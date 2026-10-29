@@ -143,8 +143,9 @@ not Jarvis:
    use this client, even if they had the client ID.
 2. **Google deletes a Testing-mode refresh token after about 7 days.** Jarvis
    will then say, in plain words, "the saved Google permission has expired -
-   connect again in Settings, Accounts", and pressing **Connect Google Calendar**
-   once more fixes it. Your calendar is not touched and nothing is lost.
+   run `py -3 jarvis_google_calendar.py connect` in the backend folder again",
+   and running that once more fixes it. Your calendar is not touched and
+   nothing is lost.
 
 To stop that expiring you would have to publish the app ("In production"), and
 Google requires a **verification review** for the `calendar.events` scope - a

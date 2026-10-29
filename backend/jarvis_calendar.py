@@ -7,9 +7,17 @@ first, no cloud keys." CalDAV is the open, self-hosted calendar protocol
 (Nextcloud, Radicale, Baikal, Fastmail, and others all speak it) - the owner
 points this at their own server with their own username/password, exactly
 the same shape jarvis_research.py already uses for `JARVIS_GITHUB_TOKEN`.
-There is no Google/Microsoft OAuth flow here and none is planned: OAuth
-needs a registered app and a cloud key this project has always avoided, and
-the whole point of choosing CalDAV is that it does not.
+There is no Google/Microsoft OAuth flow in THIS module, and CalDAV here still
+needs no registered app and no cloud key: it reads the owner's own server with
+their own username and password, exactly the same shape
+jarvis_research.py already uses for `JARVIS_GITHUB_TOKEN`. A real Google
+SIGN-IN does exist beside this reader since 2026-10-28:
+`jarvis_google_calendar.py` owns the OAuth flow, the loopback callback, the
+Credential Manager tokens and the carded writes (docs/JARVIS-API.md section
+161, docs/GOOGLE-CALENDAR-SETUP.md). This module never touches any of that -
+when the owner chooses the Google sign-in way, reads come from that module,
+and this one keeps reading the CalDAV server and the private iCal link
+exactly as before.
 
 A SECOND SOURCE: A PRIVATE CALENDAR LINK (the owner's decision, 2026-09-25)
 Google Calendar cannot be read over CalDAV without OAuth. What Google offers

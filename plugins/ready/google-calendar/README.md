@@ -71,8 +71,11 @@ the backend's `jarvis_plugins\` folder and restart Jarvis.
 About ten minutes, free, and only you can do it (it needs your Google
 account). `docs/GOOGLE-CALENDAR-SETUP.md` walks through it click by click:
 create a project, enable the Calendar API, fill in the OAuth consent screen,
-add yourself as a test user, create a **Desktop app** OAuth client, and paste
-the client ID and secret into Settings, Accounts.
+add yourself as a test user, create a **Desktop app** OAuth client, and then
+give the two strings to Jarvis with `jarvis_google_calendar.py client <id>`
+in the backend folder (it asks for the secret with the typing hidden). There
+is no Settings card for this yet, which is why the commands above are the way
+in.
 
 **Said plainly:** `calendar.events` is a *sensitive* scope. In "Testing" mode
 with yourself as a test user it works, and only you can use it - but Google
@@ -81,9 +84,17 @@ says "the saved Google permission has expired - connect again". Publishing the
 app ("In production") with this scope means Google's verification review. That
 is Google's rule, not Jarvis's.
 
-## Why `scripts\add-plugin.ps1 -Name google-calendar` will not work
+## Adding it: the catalogue, or the folder by hand
 
-`tools/gen_plugin_catalogue.py` builds a folder for every patch in
-`$PATCHES` whose only wiring was one `install()` call. This feature never was
-a patch, so it is not in `plugins/registry.json`, and `add-plugin.ps1` reads
-its names from there. Copying the folder by hand, as above, is what to do.
+This folder is in `plugins/registry.json` under `folders` (a drop-in that
+replaces no patch), so the catalogue script knows it by name:
+
+```
+scripts\add-plugin.ps1 -Name google-calendar -BackendPath "D:\your\backend"
+```
+
+`add-plugin.ps1` reads its names from `plugins/registry.json` and copies this
+folder into the backend's `jarvis_plugins\`, which is also what the
+`Copy-Item` line above does if you would rather do it yourself. If a future
+`tools/gen_plugin_catalogue.py` run ever leaves it out, run that generator -
+never hand-edit the registry.

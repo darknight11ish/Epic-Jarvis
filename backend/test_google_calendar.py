@@ -34,13 +34,13 @@ own, on 127.0.0.1) and nothing else. No real client ID, secret or token is in
 this file - the values are assembled from pieces, like test_calendar_link.py
 does with the private link.
 """
+import ast
 import base64
 import contextlib
 import hashlib
 import inspect
 import io
 import json
-import re
 import socket
 import sys
 import tempfile
@@ -167,10 +167,12 @@ class Card:
 class Transport:
     """A stand-in Google: records every request and answers by URL."""
 
-    def __init__(self, *, refresh_status=200, exchange_ok=True):
+    def __init__(self, *, refresh_status=200, exchange_ok=True,
+                 refresh_value=REFRESH):
         self.calls = []
         self.refresh_status = refresh_status
         self.exchange_ok = exchange_ok
+        self.refresh_value = refresh_value
 
     def __call__(self, method, url, payload, headers):
         self.calls.append({"method": method, "url": url, "payload": payload,
@@ -184,7 +186,7 @@ class Transport:
             if not self.exchange_ok:
                 return 400, {"error": "invalid_grant"}
             return 200, {"access_token": ACCESS_1, "expires_in": 3600,
-                         "refresh_token": REFRESH, "token_type": "Bearer"}
+                         "refresh_token": self.refresh_value, "token_type": "Bearer"}
         if "oauth2.googleapis.com/revoke" in url:
             return 200, {}
         if "/calendars/primary/events" in url:
@@ -243,6 +245,18 @@ check("a missing state does not", not G.state_matches(state, None))
 check("an empty state does not", not G.state_matches(state, ""))
 check("a non-text state does not", not G.state_matches(state, 12345))
 check("no expected state never matches", not G.state_matches("", state))
+# S2, measured: `?state=é` used to raise TypeError out of hmac.compare_digest,
+# which escaped do_GET and closed the listener - an unauthenticated kill.
+for non_ascii in ("é", state + "é", "\u00e9"):
+    try:
+        raised = None
+        answer = G.state_matches(state, non_ascii)
+    except Exception as exc:                       # the bug being fixed
+        raised, answer = repr(exc), None
+    check(f"a non-ASCII state is refused, not raised ({non_ascii!r})",
+          raised is None and answer is False, raised or answer)
+check("... and a non-ASCII EXPECTED state is refused too, not raised",
+      G.state_matches("é", "é") is False)
 
 check("exactly one scope, and it is calendar.events",
       G.SCOPES == ("https://www.googleapis.com/auth/calendar.events",), G.SCOPES)
@@ -270,22 +284,43 @@ code_src = code_only(src)
 for forbidden in ("0.0.0.0", "ngrok", "cloudflare", "tailscale", "funnel",
                   "localtunnel", "serveo"):
     check(f"the module's code never uses {forbidden!r}", forbidden not in code_src.lower())
-check("the listener is built from BIND_HOST, never a literal 0",
-      'HTTPServer((BIND_HOST, 0)' in src and 'BIND_HOST = "127.0.0.1"' in src)
+# The loopback listener is proven at runtime below (the socket's own address and
+# a real loopback connection) and the bind host constant above. This is the one
+# structural half those cannot see: the port is EPHEMERAL (0), never a fixed
+# port somebody could plan around. An `ast` walk cannot be fooled by a comment
+# or a docstring - the old text pin could be.
+TREE = ast.parse(src)
+SERVER_CALLS = [n for n in ast.walk(TREE)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "HTTPServer"]
+BIND_ARGS = [tuple(getattr(a, "value", getattr(a, "id", None)) for a in c.args[0].elts)
+             for c in SERVER_CALLS
+             if c.args and isinstance(c.args[0], ast.Tuple)]
+check("the listener is built from BIND_HOST on an ephemeral port (0), never a "
+      "fixed one", BIND_ARGS == [("BIND_HOST", 0)] and G.BIND_HOST == "127.0.0.1",
+      BIND_ARGS)
 
 
 # ── one whole sign-in, against a real loopback listener + a stub Google ─────
 
-def sign_in(*, state_suffix="", missing_state=False, error=None):
+def sign_in(*, state_suffix="", missing_state=False, error=None, state_text=None):
+    """One callback against the flow's own loopback listener.
+
+    `error`: Google's own answer (`access_denied` ...), which carries the state
+    on a real Google redirect and has to carry it here too, because a callback
+    without the right state is refused before the error is looked at (S1).
+    `state_text`: an exactly-chosen state value, for the non-ASCII refusal.
+    """
     started = G.start(opener=lambda url: None)
     query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(started["auth_url"]).query))
     port = started["port"]
+    sent_state = state_text if state_text is not None else query["state"] + state_suffix
     if error:
         target = f"http://127.0.0.1:{port}/callback?error={error}"
     else:
         target = f"http://127.0.0.1:{port}/callback?code=one-time-code"
-        if not missing_state:
-            target += "&state=" + query["state"] + state_suffix
+    if not missing_state:
+        target += "&state=" + urllib.parse.quote(sent_state)
     status = None
     try:
         with urllib.request.urlopen(target, timeout=10) as resp:
@@ -293,7 +328,11 @@ def sign_in(*, state_suffix="", missing_state=False, error=None):
     except urllib.error.HTTPError as exc:
         status = exc.code
         exc.read()
-    G.wait(5.0)
+    # Short: a REFUSED callback deliberately leaves the flow waiting (S1/S2),
+    # so waiting the flow's own timeout here would only slow the suite down.
+    # The answer and the exchange have already happened when urlopen returns.
+    G.wait(0.5)
+    return started, query, status
     return started, query, status
 
 
@@ -349,6 +388,11 @@ check("the settings file holds the client ID (which is public)",
 check("NO file under the settings folder holds a refresh token, access token "
       "or the client secret",
       not any(leaks(text) for text in texts.values()), sorted(texts))
+written_doc = json.loads((root / G.SETTINGS_NAME).read_text(encoding="utf-8"))
+check("the settings file on disk holds ONLY the mode and the public client ID, "
+      "so no token can be serialized into it",
+      set(written_doc) <= {"mode", "client_id"} and written_doc.get("client_id") == CLIENT_ID,
+      sorted(written_doc))
 
 _status, out, err = quiet(G.status)
 check("nothing is printed at all, so nothing can carry a token",
@@ -362,9 +406,35 @@ try:
 except Exception as exc:                       # pragma: no cover - shipped module
     check("jarvis_scrub is present", False, repr(exc))
 
+# S3, measured: `_write_secret` never called `_register`, so the refresh token
+# was NOT in jarvis_scrub at the moment of the exchange - only later, if
+# something happened to read it back. This value is used nowhere else, so
+# redacting it can only have come from this one write.
+REGISTERED = "1//" + "0f4ke" + "registeredAt" + "Exchange" + "Zz"
+try:
+    import jarvis_scrub
+    root_s3, data_s3 = begin(mode="off")
+    G._TRANSPORT = Transport(refresh_value=REGISTERED)
+    G.exchange_code("one-time-code", G.make_verifier(),
+                    "http://127.0.0.1:1/callback")
+    check("the exchanged refresh token is written to the store",
+          data_s3.get(G.TARGET_REFRESH) == REGISTERED, sorted(data_s3))
+    scrubbed_s3 = jarvis_scrub.scrub_text("token=" + REGISTERED)
+    check("... and registered with jarvis_scrub by value AT THE WRITE, with no read back",
+          REGISTERED not in scrubbed_s3, scrubbed_s3[:80])
+except Exception as exc:
+    check("the exchange registers the refresh token with jarvis_scrub", False, repr(exc))
+
 # ── a wrong state, a missing state, and the owner pressing Cancel ───────────
+# S1/S2, measured: ANY unauthenticated request that reached this listener could
+# end the sign-in - a forged `error=` before the state was checked, and a
+# non-ASCII `state=` that raised out of hmac.compare_digest and closed the
+# listener. A refusal must REFUSE and leave the flow waiting, never cancel it.
 for label, kwargs in (("a WRONG state", {"state_suffix": "x"}),
-                      ("a MISSING state", {"missing_state": True})):
+                      ("a MISSING state", {"missing_state": True}),
+                      ("a non-ASCII state", {"state_text": "\u00e9"}),
+                      ("an ERROR with no state", {"missing_state": True,
+                                                  "error": "access_denied"})):
     root2, data2 = begin(mode="off")
     t2 = Transport()
     G._TRANSPORT = t2
@@ -373,16 +443,61 @@ for label, kwargs in (("a WRONG state", {"state_suffix": "x"}),
     check(f"{label} exchanges NOTHING with Google", not t2.methods("token"), t2.urls())
     check(f"{label} leaves no refresh token in the store",
           G.TARGET_REFRESH not in data2, data2)
-    check(f"{label} reports bad_state, never 'connected'",
-          G.pending().outcome()["outcome"] == "bad_state", G.pending().outcome())
+    check(f"{label} cannot CANCEL the sign-in: the flow is still waiting",
+          G.pending().outcome()["outcome"] == "waiting", G.pending().outcome())
+    G.cancel()                        # the flow is still live; stop its listener
 
 root3, data3 = begin(mode="off")
 t3 = Transport()
 G._TRANSPORT = t3
 _started, _query, code = sign_in(error="access_denied")
-check("Google's own 'access_denied' is refused, not connected",
+check("Google's own 'access_denied' WITH the right state is refused, not connected",
       code == 400 and G.pending().outcome()["outcome"] == "denied"
       and G.TARGET_REFRESH not in data3, G.pending().outcome())
+
+# S1, end to end: an attacker's `?error=` must not kill a real sign-in that is
+# still waiting - the same flow still accepts the genuine callback afterwards.
+root3a, data3a = begin(mode="off")
+t3a = Transport()
+G._TRANSPORT = t3a
+started, query, attack_code = sign_in(missing_state=True, error="access_denied")
+check("an error callback without the state is refused", attack_code == 400, attack_code)
+check("... and the sign-in it tried to kill is still waiting",
+      G.pending().outcome()["outcome"] == "waiting", G.pending().outcome())
+port = started["port"]
+try:
+    with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/callback?code=one-time-code&state="
+            + urllib.parse.quote(query["state"]), timeout=10) as resp:
+        genuine = resp.status
+except urllib.error.HTTPError as exc:
+    genuine, _ = exc.code, exc.read()
+G.wait(5.0)
+check("... and the genuine callback on the same flow still connects",
+      genuine == 200 and G.pending().outcome()["outcome"] == "connected"
+      and data3a.get(G.TARGET_REFRESH) == REFRESH, G.pending().outcome())
+
+# S2, end to end: `?state=é` used to kill the flow with a TypeError. It must be
+# refused, and the same listener must still answer the real callback after it.
+root3c, data3c = begin(mode="off")
+t3c = Transport()
+G._TRANSPORT = t3c
+started, query, attack_code = sign_in(state_text="\u00e9")
+check("a non-ASCII state is refused with 400, not a dropped connection",
+      attack_code == 400, attack_code)
+check("... and the sign-in it tried to kill is still waiting",
+      G.pending().outcome()["outcome"] == "waiting", G.pending().outcome())
+try:
+    with urllib.request.urlopen(
+            f"http://127.0.0.1:{started['port']}/callback?code=one-time-code&state="
+            + urllib.parse.quote(query["state"]), timeout=10) as resp:
+        genuine = resp.status
+except urllib.error.HTTPError as exc:
+    genuine, _ = exc.code, exc.read()
+G.wait(5.0)
+check("... and the genuine callback after it still connects",
+      genuine == 200 and G.pending().outcome()["outcome"] == "connected"
+      and data3c.get(G.TARGET_REFRESH) == REFRESH, G.pending().outcome())
 
 # the browser page is fixed words: nothing from the query is ever echoed into it
 root3b, data3b = begin(mode="off")
@@ -439,6 +554,57 @@ _G = G.cancel()
 check("cancel() stops a waiting flow",
       G.pending().outcome()["outcome"] == "cancelled", G.pending().outcome())
 
+# ── S9: start() is locked, so a burst cannot orphan a listener ──────────────
+# Measured before the fix: two starts could each bind a listener and only the
+# second stayed in _PENDING, leaving the first open for its whole 600 s. And a
+# second click on the button CANCELLED the sign-in that was already waiting.
+root5b, data5b = begin(mode="off")
+G._TRANSPORT = Transport()
+first = G.start(opener=lambda url: None)
+first_flow = G.pending()
+second = G.start(opener=lambda url: None)
+check("a second start while one is waiting answers the SAME flow, not a new one",
+      second["auth_url"] == first["auth_url"] and second["port"] == first["port"]
+      and G.pending() is first_flow, (first["port"], second["port"]))
+check("... and it does not claim to have opened a second browser",
+      second["browser_opened"] is False and first["browser_opened"] is False,
+      (first["browser_opened"], second["browser_opened"]))
+check("... and the waiting flow was not cancelled by the second start",
+      G.pending().outcome()["outcome"] == "waiting", G.pending().outcome())
+
+# A burst of concurrent starts leaves exactly one listener and one flow.
+import threading  # noqa: E402
+burst: list = []
+def _one_start():
+    try:
+        burst.append(G.start(opener=lambda url: None))
+    except Exception as exc:                       # a refusal is not a crash
+        burst.append({"error": repr(exc)})
+threads = [threading.Thread(target=_one_start) for _ in range(8)]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join(timeout=10)
+check("a burst of eight starts answers ONE flow and opens one browser",
+      len(burst) == 8 and len({b.get("port") for b in burst}) == 1
+      and len({b.get("auth_url") for b in burst}) == 1
+      and [b for b in burst if b.get("browser_opened")] == [], burst)
+check("... and the one flow is still the same, still waiting",
+      G.pending() is first_flow and first_flow.outcome()["outcome"] == "waiting",
+      first_flow.outcome())
+
+# A FINISHED flow is reaped before the next listener binds, not left open.
+done_flow = first_flow
+G.cancel()
+check("cancel() closes the listener of the finished flow",
+      done_flow.done.is_set() and done_flow.server.socket.fileno() == -1,
+      (done_flow.done.is_set(), done_flow.server.socket.fileno()))
+third = G.start(opener=lambda url: None)
+check("a start after a finished flow REPLACES it, with a live new listener",
+      G.pending() is not done_flow and not G.pending().done.is_set()
+      and G.pending().server.socket.fileno() != -1, third)
+G.cancel()
+
 begin(mode="off", client=False)
 try:
     G.start(opener=lambda url: None)
@@ -489,8 +655,11 @@ check("a read has no card parameter at all, so a read cannot raise one",
 check("two events come back, bounded, with no unknown fields",
       [r["summary"] for r in got["events"]] == ["Dentist", "Bin day"], got["events"])
 check("an all-day event is marked all-day", got["events"][1]["all_day"] is True)
-check("the read records the snapshot a change may be allowed against",
-      G._STATE["read_ok"] and "evt_" + "one" in G._STATE["ids"], list(G._STATE["ids"]))
+check("the read records WHAT it saw, by id - the event's own summary and times",
+      set(G._STATE["events"]) == {"evt_" + "one", "evt_" + "two"}
+      and G._STATE["events"]["evt_" + "one"]["summary"] == "Dentist"
+      and G._STATE["events"]["evt_" + "one"]["start"] == "2026-11-03T15:00:00-07:00",
+      G._STATE["events"])
 check("the read itself carries no token", not leaks(got), leaks(got))
 check("event text comes back as plain, capped outside text",
       len(got["events"][0]["summary"]) <= 300)
@@ -547,7 +716,7 @@ check("an event without a start and an end is refused before any card",
       bad[0] == 400, bad)
 
 # ── update and delete: the event must be in the last read ───────────────────
-G._STATE["last_read"] = 0.0
+G._STATE["last_read"], G._STATE["events"] = 0.0, {}     # nothing read this run
 stale_card = Card()
 code, out = G.update_event({"event_id": "evt_" + "one", "summary": "Dentist",
                             "start": "2026-11-03T16:00:00-07:00",
@@ -565,7 +734,10 @@ code, out = G.update_event({"event_id": "evt_" + "one", "summary": "Dentist"},
 check("a read older than the stream limit is refused as stale",
       code == 409 and out["outcome"] == "stale" and not old_card.calls, out)
 
-G._STATE["last_read"] = time.monotonic()
+# A REAL read, because the snapshot a change is allowed against is the one a
+# read took - a write drops it (asserted below), so it cannot be faked here.
+G._TRANSPORT = Transport()
+G.list_events(7)
 unknown_card = Card()
 code, out = G.delete_event({"event_id": "evt_" + "never-seen"},
                            gate=unknown_card, tier_of=lambda a: "ask",
@@ -573,7 +745,6 @@ code, out = G.delete_event({"event_id": "evt_" + "never-seen"},
 check("an event the last read did not see is refused, card-free",
       code == 409 and not unknown_card.calls, out)
 
-G._STATE["last_read"] = time.monotonic()
 t10 = Transport()
 del_card = Card()
 code, out = G.delete_event({"event_id": "evt_" + "one", "summary": "Dentist"},
@@ -584,7 +755,52 @@ check("an approved delete sends ONE DELETE", code == 200
 check("the delete card names the event", "Dentist" in del_card.calls[0]["detail"]["card"],
       del_card.calls[0]["detail"]["card"])
 check("a write drops the snapshot, so the next change is stale again",
-      G._STATE["last_read"] == 0.0 and not G._STATE["read_ok"], G._STATE)
+      G._STATE["last_read"] == 0.0 and not G._STATE["events"], G._STATE)
+
+# ── S4, measured: the card was built from the REQUEST, not the last read ────
+# A caller could show "Dentist" on the card and delete another event's id, and
+# an update card never showed what was there before. Both cards are now built
+# from the snapshot the read took.
+_root_s4, data_s4 = begin(mode="google")
+data_s4[G.TARGET_REFRESH] = REFRESH
+G._TRANSPORT = Transport()
+G.list_events(7)                     # the read whose snapshot the cards use
+lies_card = Card()
+code, out = G.delete_event({"event_id": "evt_" + "one",
+                            "summary": "Bin day",
+                            "start": "2026-11-04", "end": "2026-11-05",
+                            "where": "Somewhere else"},
+                           gate=lies_card, tier_of=lambda a: "ask",
+                           spawn=lambda fn: fn(), transport=Transport())
+card_text = lies_card.calls[0]["detail"]["card"] if lies_card.calls else ""
+check("a delete card shows the event the LAST READ saw, not the request's words",
+      "Dentist" in card_text and "Bin day" not in card_text
+      and "2026-11-03T15:00:00-07:00" in card_text
+      and "Somewhere else" not in card_text, card_text)
+check("... and the card's own detail carries the read's values too",
+      lies_card.calls[0]["detail"]["summary"] == "Dentist"
+      and lies_card.calls[0]["detail"]["start"] == "2026-11-03T15:00:00-07:00",
+      lies_card.calls[0]["detail"] if lies_card.calls else None)
+
+G._TRANSPORT = Transport()
+G.list_events(7)
+change_card = Card()
+code, out = G.update_event({"event_id": "evt_" + "one", "summary": "Team sync",
+                            "start": "2026-11-03T16:00:00-07:00",
+                            "end": "2026-11-03T17:00:00-07:00",
+                            "where": "Room 2"},
+                           gate=change_card, tier_of=lambda a: "ask",
+                           spawn=lambda fn: fn(), transport=Transport())
+change_text = change_card.calls[0]["detail"]["card"] if change_card.calls else ""
+check("an update card shows BOTH the old values and the new ones",
+      "Team sync" in change_text and "Dentist" in change_text
+      and "2026-11-03T16:00:00-07:00" in change_text
+      and "2026-11-03T15:00:00-07:00" in change_text, change_text)
+check("... and the gate's detail carries the old values it is replacing",
+      change_card.calls[0]["detail"]["previous"]["summary"] == "Dentist"
+      and change_card.calls[0]["detail"]["previous"]["end"]
+      == "2026-11-03T16:00:00-07:00",
+      change_card.calls[0]["detail"].get("previous") if change_card.calls else None)
 
 # a card that never answers is a refusal, not a hang forever. The wait limit
 # is read from jarvis_gate, which is not on this machine, so it is shortened
@@ -701,9 +917,47 @@ with_store({})
 st = G.status()
 check("status with nothing set up is honest and lists what is missing",
       st["mode"] == "off" and st["connected"] is False
-      and "the Google client ID" in st["needs"], st)
+      and st["ical_link_saved"] is False
+      and any("a way chosen" in need for need in st["needs"]), st)
+check("status does not push the Google client on someone with no way chosen",
+      not any("Google client" in need for need in st["needs"]), st["needs"])
 check("status carries no token and no secret",
       not leaks(st) and "client_secret\"" not in json.dumps(st), st)
+
+# ── S5, measured: a SAVED private link with the mode still "off" (the default)
+# made status and the chat say "neither is set up yet". A saved thing is set
+# up; the chosen mode is the separate fact.
+_real_ical_link = G._ical_link
+G._ical_link = lambda: ("https://calendar.google.com/calendar/ical/owner%40example"
+                        ".com/private-abcdef/basic.ics")
+try:
+    linked_status = G.status()
+    check("a saved iCal link is reported as saved while mode is still off",
+          linked_status["mode"] == "off" and linked_status["ical_link_saved"] is True
+          and linked_status["connected"] is False, linked_status)
+    check("... and status does not call a saved link 'not set up'",
+          "not set up" not in linked_status["way"]
+          and "private iCal link is saved" in linked_status["way"],
+          linked_status["way"])
+    check("... and needs nothing, because a saved link is a working way to choose",
+          linked_status["needs"] == [], linked_status["needs"])
+    chat = G.connect_sentence()
+    check("the chat says the saved private link is set up, not 'neither is set up yet'",
+          "neither is set up yet" not in chat.lower()
+          and "already saved" in chat and "mode ical" in chat, chat)
+    # ... and a saved Google token is reported the same way.
+    with_store({G.TARGET_REFRESH: REFRESH})
+    G._ical_link = lambda: ""
+    signed_status = G.status()
+    check("a saved Google sign-in is reported as saved while mode is still off",
+          signed_status["refresh_token_saved"] is True and signed_status["connected"] is False
+          and "Google sign-in is saved" in signed_status["way"], signed_status)
+    check("... and the chat says the saved sign-in is set up too",
+          "neither is set up yet" not in G.connect_sentence().lower()
+          and "already saved" in G.connect_sentence()
+          and "mode google" in G.connect_sentence(), G.connect_sentence())
+finally:
+    G._ical_link = _real_ical_link
 
 # ══════════════════════════════════════════════════════════════════════════
 #   6. The chat sentences - deterministic, and each one is a fact
@@ -910,25 +1164,80 @@ check("`disconnect` output carries no token", not leaks(out), out)
 
 print("\nThe module's own promises")
 
-import ast  # noqa: E402
-
-tree = ast.parse(src)
-builtin_open = [n for n in ast.walk(tree)
+# These five used to be pins on the module's SOURCE TEXT (`src.count(
+# "write_text(")`, `"os.replace" in src`, `re.search(..., src)` and friends).
+# A pin on text goes red when the code is renamed or improved and stays green
+# when the behaviour is wrong, so each one is now either a structural `ast`
+# walk (immune to comments, docstrings and spelling) or a real call whose
+# effect is measured.
+builtin_open = [n for n in ast.walk(TREE)
                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
                 and n.func.id == "open"]
-check("the module writes ONE file, and it is the settings file",
-      src.count("write_text(") == 1 and "SETTINGS_NAME" in src)
 check("the module never calls the builtin open()", not builtin_open,
       [getattr(c, "lineno", "") for c in builtin_open])
-check("a refresh token is never inside json.dumps or a file writer",
-      not re.search(r"json\.dumps\([^)]*refresh", src, re.I))
-check("no environment variable can supply an OAuth token",
-      "resolve_secret" not in code_src
-      and not re.search(r"environ[^\n]{0,120}(?:token|secret|refresh|access)",
-                        code_src, re.I),
-      re.findall(r"environ[^\n]{0,60}", code_src, re.I)[:4])
-check("the temporary settings copy is replaced, not left behind",
-      "os.replace" in src)
+json_file_calls = [n for n in ast.walk(TREE)
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                   and n.func.attr == "dump"]
+check("the module never calls json.dump (a file writer), only json.dumps",
+      not json_file_calls, [getattr(c, "lineno", "") for c in json_file_calls])
+
+write_text_calls = [n for n in ast.walk(TREE)
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr == "write_text"]
+check("the module writes the disk through exactly ONE write_text call",
+      len(write_text_calls) == 1, [getattr(c, "lineno", "") for c in write_text_calls])
+
+G._reset_for_tests()
+root_w = use_config()
+with_store({})
+G._write_settings({"mode": "ical", "client_id": CLIENT_ID})
+files_w = sorted(p.name for p in root_w.iterdir() if p.is_file())
+check("... and the one file it creates IS the settings file, and nothing else",
+      files_w == [G.SETTINGS_NAME], files_w)
+check("... holding only the mode and the public client ID, so no token can be "
+      "serialized into it",
+      set(json.loads(G.settings_path().read_text(encoding="utf-8")))
+      == {"mode", "client_id"}, G.settings_path().read_text(encoding="utf-8"))
+check("... and no temporary copy is left behind",
+      not G.settings_path().with_suffix(".tmp").exists()
+      and not any(p.suffix == ".tmp" for p in root_w.iterdir()), files_w)
+G._write_settings({"mode": "off", "client_id": CLIENT_ID})
+check("... also after a second write (the replace path runs again)",
+      not any(p.suffix == ".tmp" for p in root_w.iterdir()), files_w)
+
+refused_all = True
+for field in G._REFUSED_FIELDS:
+    try:
+        G._write_settings({field: "x"})
+        refused_all = False
+    except ValueError:
+        pass
+check("the settings writer refuses EVERY secret-shaped field in its own list",
+      refused_all, G._REFUSED_FIELDS)
+
+
+def _call_chain(node) -> list:
+    """[names and attribute names] along a dotted expression."""
+    out: list = []
+    while isinstance(node, ast.Attribute):
+        out.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        out.append(node.id)
+    return out
+
+
+environ_reads = [[a.value for a in n.args if isinstance(a, ast.Constant)]
+                 for n in ast.walk(TREE)
+                 if isinstance(n, ast.Call) and "environ" in _call_chain(n.func)]
+check("the only environment variable the module reads is the config folder, so "
+      "no environment variable can supply an OAuth token",
+      environ_reads == [["OPENJARVIS_CONFIG_DIR"]], environ_reads)
+secret_reader = [n for n in ast.walk(TREE)
+                 if isinstance(n, ast.Call)
+                 and ("resolve_secret" in _call_chain(n.func))]
+check("the module never calls resolve_secret (which puts the environment first)",
+      not secret_reader, [getattr(c, "lineno", "") for c in secret_reader])
 
 print()
 if FAILED:

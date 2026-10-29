@@ -26610,23 +26610,35 @@ to `jarvis_hud.py`.
    the Google authorization URL with PKCE **S256**, a random `state`,
    `access_type=offline` and `prompt=consent`, hands it to the default browser,
    and answers `{auth_url, port, redirect_uri, browser_opened, expires_in}`.
-   The verifier and the state are never returned and never written anywhere.
+   The **verifier** is never returned and never written anywhere. The **state**
+   appears only inside the returned `auth_url` - Google has to echo it back -
+   and is never stored by this module. A second `POST /start` while a sign-in is
+   still waiting answers that SAME flow (same URL and port, no second listener);
+   a flow that already finished or timed out is reaped and replaced.
 3. Google redirects the browser to `http://127.0.0.1:<port>/callback`. That
    listener answers exactly that path (everything else is 404) and checks
-   `state` with `hmac.compare_digest` **before** anything else. A wrong or
-   missing state, or Google's own `error=` answer, ends the flow with
-   `bad_state` / `denied` and **no code is exchanged**.
+   `state` with `hmac.compare_digest` before it looks at the code **or acts on
+   Google's own `error=`**. A wrong or missing state - including a non-ASCII
+   one, which is refused rather than raising - ends nothing: the answer is 400
+   and the sign-in stays waiting, so an unauthenticated request cannot kill it,
+   and no code is exchanged. Google's `error=` **with the right state** ends the
+   flow with `denied` / `error`, again with no exchange.
 4. The code is exchanged at `https://oauth2.googleapis.com/token` with the
    verifier. The **refresh token** is written to Credential Manager under
    `Jarvis Backend/Google Calendar refresh token` and read back before the flow
    is called connected; the **access token** is kept in memory only, with the
-   expiry, and both are registered with `jarvis_scrub` by value. The chosen way
-   becomes `google`.
+   expiry, and both are registered with `jarvis_scrub` by value at the moment
+   each is written or read. The chosen way becomes `google`. One more read is
+   made here - `GET /calendars/primary`, for the calendar's own name that
+   `/status` shows (Google's summary for the primary calendar, usually the
+   account's address) - and it is the only other request the sign-in makes.
 5. `GET /api/google-calendar/status` reports `mode`, `connected`, whether the
-   client ID/secret/refresh token are saved, whether an access token is in
-   memory and when it expires, what is still needed, the flow's outcome, and
-   where the token lives - **never a token, never part of one**. The client ID
-   is shown back (it is public).
+   client ID/secret/refresh token are saved, whether the **private iCal link is
+   saved** (`ical_link_saved` - reported even while the mode is `off`, so a
+   saved link is never described as "not set up"), whether an access token is in
+   memory and when it expires, what is still needed **for the chosen way**, the
+   flow's outcome, and where the token lives - **never a token, never part of
+   one**. The client ID is shown back (it is public).
 
 **Every route** (all `GET`/`POST` under `/api/google-calendar/`, all behind the
 server's own origin check and `X-Jarvis-Token`; the phone has no screen for any
@@ -26636,7 +26648,7 @@ of them):
 |---|---|---|
 | `GET /status` | what is connected, in words | no |
 | `GET /events?days=7` | the next 7 days (1-90), through whichever way is chosen | no |
-| `POST /start` | begin a sign-in (one flow at a time; a second cancels the first) | no |
+| `POST /start` | begin a sign-in (one flow at a time; a second start while one is waiting answers the same flow and opens no second listener) | no |
 | `POST /cancel` | stop a waiting sign-in | no |
 | `POST /disconnect` | ask Google to revoke the refresh token, delete it here, mode -> `off` | no |
 | `POST /mode` | `{"mode": "off"\|"ical"\|"google"}` - only one active | no |
@@ -26648,11 +26660,15 @@ of them):
 **Writes.** Each write raises one `jarvis_gate.check` card under the action
 `google_calendar_write`, tier `ask`, whose text is built from the values that
 will be sent (title, when, where, "Calendar: primary"), never from the request
-body verbatim. A denied, timed-out or refused card answers 403/503 and **nothing
-is sent**; a yes at any tier but `ask` is refused. A change or a delete is
-refused as stale (409, `outcome: "stale"`, no card) when the last successful read
-was more than `STREAM_MAX_AGE` (300 s) ago or the event id was not in that read
-(rule 4). Reads raise no card at all and have no gate parameter.
+body verbatim. The card for a **delete** is built only from the id plus the
+snapshot of the last read - its title and times are that read's, so a card
+cannot show one event while another is deleted - and the card for an **update**
+shows the last-read values ("It is like this now") as well as the new ones. A
+denied, timed-out or refused card answers 403/503 and **nothing is sent**; a yes
+at any tier but `ask` is refused. A change or a delete is refused as stale (409,
+`outcome: "stale"`, no card) when the last successful read was more than
+`STREAM_MAX_AGE` (300 s) ago or the event id was not in that read (rule 4).
+Reads raise no card at all and have no gate parameter.
 
 **The private link.** With `mode = "ical"`, `GET /events` calls
 `jarvis_calendar.plan()`/`run()` - the same reader as before, not a second one -
@@ -26668,7 +26684,12 @@ Google Cloud setup is `docs/GOOGLE-CALENDAR-SETUP.md`.
 window has no door of its own to the backend; every Settings card here is a Rust
 command in `src-tauri/src/lib.rs`, which the parallel account-connect work owns),
 a model tool, and any phone surface. `jarvis_google_calendar.answer(text)` is the
-deterministic chat sentence ready to be called from `jarvis_quick.py`.
+deterministic chat sentence, and it is **not wired** into `jarvis_quick.py` yet:
+that is a follow-up integration step for the Lead, and the module's own WIRING
+note carries the exact block. It must wrap the string in a `Result`, because
+`jarvis_quick.answer()` returns `Optional[Result]` and its caller reads
+`.reply` - a bare `str` breaks the turn. Wiring it would still not create an
+event: `answer()` only describes one, and creating it is a second explicit step.
 
 **What Google imposes.** `calendar.events` is a *sensitive* scope. In "Testing"
 with the owner added as a test user it works and only he can use it, and Google
@@ -26677,11 +26698,14 @@ deletes a Testing-mode refresh token after about 7 days - after which
 again". Publishing the app needs Google's verification review. Nothing here is
 pretending otherwise.
 
-**What is proven and what is not.** `backend/test_google_calendar.py` (138
-checks) proves PKCE/state generation and validation, the callback's refusals, the
-exchange against a stub, that the refresh token reaches the credential store and
-no file/answer/log, the loopback bind, one card and nothing-sent-before-yes for
-each of create/change/delete, the stale refusals, the revoke path, and the
-status/banner words. It runs no network request. **The real Google round trip has
-not been run in this checkout** (no Google account, no network): the first
-`connect` on the owner's PC is the field test.
+**What is proven and what is not.** `backend/test_google_calendar.py` (183
+checks at the time of writing) proves PKCE/state generation and validation, the
+callback's refusals (including that an unauthenticated wrong-state or bare
+`error=` request cannot cancel a waiting sign-in), the exchange against a stub,
+that the refresh token reaches the credential store and no file/answer/log, the
+loopback bind, one card and nothing-sent-before-yes for each of
+create/change/delete, the delete card's values coming from the last read rather
+than the request, the stale refusals, the revoke path, and the status/banner
+words. It runs no network request. **The real Google round trip has not been run
+in this checkout** (no Google account, no network): the first `connect` on the
+owner's PC is the field test.

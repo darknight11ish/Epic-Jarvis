@@ -25,8 +25,8 @@ this program is a Rust command, and `src-tauri/src/lib.rs` is where the parallel
 account-connect work is - so the Settings row and the chat tool are NOT built
 here. The routes below are the whole surface a Settings card or the account
 tool needs when one lands, and `answer()` is the deterministic chat sentence
-ready to be called from `jarvis_quick.py` (the three-line note at the bottom of
-this docstring).
+ready to be called from `jarvis_quick.py` (the wiring note at the bottom of
+this docstring, which is NOT wired yet).
 
 WHY THE FLOW IS SHAPED THIS WAY (the rules that are not negotiable)
 
@@ -41,10 +41,13 @@ WHY THE FLOW IS SHAPED THIS WAY (the rules that are not negotiable)
     shape Google still allows for a desktop app.
   * PKCE (RFC 7636, S256) AND A RANDOM `state`. The verifier never leaves this
     process and is never written anywhere; the challenge goes to Google. The
-    callback is answered only when its `state` matches the one this flow
-    started with (`hmac.compare_digest`), so a callback that did not come from
-    the browser tab this flow opened is refused and NOTHING is exchanged. A
-    wrong or missing state is a refusal, never a warning.
+    callback looks at NOTHING until its `state` matches the one this flow
+    started with (`hmac.compare_digest`) - not the code, and not Google's own
+    `error=` - so a callback that did not come from the browser tab this flow
+    opened is refused and NOTHING is exchanged. A wrong, missing or non-ASCII
+    state is a refusal, never a warning and never an exception: it does not
+    cancel the flow either, so nobody who can reach the loopback port can kill
+    a sign-in by sending a bad `state` or a bare `error=`.
   * THE REFRESH TOKEN LIVES IN WINDOWS CREDENTIAL MANAGER (DPAPI, encrypted to
     this Windows account), through the SAME store helper the rest of the
     backend uses - `jarvis_token_store.WindowsStore`, not a second key store.
@@ -61,9 +64,10 @@ WHY THE FLOW IS SHAPED THIS WAY (the rules that are not negotiable)
   * ACCESS TOKENS LIVE IN MEMORY ONLY. One dict, overwritten on refresh, never
     returned by a route, never in a card, never in an error, never in a log
     line, never written to a file. `status()` reports whether one is held, and
-    when it expires - never the value. Both the refresh and access token are
-    handed to `jarvis_scrub.register_secret`, so if one ever did reach a log
-    line or a model prompt the redactor removes it by value.
+    when it expires - never the value. Both the refresh token and the access
+    token are handed to `jarvis_scrub.register_secret` BY VALUE at the moment
+    each is written or read, so if one ever did reach a log line or a model
+    prompt the redactor removes it by value.
   * THE PHONE NEVER HOLDS THE REFRESH TOKEN. Nothing here returns it, no route
     serves it, and the Settings window is the PC's. `docs/ARCHITECTURE.md`
     section 3348-3351 already says a phone-side card would send a secret over
@@ -108,8 +112,9 @@ WHAT IS NOT HERE
     (`jarvis_agent.py`, `jarvis_quick.py`, `jarvis_ui_control.py`,
     `jarvis_hud.html`), so the chat sentences are DETERMINISTIC functions in
     this module (`answer()`, `parse_meeting()`) with their own tests, and the
-    three-line wiring note at the bottom of this docstring is for the Lead to
-    merge rather than a second copy of the quick path. See "WIRING" below.
+    wiring note at the bottom of this docstring is a follow-up step for the
+    Lead rather than a second copy of the quick path - it is NOT wired. See
+    "WIRING" below.
   * No second store, no second redactor, no second outside-text path: every
     one of those is the module that already does it.
   * No background sync. A read happens when something asks for one.
@@ -118,7 +123,8 @@ ROUTES (installed by `install()`, called from plugins/ready/google-calendar)
 
     GET  /api/google-calendar/status          what is connected, in words
     GET  /api/google-calendar/events?days=7   the next N days (card-free)
-    POST /api/google-calendar/start           begin the sign-in (one flow)
+    POST /api/google-calendar/start           begin the sign-in (one flow; a second
+                                              start answers that same flow)
     POST /api/google-calendar/cancel          stop a flow that is waiting
     POST /api/google-calendar/disconnect      revoke at Google + forget it
     POST /api/google-calendar/mode            {"mode": "off"|"ical"|"google"}
@@ -128,20 +134,46 @@ ROUTES (installed by `install()`, called from plugins/ready/google-calendar)
     POST /api/google-calendar/events/update   change (ONE card)
     POST /api/google-calendar/events/delete   delete (ONE card)
 
-WIRING, FOR THE LEAD (the only edit this feature needs outside its own files)
+WIRING: NOT DONE, AND THIS IS THE CORRECT BLOCK FOR THE LEAD
 
-In `jarvis_quick.py`'s deterministic fast path, before the model is asked:
+This is a FOLLOW-UP INTEGRATION STEP owned by the Lead, not something this
+module does today and not something this PR wires. Two facts have to be right
+before anyone pastes it in:
 
-    import jarvis_google_calendar
-    said = jarvis_google_calendar.answer(text)
-    if said is not None:
-        return said
+  * `answer()` below returns `Optional[str]` - one sentence, or None.
+  * `jarvis_quick.answer()` returns `Optional[Result]` (a dataclass), and its
+    caller then runs `res.reply = in_manner(res.reply, ...)`
+    (`jarvis_quick.py:8475`). A bare string returned from that function breaks
+    the turn: a `str` has no `.reply`. The sentence must be wrapped in a
+    `Result`, which is why the block below does that and the old note's
+    `return said` was wrong.
+
+The correct call, inside `jarvis_quick.answer()`, AFTER the `_creator` block
+(`jarvis_quick.py:8224-8229`) and BEFORE `intent = match(text, now)` (8231) -
+before `match` because no quick intent owns these sentences, and guarded
+because a private chat must not reach Google:
+
+    if not private:
+        try:
+            import jarvis_google_calendar as _gcal
+            _said = _gcal.answer(text)
+        except Exception:
+            _said = None
+        if _said is not None:
+            return Result(str(_said), "google_calendar", read=["calendar_read"])
 
 `answer()` returns None for anything that is not one of the three calendar
 sentences ("connect my google calendar", "what's on my calendar", "add a
-meeting Tuesday 3pm"), so it cannot swallow another answer. When the parallel
-account-connect work lands its `connect_account` tool, the "connect" branch
-here is the one that should be routed to for `service == "google-calendar"`.
+meeting Tuesday 3pm"), so it cannot swallow another answer. No model tool is
+added, so `tools/check_invoke_grants.py` stays green.
+
+WHAT THAT WIRING STILL DOES NOT DO: create an event. `answer()` only DESCRIBES
+a proposed event ("I can add ... it needs one approval card"); nothing is sent
+to Google by it. Creating one needs a second, explicit step -
+`create_event(parse_meeting(text), ...)` after an explicit yes - and that step
+is not wired, so a chat sentence can describe an event but cannot create one.
+`create_event()` returns a `(status, dict)` tuple for the route; it does not
+return an event dictionary, and nothing here hands one back to chat.
 """
 
 from __future__ import annotations
@@ -372,6 +404,12 @@ def _read_secret(target: str) -> str:
 def _write_secret(target: str, value: str) -> bool:
     """Write it and read it back. True only when the read-back matches.
 
+    The value is handed to the redactor HERE as well as on every later read -
+    otherwise the refresh token written at exchange time would not be
+    registered with `jarvis_scrub` until something happened to read it back,
+    and the docstring's promise ("registered by value") would be false for the
+    whole window in which it is most likely to be logged.
+
     No plaintext copy is left anywhere: the store is the only place it goes,
     and `jarvis_token_store.WindowsStore.write` zeroes its own byte copy."""
     st = _store(target)
@@ -382,7 +420,10 @@ def _write_secret(target: str, value: str) -> bool:
         back = str(st.read() or "").strip()
     except Exception:
         return False
-    return bool(back) and hmac.compare_digest(back, value)
+    if bool(back) and hmac.compare_digest(back, value):
+        _register(value)
+        return True
+    return False
 
 
 def _delete_secret(target: str) -> bool:
@@ -413,10 +454,12 @@ _ACCESS: dict = {"token": "", "expires_at": 0.0}
 _ACCOUNT: dict = {"name": ""}
 _LOCK = threading.RLock()
 
-#: Everything the writes need to know about the last read: when it happened
-#: (monotonic) and which event ids it saw. A change to an id that is not in
-#: the snapshot is refused rather than sent blind.
-_STATE: dict = {"last_read": 0.0, "ids": set(), "read_ok": False}
+#: Everything a write needs to know about the last read: when it happened
+#: (monotonic) and WHAT it saw, by event id - the event's own summary and times,
+#: not just the id. A change to an id that is not in the snapshot is refused
+#: rather than sent blind, and a card is built from the snapshot so it can never
+#: show one event while deleting another.
+_STATE: dict = {"last_read": 0.0, "events": {}}
 
 
 def _reset_for_tests() -> None:
@@ -425,7 +468,7 @@ def _reset_for_tests() -> None:
     with _LOCK:
         _ACCESS["token"], _ACCESS["expires_at"] = "", 0.0
         _ACCOUNT["name"] = ""
-        _STATE["last_read"], _STATE["ids"], _STATE["read_ok"] = 0.0, set(), False
+        _STATE["last_read"], _STATE["events"] = 0.0, {}
     with _PENDING_LOCK:
         _PENDING["flow"] = None
     _STORE_FACTORY = None
@@ -521,10 +564,19 @@ def make_state() -> str:
 
 
 def state_matches(expected: str, given: Any) -> bool:
-    """Constant-time, and a missing or non-text state is never a match."""
+    """Constant-time, and a missing or non-text state is never a match.
+
+    A state Jarvis makes is always ASCII (`secrets.token_urlsafe`), so a
+    non-ASCII `given` can never be the real one - and it must be REFUSED
+    rather than raise: `hmac.compare_digest` raises `TypeError` on a non-ASCII
+    `str`, and an exception here would escape `do_GET` and close the listener,
+    killing a sign-in nobody authenticated. Every value is refused safely."""
     if not isinstance(given, str) or not given or not expected:
         return False
-    return hmac.compare_digest(str(expected), given)
+    expected = str(expected)
+    if not expected or not expected.isascii() or not given.isascii():
+        return False
+    return hmac.compare_digest(expected, given)
 
 
 # --------------------------------------------------------------------------
@@ -541,6 +593,13 @@ class Flow:
     redirect_uri: str
     port: int
     deadline: float
+    #: The URL the browser was sent to. It holds the state and the challenge,
+    #: never the verifier, and it is what a second `start` answers with so two
+    #: clicks cannot open two listeners.
+    url: str = ""
+    #: Whether the browser was handed the URL (so a second `start` can answer
+    #: truthfully instead of claiming it opened another one).
+    opened: bool = False
     server: Any = None
     thread: Any = None
     done: Any = field(default_factory=threading.Event)
@@ -564,9 +623,16 @@ class Flow:
         return out
 
 
-#: The one flow allowed at a time. A second `start` cancels the first.
+#: The one flow allowed at a time. A second `start` while one is WAITING
+#: answers that same flow and opens no second listener; a flow that already
+#: finished (or timed out) is reaped and replaced. `_START_LOCK` serialises the
+#: whole start, so a burst of `POST /start` cannot leave an orphan listener that
+#: no `_PENDING` entry points at (each one would otherwise live up to
+#: FLOW_SECONDS). Lock order: `_START_LOCK` then `_PENDING_LOCK`, never the
+#: other way round, and nothing here calls `cancel()` while holding either.
 _PENDING: dict = {"flow": None}
 _PENDING_LOCK = threading.Lock()
+_START_LOCK = threading.Lock()
 
 #: Tests replace this. The real one hands the URL to the default browser -
 #: which is the owner's own browser, on the owner's own PC.
@@ -656,11 +722,27 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             return
         query = dict(parse_qsl(parts.query, keep_blank_values=True))
 
+        # THE STATE CHECK, BEFORE ANYTHING IS ACTED ON. A callback that did not
+        # come from the tab this flow opened is refused and nothing is
+        # exchanged - and it must also not FINISH the flow: anything that can
+        # reach this loopback port is unauthenticated, so a bad or missing
+        # state that cancelled the sign-in here would be a way to kill a
+        # sign-in nobody asked that attacker to touch. The flow stays waiting;
+        # a real bad state (an old tab) simply expires.
+        if not state_matches(flow.state, query.get("state")):
+            _page(self, 400, "That sign-in did not start here",
+                  "Jarvis refused it because the code did not match the sign-in "
+                  "it started. Nothing was saved, and the sign-in Jarvis started "
+                  "is still waiting - finish it in the tab that opened it, or "
+                  "close this tab and start again from Jarvis.")
+            return
+
         # A refusal from Google itself: the owner pressed Cancel, or the
-        # client is misconfigured. The CODE is recorded for the status line;
-        # the page says fixed words and never echoes the query, so nothing
-        # chosen by whoever reached this address can appear in the owner's
-        # browser.
+        # client is misconfigured. It only reaches this branch with the RIGHT
+        # state, so only the browser tab this flow opened can end it. The CODE
+        # is recorded for the status line; the page says fixed words and never
+        # echoes the query, so nothing chosen by whoever reached this address
+        # can appear in the owner's browser.
         if query.get("error"):
             err = str(query.get("error"))[:60]
             flow.finish(outcome="denied" if err == "access_denied" else "error",
@@ -672,23 +754,12 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             self._stop()
             return
 
-        # THE STATE CHECK, before anything else. A callback that did not come
-        # from the tab this flow opened is refused and nothing is exchanged.
-        if not state_matches(flow.state, query.get("state")):
-            flow.finish(outcome="bad_state")
-            _page(self, 400, "That sign-in did not start here",
-                  "Jarvis refused it because the code did not match the sign-in "
-                  "it started. Nothing was saved. Start the connection again "
-                  "from Settings, and close this tab.")
-            self._stop()
-            return
-
         code = query.get("code")
         if not isinstance(code, str) or not code:
             flow.finish(outcome="bad_request")
             _page(self, 400, "No code came back",
                   "Google did not send an authorization code, so nothing was "
-                  "saved. Start the connection again from Settings.")
+                  "saved. Start the connection again from Jarvis.")
             self._stop()
             return
 
@@ -832,8 +903,9 @@ def access_token(*, transport: Optional[Callable] = None,
     if status != 200:
         err = str(body.get("error") or "Google answered with error number {}".format(status))[:60]
         if err == "invalid_grant":
-            raise NotConnected("the saved Google permission has expired - connect again "
-                               "in Settings, Accounts (Google deletes a Testing-mode "
+            raise NotConnected("the saved Google permission has expired - run "
+                               "`py -3 jarvis_google_calendar.py connect` in the "
+                               "backend folder again (Google deletes a Testing-mode "
                                "token after about 7 days)")
         raise NotConnected("Google would not renew the connection ({})".format(err))
     if not isinstance(body.get("access_token"), str) or not body.get("access_token"):
@@ -841,6 +913,14 @@ def access_token(*, transport: Optional[Callable] = None,
     _keep_access(body)
     with _LOCK:
         return _ACCESS["token"]
+
+
+def _answer_for(flow: Flow, clock: Callable[[], float]) -> dict:
+    """The start() answer for a flow - never the verifier, never a token."""
+    return {"auth_url": flow.url, "port": flow.port,
+            "redirect_uri": flow.redirect_uri,
+            "browser_opened": bool(flow.opened),
+            "expires_in": max(0, int(flow.deadline - clock()))}
 
 
 def start(*, opener: Optional[Callable[[str], Any]] = None,
@@ -852,36 +932,60 @@ def start(*, opener: Optional[Callable[[str], Any]] = None,
 
     The listener is bound to `BIND_HOST` (127.0.0.1) on an ephemeral port, so
     there is nothing to forward and nothing another machine can reach.
+
+    ONE listener at a time, and that is a lock rather than a convention: a
+    second `start` while the first is still WAITING answers the SAME flow (so a
+    double click on a Settings button cannot kill a sign-in or open a second
+    listener); a flow that already finished or timed out is finished here and
+    its listener closed before the new one binds. A burst of `POST /start`
+    therefore leaves exactly one live listener, not one per request.
     """
-    if not client_id():
+    client = client_id()
+    if not client:
         raise FlowError("the Google client ID has not been saved on this PC yet")
     if not _read_secret(TARGET_CLIENT_SECRET):
         raise FlowError("the Google client secret has not been saved on this PC yet")
-    cancel()                                  # one flow at a time
 
-    server = HTTPServer((BIND_HOST, 0), _CallbackHandler)
-    server.daemon_threads = True
-    server.timeout = 0.25
-    host, port = server.server_address[0], int(server.server_address[1])
-    if host != BIND_HOST:                     # cannot happen; refuse anyway
-        server.server_close()
-        raise FlowError("the sign-in listener refused to bind to loopback only")
+    with _START_LOCK:
+        with _PENDING_LOCK:
+            current = _PENDING.get("flow")
+            still_waiting = (current is not None and not current.done.is_set()
+                             and clock() <= current.deadline)
+            if still_waiting:
+                return _answer_for(current, clock)
+            if current is not None:           # finished or timed out: reap it
+                current.finish(outcome="cancelled")
+                try:
+                    current.server.server_close()
+                except Exception:
+                    pass
 
-    flow = Flow(state=make_state(), verifier=make_verifier(),
-                redirect_uri="http://{}:{}{}".format(BIND_HOST, port, CALLBACK_PATH),
-                port=port, deadline=clock() + FLOW_SECONDS, server=server)
-    server.jarvis_flow = flow
-    flow.thread = threading.Thread(target=_serve, args=(server, flow),
-                                   name="jarvis-google-calendar-callback", daemon=True)
-    with _PENDING_LOCK:
-        _PENDING["flow"] = flow
-    flow.thread.start()
+            server = HTTPServer((BIND_HOST, 0), _CallbackHandler)
+            server.daemon_threads = True
+            server.timeout = 0.25
+            host, port = server.server_address[0], int(server.server_address[1])
+            if host != BIND_HOST:             # cannot happen; refuse anyway
+                server.server_close()
+                raise FlowError("the sign-in listener refused to bind to loopback only")
 
-    url = auth_url(flow, client_id())
-    opened = _open(url) if opener is None else bool(_try(lambda: opener(url)))
-    return {"auth_url": url, "port": port, "redirect_uri": flow.redirect_uri,
-            "browser_opened": opened,
-            "expires_in": max(0, int(flow.deadline - clock()))}
+            flow = Flow(state=make_state(), verifier=make_verifier(),
+                        redirect_uri="http://{}:{}{}".format(BIND_HOST, port,
+                                                             CALLBACK_PATH),
+                        port=port, deadline=clock() + FLOW_SECONDS, server=server)
+            flow.url = auth_url(flow, client)
+            server.jarvis_flow = flow
+            _PENDING["flow"] = flow
+
+        # Opening the browser and starting the thread happen while `_START_LOCK`
+        # is still held, so a concurrent `start` sees a flow that is already
+        # running and answers it rather than adding a second listener.
+        flow.thread = threading.Thread(target=_serve, args=(server, flow),
+                                       name="jarvis-google-calendar-callback",
+                                       daemon=True)
+        flow.thread.start()
+        flow.opened = (_open(flow.url) if opener is None
+                       else bool(_try(lambda: opener(flow.url))))
+        return _answer_for(flow, clock)
 
 
 def _try(fn) -> bool:
@@ -987,6 +1091,27 @@ def _event_row(item: dict) -> dict:
     }
 
 
+def _snapshot(rows: list) -> dict:
+    """What the last read saw, by event id: the event's OWN summary and times.
+
+    The card for a change or a delete is built from this, never from the
+    request, so it cannot display one event while deleting another - and an
+    update card can show the values that were there before as well as the ones
+    that will replace them."""
+    seen: dict = {}
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("id"):
+            continue
+        seen[str(row["id"])] = {
+            "summary": str(row.get("summary") or "(no title)"),
+            "start": str(row.get("start") or ""),
+            "end": str(row.get("end") or ""),
+            "where": str(row.get("where") or ""),
+            "all_day": bool(row.get("all_day")),
+        }
+    return seen
+
+
 def _window(days_ahead: int, *, now: Optional[datetime] = None) -> tuple:
     days = max(1, min(_DAYS_CAP, int(days_ahead)))
     moment = now or datetime.now(timezone.utc)
@@ -1020,8 +1145,7 @@ def _list_google(days_ahead: int, *, now: Optional[datetime] = None,
             if isinstance(i, dict)][:_MAX_EVENTS]
     with _LOCK:
         _STATE["last_read"] = time.monotonic()
-        _STATE["ids"] = {r["id"] for r in rows if r["id"]}
-        _STATE["read_ok"] = True
+        _STATE["events"] = _snapshot(rows)
     return {"ok": True, "connected": True, "events": rows,
             "days": max(1, min(_DAYS_CAP, int(days_ahead))),
             "window": {"from": start_at.isoformat(), "to": end_at.isoformat()}}
@@ -1138,13 +1262,21 @@ CARD_WHY = ("Nothing is sent to Google until you say yes. The card shows the exa
 
 
 def _words(kind: str, event: dict) -> str:
-    """The card's own text, built only from the values that will be sent."""
+    """The card's own text: the values that will be sent, and - for a change -
+    the values the last read actually saw, so the person can see both."""
     when = "{} to {}".format(event.get("start", "?"), event.get("end", "?"))
     lines = [CARD_TITLES[kind], "", CARD_WHY, "",
              "What:  " + str(event.get("summary") or "(no title)"),
              "When:  " + when,
              "Where: " + (str(event.get("where") or "-")),
              "Calendar: primary"]
+    old = event.get("previous") or {}
+    if kind == "update" and old:
+        lines += ["", "It is like this now, and this is what the card changes:",
+                  "What:  " + str(old.get("summary") or "(no title)"),
+                  "When:  " + "{} to {}".format(old.get("start") or "?",
+                                                old.get("end") or "?"),
+                  "Where: " + str(old.get("where") or "-")]
     if event.get("description"):
         lines.append("Notes: " + str(event["description"])[:300])
     return "\n".join(lines)
@@ -1162,6 +1294,7 @@ def _card_says_yes(kind: str, event: dict, *, gate=None, tier_of=None,
         "start": event.get("start", ""),
         "end": event.get("end", ""),
         "where": event.get("where", ""),
+        "previous": event.get("previous") or {},
         "event_id": event.get("id", ""),
         "leaves_this_pc": True,
         "text": CARD_TITLES[kind],
@@ -1209,10 +1342,13 @@ def _refuse(code: int, why: str, outcome: str = "refused") -> tuple:
 
 def _need_google() -> None:
     if mode() != "google":
-        raise NotConnected("Google sign-in is not the chosen way in Settings")
+        raise NotConnected("Google sign-in is not the chosen way on this PC - run "
+                           "`py -3 jarvis_google_calendar.py mode google` in the "
+                           "backend folder")
     if not refresh_token_present():
-        raise NotConnected("Google Calendar is not connected yet - "
-                           "Settings, Accounts, Connect Google Calendar")
+        raise NotConnected("Google Calendar is not connected yet - run "
+                           "`py -3 jarvis_google_calendar.py connect` in the backend "
+                           "folder")
 
 
 def stale_reason(*, now: Optional[float] = None) -> str:
@@ -1309,8 +1445,7 @@ def create_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
     if status not in (200, 201):
         return _refuse(502, "Google refused the new event (error number {})".format(status), "failed")
     with _LOCK:
-        _STATE["last_read"] = 0.0          # the list is now out of date
-        _STATE["read_ok"] = False
+        _STATE["last_read"], _STATE["events"] = 0.0, {}   # the list is now out of date
     return 200, {"ok": True, "outcome": "approved", "event": _event_row(out),
                  "message": LAST_WORDS["approved"]}
 
@@ -1318,7 +1453,8 @@ def create_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
 def update_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
                  transport: Optional[Callable] = None) -> tuple:
     """POST /api/google-calendar/events/update - ONE card, and only for an
-    event the last read really saw."""
+    event the last read really saw. The card shows the values that read saw
+    ("It is like this now") as well as the ones that will replace them."""
     try:
         _need_google()
     except NotConnected as exc:
@@ -1328,10 +1464,10 @@ def update_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
         return _refuse(400, "which event? an event id from the last read is needed")
     stale = stale_reason()
     with _LOCK:
-        seen = event_id in set(_STATE.get("ids") or ())
+        previous = dict((_STATE.get("events") or {}).get(event_id) or {})
     if stale:
         return _refuse(409, stale, "stale")
-    if not seen:
+    if not previous:
         return _refuse(409, "that event is not in the calendar I last read, so I will "
                             "not change it blind", "stale")
     body = _event_body(fields)
@@ -1341,7 +1477,8 @@ def update_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
              "start": str(fields.get("start") or ""),
              "end": str(fields.get("end") or ""),
              "where": str(fields.get("where") or ""),
-             "description": str(fields.get("description") or "")}
+             "description": str(fields.get("description") or ""),
+             "previous": previous}
     yes, outcome = _card_says_yes("update", shown, gate=gate, tier_of=tier_of,
                                   spawn=spawn)
     if not yes:
@@ -1357,8 +1494,7 @@ def update_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
     if status != 200:
         return _refuse(502, "Google refused the change (error number {})".format(status), "failed")
     with _LOCK:
-        _STATE["last_read"] = 0.0
-        _STATE["read_ok"] = False
+        _STATE["last_read"], _STATE["events"] = 0.0, {}
     return 200, {"ok": True, "outcome": "approved", "event": _event_row(out),
                  "message": LAST_WORDS["approved"]}
 
@@ -1366,7 +1502,11 @@ def update_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
 def delete_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
                  transport: Optional[Callable] = None) -> tuple:
     """POST /api/google-calendar/events/delete - ONE card, and only for an
-    event the last read really saw."""
+    event the last read really saw.
+
+    Only the id comes from the request. The card's title and times are the ones
+    the last read saw for that id, so the card cannot describe one event while
+    the DELETE goes to another."""
     try:
         _need_google()
     except NotConnected as exc:
@@ -1376,16 +1516,17 @@ def delete_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
         return _refuse(400, "which event? an event id from the last read is needed")
     stale = stale_reason()
     with _LOCK:
-        seen = event_id in set(_STATE.get("ids") or ())
+        previous = dict((_STATE.get("events") or {}).get(event_id) or {})
     if stale:
         return _refuse(409, stale, "stale")
-    if not seen:
+    if not previous:
         return _refuse(409, "that event is not in the calendar I last read, so I will "
                             "not delete it blind", "stale")
-    shown = {"id": event_id, "summary": str(fields.get("summary") or "(the event)")[:300],
-             "start": str(fields.get("start") or ""),
-             "end": str(fields.get("end") or ""),
-             "where": str(fields.get("where") or "")}
+    shown = {"id": event_id,
+             "summary": previous.get("summary") or "(the event)",
+             "start": previous.get("start") or "",
+             "end": previous.get("end") or "",
+             "where": previous.get("where") or ""}
     yes, outcome = _card_says_yes("delete", shown, gate=gate, tier_of=tier_of,
                                   spawn=spawn)
     if not yes:
@@ -1401,8 +1542,7 @@ def delete_event(fields: dict, *, gate=None, tier_of=None, spawn=None,
     if status not in (200, 204):
         return _refuse(502, "Google refused the delete (error number {})".format(status), "failed")
     with _LOCK:
-        _STATE["last_read"] = 0.0
-        _STATE["read_ok"] = False
+        _STATE["last_read"], _STATE["events"] = 0.0, {}
     return 200, {"ok": True, "outcome": "approved", "deleted": event_id,
                  "message": "Deleted from your Google Calendar."}
 
@@ -1433,7 +1573,7 @@ def disconnect(*, revoke: bool = True,
     with _LOCK:
         _ACCESS["token"], _ACCESS["expires_at"] = "", 0.0
         _ACCOUNT["name"] = ""
-        _STATE["last_read"], _STATE["ids"], _STATE["read_ok"] = 0.0, set(), False
+        _STATE["last_read"], _STATE["events"] = 0.0, {}
     doc, _why = _read_settings()
     if doc.get("mode") == "google":
         doc["mode"] = "off"
@@ -1468,7 +1608,8 @@ def set_mode(chosen: str) -> dict:
             raise ValueError("save the Google client ID and client secret first - "
                              "docs/GOOGLE-CALENDAR-SETUP.md walks through it")
         if not refresh_token_present():
-            raise ValueError("sign in to Google first: Connect Google Calendar")
+            raise ValueError("sign in to Google first: run `py -3 "
+                             "jarvis_google_calendar.py connect` in the backend folder")
     if chosen == "ical":
         link = _ical_link()
         if not link:
@@ -1480,7 +1621,7 @@ def set_mode(chosen: str) -> dict:
     _write_settings(doc)
     with _LOCK:
         if chosen != "google":
-            _STATE["last_read"], _STATE["ids"], _STATE["read_ok"] = 0.0, set(), False
+            _STATE["last_read"], _STATE["events"] = 0.0, {}
     return {"ok": True, "mode": chosen}
 
 
@@ -1520,6 +1661,29 @@ def set_client(client_id_value: Optional[str] = None,
 #   status - what the apps read, and never a token
 # --------------------------------------------------------------------------
 
+def _way_words(chosen: str, *, link: bool, signed_in: bool) -> str:
+    """The status line's `way`, which must not call a saved thing "not set up".
+
+    `mode` is still the separate fact: `connected` below is false while the
+    chosen way is off, because Jarvis is not reading a calendar then. What this
+    sentence fixes is the claim that nothing EXISTS - a saved iCal link or a
+    saved Google sign-in is set up whether or not it has been chosen."""
+    if chosen == "ical":
+        return ("private link (read-only)" if link
+                else "private link (read-only) - chosen, but no address saved")
+    if chosen == "google":
+        return ("Google sign-in (read/write)" if signed_in
+                else "Google sign-in (read/write) - chosen, but not signed in")
+    saved = []
+    if link:
+        saved.append("a private iCal link is saved")
+    if signed_in:
+        saved.append("a Google sign-in is saved")
+    if saved:
+        return "not chosen yet (" + " and ".join(saved) + ")"
+    return "not set up"
+
+
 def status() -> dict:
     """Plain words and booleans. NEVER a token, never part of one."""
     chosen = mode()
@@ -1528,26 +1692,34 @@ def status() -> dict:
         held = bool(_ACCESS.get("token"))
         expires_at = float(_ACCESS.get("expires_at") or 0.0)
         account = str(_ACCOUNT.get("name") or "")
+    linked = bool(_ical_link())
     refresh = refresh_token_present()
     needs: list = []
-    if not client_id():
-        needs.append("the Google client ID")
-    if not client_secret_present():
-        needs.append("the Google client secret")
-    if chosen == "google" and not refresh:
-        needs.append("a Google sign-in")
-    if chosen == "ical" and not _ical_link():
-        needs.append("the private iCal address")
+    if chosen == "google":
+        if not client_id():
+            needs.append("the Google client ID")
+        if not client_secret_present():
+            needs.append("the Google client secret")
+        if not refresh:
+            needs.append("a Google sign-in")
+    elif chosen == "ical":
+        if not linked:
+            needs.append("the private iCal address")
+    elif not linked and not refresh:
+        # With no way chosen, the Google client is only needed if the owner
+        # picks the sign-in way; saying it is "still needed" would push one of
+        # the two ways on someone who may want the private link.
+        needs.append("a way chosen - mode ical (read-only) or mode google (read/write)")
     return {
         "mode": chosen,
         "connected": bool(chosen == "google" and refresh)
-        or bool(chosen == "ical" and _ical_link()),
-        "way": {"off": "not set up", "ical": "private link (read-only)",
-                "google": "Google sign-in (read/write)"}[chosen],
+        or bool(chosen == "ical" and linked),
+        "way": _way_words(chosen, link=linked, signed_in=refresh),
         "client_id": client_id(),          # public, and shown so it can be checked
         "client_id_set": bool(client_id()),
         "client_secret_set": client_secret_present(),
         "refresh_token_saved": refresh,
+        "ical_link_saved": linked,
         "access_token_in_memory": held,
         "access_expires_at": expires_at,
         "account": account,
@@ -1653,17 +1825,31 @@ def parse_meeting(text: str, *, now: Optional[datetime] = None) -> Optional[dict
 
 def connect_sentence() -> str:
     """The two real ways, and where each one lives. This is the answer that
-    replaces the old "Jarvis cannot connect to external calendars"."""
+    replaces the old "Jarvis cannot connect to external calendars".
+
+    It reports what is SAVED as well as what is CHOSEN: a saved private iCal
+    link with the chosen way still off is set up, and saying "neither is set up
+    yet" to someone who pasted that link yesterday is simply wrong."""
     chosen = mode()
-    if chosen == "google" and refresh_token_present():
-        return ("Google Calendar is connected both ways already: Google sign-in is "
+    linked = bool(_ical_link())
+    signed_in = refresh_token_present()
+    if chosen == "google" and signed_in:
+        return ("Google Calendar is connected the read/write way: Google sign-in is "
                 "the chosen way, so I can read your calendar and add, change or "
                 "delete an event - each change waits for your yes on a card.")
-    if chosen == "ical":
+    if chosen == "google" and not signed_in:
+        return ("Google sign-in is the chosen way, but nobody has signed in on this PC "
+                "yet. Run `py -3 jarvis_google_calendar.py connect` in the backend "
+                "folder - the one-time Google Cloud setup is in " + SETUP_DOC + ".")
+    if chosen == "ical" and linked:
         return ("Your calendar is connected the read-only way: the private iCal "
-                "address. I can read it; I cannot add or change anything. Switch to "
-                "Google sign-in in Settings, Accounts if you want two-way.")
-    return (
+                "address. I can read it; I cannot add or change anything. Google "
+                "sign-in is the other way if you want two-way - " + SETUP_DOC + ".")
+    if chosen == "ical" and not linked:
+        return ("The private iCal link is the chosen way, but no address is saved yet. "
+                "Paste your calendar's secret iCal address (Google Calendar, Settings, "
+                "the calendar, Integrate calendar) into the box in Settings, Accounts.")
+    two_ways = (
         "Two ways, and only one is active at a time:\n\n"
         "1. Private link (read-only) - paste your calendar's secret iCal address "
         "(Google Calendar, Settings, the calendar, Integrate calendar) into the box "
@@ -1673,22 +1859,39 @@ def connect_sentence() -> str:
         "minutes, free), then one sign-in in your own browser. I can then read and "
         "add, change or delete an event, each change on an approval card.\n\n"
         "The Google setup and sign-in are commands in the backend folder today "
-        "(Settings will get its own row): "
+        "(the Settings window has no card for them yet): "
         "`py -3 jarvis_google_calendar.py client <client-id>`, then "
-        "`py -3 jarvis_google_calendar.py connect`. The steps are in " + SETUP_DOC + "."
-        + " Which one works today: "
-        + ("neither is set up yet" if chosen == "off" else
-           "the private link" if chosen == "ical" else "Google sign-in")
-        + ".")
+        "`py -3 jarvis_google_calendar.py connect`. The steps are in " + SETUP_DOC + ".")
+    if linked and signed_in:
+        return (two_ways + "\n\nBoth are already set up on this PC - the private link "
+                "is saved and a Google sign-in is saved - but neither is chosen, so I "
+                "am not reading your calendar. Choose one in the backend folder: "
+                "`py -3 jarvis_google_calendar.py mode ical` (read-only) or "
+                "`py -3 jarvis_google_calendar.py mode google` (read/write).")
+    if linked:
+        return (two_ways + "\n\nThe private iCal link is already saved, so only the "
+                "choice is missing: `py -3 jarvis_google_calendar.py mode ical` in the "
+                "backend folder turns it on (read-only).")
+    if signed_in:
+        return (two_ways + "\n\nA Google sign-in is already saved, so only the choice "
+                "is missing: `py -3 jarvis_google_calendar.py mode google` in the "
+                "backend folder turns it on (read/write).")
+    return (two_ways + "\n\nNeither is set up yet. The Google setup and sign-in are "
+            "the commands above; the private link needs no setup page at all.")
 
 
 def answer(text: str, *, now: Optional[datetime] = None) -> Optional[str]:
     """The deterministic chat answer for one of the three calendar sentences,
     or None (so a caller can fall through to the model).
 
-    Reads are card-free; a proposed event is only PROPOSED here - the card is
-    raised by `create_event`, which the caller reaches with the dictionary
-    this returns. Nothing is sent to Google by this function.
+    Returns ONE SENTENCE (a `str`), never a Result and never a dictionary -
+    `jarvis_quick.answer()` returns `Optional[Result]`, so a caller that wires
+    this in must wrap the sentence (see WIRING at the top of this module).
+
+    Reads are card-free; a proposed event is only PROPOSED here - nothing is
+    sent to Google by this function, and no approval card is raised by it.
+    Creating the event is a separate step, `create_event(parse_meeting(...))`,
+    after the owner has said yes in chat.
     """
     said = str(text or "")
     if not said.strip():
@@ -1837,8 +2040,6 @@ def _main(argv, *, getpass_fn: Optional[Callable[[str], str]] = None) -> int:
             return 0
         print({
             "denied": "You (or Google) did not finish the sign-in. Nothing was saved.",
-            "bad_state": "That sign-in did not start here, so Jarvis refused it. "
-                         "Nothing was saved - run connect again.",
             "timed_out": "The sign-in window closed before the answer came back. "
                          "Nothing was saved - run connect again.",
             "cancelled": "Cancelled. Nothing was saved.",
@@ -1995,7 +2196,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     handler_cls.do_POST = do_POST
     chosen = mode()
     return ("  calendar   Google Calendar: "
-            + {"off": "neither way chosen yet (Settings, Accounts)",
+            + {"off": "neither way chosen yet - mode ical or mode google in the "
+                      "backend folder",
                "ical": "the private iCal link (read-only)",
                "google": ("Google sign-in (read/write)" if refresh_token_present()
                           else "Google sign-in chosen but not signed in")}[chosen])
