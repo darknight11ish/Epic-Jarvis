@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-set-galaxy-look"
+description = "Enables the hud_set_galaxy_look command without any pre-configured scope."
+commands.allow = ["hud_set_galaxy_look"]
+
+[[permission]]
+identifier = "deny-hud-set-galaxy-look"
+description = "Denies the hud_set_galaxy_look command without any pre-configured scope."
+commands.deny = ["hud_set_galaxy_look"]

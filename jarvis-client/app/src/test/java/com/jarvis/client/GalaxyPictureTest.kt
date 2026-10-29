@@ -147,6 +147,125 @@ class GalaxyPictureTest {
         }
     }
 
+    /**
+     * Every look the desktop builds, at the desktop's own numbers.
+     *
+     * The phone's eight layouts are a PORT, and a port is only honest if it can
+     * be checked against the original - so this compares
+     * [com.jarvis.client.net.GalaxyLayouts]'s positions with the ones
+     * `galaxy-presets.js` computed for the same names, look by look, name by
+     * name. The fixture's `look_ids` come from that module's own
+     * `BUILT_PRESETS`, so a look the desktop adds and this phone has never
+     * heard of fails here, naming it, instead of quietly drawing the zen ring.
+     */
+    @Test
+    fun everyLookIsTheDesktopsOwnLayout() {
+        val ids = doc["look_ids"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(
+            "the phone draws every look the desktop builds",
+            ids,
+            com.jarvis.client.net.GalaxyLayouts.LOOKS,
+        )
+
+        for (case in cases) {
+            val name = caseName(case)
+            val entities = entitiesOf(case)
+            val looks = case["looks"]!!.jsonObject
+            val kept = GalaxyPicture.ordered(entities)
+            for (look in ids) {
+                val want = looks[look]?.jsonArray ?: error("$name: no \"$look\" positions")
+                val got = com.jarvis.client.net.GalaxyLayouts.layout(look, kept)
+                    ?: error("$name: GalaxyLayouts does not draw \"$look\"")
+                assertEquals("$name/$look: one point per name", want.size, got.size)
+                for (i in want.indices) {
+                    val pair = want[i].jsonArray
+                    assertEquals(
+                        "$name/$look: point $i x",
+                        pair[0].jsonPrimitive.double,
+                        got[i].x,
+                        1e-6,
+                    )
+                    assertEquals(
+                        "$name/$look: point $i y",
+                        pair[1].jsonPrimitive.double,
+                        got[i].y,
+                        1e-6,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * A look this phone cannot draw is SAID, never silently swapped.
+     *
+     * `docs/APPEARANCE-SYNC-PROPOSAL.md` §2 is the rule: a phone quietly showing
+     * one face while the desktop shows another is the same private-language
+     * problem the shared document exists to end, and it is worse than an error
+     * because it looks like it worked. So [GalaxyPicture.Picture] keeps both the
+     * look that was ASKED for and the one that was DRAWN, and the plate reads
+     * the difference.
+     */
+    @Test
+    fun aLookThisPhoneLacksIsSaidOutLoudNotSubstituted() {
+        val entities = entitiesOf(case("names"))
+
+        val zen = GalaxyPicture.build(entities, "zen-ring")
+        assertEquals("zen-ring", zen.look)
+        assertEquals("zen-ring", zen.drawn)
+        assertFalse(zen.lookSubstituted)
+
+        val unknown = GalaxyPicture.build(entities, "hypercube")
+        assertEquals("hypercube", unknown.look)
+        assertEquals(GalaxyPicture.CONSTELLATION, unknown.drawn)
+        assertTrue(unknown.lookSubstituted)
+
+        // The constellation is the desktop's force simulation, which this phone
+        // does not run - so it is the zen ring, unchanged from before the look
+        // was shared, and it does not claim to be a look it is not.
+        val plain = GalaxyPicture.build(entities)
+        assertEquals(GalaxyPicture.CONSTELLATION, plain.drawn)
+        assertFalse(plain.lookSubstituted)
+        assertEquals(zen.dots, plain.dots)
+    }
+
+    /**
+     * The phone's own list of looks is the desktop module's list - ids AND
+     * labels.
+     *
+     * The Appearance screen shows these labels and posts these ids, so a look
+     * renamed on the desktop must not stay stale here: `galaxy-presets.js` is
+     * the one list, the fixture is written from it, and this compares the
+     * phone's copy with it.
+     */
+    @Test
+    fun thePhonesLookListIsTheDesktopsOwn() {
+        val want = doc["looks"]!!.jsonArray.map {
+            val look = it.jsonObject
+            look["id"]!!.jsonPrimitive.content to look["label"]!!.jsonPrimitive.content
+        }
+        assertEquals(
+            want,
+            com.jarvis.client.net.GalaxyLook.BUILT.map { it.id to it.label },
+        )
+        // The desktop's default is a look but not a flat layout, so it is
+        // offered by the picker and is NOT one of the eight the phone draws.
+        assertTrue(
+            com.jarvis.client.net.GalaxyLook.Constellation !in
+                com.jarvis.client.net.GalaxyLook.BUILT,
+        )
+        // A value the desktop does not recognise is the constellation there
+        // (`storedPreset`), so it is the constellation here.
+        assertEquals(
+            com.jarvis.client.net.GalaxyLook.Constellation,
+            com.jarvis.client.net.GalaxyLook.byId("hypercube"),
+        )
+        assertEquals(
+            com.jarvis.client.net.GalaxyLook.byId("dna-helix"),
+            com.jarvis.client.net.GalaxyLook.byId("dna-helix"),
+        )
+    }
+
     @Test
     fun theSameListAlwaysDrawsTheSamePicture() {
         val entities = entitiesOf(case("names"))
@@ -586,7 +705,7 @@ class GalaxyPictureTest {
         // `openId` the list rows set - instead of a new screen or a new card.
         assertTrue(
             "a dot does not open the name's existing facts view",
-            plate.contains("GalaxyPicture(band, onOpen = {"),
+            plate.contains("GalaxyPicture(band, look = galaxy, onOpen = {"),
         )
         assertTrue(
             "a dot does not set the same openId the list rows set",
@@ -595,6 +714,16 @@ class GalaxyPictureTest {
         assertTrue(
             "the plate no longer draws the existing facts panel for the opened name",
             plate.contains("EntityFacts(open,"),
+        )
+
+        // 6. The look is the SHARED one (2026-10-28), read from the appearance
+        // store rather than typed here: a look chosen on the PC redraws this
+        // picture on the `appearance` event, and one chosen on the phone
+        // reaches the PC. A hard-coded look here would agree with itself and be
+        // wrong on both apps at once.
+        assertTrue(
+            "the picture is not drawn in the owner's chosen Galaxy look",
+            plate.contains("JarvisRuntime.appearance.galaxy.collectAsState()"),
         )
     }
 

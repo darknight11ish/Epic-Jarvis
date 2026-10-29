@@ -94,15 +94,30 @@ object GalaxyPicture {
     /** One line between two drawn names, and how many facts they share. */
     data class Edge(val source: String, val target: String, val shared: Int)
 
+    /** The desktop's default look. It is not a flat layout - the desktop's own
+     *  is its force simulation - so the phone draws its zen ring for it. */
+    const val CONSTELLATION = "constellation"
+
     /** The whole picture: what to paint, and the real total so the plate can
-     *  say "Showing 48 of 312" when the cap hides names. */
+     *  say "Showing 48 of 312" when the cap hides names.
+     *
+     *  [look] is the id the DESKTOP asked for, and [drawn] is the id this
+     *  picture was actually laid out in - the same id when the phone has that
+     *  look, the zen ring when it does not. Keeping both is what lets the plate
+     *  be honest instead of quietly drawing something else (the rule in
+     *  `docs/APPEARANCE-SYNC-PROPOSAL.md` §2: fall back, and SAY SO). */
     data class Picture(
         val dots: List<Dot>,
         val edges: List<Edge>,
         /** How many names the plate holds, drawn or not. */
         val total: Int,
+        val look: String = CONSTELLATION,
+        val drawn: String = CONSTELLATION,
     ) {
         val connections: Int get() = edges.size
+
+        /** True when the desktop's look is not the one this phone can draw. */
+        val lookSubstituted: Boolean get() = look != drawn
     }
 
     /** A dot placed on the canvas, in pixels, ready to paint and to hit-test. */
@@ -181,7 +196,7 @@ object GalaxyPicture {
      * characters and the phone draws no labels at all, so nothing here is
      * clipped or fake.
      */
-    fun build(entities: List<Entities.Entity>): Picture {
+    fun build(entities: List<Entities.Entity>, look: String = CONSTELLATION): Picture {
         val kept = ordered(entities)
         val edges = edges(kept)
         val degree = HashMap<String, Int>(kept.size)
@@ -189,7 +204,12 @@ object GalaxyPicture {
             degree[l.source] = (degree[l.source] ?: 0) + 1
             degree[l.target] = (degree[l.target] ?: 0) + 1
         }
-        val points = layout(kept.size)
+        // The look the desktop is showing, drawn with the desktop's own flat
+        // layout of it ([GalaxyLayouts]). Anything this build has not ported
+        // keeps the zen ring, which is what this phone drew before the look was
+        // shared - and `Picture.drawn` records that, so the plate can say so.
+        val placed = GalaxyLayouts.layout(look, kept)
+        val points = placed ?: layout(kept.size)
         val dots = kept.mapIndexed { i, e ->
             val weight = e.factIds.size
             val deg = degree[e.id] ?: 0
@@ -206,7 +226,13 @@ object GalaxyPicture {
                 y = points[i].y,
             )
         }
-        return Picture(dots = dots, edges = edges, total = entities.size)
+        return Picture(
+            dots = dots,
+            edges = edges,
+            total = entities.size,
+            look = look,
+            drawn = if (placed != null) look else CONSTELLATION,
+        )
     }
 
     /**
