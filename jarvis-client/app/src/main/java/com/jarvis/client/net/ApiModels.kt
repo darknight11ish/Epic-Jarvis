@@ -422,14 +422,21 @@ data class ProposalOption(
 
 /**
  * The approvals the PC only ever answers on the PC itself, with Windows Hello:
- * a client-side copy of `jarvis_owner_check.PC_ONLY_ACTIONS` (eight on
- * 2026-10-24, listed here in the PC's own order).
+ * a client-side copy of `jarvis_owner_check.PC_ONLY_ACTIONS` (nine on
+ * 2026-10-28, listed here in the PC's own order).
  *
  * The phone cannot ask the server which cards are PC-only, and copying only the
  * one action it used to know is what offered an Approve button on the other
  * seven, then blamed the pairing key when the PC refused (the full audit's C2,
- * 2026-10-24). `AuditPlumbingTest` names all eight so a change on the PC side
- * that is not carried here fails a test rather than a tap.
+ * 2026-10-24). `desktop_update` was the same drift again: the PC added it to
+ * its set on 2026-10-26 (the update card replaces THIS PC's own executable, so
+ * only the PC can say yes), the phone never heard, and the copy looked
+ * complete. So the list is no longer held by a hand-written test alone:
+ * `AuditPlumbingTest` reads `contract/card-words-cases.json`'s
+ * `pc_only_actions`, which `tools/gen_card_words_cases.py` builds from the PC's
+ * own `jarvis_owner_check.PC_ONLY_ACTIONS`, and the JVM test in the required
+ * `phone-unit-tests` job fails the moment the two differ - instead of an
+ * Approve button that can only fail.
  */
 object PcOnlyActions {
     val ALL: Set<String> = setOf(
@@ -441,6 +448,11 @@ object PcOnlyActions {
         "register_approval_key",
         "handoff_keep_offering",
         "handoff_bring_to_front",
+        // 2026-10-26, the PC's ninth: the update card replaces this PC's own
+        // executable and patches the folder Jarvis runs from, so only the PC
+        // can approve it, with Windows Hello. Approving it here would promise
+        // an install nothing on the phone can perform.
+        "desktop_update",
     )
 }
 

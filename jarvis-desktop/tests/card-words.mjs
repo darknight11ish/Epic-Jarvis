@@ -17,6 +17,8 @@ import {
   CARD_BUTTONS,
   CARD_KICKER,
   CARD_NO_ACTION,
+  CARD_TIMED_OUT,
+  CARD_TIMED_OUT_NEXT,
   CARD_VOICE,
   cardTitle,
   createCardVoice,
@@ -66,6 +68,25 @@ check("the spoken card lines are the PC's, word for word", () => {
   assert.deepEqual({ ...CARD_VOICE }, CASES.voice);
   for (const line of Object.values(CASES.voice)) assert.ok(isCardLine(line), line);
   assert.equal(isCardLine("It's on your screen."), false);
+});
+
+check("an expired card says the PC's words, and the phone's advice is the PC's too", () => {
+  // 2026-10-28, the owner's ruling that the phone's cards must match the
+  // desktop's. `timed_out` is the FACT both apps draw; `timed_out_next` is the
+  // phone's own second sentence (the PC never shows it).
+  assert.equal(CARD_TIMED_OUT, CASES.timed_out);
+  assert.equal(CARD_TIMED_OUT_NEXT, CASES.timed_out_next);
+  assert.match(CARD_TIMED_OUT, /^Timed out/);
+  // The HUD page's own copy of the sentence is the same words - it cannot
+  // import the module, so this is what holds the two together.
+  const hudCopy = HUD.match(/const APPR_TIMED_OUT = "([^"]+)";/);
+  assert.ok(hudCopy, "jarvis_hud.html no longer declares APPR_TIMED_OUT");
+  assert.equal(hudCopy[1], CARD_TIMED_OUT);
+  // And no desktop surface re-types the sentence somewhere else.
+  for (const name of ["main.js", "widget.js", "jarvis-link.js"]) {
+    assert.equal(page(name).split(CARD_TIMED_OUT).length - 1, 0,
+      `${name} types the timed-out sentence out instead of importing it`);
+  }
 });
 
 check("every action's title, as the PC serves it, is what every surface shows", () => {

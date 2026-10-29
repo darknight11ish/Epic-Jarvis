@@ -35,6 +35,28 @@ export const CARD_BUTTONS = Object.freeze(["Deny", "Approve"]);
 export const CARD_NO_ACTION = "Jarvis is asking for your approval";
 
 /**
+ * What an EXPIRED card says - the one sentence every screen draws, from
+ * backend/jarvis_card_words.py's `TIMED_OUT` (2026-10-28, the owner's ruling
+ * that the phone's cards must match the desktop's).
+ *
+ * An expired card cannot be decided any more: the gate refuses it by itself at
+ * the deadline, so both apps stop offering the buttons there. This sentence is
+ * what explains the empty place they left, and it is one copy so the reason and
+ * the dead control cannot drift apart (the DEF-010 lesson).
+ */
+export const CARD_TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it by itself.";
+
+/**
+ * The phone adds this second sentence on the same card, and the PC does not:
+ * on the PC the owner is already in front of the window that raises cards, so
+ * "ask the desktop" would be advice about a machine he is sitting at. Kept here
+ * beside its partner so the pair is read together; `card-words.mjs` holds both
+ * against the PC's own words.
+ */
+export const CARD_TIMED_OUT_NEXT = "Ask the desktop to raise this again.";
+
+
+/**
  * What Jarvis says during a SPOKEN question that waits on a card, and
  * afterwards - keyed by the chat stream's `: jarvis-status` word
  * (backend/jarvis_agent.py: "approval", then the gate's outcome). Fixed

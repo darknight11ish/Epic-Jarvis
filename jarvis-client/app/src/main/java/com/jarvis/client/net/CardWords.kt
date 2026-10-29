@@ -34,6 +34,31 @@ object CardWords {
     /** The title of a row that names no action at all. */
     const val NO_ACTION = "Jarvis is asking for your approval"
 
+    /**
+     * What an EXPIRED card says - the FACT, and the one sentence both apps
+     * draw: `backend/jarvis_card_words.py`'s `TIMED_OUT`, which the desktop
+     * renders from `card-words.js`'s `CARD_TIMED_OUT`. The owner's ruling of
+     * 2026-10-28, that "the cards on android should match the cards on
+     * desktop", is what put this in one place: the phone said "Timed out — ask
+     * the desktop to raise this again." and the PC said "Timed out: Jarvis
+     * stopped waiting and refused it by itself." for the same event.
+     *
+     * An expired card is not decidable on either screen: the gate refuses it by
+     * itself at the deadline, so it draws no buttons (DEF-010, 2026-10-11) and
+     * this sentence is what explains the empty place they left.
+     */
+    const val TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it by itself."
+
+    /**
+     * The phone's own second sentence on the same card - [TIMED_OUT] plus this
+     * is the whole line. The PC does not show it: there the owner is already in
+     * front of the window that raises cards, so "ask the desktop" would be
+     * advice about the machine he is sitting at. Both strings come from the
+     * PC's `jarvis_card_words` (`TIMED_OUT_NEXT`) and are held to it by
+     * `CardWordsContractTest` against `contract/card-words-cases.json`.
+     */
+    const val TIMED_OUT_NEXT = "Ask the desktop to raise this again."
+
     /** "Open the card" - the line on every screen but Home while a card waits. */
     const val OPEN_CARD = "Open the card"
 
