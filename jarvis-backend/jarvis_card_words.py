@@ -564,6 +564,32 @@ VOICE = {
 #: does - so the sentence names the card.
 UNTIL_APPROVED = "Nothing is set up until you approve the card."
 
+#: WHAT AN EXPIRED CARD SAYS, in one place (2026-10-28, the owner's ruling that
+#: "the cards on android should match the cards on desktop"). The card's own
+#: deadline comes from the PC (`expires_in`, approval-expiry.patch); the words
+#: for the moment it passes did not. The phone said "Timed out - ask the
+#: desktop to raise this again." and the desktop said "Timed out: Jarvis
+#: stopped waiting and refused it by itself." - the same event, two sentences,
+#: on the two screens the owner compares.
+#:
+#: So the FACT is one sentence here and both apps draw it; TIMED_OUT_NEXT is
+#: the phone's own recovery sentence, added only there because on the PC the
+#: owner is already sitting in front of the window that raises cards. Both are
+#: written into `jarvis-desktop/tests/fixtures/card-words-cases.json` and
+#: `jarvis-client/.../contract/card-words-cases.json` by
+#: tools/gen_card_words_cases.py, and each app's test holds its own constant to
+#: these words - the same mechanism KICKER and BUTTONS already use.
+#:
+#: WHY IT MATTERS BEYOND WORDING: an expired card cannot be decided any more
+#: (the gate refuses it by itself), so the desktop must stop offering its
+#: buttons at the deadline just as the phone does. This sentence is what says
+#: so after they are gone - one copy, so the reason and the dead control cannot
+#: drift apart (the DEF-010 lesson, measured on the owner's phone 2026-10-11).
+TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it by itself."
+
+#: The phone's second sentence on the same card. Never shown on the PC.
+TIMED_OUT_NEXT = "Ask the desktop to raise this again."
+
 _MAX_NAME = 60
 
 

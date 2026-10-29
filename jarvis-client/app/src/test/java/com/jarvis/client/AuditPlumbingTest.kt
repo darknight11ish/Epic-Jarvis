@@ -53,18 +53,39 @@ class AuditPlumbingTest {
 
     @Test
     fun everyPcOnlyActionIsKnownAndTheRestAreNot() {
-        // The PC's own set, as `jarvis_owner_check.PC_ONLY_ACTIONS` lists it on
-        // 2026-10-24. If it gains or loses one there, this test should be the
-        // first thing that notices - not a tap that fails.
+        // THE PC'S OWN SET, from the one generated file that holds it. This
+        // test used to assert a hand-copied set of eight against the same eight
+        // in `PcOnlyActions.ALL`, so it could only ever prove the copy equalled
+        // itself - and `desktop_update` joined the PC's set on 2026-10-26 while
+        // the phone went on offering an Approve button the PC refuses (the
+        // drift this now catches). `contract/card-words-cases.json` is written
+        // by tools/gen_card_words_cases.py from
+        // `jarvis_owner_check.PC_ONLY_ACTIONS` itself - the same file the
+        // desktop's own tests read - so both apps and the PC are held to one
+        // list, and a new PC-only action fails HERE, in the required
+        // `phone-unit-tests` job, rather than at a tap.
+        val contract = repoFile(
+            "jarvis-client/app/src/test/resources/contract/card-words-cases.json",
+        ).readText()
+        val listed = Regex("\"pc_only_actions\"\\s*:\\s*\\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
+            .find(contract)
+            ?.groupValues?.get(1)
+            ?: error(
+                "card-words-cases.json carries no pc_only_actions, so the phone's copy of " +
+                    "the PC's list cannot be checked against anything",
+            )
+        val onPc = Regex("\"([a-z_]+)\"").findAll(listed).map { it.groupValues[1] }.toSet()
+        assertTrue("pc_only_actions is empty in the generated contract", onPc.isNotEmpty())
         assertEquals(
-            setOf(
-                "loosen_what_asks_first", "enable_reading_tool", "restore_backup",
-                "pair_device", "unretire_shared_key", "register_approval_key",
-                "handoff_keep_offering", "handoff_bring_to_front",
-            ),
+            "the phone's PcOnlyActions has drifted from the PC's own PC_ONLY_ACTIONS",
+            onPc,
             PcOnlyActions.ALL,
         )
-        assertEquals(8, PcOnlyActions.ALL.size)
+        assertTrue(
+            "desktop_update is PC-only on the PC since 2026-10-26, so the phone must not " +
+                "offer Approve for it",
+            "desktop_update" in PcOnlyActions.ALL,
+        )
         assertTrue(AsksFirst.LOOSEN_ACTION in PcOnlyActions.ALL)
         for (action in PcOnlyActions.ALL) {
             assertTrue(

@@ -15,7 +15,7 @@
  * @module jarvis-link
  */
 
-import { fallbackTitle } from "./card-words.js";
+import { fallbackTitle, CARD_TIMED_OUT } from "./card-words.js";
 import { isReplaceCard } from "./replace-confirm.js";
 import { markMigrated, migrated, storeAnimal } from "./animal-shared.js";
 import { loadFaceTuning } from "./face-tuning.js";
@@ -325,15 +325,41 @@ function expiryOf(row) {
  * "Timed out" is the one word for this on every screen (settings audit
  * 2026-10-05, wording disagreement 1): the phone's card said "Expired" while
  * its own list and this one said "Timed out".
+ *
+ * The sentence itself is `CARD_TIMED_OUT` from card-words.js (2026-10-28): the
+ * phone draws the same words from `jarvis_card_words.TIMED_OUT`, and the two
+ * are held together by `tests/card-words.mjs` so a card that ran out of time
+ * cannot be explained two ways on the two screens the owner compares.
  */
 export function expiryWords(expiresAt, now = Date.now()) {
   if (expiresAt === null || expiresAt === undefined || !Number.isFinite(expiresAt)) return "";
   const left = Math.ceil((expiresAt - now) / 1000);
-  if (left <= 0) return "Timed out: Jarvis stopped waiting and refused it by itself.";
+  if (left <= 0) return CARD_TIMED_OUT;
   const m = Math.floor(left / 60);
   const sec = String(left % 60).padStart(2, "0");
   return `${m}:${sec} left to decide, then Jarvis refuses it by itself.`;
 }
+
+/**
+ * Whether this card's deadline has passed, so it can no longer be decided.
+ *
+ * THE ONE RULE, IN ONE PLACE (2026-10-28). The phone has refused an expired
+ * card since DEF-010 (2026-10-11, measured on the owner's phone): it draws no
+ * buttons once the deadline passes, because a faded control captioned by a
+ * line nobody connects to it does not read as "you cannot act". The three
+ * desktop surfaces still drew live Approve and Deny on the same card, so the
+ * same expired request could be pressed on the PC and not on the phone - the
+ * opposite of the owner's ruling that the two must match.
+ *
+ * A card with NO deadline (`expiresAt` null: a pairing, a key registration, a
+ * restore - `jarvis_gate.APPROVAL_NEVER_EXPIRES`) never expires, so this is
+ * false and both surfaces show no countdown for it either.
+ */
+export function cardHasExpired(expiresAt, now = Date.now()) {
+  if (expiresAt === null || expiresAt === undefined || !Number.isFinite(expiresAt)) return false;
+  return now >= expiresAt;
+}
+
 
 /**
  * Whether an approval may be answered by a gesture rather than a decision.
