@@ -1636,11 +1636,15 @@ object JarvisRuntime {
                     scope.launch { runCatching { phoneNotificationsSettings() } }
                 }
             }
-            // A custom-voice card ended, a voice was deleted, the voice went
-            // back to the built-in one, or the better voice went off
-            // (`{"what", "outcome"}` - a doorbell, never a name or words).
-            // Read again only once the Voices screen has asked.
-            "voices" -> if (customVoicesAsked) refreshCustomVoices()
+            // The PC's voice changed - a picker in either app, a speed change,
+            // a personality applying its voice, or a voice deleted (`{"what",
+            // "outcome"}` - a doorbell, never a name or words). The one setting
+            // is read again EVERY time, not only once the Voices screen has
+            // asked (2026-10-28): the Live screen names the voice it is speaking
+            // in from this same read, so a change made on the desktop has to
+            // reach a phone that never opened that screen. It is one cheap GET
+            // that loads no model and starts nothing (`GET /api/voice/voices`).
+            "voices" -> refreshCustomVoices()
             // A deep question finished (`{"id", "state"}` only - a doorbell,
             // never the question or the answer). The list is re-read for the
             // answer, and the switches for the speed it measured.
@@ -3704,14 +3708,15 @@ object JarvisRuntime {
 
     private val _customVoices = MutableStateFlow<CustomVoices.Read>(CustomVoices.Read.Loading)
 
-    /** `GET /api/voice/voices`, read when the Voices screen opens and on the `voices` event. */
+    /**
+     * `GET /api/voice/voices` - the ONE PC-wide voice (which built-in voice,
+     * and how fast), read when the Voices screen opens, by every change the
+     * owner makes here, and on the `voices` event. The Live screen names the
+     * voice it speaks in from this same read, whichever app changed it.
+     */
     val customVoices: StateFlow<CustomVoices.Read> = _customVoices.asStateFlow()
 
-    /** Set once the Voices screen has asked; the `voices` event only re-reads after that. */
-    @Volatile private var customVoicesAsked = false
-
     suspend fun refreshCustomVoices() {
-        customVoicesAsked = true
         _customVoices.value = CustomVoices.read(api.customVoices())
     }
 

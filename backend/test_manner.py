@@ -1222,14 +1222,27 @@ def t_personality_voice_blending_and_voice_lock():
         check("a chosen personality hands the voice its blend, fallback and speed",
               spec is not None and spec["voice"] == "bm_george:0.65+bm_lewis:0.35"
               and spec["fallback"] == "bm_george" and spec["speed"] == 1.02, spec)
-        check("jarvis_speech's own voice resolver sees the same recipe",
-              SP._personality_voice() == spec)
+        # 2026-10-28: the preset's voice is APPLIED to the one PC-wide setting
+        # (jarvis_voices.set_speaker_name), never read beside it at speech
+        # time. `test_voice_one_state.py` owns the full proof; these two lines
+        # are the part that lives in this suite's own subject.
+        import jarvis_voices as V
+        check("the preset's voice is written into the one PC-wide setting, not held beside it",
+              V.speaker_view()["choice"] == "bm_george")
+        check("jarvis_speech no longer asks a personality for a voice at all",
+              not hasattr(SP, "_personality_voice"))
         check("the chosen personality's fixed acks join the #690 reflex whitelist",
               "Done, sir." in SP.reflex_texts()
               and not any("{" in t for t in SP.reflex_texts()))
         M.handle_set({"sync_voice_with_personality": False})
-        check("with the voice-lock switch on, jarvis_speech is handed no recipe at all",
-              M.voice_for_speech() is None and SP._personality_voice() is None)
+        check("with the voice-lock switch off, the recipe is gone and the voice stays put",
+              M.voice_for_speech() is None)
+        M.set_personality("dry_wit")
+        check("... so switching personality then changes no voice at all",
+              V.speaker_view()["choice"] == "bm_george")
+        M.handle_set({"sync_voice_with_personality": True})
+        check("turning the lock on applies the preset's voice at once",
+              V.speaker_view()["choice"] == "bm_lewis")
 
 
 def t_personality_quick_switching_bite3():

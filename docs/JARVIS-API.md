@@ -2919,6 +2919,45 @@ really has - Kokoro v0.19 or v1.0, with "Hear it" on every voice: section
 94.** The old number is carried over once, and `[voice] tts_speaker_id` keeps
 its old numbering.
 
+**ONE VOICE, ONE SETTING, AND IT IS THE ONE THAT IS HEARD** (2026-10-28; the
+owner's report: *"when i change the jarvis voice in the android app it still
+stays the same in jarvis live in the android app. it needs to be consistent,
+including across gemini on desktop and android. if i change voice on desktop
+jarvis it should change it on android jarvis and so forth"*). The built-in
+voice above and the speaking speed are ONE PC-wide pair of settings,
+`<config dir>/voices/state.json`, and every spoken sentence on this PC is made
+in them: `jarvis_speech.tts_voice()` reads `jarvis_voices.speaker()` /
+`speed()` and nothing else. `POST /api/voice/voices/speaker` and
+`/api/voice/voices/speed` are the only writes - both apps' Voices screens, the
+chat sentences of §58.2.1 and a chosen personality all go through the same
+two functions - and each is one `voices/state.json` write, one audit line and
+one `voices` event; both apps re-read on that event and show the same voice: a
+change made in either app is heard, named and shown in the other.
+
+**A chosen personality's voice is applied TO this setting, never beside it**
+(the same day). With §27.7's "switch Jarvis's spoken voice" ON - the default -
+`jarvis_manner.set_personality()` (and turning that switch on) writes the
+preset's `voice_fallback` through `jarvis_voices.set_speaker_name`, the same
+function the picker calls. So the screen, the event and the sound are one
+value. **What this replaced, said plainly:** until 2026-10-28
+`jarvis_speech.tts_voice()` asked the personality first and returned its
+fallback voice and pace before ever reading `jarvis_voices`, so with a preset
+chosen (the default lock) the pickers showed one voice, `voices/state.json`
+held it, both apps showed it - and every reply was spoken in another, which is
+why changing the voice in either app changed nothing that was heard. The
+preset's own pace (`voice_speed`, 0.94-1.1) is **not** applied: a pace on this
+PC is one of three choices (slower, normal, faster) and a preset's own lands on
+"normal"; that small loss is deliberate and recorded in the decision log.
+
+**Live is the same path, and the phone now says so.** A Live reply asks
+`/api/voice/say` for its sound exactly like every other reply
+(`VoiceSession` -> `api.say`), so it speaks in this one setting - there has
+never been a second voice for Live. The phone's Live screen names the voice it
+is speaking in, from the same `GET /api/voice/voices` read the Voices screen
+uses (`voice/VoiceNow.kt`), and says plainly when the PC has no voice engine
+and Live is using the phone's own offline voice instead - that one is a voice
+no PC setting can change, which is now visible rather than mysterious.
+
 **Voice follows the face** (added 2026-09-27, the owner's choice): with one
 of the animal faces showing (red panda, pygmy owl, sea otter, monkey, and
 the robot, which counts as one - `docs/CRITTERS.md`), the **built-in** voice becomes that animal's: one of
@@ -3041,7 +3080,7 @@ owner.
 | `POST /api/voice/voices/active` | `{"voice": "<id>"}` or `{"voice": "builtin"}` | `builtin`: **200** `{"ok": true, "active": "builtin", "pending": false, "message"}` at once, no card (it also withdraws a waiting switch card and stops the better voice). A custom voice: **202** `{"ok": true, "pending": true, "voice": "<id>", "message"}` - ONE card (`custom_voice`); **200** `{"ok": true, "active": "<id>", "pending": false, "message"}` if already active; **404** unknown id; **409** as for create (`refused: "owner_voice"`, a card waiting, tier not `ask`, or its recording unreadable) | Nothing changes until the card is approved. |
 | `POST /api/voice/voices/delete` | `{"voice": "<id>"}` | **200** `{"ok": true, "deleted": "<id>", "active": "<id>" \| "builtin"}` at once, no card; **400** for `builtin`; **404** unknown id; 500 `{"ok": false, "error"}` if the folder could not be removed | Deletes the folder. If Jarvis was speaking in it, it goes back to the built-in voice (`active` says so). |
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
-| `POST /api/voice/voices/speaker` (added 2026-09-27; by NAME since 2026-09-29) | `{"speaker": "bm_george"}` (one of `speaker.choices[].id` - a NAME; a number is refused) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
+| `POST /api/voice/voices/speaker` (added 2026-09-27; by NAME since 2026-09-29) | `{"speaker": "bm_george"}` (one of `speaker.choices[].id` - a NAME; a number is refused) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). **The ONE write of the built-in voice:** a chosen personality with "switch Jarvis's spoken voice" on applies its voice through the same function (`jarvis_voices.set_speaker_name`, §15), so the screen, the event and the sound are one value whichever app or person changed it last. |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
 | `POST /api/voice/voices/face_offer` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot", "answer": "use" \| "keep"}` (both, nothing else) | **200** `{"ok": true, "message": "The Red Panda speaks in its own voice now. \"Voice follows the face\" is on; turn it off in the voice settings to go back." \| "Jarvis keeps your voice for the Red Panda. Each animal asks once for itself.", "face_voice": {...as in status(), with "offer": null}}` at once, no card either way; **400** `{"ok": false, "error"}` in words - "send the face and the answer, \"use\" or \"keep\"", "choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot", "the answer must be \"use\" or \"keep\""; 500 `{"ok": false, "error"}` if it could not be saved | The answer is kept for that face alone (`face_answers` in `<config dir>/voices/state.json`); an animal speaks as itself only with the switch on and its answer "use". "use" also turns "Voice follows the face" on; "keep" leaves the switch as it is. Rings the `voices` event (`{"what": "face_offer", "outcome": "use" \| "keep"}`). The audit line has the face and the answer only. |
 | `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot", "speaker": "af_sarah" (a NAME from `face_voice.animal_choices.voices`), "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on; with it on, and that animal not answered for or answered "keep", the message says so); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter the Monkey or the Robot", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
@@ -7631,8 +7670,12 @@ replaces the whole persona block with the calm support text**, so no preset can
 joke or criticise through a difficult moment; the #492 sensitive-fact line
 stays exactly `"It's on your screen."`; and the quick (0 ms) confirmations -
 timer, reminder, done, stopped, muted, walk brain-dump - answer in the active
-preset's own words. Kokoro voice/speed follow a chosen preset unless the owner
-turns voice sync off.
+preset's own words. Kokoro's VOICE follows a chosen preset unless the owner
+turns voice sync off - and since 2026-10-28 that means the preset's
+`voice_fallback` is WRITTEN into the one PC-wide voice setting (§15), so both
+apps show the voice that is heard and a voice picked in either app afterwards
+wins. The preset's own pace is not applied (a pace here is one of three
+choices; §15 says why).
 
 Known gaps, said plainly (2026-10-23): **`jarvis_live.py` does not yet inject
 the persona block or switch personality mid-session**; the weighted Kokoro
