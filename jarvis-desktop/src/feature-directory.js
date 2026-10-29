@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "840303845ae6b35d47b7b116becd15361b0a1344b32048282c2f8cc202585d05",
+  "source_sha256": "ac5ad2bd8bf2d180d6d9b56a5de8a0bdb2d820f75fab8a40b65d61ea048988a7",
   "feature_count": 142,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -159,7 +159,7 @@ export const FEATURE_DIRECTORY = {
       "label": "Switchable / Adjustable (Typed & Settings)",
       "status": "enforced",
       "label_note": "",
-      "example": "set the built-in voice to am puck",
+      "example": "change your voice to Ashby",
       "example_ok": true,
       "where": "desktop Settings: voices; phone: All features and abilities",
       "where_desktop": "voices",
