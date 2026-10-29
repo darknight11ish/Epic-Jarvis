@@ -30,6 +30,7 @@ import {
   resumeTask,
   riskLine,
   expiryWords,
+  cardHasExpired,
   stopTask,
   followTheme,
   followZoom,
@@ -44,7 +45,7 @@ import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./not
 // repainted in its place (docs/DEEP-AUDITS-2026-10-05.md §5, finding 1).
 import { ApprovalTarget, GONE_DETAIL, GONE_LINE } from "./approval-target.js";
 import { EMAIL_APPROVE, emailDetail, isEmailCard } from "./email-sending.js";
-import { CARD_KICKER, cardTitle } from "./card-words.js";
+import { CARD_KICKER, CARD_TIMED_OUT, cardTitle } from "./card-words.js";
 import { needsFullCard } from "./heavy-approve.js";
 import { faceWords } from "./face-words.js";
 // The PC answering while its own model is not: one rule, two windows
@@ -256,6 +257,10 @@ const state = {
   /** The id already answered from this window, so a second click cannot send
    *  a contradictory decision before the resolution broadcast lands. */
   decided: null,
+  /** Whether the card on screen is past its deadline (2026-10-28), so the
+   *  one-second clock calls `syncApprovalButtons` once - at the moment the two
+   *  buttons go - rather than on every tick after it. */
+  expiredCard: false,
   /** A note is being sent for the current approval. Its own flag, on
    *  purpose - `busy` (the Logseq/Joplin capture) and `deciding` already
    *  learned this lesson once: one shared flag makes two unrelated actions
@@ -1282,6 +1287,9 @@ function openApproval(approval) {
   }
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
+  // The card's own deadline state at the paint, so the clock only has to
+  // notice the moment it CHANGES (2026-10-28).
+  state.expiredCard = cardHasExpired(approval.expiresAt);
   // This is the paint: the card a press on Approve or Deny now belongs to.
   // Recorded here, not read back at click time, so a swap under the owner's
   // finger cannot move the decision to a card they never saw.
@@ -1403,6 +1411,9 @@ function closeApproval() {
   dom.apprOptionsWhy.hidden = true;
   dom.apprCount.hidden = true;
   dom.btnApprYes.hidden = false;
+  // Both buttons come back for the NEXT card, however the last one ended (see
+  // main.js's twin): an expired card hides them, and that must not carry over.
+  dom.btnApprNo.hidden = false;
   dom.apprNoteInput.value = "";
   applyFaceVisibility();
   syncSize();
@@ -1425,6 +1436,19 @@ function syncApprovalButtons() {
   // quickbar has always used `stale || deciding`.
   const link = currentLink();
   const blocked = link.stale || state.deciding;
+  // AN EXPIRED CARD SHOWS NO BUTTONS (2026-10-28) - the same rule as the
+  // quickbar's, and the one the phone has followed since DEF-010: the gate has
+  // refused the card by itself at the deadline, so a live Approve (or Deny)
+  // offers a decision nothing will take. See `main.js`'s twin for the full
+  // reasoning; the rule itself is `cardHasExpired` in jarvis-link.js, so the
+  // two windows cannot answer it differently.
+  const expiredCard = Boolean(state.approval && cardHasExpired(state.approval.expiresAt));
+  const multiple = Boolean(
+    !state.appLock && state.approval && Array.isArray(state.approval.options)
+      && state.approval.options.length > 1
+  );
+  dom.btnApprYes.hidden = multiple || expiredCard;
+  dom.btnApprNo.hidden = expiredCard;
   // A cut-off request cannot be approved - see the quickbar's twin.
   dom.btnApprYes.disabled = blocked || Boolean(state.approval && state.approval.cutOff);
   // Deny is held by one thing only: a decision already on its way. Never by
@@ -1451,7 +1475,7 @@ function syncApprovalButtons() {
   // still needs to stop once a decision on THIS card is in flight or has
   // already landed — sending a note for a plan already being decided would
   // arrive after the fact.
-  const noteBlocked = blocked || state.noteBusy || state.deciding
+  const noteBlocked = blocked || state.noteBusy || state.deciding || expiredCard
     || (state.approval && state.decided === state.approval.id);
   dom.apprNoteInput.disabled = noteBlocked;
   dom.btnApprNoteSend.disabled = noteBlocked;
@@ -1497,7 +1521,16 @@ function clockWaitMs() {
 }
 
 const approvalClock = clockTimer(() => {
-  if (state.approval && !dom.apprCard.hidden) paintApprovalClock();
+  if (!state.approval || dom.apprCard.hidden) return;
+  // ONE state change, at the deadline: the two buttons go and the risk line
+  // starts saying the shared "Timed out" sentence (2026-10-28).
+  const expiredNow = cardHasExpired(state.approval.expiresAt);
+  if (expiredNow !== state.expiredCard) {
+    state.expiredCard = expiredNow;
+    syncApprovalButtons();
+    return;
+  }
+  paintApprovalClock();
 }, { delay: clockWaitMs, name: "widget" });
 approvalClock.wake();
 
@@ -1534,6 +1567,16 @@ async function decide(approved, optionId = null) {
     return;
   }
   const approval = target.card;
+  // An expired card is not decidable any more - neither direction (2026-10-28,
+  // the rule the phone has had since DEF-010). The gate has refused the card by
+  // itself, so a press here could only earn a 409. The buttons are already
+  // hidden for it (`syncApprovalButtons`); this is the same rule at the click,
+  // because a hidden button is not a guarantee and the card can expire between
+  // the paint and the press.
+  if (cardHasExpired(target.card.expiresAt)) {
+    flash(CARD_TIMED_OUT, "bad");
+    return;
+  }
   // App lock on: this window approves nothing (see `applyAppLock`). Nor,
   // lock or not, an email: all of it is read in the Jarvis bar first. Nor a
   // card whose reach or reversibility matters, or that the backend never

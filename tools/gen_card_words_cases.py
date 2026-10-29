@@ -25,6 +25,19 @@ same way the PC does for an action it has no phrase for.
 simple summary, with an explain more button"), for every action, built by the
 real `notice_for` - so both apps' tests read the PC's own short words rather
 than a second copy somebody typed.
+
+`timed_out` and `timed_out_next` are the words an EXPIRED card says (2026-10-28,
+the owner's ruling that the phone's cards must match the desktop's). The first
+is drawn by both apps; the second only by the phone, because on the PC the
+owner is already in front of the window that raises cards.
+
+`pc_only_actions` is `jarvis_owner_check.PC_ONLY_ACTIONS` - the cards the PC
+answers itself, with Windows Hello, and refuses from any other device. The
+phone keeps its own copy of that set (`net/PcOnlyActions.kt`) because a card
+must not depend on a second read to know which buttons it may draw, and this
+key is what stops the copy drifting: the phone's JVM test fails in CI
+(`phone-unit-tests`) the moment the PC's set gains an action the phone was
+never taught, instead of an Approve button that can only fail.
 """
 import json
 import sys
@@ -52,6 +65,7 @@ if str(BACKEND) not in sys.path:
 
 import jarvis_card_words as W  # noqa: E402
 import jarvis_card_summary as CS  # noqa: E402
+import jarvis_owner_check as OC  # noqa: E402
 import test_approval_contract as C  # noqa: E402
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "card-words-cases.json"
@@ -102,6 +116,13 @@ def build() -> dict:
         "summaries": summaries,
         "fallback": fallback,
         "voice_script": voice_script,
+        # An expired card: the fact both apps say, and the phone's own second
+        # sentence (see this file's docstring).
+        "timed_out": W.TIMED_OUT,
+        "timed_out_next": W.TIMED_OUT_NEXT,
+        # The cards only the PC may approve (jarvis_owner_check), so the phone's
+        # copy of that set cannot drift from the PC's without a red test.
+        "pc_only_actions": sorted(OC.PC_ONLY_ACTIONS),
         # The control's own words and the two choices, from the one place that
         # names them (the PC hands these over at GET /api/card-prefs too).
         "card_prefs": {

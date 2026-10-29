@@ -7441,6 +7441,14 @@ async function apprPoll(){
     // A request cut off before it reached this card cannot be approved from
     // it: what is shown is not all of what would run.
     if(apprCutOff(p)){ yes.disabled = true; yes.dataset.cutoff = "1"; }
+    // Already past its deadline when it was drawn (an old row still in the
+    // queue): no buttons at all, and the line below says the shared sentence
+    // the moment apprTick runs. The gate is not waiting for either answer.
+    if(deadline !== null && apprExpired(deadline, Date.now())){
+      el.dataset.expired = "1";
+      yes.hidden = true;
+      el.querySelector(".no").hidden = true;
+    }
     if(apprReplace(p) && !apprCutOff(p)){
       // Review ruling 8.2: TWO presses. The first arms the card and sends
       // nothing at all - the button then says "Confirm replace", so a person
@@ -7562,6 +7570,28 @@ function apprRiskLine(risk){
   return risk.why ? `${undo} \u00b7 ${reach} \u2014 ${risk.why}` : `${undo} \u00b7 ${reach}`;
 }
 
+/* AN EXPIRED CARD IS NOT DECIDABLE (2026-10-28) - the rule the quickbar, the
+ * widget and the phone all follow now (DEF-010 for the phone, 2026-10-11): the
+ * gate stops waiting at the deadline and refuses the card by itself, so this
+ * page must stop offering its two buttons there. It used to keep them live,
+ * which meant the same expired request could be pressed here and not on the
+ * phone - the opposite of the owner's ruling that the cards must match.
+ *
+ * The deadline is the one stamped on the card when it was read (apprSync's
+ * `data-deadline`, from `expires_in`), in this machine's milliseconds.
+ * `cardHasExpired` in jarvis-link.js is the same rule for the other two
+ * surfaces, and tests/expiry-parity.mjs drives both so they cannot disagree.
+ * A card with no stamp - no deadline at all - is never expired. */
+function apprExpired(deadline, now){
+  return typeof deadline === "number" && isFinite(deadline) && Number(now) >= deadline;
+}
+
+/* The sentence an expired card says, in ONE place on this page. It is
+ * `CARD_TIMED_OUT` in card-words.js, letter for letter, and
+ * tests/approvals-contract.mjs holds the two together - the same way apprTitle
+ * is held to that module's fallbackTitle. */
+const APPR_TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it by itself.";
+
 /* The gate keeps json.dumps(detail)[:4000]: text that long that no longer
  * parses was cut off on the way here. */
 function apprCutOff(p){
@@ -7569,16 +7599,30 @@ function apprCutOff(p){
   try{ JSON.parse(p.detail); return false; }catch(e){ return true; }
 }
 
-/* How long each card has left, repainted each second while any is shown. */
+/* How long each card has left, repainted each second while any is shown.
+ *
+ * Past the deadline the card stops being decidable: the two buttons go, and
+ * the line says the shared "Timed out" sentence (2026-10-28). The gate has
+ * already refused the card by itself, so a live button here would offer a
+ * decision nothing will take - the same defect DEF-010 fixed on the phone. */
 function apprTick(){
   if(document.hidden) return;   // the countdown is visible text; nothing to repaint unseen
   const now = Date.now();
   document.querySelectorAll("#approvals .appr[data-deadline]").forEach(el => {
     const line = el.querySelector(".left");
+    const deadline = Number(el.dataset.deadline);
+    const gone = apprExpired(deadline, now);
+    if(gone && !el.dataset.expired){
+      // Once per card, not once a second: hiding a button is a state change.
+      el.dataset.expired = "1";
+      const yes = el.querySelector(".yes"), no = el.querySelector(".no");
+      if(yes) yes.hidden = true;
+      if(no) no.hidden = true;
+    }
     if(!line) return;
-    const left = Math.ceil((Number(el.dataset.deadline) - now) / 1000);
+    const left = Math.ceil((deadline - now) / 1000);
     line.textContent = left <= 0
-      ? "Timed out: Jarvis stopped waiting and refused it by itself."
+      ? APPR_TIMED_OUT
       : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left to decide, then Jarvis refuses it by itself.`;
   });
 }
@@ -7837,6 +7881,16 @@ function apprDescribe(p, detail){
 }
 
 async function apprDecide(id, ok, el){
+  // An expired card is not decidable, in either direction (2026-10-28). The
+  // buttons are already gone for it (apprTick / apprSync); this is the same
+  // rule at the click, because a card can expire between the paint and the
+  // press. The gate refused the card by itself, so sending would only earn a
+  // 409 - say the shared sentence instead and leave the card alone.
+  if(el && el.dataset.deadline && apprExpired(Number(el.dataset.deadline), Date.now())){
+    const line = el.querySelector(".left");
+    if(line) line.textContent = APPR_TIMED_OUT;
+    return;
+  }
   el.classList.add("settled");
   el.querySelectorAll("button").forEach(b => b.disabled = true);
   try{

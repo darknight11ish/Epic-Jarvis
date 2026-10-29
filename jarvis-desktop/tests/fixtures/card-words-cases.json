@@ -1911,6 +1911,19 @@
       "says": []
     }
   ],
+  "timed_out": "Timed out: Jarvis stopped waiting and refused it by itself.",
+  "timed_out_next": "Ask the desktop to raise this again.",
+  "pc_only_actions": [
+    "desktop_update",
+    "enable_reading_tool",
+    "handoff_bring_to_front",
+    "handoff_keep_offering",
+    "loosen_what_asks_first",
+    "pair_device",
+    "register_approval_key",
+    "restore_backup",
+    "unretire_shared_key"
+  ],
   "card_prefs": {
     "more_label": "Explain more",
     "less_label": "Show less",

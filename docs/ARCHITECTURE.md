@@ -768,6 +768,28 @@ places between screens. Presentation only - no approval logic changed.
   approve-by-voice**: the voice check cannot tell a recording from the owner,
   so a spoken "yes" answers nothing. For the same reason no sentence says
   "until you say yes" any more ("until you approve the card").
+- **An expired card is dead on every screen, and says one sentence
+  (2026-10-28).** The owner's ruling - *"the cards on android should match the
+  cards on desktop"* - found that they did not, and that the phone was the one
+  that was right: it has drawn **no buttons** on a card past its deadline since
+  DEF-010 (2026-10-11, measured on his phone - a faded Approve captioned by a
+  line he had not connected to it does not read as "you cannot act"), while the
+  Jarvis bar, the desktop widget and the HUD page each went on drawing live
+  Approve and Deny on the same card. The rule is now one function -
+  `cardHasExpired` in `jarvis-desktop/src/jarvis-link.js`, the same answer on
+  all three desktop surfaces and `expired` in `ApprovalCard.kt` on the phone -
+  and **hiding the buttons is only the drawing**: `decideApproval`, the
+  widget's `decide` and the page's `apprDecide` refuse an expired card too,
+  because a hidden button is not a refusal. Nothing about the gate changed: it
+  still stops waiting at the deadline and refuses the card by itself
+  (`approval-expiry.patch`, `no-expiry-cards.patch`), and a card with **no**
+  deadline (pairing, a key registration, a restore -
+  `jarvis_gate.APPROVAL_NEVER_EXPIRES`) shows no countdown and no expiry on
+  either app. The words are one sentence from `jarvis_card_words.TIMED_OUT`,
+  drawn by both apps as `CARD_TIMED_OUT` (card-words.js) and
+  `CardWords.TIMED_OUT`; `timed_out_next` is the phone's own second sentence
+  (§8 below).
+
 - **Two MECHANICAL guards against blind, stacked approvals (2026-10-20).**
   The owner's incident: one "approve all" click approved three backup
   restores, two imports and a device-key registration, because repeated
@@ -2472,6 +2494,71 @@ The two apps are meant to do the same things. These are the exceptions, each
 with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
+
+**The approval card's remaining differences, after the 2026-10-28 parity slice**
+(the owner's ruling: *"the cards on android should match the cards on
+desktop"*). Everything a card *decides* is now the same on both apps: the title,
+the label, the button order, the risk reason, the replaces guard, the two-press
+rule, the no-deadline rule and - since this slice - the expired-card rule and its
+sentence (§3 above). What is still different is each item below, with the rule
+that keeps it:
+
+- **The phone's expired card adds one sentence the PC's does not.**
+  `jarvis_card_words.TIMED_OUT` is the fact and both apps draw it;
+  `TIMED_OUT_NEXT` ("Ask the desktop to raise this again.") is the phone's own
+  second sentence. On the PC the owner is already in front of the window that
+  raises cards, so the advice would be about the machine he is sitting at. This
+  is a written rule, not a gap: both strings come from the one module and both
+  apps' tests hold their copy to it.
+- **A PC-only card is answered on the PC, and the phone says so.** The set is
+  `jarvis_owner_check.PC_ONLY_ACTIONS` (nine on 2026-10-28, `desktop_update`
+  being the newest); the PC refuses such a card's approval from any other device
+  (403 `pc_only`) and always checks Windows Hello. The phone draws **Deny only**
+  and says "Approve this one on the PC - it needs Windows Hello there. Deny
+  still works here." The phone keeps its own copy of that set
+  (`net/ApiModels.kt` `PcOnlyActions`, because a card must not depend on a
+  second read to know which buttons it may draw) and the copy is **generated
+  into `contract/card-words-cases.json`** from the PC's module by
+  `tools/gen_card_words_cases.py`, so a new PC-only action fails the required
+  `phone-unit-tests` job instead of offering an Approve that can only fail. That
+  is the fix for the 2026-10-26 drift: `desktop_update` had been added on the
+  PC, the phone never heard, and its own test could only prove the copy equalled
+  itself.
+- **The phone warns that a check is coming; the PC lets Windows Hello arrive.**
+  The phone's card says "Fingerprint follows" when `SecurityRules.riskyByToday`
+  is true, because on Android the check may not be set up at all (no approval
+  key) and turning signing on is a step the owner has to take. On the PC the
+  same fact is a system prompt that appears at the moment of the decision, and
+  its refusal words ("Nothing was approved. Windows Hello is not set up ...")
+  are shown then. One fact, two moments, and neither app decides anything by
+  showing it.
+- **The risk line is drawn in each app's own shape.** Both read `risk.why` from
+  the PC and both say the same three facts (reversible, reach, why), but the
+  desktop writes them as one sentence ("No undo · leaves this machine — there is
+  no unsend") and the phone as pills (`NO UNDO`, `LEAVES THIS MACHINE`) plus a
+  swipe sentence ("Swipe right to approve, left to deny — ..."). The phone has a
+  swipe and the desktop has none, and a pill is a label rather than a control in
+  that app's design language. The adjudication is the PC's (`risk_for`), and no
+  client re-derives `swipe_ok`.
+- **"Start short" with "Explain more" is the phone's alone today, and that is a
+  named follow-up, not a decision.** `GET/POST /api/card-prefs`
+  (`jarvis_card_summary.py`) is `desktop-todo` in `tools/check_parity.py`: the
+  phone folds every card to `notice.summary` with the owner's "Explain more"
+  control (his request of 2026-10-09), and the desktop still draws the whole
+  card, so the setting changes nothing there. `docs/DESKTOP-APPROVAL-CARD-PREF.md`
+  is the bounded plan (it needs `notice.summary`/`full` added to
+  `jarvis-link.js`'s `normaliseApproval`, the fold in `refreshApproval`, a
+  Settings card and a read of the route - which does need a Rust command, the way
+  `get_animal` reads `/api/animal`, whatever that page's section 3 says). Until
+  then the desktop's card shows the same words, unfolded, which is why this is a
+  difference in how much is shown rather than in what is said.
+- **Credentials never appear on a phone card, and the secret hand-off card is
+  the HUD's.** The owner-secret hand-off (§8 above, 2026-10-26) is typed into
+  the PC's own HUD card and is not a `/api/pending` row at all, so no phone
+  screen can draw it; the account keys and search keys are written straight into
+  Windows Credential Manager by the desktop and have no route (the §8 rows
+  below). No card on the phone can carry a secret, and none of the differences
+  above may ever be "fixed" by adding one.
 
 **Connecting an account: the card is the PC's alone, and that is one-sided on
 purpose** (2026-10-28; the owner's ask: *"if I need to put in a password a
