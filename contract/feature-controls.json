@@ -466,12 +466,12 @@
         "turn_off": "turn off voice follows the face",
         "adjust": [
           {
-            "phrase": "set the built-in voice to am puck",
+            "phrase": "change your voice to Ashby",
             "intent": "settings_choice",
             "place": "voices",
             "kind": "choice",
             "env_dependent": true,
-            "reason": "the typed value is the owner's configured voice list, so the pure grammar resolves it only when voices are configured; the handler is jarvis_settings_registry's named choice setter"
+            "reason": "the typed value is the owner's configured voice list, so the pure grammar resolves it only when voices are configured (Ashby is offered by the v1.0 pack once it is made); the handler is jarvis_settings_registry's named choice setter, reached through the owner's own words ('your voice', 2026-10-28)"
           }
         ],
         "intent": "settings_bool"
@@ -499,7 +499,7 @@
       "reason": "typed control and both Settings locations verified",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
-        "example_phrase": "set the built-in voice to am puck",
+        "example_phrase": "change your voice to Ashby",
         "screen_path": "desktop Settings: voices; phone: All features and abilities"
       },
       "command": {
@@ -10419,13 +10419,6 @@
     },
     {
       "kind": "choice-setting",
-      "id": "voice_speaker",
-      "status": "planned",
-      "owner": "voiceprint-wiring",
-      "reason": "named choice setting newly wired; setter test/proof still pending"
-    },
-    {
-      "kind": "choice-setting",
       "id": "focus_preset",
       "status": "planned",
       "owner": "voiceprint-wiring",
@@ -11515,7 +11508,10 @@
         "which voice jarvis uses",
         "jarvis's built-in voice",
         "the voice jarvis speaks with",
-        "the voice"
+        "the voice",
+        "your voice",
+        "his voice",
+        "jarvis's voice"
       ],
       "section": "voices",
       "options": {
@@ -11545,9 +11541,8 @@
       "desktop_found": true,
       "phone_found": true,
       "handler": "jarvis_settings_registry.set_voice_speaker",
-      "status": "planned",
-      "owner": "voiceprint-wiring",
-      "reason": "named choice setting newly wired; setter test/proof still pending"
+      "status": "enforced",
+      "proof": "backend/test_settings_registry.py (t_the_natural_voice_sentences_reach_the_one_builtin_voice_setter): 'change your voice to Ashby', 'set your voice to Ashby', 'change his voice to Ashby', \"change jarvis's voice to Ashby\" and 'use the Clara voice' resolve through jarvis_quick.match() to voice_speaker with the voice pack's own blend ids (mix_ashby/mix_clara), dispatch calls jarvis_settings_registry.set_voice_speaker with that id, an unknown name is refused with the real voices, and the near misses ('change the voice on the phone', 'change the volume', 'use the passive voice') never reach this setter; backend/test_settings_tool.py (t_the_natural_words_name_the_builtin_voice_to_the_tool) proves the model's change_setting path resolves the same three aliases and refuses an unknown voice"
     },
     {
       "key": "focus_preset",
