@@ -1316,6 +1316,10 @@
      "name": "Explaining and checking one of Jarvis's own features (read-only)"
     },
     {
+     "id": "connect_account",
+     "name": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)"
+    },
+    {
      "id": "browser_control",
      "name": "Browser control"
     }

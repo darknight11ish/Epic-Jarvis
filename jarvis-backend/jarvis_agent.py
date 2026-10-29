@@ -1545,6 +1545,11 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
 _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
+                                  # "connect_account" (CONNECT_TOOL, 2026-10-28): raising
+                                  # the connect card is one deliberate act with its own
+                                  # host path, never a step of a plan. Written as the
+                                  # literal, like "change_setting" below.
+                                  "connect_account",
                                   "my_spending", "retirement_whatif",
                                   # "change_setting" (SETTINGS_TOOL, 2026-10-13), written
                                   # as the literal the way SPENDING_TOOL and
@@ -1977,6 +1982,96 @@ def _execute_change_setting(args: dict, state):
     return {"ok": False, "changed": False,
             "error": "refused: a setting is changed through the settings tool's own "
                      "path, not this one, so nothing was changed."}
+
+
+# --------------------------------------------------------------------------
+#   "Connect my calendar", "set up github" - ONE card, no value in the chat
+#   (2026-10-28)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK, verbatim: "if I need to put in a password a notification will
+# pop up ... it should be able to connect all features just through me talking
+# to jarvis". The HUD answered his calendar question with "jarvis cannot connect
+# directly to external calendars ... Would you like instructions on exporting
+# your calendar to ICS?" - false about Jarvis, which reads CalDAV and a private
+# iCal link today.
+#
+# WHAT THIS TOOL IS. ONE tool, `connect_account`, whose whole effect is to raise
+# ONE card (`jarvis_connect_account.raise_card`) for one service. The card takes
+# a token, a private iCal link, or a username and password; the OWNER types them
+# on this PC, the HUD posts them to a host-only route, and they go straight into
+# Windows Credential Manager and are then tested with one real request. No value
+# is ever in this tool's arguments, its result, the model's context, the chat,
+# a log or a file.
+#
+# WHY IT IS NOT PUT TO THE GATE, like SETTINGS_TOOL. Raising the card IS the
+# ask: nothing is saved, sent or changed until the owner types a value and
+# presses Save on that card, so a second approval card in front of it would ask
+# the owner to approve asking. The card is the gate. `_connect_call` below is
+# the only path, `_PLAN_EXCLUDED_STEPS` keeps a plan from naming this tool, and
+# the tool refuses any argument that looks like a value (there is no field for
+# one).
+#
+# IT IS NOT THE WAY THE OWNER'S SENTENCES WORK. `jarvis_quick.py`'s own grammar
+# raises the same card with no model at all, so "connect my calendar" answers
+# even with the model lane off - the same reason the Notion answer lives there.
+CONNECT_TOOL = "connect_account"
+
+
+def _connect_tool_text() -> str:
+    """The connect_account description. Kept under 300 tokens like every tool
+    text (backend/test_tool_text.py), and it says the one thing that keeps rule
+    3: never take the value here."""
+    return ("Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the "
+            "owner asks to connect, set up or link one. The OWNER types the token, "
+            "private link or username and password into that card on this PC; it is "
+            "saved into Windows Credential Manager and tested for real. NEVER take a "
+            "password, token or private link in the chat and never pass one here: this "
+            "tool has no field for a value. For any other account say Settings-only.")
+
+
+def _run_connect_tool(args: dict) -> dict:
+    """Raise the connect card and describe it - names and field labels only.
+
+    Refuses outright if the call carries anything that looks like a value: the
+    model is never a place a secret can arrive from, so a `value`, `password`,
+    `token`, `url` or `secret` field is a refusal with an explanation, not a
+    card. The service is resolved through the module's own closed vocabulary,
+    so "calendar" and "github" mean what the quick path means by them."""
+    try:
+        import jarvis_connect_account as C
+    except Exception:                       # noqa: BLE001 - module absent
+        return {"ok": False, "raised": False,
+                "error": ("I cannot raise the connect card on this PC: "
+                          "jarvis_connect_account.py is not in the backend folder.")}
+    unexpected = sorted(str(k) for k in (args or {})
+                        if str(k) not in ("service", "note"))
+    if unexpected:
+        return {"ok": False, "raised": False,
+                "error": ("Refused: this tool takes a service and a note only, and "
+                          f"nothing here may carry a value ({', '.join(unexpected)}). A "
+                          "password, a token or a private link is typed by the owner "
+                          "into the card on this PC, never given to a model.")}
+    asked = str((args or {}).get("service") or "")
+    sid = C.service_from_words(asked)
+    if sid is None and asked in C.SERVICES:
+        sid = asked
+    if sid is None:
+        return {"ok": False, "raised": False,
+                "error": ("I cannot connect that from chat yet. I can connect "
+                          + " and ".join(s.name for s in C.SERVICES.values())
+                          + "; everything else is Settings, Accounts on the PC today.")}
+    try:
+        card = C.raise_card(sid, (args or {}).get("note") or "")
+    except C.ConnectAccountError as exc:
+        return {"ok": False, "raised": False, "error": str(exc)}
+    return {"ok": True, "raised": True, "service": card["service"],
+            "service_label": card["service_label"],
+            "fields": [f["label"] for f in card["fields"]],
+            "stored_in": "Windows Credential Manager, on this PC",
+            "said": ("One card is waiting in the Jarvis window on this PC. The owner "
+                     "types the value there and presses Save; nothing is saved until "
+                     "then, and I test it straight away.")}
 
 
 # --------------------------------------------------------------------------
@@ -2645,6 +2740,24 @@ TOOLS: dict = {
         _plain_prepare("Explain feature"),
         lambda args, state, **_: _run_feature_guide(args),
         gate_lookup_name=lambda args: "skill_list"),
+    # Raising the connect card - see CONNECT_TOOL above for why this is not put
+    # to the gate. `_one_call` hands this tool to `_connect_call` before the
+    # generic path, so prepare()/execute() here are never reached by a real
+    # turn; they exist so the schema is the same on both sides and so a path
+    # that somehow reached execute() would raise no card at all.
+    CONNECT_TOOL: Tool(
+        CONNECT_TOOL, _connect_tool_text(),
+        {"type": "object", "properties": {
+            "service": {"type": "string",
+                        "description": "which account: calendar, caldav or github"},
+            "note": {"type": "string",
+                     "description": "why, in a few words; shown to the owner as an "
+                                    "unverified note. Never a password or a token."}},
+         "required": ["service"]},
+        lambda args: (args, f"Connect account: {args.get('service', '')}"),
+        lambda args, state, **_: {"ok": False, "raised": False,
+                                  "error": "refused: connecting is raised through its "
+                                           "own card path, so nothing was raised here."}),
     REA_TOOL: Tool(
         REA_TOOL, _rea_tool_text(),
         {"type": "object", "properties": {
@@ -6284,6 +6397,10 @@ TOOL_GROUPS = (
     # Its own group: my_spending's group is dropped while no folder is listed,
     # and this needs no folder.
     ("retirement", "a retirement what-if", ("retirement_whatif",)),
+    # Connecting an account by talking (2026-10-28): its own group, one member,
+    # because raising the card is a single deliberate act and nothing else in
+    # this file may do it. `jarvis_quick.py` raises the same card with no model.
+    ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
     ("github", "search GitHub for a library", ("github_search",)),
     # Reading ONE web page the owner hands over, out loud (jarvis_readpage.py,
     # 2026-10-05; JARVIS-API section 115) - the same shape as the "send_email"
@@ -6497,6 +6614,13 @@ TOOL_HINTS = {
                         r"\belectron\b", r"\bghidra\b", r"\bjadx\b", r"\bapk\b",
                         r"\.dll\b", r"\.exe\b", r"\bbinar(y|ies)\b",
                         r"\bdisassembl", r"\bsource ?map\b"),
+    # CONNECT_TOOL (2026-10-28): "connect my calendar", "set up GitHub", "link
+    # my calendar". Deliberately narrow: asking what is ON the calendar, or
+    # what a token is, must not pull the connect tool in - each pattern needs
+    # the connecting verb AND an account word.
+    "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|account)\b",
+                        r"\b(?:set ?up|link|sign in|log ?in)\b.*\b(?:calendar|caldav|"
+                        r"github|account)\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
@@ -10646,6 +10770,55 @@ def cloud_postscript(answer_text: str, messages=None) -> list:
         return []
 
 
+def _connect_call(args: dict, call: dict, convo: list, steps: list, say_step,
+                  *, watch: "_TurnWatch") -> None:
+    """One connect_account call: raise ONE card, or say why not.
+
+    The card is the ask (see CONNECT_TOOL), so this does not go to the gate and
+    raises no approval card of its own. What it does keep is every rule that
+    protects the owner from being buried or from a secret arriving through the
+    model: a turn shaped by outside text raises nothing, the per-answer card
+    limit still applies, and an argument that looks like a value is refused
+    rather than dropped."""
+    name = CONNECT_TOOL
+
+    def reply(result: dict) -> None:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+
+    def stop(why: str, outcome: str = "refused") -> None:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": outcome})
+        say_step("tool_refused", name)
+        reply({"ok": False, "raised": False, "error": why})
+
+    if watch.cards >= CARDS_PER_TURN:
+        return stop(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
+    if _settings_turn_is_shaped(watch):
+        # A turn that read outside text must not put a credential box on screen:
+        # the same STRICTER rule SETTINGS_AFTER_OUTSIDE applies to a settings
+        # change, and for a stronger reason - a card raised by a page's own
+        # words is exactly the shape a prompt injection would want.
+        return stop(CONNECT_AFTER_OUTSIDE)
+    step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
+    steps.append(step)
+    say_step("tool_started", name)
+    result = _run_connect_tool(args)
+    step["ran"] = True
+    step["ok"] = result.get("ok") is True
+    if step["ok"]:
+        # It DID raise a card, so the per-answer budget counts it.
+        watch.cards += 1
+    say_step("tool_finished", name, ok=step["ok"])
+    reply(result)
+
+
+#: Said when a turn has read outside text and asks to raise a credential card.
+CONNECT_AFTER_OUTSIDE = (
+    "refused: something outside jarvis shaped this answer (a page, an email, a file "
+    "or a search result), so no credential card is raised in it. Ask again in a new "
+    "message, in your own words.")
+
+
 def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
                    *, watch: "_TurnWatch") -> None:
     """One change_setting call - the whole of the model-facing settings tool.
@@ -10892,6 +11065,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # it would never run. With the guard it falls through to the generic
         # path, where a plug-in tool always needs a person's yes.
         _settings_call(args, call, convo, steps, say_step, watch=watch)
+        return
+    if name == CONNECT_TOOL and not outside_program:
+        # Raising the connect card (2026-10-28) - not put to the gate here, for
+        # the reason CONNECT_TOOL gives: the card IS the ask, and nothing is
+        # saved, sent or changed until the owner types a value into it on this
+        # PC. `and not outside_program` is the same belt SETTINGS_TOOL carries:
+        # a plug-in tool is named "mcp__<server>__<tool>" and can never equal
+        # this bare name today, but if one ever did it would fall through to
+        # the generic path, where a plug-in tool always needs a person's yes.
+        _connect_call(args, call, convo, steps, say_step, watch=watch)
         return
     if name == "send_email":
         # Refused before anything is planned or anyone asked - see SEND_EMAIL_*.

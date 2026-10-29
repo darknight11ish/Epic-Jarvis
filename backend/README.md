@@ -3897,6 +3897,16 @@ unchanged:**
 | Private calendar link | `jarvis_calendar._feed_url()` | `JARVIS_CALENDAR_ICS_SECRET_URL` | `Jarvis Backend/Calendar iCal link` |
 | Home Assistant token | `jarvis_home._token()` | `JARVIS_HOME_TOKEN` | `Jarvis Backend/Home Assistant token` |
 
+**Two secrets are Credential-Manager-ONLY and deliberately absent from that
+table**, because no environment variable may supply them (an OAuth token in a
+plain-text environment variable is exactly what rule 3 forbids): the Google
+Calendar **client secret** and **refresh token**, under
+`Jarvis Backend/Google Calendar client secret` and
+`Jarvis Backend/Google Calendar refresh token`. `backend/jarvis_google_calendar.py`
+uses the same `jarvis_token_store` store helper and never calls
+`resolve_secret()`; each value is registered with `jarvis_scrub` by value at
+the moment it is read or written. See `docs/JARVIS-API.md` section 161.
+
 A store that cannot be reached, refuses, or is not there at all (any
 platform but Windows) is treated as empty, exactly like an unset
 environment variable - never raised, never made up. A value read from

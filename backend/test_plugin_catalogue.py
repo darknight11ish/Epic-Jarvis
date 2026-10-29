@@ -15,7 +15,7 @@ wrote, so a folder it chose not to write could not be seen as stale.
 WHAT THIS PINS
 
   - the committed tree accounts for every folder: 28 patch-backed drop-ins
-    plus the eleven no-patch ones above (and that list is written down, so
+    plus the twelve no-patch ones above (and that list is written down, so
     losing one is a failure rather than a smaller number);
   - a synthetic folder the catalogue cannot read - no manifest, a manifest
     that will not parse, or a complete one - is REPORTED in `unaccounted`,
@@ -48,6 +48,7 @@ FAILED, PASSED, SKIPPED = [], [], []
 #: manifest. Adding another is a catalogue-count change: put it here too.
 NO_PATCH = {
     "antislop",
+    "google-calendar",
     "auto-router",
     "media-index",
     "notion-obsidian",

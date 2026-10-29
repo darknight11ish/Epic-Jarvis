@@ -541,7 +541,14 @@ GROUPS = (
     ("Projects", ["fixed:projects", "fixed:project_share", "fixed:project_unmark",
                   "fixed:app_tasks"]),
     ("Email and calendar", ["draft_email", "send_email", "tidy_inbox", "edit_calendar_event",
-                            "delete_calendar_event"]),
+                            "delete_calendar_event",
+                            # The Google Calendar sign-in's ONE write action
+                            # (2026-10-28, jarvis_google_calendar.ACTION_WRITE):
+                            # created, changed or deleted, ONE event, one card
+                            # each. Added at the 2026-10-28 integration merge -
+                            # test_asks_first.py requires every action a card can
+                            # name to have a row on this page.
+                            "google_calendar_write"]),
     ("The internet", ["search_the_web", "web_search_enable", "web_research", "research_authenticated",
                       "control_browser", "browser_form_submit", "obscura_enable",
                       "post_to_external_service",

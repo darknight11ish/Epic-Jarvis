@@ -479,6 +479,24 @@ def _env(name: str) -> str:
     return str(os.environ.get(name, "") or "").strip()
 
 
+def _github_token() -> str:
+    """The GitHub token a watch uses: `GITHUB_TOKEN_ENV` if the owner set it,
+    else Windows Credential Manager under `jarvis_research.TOKEN_TARGET`
+    (2026-10-28, the owner's "connect my accounts by talking to Jarvis" ask -
+    the token used to be a plain-text environment variable only, which is the
+    rule 3 breach that ask made worth fixing). The environment variable still
+    wins, so an installation that already works keeps working.
+
+    One resolver, shared with `jarvis_research`, so the two halves of Jarvis
+    that speak to api.github.com can never disagree about which token is in
+    use. Never raises; returns only a value one of those two places gave."""
+    try:
+        import jarvis_research
+        return jarvis_research._token()
+    except Exception:                       # noqa: BLE001 - module absent: env only
+        return _env(GITHUB_TOKEN_ENV)
+
+
 # --------------------------------------------------------------------------
 #   Is a source set up? (settings only - no socket)
 # --------------------------------------------------------------------------
@@ -1089,7 +1107,7 @@ def _search_card_lines(w: dict, every: str) -> list:
 
 
 def _github_card_lines(w: dict, every: str) -> list:
-    keyed = bool(_env(GITHUB_TOKEN_ENV))
+    keyed = bool(_github_token())
     if w["event"] == "pr_merged":
         what = (f"Watching for: pull request #{w['pr']} on {w['repo']} - when it is merged "
                 "(or closed without being merged, which Jarvis tells you too, and then stops).")
@@ -2643,7 +2661,7 @@ def _default_github_get(url: str) -> tuple:
         raise ValueError("not a GitHub API address")
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "jarvis-tellme",
                "X-GitHub-Api-Version": "2022-11-28"}
-    token = _env(GITHUB_TOKEN_ENV)
+    token = _github_token()
     if token:
         try:
             import jarvis_scrub

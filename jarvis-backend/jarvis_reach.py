@@ -144,6 +144,12 @@ TOOL_NAMES = {
     # (test_reach.py).
     "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one "
                        "card each; off unless you switch it on)",
+    # CONNECT_TOOL (2026-10-28): raising the connect card changes nothing until
+    # the owner types the details and presses Save on that card, so its own ask
+    # words are the card rather than a second approval card. Listed here because
+    # test_reach.py requires every tool to have plain words for the page.
+    "connect_account": "Connecting a calendar or GitHub (one card on this PC; you "
+                       "type the details, never the model)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as

@@ -7,9 +7,17 @@ first, no cloud keys." CalDAV is the open, self-hosted calendar protocol
 (Nextcloud, Radicale, Baikal, Fastmail, and others all speak it) - the owner
 points this at their own server with their own username/password, exactly
 the same shape jarvis_research.py already uses for `JARVIS_GITHUB_TOKEN`.
-There is no Google/Microsoft OAuth flow here and none is planned: OAuth
-needs a registered app and a cloud key this project has always avoided, and
-the whole point of choosing CalDAV is that it does not.
+There is no Google/Microsoft OAuth flow in THIS module, and CalDAV here still
+needs no registered app and no cloud key: it reads the owner's own server with
+their own username and password, exactly the same shape
+jarvis_research.py already uses for `JARVIS_GITHUB_TOKEN`. A real Google
+SIGN-IN does exist beside this reader since 2026-10-28:
+`jarvis_google_calendar.py` owns the OAuth flow, the loopback callback, the
+Credential Manager tokens and the carded writes (docs/JARVIS-API.md section
+161, docs/GOOGLE-CALENDAR-SETUP.md). This module never touches any of that -
+when the owner chooses the Google sign-in way, reads come from that module,
+and this one keeps reading the CalDAV server and the private iCal link
+exactly as before.
 
 A SECOND SOURCE: A PRIVATE CALENDAR LINK (the owner's decision, 2026-09-25)
 Google Calendar cannot be read over CalDAV without OAuth. What Google offers
@@ -72,9 +80,12 @@ module does not decide its own tier, `jarvis_gate.py` does, same as always.
 
 CREDENTIALS - NEVER STORED HERE, NEVER LOGGED, NEVER ON A CARD
 `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` are read
-fresh on every call, exactly like `jarvis_research.TOKEN_ENV`. This module
-never writes them to disk and never puts the password in a `Plan`, a `Query`,
-or `describe()`'s output - `describe()` says only THAT the request is
+fresh on every call, exactly like `jarvis_research.TOKEN_ENV` - and since
+2026-10-28 the username and password can live in Windows Credential Manager
+instead of a plain-text Windows user environment variable (`login()` below);
+the environment variable still wins when one is set. This module never writes
+them to disk and never puts the password in a `Plan`, a `Query`, or
+`describe()`'s output - `describe()` says only THAT the request is
 authenticated, never with what, matching `jarvis_research.describe()`'s own
 auth line.
 
@@ -192,6 +203,19 @@ ICS_URL_ENV = "JARVIS_CALENDAR_ICS_SECRET_URL"
 #: test_account_secrets.py checks the text).
 ICS_URL_TARGET = "Jarvis Backend/Calendar iCal link"
 
+#: Windows Credential Manager names for the CalDAV username and password (the
+#: owner's ask of 2026-10-28: connect an account by talking to Jarvis, with a
+#: pop-up for the password). Until this, both were read ONLY from
+#: `USER_ENV`/`PASSWORD_ENV` - a plain-text Windows user environment variable -
+#: which is the rule 3 breach that ask made worth fixing. The same order as the
+#: link above: the environment variable still wins when one is set, so an
+#: installation that already works keeps working; Credential Manager is only
+#: ever the fallback. Written by the connect-account card on this PC
+#: (jarvis_connect_account.py) - never over HTTP from the phone, never in the
+#: chat, never in a log.
+USER_TARGET = "Jarvis Backend/CalDAV username"
+PASSWORD_TARGET = "Jarvis Backend/CalDAV password"
+
 # A calendar with hundreds of events in the window asked for is not a
 # reading list, it is a data dump - capped the same way jarvis_agent's
 # _tool_content caps any one tool's result, but here at the source, so the
@@ -302,6 +326,26 @@ def _feed_url() -> str:
     return jarvis_token_store.resolve_secret(ICS_URL_ENV, ICS_URL_TARGET)
 
 
+def login() -> tuple:
+    """The CalDAV username and password, as `(user, password)`, each in
+    `resolve_secret`'s own order: the environment variable first (someone who
+    set one meant it), then Windows Credential Manager, then "".
+
+    Since 2026-10-28 both can live in Credential Manager, written by the
+    connect-account card on this PC. Before that they were read from the
+    environment only - a plain-text Windows user variable - which is the rule 3
+    breach the owner's "connect my accounts by talking to Jarvis" ask made
+    worth fixing. The password is read fresh on every call, is never stored in
+    this module, and is never put in a `Plan`, a `Query` or `describe()`'s
+    output - `describe()` says only THAT the request is authenticated.
+
+    Never raises: a store that cannot be reached is simply empty, so nothing
+    that works today stops."""
+    import jarvis_token_store
+    return (jarvis_token_store.resolve_secret(USER_ENV, USER_TARGET),
+            jarvis_token_store.resolve_secret(PASSWORD_ENV, PASSWORD_TARGET))
+
+
 def _base_url() -> str:
     """The CalDAV address, in the order that is the whole point:
 
@@ -335,8 +379,12 @@ def _configured() -> bool:
 
 
 def authenticated() -> bool:
-    """Whether a username is configured. Never reveals the password."""
-    return bool(os.environ.get(USER_ENV, "").strip())
+    """Whether a username is configured. Never reveals the password.
+
+    A username can now come from Windows Credential Manager as well as the
+    environment (2026-10-28), so this asks `login()` rather than the
+    environment - the same bool either way when only the variable is set."""
+    return bool(login()[0])
 
 
 def source() -> str:
@@ -706,14 +754,14 @@ def _read_capped(r, *, clock: Callable[[], float] = time.monotonic) -> str:
 
 def _default_fetch(q: Query) -> str:
     """The real call. For the private link, `_fetch_feed`. For CalDAV,
-    Basic auth from the environment, read fresh - never cached, never
-    logged, and never followed onto a redirect (see `_RefuseRedirect`).
-    Raises on any non-2xx status; callers see that as a real error rather
-    than an empty, misleadingly clean result."""
+    Basic auth from `login()` (environment first, then Credential Manager -
+    2026-10-28), read fresh - never cached, never logged, and never followed
+    onto a redirect (see `_RefuseRedirect`). Raises on any non-2xx status;
+    callers see that as a real error rather than an empty, misleadingly clean
+    result."""
     if q.private_link:
         return _fetch_feed(q)
-    user = os.environ.get(USER_ENV, "")
-    password = os.environ.get(PASSWORD_ENV, "")
+    user, password = login()
     req = urllib.request.Request(
         q.url, data=q.body.encode("utf-8"), method=q.method,
         headers={"Content-Type": "application/xml; charset=utf-8", "Depth": "1"})

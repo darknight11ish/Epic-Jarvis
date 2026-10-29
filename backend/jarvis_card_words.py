@@ -71,6 +71,11 @@ TITLES = {
     "calendar_read": "read your calendar",
     "edit_calendar_event": "change an event in your calendar",
     "delete_calendar_event": "delete an event from your calendar",
+    # The Google Calendar sign-in's ONE write action (2026-10-28,
+    # jarvis_google_calendar.ACTION_WRITE): creating, changing or deleting one
+    # event, each on its own card. Added at the 2026-10-28 integration merge -
+    # the module shipped without a phrase here, and test_card_words.py caught it.
+    "google_calendar_write": "add, change or delete an event in your Google Calendar",
     # --- files, commands, the computer and the phone
     "read_files_readonly": "read files on this PC",
     # M7 (2026-10-18): a sandbox run that reads the files the caller listed is
@@ -302,6 +307,9 @@ SUMMARY = {
     "calendar_read": "read your calendar",
     "edit_calendar_event": "change a calendar event",
     "delete_calendar_event": "delete a calendar event",
+    # The Google Calendar sign-in's one write action (2026-10-28); added at the
+    # 2026-10-28 integration merge, with the TITLES row above.
+    "google_calendar_write": "add, change or delete a calendar event",
     # --- files, commands, the computer and the phone
     "read_files_readonly": "read files on this PC",
     "sandbox_file_run": "run a script that reads your files",
