@@ -7602,6 +7602,44 @@ as aliases of `voice_sync` / `custom_personalities`, and `personality_default`,
   secrets before it is stored; the name is capped at 60 characters and the
   other fields at 240, with at most 20 saved presets.
 
+**Both apps list the same presets, from this one answer (2026-10-28).** The
+owner's ask that day was "make sure the presets for jarvis personality and
+other presets are consistent too". Until then the phone's Mind screen drew only
+the legacy Warm/Plain pair (docs/ARCHITECTURE.md §8 recorded it as desktop
+first), and it marked "Plain" as in use whenever the PC was on ANY preset other
+than Warm Collaborator - because `manner` is derived on the PC
+(`jarvis_manner.current()`: warm only for `warm_peer`, plain for every other
+preset). A screen naming a preset Jarvis was not in is the same class of bug as
+the voice that disagreed with every screen showing it (§15, 2026-10-28).
+
+What both apps do now, with no new route and no new field:
+
+| | desktop (`manner-settings.js`, `personalities.js`) | phone (`Manner.kt`, `MannerPlate.kt`) |
+|---|---|---|
+| the list | `GET /api/manner`'s `personalities`; the local copy in `personalities.js` is the fallback for an older PC and is held word-for-word to `contract/personalities.json` by `tests/personalities.mjs` | the SAME `personalities` array, in the PC's order, titles and descriptions verbatim |
+| the mark | the PC's `personality` | the PC's `personality`, and ONLY that id (a derived `manner` word is never matched to a preset) |
+| a switch | one field, `{"personality": "<id>"}` | the same one field, `{"personality": "<id>"}` |
+| live | re-reads on its own actions | re-reads on the `manner` event (below) |
+| the legacy pair | hidden once the PC sends a list | hidden once the PC sends a list; both keep it for an older PC |
+| the four dials, "My personalities" editor, Hear Sample | here | **not drawn** - one line says where they are (ARCHITECTURE §8) |
+
+**A client must never switch a preset with `{"manner": "warm"|"plain"}`.** That
+legacy write is still accepted and still means what it meant (it maps to
+`warm_peer`/`tactical_ops`), but it also resets the four dials
+(`jarvis_manner.handle_set`'s legacy branch writes the mapped preset's dials),
+so it silently replaces a preset chosen on the other device. `{"personality":
+id}` changes only the preset and its own dials.
+
+**`manner` is an event kind (2026-10-28).** Every write that goes through
+`jarvis_manner._merge_setting` - a personality, the manner word, humour, a dial,
+the voice-sync switch, saving or deleting a saved personality - publishes
+`manner` with `{manner, personality, personality_explicit, humor, voice_sync,
+dials}`. Like every other kind it is a doorbell, not state: the phone re-reads
+`GET /api/manner` (`JarvisRuntime.mannerTick`), so an open Mind screen follows a
+switch made in the desktop's Settings window, the HUD's Presets menu or the chat
+sentence without being reopened. A refused body and a damaged `manner.json` ring
+nothing, because nothing changed.
+
 **Asking what each one does** (2026-10-26, `jarvis_quick.py`): "what does the
 Classic Butler personality do", "what is TARS like", "describe the butler
 personality" and "tell me about TARS" answer with that preset's own

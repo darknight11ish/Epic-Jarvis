@@ -21,7 +21,7 @@ import kotlinx.serialization.json.put
  * `backend/fixtures/work_presets.json` (tools/gen_work_presets.py; regenerate,
  * never hand-edit), and [FocusPresetsTest] reads that real file.
  *
- * The new contract's answer carries the five `presets[]`, the PC's `hardware`
+ * The new contract's answer carries the nine `presets[]`, the PC's `hardware`
  * (with the `questionnaire`) and `recommendations`, plus the saved `chosen`
  * id when the PC has one. This object keeps those blocks so the client parses
  * the WHOLE shape rather than only the rows, but only [presets] and [chosen]

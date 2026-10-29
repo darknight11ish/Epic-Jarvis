@@ -1687,6 +1687,14 @@ object JarvisRuntime {
             // reads the route again, and nothing is fetched while that plate
             // is not open.
             com.jarvis.client.net.Antislop.EVENT -> _antislopTick.update { it + 1 }
+            // How Jarvis talks was changed somewhere else: a personality
+            // switched from the PC's Settings page, the HUD's Presets menu or
+            // the chat sentence, the manner word, humour, the voice-sync
+            // switch or a dial. One `manner` frame, a doorbell like the rest:
+            // the Mind plate reads `GET /api/manner` again, so the preset it
+            // marks as "in use" is the PC's own answer and never a local
+            // guess. Nothing is fetched while that plate is not open.
+            com.jarvis.client.net.Manner.EVENT -> _mannerTick.update { it + 1 }
             // The brief covers these; the Watches plate on Mind reads its
             // lists again, as the desktop's Brain does.
             "finding" -> _watchTick.update { it + 1 }
@@ -3038,6 +3046,33 @@ object JarvisRuntime {
         val body = com.jarvis.client.net.Manner.body(manner)
             ?: return "That is not one of the two choices."
         return com.jarvis.client.net.Manner.replyLine(api.mannerPost(body), manner)
+    }
+
+    /**
+     * Goes up by one on every `manner` event, so this screen reads itself
+     * again when the personality was switched somewhere else - the PC's own
+     * Settings, the HUD's Presets menu, or the chat sentence ("switch to the
+     * Classic Butler personality"). The frame carries `{manner, personality,
+     * humor, voice_sync, dials}` (`jarvis_manner._publish`), but the event is
+     * a doorbell like every other kind ([onEvent]'s own rule): the plate owns
+     * its read, so this re-runs the SAME [manner] GET it opens with.
+     */
+    private val _mannerTick = MutableStateFlow(0)
+
+    /** Read by `MannerSection`'s `LaunchedEffect` beside its own re-reads. */
+    val mannerTick: StateFlow<Int> = _mannerTick.asStateFlow()
+
+    /**
+     * ONE change: switch to a personality preset (`GET /api/manner`'s
+     * `personalities`, §27.7). The body is `{"personality": "<id>"}` and
+     * nothing else - the SAME one-field write the desktop sends. No card
+     * (wording only), held on a stale link like [setManner].
+     */
+    suspend fun usePersonality(id: String, title: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Manner.personalityBody(id)
+            ?: return "That is not one of the PC's personalities."
+        return com.jarvis.client.net.Manner.personalityReplyLine(api.mannerPost(body), title)
     }
 
     // ------------------------------------------------- anti-slop filter ----

@@ -892,10 +892,10 @@ def live_status() -> dict:
     return {
         "found": f"{len(PRESETS)} focus presets",
         "presets": [p.view() for p in PRESETS],
-        # The Cloud row: a SIXTH row in the same shape, deliberately not in
-        # `presets` - both apps' nine-row list stays nine rows (the owner's
-        # decision of 2026-10-27: additive keys only, so the phone needs no
-        # change at all to keep working).
+        # The Cloud row: a TENTH row in the same shape (nine presets + this
+        # one), deliberately not in `presets` - both apps' nine-row list stays
+        # nine rows (the owner's decision of 2026-10-27: additive keys only, so
+        # the phone needs no change at all to keep working).
         "cloud_preset": cloud_preset_view(),
         # The provider in use, the services to choose from, and the PC's own
         # standing escalation switch. See cloud_view().
