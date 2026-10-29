@@ -107,7 +107,9 @@ its card, tier, stale-link and PC-only rules are unchanged:
   * the named choices (CHOICE_SETTINGS, "set <name> to <value>"): how long
     chats are kept (0/30/90/365 days), the captcha hand-off (stop early or
     keep offering), whether that window is brought to the front, voice speed,
-    the built-in voice the pack really offers, and the focus presets (its
+    the built-in voice the pack really offers - by its own id, its picker
+    label, or, for Ashby and Clara, the short name the owner says ("change
+    your voice to Ashby", 2026-10-28) - and the focus presets (its
     apply still raises the one switch_model card it always did);
   * the sandbox and media-index switches now name their real Settings cards,
     so "is the sandbox on?" maps to the switch the page draws.
@@ -2575,9 +2577,8 @@ def _voice_speaker_choices() -> dict:
     except Exception:
         return {}
     out = {}
-    for row in view.get("choices") or ():
-        if not isinstance(row, dict):
-            continue
+    rows = [r for r in view.get("choices") or () if isinstance(r, dict)]
+    for row in rows:
         pid = str(row.get("id") or "").strip()
         if not pid:
             continue
@@ -2588,6 +2589,21 @@ def _voice_speaker_choices() -> dict:
         accent = str(row.get("accent") or "").strip()
         if accent:
             out[_bare(f"{label} {accent}")] = pid
+    # THE BLENDS' SHORT NAMES (2026-10-28). Ashby and Clara are labelled
+    # "Ashby (made for Jarvis)" in the picker, so their own label never matched
+    # the sentence the owner actually says - "change your voice to Ashby". The
+    # short name is the blend's own `name` in jarvis_kokoro.MIX, read from there
+    # rather than typed again, and only for a blend this pack is really
+    # OFFERING: a refused or unmade blend must not become selectable, and the
+    # voice check's refusal stays exactly where it was.
+    try:
+        import jarvis_kokoro as K
+        for pid in {str(r.get("id") or "").strip() for r in rows}:
+            name = str((K.MIX.get(pid) or {}).get("name") or "").strip()
+            if name:
+                out.setdefault(_bare(name), pid)
+    except Exception:
+        pass
     return out
 
 
@@ -2874,8 +2890,16 @@ CHOICE_SETTINGS: tuple = (
         "how fast Jarvis speaks (slower, normal, faster)"),
     ChoiceSetting(
         "voice_speaker",
+        # THE OWNER'S OWN WORDS (2026-10-28): "change your voice to Ashby" is
+        # the sentence he asked for. "your voice" and "his voice" are the two
+        # the table did not have; "jarvis's voice" is added here as well so the
+        # questions that name the setting ("what can I set jarvis's voice to?")
+        # answer from this list too. All of them end at the SAME cardless,
+        # PC-wide setter the Settings picker calls - no new route, no tier, no
+        # card (see set_voice_speaker's own note).
         ("the built-in voice", "which voice jarvis uses", "jarvis's built-in voice",
-         "the voice jarvis speaks with", "the voice"),
+         "the voice jarvis speaks with", "the voice",
+         "your voice", "his voice", "jarvis's voice"),
         "voices", _voice_speaker_choices, set_voice_speaker,
         "which built-in voice Jarvis speaks with"),
     ChoiceSetting(
@@ -3029,6 +3053,15 @@ CONTROL_FIELDS: dict = {
 }
 
 #: The words a person may say for each control, longest first at match time.
+#:
+#: THE BUILT-IN VOICE'S NATURAL WORDS ARE NOT HERE, ON PURPOSE (2026-10-28).
+#: "your voice" and "his voice" live in CHOICE_SETTINGS' voice_speaker `names`
+#: instead. This table is the MULTI-FIELD control one, and a value it cannot
+#: place answers with the FIELD names ("Its fields are: speed; voice"), while
+#: the named-choice table answers with the REAL voice names - which is what
+#: "change your voice to Ashby" must say when the name is wrong. Both end at
+#: the same setter, so nothing about the change itself differs. "the voice" and
+#: "jarvis's voice" stay here for the sentences that name no field.
 CONTROL_NAMES = {
     "voice": ("the voice", "jarvis's voice", "jarvis voice", "voice"),
     "captcha hand off": ("the captcha hand-off", "the captcha handoff",
