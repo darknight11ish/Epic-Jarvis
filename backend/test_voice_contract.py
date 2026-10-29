@@ -638,6 +638,31 @@ def t_the_desktop_fixture_is_fresh():
           f"inside the producer's own world - so 'with only the basic voice check "
           f"installed' would be this PC's answer, not the state the case names")
 
+    # THE SAME PREMISE, ONE MODULE OVER (2026-10-29). status()'s speech block
+    # and the "One moment." clip's key come from jarvis_voices - the chosen
+    # voice, its speed, an animal face - so the producer must read THAT
+    # module's own temporary config folder too. Left to the machine it read
+    # whatever voice that PC had saved (the owner's says bm_george), and on CI
+    # a run's shared config folder can already hold a voice an earlier suite
+    # saved; the three fixture comparisons below failed on run 40832200470 in
+    # both jobs with the same wrong bytes, which is what one shared folder
+    # looks like from here. Named before the comparisons for the same reason as
+    # the embedder check: if the pin is ever lost, this says so in one line
+    # instead of three fixture failures.
+    import jarvis_voices as VOICES
+    outside = str(VOICES._config_dir())
+    with G.World():
+        inside = str(VOICES._config_dir())
+        # ... asked INSIDE the world: its folder is removed when it closes.
+        was_a_folder = os.path.isdir(inside)
+        saved = VOICES._read_state()
+    check("the producer's cases read a voice setting of their own, not this PC's",
+          inside != outside and was_a_folder
+          and saved.get("speaker") is None and saved.get("face_voice") is None,
+          f"jarvis_voices._config_dir() answered {inside!r} inside the producer's "
+          f"world (saved state: {saved!r}) and {outside!r} outside it - so "
+          f"flow.moment.key would be this PC's voice, not the state the case names")
+
     check("voice-status-cases.json equals a fresh run of the producer",
           G.main(["--check"]) == 0, "run python3 tools/gen_voice_status_cases.py")
     # The training and custom-voice screens are tested against their own
