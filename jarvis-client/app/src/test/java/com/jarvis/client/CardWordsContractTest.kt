@@ -72,6 +72,23 @@ class CardWordsContractTest {
     }
 
     @Test
+    fun `an expired card says the PC's words, and only the phone adds its advice`() {
+        // 2026-10-28, the owner's ruling that the phone's cards must match the
+        // desktop's: the FACT is one sentence from jarvis_card_words.TIMED_OUT,
+        // drawn by both apps; TIMED_OUT_NEXT is this phone's own second
+        // sentence, because on the PC the owner is already in front of the
+        // window that raises cards. Both are the PC's words, not typed here.
+        assertEquals(text("timed_out"), CardWords.TIMED_OUT)
+        assertEquals(text("timed_out_next"), CardWords.TIMED_OUT_NEXT)
+        // The two halves read as one sentence about one event, and the card
+        // draws exactly them (no third wording, no re-typed literal).
+        val line = "${CardWords.TIMED_OUT} ${CardWords.TIMED_OUT_NEXT}"
+        assertTrue(line.startsWith("Timed out"))
+        assertTrue(line.endsWith("."))
+        assertTrue(source("ui/approval/ApprovalCard.kt").contains("CardWords.TIMED_OUT_NEXT"))
+    }
+
+    @Test
     fun `every action's title, as the PC serves it, is the card's title here`() {
         for (c in cases["titles"]!!.jsonArray) {
             val action = c.jsonObject["action"]!!.jsonPrimitive.content
