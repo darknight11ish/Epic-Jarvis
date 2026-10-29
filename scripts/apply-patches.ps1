@@ -2479,6 +2479,25 @@ $SHIPPED = @(
 # /api/models/install and /api/work/apply cards remain the only ways to act).
 # backend/_where.py's SHIPPED list has the same entry, at the end too.
 'jarvis_model_recommendations.py'
+# A real two-way Google Calendar (2026-10-28, the owner chose "both at once"):
+# the private iCal link (read-only) or a Google sign-in over a LOOPBACK redirect
+# with PKCE and a checked state (read/write), one active at a time. Its routes
+# come from its own install(), called by plugins/ready/google-calendar, so no
+# patch of its own. The refresh token is in Windows Credential Manager, access
+# tokens are in memory only, and every create/change/delete waits on its own
+# approval card.
+'jarvis_google_calendar.py'
+    # Connecting an account by talking to Jarvis (2026-10-28, the owner's ask:
+    # "it should be able to connect all features just through me talking to
+    # jarvis"). The service table, the ONE card, the real test per service and
+    # the status the chat reads; and the host-only routes the HUD card posts to
+    # - installed by jarvis_secret_handoff_wiring.install(), the ONE call
+    # secret-handoff.patch already makes, so this feature adds no patch. Every
+    # value is typed on this PC and saved into Windows Credential Manager, and
+    # nowhere else. The same two entries are at the end of backend/_where.py's
+    # SHIPPED list.
+    'jarvis_connect_account.py'
+    'jarvis_connect_account_wiring.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

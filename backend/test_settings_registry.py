@@ -954,6 +954,129 @@ def t_every_choice_setting_resolves_its_options_and_reaches_its_own_setter():
               ask is not None and ask.name == "settings_choice_help", ask)
 
 
+def t_the_natural_voice_sentences_reach_the_one_builtin_voice_setter():
+    """The owner's own wording (2026-10-28): "change your voice to Ashby".
+
+    THE GAP THIS CLOSES. That sentence matched nothing, so it went to the
+    model - which has no voice control - while "set the built-in voice to X"
+    already changed the same setting with no card. The fix is ALIASES, not a
+    route: "your voice" and "his voice" are the missing names of the one
+    `voice_speaker` choice, plus one closed-world sentence shape ("use the
+    Clara voice") that only fires on a name the pack really offers. Every
+    path here ends at `jarvis_settings_registry.set_voice_speaker`, which is
+    the same cardless, PC-wide setter the Settings picker calls.
+
+    The blend ids are supplied from `jarvis_kokoro.MIX` rather than typed, so
+    "the real speaker id" means the id the voice pack itself uses.
+    """
+    import dataclasses
+    import jarvis_kokoro as K
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    import jarvis_voices as JV
+
+    ashby = next(k for k, row in K.MIX.items() if row.get("name") == "Ashby")
+    clara = next(k for k, row in K.MIX.items() if row.get("name") == "Clara")
+    check("Ashby and Clara are real blend ids, not names guessed at",
+          ashby in K.MIX_SLOTS and clara in K.MIX_SLOTS, (ashby, clara))
+
+    for words in ("your voice", "his voice", "jarvis's voice"):
+        found = R.find_choice_setting(words)
+        check(f"{words!r} names the built-in voice setting",
+              found is not None and found.key == "voice_speaker", found)
+        check(f"...and the model's own wording finds the same setting",
+              R.find_choice_setting_words(f"the {words}") is found, words)
+
+    # A v1.0 pack's own rows (the shorter pack this PC may have does not offer
+    # the blends at all). The registry reads the pack at match time, so this
+    # exercises the real `_voice_speaker_choices` map, including the short
+    # name the owner says.
+    real_view = JV.speaker_view
+
+    def v1_view():
+        view = dict(real_view() or {})
+        view["choices"] = [{"id": "af_bella",
+                            "label": "American (female) - Bella"},
+                           {"id": ashby, "label": K.MIX[ashby]["label"]},
+                           {"id": clara, "label": K.MIX[clara]["label"]}]
+        return view
+
+    JV.speaker_view = v1_view
+    try:
+        check("the blend answers to the short name the owner says",
+              R.choice_from_words(R._choice("voice_speaker"), "Ashby") == ashby,
+              R._voice_speaker_choices())
+        for sentence, value in (
+                ("change your voice to Ashby", ashby),
+                ("set your voice to Ashby", ashby),
+                ("change his voice to Ashby", ashby),
+                ("change jarvis's voice to Ashby", ashby),
+                ("use the Clara voice", clara),
+                ("switch to the Ashby voice", ashby)):
+            got = Q.match(sentence)
+            # Two grammars can own the sentence ("jarvis's voice" is also a
+            # control name), and every one of them settles on this setting's
+            # own setter - accept whichever wins, never another setting.
+            check(f"{sentence!r} changes the built-in voice to {value}",
+                  got is not None
+                  and got.name in ("settings_choice", "control_set")
+                  and got.f.get("key") == "voice_speaker"
+                  and got.f.get("value") == value, got)
+
+        # ...and the sentence really dispatches to that setting's own setter,
+        # with the pack's real id - never a made-up value.
+        calls = []
+
+        def spy(chosen, *, peer=None, local=None):
+            calls.append((chosen, peer, local))
+            return R.Outcome(True, "spy said it changed")
+
+        saved = R.CHOICE_SETTINGS
+        R.CHOICE_SETTINGS = tuple(
+            dataclasses.replace(c, set=spy) if c.key == "voice_speaker" else c
+            for c in saved)
+        try:
+            got = Q.match("change your voice to Ashby")
+            out = (Q._run_settings_choice({"key": "voice_speaker",
+                                           "value": got.f["value"]}, "phone", False)
+                   if got is not None else None)
+        finally:
+            R.CHOICE_SETTINGS = saved
+        check("the sentence calls the setting's own setter with the real id",
+              calls == [(ashby, "phone", False)]
+              and out is not None and out.reply == "spy said it changed", calls)
+
+        # An unknown name changes nothing and says the names this PC has.
+        got = Q.match("change your voice to Nobody")
+        check("an unknown voice is a refusal, not a guess",
+              got is not None and got.name == "settings_choice_bad", got)
+        said = Q._run_settings_choice_bad(got.f).reply if got is not None else ""
+        check("...and the answer names the real voices to say instead",
+              "not one of the choices" in said
+              and "ashby" in said.lower() and "clara" in said.lower(), said)
+    finally:
+        JV.speaker_view = real_view
+
+    # The near misses must keep reaching whatever they reached before. "change
+    # the voice on the phone" is the multi-field control's question about
+    # WHICH part (it never set anything, before or now), and "use the passive
+    # voice" is a writing request, not a voice change.
+    for sentence in ("change the voice on the phone", "change the volume",
+                     "use the passive voice", "change your voice louder"):
+        got = Q.match(sentence)
+        check(f"{sentence!r} never reaches the built-in voice setter",
+              got is None or got.f.get("key") != "voice_speaker", got)
+
+    # The recorded/custom voice is a DIFFERENT, carded feature (a clip plus
+    # the `custom_voice` card, Voices screen only). It is untouched: its own
+    # action still exists, and no chat sentence can select a recorded voice.
+    check("a recorded voice still has its own card action",
+          JV.ACTION == "custom_voice", JV.ACTION)
+    got = Q.match("change your voice to the voice I recorded")
+    check("...and asking for a recorded voice in chat changes no voice",
+          got is None or got.name in ("settings_choice_bad", "control_bad"), got)
+
+
 def t_the_deliberate_open_only_switches_stay_unreachable():
     import jarvis_quick as Q
     import jarvis_settings_registry as R

@@ -407,6 +407,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
+      },
+      {
+       "action": "google_calendar_write",
+       "fixed": false,
+       "id": "google_calendar_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add, change or delete an event in your Google Calendar"
       }
      ],
      "title": "Email and calendar"
@@ -1690,6 +1699,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
+      },
+      {
+       "action": "google_calendar_write",
+       "fixed": false,
+       "id": "google_calendar_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add, change or delete an event in your Google Calendar"
       }
      ],
      "title": "Email and calendar"
@@ -2970,6 +2988,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
+      },
+      {
+       "action": "google_calendar_write",
+       "fixed": false,
+       "id": "google_calendar_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add, change or delete an event in your Google Calendar"
       }
      ],
      "title": "Email and calendar"
@@ -4243,6 +4270,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
+      },
+      {
+       "action": "google_calendar_write",
+       "fixed": false,
+       "id": "google_calendar_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add, change or delete an event in your Google Calendar"
       }
      ],
      "title": "Email and calendar"
@@ -5516,6 +5552,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
+      },
+      {
+       "action": "google_calendar_write",
+       "fixed": false,
+       "id": "google_calendar_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add, change or delete an event in your Google Calendar"
       }
      ],
      "title": "Email and calendar"
@@ -6801,6 +6846,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
+      },
+      {
+       "action": "google_calendar_write",
+       "fixed": false,
+       "id": "google_calendar_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add, change or delete an event in your Google Calendar"
       }
      ],
      "title": "Email and calendar"
@@ -8081,6 +8135,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
+      },
+      {
+       "action": "google_calendar_write",
+       "fixed": false,
+       "id": "google_calendar_write",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add, change or delete an event in your Google Calendar"
       }
      ],
      "title": "Email and calendar"

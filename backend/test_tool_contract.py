@@ -107,7 +107,8 @@ OFFERED_FRESH = [
 CATALOGUE = [
     "append_logseq_journal", "append_obsidian_daily", "browser_control",
     "calculator", "calendar_read", "change_setting", "coming_up",
-    "control_computer", "control_phone", "create_joplin_note", "draft_email",
+    "connect_account", "control_computer", "control_phone", "create_joplin_note",
+    "draft_email",
     "email_check", "feature_guide", "file_read", "github_search",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
     "notes_search", "propose_plan", "rea_investigate", "read_web_page",

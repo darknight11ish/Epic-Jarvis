@@ -991,6 +991,12 @@ pub fn run() {
             // its own POSTs stay refused; hud_proxy.rs still owns the read.
             hud_secret_handoff::hud_secret_handoff_fill,
             hud_secret_handoff::hud_secret_handoff_cancel,
+            // The connect-account card (2026-10-28): save its values, or cancel
+            // it, with the token added in Rust. The values go straight into
+            // Windows Credential Manager on this PC; the page holds neither the
+            // token nor any place to keep a value.
+            hud_secret_handoff::hud_connect_account_save,
+            hud_secret_handoff::hud_connect_account_cancel,
             // App lock and the widget (apps security audit M3).
             commands::get_app_lock,
             // The two lock switches, for the faces' fact nod (face-moments.js).

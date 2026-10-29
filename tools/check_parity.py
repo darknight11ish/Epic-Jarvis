@@ -132,6 +132,16 @@ CLASSIFICATION = {
     "/api/secret-handoff/pending": ("deliberate", "The owner-secret hand-off card is PC-only: the host measures a window with UI Automation and the owner types the secret into the PC's own card. The phone has no card and no measured target (ARCHITECTURE section 8, JARVIS-API section 157)."),
     "/api/secret-handoff/fill": ("deliberate", "The owner-secret hand-off fill is PC-only: it types the owner's secret into a PC window the host re-measured, which a phone cannot do or watch. Desktop HUD only (ARCHITECTURE section 8)."),
     "/api/secret-handoff/cancel": ("deliberate", "Cancelling the owner-secret hand-off card is PC-only, like the card itself: the card exists only in the desktop HUD (ARCHITECTURE section 8)."),
+    # The connect-account card (2026-10-28, the owner's ask: connect an account
+    # by talking to Jarvis, with a pop-up for the password). PC-only for the
+    # same reason the hand-off is, and one stronger one: a phone-side card would
+    # have to send the value over the network to reach the store on this PC,
+    # which is worse than the store it is meant to be kept out of. Backend:
+    # jarvis_connect_account_wiring.py (installed by secret-handoff.patch's one
+    # call). ARCHITECTURE section 8 and JARVIS-API section 161 record it.
+    "/api/connect-account/pending": ("deliberate", "The connect-account card is PC-only: the owner types the token, private link or password into the PC's own card and it goes straight into this PC's Credential Manager. A phone-side card would have to send the value over the network to reach that store (ARCHITECTURE section 8, JARVIS-API section 161)."),
+    "/api/connect-account/save": ("deliberate", "Saving a connect-account card is PC-only: the values are saved into Windows Credential Manager on this PC, and there is no route by which a phone may send a credential (rule 3, JARVIS-API section 161)."),
+    "/api/connect-account/cancel": ("deliberate", "Cancelling the connect-account card is PC-only, like the card itself: it exists only in the desktop HUD (ARCHITECTURE section 8)."),
 
     "/api/appearance": ("ported", ""),
     # `/api/work/cloud-escalate` (the standing cloud-escalation switch, 2026-10-27):

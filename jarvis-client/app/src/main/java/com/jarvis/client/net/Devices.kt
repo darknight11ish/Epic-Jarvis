@@ -163,6 +163,51 @@ object Devices {
 
     const val MISSING = "Your PC's Jarvis does not have a device list yet."
 
+    /**
+     * What this card says when the phone has NOT reached the PC at all, which
+     * is a different fact from [MISSING] and used to be reported as it.
+     *
+     * Before 2026-10-28 the row drew [MISSING] whenever `JarvisRuntime.version`
+     * was null - and that is null both for a genuinely old PC *and* for a PC
+     * that is simply not answering. So a paired phone whose PC was off, asleep,
+     * or logged out of Tailscale was told its Jarvis "does not have a device
+     * list yet": a claim about the PC that the phone had no evidence for, on
+     * the one card that could have said what to do instead.
+     */
+    const val NOT_REACHED = "This phone cannot reach your PC right now, so its list of devices is not shown here."
+
+    /**
+     * The one sentence choosing between [MISSING] and [NOT_REACHED] - a pure
+     * function, so the choice is tested without a screen
+     * (`PairFromSettingsTest`). [versionKnown] is whether the phone has read
+     * the PC's version at all: false means "not reached", never "too old".
+     */
+    fun notShown(versionKnown: Boolean): String = if (versionKnown) MISSING else NOT_REACHED
+
+    /**
+     * "Pair with your PC" - the way BACK INTO pairing from Settings, added
+     * 2026-10-28 after the owner reported his phone would not pair and
+     * "Settings has nothing for pair/reconnect to the PC".
+     *
+     * It was true. Settings' only pairing-adjacent control was
+     * [UNPAIR_BUTTON] - which DESTROYS the pairing and then tells the owner to
+     * "pair again" - and the two non-destructive ways back to the pair screen
+     * were both unreachable by name: the Home status line (which looks like
+     * text, not a button) and "Platform checks" -> "Change desktop or token".
+     * Meanwhile the pairing screen is drawn only while `!paired || repairing`,
+     * so a phone that still holds a token - exactly the state a rotated key, a
+     * reinstalled PC or a moved address leaves it in - never saw it again.
+     *
+     * The words are the pair screen's own ("Pair with your desktop"), with
+     * "PC" because that is the word the Devices card and the owner both use.
+     */
+    const val PAIR_BUTTON = "Pair with your PC"
+
+    /** Under [PAIR_BUTTON]: what it does, and the promise that it is safe. */
+    const val PAIR_HELP =
+        "Pair this phone again, or change which PC it talks to. " +
+            "Your saved PC and token stay until new ones connect."
+
     const val SHARED_ROW = "Old shared key - used by this PC, and by devices paired before per-device keys."
 
     /**

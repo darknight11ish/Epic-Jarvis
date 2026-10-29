@@ -49,8 +49,9 @@ class FeatureDirectoryTest {
         // Private chat row on 2026-10-26, and Choose Jarvis's face
         // PC-Only -> Switchable/Adjustable by the face-by-asking work, same
         // day: 40 -> 41 and 16 -> 15; Command-Only 70 -> 71 by the
-        // reminder-actions row on 2026-10-27), so a wrong label is caught.
-        assertEquals(41, rows.count { it.label.startsWith("Switchable / Adjustable") })
+        // reminder-actions row on 2026-10-27; and Switchable 41 -> 42 by the
+        // Anti-Slop settings card on 2026-10-28), so a wrong label is caught.
+        assertEquals(42, rows.count { it.label.startsWith("Switchable / Adjustable") })
         assertEquals(2, rows.count { it.label.startsWith("Settings-Only") })
         assertEquals(15, rows.count { it.label.startsWith("PC-Only Setting") })
         assertEquals(71, rows.count { it.label.startsWith("Command-Only") })
