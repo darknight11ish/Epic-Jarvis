@@ -1,5 +1,6 @@
 package com.jarvis.client
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -67,6 +68,56 @@ class QueueBeatTest {
         )
     }
 
+    /**
+     * The STALE dimension, which is the one the two platforms must agree on
+     * (2026-10-30 follow-up). The rule is TWO conditions on both sides -
+     * `waiting > 0 && connected` here, `connected && approvals > 0` in
+     * `stream.rs` - and `stale` is deliberately not one of them.
+     *
+     * Why: a stale link is what one failed queue read leaves behind, and the
+     * next successful read is the only thing that clears it. On the desktop,
+     * requiring `!stale` meant one transient failure switched off the only
+     * retry that could recover, so Approve stayed refused until the hourly
+     * reconnect. Here a success sets `refreshedSinceOpen`, which the stale
+     * watchdog uses to clear `_stale`, so the same recovery is already in
+     * place - and suppressing the beat while stale would remove it.
+     *
+     * The reflection check is the part that can catch a regression: if a
+     * `stale` term is added to the signature, the parameter count stops being
+     * two and this fails. The matrix below names `stale` on every row so the
+     * intent is not hidden in a loop variable.
+     */
+    @Test
+    fun `stale is not a condition - a waiting card on a connected link is re-read`() {
+        assertEquals(
+            "QueueBeat.due must take waiting and connected, and no stale term",
+            2,
+            QueueBeat::class.java.getDeclaredMethod(
+                "due",
+                Int::class.javaPrimitiveType!!,
+                Boolean::class.javaPrimitiveType!!,
+            ).parameterCount,
+        )
+        for (stale in listOf(false, true)) {
+            assertTrue(
+                "stale=$stale: something is on screen and the PC can be asked",
+                QueueBeat.due(waiting = 1, connected = true),
+            )
+            assertFalse(
+                "stale=$stale: nothing is waiting, so there is nothing to correct",
+                QueueBeat.due(waiting = 0, connected = true),
+            )
+            assertFalse(
+                "stale=$stale: a dead link has its own recovery",
+                QueueBeat.due(waiting = 1, connected = false),
+            )
+            assertFalse(
+                "stale=$stale: nothing waiting and no link",
+                QueueBeat.due(waiting = 0, connected = false),
+            )
+        }
+    }
+
     // ------------------------------------------------------- the wiring ----
 
     /**
@@ -106,6 +157,17 @@ class QueueBeatTest {
         assertTrue(
             "the beat must re-read through refreshPending, the one queue read",
             loop.contains("refreshPending()"),
+        )
+        // And every read must be ordered, or the beat's slow pre-decision
+        // answer can re-add the card a decision just cleared
+        // (`PendingRefreshOrderTest` proves the ordering itself).
+        assertTrue(
+            "every read must take a generation number before the request",
+            src.contains("val generation = pendingReadOrder.begin()"),
+        )
+        assertTrue(
+            "and only the newest read may write the queue",
+            src.contains("pendingReadOrder.applyIfLatest(generation)"),
         )
     }
 
