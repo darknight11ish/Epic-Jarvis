@@ -165,18 +165,21 @@ await check("the default document is a fixed point of the normalizer", () => {
   assert.deepEqual(H.normalizeHomeCards(H.normalizeHomeCards(all)), H.normalizeHomeCards(all));
 });
 
-await check("one id is one card: homeCardsFor filters by app, in order", () => {
+await check("one id is one card: homeCardsFor filters by app and by folded, in order", () => {
   const doc = { version: 1, cards: [
     { key: "calendar", on: true, order: 0 },
     { key: "today", on: true, order: 1 },
     { key: "pictures", on: false, order: 2 },
   ] };
+  // `pictures` is folded away (`on: false`): it stays in the document, but the
+  // main strip does not draw it. Before 2026-10-30 this list still held it, so
+  // "Pictures is folded away." was said while the card was on the screen.
   assert.deepEqual(H.homeCardsFor(doc, "desktop").map((entry) => entry.key),
-    ["calendar", "today", "pictures"]);
+    ["calendar", "today"]);
   // A phone cannot draw the calendar, so it is not in the phone's list at all -
   // that is the difference between "removed" and "not on this app".
   assert.deepEqual(H.homeCardsFor(doc, "phone").map((entry) => entry.key),
-    ["today", "pictures"]);
+    ["today"]);
   assert.deepEqual(H.cardsOnlyOnOtherApp(doc, "phone").map((card) => card.key),
     ["calendar"]);
   assert.deepEqual(H.missingHomeCards(doc, "desktop").map((card) => card.key),
@@ -315,6 +318,37 @@ await check("Switch a card's tile on and off without removing it", () => {
   assert.equal(H.applyHomeAction(doc, { type: "setCardOn", key: "today" }).doc.cards[0].on,
     false, "no value means flip");
   assert.equal(H.applyHomeAction(doc, { type: "setCardOn", key: "wiki" }).refused, true);
+});
+
+await check("folding a card away takes it off the strip, and the editor keeps it", () => {
+  // THE REGRESSION (2026-10-30 feature audit, HIGH): the note said "folded
+  // away" while `homeCardsFor` still returned the card, so the main screen drew
+  // it anyway. Drive the real reducer and the real list, as the audit did.
+  const doc = H.defaultHomeCards();
+  const answer = H.applyHomeAction(doc, { type: "setCardOn", key: "today", on: false });
+  assert.equal(answer.note, "Today is folded away.");
+  assert.deepEqual(H.homeCardsFor(answer.doc, "desktop").map((entry) => entry.key),
+    ["coming-up", "now", "settings-entry"]);
+  // The card is still in the document, so the editor's own list can draw it
+  // again - folding must never be a quiet delete.
+  assert.deepEqual(H.normalizeHomeCards(answer.doc).cards.map((entry) => entry.key),
+    ["today", "coming-up", "now", "settings-entry"]);
+  assert.deepEqual(H.missingHomeCards(answer.doc, "desktop").map((card) => card.key),
+    H.catalogueFor("desktop").filter((card) =>
+      !["today", "coming-up", "now", "settings-entry"].includes(card.key))
+      .map((card) => card.key),
+    "a folded card is on the main screen, so it must not be offered as missing");
+  // Unfolding brings it back where it was, not at the end.
+  const back = H.applyHomeAction(answer.doc, { type: "setCardOn", key: "today", on: true });
+  assert.equal(back.note, "Today is drawn.");
+  assert.deepEqual(H.homeCardsFor(back.doc, "desktop").map((entry) => entry.key),
+    ["today", "coming-up", "now", "settings-entry"]);
+  // Folding every card is allowed: an empty strip is a real choice.
+  let empty = H.defaultHomeCards();
+  for (const entry of empty.cards) {
+    empty = H.applyHomeAction(empty, { type: "setCardOn", key: entry.key, on: false }).doc;
+  }
+  assert.deepEqual(H.homeCardsFor(empty, "desktop"), []);
 });
 
 await check("Reset returns the usual four, and says so when there is nothing to do", () => {

@@ -552,13 +552,19 @@ export function isDefaultHomeCards(doc) {
   });
 }
 
-/** The cards the main screen actually draws, in order, for one app. */
+/**
+ * The cards the main screen actually draws, in order, for one app.
+ *
+ * A card the owner folded away (`on: false`) stays in the document and in the
+ * editor's own list, so it can be drawn again - but it is NOT drawn here. That
+ * is the promise the "Fold away" note makes.
+ */
 export function homeCardsFor(doc, app = "desktop") {
   const clean = normalizeHomeCards(doc);
   return clean.cards
     .filter((entry) => {
       const card = BY_KEY.get(entry.key);
-      return Boolean(card) && card.apps.includes(app);
+      return Boolean(card) && card.apps.includes(app) && entry.on !== false;
     })
     .sort((a, b) => a.order - b.order)
     .map((entry) => ({ ...entry, card: BY_KEY.get(entry.key) }));
