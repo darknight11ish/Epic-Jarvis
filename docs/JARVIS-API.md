@@ -27291,7 +27291,7 @@ colour, title, asset and path is refused; the build command is exactly
 tampered argv runs nothing; no yes means no run, and a stale-stream gate
 answer runs nothing; the environment holds no token, key or password; the
 install accepts only the APK inside the copy and no other adb form exists; the
-gate rows, tier lines and drop-in folder are all in place. **No test runs a
+gate rows, tier lines and drop-in folder are all in place, and that the module's own install() wraps a Handler, answers its own routes and lets every other request through untouched. **No test runs a
 real Gradle build or a real adb install** - a CI runner has no Android SDK and
 no phone. The build in section 168.1 was a manual measurement on the owner's
 PC, reported as such.

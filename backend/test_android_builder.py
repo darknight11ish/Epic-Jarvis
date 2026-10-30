@@ -921,6 +921,87 @@ def t_the_routes_say_no_plainly():
         check("a task that is not there is 404", code == 404, (code, body))
 
 
+def t_install_wraps_the_routes():
+    """The one piece of wiring this suite can prove: install() wraps a
+    Handler exactly as every other module's does, answers ITS routes, refuses
+    on the server's own origin/token checks, and lets every other request
+    through untouched.
+
+    Each check gets a NEW class, because install() marks the do_GET/do_POST it
+    wrapped and would (rightly) answer "already on" to a second call on the
+    same one - which is itself one of the checks below."""
+    A._reset_for_tests()
+    name, task = fresh()
+    written(name, task)
+
+    def handler_class():
+        class Fake:
+            def __init__(self):
+                self.path = ""
+                self.sent = []
+                self.body = b"{}"
+
+            def _send(self, code, out):
+                self.sent.append((code, out))
+                return code
+
+            def do_GET(self):
+                self.sent.append(("original", None))
+
+            def do_POST(self):
+                self.sent.append(("original", None))
+
+        return Fake
+
+    def wrapped(cls, *, origin=True, token=True):
+        return A.install(cls, origin_ok=lambda h: origin, token_ok=lambda h: token,
+                         read_body=lambda h: h.body)
+
+    saved = A._resolve
+    A._resolve = lambda store, pid: (name, "App")
+    try:
+        Fake = handler_class()
+        line = wrapped(Fake)
+        check("install() returns a banner line a reader understands",
+              isinstance(line, str) and "android" in line.lower(), line)
+        check("installing the same module twice is harmless and says it is already on",
+              "already on" in wrapped(Fake))
+        got = Fake()
+        got.path = f"/api/projects/p1/app/tasks/{task}/android"
+        got.do_GET()
+        check("a GET on the status route is answered by the module",
+              got.sent and got.sent[-1][0] == 200 and got.sent[-1][1]["ok"] is True,
+              got.sent[-1:])
+        other = Fake()
+        other.path = "/api/status"
+        other.do_GET()
+        check("every other route falls through to the original handler, untouched",
+              other.sent == [("original", None)], other.sent)
+        post = Fake()
+        post.path = f"/api/projects/p1/app/tasks/{task}/android/build"
+        post.do_POST()
+        check("a POST is answered too - 403 pc_only here, because a fake Handler is "
+              "not this PC",
+              post.sent and post.sent[-1][0] == 403
+              and post.sent[-1][1]["pc_only"] is True, post.sent[-1:])
+        NoToken = handler_class()
+        wrapped(NoToken, token=False)
+        nt = NoToken()
+        nt.path = f"/api/projects/p1/app/tasks/{task}/android"
+        nt.do_GET()
+        check("no token: 401 and the module answers nothing",
+              nt.sent and nt.sent[-1][0] == 401, nt.sent[-1:])
+        OtherOrigin = handler_class()
+        wrapped(OtherOrigin, origin=False)
+        oo = OtherOrigin()
+        oo.path = f"/api/projects/p1/app/tasks/{task}/android"
+        oo.do_GET()
+        check("another origin: 403, before the token is even looked at",
+              oo.sent and oo.sent[-1][0] == 403, oo.sent[-1:])
+    finally:
+        A._resolve = saved
+
+
 # --------------------------------------------------------------------------
 #   The wiring: the gate, the settings, the drop-in folder
 # --------------------------------------------------------------------------
