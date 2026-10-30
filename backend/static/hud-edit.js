@@ -44,6 +44,716 @@ import {
 import { loadLayout, saveLayout } from "./hud-layout-store.js";
 import { ensureCustomCopy } from "./hud-presets.js";
 
+/* =========================================================================
+ * 0. The main-screen feature catalogue (the owner's requirement, 2026-10-29)
+ *
+ * WHY THIS LIVES IN THIS MODULE RATHER THAN ITS OWN FILE. The page imports
+ * exactly the modules the backend's closed whitelist serves, and adding a new
+ * served file means five lists in five files (the whitelist, both SHIPPED
+ * lists, the re-take rule's BESIDE table and the deploy copy) before a browser
+ * can fetch it. The catalogue is the editor's own data - Edit HUD is the only
+ * thing that writes it - so it belongs beside the editor instead, and this
+ * module is already served, already twinned and already imported by the page.
+ *
+ * WHAT IT IS. One entry per FEATURE that may be a card on the HUD's main
+ * screen. The keys are `features/features.json`'s own ids, so a card can never
+ * name a feature that does not exist. The safety surfaces (approvals, Stop
+ * everything, app lock, What asks first, the stale link) are deliberately NOT
+ * in the catalogue: ruling 25 says a layout may never hide or move the one
+ * surface a pending approval must reach, and keeping them out of the data makes
+ * that a property rather than a check somebody could forget.
+ *
+ * THE THREE DOORS ARE ONE REDUCER. `applyHomeAction` is the only way the
+ * main-screen document changes - the Add button, the Remove button, the arrow
+ * keys, the reset and the tests all call it.
+ * ========================================================================= */
+
+/** The version of the document shape this build reads and writes. */
+export const HOME_CARDS_VERSION = 1;
+
+/** The most cards the main screen may hold: the catalogue's own size. */
+export const MAX_HOME_CARDS = 24;
+
+/**
+ * The editor's four sizes, in the desktop grid's columns. `min_size` is the
+ * smallest an owner may shrink a card to; on the phone `S` and `M` mean one
+ * column and `L`/`T` mean full width.
+ */
+export const HOME_SIZES = Object.freeze({
+  S: Object.freeze({ key: "S", label: "Small", col_span: 4, row_span: 1 }),
+  M: Object.freeze({ key: "M", label: "Medium", col_span: 6, row_span: 1 }),
+  L: Object.freeze({ key: "L", label: "Wide", col_span: 12, row_span: 1 }),
+  T: Object.freeze({ key: "T", label: "Tall", col_span: 12, row_span: 2 }),
+});
+
+/** The size order, smallest first - the only sizes a document may name. */
+export const SIZE_ORDER = Object.freeze(["S", "M", "L", "T"]);
+
+/**
+ * Where a card opens. The vocabulary is deliberately tiny and is translated by
+ * each app: `stage:<tab>` is one of the HUD's stage tabs, `settings:<section>`
+ * is one of the Settings page's own sections, and the phone reads both with its
+ * own existing navigation. A card whose `opens` this build does not know is
+ * still drawn - it just opens nothing, which is honest.
+ */
+export const OPENS = Object.freeze([
+  "stage:today",
+  "stage:reminders",
+  "stage:galaxy",
+  "stage:memory",
+  "stage:telemetry",
+  "settings:today",
+  "settings:memory",
+  "settings:pictures",
+  "settings:voice",
+  "settings:models",
+  "settings:hardware",
+  "settings:spending",
+  "settings:retirement",
+  "settings:projects",
+  "settings:learning",
+  "settings:topics",
+  "settings:wiki",
+  "settings:quiz",
+  "settings:decks",
+  "settings:focus",
+  "settings:skills",
+  "settings:calendar",
+  "settings:briefing",
+  "settings:compute",
+  "settings:briefing",
+  "settings:pinned",
+  "settings:undo",
+  "settings:jobs",
+  "settings:main",
+  "settings:topics",
+]);
+
+/**
+ * One catalogue row, frozen down to its `apps` list. `Object.freeze` on the
+ * outer array alone is not enough - it is shallow, so `HOME_CARDS[0].label =
+ * "x"` would still succeed and every screen in the same page would then be
+ * drawing a rewritten label. Freezing each row (and its array) is what makes
+ * the catalogue a constant an editor cannot edit, which the test suite proves.
+ */
+function freezeCardRow(card) {
+  return Object.freeze({ ...card, apps: Object.freeze(card.apps.slice()) });
+}
+
+/**
+ * THE CATALOGUE: one entry per feature that may be a main-screen card.
+ *
+ * `key`        the feature's own id in `features/features.json` (one id is one
+ *              feature in both apps).
+ * `label`      the owner's words, shown unchanged by the editor and both apps.
+ * `about`      one plain sentence, for the Add row and the card itself.
+ * `apps`       which app can draw it: `desktop`, `phone`, or both.
+ * `default_on` whether a fresh install has it on the main screen.
+ * `size`       the size it is added at; `min_size` the smallest it may become.
+ * `opens`      where the card takes you (the vocabulary above).
+ * `feature`    the feature whose on/off state the card reports, when that is
+ *              not the key itself. `null` means "the card is the feature".
+ */
+export const HOME_CARDS = Object.freeze([
+  // ---- the four that are on from the start: the HUD's own main screen
+  {
+    key: "today",
+    label: "Today",
+    about: "Today's plan and what is left of it.",
+    apps: ["desktop", "phone"],
+    default_on: true,
+    size: "M",
+    min_size: "S",
+    opens: "stage:today",
+    feature: "today",
+  },
+  {
+    key: "coming-up",
+    label: "Coming up",
+    about: "Timers, alarms, reminders and the to-do list.",
+    apps: ["desktop", "phone"],
+    default_on: true,
+    size: "M",
+    min_size: "S",
+    opens: "stage:reminders",
+    feature: "coming-up",
+  },
+  {
+    key: "now",
+    label: "Right now",
+    about: "What Jarvis is doing at this moment.",
+    apps: ["desktop", "phone"],
+    default_on: true,
+    size: "S",
+    min_size: "S",
+    opens: "stage:telemetry",
+    feature: "now",
+  },
+  {
+    key: "settings-entry",
+    label: "Settings",
+    about: "Every setting, in one place.",
+    apps: ["desktop", "phone"],
+    default_on: true,
+    size: "S",
+    min_size: "S",
+    opens: "settings:main",
+    feature: "settings-entry",
+  },
+  // ---- planning and the day
+  {
+    key: "calendar",
+    label: "Calendar",
+    about: "What is booked, and what is next.",
+    apps: ["desktop"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:calendar",
+    feature: "calendar",
+  },
+  {
+    key: "briefing",
+    label: "Morning briefing",
+    about: "The three lines worth reading first.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:briefing",
+    feature: "briefing",
+  },
+  // ---- memory
+  {
+    key: "memory-tab",
+    label: "Memory",
+    about: "Everything Jarvis remembers, and where to forget it.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "stage:memory",
+    feature: "memory-tab",
+  },
+  {
+    key: "pinned-facts",
+    label: "Always keep in mind",
+    about: "Facts pinned to every answer.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "S",
+    min_size: "S",
+    opens: "settings:pinned",
+    feature: "pinned-facts",
+  },
+  {
+    key: "topics",
+    label: "Topics",
+    about: "A mode for each topic of what Jarvis learns.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "S",
+    min_size: "S",
+    opens: "settings:topics",
+    feature: "topics",
+  },
+  {
+    key: "wiki",
+    label: "Wiki",
+    about: "The wiki Jarvis builds from your notes.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:wiki",
+    feature: "wiki",
+  },
+  {
+    key: "galaxy",
+    label: "Galaxy",
+    about: "The names Jarvis holds and the links between them.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "T",
+    min_size: "L",
+    opens: "stage:galaxy",
+    feature: "galaxy",
+  },
+  // ---- screen and pictures
+  {
+    key: "pictures",
+    label: "Pictures",
+    about: "What Jarvis has seen on your screen, and the pictures it kept.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:pictures",
+    feature: "pictures",
+  },
+  // ---- study
+  {
+    key: "quiz",
+    label: "Quiz me on a text",
+    about: "Questions made from your own words.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:quiz",
+    feature: "quiz",
+  },
+  {
+    key: "decks",
+    label: "Study decks",
+    about: "The fading-card decks and the radar.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:decks",
+    feature: "decks",
+  },
+  // ---- work
+  {
+    key: "focus",
+    label: "Focus session",
+    about: "One job at a time, until the bell.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "S",
+    min_size: "S",
+    opens: "settings:focus",
+    feature: "focus",
+  },
+  {
+    key: "jobs",
+    label: "Background jobs",
+    about: "Work that outlives the conversation.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:jobs",
+    feature: "jobs",
+  },
+  {
+    key: "undo",
+    label: "Undo shelf",
+    about: "What can still be undone, in one tap.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "S",
+    min_size: "S",
+    opens: "settings:undo",
+    feature: "undo",
+  },
+  // ---- voice
+  {
+    key: "voice-check",
+    label: "Voice check",
+    about: "Say one line and hear how it sounds.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "S",
+    min_size: "S",
+    opens: "settings:voice",
+    feature: "voice-check",
+  },
+  // ---- the machine
+  {
+    key: "models",
+    label: "Models",
+    about: "Which model answers, and where it runs.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:models",
+    feature: "models",
+  },
+  {
+    key: "compute",
+    label: "Compute",
+    about: "What the graphics cards are doing.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "S",
+    min_size: "S",
+    opens: "settings:compute",
+    feature: "compute",
+  },
+  {
+    key: "skills",
+    label: "Skills",
+    about: "What Jarvis has been taught to do.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "S",
+    min_size: "S",
+    opens: "settings:skills",
+    feature: "skills",
+  },
+  // ---- money
+  {
+    key: "spending",
+    label: "Spending",
+    about: "Spending summaries from a bank file.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:spending",
+    feature: "spending",
+  },
+  {
+    key: "retirement",
+    label: "Retirement what-if",
+    about: "What the numbers look like later.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:retirement",
+    feature: "retirement",
+  },
+  // ---- projects
+  {
+    key: "projects",
+    label: "Projects",
+    about: "What is on, and how far along it is.",
+    apps: ["desktop", "phone"],
+    default_on: false,
+    size: "M",
+    min_size: "S",
+    opens: "settings:projects",
+    feature: "projects",
+  },
+].map(freezeCardRow));
+
+const BY_KEY = new Map(HOME_CARDS.map((card) => [card.key, card]));
+
+/** What `about` says when a build is asked for a card it does not have. */
+const UNKNOWN_ABOUT = "This build of Jarvis does not have that card.";
+
+/** The catalogue entry for one key, or null. */
+export function homeCard(key) {
+  return BY_KEY.get(key) || null;
+}
+
+/** Every card this app can draw, in catalogue order. `app` may be omitted. */
+export function catalogueFor(app = null) {
+  if (!app) return HOME_CARDS.slice();
+  return HOME_CARDS.filter((card) => card.apps.includes(app));
+}
+
+/** The four size words, for the editor's buttons. */
+export function sizeInfo(key) {
+  return HOME_SIZES[key] || null;
+}
+
+/** The smallest size this card may become, as a size object (or null). */
+export function minSizeOf(card) {
+  if (!card) return null;
+  return HOME_SIZES[card.min_size] || HOME_SIZES.S;
+}
+
+/** The size this card is drawn at when it is added, as a size object. */
+export function defaultSizeOf(card) {
+  if (!card) return null;
+  const size = HOME_SIZES[card.size] || HOME_SIZES.M;
+  const min = minSizeOf(card);
+  // A default smaller than the minimum is a catalogue typo; the minimum wins,
+  // because the minimum is the promise the editor keeps.
+  return SIZE_ORDER.indexOf(size.key) < SIZE_ORDER.indexOf(min.key) ? min : size;
+}
+
+/* =========================================================================
+ * 1. The document - closed world, one normalizer
+ * ========================================================================= */
+
+function textOf(value, max, fallback = "") {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  return trimmed ? trimmed.slice(0, max) : fallback;
+}
+
+function intIn(value, lo, hi, fallback) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(n) || n < lo || n > hi) return fallback;
+  return n;
+}
+
+/** One card entry from untrusted data, or null when the key is not a card. */
+function entryOf(raw, index) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const key = textOf(raw.key, 40);
+  if (!BY_KEY.has(key)) return null;
+  return {
+    key,
+    on: typeof raw.on === "boolean" ? raw.on : true,
+    order: intIn(raw.order, 0, MAX_HOME_CARDS, index),
+  };
+}
+
+/**
+ * The document this build means. CLOSED WORLD, exactly `normalizeLayout`'s
+ * rule: only catalogue keys survive, a duplicate keeps its first place, `order`
+ * is re-numbered 0..n-1 in the order the entries sorted to, unknown fields are
+ * dropped (never copied through), and a wrong or missing `version` is not
+ * repaired field by field - it is replaced by the default document, because
+ * guessing what an older document meant is how a layout silently becomes a
+ * different one.
+ */
+export function normalizeHomeCards(doc) {
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return defaultHomeCards();
+  if (doc.version !== HOME_CARDS_VERSION) return defaultHomeCards();
+  const seen = new Set();
+  const cards = [];
+  for (const raw of Array.isArray(doc.cards) ? doc.cards : []) {
+    const entry = entryOf(raw, cards.length);
+    if (!entry || seen.has(entry.key)) continue;
+    if (cards.length >= MAX_HOME_CARDS) break;
+    seen.add(entry.key);
+    cards.push(entry);
+  }
+  cards.sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
+  cards.forEach((entry, index) => { entry.order = index; });
+  return {
+    version: HOME_CARDS_VERSION,
+    cards,
+    updated_at: intIn(doc.updated_at, 0, 2 ** 52, 0),
+  };
+}
+
+/** A fresh document holding exactly the catalogue's default-on cards. */
+export function defaultHomeCards() {
+  const cards = HOME_CARDS.filter((card) => card.default_on)
+    .map((card, index) => ({ key: card.key, on: true, order: index }));
+  return { version: HOME_CARDS_VERSION, cards, updated_at: 0 };
+}
+
+/** Whether a document is exactly the shipped default (so the editor can say so). */
+export function isDefaultHomeCards(doc) {
+  const clean = normalizeHomeCards(doc);
+  const base = defaultHomeCards();
+  if (clean.cards.length !== base.cards.length) return false;
+  return clean.cards.every((entry, index) => {
+    const other = base.cards[index];
+    return other && entry.key === other.key && entry.on === other.on;
+  });
+}
+
+/** The cards the main screen actually draws, in order, for one app. */
+export function homeCardsFor(doc, app = "desktop") {
+  const clean = normalizeHomeCards(doc);
+  return clean.cards
+    .filter((entry) => {
+      const card = BY_KEY.get(entry.key);
+      return Boolean(card) && card.apps.includes(app);
+    })
+    .sort((a, b) => a.order - b.order)
+    .map((entry) => ({ ...entry, card: BY_KEY.get(entry.key) }));
+}
+
+/** The catalogue cards this app can draw that are NOT on the main screen. */
+export function missingHomeCards(doc, app = "desktop") {
+  const clean = normalizeHomeCards(doc);
+  const have = new Set(clean.cards.map((entry) => entry.key));
+  return catalogueFor(app).filter((card) => !have.has(card.key));
+}
+
+/** The cards another app draws and this one does not, for an honest note. */
+export function cardsOnlyOnOtherApp(doc, app = "desktop") {
+  const clean = normalizeHomeCards(doc);
+  const other = app === "phone" ? "desktop" : "phone";
+  return clean.cards
+    .map((entry) => BY_KEY.get(entry.key))
+    .filter((card) => card && !card.apps.includes(app) && card.apps.includes(other));
+}
+
+/* =========================================================================
+ * 2. The one reducer - add, remove, reorder, switch off
+ * ========================================================================= */
+
+/** Re-number `order` contiguously in array order. */
+function renumberHomeCards(cards) {
+  cards.forEach((entry, index) => { entry.order = index; });
+  return cards;
+}
+
+
+/**
+ * One action -> `{ doc, changed, refused, note }`. Pure: never mutates `doc`,
+ * always returns a document that is a fixed point of `normalizeHomeCards`.
+ * Every input - the Add button, the Remove button, the arrow keys, a reset and
+ * the tests - calls this ONE function, which is what makes the editor's promise
+ * mechanical rather than a matter of remembering.
+ */
+export function applyHomeAction(doc, action) {
+  const base = normalizeHomeCards(doc);
+  const act = action && typeof action === "object" ? action : {};
+  const cards = base.cards.map((entry) => ({ ...entry }));
+  const find = (key) => cards.find((entry) => entry.key === key);
+  const say = (changed, note = "", refused = false) => {
+    const next = changed
+      ? normalizeHomeCards({ ...base, cards: renumberHomeCards(cards),
+        updated_at: Math.floor(Date.now() / 1000) })
+      : base;
+    return { doc: next, changed, refused, note };
+  };
+  const refuse = (note) => ({ doc: base, changed: false, refused: true, note });
+
+  switch (act.type) {
+    case "addCard": {
+      const card = BY_KEY.get(textOf(act.key, 40));
+      if (!card) return refuse("That is not a feature this HUD can put on the main screen.");
+      if (find(card.key)) return refuse(`${card.label} is already on the main screen.`);
+      if (cards.length >= MAX_HOME_CARDS) return refuse("The main screen is full.");
+      const at = act.index === undefined
+        ? cards.length
+        : clampInt(act.index, 0, cards.length, cards.length);
+      cards.splice(at, 0, { key: card.key, on: true, order: at });
+      return say(true, `${card.label} is on the main screen.`);
+    }
+    case "removeCard": {
+      const key = textOf(act.key, 40);
+      const card = BY_KEY.get(key);
+      const at = cards.findIndex((entry) => entry.key === key);
+      if (at < 0) return refuse(`${card ? card.label : "That card"} is not on the main screen.`);
+      cards.splice(at, 1);
+      return say(true, `${card ? card.label : key} is off the main screen.`);
+    }
+    case "moveCard": {
+      const key = textOf(act.key, 40);
+      const card = BY_KEY.get(key);
+      const at = cards.findIndex((entry) => entry.key === key);
+      if (at < 0) return refuse(`${card ? card.label : "That card"} is not on the main screen.`);
+      let to;
+      if (act.index !== undefined) {
+        to = clampInt(act.index, 0, cards.length - 1, at);
+      } else {
+        const delta = clampInt(act.delta, -MAX_HOME_CARDS, MAX_HOME_CARDS, 0);
+        to = clampInt(at + delta, 0, cards.length - 1, at);
+      }
+      if (to === at) {
+        return { doc: base, changed: false, refused: false, note: "" };
+      }
+      cards.splice(to, 0, cards.splice(at, 1)[0]);
+      return say(true, `${card ? card.label : key} moved ${to < at ? "up" : "down"}.`);
+    }
+    case "setCardOn": {
+      const key = textOf(act.key, 40);
+      const card = BY_KEY.get(key);
+      const entry = find(key);
+      if (!entry) return refuse(`${card ? card.label : "That card"} is not on the main screen.`);
+      const want = act.on === undefined ? !entry.on : Boolean(act.on);
+      if (entry.on === want) return { doc: base, changed: false, refused: false, note: "" };
+      entry.on = want;
+      return say(true, `${card ? card.label : key} is ${want ? "drawn" : "folded away"}.`);
+    }
+    case "resetHome": {
+      if (isDefaultHomeCards(base)) {
+        return { doc: base, changed: false, refused: false, note: "That is already the usual set." };
+      }
+      return {
+        doc: defaultHomeCards(),
+        changed: true,
+        refused: false,
+        note: "Back to the usual four cards.",
+      };
+    }
+    default:
+      return refuse("That is not an edit this HUD knows.");
+  }
+}
+
+/* =========================================================================
+ * 3. The off state - never blank, never raw JSON
+ * ========================================================================= */
+
+/**
+ * What a card draws, given what the screen knows about its feature.
+ *
+ * `availability` is a plain object: `{ key: "on" | "off" | "missing" }`. A key
+ * that is absent, or whose value is anything else, means **not asked** - and
+ * "not asked" is drawn as a normal card, because "I have not checked" is not
+ * "turned off". That is the same honesty rule `/api/status` runs on: a latch
+ * that is `null` is "the PC has not said", never "not latched".
+ */
+export function cardState(key, availability = null) {
+  const said = availability && typeof availability === "object"
+    ? availability[key] : undefined;
+  if (said === "on") return "on";
+  if (said === "off") return "off";
+  if (said === "missing") return "missing";
+  return "on";
+}
+
+/**
+ * The words a card draws for its state. Never empty, never JSON: the `off` and
+ * `missing` lines are whole sentences an owner can act on.
+ */
+export function stateWords(card, state) {
+  const label = card && card.label ? card.label : "This card";
+  if (state === "off") return `${label} is turned off. Turn it on in Settings.`;
+  if (state === "missing") return `${label} is not on this PC yet.`;
+  return (card && card.about) || UNKNOWN_ABOUT;
+}
+
+/* =========================================================================
+ * 4. Reading and writing the document (portability, the store, the tests)
+ * ========================================================================= */
+
+/** The document as JSON text, for a backup, a paste or the backend route. */
+export function homeCardsJson(doc) {
+  const clean = normalizeHomeCards(doc);
+  return JSON.stringify({
+    version: clean.version,
+    cards: clean.cards.map((entry) => ({ key: entry.key, on: entry.on, order: entry.order })),
+    updated_at: clean.updated_at,
+  });
+}
+
+/** A stored or pasted document, or null when it is not even an object. */
+export function parseHomeCards(text) {
+  if (typeof text !== "string" || !text.trim()) return null;
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return normalizeHomeCards(value);
+}
+
+/** The catalogue as the plain rows the phone reads (no functions, no Map). */
+export function catalogueRows() {
+  return HOME_CARDS.map((card) => ({
+    key: card.key,
+    label: card.label,
+    about: card.about,
+    apps: card.apps.slice(),
+    default_on: card.default_on,
+    size: card.size,
+    min_size: card.min_size,
+    opens: card.opens,
+    feature: card.feature,
+  }));
+}
+
+/** One line saying what the main screen holds, for the editor's status line. */
+export function describeHomeCards(doc) {
+  const clean = normalizeHomeCards(doc);
+  if (!clean.cards.length) return "The main screen has no feature cards.";
+  const words = clean.cards.map((entry) => {
+    const card = BY_KEY.get(entry.key);
+    return card ? card.label : entry.key;
+  });
+  return `Main screen: ${words.join(", ")}.`;
+}
+
 /** The size buttons, as the ruling asks: Small / Medium / Wide / Tall. */
 export const SIZES = Object.freeze([
   { key: "S", label: "Small", short: "S", col_span: 4, row_span: 1 },
@@ -271,6 +981,9 @@ export function sizeKeyFor(card) {
 const SAVE_DEBOUNCE_MS = 400;
 const UNDO_LIMIT = 50;
 
+/** This window's own key for the main-screen cards (DESIGN.md section 4). */
+const HOME_STORE_KEY = "jarvis.hud.home_cards.v1";
+
 /**
  * Mount the editor on the live page. Returns a controller; the page's own
  * glue calls this once. Safe to call in a plain browser: without the shell
@@ -297,6 +1010,8 @@ export function mountHudEditor(options = {}) {
   let statusEl = null;
   let barEl = null;
   let badgeEl = null;
+  let homeDoc = null;      // the main screen's feature cards
+  let homeStrip = null;    // the strip they are drawn in
 
   const byId = (id) => doc.getElementById(id);
   const labelOf = (id) => (CARD_BY_ID.get(id) || { label: id }).label;
@@ -538,6 +1253,7 @@ export function mountHudEditor(options = {}) {
     }
     doc.body.setAttribute("data-hud-edit", editing ? "on" : "off");
     if (barEl) barEl.hidden = !editing;
+    renderHomeStrip();
     updateBadge();
     if (options.onRender) {
       try { options.onRender(layout, { editing }); } catch { /* never break the page */ }
@@ -917,9 +1633,315 @@ export function mountHudEditor(options = {}) {
     updateBadge();
   }
 
+  // ------------------------------------- the main screen's feature cards
+  //
+  // THE OWNER'S REQUIREMENT (2026-10-29). "Add them to the main screen through
+  // the edit jarvis hud on desktop" - so the strip of feature cards at the top
+  // of the stage and the Add/Remove/Reorder panel are BOTH drawn from this one
+  // module, and both come out of the same `applyHomeAction`. Nothing else in
+  // the page changes: the page already mounts this module on every load, so a
+  // new served file would mean five lists in five files (the backend's closed
+  // whitelist, both SHIPPED lists, the re-take table and the deploy copy)
+  // before a browser could fetch it - and the catalogue is the editor's own
+  // data, so it belongs here.
+  //
+  // WHERE THE CHOICE IS KEPT. This window's own storage, under one key. It is
+  // read once at boot and written after every change; "not saved" is said out
+  // loud rather than painted as saved. Moving it into the PC's settings store
+  // and publishing it for the phone is the parity slice's next step - the
+  // document shape is already the one both apps will read (see DESIGN.md).
+
+  function readHomeDoc() {
+    try {
+      const storage = globalThis.localStorage;
+      const raw = storage ? storage.getItem(HOME_STORE_KEY) : null;
+      return (raw ? parseHomeCards(raw) : null) || defaultHomeCards();
+    } catch {
+      return defaultHomeCards();
+    }
+  }
+
+  function writeHomeDoc(next) {
+    try {
+      const storage = globalThis.localStorage;
+      if (!storage) return { saved: false, error: "this window has no store" };
+      storage.setItem(HOME_STORE_KEY, homeCardsJson(next));
+      return { saved: true };
+    } catch (error) {
+      return { saved: false, error: "this window refused to store it" };
+    }
+  }
+
+  /** The styles the strip needs, injected once (the page itself is untouched). */
+  function ensureHomeStyles() {
+    if (byId("hud-home-cards-css")) return;
+    const style = doc.createElement("style");
+    style.id = "hud-home-cards-css";
+    style.textContent = [
+      ".hud-home-cards{display:flex; flex-direction:column; gap:7px; margin:8px 0 0;}",
+      ".hud-home-cards:empty{display:none;}",
+      ".hud-home-cards h2{font-family:var(--f-mono); font-size:9.5px; letter-spacing:.14em;",
+      " text-transform:uppercase; color:var(--dim); margin:0;}",
+      ".hud-home-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));",
+      " gap:7px;}",
+      ".hud-home-card{border:1px solid var(--line); border-radius:5px; padding:8px 9px;",
+      " background:rgb(var(--accent-rgb) / .02); display:flex; flex-direction:column; gap:5px;",
+      " min-width:0;}",
+      ".hud-home-card h3{font-size:11.5px; font-weight:600; margin:0; color:var(--text);}",
+      ".hud-home-card p{margin:0; font-size:11px; line-height:1.35; color:var(--dim);}",
+      ".hud-home-card.is-off,.hud-home-card.is-missing{opacity:.72; border-style:dashed;}",
+      ".hud-home-card .hud-home-open{align-self:flex-start; font:inherit; font-size:10.5px;",
+      " padding:2px 7px; border:1px solid var(--line); border-radius:4px; background:transparent;",
+      " color:var(--text); cursor:pointer;}",
+      ".hud-home-card .hud-home-open:hover{border-color:var(--line-hot);}",
+      ".hud-home-edit{border:1px dashed var(--line); border-radius:5px; padding:8px 9px;",
+      " display:flex; flex-direction:column; gap:6px; background:rgb(var(--accent-rgb) / .03);}",
+      ".hud-home-edit h3,.hud-home-edit h4{font-family:var(--f-mono); font-size:9.5px;",
+      " letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin:0;}",
+      ".hud-home-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}",
+      ".hud-home-row .hud-home-name{font-size:11.5px; color:var(--text); min-width:120px;}",
+      ".hud-home-row .hud-home-note{font-size:10.5px; color:var(--dim); flex:1 1 120px;}",
+      ".hud-home-row button{font:inherit; font-size:10.5px; padding:2px 7px; border-radius:4px;",
+      " border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer;}",
+      ".hud-home-row button:hover{border-color:var(--line-hot);}",
+      ".hud-home-edit-status{font-size:10.5px; color:var(--dim); min-height:1em;}",
+    ].join("\n");
+    (doc.head || doc.documentElement).appendChild(style);
+  }
+
+  /** The strip's container, created once at the top of the stage. */
+  function ensureHomeStrip() {
+    ensureHomeStyles();
+    if (homeStrip && homeStrip.isConnected !== false) return homeStrip;
+    const stage = byId("stage");
+    if (!stage) return null;
+    const wrap = doc.createElement("section");
+    wrap.className = "hud-home-cards";
+    wrap.id = "hud-home-cards";
+    wrap.setAttribute("aria-label", "Your main screen");
+    // Below the stage tabs and above the banner: the same place the editor's
+    // own stage-top region is made, so a page that already asserts what is
+    // at the top of the stage keeps its answer.
+    stage.insertBefore(wrap, byId("banner") || byId("stage-menu") || stage.firstChild);
+    homeStrip = wrap;
+    return wrap;
+  }
+
+  /** What the page knows about one card's feature: a real answer or nothing. */
+  function homeAvailability() {
+    const seen = {};
+    for (const card of HOME_CARDS) {
+      const opens = String(card.opens || "");
+      if (!opens.startsWith("stage:")) continue;
+      const tab = opens.slice("stage:".length);
+      // The feature's own stage tab is the page's own proof that the feature
+      // exists in this build: a card whose tab is not on the page is drawn as
+      // "not on this PC yet" rather than as a door to nowhere.
+      seen[card.key] = doc.querySelector(`[data-hud-tab-choice="${tab}"]`)
+        ? "on" : "missing";
+    }
+    return seen;
+  }
+
+  /** Open the place one card stands for: a stage tab, or the Settings window. */
+  function openHomeCard(key) {
+    const card = homeCard(key);
+    if (!card) return;
+    const opens = String(card.opens || "");
+    if (opens.startsWith("stage:")) {
+      const tab = doc.querySelector(`[data-hud-tab-choice="${opens.slice(6)}"]`);
+      if (tab) { tab.click(); return; }
+      announce(`${card.label} is not on this PC yet.`);
+      return;
+    }
+    const invoke = globalThis.__TAURI__ && globalThis.__TAURI__.core
+      ? globalThis.__TAURI__.core.invoke : null;
+    if (!invoke) {
+      announce(`${card.label} opens in Settings, which is on the PC.`);
+      return;
+    }
+    // Navigation only: the same command the Settings gear and the first-run
+    // card already use, and it changes no setting.
+    try {
+      invoke("open_fix_place", { place: "settings" });
+      announce(`${card.label}: opened Settings.`);
+    } catch {
+      announce(`${card.label} opens in Settings, which is on the PC.`);
+    }
+  }
+
+  function homeRow(card, entry, editing_) {
+    const row = doc.createElement("div");
+    row.className = "hud-home-row";
+    const name = doc.createElement("span");
+    name.className = "hud-home-name";
+    name.textContent = card.label;
+    row.appendChild(name);
+    const note = doc.createElement("span");
+    note.className = "hud-home-note";
+    note.textContent = card.apps.includes("phone")
+      ? `Also on the phone. Smallest size ${minSizeOf(card).label}.`
+      : `On the PC only. Smallest size ${minSizeOf(card).label}.`;
+    row.appendChild(note);
+    const button = (command, text, title) => {
+      const b = doc.createElement("button");
+      b.type = "button";
+      b.setAttribute("data-home-command", command);
+      b.setAttribute("data-home-card", card.key);
+      b.textContent = text;
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      return b;
+    };
+    if (entry) {
+      row.appendChild(button("up", "\u2191", `Move ${card.label} earlier on the main screen`));
+      row.appendChild(button("down", "\u2193", `Move ${card.label} later on the main screen`));
+      const onBtn = button("switch", entry.on ? "\u25c9" : "\u25cb",
+        entry.on ? `Fold ${card.label} away without removing it`
+          : `Draw ${card.label} again`);
+      onBtn.setAttribute("aria-pressed", entry.on ? "true" : "false");
+      row.appendChild(onBtn);
+      row.appendChild(button("remove", "\u2715", `Remove ${card.label} from the main screen`));
+    } else {
+      row.appendChild(button("add", "Add", `Add ${card.label} to the main screen`));
+    }
+    return row;
+  }
+
+  /** The Edit HUD panel: what is on the main screen, and everything that could be. */
+  function homeEditorBlock() {
+    const box = doc.createElement("div");
+    box.className = "hud-home-edit";
+    box.id = "hud-home-cards-editor";
+    const title = doc.createElement("h3");
+    title.textContent = "Main screen cards";
+    box.appendChild(title);
+    const clean = normalizeHomeCards(homeDoc);
+    const on = doc.createElement("h4");
+    on.textContent = `On the main screen (${clean.cards.length})`;
+    box.appendChild(on);
+    if (!clean.cards.length) {
+      const line = doc.createElement("p");
+      line.textContent = "Nothing yet. Add a feature from the list below.";
+      box.appendChild(line);
+    }
+    for (const entry of clean.cards) {
+      const card = homeCard(entry.key);
+      if (card) box.appendChild(homeRow(card, entry, true));
+    }
+    const rest = missingHomeCards(homeDoc, "desktop");
+    const off = doc.createElement("h4");
+    off.textContent = `Not on the main screen (${rest.length})`;
+    box.appendChild(off);
+    if (!rest.length) {
+      const line = doc.createElement("p");
+      line.textContent = "Every card is on the main screen already.";
+      box.appendChild(line);
+    }
+    for (const card of rest) box.appendChild(homeRow(card, null, true));
+    const foot = doc.createElement("div");
+    foot.className = "hud-home-row";
+    const reset = doc.createElement("button");
+    reset.type = "button";
+    reset.setAttribute("data-home-command", "reset");
+    reset.textContent = "Reset to the usual four";
+    foot.appendChild(reset);
+    const status = doc.createElement("span");
+    status.className = "hud-home-edit-status";
+    status.id = "hud-home-cards-status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    foot.appendChild(status);
+    box.appendChild(foot);
+    return box;
+  }
+
+  /** Redraw the strip: the cards the owner chose, then (editing) the panel. */
+  function renderHomeStrip() {
+    const wrap = ensureHomeStrip();
+    if (!wrap) return;
+    wrap.textContent = "";
+    const head = doc.createElement("h2");
+    head.textContent = "Your main screen";
+    wrap.appendChild(head);
+    const cards = homeCardsFor(homeDoc, "desktop");
+    const availability = homeAvailability();
+    const grid = doc.createElement("div");
+    grid.className = "hud-home-grid";
+    for (const entry of cards) {
+      const card = entry.card;
+      const state = cardState(card.key, availability);
+      const tile = doc.createElement("article");
+      tile.className = `hud-home-card is-${state}`;
+      tile.setAttribute("data-home-card-tile", card.key);
+      const title = doc.createElement("h3");
+      title.textContent = card.label;
+      tile.appendChild(title);
+      const line = doc.createElement("p");
+      // The off state is a whole sentence, never a blank box and never JSON.
+      line.textContent = stateWords(card, state);
+      tile.appendChild(line);
+      const open = doc.createElement("button");
+      open.type = "button";
+      open.className = "hud-home-open";
+      open.setAttribute("data-home-command", "open");
+      open.setAttribute("data-home-card", card.key);
+      open.textContent = String(card.opens).startsWith("stage:") ? "Open" : "Open Settings";
+      open.title = `Open ${card.label}`;
+      tile.appendChild(open);
+      grid.appendChild(tile);
+    }
+    if (!cards.length) {
+      const line = doc.createElement("p");
+      line.textContent = editing
+        ? "The main screen has no feature cards. Add one below."
+        : "The main screen has no feature cards. Open Edit HUD to add some.";
+      grid.appendChild(line);
+    }
+    wrap.appendChild(grid);
+    if (editing) wrap.appendChild(homeEditorBlock());
+  }
+
+  /** One writer for the main-screen document - Add, Remove, move, reset. */
+  function homeAction(action) {
+    const result = applyHomeAction(homeDoc, action);
+    if (!result.changed) {
+      if (result.note) announce(result.note);
+      const status = byId("hud-home-cards-status");
+      if (status && result.note) status.textContent = result.note;
+      return result;
+    }
+    homeDoc = result.doc;
+    const answer = writeHomeDoc(homeDoc);
+    renderHomeStrip();
+    const status = byId("hud-home-cards-status");
+    const said = answer.saved ? result.note : `Not saved: ${answer.error}.`;
+    if (status) status.textContent = said;
+    if (!answer.saved) announce(said);
+    return result;
+  }
+
+  function onHomeClick(event) {
+    const button = event.target && event.target.closest
+      ? event.target.closest("[data-home-command]") : null;
+    if (!button) return;
+    event.preventDefault();
+    const command = button.getAttribute("data-home-command");
+    const key = button.getAttribute("data-home-card");
+    if (command === "open") { openHomeCard(key); return; }
+    if (!editing) return;
+    if (command === "add") homeAction({ type: "addCard", key });
+    else if (command === "remove") homeAction({ type: "removeCard", key });
+    else if (command === "up") homeAction({ type: "moveCard", key, delta: -1 });
+    else if (command === "down") homeAction({ type: "moveCard", key, delta: 1 });
+    else if (command === "switch") homeAction({ type: "setCardOn", key });
+    else if (command === "reset") homeAction({ type: "resetHome" });
+  }
+
   // ------------------------------------------------------------------- mount
   function wire() {
     doc.addEventListener("click", onToolbarClick);
+    doc.addEventListener("click", onHomeClick);
     doc.addEventListener("change", onRegionChange);
     doc.addEventListener("pointerdown", onPointerDown, true);
     doc.addEventListener("pointermove", onPointerMove, true);
@@ -968,6 +1990,7 @@ export function mountHudEditor(options = {}) {
         if (answer && answer.layout) layout = normalizeLayout(answer.layout);
       } catch { /* the page keeps the Cockpit preview */ }
     }
+    homeDoc = readHomeDoc();
     wire();
     render();
     updateEditButton();
@@ -977,6 +2000,8 @@ export function mountHudEditor(options = {}) {
   const controller = {
     get layout() { return layout; },
     get editing() { return editing; },
+    get homeCards() { return normalizeHomeCards(homeDoc); },
+    homeAction(action) { return homeAction(action); },
     setLayout(next) { layout = normalizeLayout(next); render(); },
     enter() { setEditing(true); },
     exit() { setEditing(false); },

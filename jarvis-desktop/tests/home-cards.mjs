@@ -41,14 +41,13 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tmpdir } from "node:os";
-import * as H from "../src/home-cards.js";
+import * as H from "../src/hud-edit.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SRC = join(HERE, "..", "src", "home-cards.js");
+const SRC = join(HERE, "..", "src", "hud-edit.js");
 const FEATURES = JSON.parse(
   readFileSync(join(HERE, "..", "src", "features.json"), "utf8"),
 );
@@ -408,7 +407,7 @@ await check("a new feature key can be added by one catalogue row and it appears"
   // imports nothing, so it runs on its own.
   const source = readFileSync(SRC, "utf8");
   const anchor = "export const HOME_CARDS = Object.freeze([";
-  assert.ok(source.includes(anchor), "home-cards.js no longer declares HOME_CARDS this way");
+  assert.ok(source.includes(anchor), "hud-edit.js no longer declares HOME_CARDS this way");
   const row = `
   {
     key: "health",
@@ -423,9 +422,18 @@ await check("a new feature key can be added by one catalogue row and it appears"
   },`;
   const patched = source.replace(anchor, `${anchor}${row}`);
   assert.notEqual(patched, source, "the splice changed nothing");
-  const file = join(mkdtempSync(join(tmpdir(), "home-cards-")), "home-cards-probe.mjs");
+  // The copy is written BESIDE hud-edit.js, because that module imports its
+  // neighbours by relative path; a copy in the system temp folder would not
+  // resolve them. It is removed again whatever happens below.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const file = join(here, "..", "src", `.home-cards-probe-${process.pid}.mjs`);
   writeFileSync(file, patched, "utf8");
-  const probe = await import(`file://${file.replace(/\\/g, "/")}`);
+  let probe;
+  try {
+    probe = await import(`file://${file.replace(/\\/g, "/")}?v=${Date.now()}`);
+  } finally {
+    rmSync(file, { force: true });
+  }
 
   // 1. it is in the catalogue, sane, and on both apps' lists;
   const added = probe.homeCard("health");
