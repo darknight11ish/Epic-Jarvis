@@ -782,10 +782,13 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     # calls jarvis_antislop's own set_enabled() - the same function its route
     # and the spoken phrase call. The count is pinned so a switch that arrives
     # without a phrase, or a phrase without a switch, is noticed.
-    check("the count is now 32: the 23 measured on 2026-10-19, the eight added"
-          " by the universal-control pass on 2026-10-22, and antislop on"
-          " 2026-10-28",
-          len(R.BOOL_SETTINGS) == 32, str(len(R.BOOL_SETTINGS)))
+    # 33 since 2026-10-29: `jarvis_calendar` (the Jarvis Calendar) joined. Its
+    # setter calls jarvis_local_calendar's own handle_settings(), the same
+    # function its route and its typed switch call.
+    check("the count is now 33: the 23 measured on 2026-10-19, the eight added"
+          " by the universal-control pass on 2026-10-22, antislop on"
+          " 2026-10-28, and the Jarvis calendar on 2026-10-29",
+          len(R.BOOL_SETTINGS) == 33, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:

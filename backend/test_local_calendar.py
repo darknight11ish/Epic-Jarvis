@@ -267,6 +267,21 @@ def t_the_routes_are_wired_through_install():
         check("a write without the token is refused",
               no_token.answers and no_token.answers[0][0] == 401, no_token.answers)
 
+        # EVERY route, BOTH refusals - not one example of each. The wrapper's
+        # `_allowed` runs before any handler, so one route's pass is not proof
+        # for the other three; this loop is.
+        refused = []
+        for route in sorted(set(C.ROUTES)):
+            for gate, want in (("origin", 403), ("token", 401)):
+                w = wrapped(origin=(gate != "origin"), token=(gate != "token"))
+                w.path = route
+                (w.do_GET if route == C.READ_PATH else w.do_POST)()
+                got = w.answers[0][0] if w.answers else None
+                if got != want:
+                    refused.append((route, gate, got))
+        check("every route refuses a cross-origin request (403) and a missing "
+              "token (401) before it does any work", not refused, refused)
+
         bad = wrapped(body=b"not json")
         bad.path = C.ADD_PATH
         bad.do_POST()
@@ -535,6 +550,48 @@ def t_a_multi_day_event_overlaps_the_window_and_is_shown_once():
 #   5. The records: backup and no egress
 # ══════════════════════════════════════════════════════════════════════════
 
+def t_the_owners_own_phrase_turns_it_off():
+    """The third door: "turn off the Jarvis calendar", typed or spoken.
+
+    The design brief asks for the typed switch as well as the route, and the
+    project's rule is that both call the SAME function
+    (`jarvis_settings_registry.set_jarvis_calendar` -> this module's
+    `handle_settings`), so the switch and the route cannot disagree.
+
+    The phrase the brief names resolves through the feature lane
+    (`feature_switch`), because "jarvis" is filler in the settings alias table
+    and a bare "calendar" alias would also catch "turn off Google calendar" -
+    which must keep falling through rather than flip this switch. That is why
+    the alias list says "local calendar" and this test drives the real grammar
+    instead of assuming either lane.
+    """
+    old = begin()
+    try:
+        import jarvis_quick as Q
+        check("'jarvis_calendar' is in jarvis_quick's CHANGE_BY_ASKING list",
+              "jarvis_calendar" in Q.CHANGE_BY_ASKING)
+        intent = Q.match("turn off the jarvis calendar")
+        check('"turn off the jarvis calendar" is a real intent',
+              intent is not None and intent.name == "feature_switch",
+              None if intent is None else intent.name)
+        result = Q.run(intent, None, 0.0) if intent is not None else None
+        check("... it really turns this module's switch off",
+              C.is_on() is False)
+        check("... and answers in this module's own words, not a bare 'Done'",
+              result is not None and "Jarvis calendar is off" in result.reply,
+              None if result is None else result.reply)
+        back = Q.match("turn on the jarvis calendar")
+        result = Q.run(back, None, 0.0) if back is not None else None
+        check("... and the other way round turns it back on",
+              C.is_on() is True
+              and result is not None and "Jarvis calendar is on" in result.reply,
+              None if result is None else result.reply)
+        check("a phrase about Google's calendar does not flip this switch",
+              Q.match("turn off google calendar") is None and C.is_on() is True)
+    finally:
+        end(old)
+
+
 def t_backup_and_no_socket():
     check("calendar.db is on the list of databases the backup copies",
           "calendar.db" in B.SOURCE_DBS, B.SOURCE_DBS)
@@ -577,6 +634,7 @@ def main():
                t_monthly_31st_is_clamped_to_the_short_months,
                t_weekly_until_and_the_one_day_window,
                t_a_multi_day_event_overlaps_the_window_and_is_shown_once,
+               t_the_owners_own_phrase_turns_it_off,
                t_backup_and_no_socket,
                t_the_self_check_passes_and_removes_its_folder):
         print(f"\n--- {fn.__name__} ---")
