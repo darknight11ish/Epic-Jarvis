@@ -1129,6 +1129,9 @@ class MainActivity : FragmentActivity() {
         val faceId by appearance.faceId.collectAsState()
         val bindings by appearance.bindings.collectAsState()
         val faceSize by appearance.faceSize.collectAsState()
+        // The Galaxy's look (2026-10-28): shared with the desktop, unlike
+        // faceSize above - it is the same key in the same appearance document.
+        val galaxy by appearance.galaxy.collectAsState()
         // Everything else about how this phone looks, as one record - see
         // AppearanceStore.look. Read below by the theme, Home and Appearance.
         val look by appearance.look.collectAsState()
@@ -3481,6 +3484,15 @@ class MainActivity : FragmentActivity() {
                             capability = version?.can("appearance") == true,
                             sendOk = appearanceSent,
                         ),
+                        // The Galaxy's look, on the same push the face uses: a
+                        // look picked here is what the PC's Galaxy draws, and a
+                        // look picked there arrives on the `appearance` event
+                        // (`JarvisRuntime.refreshAppearance` -> `applySyncDocument`).
+                        galaxy = galaxy,
+                        onPickGalaxy = {
+                            appearance.setGalaxy(it)
+                            scope.launch { JarvisRuntime.pushAppearance() }
+                        },
                         onUndoBindings = { appearance.setBindings(it) },
                         // On the runtime's scope, not a composition one: this can
                         // fire from the screen's onDispose as it leaves, and on a

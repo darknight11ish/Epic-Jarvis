@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -217,9 +218,17 @@ internal fun PeopleAndThingsSection(
             // are the read above, and the connections are worked out from it.
             val band = entities
             if (asOfEpoch == null && !band.isNullOrEmpty()) {
+                // The look the owner chose, from the shared appearance document
+                // (2026-10-28): the same value the desktop HUD's Look switch
+                // writes, so the phone draws the Galaxy the desktop is showing
+                // rather than one shape for all of them. Read straight from the
+                // store, like this plate already reads the runtime for its
+                // names; a change arrives on the `appearance` event, so the
+                // picture repaints without a reload.
+                val galaxy by JarvisRuntime.appearance.galaxy.collectAsState()
                 Kicker(Entities.GALAXY_TITLE)
                 Gap(2)
-                GalaxyPicture(band, onOpen = {
+                GalaxyPicture(band, look = galaxy, onOpen = {
                     openedFromPicture = true
                     openId = it
                 })

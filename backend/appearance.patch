@@ -8,7 +8,7 @@
  from typing import Optional
  import sqlite3
  import sys
-@@ -239,6 +240,316 @@
+@@ -239,6 +240,387 @@
      return out
  
  
@@ -67,6 +67,53 @@
 +    return {}
 +
 +
++def _galaxy_looks() -> list:
++    """The Galaxy's look ids, from the desktop page module that builds them.
++
++    "Galaxy models" (the owner, 2026-10-28) are the looks the HUD's switch
++    offers - `galaxy-presets.js`'s `BUILT_PRESETS` - plus the default
++    `constellation`, which is not a flat layout but is a look the owner can
++    choose. They are READ FROM THAT MODULE rather than typed here, because a
++    list of another component's contents kept by hand is the thing in this
++    system that has rotted most reliably (the face list was the last one).
++
++    The module is the one the server already serves to the HUD, so a machine
++    running the HUD has it. No module, no list: the id is then stored
++    unvalidated and the save says so, exactly as an absent visual spec does -
++    a server that refused every look could not have its own page tell it what
++    looks exist.
++    """
++    # Imported here rather than added to the file's import block: a hunk in
++    # that block is the one part of this patch that has to match a file other
++    # patches also edit, and it is what stopped this patch being replaceable
++    # on the owner's PC (2026-10-28).
++    import re
++    for candidate in (
++            CONFIG_DIR / "galaxy-presets.js",
++            HERE / "galaxy-presets.js",
++            HERE / "static" / "galaxy-presets.js",
++            HERE / "src" / "galaxy-presets.js",
++            HERE / "jarvis-desktop" / "src" / "galaxy-presets.js",
++            HERE.parent / "jarvis-desktop" / "src" / "galaxy-presets.js",
++    ):
++        try:
++            if not candidate.is_file():
++                continue
++            text = candidate.read_text(encoding="utf-8", errors="replace")
++        except Exception:
++            continue
++        default = re.search(r'DEFAULT_PRESET\s*=\s*"([a-z0-9-]+)"', text)
++        block = re.search(r'BUILT_PRESETS\s*=\s*Object\.freeze\(\[(.*?)\]\)',
++                          text, re.S)
++        out = [default.group(1)] if default else []
++        if block:
++            for look in re.findall(r'id:\s*"([a-z0-9-]+)"', block.group(1)):
++                if look not in out:
++                    out.append(look)
++        return out
++    return []
++
++
 +def _appearance_view() -> dict:
 +    """The stored appearance, or an empty document.
 +
@@ -79,8 +126,13 @@
 +        if APPEARANCE_FILE.is_file():
 +            stored = json.loads(APPEARANCE_FILE.read_text(encoding="utf-8"))
 +            if isinstance(stored, dict):
-+                doc.update({k: stored[k] for k in ("face", "bindings", "updated")
++                doc.update({k: stored[k] for k in ("face", "bindings", "galaxy",
++                                                   "updated")
 +                            if k in stored})
++        # The look is always in the document, even on a machine nobody has
++        # edited: absent and null both mean "no look chosen", and a client
++        # that had to tell those apart is a client that can get it wrong.
++        doc.setdefault("galaxy", None)
 +    except Exception as exc:
 +        # A corrupt file must not take the whole surface down with it. Report
 +        # it and hand back the empty document, which is recoverable by saving.
@@ -101,6 +153,16 @@
 +    face = body.get("face")
 +    if face is not None and not isinstance(face, str):
 +        return "face must be a string or null"
++    # The Galaxy's look (2026-10-28): one id from `galaxy-presets.js`. It is
++    # checked exactly like the face, and for the same reason - a look id no
++    # renderer knows would draw the constellation everywhere while the switch
++    # showed something else, which is a choice "in effect nowhere".
++    galaxy = body.get("galaxy")
++    if galaxy is not None and not isinstance(galaxy, str):
++        return "galaxy must be a string or null"
++    looks = _galaxy_looks() if galaxy else []
++    if looks and galaxy and galaxy not in looks:
++        return f"no galaxy look named {galaxy!r}"
 +    bindings = body.get("bindings", {})
 +    if not isinstance(bindings, dict):
 +        return "bindings must be an object"
@@ -246,15 +308,21 @@
 +    face = stored.get("face")
 +    if not isinstance(face, str):
 +        face = None
++    galaxy = stored.get("galaxy")
++    if not isinstance(galaxy, str):
++        galaxy = None
 +    kept = stored.get("bindings")
 +    if not isinstance(kept, dict):
 +        kept = {}
 +    if "face" in body:
 +        face = body.get("face") or None
++    if "galaxy" in body:
++        galaxy = body.get("galaxy") or None
 +    if "bindings" in body:
 +        kept = bindings
 +    doc = {"face": face,
 +           "bindings": dict(kept),
++           "galaxy": galaxy,
 +           "updated": time.time()}
 +    try:
 +        APPEARANCE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -282,6 +350,9 @@
 +    elif not spec_seen:
 +        out["note"] = ("stored without checking it against the visual spec: no "
 +                       "jarvis-visual-spec.json on this machine")
++    elif "galaxy" in body and body.get("galaxy") and not _galaxy_looks():
++        out["note"] = ("stored without checking the galaxy look: no "
++                       "galaxy-presets.js on this machine")
 +    return 200, out
 +
 +
@@ -325,7 +396,7 @@
  def _desktop_action(route: str, body: dict):
      """Returns (http_status, payload). Every branch calls the module and
      returns what the module said - including its refusals."""
-@@ -273,6 +584,9 @@
+@@ -273,6 +651,9 @@
          return 202, {"ok": True, "started": ref,
                       "progress": "watch the event stream for kind=model"}
  
@@ -335,7 +406,7 @@
      if route == "/api/config":
          # Not implemented, and saying so is the honest answer. Writing this
          # file means rewriting the tiers that decide what Jarvis may do
-@@ -1379,7 +1693,8 @@
+@@ -1379,7 +1760,8 @@
                  return self._send(200, {"available": False,
                                          "error": f"{type(exc).__name__}: {exc}"})
  
@@ -345,7 +416,7 @@
              # The three desktop-only surfaces. Every one of these existed as a
              # Python module with no way to reach it over HTTP, which meant the
              # desktop brief was promising screens with nothing behind them.
-@@ -1392,6 +1707,43 @@
+@@ -1392,6 +1774,43 @@
                      return self._send(200, _models_view())
                  if path == "/api/config":
                      return self._send(200, _config_view())
@@ -389,7 +460,7 @@
                  return self._send(200, _skills_view())
              except Exception as exc:
                  return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
-@@ -1573,6 +1925,7 @@
+@@ -1573,6 +1992,7 @@
  
          if route in ("/api/models/install", "/api/models/switch",
                       "/api/models/rollback", "/api/config", "/api/skills/decide",

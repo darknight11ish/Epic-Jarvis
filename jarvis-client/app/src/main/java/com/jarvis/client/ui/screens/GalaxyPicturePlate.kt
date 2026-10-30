@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.Entities
+import com.jarvis.client.net.GalaxyLook
 import com.jarvis.client.net.GalaxyPicture as GalaxyPictureData
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.theme.LocalAccent
@@ -91,10 +92,14 @@ private val DOT_TARGET = 48.dp
  * already fetched, and the picture is dropped with the plate.
  */
 @Composable
-internal fun GalaxyPicture(entities: List<Entities.Entity>, onOpen: (String) -> Unit) {
+internal fun GalaxyPicture(
+    entities: List<Entities.Entity>,
+    look: GalaxyLook = GalaxyLook.Constellation,
+    onOpen: (String) -> Unit,
+) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
-    val picture = remember(entities) { GalaxyPictureData.build(entities) }
+    val picture = remember(entities, look) { GalaxyPictureData.build(entities, look.id) }
     if (picture.dots.isEmpty()) return
 
     Column(Modifier.fillMaxWidth()) {
@@ -204,6 +209,20 @@ internal fun GalaxyPicture(entities: List<Entities.Entity>, onOpen: (String) -> 
                 },
             )
         }
+        // Which look this is, said out loud. The desktop and this phone share
+        // one look id (2026-10-28), and the phone draws the eight flat layouts
+        // the desktop falls back to on a machine without WebGL. The one it does
+        // NOT draw is the desktop's own physics constellation - so when the two
+        // differ it says so, instead of quietly showing a different picture
+        // under the same name (`docs/APPEARANCE-SYNC-PROPOSAL.md` §2).
+        Gap(2)
+        val lookLine = Entities.galaxyLookLine(look, picture.drawn)
+        Text(
+            lookLine,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+            modifier = Modifier.semantics { contentDescription = lookLine },
+        )
     }
 }
 
