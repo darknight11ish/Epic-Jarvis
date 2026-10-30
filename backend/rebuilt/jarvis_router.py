@@ -689,6 +689,7 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            has_image: bool = False, conversation_tainted: bool = False,
            budget: Optional[Budget] = None, tainted: Optional[bool] = None,
            owner_said_yes: bool = False, has_screen: bool = False,
+           has_file: bool = False,
            **_extra) -> Decision:
     """Which lane answers this turn.
 
@@ -703,6 +704,7 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
       1. the conversation is tainted -> local, unconditionally
      1b. the turn carries a picture  -> local, unconditionally
          or the screen's words
+         or a FILE the owner attached (2026-10-29)
       2. private content matched     -> local
       3. a real secret was found     -> local, unconditionally
       4. not complex enough          -> local
@@ -710,6 +712,13 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
       6. the owner has not said yes  -> local, with the cloud lane OFFERED
          for THIS question
       otherwise                      -> the first cloud lane
+
+    Gates 1b, 2, 3 and 4 all come BEFORE the budget and the offer, and that is
+    the policy rather than an accident: there is no budget to spend and no offer
+    to make on a turn that can never leave this PC. `has_file` (2026-10-29) sits
+    beside the picture and the screen's words for the same reason they do - a
+    file's words can be anything - and because `cloud-one-turn.patch` keeps
+    exactly the NEWEST user turn, which is where those words ride.
 
     GATE 6, AND WHY THE DEFAULT IS "NO" (the owner's decision, 2026-09-24).
     docs/ARCHITECTURE.md says cloud use is "per use, with permission ...
@@ -824,6 +833,19 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
             "image",
             "the message carries a picture, which can show anything that was "
             "on screen, so it stays on this machine")
+    # A FILE THE OWNER ATTACHED NEVER LEAVES (2026-10-29). The PC reads the
+    # file's words itself and puts them in the NEWEST user turn - which is
+    # exactly the turn cloud-one-turn.patch keeps when it cuts a request down -
+    # so this gate is the only thing between the owner's tax return and a cloud
+    # model. Its own gate name, "file", so the route header says why. It sits
+    # here, before the private check, the budget and the offer, because there is
+    # nothing to ask about a turn that cannot go: test_attached_file.py proves
+    # it answers local before any of them run (design risk 1).
+    if has_file:
+        return local_decision(
+            "file",
+            "the message carries a file you attached, so its words stay on this "
+            "machine")
     # THE SCREEN'S WORDS NEVER LEAVE EITHER (docs/SCREEN-DESIGN.md section 5,
     # "Rule 1: a turn with screen content always stays on this PC"). "Look
     # at this" and "Watch with me" hand the model the words read off the

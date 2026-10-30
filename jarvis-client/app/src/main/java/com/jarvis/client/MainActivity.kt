@@ -219,6 +219,12 @@ class MainActivity : FragmentActivity() {
     /** The briefing notification was tapped - see [readBriefingIntent]. Consumed once. */
     private val openBriefingRequested = mutableStateOf(false)
 
+    /** The calendar widget's tap opened the Calendar screen - see [readCalendarIntent]. */
+    private val openCalendarRequested = mutableStateOf(false)
+
+    /** The calendar widget's tap while the feature is off: Settings at "calendar". */
+    private val openCalendarSettingsRequested = mutableStateOf(false)
+
     /**
      * The assistant gesture just looked at the screen (or said why it did not):
      * go Home, and start the look's two minutes once the app is unlocked
@@ -665,6 +671,7 @@ class MainActivity : FragmentActivity() {
         readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readCalendarIntent(intent)
         // Only on a fresh start: a rotation hands back the SAME launch intent,
         // and must not start a look's two minutes again.
         if (savedInstanceState == null) readLookIntent(intent)
@@ -715,6 +722,7 @@ class MainActivity : FragmentActivity() {
         readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readCalendarIntent(intent)
         readLookIntent(intent)
         readShortcutQuestionIntent(intent)
         readResumeListeningIntent(intent)
@@ -761,6 +769,23 @@ class MainActivity : FragmentActivity() {
     private fun readBriefingIntent(intent: Intent?) {
         if (intent?.action != ACTION_OPEN_BRIEFING) return
         openBriefingRequested.value = true
+    }
+
+    /**
+     * The calendar widget's tap: open the Calendar screen - or, while the
+     * feature is off, Settings at its own row, which is the one thing that
+     * fixes what the widget just said (design decision D5). `singleTask`, so
+     * the `onNewIntent` half is needed too, same as [readBriefingIntent].
+     *
+     * Two actions and one reader, rather than a flag on the intent: the widget
+     * knows which sentence it drew, and the screen that opens must be the one
+     * that matches it.
+     */
+    private fun readCalendarIntent(intent: Intent?) {
+        when (intent?.action) {
+            ACTION_OPEN_CALENDAR -> openCalendarRequested.value = true
+            ACTION_OPEN_CALENDAR_SETTINGS -> openCalendarSettingsRequested.value = true
+        }
     }
 
     /**
@@ -2067,6 +2092,28 @@ class MainActivity : FragmentActivity() {
             nav.go(Screen.BRAIN)
         }
 
+        // The calendar widget's tap: the Calendar screen itself (Back goes
+        // Home). Consumed once, so a second visit from Home does not bounce
+        // back here.
+        LaunchedEffect(openCalendarRequested.value) {
+            if (!openCalendarRequested.value) return@LaunchedEffect
+            openCalendarRequested.value = false
+            nav.resetTo(Screen.HOME)
+            nav.go(Screen.CALENDAR)
+        }
+
+        // The same tap while the feature is off: Settings at the calendar's own
+        // row, because that switch is the one thing that fixes it. The row is
+        // handed to Settings the way every other "open <section>" is.
+        LaunchedEffect(openCalendarSettingsRequested.value) {
+            if (!openCalendarSettingsRequested.value) return@LaunchedEffect
+            openCalendarSettingsRequested.value = false
+            pendingSection = "calendar"
+            pendingSectionScreen = Screen.SETTINGS.name
+            nav.resetTo(Screen.HOME)
+            nav.go(Screen.SETTINGS)
+        }
+
         // "Look at this" from the assistant gesture: Home, where the chip
         // ("Looked at: Chrome screen · words only") is - and the look's two
         // minutes of follow-up questions start only once the app is unlocked
@@ -3101,6 +3148,9 @@ class MainActivity : FragmentActivity() {
                                 pendingSectionScreen = Screen.SETTINGS.name
                                 nav.go(Screen.SETTINGS)
                             },
+                            // "Jarvis Calendar" (the owner's ask of 2026-10-29):
+                            // the row beside Coming up opens the calendar screen.
+                            onOpenCalendar = { nav.go(Screen.CALENDAR) },
                         )
                     }
 
@@ -3175,6 +3225,24 @@ class MainActivity : FragmentActivity() {
                         privateHidden = privateHidden,
                         onShowPrivate = ::showPrivateLists,
                         showPrivateBusy = ownerCheckBusy.value,
+                    )
+
+                    // "Jarvis Calendar" (the owner's ask of 2026-10-29): the month
+                    // grid, the selected day's list and the add/edit sheet
+                    // (CalendarPlate.kt, JARVIS-API section 163). A title is the
+                    // owner's own words, so "Hide memory lists and chat history"
+                    // hides them exactly as it hides a reminder's; the writes are
+                    // held on a stale link by JarvisRuntime itself, and `canAct`
+                    // here only decides whether the buttons are offered.
+                    Screen.CALENDAR -> com.jarvis.client.ui.screens.CalendarScreen(
+                        canAct = link == LinkState.CONNECTED && !stale,
+                        privateHidden = privateHidden,
+                        onBack = { nav.back() },
+                        onOpenSettings = {
+                            pendingSection = "calendar"
+                            pendingSectionScreen = Screen.SETTINGS.name
+                            nav.go(Screen.SETTINGS)
+                        },
                     )
 
                     Screen.LIVE -> com.jarvis.client.ui.screens.LiveScreen(
@@ -4793,6 +4861,19 @@ class MainActivity : FragmentActivity() {
 
         /** Fired by the "your morning briefing is ready" notification ([com.jarvis.client.service.ScheduleNotifier]). */
         const val ACTION_OPEN_BRIEFING = "com.jarvis.client.action.OPEN_BRIEFING"
+
+        /**
+         * Fired by the calendar widget's tap ([com.jarvis.client.widget.CalendarWidget]):
+         * open the Calendar screen.
+         */
+        const val ACTION_OPEN_CALENDAR = "com.jarvis.client.action.OPEN_CALENDAR"
+
+        /**
+         * Fired by the calendar widget's tap while the feature is switched off:
+         * open Settings at the calendar's own row, which is the one control that
+         * turns it back on (design decision D5).
+         */
+        const val ACTION_OPEN_CALENDAR_SETTINGS = "com.jarvis.client.action.OPEN_CALENDAR_SETTINGS"
 
         /** Fired by the Jarvis Live notification ([com.jarvis.client.service.LiveService]). */
         const val ACTION_OPEN_LIVE = "com.jarvis.client.action.OPEN_LIVE"

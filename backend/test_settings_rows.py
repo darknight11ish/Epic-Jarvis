@@ -234,12 +234,14 @@ def t_setting_links_are_real():
     # audit's G1 gave them the `learning` card and its two rows - they are
     # linked above now. `antislop` joined on the same day: its desktop control
     # is the bespoke card in "How Jarvis talks", not a generated toggle row, so
-    # the list is fourteen.
+    # the list was fourteen. `jarvis_calendar` joined on 2026-10-29 for the same
+    # reason (typed switch built with the store; the Settings card is the UI
+    # slice), so it is fifteen.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known fourteen",
+    check("...and the BoolSettings with no desktop row are the known fifteen",
           orphans == ["antislop", "big_coder", "big_model",
                       "big_model_deep_questions", "big_model_wiki", "chat_history",
-                      "lights_without_card", "media_index",
+                      "jarvis_calendar", "lights_without_card", "media_index",
                       "phone_notifications", "second_card_combined",
                       "second_card_suggest_correction", "second_card_suggest_struggle",
                       "smartwatch_notifications", "write_like_me"], str(orphans))
@@ -332,9 +334,14 @@ def t_bool_settings_is_the_measured_thirteen():
     Gate and three dials), not one of the generated `<label class="toggle">`
     rows this file counts. Its `section` is "manner", so "open how jarvis
     talks" lands on the card that draws it.
+
+    Thirty-three since 2026-10-29: `jarvis_calendar`, the Jarvis-owned local
+    calendar's switch. Cardless either way, ON by default, OFF keeps every
+    event; an orphan above too, because the Calendar Settings card that will
+    draw it is the UI slice's.
     """
-    check("BOOL_SETTINGS holds its thirty-two spoken settings",
-          len(R.BOOL_SETTINGS) == 32, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-three spoken settings",
+          len(R.BOOL_SETTINGS) == 33, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

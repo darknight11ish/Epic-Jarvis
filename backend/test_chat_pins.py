@@ -145,11 +145,14 @@ def t_a_new_chat_is_not_pinned_and_the_field_is_always_there():
               for c in got.values()), str(got))
     check("... and `pinned_at` as null until it is pinned",
           all(c["pinned_at"] is None for c in got.values()), str(got))
-    check("the row's other fields are the ones section 18.3 already documents",
+    check("the row's other fields are the ones section 18.3 already documents, plus `archived`",
           set(got["conv-aaaa"]) == {"id", "title", "started", "updated", "turns",
                                     "device", "has_voice", "tainted", "kind",
-                                    "project", "tag_id", "pinned", "pinned_at"},
+                                    "project", "tag_id", "pinned", "pinned_at",
+                                    "archived"},
           str(sorted(got["conv-aaaa"])))
+    check("... and every one of them carries `archived: false` until it is put away",
+          all(c["archived"] is False for c in got.values()), str(got))
     conv = log.get("conv-aaaa")
     check("an opened conversation carries `pinned`: false too",
           conv["pinned"] is False, str(conv.get("pinned")))

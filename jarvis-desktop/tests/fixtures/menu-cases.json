@@ -135,6 +135,26 @@
       ]
     },
     {
+      "id": "settings.calendar",
+      "title": "Jarvis Calendar",
+      "about": "Your own events, kept on your PC: the month view, the day list and the home-screen widget.",
+      "apps": [
+        "phone"
+      ],
+      "area": "settings",
+      "view": "",
+      "kind": "row",
+      "group": null,
+      "parent": null,
+      "hide": false,
+      "collapse": false,
+      "why": "Never hideable: it is the feature's own ON/OFF switch, and hiding the row that turns the feature back on would leave a switched-off calendar with no way to switch it on.",
+      "names": [
+        "jarvis calendar",
+        "the jarvis calendar"
+      ]
+    },
+    {
       "id": "settings.devices",
       "title": "Devices",
       "about": "Every paired device with its own key.",
@@ -2786,6 +2806,10 @@
       "why": "Never hideable: it is the phone's map of where every feature and setting lives, so hiding it would strand the way to find the rest."
     },
     {
+      "id": "settings.calendar",
+      "why": "Never hideable: it is the feature's own ON/OFF switch, and hiding the row that turns the feature back on would leave a switched-off calendar with no way to switch it on."
+    },
+    {
       "id": "settings.devices",
       "why": "Removing a lost phone must stay reachable."
     },
@@ -3044,6 +3068,7 @@
     "idle timeout": "settings.idle-new",
     "inbox": "safety.approvals",
     "inside jokes": "brain.memory.between-us",
+    "jarvis calendar": "settings.calendar",
     "jarvis's voice": "settings.voices",
     "jarvis's voices": "settings.voices",
     "keyboard shortcuts": "settings.shortcuts",
@@ -3480,6 +3505,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -3681,6 +3707,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -3878,6 +3905,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -5352,6 +5380,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -6176,6 +6205,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -6372,6 +6402,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -6770,6 +6801,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -6966,6 +6998,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -7168,6 +7201,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
