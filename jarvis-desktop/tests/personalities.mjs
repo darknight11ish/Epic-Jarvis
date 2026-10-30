@@ -12,6 +12,14 @@
  * the page's rules:
  *
  *   - the ten ids, in order, and each one's paired voice and speed;
+ *   - THE LOCAL COPY IS THE CONTRACT'S COPY (added 2026-10-28, the owner's
+ *     "make sure the presets ... are consistent too"): ids, titles,
+ *     descriptions, sample lines, switch lines and voice numbers are read back
+ *     out of `contract/personalities.json` - the file the PC's generated
+ *     `jarvis_manner.py` block comes from - so an older PC's screen cannot
+ *     show a name or a description the PC would never send. This caught a real
+ *     drift: this module said "Socratic Coach" where the PC says "Socratic
+ *     Coach & Tutor";
  *   - the four dials' accepted values, and nothing else;
  *   - the PC's answer WINS when it carries the fields (and only then is the
  *     page allowed to switch anything);
@@ -28,7 +36,15 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import * as P from "../src/personalities.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const CONTRACT = JSON.parse(
+  readFileSync(join(HERE, "..", "..", "contract", "personalities.json"), "utf8"),
+);
 
 const fails = [];
 const check = (name, fn) => {
@@ -50,6 +66,24 @@ check("the ten preset ids are the blueprint's, in its order", () => {
     "advocate", "reflect",
   ]);
   assert.equal(P.PRESETS.length, 10);
+});
+
+check("the local copy is the contract's copy, word for word", () => {
+  const theirs = CONTRACT.personalities;
+  assert.equal(theirs.length, P.PRESETS.length,
+    "the contract and this module disagree about how many presets exist");
+  theirs.forEach((preset, i) => {
+    const mine = P.PRESETS[i];
+    assert.equal(mine.id, preset.id, `row ${i}: the id/order differs`);
+    assert.equal(mine.title, preset.title, `${preset.id}: title`);
+    assert.equal(mine.description, preset.description, `${preset.id}: description`);
+    assert.equal(mine.quote, preset.examples[0].jarvis, `${preset.id}: sample line`);
+    assert.equal(mine.switchAck, preset.switch_ack, `${preset.id}: switch line`);
+    assert.equal(mine.voice.blend, preset.voice_blend, `${preset.id}: voice blend`);
+    assert.equal(mine.voice.fallback, preset.voice_fallback, `${preset.id}: voice fallback`);
+    assert.equal(Number(mine.voice.speed), Number(preset.voice_speed),
+      `${preset.id}: voice speed`);
+  });
 });
 
 check("every preset has a title, one-line description, sample line and switch line", () => {

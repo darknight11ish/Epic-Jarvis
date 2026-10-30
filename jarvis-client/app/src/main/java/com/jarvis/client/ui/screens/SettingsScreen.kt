@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
@@ -230,6 +231,20 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /**
+     * Room to keep under the last card while the fixed "Needs your OK" line is
+     * drawn OVER this screen - Gemini's `F4`, measured on the owner's phone
+     * 2026-10-28. Zero when no card is waiting (or on Home, where the line is
+     * not drawn), so a quiet screen carries no blank space.
+     *
+     * The line is an overlay in `MainActivity`, not part of this screen's
+     * column, so it takes no room by itself: the list has to keep the room
+     * instead, or its last row - at max scroll, Devices' "Unpair & clear the
+     * token" - sits underneath it and cannot be pressed. The height comes from
+     * `BottomReserve`, which `MainActivity` fills from the line's own measured
+     * height rather than a guess, because the line wraps the PC's card title.
+     */
+    bottomReserve: Dp = 0.dp,
+    /**
      * "Train my voice", "Voice check: how strict...", and "Jarvis's voice" -
      * null until a desktop is paired, the same rule
      * [com.jarvis.client.MainActivity] already applies for the same three
@@ -419,7 +434,17 @@ fun SettingsScreen(
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             state = listState,
-            contentPadding = PaddingValues(16.dp),
+            // 16 dp is this list's own margin; [bottomReserve] is the fixed
+            // "Needs your OK" line's real height plus its gap, so the last
+            // card can be scrolled clear of it (2026-10-28). Without it the
+            // line covered the bottom of the Devices card - "Unpair & clear
+            // the token" - by its own height minus 4 dp at max scroll.
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = 16.dp,
+                end = 16.dp,
+                bottom = 16.dp + bottomReserve,
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // The box is the FIRST row: the first thing TalkBack and Tab reach,

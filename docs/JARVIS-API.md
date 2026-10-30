@@ -286,22 +286,33 @@ The current parser refuses names that mean "already dealt with"
 NAME, for the read-only "Activity" list. Section 41 has the details, and
 what could and could not be confirmed about its rows' exact shape.
 
-### Approve/deny bodies — the clients disagree
+### Approve/deny bodies — settled 2026-10-29: all three surfaces name themselves
 
 ```
-Desktop  →  {"id": "<id>", "by": "desktop_spotlight"}      commands.rs:914-916, 954-958
-Android  →  {"id": "<id>"}                                  JarvisApi.kt:395, 484
+Desktop  →  {"id": "<id>", "by": "desktop_spotlight"}      commands.rs:3064-3067
+HUD page →  {"id": "<id>", "by": "hud"}                    jarvis_hud.html (apprDecide)
+Android  →  {"id": "<id>", "by": "phone"}                  SignedApproval.BY, approveBody/denyBody
 ```
 
-The desktop adds `by` so the server can record which machine the human was
-sitting at. The phone sends no such field, so a decision made from the phone is
-attributed to nothing. Neither client knows whether the server reads `by` at
-all. See §7.
+`jarvis_hud.py`'s route for both methods reads `by` and stores it as the gate's
+`decided_by` column (`jarvis_hud.py` `/api/approve|/api/deny`,
+`jarvis_gate.decide`). The default when the field is **absent or empty** is
+`"hud"`, which is what the phone used to inherit by sending only `{"id"}` — so
+until 2026-10-29 every phone decision was recorded as the browser HUD's, and the
+Activity list on both apps repeated that back as the device that answered. The
+phone now sends `"by": "phone"` on **both** verbs, from one constant, because
+`approveBody` and `denyBody` in `SignedApproval` are built together and
+`SignedApprovalTest` holds them to the same word. A `by` longer than 64
+characters is cut, not refused — it lands in a stored column. `backend/test_decided_by_attribution.py`
+proves the whole path, including that a decided card is gone from the next
+`/api/pending` and that a second answer is refused. See §7.
 
 A **409** from either route means "already decided, expired, or unknown id"
 (`commands.rs:853-855`) — routine when both clients are open, and the Android
 client gives it its own named outcome rather than rendering it as a failure
-(`JarvisApi.kt:501`).
+(`JarvisApi.kt:501`). A 409 is also the server half of "no dead Approve on a
+resolved card": the verdict cannot be recorded twice, and both apps re-read the
+queue when they see one.
 
 ### Approving with a choice
 
@@ -390,6 +401,47 @@ answerable for as long as the owner needs. Since 2026-10-28 their rows carry no
 `waited_until`, so the read-time sweep below never touches them, and the
 difference is only in their REQUEST: theirs waits until its own flow withdraws
 the card, while every other request waits `approval_timeout_seconds`.
+
+**A card past its deadline is not served at all** (2026-10-28). `GET
+/api/pending` runs the gate's own expiry sweep before it builds the list, so the
+`pending` array holds only rows still inside their own window: every row older
+than its action's timeout plus the same 60-second grace the start-up sweep
+always allowed is marked `expired` first. The four no-deadline cards above are
+never touched. **It is a lapse, never a decision** — nothing is approved or
+denied and nothing a person decided is hidden; the row still appears in
+`history` (and in the Activity list, §42) as `expired`. **And it cannot take a
+live card:** the deadline is recomputed on the PC at the moment of the read, no
+client sends an id, so a stale phone page has nothing to ask with. Why it
+exists: the start-up sweep ran once per PROCESS, so a card whose waiting thread
+died with an earlier process was served as "waiting on you" for the life of the
+next one — the owner's 2026-10-28 report of expired cards he could not clear on
+his phone, which the phone was drawing correctly (no Approve, no Deny, "Timed
+out") because it believed the row. `backend/test_pending_expiry_on_read.py`
+proves an overdue card leaves while a live one stays. The bounded cost: an
+overdue row can still be served for up to that 60-second grace and until the
+next read after it, and a card that expires while a screen is already open sits
+there until that screen next reads the queue — which since 2026-10-29 is at
+most **30 seconds while the app is running and the link is live**. That is not
+one number for every surface: a killed phone's widget keeps the last RemoteViews
+the launcher drew until the widget's own update,
+`android:updatePeriodMillis="1800000"`, so it can lag up to **30 minutes**; and
+while the desktop's stream is down there is no beat at all, so its bound is the
+next event or reconnect. A stale-but-connected desktop link recovers on the next
+beat, because that read is what clears `stale` (the `approval` event's success
+and the beat share one rule, `stream.rs`'s `queue_read_landed`). **No client-side
+"clear expired" control exists, and none is needed** — the card is gone from the
+next read and nothing can be approved by a card that is not served. The phone's
+own halves are one line in `MainActivity.onResume` that re-reads this route when
+the app comes to the front (2026-10-28), and `QueueBeat` — one re-read every 30 s
+while a card is waiting on a CONNECTED link, which is also what clears a card
+**decided elsewhere** (`JarvisRuntime`; the widget, the notification and Home all
+draw from that one `pending`). The desktop's HUD, widget and bar re-read on the
+events they already receive, and `stream.rs` adds the same 30-second re-read
+beside them (`queue_beat_due`) for the case where the `approval` event never
+arrives. While the HUD is visible and a card waits, that is TWO independent 30 s
+`/api/pending` reads on the PC - the HUD page's own `apprPoll` and the stream's
+beat - which is deliberate (either can fail without silencing the other) and is
+named in `ARCHITECTURE.md` §6.
 
 **A routine card whose request has finished is swept on the next read, so no
 live Approve is left; the 409 is the race guard** (2026-10-28, Gemini F3 /
@@ -1990,10 +2042,17 @@ know which side the backend agrees with.
    phone reads both framings through `net/ChatChunkParser.kt`, as the
    desktop does - `API-DISAGREEMENTS.md` §4.)
 
-2. **Approve/deny attribution.** Desktop sends `"by": "desktop_spotlight"`
-   (`commands.rs:914-916`); Android sends only `{"id": …}` (`JarvisApi.kt:395`).
-   If the server records `by`, phone decisions are attributed to nothing. If it
-   ignores `by`, the desktop is sending a field nobody reads.
+2. **Approve/deny attribution — SETTLED 2026-10-29.** Desktop sends
+   `"by": "desktop_spotlight"` (`commands.rs:3064-3067`), the browser HUD sends
+   `"by": "hud"`, and Android now sends `"by": "phone"` (`SignedApproval.BY`,
+   used by both `approveBody` and `denyBody`). The server **does** read it: the
+   route passes it to `jarvis_gate.decide`, which stores it as `decided_by`, and
+   an absent or empty one defaults to `"hud"` - so the phone's old `{"id"}`-only
+   body was recorded as the HUD's, which is the owner's 2026-10-29 field
+   evidence. `backend/test_decided_by_attribution.py` drives both halves. What
+   remains different between the clients is only the WORD each sends, and that
+   is deliberate: it is how a person reading the Activity list can tell which
+   surface answered.
 
 3. **`/api/appearance` — the clients used to contradict each other about
    whether it exists.** *Resolved on the desktop side:* `appearance.rs` now
@@ -7622,6 +7681,44 @@ as aliases of `voice_sync` / `custom_personalities`, and `personality_default`,
   markers, refused if it tries to change Jarvis's instructions, and scrubbed of
   secrets before it is stored; the name is capped at 60 characters and the
   other fields at 240, with at most 20 saved presets.
+
+**Both apps list the same presets, from this one answer (2026-10-28).** The
+owner's ask that day was "make sure the presets for jarvis personality and
+other presets are consistent too". Until then the phone's Mind screen drew only
+the legacy Warm/Plain pair (docs/ARCHITECTURE.md §8 recorded it as desktop
+first), and it marked "Plain" as in use whenever the PC was on ANY preset other
+than Warm Collaborator - because `manner` is derived on the PC
+(`jarvis_manner.current()`: warm only for `warm_peer`, plain for every other
+preset). A screen naming a preset Jarvis was not in is the same class of bug as
+the voice that disagreed with every screen showing it (§15, 2026-10-28).
+
+What both apps do now, with no new route and no new field:
+
+| | desktop (`manner-settings.js`, `personalities.js`) | phone (`Manner.kt`, `MannerPlate.kt`) |
+|---|---|---|
+| the list | `GET /api/manner`'s `personalities`; the local copy in `personalities.js` is the fallback for an older PC and is held word-for-word to `contract/personalities.json` by `tests/personalities.mjs` | the SAME `personalities` array, in the PC's order, titles and descriptions verbatim |
+| the mark | the PC's `personality` | the PC's `personality`, and ONLY that id (a derived `manner` word is never matched to a preset) |
+| a switch | one field, `{"personality": "<id>"}` | the same one field, `{"personality": "<id>"}` |
+| live | re-reads on its own actions | re-reads on the `manner` event (below) |
+| the legacy pair | hidden once the PC sends a list | hidden once the PC sends a list; both keep it for an older PC |
+| the four dials, "My personalities" editor, Hear Sample | here | **not drawn** - one line says where they are (ARCHITECTURE §8) |
+
+**A client must never switch a preset with `{"manner": "warm"|"plain"}`.** That
+legacy write is still accepted and still means what it meant (it maps to
+`warm_peer`/`tactical_ops`), but it also resets the four dials
+(`jarvis_manner.handle_set`'s legacy branch writes the mapped preset's dials),
+so it silently replaces a preset chosen on the other device. `{"personality":
+id}` changes only the preset and its own dials.
+
+**`manner` is an event kind (2026-10-28).** Every write that goes through
+`jarvis_manner._merge_setting` - a personality, the manner word, humour, a dial,
+the voice-sync switch, saving or deleting a saved personality - publishes
+`manner` with `{manner, personality, personality_explicit, humor, voice_sync,
+dials}`. Like every other kind it is a doorbell, not state: the phone re-reads
+`GET /api/manner` (`JarvisRuntime.mannerTick`), so an open Mind screen follows a
+switch made in the desktop's Settings window, the HUD's Presets menu or the chat
+sentence without being reopened. A refused body and a damaged `manner.json` ring
+nothing, because nothing changed.
 
 **Asking what each one does** (2026-10-26, `jarvis_quick.py`): "what does the
 Classic Butler personality do", "what is TARS like", "describe the butler
