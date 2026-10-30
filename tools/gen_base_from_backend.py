@@ -271,6 +271,18 @@ BESIDE = (
 #: the same re-take rule and the same two-file rule, and `backend/
 #: test_hud_static.py` pins them to the page's real copies in jarvis-desktop/.
 BESIDE_BINARY = (
+    # The app builder's Gradle wrapper (2026-10-30, jarvis_android_builder.py):
+    # Gradle's OWN `gradlew.bat` and `gradle-wrapper.jar`, copied byte for byte
+    # from `jarvis-client/` (Apache-2.0, credited in THIRD-PARTY-NOTICES.txt).
+    # The owner's PC has NO Gradle installed (measured 2026-10-30), so a
+    # generated app cannot be built without these two: `gradlew.bat` starts the
+    # download and `gradle-wrapper.jar` is what it needs to do it. Bytes are
+    # the point - a text round-trip corrupts a jar - and
+    # `backend/test_android_builder.py` pins both to the client's copies.
+    ("jarvis-android-gradlew.bat", "{repo}/backend/jarvis-android-gradlew.bat",
+     "the script that starts an app's Gradle build; needs no Gradle installed"),
+    ("jarvis-android-wrapper.jar", "{repo}/backend/jarvis-android-wrapper.jar",
+     "the wrapper jar gradlew.bat needs; pinned to jarvis-client's own copy"),
     ("chakra-petch-400.woff2", "{repo}/backend/static/chakra-petch-400.woff2",
      "a self-hosted face; served at /fonts/chakra-petch-400.woff2"),
     ("chakra-petch-500.woff2", "{repo}/backend/static/chakra-petch-500.woff2",

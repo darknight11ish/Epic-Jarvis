@@ -2665,6 +2665,35 @@ no card. The model's `connect_account` tool ships OFF like every other tool that
 is not in the shipped `[tools].enabled` list, and it only ever raises the same
 PC card; nothing about it can save a value from a model turn.
 
+**Building an Android app and putting it on the phone is the desktop's PC, and
+neither app has a screen for it - one-sided on purpose** (2026-10-30; the
+owner's question *"can jarvis build android apps? that i can sideload into my
+phone? if not add them"*; JARVIS-API section 168). The three routes that write
+the project, build it and install it are **PC only** (`jarvis_android_builder`:
+403 `pc_only` from any other device, before anything else about the request is
+read), and `tools/check_parity.py` classifies all four of its routes in
+`BACKEND_ONLY`. The reason is physical, not political: the Android SDK, the
+JDK and a Gradle wrapper are on this PC, and `adb` reaches the phone over
+**this PC's** cable. No app on the phone could run a build, and a phone-side
+button that asked the PC to build would be a new route whose only purpose is to
+start an existing one.
+
+**What both apps DO get is the two cards.** `app_build_android` and
+`app_install_android` are ordinary `ask`-tier risky cards
+(`jarvis_gate._RISK`, reversible "no"), so they arrive in the same card list
+both apps already draw, with the same words, the same Windows Hello on the PC
+and the same screen lock on the phone - the owner can approve a build from the
+sofa while the PC does the work. Neither is in `PC_ONLY_ACTIONS`: a PC-only
+card would take the phone's Approve button away for no gain, because the
+machine that runs the command is not the machine that answers the card.
+
+**Why there is no app screen, in one line each.** The desktop's Projects page
+already owns the app and its tasks (section 92), and the work moves forward by
+answering a card - which it already draws. The phone has no Projects screen
+worth the name and no access to the cable. If a screen is ever built it is the
+desktop's, beside the task it belongs to, and the phone still gets no build
+button.
+
 **The model advisor is the desktop's alone, and that is one-sided on purpose**
 (2026-10-28; the owner's request: *"can you give jarvis the ability to recommend
 a change to presets (for the local ai models being used) with a one click check

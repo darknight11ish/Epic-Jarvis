@@ -1,14 +1,25 @@
 # The app builder - design and milestones (2026-09-28)
 
-**Status (2026-09-29): milestone A is built (`backend/jarvis_app_workspace.py`).
+**Status (2026-10-30): milestone A is built (`backend/jarvis_app_workspace.py`).
 Milestone B is split in two: B1 - an app is a project in Projects; its
 tasks, the ONE merge card, and pasting a change in on the PC - is built on
 the backend (`backend/jarvis_apps.py`, `apps-in-projects.patch`, JARVIS-API
 section 92; the two apps' screens are built against it, see
 `docs/APPS-IN-PROJECTS-DESIGN.md`). B2 - the model tools that let Jarvis
 write the code - is NOT built: it waits for the 12 GB card (the owner,
-2026-09-29). Milestone C (running commands) is not built either.** Nothing
-here runs a program: git is the only program started.
+2026-09-29).**
+
+**Milestones C, F and G are PARTLY built, in one narrow way (2026-10-30).**
+The owner asked *"can jarvis build android apps? that i can sideload into my
+phone? if not add them"*. `backend/jarvis_android_builder.py` now does
+exactly that and nothing more: it writes a FIXED Android project (one WebView
+showing the owner's own page) into a task's copy, runs exactly
+`gradlew.bat assembleDebug`, and runs exactly `adb install -r <apk>` - each
+build and install behind its own risky card (JARVIS-API section 168). Every
+other kind of command, every other kind of project and every other adb
+subcommand is still unbuilt. **The three programs the app builder can start
+are now git, `gradlew.bat assembleDebug` and `adb install -r <apk>`**, and no
+other command is reachable from it.
 
 ## What the owner decided (2026-09-28)
 
