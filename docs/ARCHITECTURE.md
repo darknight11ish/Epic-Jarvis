@@ -3947,7 +3947,6 @@ half, so `tools/check_parity.py` classifies nothing new.
 
 **Picture-in-picture is the phone's, and the platform is why** (2026-10-30, the owner's settled design of 2026-10-11: *"can you add a picture in picture mode to jarvis that's similar to Google maps"*; `docs/PIP-DESIGN.md`). Android's own PiP - a small Jarvis window that stays on screen while other apps are in front - is the activity itself, resized by the OS: `MainActivity` declares `supportsPictureInPicture`, draws its own compact layout while `isInPictureInPictureMode` is true, and shows the face and the first line of the answer, the last few messages, or Jarvis Live (`data/PipMode.kt`, `ui/PipWindow.kt`). **The PC has no such window**: its nearest equivalent is the floating face over other windows (`docs/JARVIS-API.md` §57), which is a window of Jarvis's own and not an OS-managed miniature of the whole activity, so there is no desktop PiP layout to build and no desktop Settings row of the same name - the mode is saved on that phone only (`ClientSettings.pipMode`, key `pip_mode`), like every other display setting. It adds **no route and no permission**: the window is fed by the existing chat and Live flows, and its only system action is Expand. Two rules are the reason it is a design rather than a shrunken screen: it never approves anything (`JarvisRuntime.decide` is not reachable from that surface at all), and while "Hide memory lists and chat history" or App lock hides content it draws a dimmed face and the owner's own sentence - "Hidden while Jarvis is locked." - never the answer or the conversation (`docs/PIP-DESIGN.md` §4, §5, §9.1). `tools/check_parity.py` has nothing to classify here.
 
-**Long Fuse's start/answer loop is the desktop's for now, and the phone half is the named next slice** (2026-10-30, JARVIS-API §169; `backend/jobs-routes.patch`). `POST /api/jobs` and `POST /api/jobs/answer` exist now, and the desktop's Work tab uses both: a "Start a background job" form offering only the bodies this PC registered, and "Allow once: <action>" / "No" under a parked job. **The phone does not, for a measured reason rather than taste:** its Work tab has never had a control for Long Fuse - it draws `JobPlate`, a read-only row showing the state and the frozen set - and its `JobRecord` (`net/ApiModels.kt`) parses neither the `grants` the answer needs nor the `status.handlers` list the form needs. So the phone half is a model change plus a control, not a button; it is the next slice, and nothing about the permission model changes when it lands (the same one grant, one use, no standing rule). `tools/check_parity.py` records `/api/jobs/answer` as `todo` with that reason, while `/api/jobs` stays `ported` because the phone already makes that read. **This entry is a slice boundary, not a decision that the phone should never have it** - it is deleted when the phone half is built.
 
 ## 9. Where the backend lives
 
@@ -4296,9 +4295,10 @@ they landed):
     `needs` is the capability set frozen onto the row. It passes all four
     through `create()`, which is what makes that set his yes; it approves
     nothing itself, never widens a set, and answers **503 when the one
-    heartbeat is off** rather than queue a job nothing would run. The desktop
-    Work pane sends `needs: []` on purpose: the job starts with nothing and
-    parks on its first need, where the owner answers one question at a time.
+    heartbeat is off** rather than queue a job nothing would run. Both Work
+    panes (the desktop's and the phone's) send `needs: []` on purpose: the job
+    starts with nothing and parks on its first need, where the owner answers one
+    question at a time.
   * **`POST /api/jobs/answer`** answers the ONE grant a parked job waits on,
     with `{"id", "approved": true|false}`. It is the owner's own answer
     arriving over HTTP - the card's button, not a policy change. One job, one
@@ -4316,14 +4316,25 @@ they landed):
   allow-list. `backend/test_jobs.py` tests the logic and rehearses the patch;
   `jarvis-desktop/tests/job-list.mjs` holds the desktop's half.
 
-  **One-sided for now, and the reason written down:** only the DESKTOP has the
-  loop. The phone's Work pane is a read-only job list (`JobPlate`) that has
-  never offered a create, a cancel or an answer for Long Fuse, and its
-  `JobRecord` drops both `grants` and `status.handlers` - so the phone half
-  needs a model change before it can be a button, not only a control.
-  `tools/check_parity.py` records `/api/jobs/answer` as `todo` with that
-  reason, and JARVIS-API section 169.4 says the same. When the phone half is
-  built the classification becomes `ported`; it is NOT a deliberate omission.
+  **BOTH APPS HAVE THE LOOP (2026-10-30, the same day the routes landed).** The
+  desktop's Work tab draws it first (`brain_create_job` / `brain_answer_job`,
+  `src/brain.js` `renderJobStart` / `jobGrantActions`); the phone's half
+  followed in the same slice (`jarvis-client`'s `net/Jobs.kt`,
+  `ui/screens/JobsPlate.kt` and `JarvisRuntime.startJob` / `answerJob`) and it
+  is the desktop's form and its two answers in the phone's own words: a closed
+  list of the bodies this PC registered, the owner's words in a text box, and
+  under a parked job what it is asking for with exactly "No" and "Allow once".
+  **The permission model is identical, because it is the server's:** the phone
+  sends `needs: []` too, so a job started there parks at its first need; one
+  job, one grant, one use; a No stops that job at once and leaves no rule for
+  the next; there is no list form and no "allow all" on either app. Both writes
+  are held on a live link (rule 4) - the desktop through `require_link_live`,
+  the phone through `JarvisRuntime.actionBlocker` - and neither app can widen a
+  frozen set, because no route and no client argument can. `tools/check_parity.py`
+  records `/api/jobs/answer` as **`ported`**, and JARVIS-API §169.4 describes the
+  phone's own controls. The phone's `JobRecord` gained no row fields: the
+  grants arrive in the SAME GET body, by job id (`Jobs.Feed`), which is why the
+  read the phone already made was enough to answer a job.
 
   **One job body exists in production, and that is said plainly too:** the
   start-up call this patch adds to `jarvis_watch.register_job()` (the function

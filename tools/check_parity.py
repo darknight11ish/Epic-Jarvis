@@ -345,7 +345,7 @@ CLASSIFICATION = {
     "/api/jobs": ("ported", ""),
     "/api/jobs/cancel": ("ported", ""),
     # Long Fuse's way in and out (2026-10-30, jobs-routes.patch; JARVIS-API
-    # section 21.10). POST /api/jobs starts ONE job from the owner's own words
+    # section 169). POST /api/jobs starts ONE job from the owner's own words
     # with no capabilities frozen, so it parks the moment it needs one; its
     # route is the same path as the ported GET, which is why the method is in
     # the reason rather than a second classification. POST /api/jobs/answer
@@ -353,12 +353,12 @@ CLASSIFICATION = {
     # that job at once. Desktop: the Work pane's "Start a background job" form
     # and the "Allow once" / "No" buttons under a parked job (brain.rs
     # brain_create_job/brain_answer_job, src/brain.js renderJobStart and
-    # jobGrantActions, tests/job-list.mjs). Phone: the loop is NOT built yet -
-    # its Work pane is a read-only job list that shows the frozen set and
-    # nothing else, and its JobRecord drops the `grants` and `status.handlers`
-    # this needs. That is the named follow-up, and ARCHITECTURE.md section 8
-    # records it; when it is built the classification becomes "ported".
-    "/api/jobs/answer": ("todo", "Answers the ONE grant a parked Long Fuse job is waiting on (2026-10-30, jobs-routes.patch; JARVIS-API section 21.10). ONE job, ONE use, and a No stops that job and leaves no rule behind - there is no list form and no 'allow all'. The desktop has it in the Work pane (brain_answer_job, src/brain.js jobGrantActions). The phone's Work pane is still a read-only job list, and its JobRecord drops the grants this needs: the phone half is the named follow-up (ARCHITECTURE.md section 8)."),
+    # jobGrantActions, tests/job-list.mjs). Phone: the SAME loop in the same
+    # pane, holding the same rule (net/Jobs.kt, ui/screens/JobsPlate.kt,
+    # JarvisRuntime.startJob/answerJob - both held on a stale link, neither able
+    # to freeze a capability or always-allow; BackgroundJobsTest.kt holds the
+    # bodies and the sentences). Both apps read the whole GET body, grants in.
+    "/api/jobs/answer": ("ported", "Answers the ONE grant a parked Long Fuse job is waiting on (2026-10-30, jobs-routes.patch; JARVIS-API section 169). ONE job, ONE use, and a No stops that job and leaves no rule behind - there is no list form and no 'allow all'. Both apps have it in the Work pane: the desktop's two buttons under a parked job (brain_answer_job, src/brain.js jobGrantActions) and the phone's two answers (JarvisRuntime.answerJob, ui/screens/JobsPlate.kt). Both hold it on a live link, and neither can write a standing rule."),
     "/api/ledger": ("ported", "Brain screen, read-only."),
     # The limits and frequencies the owner can change (2026-10-08): ONE table
     # on the PC (backend/jarvis_limits.py) behind one read route and one write

@@ -4590,6 +4590,68 @@ object JarvisRuntime {
         return result
     }
 
+    // ------------------------------------------ Long Fuse's way in and out ----
+    // 2026-10-30, backend/jobs-routes.patch; docs/JARVIS-API.md section 169. The
+    // desktop's Work tab has had both since that day (brain_create_job /
+    // brain_answer_job); these are the phone's half. NOTHING HERE APPROVES
+    // ANYTHING: starting sends needs:[] (so the job begins with no
+    // capabilities and parks on its first need) and answering is one person's
+    // decision about one job's one grant, spent by its next use.
+
+    /**
+     * `GET /api/jobs` into the Work pane's own view ([Jobs.Read]): the rows,
+     * the pending grants and whether the heartbeat is running.
+     *
+     * A READ, so it is NOT held on a stale link (rule 4 holds actions). The
+     * screen that asked holds the answer and drops it when it closes - nothing
+     * is kept here, the same shape [tasks] follows.
+     */
+    suspend fun jobsRead(): com.jarvis.client.net.Jobs.Read =
+        com.jarvis.client.net.Jobs.readOf(api.jobsFeed())
+
+    /**
+     * Start ONE background job from the owner's own words.
+     *
+     * HELD ON A STALE LINK ([actionBlocker], rule 4): a job started against a
+     * list that could not be confirmed live risks a second copy of one the
+     * owner already has. It approves nothing - the request freezes an EMPTY
+     * capability set, so the job parks at its first need and asks there.
+     *
+     * @return [com.jarvis.client.net.Jobs.Said.Landed] with the line to show,
+     *   or [com.jarvis.client.net.Jobs.Said.Refused] with the PC's own
+     *   sentence for why nothing was created (this app's only when the PC sent
+     *   none, or when the link is down).
+     */
+    suspend fun startJob(kind: String, text: String): com.jarvis.client.net.Jobs.Said {
+        actionBlocker()?.let { return com.jarvis.client.net.Jobs.Said.Refused(it) }
+        return when (val result = api.createJob(kind, text)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Jobs.startSaid(result.value)
+            is ApiResult.Failed -> com.jarvis.client.net.Jobs.startSaid(null, result.error)
+        }
+    }
+
+    /**
+     * Answer the ONE grant a parked job is waiting on - yes or no, for that job
+     * only.
+     *
+     * HELD ON A STALE LINK like every action ([actionBlocker], rule 4):
+     * deciding a question that could not be confirmed live risks answering one
+     * already answered, or one whose job has finished. The PC's 409s are
+     * answers, not transport errors, and keep their own sentence
+     * ([com.jarvis.client.net.Jobs.answerSaid]).
+     *
+     * A **No** stops that job immediately and remembers nothing; an **Allow
+     * once** marks the grant and the job carries on at the next background
+     * check, because nothing runs inside the request.
+     */
+    suspend fun answerJob(jobId: String, approved: Boolean): com.jarvis.client.net.Jobs.Said {
+        actionBlocker()?.let { return com.jarvis.client.net.Jobs.Said.Refused(it) }
+        return when (val result = api.answerJob(jobId, approved)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Jobs.answerSaid(result.value)
+            is ApiResult.Failed -> com.jarvis.client.net.Jobs.answerSaid(null, result.error)
+        }
+    }
+
     /**
      * Stops a message inside its send window.
      *

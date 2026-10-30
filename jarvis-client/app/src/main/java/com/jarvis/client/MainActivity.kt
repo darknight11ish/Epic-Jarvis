@@ -2982,7 +2982,6 @@ class MainActivity : FragmentActivity() {
                             status = status,
                             version = version,
                             attention = attention,
-                            jobs = jobs,
                             brain = brain,
                             onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
                             onBack = { nav.back() },

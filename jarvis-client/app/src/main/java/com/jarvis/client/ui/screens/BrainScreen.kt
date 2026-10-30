@@ -51,7 +51,6 @@ import com.jarvis.client.SectionRead
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.AttentionSettings
 import com.jarvis.client.net.CachedModels
-import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.MemoryCardKind
 import com.jarvis.client.net.MemoryCardView
 import com.jarvis.client.net.MemoryCards
@@ -127,7 +126,6 @@ fun BrainScreen(
     status: StatusInfo?,
     version: VersionInfo?,
     attention: Attention,
-    jobs: List<JobRecord>,
     brain: BrainSnapshot,
     onRefresh: () -> Unit,
     onBack: () -> Unit,
@@ -986,15 +984,18 @@ fun BrainScreen(
                 // down. Its menu can never be hidden or folded, so it may not
                 // sit inside a heading that can be shut (BrainSections.ALWAYS_DRAWN).
 
-                if (jobs.isNotEmpty()) {
-                    if (menus.shows("brain.work.jobs")) plate("jobs", drawn = { true }) {
-                        MenuFrame(menus, "brain.work.jobs") {
-                            Section("Background jobs") {
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    jobs.forEach { JobPlate(it) }
-                                }
-                            }
-                        }
+                // "Background jobs" - Long Fuse's way in and out, the desktop's
+                // Work tab in the phone's words (JobsPlate.kt, the owner's slice
+                // of 2026-10-30; docs/JARVIS-API.md section 169): start ONE job
+                // from the owner's own words, and under a parked one the single
+                // permission it is waiting on with its two answers. It is drawn
+                // even when the list is EMPTY - before this, a phone with no
+                // jobs could neither see the section nor start the first one.
+                // It reads and acts through JarvisRuntime directly, so this is
+                // its only line.
+                if (menus.shows("brain.work.jobs")) plate("jobs", drawn = { true }) {
+                    MenuFrame(menus, "brain.work.jobs") {
+                        JobsSection(canAct = canAct)
                     }
                 }
 
@@ -2296,53 +2297,6 @@ private fun NumberStepper(
     }
 }
 
-@Composable
-private fun JobPlate(job: JobRecord) {
-    val chrome = LocalChrome.current
-    Plate {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                job.title,
-                style = MaterialTheme.typography.titleSmall,
-                color = chrome.textHi,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            Pill(job.state.ifBlank { "running" })
-        }
-        job.progress?.let {
-            Gap(10)
-            Meter(it)
-        }
-        if (job.frozen.isNotEmpty()) {
-            Gap(10)
-            // Frozen for the job's life. A job can never gain more while it
-            // runs: approving something on Tuesday is not approving it on
-            // Wednesday, and showing the frozen set is how that promise is
-            // checkable rather than merely stated.
-            Kicker("Approved with")
-            Gap(6)
-            FlowChips(job.frozen)
-        }
-        if (job.tainted) {
-            Gap(8)
-            Text(
-                "Read private data, so it stays on the PC.",
-                style = MaterialTheme.typography.bodySmall,
-                color = chrome.textMid,
-            )
-        }
-        if (job.private) {
-            Gap(8)
-            Text(
-                "Private — the phone is not shown what this is working on.",
-                style = MaterialTheme.typography.bodySmall,
-                color = chrome.textMid,
-            )
-        }
-    }
-}
-
 /**
  * A read-only "what did the memory store believe was true on this date"
  * lookup - `docs/ANDROID-FEATURE-AUDIT.md` §4 P3, marked optional there. A
@@ -2882,7 +2836,7 @@ private fun MemoryProposalRow(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FlowChips(items: Collection<String>, muted: Boolean = false) {
+internal fun FlowChips(items: Collection<String>, muted: Boolean = false) {
     val chrome = LocalChrome.current
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),

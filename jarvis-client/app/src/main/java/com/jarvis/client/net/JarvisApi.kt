@@ -473,6 +473,50 @@ class JarvisApi(
     suspend fun jobs(): ApiResult<List<JobRecord>> =
         get("/api/jobs", ListSerializer(JobRecord.serializer()), JOB_KEYS)
 
+    /**
+     * `GET /api/jobs`, the WHOLE body: the rows, the pending grants and whether
+     * the one heartbeat is running ([Jobs.Feed]).
+     *
+     * The Inbox's cancellation list still reads [jobs] (rows only) because that
+     * is all it needs. This read is the Work pane's, which cannot answer a
+     * parked job from its rows alone: the grants arrive in the same body, by
+     * job id, and `ticking` is what tells the pane a job started now would
+     * actually run (docs/JARVIS-API.md section 169.3).
+     *
+     * A read: never held on a stale link, and it claims nothing.
+     */
+    suspend fun jobsFeed(): ApiResult<Jobs.Feed> =
+        get("/api/jobs", Jobs.Feed.serializer())
+
+    /**
+     * `POST /api/jobs {"kind","text","needs":[]}` - start ONE background job
+     * from the owner's own words ([Jobs.startBody]).
+     *
+     * The body carries an EMPTY capability list on purpose, exactly like the
+     * desktop's form: this is not a capability picker, so the job begins with
+     * nothing frozen and parks on its first need. It approves nothing, widens
+     * nothing and creates at most one row - the route refuses a kind this PC
+     * has not registered, rather than queueing a job that cannot run.
+     *
+     * The PC's own refusal body is returned as it wrote it (`ok: false` plus a
+     * sentence), via [postExplained]: those sentences are what the owner acts
+     * on (`Jobs.startSaid`).
+     */
+    suspend fun createJob(kind: String, text: String): ApiResult<JsonObject> =
+        postExplained(Jobs.PATH, Jobs.startBody(kind, text))
+
+    /**
+     * `POST /api/jobs/answer {"id","approved"}` - answer the ONE grant a parked
+     * job is waiting on ([Jobs.answerBody]).
+     *
+     * One job, one grant, one use: the server spends it at the handler's next
+     * `require()`, a second tap is a 409, and a No stops that job at once and
+     * leaves no rule behind. There is no list form and no "allow all" - the
+     * whole permission model is one card per action.
+     */
+    suspend fun answerJob(id: String, approved: Boolean): ApiResult<JsonObject> =
+        postExplained(Jobs.ANSWER_PATH, Jobs.answerBody(id, approved))
+
     // ----------------------------------------------------------- models ----
 
     /**
