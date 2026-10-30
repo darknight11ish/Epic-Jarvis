@@ -3887,12 +3887,20 @@ class JarvisApi(
          * no other; see [ChatHistory.requestBody]'s own doc on the field.
          */
         think: Boolean = false,
+        /**
+         * A document the owner attached to THIS question ([AttachFile]): it
+         * rides inside the newest user message as one `attachment` object and
+         * `has_file: true` beside `has_image`. No new route, no upload, no
+         * permission - the bytes travel in this body and the PC reads them
+         * within this turn only.
+         */
+        file: AttachFile.Ready? = null,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
             interrupted = interrupted, temporary = temporary, cloudYes = cloudYes, live = live,
-            screen = screen, think = think,
+            screen = screen, think = think, file = file,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()

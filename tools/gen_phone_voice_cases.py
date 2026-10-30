@@ -224,19 +224,21 @@ class World:
         speaker_dir = missing_models("voice-models", "speaker")
         ps = [
             mock.patch.object(S, "_config_dir", return_value=d),
-            # The owner's CHOSEN PERSONALITY must not come from this machine.
-            # jarvis_speech.tts_voice() asks jarvis_manner.voice_for_speech()
-            # first, and that reads the real config folder (this world
-            # redirects jarvis_speech's and jarvis_voices' only) - so a PC with
-            # a personality chosen changes `moment_key()`, which is the
-            # `flow.moment.key` in this fixture. Measured 2026-10-27: the
-            # owner's PC (classic_butler, fallback bm_george, speed 1.02)
-            # answered (9, 1.02) and a runner with no personality answers
-            # (0, 1.0), so the same tree gave key 81cda4b04304 here and
-            # 34c972a65e5f on CI, and `--check` failed on one but not the
-            # other. This world's own config folder is temporary and holds no
-            # personality, so None is the answer it already means to describe.
-            mock.patch.object(S, "_personality_voice", lambda: None),
+            # The owner's CHOSEN PERSONALITY is not read at speech time any
+            # more (2026-10-28): jarvis_speech.tts_voice() asks ONLY
+            # jarvis_voices, and this world redirects that module's config
+            # folder (VS._config_dir, below) - so a PC with a personality
+            # chosen and a runner with none give the same answer. Until that
+            # change this world had to patch jarvis_speech._personality_voice
+            # to None, because a real personality on the machine changed
+            # `moment_key()`, which is the `flow.moment.key` in this fixture.
+            # Measured 2026-10-27: the owner's PC (classic_butler, fallback
+            # bm_george, speed 1.02) answered (9, 1.02) and a runner with no
+            # personality answered (0, 1.0), so the same tree gave key
+            # 81cda4b04304 here and 34c972a65e5f on CI, and `--check` failed on
+            # one but not the other. The patch is gone with the function it
+            # patched; a stand-in for a seam that no longer exists would only
+            # prove the generator is not running.
             mock.patch.object(V, "PROFILE_PATH", profile),
             mock.patch.object(W, "model_dir",
                               return_value=missing_models("voice-models", "wakeword")),

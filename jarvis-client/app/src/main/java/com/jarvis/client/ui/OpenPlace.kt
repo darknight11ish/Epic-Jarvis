@@ -67,6 +67,14 @@ object OpenPlace {
         "backup" to Where.Go(Screen.SETTINGS, "backup"),
         "watch-notify" to Where.Go(Screen.SETTINGS, "watch-notify"),
         "phone-notify" to Where.Go(Screen.SETTINGS, "phone-notify"),
+        // "Notifications" (2026-10-29, the settings wrong-app audit's finding 7):
+        // the registry now says this section is on BOTH apps, because the phone
+        // changes the PC's own seven notification kinds in its "Notifications
+        // from Jarvis" row (SettingsScreen.kt's PcNotifySection, every line saying
+        // "(on your PC)"). So "open notifications" lands on that row rather than
+        // answering "only in Jarvis on your PC" - which is what it used to do
+        // while `notifications` sat in PC_ONLY.
+        "notifications" to Where.Go(Screen.SETTINGS, "jarvis-notify"),
         // "Look at this and Watch with me": picture mode's switch (2026-09-29).
         "screen-look" to Where.Go(Screen.SETTINGS, "screen-look"),
         // The headless browser (Obscura): its switch, default and install line (2026-09-29).
@@ -220,7 +228,12 @@ object OpenPlace {
         "more-options",
         "crash-notes",
         "start-jarvis",
-        "notifications",
+        // Notifications was here until 2026-10-29 (the settings wrong-app audit's
+        // finding 7): the phone does have the PC's seven kinds, in its
+        // "Notifications from Jarvis" row, so it has a place in PLACES now
+        // rather than an honest-sounding refusal. (No quoted id is written in
+        // this comment on purpose - the registry's own checker scans this block
+        // as text, and a quoted id here would read as a member of the set.)
         "first-run",
         "hud-window",
         // "Searchable recordings and videos" (F5 S2, 2026-10-19; S3 added the
