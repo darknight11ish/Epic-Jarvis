@@ -935,6 +935,17 @@ object ChatLog {
     const val OPEN_IN_HISTORY = "Open in History"
     const val OPEN_IN_HISTORY_TITLE = "Read it, or delete it, in History."
 
+    /**
+     * Home's one-tap way into History (the owner's request of 2026-10-29: "i
+     * want the chat history accessible directly from the jarvis hud on desktop,
+     * and one click from the android jarvis app"). It sits on Home's status
+     * line - the one row no size, menu or setting hides - and it says nothing
+     * about any chat, so it stays while the memory lists are hidden too;
+     * History itself hides its list until Show is confirmed.
+     */
+    const val HOME_ENTRY = "History"
+    const val HOME_ENTRY_TITLE = "Chat history, kept on your PC"
+
     /** What an opened chat says about the facts it taught (section 79): read only. */
     fun chatFactsTaught(n: Int): String = when {
         n <= 0 -> "Jarvis is not using any fact it learned from this chat."
