@@ -97,7 +97,7 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all EIGHTEEN - those thirteen, plus `private-chat.patch` at position 152, added
+all NINETEEN - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -107,16 +107,23 @@ had ever touched, and the cloud reply's reader, which reached the owner's PC
 by a re-take rather than a patch) and `f01-manual-lane-gate.patch` at position
 155 (the manual lane-picking path and `_manual_decision()`, which no patch in
 this walk writes - and whose missing gates WERE the F-01 defect) - plus, on
-2026-10-28, TWO patches, both with their positions: `learning-extract-reason.patch`
+2026-10-28, THREE patches, all with their positions: `learning-extract-reason.patch`
 at position 157 (all three of its hunks: `_local_llm()`'s `except Exception:
 return None`, the `body` dict it posts - `think: False`, so a hybrid reasoning
 model answers instead of spending a small budget in `thinking` (Gemini
 Edition-3 review F1) - and the module-level record near `_PROMPT`, in the
 owner's `jarvis_extract.py`, which no earlier patch touches), and
 `cloud-honesty.patch` (one of its three hunks: the cloud relay's
-`_says.close()` block, which reached the owner's PC by the same re-take) - with
-their positions, instead of pretending they are not there. The position-29 rule
-is kept as a REPORTED fact, not a gate.
+`_says.close()` block, which reached the owner's PC by the same re-take), and
+`no-deadline-cards.patch` at position 37 (the owner's ruling that no approval
+card has a deadline: EIGHT of its sixteen hunks read the owner's `jarvis_gate.py`
+- `_pending_card_id()`'s SELECT and loop, check()'s ask branch and INSERT, its
+late-answer block after the wait, `pending()`'s opening, `decide()`'s body, the
+insertion point of `still_waiting()` and `withdraw()`'s docstring - and no
+earlier patch writes any of them; its other eight hunks edit
+`no-expiry-cards.patch`'s own output and cost nothing) - with their positions,
+instead of pretending they are not there. The position-29 rule is kept as a
+REPORTED fact, not a gate.
 
 THE PIN
 
@@ -235,6 +242,31 @@ PIN = {
     # patch to the published base and proves an overdue card leaves the list
     # while a live one does not.
     "no-expiry-cards.patch":                   (9, 69),     # position 36
+    # 2026-10-28, no-deadline-cards.patch (the owner's ruling: "if there
+    # doesn't need to be a time limit don't have one"). It is the patch
+    # no-expiry-cards.patch is written against, so its context on THAT patch's
+    # own lines costs this walk nothing (8 of its 16 hunks). The other EIGHT
+    # read text only the owner's PC holds, and every one is honest rather than
+    # drift - no patch in this walk writes it:
+    #   * `_pending_card_id()`'s SELECT and its loop, which the owner's gate
+    #     already had (`gate-touches.patch` added the digest column around it,
+    #     not the row read);
+    #   * `check()`'s ask branch: the `reused = False` line, the INSERT's
+    #     column list and its bound values - the owner's own queue write, which
+    #     the digest hunk of `gate-touches.patch` sits inside but does not
+    #     replace;
+    #   * `check()`'s late-answer block after the wait (the owner's UPDATE and
+    #     its four honour-the-late-decision returns) - that block is not
+    #     touched by any earlier patch, including `gate-outcome.patch`, whose
+    #     hunks stop at the audit line's neighbourhood;
+    #   * `pending()`'s opening (`_init()` and the SELECT);
+    #   * `decide()`'s body, and the insertion point of `still_waiting()`
+    #     before `withdraw()`;
+    #   * `withdraw()`'s docstring, which this patch rewrites.
+    # Checked the other way by backend/test_gate_no_deadline.py, which applies
+    # BOTH patches to the published base with `git apply` (no fuzz), compiles
+    # the result and drives the card's whole life.
+    "no-deadline-cards.patch":                 (8, 133),    # position 37
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under

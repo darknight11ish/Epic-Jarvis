@@ -132,7 +132,8 @@ on a throwaway copy instead.
 | `wiki.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The wiki builder.** Adds `GET /api/wiki` (the documents in your vault's `Jarvis Wiki/Sources` and their state) and `GET`/`POST /api/wiki/ingest` ("Add to wiki": the second card's model proposes pages, then ONE approval card, `wiki_update`, before anything is written), and the approval notice's words for it. After `second-card.patch` (textual). Needs `jarvis_wiki.py` — see its own section, at the end, and `docs/SECOND-CARD.md`, "Wiki builder". |
 | `big-model.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The big model (slow), all switched off.** Adds `GET`/`POST /api/big-model` (three switches; each ON is one approval card, `big_model_enable`), `GET /api/deep` and `POST /api/deep/ask` (deep questions, answered in the background), and the approval notice's words for the new action. Last in the list, after `wiki.patch` (textual). Needs `jarvis_big_model.py` — see its own section, at the end, and `docs/BIG-MODEL.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
-| `no-expiry-cards.patch` | `jarvis_gate.py` | **Which approval cards expire at all** (the owner's ruling of 2026-10-23, Q1): ONLY pairing a device (`pair_device`, `unretire_shared_key`), registering a phone's approval key (`register_approval_key`) and restoring a backup (`restore_backup`) wait without a deadline; every routine card keeps the 15-minute window `approval-expiry.patch` added. Nothing a caller sends can choose this — the exempt set is keyed on the gate's own action ids, never on a flow name, a number or an omitted value. Adds `timeout_for()`, `withdraw()` (so a cancelled pairing does not leave a permanent card), the start-up sweep's exclusion, and the `jarvis_owner_check.py` / `jarvis_devices.py` halves. **Since 2026-10-28 the sweep is one helper (`_expire_overdue()`) and `pending()` runs it before reading**, so a card left `pending` by a dead waiting thread leaves the queue on the next read instead of for the life of the process — the owner's "approval cards that are expired" on his phone. Needs `approval-expiry.patch` (textual) — see its own section, at the end. |
+| `no-expiry-cards.patch` | `jarvis_gate.py` | **Which approval cards expire at all** (the owner's ruling of 2026-10-23, Q1): ONLY pairing a device (`pair_device`, `unretire_shared_key`), registering a phone's approval key (`register_approval_key`) and restoring a backup (`restore_backup`) wait without a deadline; every routine card keeps the 15-minute window `approval-expiry.patch` added. Nothing a caller sends can choose this — the exempt set is keyed on the gate's own action ids, never on a flow name, a number or an omitted value. Adds `timeout_for()`, `withdraw()` (so a cancelled pairing does not leave a permanent card), the start-up sweep's exclusion, and the `jarvis_owner_check.py` / `jarvis_devices.py` halves. **Since 2026-10-28 the sweep is one helper (`_expire_overdue()`) and `pending()` runs it before reading**, so a card left `pending` by a dead waiting thread leaves the queue on the next read instead of for the life of the process — the owner's "approval cards that are expired" on his phone. Needs `approval-expiry.patch` (textual) — see its own section, at the end. **The routine half is SUPERSEDED the same day by `no-deadline-cards.patch`**: the owner ruled that no card shows a time limit, so this patch's "every other card keeps its window" is no longer the shipped CARD behaviour - the window now belongs to the REQUEST, and the every-read sweep this patch added is KEPT, re-keyed on the request's own moment (`waited_until`); its own section says so. |
+| `no-deadline-cards.patch` | `jarvis_gate.py` | **No countdown, and a finished request's card leaves the queue** (the owner's ruling of 2026-10-28: "if there doesn't need to be a time limit don't have one"; Gemini F3 / ruling f). Removes `expires_in` from every `/api/pending` row, stops `check()` marking a row `expired` when its request's wait ends, and **KEEPS #965's every-read sweep**, re-keyed on the request's own last moment recorded on the row (`waited_until`): `pending()` settles a routine card past that plus the same 60-second grace before it reads, so no screen is ever handed a live Approve that can only answer 409. A routine card is still drawn, with Approve and Deny and no countdown, while its request is genuinely waiting; a ceremony card (`waited_until = NULL`) is never swept. Revalidates at the decision too — `still_waiting()`, `decide()` refusing an APPROVE, and `jarvis_owner_check.approve_check()` answering 409 with one plain sentence and withdrawing the card. A DENY always works. **Never auto-approves, no bulk approve, nothing cleared by a client, no new route.** Its `jarvis_owner_check.py` half is the shipped module. Applied after `no-expiry-cards.patch` (textual) — see its own section, right after that one. |
 | `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. Since 2026-09-29 its sound block also serves `POST /api/voice/voices/sample` ("Hear it": one fixed line in a named built-in voice, changes nothing) and needs `jarvis_kokoro.py` (Kokoro v1.0, voices by name) - "Kokoro v1.0 voices, saved by name", at the very end. |
 | `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
 | `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them (`provenance`, `conversation_id`, `device`, and since 2026-09-25 `interrupted` - the voice flow's cut-off sentence), and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). **Archive a chat (2026-10-30, JARVIS-API §18.3):** `POST /api/history/archive {"id", "archived"}` puts ONE chat away or (false) takes it back out - reversible, metadata only, no card and no confirm, `GET /api/history?archived=1` lists the archived ones and every conversation row carries `archived`; delete keeps its own confirm. Tested by `test_chat_log.py`. **Chat tags (2026-09-30, `docs/CHAT-TAGS-DESIGN.md`, JARVIS-API §99):** the same file also keeps the owner's tags - `GET/POST /api/history/tags`, `POST /api/history/tag`, `GET /api/history?tag=`; a sealed tag registry in `meta`, a plain `tag_id` column on each chat, no card, and it works while history is off (only the key is needed). Tested by `test_chat_tags.py`. **Fork from here (2026-09-30, JARVIS-API §110):** `POST /api/history/fork {"id", "upto"}` copies the first turns of a kept chat into a new "Fork of ..." chat (re-sealed under the new id, tag and outside-text marks kept, its own learning hush so nothing is learned twice, never a crisis, support, chatbot or comparison chat, no card, works with history off); every conversation row copy now reads one column list (`CONV_COLS`). Tested by `test_chat_fork.py`. Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
@@ -6201,6 +6202,14 @@ Checks shows the new switch on the wake word card.
 ---
 
 # `approval-expiry.patch` — how long each approval card has left
+
+> **Superseded on 2026-10-28 by `no-deadline-cards.patch`** (the owner's ruling:
+> "if there doesn't need to be a time limit don't have one"). The patch still
+> adds the field, and still does exactly what this section says; the later
+> patch removes it again, so the shipped stack sends no `expires_in` for any
+> card and no countdown is drawn. The field's own tests and this description are
+> kept as the record of the patch; the shipped behaviour is in the
+> `no-deadline-cards.patch` section, after `no-expiry-cards.patch`.
 
 **What it fixes.** An approval waits `approval_timeout_seconds` (900 in the
 shipped `jarvis-framework.toml` since 2026-10-13 — fifteen minutes, and the owner
@@ -19632,6 +19641,15 @@ with `lane-warning.mjs`) and `jarvis-client/.../ModelLaneTest.kt`.
 
 # `no-expiry-cards.patch` — four cards wait for the owner, the rest still expire
 
+> **The "the rest still expire" half is SUPERSEDED on 2026-10-28** by
+> `no-deadline-cards.patch`: the owner ruled that no card has a time limit
+> ("if there doesn't need to be a time limit don't have one"), so no routine
+> card is ended at fifteen minutes any more. This patch is unchanged and still
+> applies to its published base; what changed is the patch after it. Its
+> section below is the record of the 2026-10-23 ruling and of its own patch,
+> and `backend/test_gate_no_expiry.py` still proves that patch in isolation.
+> The shipped card life is the `no-deadline-cards.patch` section, below.
+
 **What it fixes.** An approval card waits `approval_timeout_seconds` and then
 refuses itself. That is right for an email, a web page, a command or a draft:
 re-raising one is cheap. It is wrong for three interactive ceremonies the owner
@@ -19747,7 +19765,128 @@ required proofs are the shipped 900 seconds and a routine card really ending at
 back on 900; every omission / 0 / negative / malformed / unknown flow value
 failing closed; and the patch applying to the published base and carrying #378's
 900 rather than the old 180. The supporting tests drive approval, denial,
-withdrawal, the sweep, `expires_in` and the Windows Hello half.
+withdrawal, the sweep, `expires_in` and the Windows Hello half. (Those proofs
+are about THIS patch in isolation; the shipped card life is the next section.)
+
+---
+
+# `no-deadline-cards.patch` — no countdown, and a finished request's card leaves
+
+**The owner's ruling, 2026-10-28:** **"if there doesn't need to be a time limit
+don't have one."** Until this patch a routine card drew a countdown, waited
+`approval_timeout_seconds` (900 s in the shipped settings) and then vanished at
+the same second. A card he picked up late, or wanted to think about, was simply
+gone. The 2026-10-23 ruling (Q1) had already accepted that for four ceremonies;
+this ruling is the same answer for every card. **It is not a literal no-limit,**
+because the wait holds the thread that will run the action: the honest synthesis
+below is what Gemini's review called for (F3, ruling f).
+
+**What it does.** No screen draws a countdown, and a card whose request has
+finished leaves the queue.
+
+- `pending()` sends **no `expires_in`** for any card - never `0` (which both
+  apps read as "expired now") and never a large number (which would draw a
+  countdown ending in a refusal that never comes). Both clients already treat
+  an absent field as "no countdown" (the four ceremonies did this before the
+  ruling), so every surface draws the card with its Approve and Deny and no
+  clock. The clients still READ the field: a backend older than this patch
+  keeps working.
+- `check()` no longer marks the row `expired` when its wait ends. The row stays
+  `pending` inside the grace below, so the card stays on every screen without a
+  countdown until the owner answers it, the PC withdraws the work, or the next
+  read settles it.
+- **#965's every-read sweep is KEPT**, and it is the part that stops the
+  "zombie Approve" (Gemini's F3, ruling f). `pending()` runs
+  `_expire_overdue()` before it builds the list, keyed on the row's own
+  `waited_until`: a routine card past that moment plus the same 60-second grace
+  is marked `expired` and NOT served. So no client is handed a card whose
+  Approve is guaranteed to answer `409 LATE_APPROVAL` after Windows Hello. It is
+  a lapse, never a decision, and it is recomputed on the PC at the moment of the
+  read.
+
+**The request keeps its patience, and that is why a late "yes" is not silently
+recorded.** The thread that waits for an answer is the thread that runs the
+action. Holding it for ever is a leak on a `ThreadingHTTPServer`, it makes
+"Stop everything" unable to interrupt a wait, and a dozen modules
+(`jarvis_vault`, `jarvis_voice_enroll`, `jarvis_voices`, `jarvis_speech`) read
+`approval_timeout_seconds` to size their own waits and would give up while a
+card lived - the "approved, nothing ran" pair this project refuses to produce.
+So the REQUEST keeps the shipped wait and writes its last moment on the row
+(`waited_until`); the CARD has no deadline. When the request ends:
+
+- until the next read settles it (60 seconds of grace, below) the row stays
+  `pending` and both buttons are drawn;
+- an **Approve** is refused, at the decision, in one plain sentence:
+  *"That card is not waiting for you any more: the request that asked has
+  finished, so nothing can be approved from it. Nothing was changed - ask
+  Jarvis again if you still want it."* The card is withdrawn at that moment
+  (state `expired`: a lapse, never a denial) so it leaves the list then;
+- a **Deny always works**. Refusing is the safe direction, and clearing an old
+  card with it is exactly what the ruling leaves the owner able to do.
+
+**Where the revalidation lives.** `_wait_open()` is the one rule: a row's
+`waited_until` against this PC's clock (a NULL one is True only for the four
+ceremonies). `still_waiting()` exposes it read-only; `decide()` refuses an
+APPROVE when it answers False; and `jarvis_owner_check.approve_check()` - the
+PC's own wrapper on `POST /api/approve`, before any Windows Hello prompt - asks
+it first and after the prompt, returns the 409 with the sentence above and
+calls `withdraw()`. An older gate without `still_waiting` gets the previous
+behaviour from the shipped module. It changes no route: the same
+`POST /api/approve` answers 409, which every client already treats as "not
+waiting any more", and the desktop HUD now shows the PC's own sentence.
+
+**The four ceremonies of 2026-10-23 are the only cards with no request wait.**
+`pair_device`, `unretire_shared_key`, `register_approval_key` and
+`restore_backup` have a NULL `waited_until`: their request waits until the flow
+withdraws the card, the sweep never touches them, and they stay answerable for
+as long as the owner needs. Nothing else has that: every routine card's request
+has a number, and its card leaves once that number plus the grace has passed.
+
+**The sweep runs at start-up and on every read, and the 60-second grace stays
+sane.** `_expire_overdue()` settles only rows no living request can act on: a
+routine row whose `waited_until` is more than the 60-second grace past, or a
+pre-patch row with no `waited_until` at all. `_init()` runs it once per process
+and `pending()` runs it before every SELECT, so a row left by a dead waiting
+thread does not outlive the next read. The four ceremonies are never touched.
+The grace is a BOOKKEEPING margin, not an approval one: `_wait_open()` refuses
+an approval at the exact `waited_until`, so the grace cannot turn a late tap
+into an "approved" with nothing done. The `_pending_card_id()` reuse rule adds
+the same test - a lapsed card cannot swallow a new identical request and answer
+it with "the same request is already waiting for you".
+
+**The costs, said plainly.** A late Approve is refused rather than honoured:
+nothing is left to run it, and recording a yes nothing acts on is the exact lie
+this change exists to prevent. For up to 60 seconds after the request's wait
+ends, a card can still be on a screen whose queue was read inside the grace; a
+tap in that window answers 409 with the sentence, and the next read takes the
+card off. That is the race guard, not the routine path, and it is the smallest
+window #965's grace allows. A backend restart does not preserve a card whose
+request died with it: the row has no request to act on its answer, so start-up
+settles it - the card was never going to be answerable to anything. A row from a
+backend older than this patch (no `waited_until`) is settled on the first read
+for the same reason: nothing can approve it.
+
+**Deploying it.** `jarvis_gate.py` is patch-carried, so apply the patch;
+`jarvis_owner_check.py` is SHIPPED, so copy it whole (the script does both in
+one run), then restart the backend. `tools/reconcile_live_backend.py` carries
+the gate half as sixteen hunks (`"hunks": True`) after `no-expiry-cards.patch`'s
+eight regions, so the live PC needs #773's patch in place first - it is.
+
+**Test it.** `backend/test_gate_no_deadline.py` — 70 checks, built the way this
+repository tests a gate patch: apply BOTH patches to
+`jarvis-backend/jarvis_gate.py` with `git apply`, import the result, and drive
+the card's whole life. Its required proofs are a routine card still `pending`
+inside the grace with no `expires_in`; the read sweep taking it after
+`waited_until + 60` so no live Approve is left, with the row `expired` and a
+lapsed or fabricated id refused; a late approval inside the grace refused by the
+gate and by the owner's route with the exact sentence, the card withdrawn at
+that moment; a decision inside the window still accepted; a deny still clearing a
+card whose request is gone; the four ceremonies answerable a day later and never
+swept; a withdrawn card still gone; a dead process's rows settled at start-up AND
+on the next read while a ceremony row and an inside-the-grace row are left
+alone; and a lapsed card not swallowing a new identical request. The earlier
+suites (`test_gate_no_expiry.py`, `test_pending_expiry_on_read.py`) stay green as
+evidence for the patches they are about.
 
 ---
 
