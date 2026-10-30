@@ -3084,15 +3084,21 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 "Update the backend by running apply-patches.ps1, then open this again." };
             }
             if (args.tag) h.reads[h.reads.length - 1].tag = args.tag;
+            h.reads[h.reads.length - 1].archived = args.archived === true;
             // `kind` narrows the list, as GET /api/history?kind= does; `tag`
-            // (docs/CHAT-TAGS-DESIGN.md) as GET /api/history?tag= does.
+            // (docs/CHAT-TAGS-DESIGN.md) as GET /api/history?tag= does; and
+            // `archived=1` is the archived list, the ONLY one with archived
+            // chats in it (GET /api/history, 2026-10-29). Every row carries
+            // its own `archived: true|false`, as the PC sends it.
             const all = [...h.conversations]
               .filter((c) => !args.kind || (c.kind || "chat") === args.kind)
               .filter((c) => !args.tag || (args.tag === "none"
                 ? c.tag_id == null : c.tag_id === Number(args.tag)))
+              .filter((c) => (args.archived === true) === (c.archived === true))
               .sort((a, b) => b.updated - a.updated);
             const older = args.before == null ? all : all.filter((c) => c.updated < args.before);
-            const page = older.slice(0, args.limit || 30);
+            const page = older.slice(0, args.limit || 30)
+              .map((c) => ({ ...c, archived: c.archived === true }));
             const out = JSON.parse(JSON.stringify({ ...h.status, conversations: page }));
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
@@ -3380,6 +3386,24 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const had = h.conversations.some((c) => c.id === args.id);
             h.conversations = h.conversations.filter((c) => c.id !== args.id);
             return had ? { ok: true } : { ok: true, gone: true };
+          }
+          // Puts ONE chat away, or brings it back (brain/history.rs
+          // brain_history_archive; GET /api/history?archived=1 above is the
+          // archived list). Reversible and card-free; `history.archived` holds
+          // every write, and a hidden list refuses it like the PC's 423 does.
+          case "brain_history_archive": {
+            const h = window.__history;
+            (h.archivedWrites = h.archivedWrites || []).push({ id: args.id, archived: args.archived });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
+                "and confirm it is you with Windows Hello first.");
+            }
+            const c = h.conversations.find((x) => x.id === args.id);
+            if (!c) throw new Error("That conversation is no longer kept on this PC. It was deleted, " +
+              "or it was older than the keep setting.");
+            c.archived = args.archived === true;
+            return { ok: true, id: args.id, archived: c.archived };
           }
           case "brain_history_settings": {
             const h = window.__history;
@@ -3718,8 +3742,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     status: { enabled: true, recording: true, why_not: "", waiting: false, keep_days: 0,
               encrypted: true, ...((history && history.status) || {}) },
   }));
-  Object.assign(window.__history, { reads: [], opened: [], deleted: [], settings: [], searches: [] });
-  // Unset, automatic learning as the owner has it by default: learning on,
+  Object.assign(window.__history, { reads: [], opened: [], deleted: [], settings: [],
+    searches: [], archivedWrites: [] });  // Unset, automatic learning as the owner has it by default: learning on,
   // learning automatically on, sensitive topics off, nothing waiting, and
   // nothing saved yet. `missing` is a PC without the list, `statusMissing`
   // one without GET /api/memory/learning.
