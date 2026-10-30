@@ -2919,6 +2919,45 @@ really has - Kokoro v0.19 or v1.0, with "Hear it" on every voice: section
 94.** The old number is carried over once, and `[voice] tts_speaker_id` keeps
 its old numbering.
 
+**ONE VOICE, ONE SETTING, AND IT IS THE ONE THAT IS HEARD** (2026-10-28; the
+owner's report: *"when i change the jarvis voice in the android app it still
+stays the same in jarvis live in the android app. it needs to be consistent,
+including across gemini on desktop and android. if i change voice on desktop
+jarvis it should change it on android jarvis and so forth"*). The built-in
+voice above and the speaking speed are ONE PC-wide pair of settings,
+`<config dir>/voices/state.json`, and every spoken sentence on this PC is made
+in them: `jarvis_speech.tts_voice()` reads `jarvis_voices.speaker()` /
+`speed()` and nothing else. `POST /api/voice/voices/speaker` and
+`/api/voice/voices/speed` are the only writes - both apps' Voices screens, the
+chat sentences of §58.2.1 and a chosen personality all go through the same
+two functions - and each is one `voices/state.json` write, one audit line and
+one `voices` event; both apps re-read on that event and show the same voice: a
+change made in either app is heard, named and shown in the other.
+
+**A chosen personality's voice is applied TO this setting, never beside it**
+(the same day). With §27.7's "switch Jarvis's spoken voice" ON - the default -
+`jarvis_manner.set_personality()` (and turning that switch on) writes the
+preset's `voice_fallback` through `jarvis_voices.set_speaker_name`, the same
+function the picker calls. So the screen, the event and the sound are one
+value. **What this replaced, said plainly:** until 2026-10-28
+`jarvis_speech.tts_voice()` asked the personality first and returned its
+fallback voice and pace before ever reading `jarvis_voices`, so with a preset
+chosen (the default lock) the pickers showed one voice, `voices/state.json`
+held it, both apps showed it - and every reply was spoken in another, which is
+why changing the voice in either app changed nothing that was heard. The
+preset's own pace (`voice_speed`, 0.94-1.1) is **not** applied: a pace on this
+PC is one of three choices (slower, normal, faster) and a preset's own lands on
+"normal"; that small loss is deliberate and recorded in the decision log.
+
+**Live is the same path, and the phone now says so.** A Live reply asks
+`/api/voice/say` for its sound exactly like every other reply
+(`VoiceSession` -> `api.say`), so it speaks in this one setting - there has
+never been a second voice for Live. The phone's Live screen names the voice it
+is speaking in, from the same `GET /api/voice/voices` read the Voices screen
+uses (`voice/VoiceNow.kt`), and says plainly when the PC has no voice engine
+and Live is using the phone's own offline voice instead - that one is a voice
+no PC setting can change, which is now visible rather than mysterious.
+
 **Voice follows the face** (added 2026-09-27, the owner's choice): with one
 of the animal faces showing (red panda, pygmy owl, sea otter, monkey, and
 the robot, which counts as one - `docs/CRITTERS.md`), the **built-in** voice becomes that animal's: one of
@@ -3041,7 +3080,7 @@ owner.
 | `POST /api/voice/voices/active` | `{"voice": "<id>"}` or `{"voice": "builtin"}` | `builtin`: **200** `{"ok": true, "active": "builtin", "pending": false, "message"}` at once, no card (it also withdraws a waiting switch card and stops the better voice). A custom voice: **202** `{"ok": true, "pending": true, "voice": "<id>", "message"}` - ONE card (`custom_voice`); **200** `{"ok": true, "active": "<id>", "pending": false, "message"}` if already active; **404** unknown id; **409** as for create (`refused: "owner_voice"`, a card waiting, tier not `ask`, or its recording unreadable) | Nothing changes until the card is approved. |
 | `POST /api/voice/voices/delete` | `{"voice": "<id>"}` | **200** `{"ok": true, "deleted": "<id>", "active": "<id>" \| "builtin"}` at once, no card; **400** for `builtin`; **404** unknown id; 500 `{"ok": false, "error"}` if the folder could not be removed | Deletes the folder. If Jarvis was speaking in it, it goes back to the built-in voice (`active` says so). |
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
-| `POST /api/voice/voices/speaker` (added 2026-09-27; by NAME since 2026-09-29) | `{"speaker": "bm_george"}` (one of `speaker.choices[].id` - a NAME; a number is refused) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
+| `POST /api/voice/voices/speaker` (added 2026-09-27; by NAME since 2026-09-29) | `{"speaker": "bm_george"}` (one of `speaker.choices[].id` - a NAME; a number is refused) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). **The ONE write of the built-in voice:** a chosen personality with "switch Jarvis's spoken voice" on applies its voice through the same function (`jarvis_voices.set_speaker_name`, §15), so the screen, the event and the sound are one value whichever app or person changed it last. |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
 | `POST /api/voice/voices/face_offer` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot", "answer": "use" \| "keep"}` (both, nothing else) | **200** `{"ok": true, "message": "The Red Panda speaks in its own voice now. \"Voice follows the face\" is on; turn it off in the voice settings to go back." \| "Jarvis keeps your voice for the Red Panda. Each animal asks once for itself.", "face_voice": {...as in status(), with "offer": null}}` at once, no card either way; **400** `{"ok": false, "error"}` in words - "send the face and the answer, \"use\" or \"keep\"", "choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot", "the answer must be \"use\" or \"keep\""; 500 `{"ok": false, "error"}` if it could not be saved | The answer is kept for that face alone (`face_answers` in `<config dir>/voices/state.json`); an animal speaks as itself only with the switch on and its answer "use". "use" also turns "Voice follows the face" on; "keep" leaves the switch as it is. Rings the `voices` event (`{"what": "face_offer", "outcome": "use" \| "keep"}`). The audit line has the face and the answer only. |
 | `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot", "speaker": "af_sarah" (a NAME from `face_voice.animal_choices.voices`), "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on; with it on, and that animal not answered for or answered "keep", the message says so); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter the Monkey or the Robot", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
@@ -7602,6 +7641,44 @@ as aliases of `voice_sync` / `custom_personalities`, and `personality_default`,
   secrets before it is stored; the name is capped at 60 characters and the
   other fields at 240, with at most 20 saved presets.
 
+**Both apps list the same presets, from this one answer (2026-10-28).** The
+owner's ask that day was "make sure the presets for jarvis personality and
+other presets are consistent too". Until then the phone's Mind screen drew only
+the legacy Warm/Plain pair (docs/ARCHITECTURE.md §8 recorded it as desktop
+first), and it marked "Plain" as in use whenever the PC was on ANY preset other
+than Warm Collaborator - because `manner` is derived on the PC
+(`jarvis_manner.current()`: warm only for `warm_peer`, plain for every other
+preset). A screen naming a preset Jarvis was not in is the same class of bug as
+the voice that disagreed with every screen showing it (§15, 2026-10-28).
+
+What both apps do now, with no new route and no new field:
+
+| | desktop (`manner-settings.js`, `personalities.js`) | phone (`Manner.kt`, `MannerPlate.kt`) |
+|---|---|---|
+| the list | `GET /api/manner`'s `personalities`; the local copy in `personalities.js` is the fallback for an older PC and is held word-for-word to `contract/personalities.json` by `tests/personalities.mjs` | the SAME `personalities` array, in the PC's order, titles and descriptions verbatim |
+| the mark | the PC's `personality` | the PC's `personality`, and ONLY that id (a derived `manner` word is never matched to a preset) |
+| a switch | one field, `{"personality": "<id>"}` | the same one field, `{"personality": "<id>"}` |
+| live | re-reads on its own actions | re-reads on the `manner` event (below) |
+| the legacy pair | hidden once the PC sends a list | hidden once the PC sends a list; both keep it for an older PC |
+| the four dials, "My personalities" editor, Hear Sample | here | **not drawn** - one line says where they are (ARCHITECTURE §8) |
+
+**A client must never switch a preset with `{"manner": "warm"|"plain"}`.** That
+legacy write is still accepted and still means what it meant (it maps to
+`warm_peer`/`tactical_ops`), but it also resets the four dials
+(`jarvis_manner.handle_set`'s legacy branch writes the mapped preset's dials),
+so it silently replaces a preset chosen on the other device. `{"personality":
+id}` changes only the preset and its own dials.
+
+**`manner` is an event kind (2026-10-28).** Every write that goes through
+`jarvis_manner._merge_setting` - a personality, the manner word, humour, a dial,
+the voice-sync switch, saving or deleting a saved personality - publishes
+`manner` with `{manner, personality, personality_explicit, humor, voice_sync,
+dials}`. Like every other kind it is a doorbell, not state: the phone re-reads
+`GET /api/manner` (`JarvisRuntime.mannerTick`), so an open Mind screen follows a
+switch made in the desktop's Settings window, the HUD's Presets menu or the chat
+sentence without being reopened. A refused body and a damaged `manner.json` ring
+nothing, because nothing changed.
+
 **Asking what each one does** (2026-10-26, `jarvis_quick.py`): "what does the
 Classic Butler personality do", "what is TARS like", "describe the butler
 personality" and "tell me about TARS" answer with that preset's own
@@ -7631,8 +7708,12 @@ replaces the whole persona block with the calm support text**, so no preset can
 joke or criticise through a difficult moment; the #492 sensitive-fact line
 stays exactly `"It's on your screen."`; and the quick (0 ms) confirmations -
 timer, reminder, done, stopped, muted, walk brain-dump - answer in the active
-preset's own words. Kokoro voice/speed follow a chosen preset unless the owner
-turns voice sync off.
+preset's own words. Kokoro's VOICE follows a chosen preset unless the owner
+turns voice sync off - and since 2026-10-28 that means the preset's
+`voice_fallback` is WRITTEN into the one PC-wide voice setting (§15), so both
+apps show the voice that is heard and a voice picked in either app afterwards
+wins. The preset's own pace is not applied (a pace here is one of three
+choices; §15 says why).
 
 Known gaps, said plainly (2026-10-23): **`jarvis_live.py` does not yet inject
 the persona block or switch personality mid-session**; the weighted Kokoro
@@ -9687,7 +9768,7 @@ and passes the origin check.
  "title": "Things you can say",
  "detail": "Real sentences Jarvis already answers without the AI model. Tap one to put it in the box - it does not send.",
  "sentences": [<the 10, in order>],
- "footer": "More: right-click the Jarvis icon by the clock.",
+ "footer": "More: right-click the Jarvis icon by the clock on the PC.",
  "walkthrough_examples": [<3 of the 10, for a walkthrough screen 2>],
  "help_title": "What can I say?",
  "help_body": <the Help/FAQ paragraph, naming every sentence>,
@@ -12067,7 +12148,12 @@ the change is cosmetic and PC-wide, like the speed and the manner, so it is one
 and Clara answer to the short name the owner says as well as to their picker
 label ("Ashby (made for Jarvis)") and their real id (`mix_ashby`), because the
 label alone never matched the sentence. A name this PC's pack does not offer is
-refused with the real voice names and changes nothing. A RECORDED voice is a
+refused with the real voice names and changes nothing - except a Jarvis-made
+blend (Ashby, Clara) this PC has not made yet: those are known voices that are
+absent, not unknown ones, so the answer says they are not made yet, in the
+Voices screen's own words (`jarvis_kokoro.BLENDS_TO_MAKE`, naming the one line
+that makes them), instead of listing the 22 offered voices (2026-10-29, B3 of
+the phone field test). A RECORDED voice is a
 different feature: adding or switching to one is the `custom_voice` card, in
 the Voices screen, and no chat sentence can select one.
 

@@ -1636,11 +1636,15 @@ object JarvisRuntime {
                     scope.launch { runCatching { phoneNotificationsSettings() } }
                 }
             }
-            // A custom-voice card ended, a voice was deleted, the voice went
-            // back to the built-in one, or the better voice went off
-            // (`{"what", "outcome"}` - a doorbell, never a name or words).
-            // Read again only once the Voices screen has asked.
-            "voices" -> if (customVoicesAsked) refreshCustomVoices()
+            // The PC's voice changed - a picker in either app, a speed change,
+            // a personality applying its voice, or a voice deleted (`{"what",
+            // "outcome"}` - a doorbell, never a name or words). The one setting
+            // is read again EVERY time, not only once the Voices screen has
+            // asked (2026-10-28): the Live screen names the voice it is speaking
+            // in from this same read, so a change made on the desktop has to
+            // reach a phone that never opened that screen. It is one cheap GET
+            // that loads no model and starts nothing (`GET /api/voice/voices`).
+            "voices" -> refreshCustomVoices()
             // A deep question finished (`{"id", "state"}` only - a doorbell,
             // never the question or the answer). The list is re-read for the
             // answer, and the switches for the speed it measured.
@@ -1687,6 +1691,14 @@ object JarvisRuntime {
             // reads the route again, and nothing is fetched while that plate
             // is not open.
             com.jarvis.client.net.Antislop.EVENT -> _antislopTick.update { it + 1 }
+            // How Jarvis talks was changed somewhere else: a personality
+            // switched from the PC's Settings page, the HUD's Presets menu or
+            // the chat sentence, the manner word, humour, the voice-sync
+            // switch or a dial. One `manner` frame, a doorbell like the rest:
+            // the Mind plate reads `GET /api/manner` again, so the preset it
+            // marks as "in use" is the PC's own answer and never a local
+            // guess. Nothing is fetched while that plate is not open.
+            com.jarvis.client.net.Manner.EVENT -> _mannerTick.update { it + 1 }
             // The brief covers these; the Watches plate on Mind reads its
             // lists again, as the desktop's Brain does.
             "finding" -> _watchTick.update { it + 1 }
@@ -3040,6 +3052,33 @@ object JarvisRuntime {
         return com.jarvis.client.net.Manner.replyLine(api.mannerPost(body), manner)
     }
 
+    /**
+     * Goes up by one on every `manner` event, so this screen reads itself
+     * again when the personality was switched somewhere else - the PC's own
+     * Settings, the HUD's Presets menu, or the chat sentence ("switch to the
+     * Classic Butler personality"). The frame carries `{manner, personality,
+     * humor, voice_sync, dials}` (`jarvis_manner._publish`), but the event is
+     * a doorbell like every other kind ([onEvent]'s own rule): the plate owns
+     * its read, so this re-runs the SAME [manner] GET it opens with.
+     */
+    private val _mannerTick = MutableStateFlow(0)
+
+    /** Read by `MannerSection`'s `LaunchedEffect` beside its own re-reads. */
+    val mannerTick: StateFlow<Int> = _mannerTick.asStateFlow()
+
+    /**
+     * ONE change: switch to a personality preset (`GET /api/manner`'s
+     * `personalities`, §27.7). The body is `{"personality": "<id>"}` and
+     * nothing else - the SAME one-field write the desktop sends. No card
+     * (wording only), held on a stale link like [setManner].
+     */
+    suspend fun usePersonality(id: String, title: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Manner.personalityBody(id)
+            ?: return "That is not one of the PC's personalities."
+        return com.jarvis.client.net.Manner.personalityReplyLine(api.mannerPost(body), title)
+    }
+
     // ------------------------------------------------- anti-slop filter ----
     // "Anti-Slop filter" (2026-10-28) - see
     // [com.jarvis.client.net.Antislop] and ui/screens/AntislopPlate.kt. The
@@ -3704,14 +3743,15 @@ object JarvisRuntime {
 
     private val _customVoices = MutableStateFlow<CustomVoices.Read>(CustomVoices.Read.Loading)
 
-    /** `GET /api/voice/voices`, read when the Voices screen opens and on the `voices` event. */
+    /**
+     * `GET /api/voice/voices` - the ONE PC-wide voice (which built-in voice,
+     * and how fast), read when the Voices screen opens, by every change the
+     * owner makes here, and on the `voices` event. The Live screen names the
+     * voice it speaks in from this same read, whichever app changed it.
+     */
     val customVoices: StateFlow<CustomVoices.Read> = _customVoices.asStateFlow()
 
-    /** Set once the Voices screen has asked; the `voices` event only re-reads after that. */
-    @Volatile private var customVoicesAsked = false
-
     suspend fun refreshCustomVoices() {
-        customVoicesAsked = true
         _customVoices.value = CustomVoices.read(api.customVoices())
     }
 

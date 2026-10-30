@@ -3575,45 +3575,24 @@ def plain_voice_now(text: str = "") -> bool:
         return False
 
 
-def _personality_voice() -> "dict | None":
-    """The chosen personality's spoken voice recipe, or None.
-
-    None means "leave the PC's own voice exactly as it was": no personality has
-    been chosen, or the owner turned the voice-lock switch on. Never raises."""
-    try:
-        import jarvis_manner
-        return jarvis_manner.voice_for_speech()
-    except Exception:
-        return None
-
-
 def tts_voice(voices_module=None, *, plain: bool = False) -> tuple:
     """(Kokoro voice number, speed, pitch rise) for the built-in voice, read
     ONCE - so one sentence never mixes two faces' settings if the face
     changes halfway through reading them. `plain=True` (a crisis answer,
     plain_voice_now): the face left out - the owner's own built-in choice
     and speaking speed (jarvis_voices.speaker/speed), no pitch rise. Never
-    raises."""
-    # A chosen personality's voice, when the owner kept voice sync on: the
-    # preset's fallback voice (the voice in the pack that stands in for its
-    # blend) at the preset's speed. A PC with no chosen personality takes the
-    # old path below untouched, and a crisis answer always keeps the plain
-    # voice - a difficult moment is never read out in character.
-    if not plain:
-        spec = _personality_voice()
-        if spec:
-            try:
-                import jarvis_kokoro
-                paths = _sherpa_tts_paths()
-                kind = jarvis_kokoro.table_kind_of_file(paths["voices"])
-                sid = jarvis_kokoro.sid_of(kind, spec.get("fallback"))
-                if sid is not None:
-                    speed = float(spec.get("speed") or 1.0)
-                    if not 0.5 <= speed <= 2.0:
-                        speed = 1.0
-                    return int(sid), speed, 0.0
-            except Exception:
-                pass
+    raises.
+
+    THE OWNER'S CHOICE IS THE ONLY VOICE READ HERE (2026-10-28). Until then a
+    chosen personality with "switch Jarvis's spoken voice" on returned the
+    preset's fallback voice and speed BEFORE this function ever asked
+    jarvis_voices - so the Voices screen in both apps, the `voices` event and
+    `voices/state.json` all said one voice while the reply was spoken in
+    another, and changing the voice in either app changed nothing that was
+    heard (the owner's report of 2026-10-28). There is now one PC-wide voice
+    setting and this reads it; a personality applies its voice TO that setting
+    (jarvis_manner._apply_personality_voice) so the two can never disagree.
+    test_voice_one_state.py holds both halves to it."""
     V = _voices_mod(voices_module)
     if plain:
         if V is not None and hasattr(V, "speaker") and hasattr(V, "speed"):
@@ -3863,7 +3842,10 @@ def tts_speaker(voices_module=None) -> int:
 #   * the key is the whole sound recipe (active voice, engine, speaker, speed,
 #     pitch, crisis/plain voice, and the three Kokoro model files' sizes), so
 #     another voice, another speed or a replaced voice pack can never reuse a
-#     sound made for an older one. reload_engines() empties it too.
+#     sound made for an older one - and since a chosen personality applies its
+#     voice to `voices/state.json` rather than beside it (2026-10-28), the
+#     speaker/speed in the key really are the voice that was heard.
+#     reload_engines() empties it too.
 #   * bounded: REFLEX_MAX entries, the least recently used goes first.
 
 #: The fixed confirmations jarvis_quick.py writes itself. Every one is a
@@ -3926,7 +3908,13 @@ def _reflex_key(voices_module, voice_now, *, plain: bool) -> Optional[tuple]:
     engine is active (a custom voice's brief), the built-in speaker number,
     speed and pitch rise, whether this is the plain crisis voice, and the
     sizes of the three Kokoro model files - so a replaced voice pack or model
-    is a different key, not a stale hit."""
+    is a different key, not a stale hit.
+
+    The chosen personality's recipe is NOT in here any more (2026-10-28):
+    since the preset applies its voice to `voices/state.json` instead of
+    overriding the sound at speech time, a personality cannot make the sound
+    differ without the speaker number or speed above changing first - and
+    those are already keyed."""
     if not voice_now:
         return None
     try:
@@ -3946,20 +3934,13 @@ def _reflex_key(voices_module, voice_now, *, plain: bool) -> Optional[tuple]:
                 sizes.append(os.path.getsize(paths[name]))
             except Exception:
                 sizes.append(-1)
-        # The chosen personality's voice recipe is part of the key too: a
-        # switch that keeps the same fallback voice but a different blend or
-        # speed must never reuse the old sound.
-        persona, spec = "", ""
-        try:
-            import jarvis_manner
-            chosen = jarvis_manner.voice_for_speech()
-            if chosen:
-                persona = str(chosen.get("personality") or "")
-                spec = str(chosen.get("voice") or "")
-        except Exception:
-            persona, spec = "", ""
+        # The chosen personality's voice is not part of the key: it is applied
+        # to `voices/state.json` (jarvis_manner._apply_personality_voice), so a
+        # personality switch that changes the sound changes the speaker number
+        # or the speed above, and one that does not cannot make a different
+        # sound (2026-10-28).
         return (active, engine, int(sid), round(float(speed), 4),
-                round(float(semis), 4), bool(plain), persona, spec, tuple(sizes))
+                round(float(semis), 4), bool(plain), tuple(sizes))
     except Exception:
         return None
 

@@ -290,20 +290,32 @@ def t_one_owner_per_sentence():
           reply is not None and "Integrate calendar" not in reply.reply,
           reply and reply.reply)
 
-    # The Google answer owns the reads and the event sentences. Its own store
-    # read is stubbed, so this suite touches no network and no Credential
-    # Manager on this PC.
-    old_list, old_mode = G.list_events, G.mode
-    G.list_events = lambda days, **kw: {"ok": False, "connected": False,
-                                        "reason": "Google Calendar is not connected yet"}
+    # The Google answer owns the reads and the event sentences. Only the mode
+    # is stubbed - to the real default, "off" - so the read runs through the
+    # module's own disconnected answer (no network, no Credential Manager) and
+    # the sentence asserted here is the one the phone really shows.
+    old_mode = G.mode
     G.mode = lambda: "off"
     try:
         r = Q.answer("what's on my calendar today", sched=_Sched())
         check("a calendar read is the Google answer's, marked as a read",
               r is not None and r.intent == "google_calendar" and
               r.read == ["calendar_read"], r and (r.intent, r.read))
+        reply = r.reply if r is not None else ""
         check("... answered from the real state, not a promise",
-              r is not None and "not connected yet" in r.reply.lower(), r and r.reply)
+              "not connected yet" in reply.lower(), reply)
+        # B2, the phone field test of 2026-10-29: the phone read "Not connected
+        # yet - Google Calendar is not connected yet - Settings, Accounts, pick
+        # the private link or Google sign-in". Three things were wrong: said
+        # twice; a Settings, Accounts screen the phone does not have, with no
+        # word saying it is the PC's; and both ways named as if picked there.
+        check("... it says the way in is on the PC, because the phone has no "
+              "Accounts screen",
+              "On the PC" in reply and "Settings, Accounts" in reply, reply)
+        check("... 'not connected yet' is said once, not twice (the B2 defect)",
+              reply.lower().count("not connected") == 1, reply)
+        check("... the old desktop-only route that never said PC is gone",
+              "pick the private link or Google sign-in" not in reply, reply)
         add = Q.answer("add a meeting Tuesday 3pm", sched=_Sched())
         check("an event sentence is the Google answer's too",
               add is not None and add.intent == "google_calendar", add)
@@ -312,7 +324,7 @@ def t_one_owner_per_sentence():
               "I have added" not in add.reply and "Done" not in add.reply,
               add and add.reply)
     finally:
-        G.list_events, G.mode = old_list, old_mode
+        G.mode = old_mode
 
     # A private chat must not reach Google at all (private-chat.patch).
     check("a private chat does not reach the Google answer",

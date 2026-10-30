@@ -1135,9 +1135,41 @@ def _merge_setting(patch: dict) -> tuple:
             except OSError:
                 pass                # no last-good copy this time; the save still goes on
             os.replace(tmp, p)
-            return True, ""
         except OSError as exc:
             return False, SAVE_FAILED.format(why=type(exc).__name__)
+    # Outside the lock, and only once the write really landed: the doorbell
+    # rings AFTER the file the reader will read is in place, so a listener can
+    # never re-read the old state.
+    _publish()
+    return True, ""
+
+
+def _publish() -> None:
+    """Tell anything with an event stream open that "how Jarvis talks" moved.
+
+    ONE writer, ONE doorbell: every setter - a personality, the legacy manner
+    word, humour, a dial, the voice-sync switch, a saved personality - goes
+    through `_merge_setting`, so this is rung from there and nowhere else. The
+    frame carries the whole state so a listener can paint the right row
+    without guessing, but it is a doorbell like every other kind: both apps
+    re-read `GET /api/manner` (the phone's `onEvent` bumps
+    `JarvisRuntime.mannerTick`).
+
+    The repo's shape is one kind per feature - jarvis_antislop.py publishes
+    "antislop", jarvis_devices.py "devices" - so this publishes "manner".
+    Never raises: a backend without an event bus still changes the setting."""
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish("manner", {
+            "manner": current(),
+            "personality": current_personality(),
+            "personality_explicit": personality_chosen(),
+            "humor": humor_enabled(),
+            "voice_sync": sync_voice_enabled(),
+            "dials": dials(),
+        })
+    except Exception:
+        pass
 
 
 def user_personalities() -> list:
@@ -1418,9 +1450,18 @@ def personality_chosen(conversation_id: "str | None" = None) -> bool:
 
 
 def voice_for_speech() -> "dict | None":
-    """The active preset's blended voice, speed and fallback for
-    jarvis_kokoro/jarvis_speech, or None when the owner locked their voice or
-    never chose a personality (then the PC's own voice is untouched)."""
+    """The active preset's blended voice, speed and fallback, or None when the
+    owner locked their voice or never chose a personality (then the PC's own
+    voice is untouched).
+
+    THE RECIPE, NOT THE SOUND (2026-10-28). This used to be read by
+    jarvis_speech at speech time, ahead of the PC's own voice setting - so a
+    chosen personality silently overrode the built-in voice both apps showed,
+    and changing the voice in either app changed nothing that was heard (the
+    owner's report of 2026-10-28). The preset's voice is now APPLIED to the one
+    PC-wide setting by `_apply_personality_voice` below; this function says
+    what that preset wants, which is what the apply, the docs and the tests
+    read."""
     if not sync_voice_enabled() or not personality_chosen():
         return None
     active = current_preset()
@@ -1429,8 +1470,45 @@ def voice_for_speech() -> "dict | None":
             "speed": float(active["voice_speed"])}
 
 
+def _apply_personality_voice(active: dict) -> str:
+    """Give the PC-wide voice setting this preset's voice. Returns the voice's
+    label ("British (male) - George"), or "" when nothing was applied: the
+    voice-lock switch is off, the owner never chose a preset, this PC's voice
+    pack does not offer that voice, or jarvis_voices is missing.
+
+    ONE WRITE, ONE TRUTH (2026-10-28). It writes `voices/state.json` through
+    jarvis_voices.set_speaker_name - the same function (and so the same write,
+    audit line and `voices` event) `POST /api/voice/voices/speaker` calls - so
+    the voice that is heard, the voice both apps show and the voice that event
+    announces are one value, whichever app or person changed it last. The
+    preset's exact pace is NOT applied: a pace on this PC is one of three
+    choices (slower, normal, faster) and a preset's own 0.94-1.1 lands on
+    "normal", so it is not worth a second hidden number.
+
+    A temporary chat's personality never comes through here: it is not saved
+    and the voice is PC-wide, so `personality_chosen()` is what decides - not a
+    conversation.
+
+    Never raises: a personality switch must not fail because a voice could not
+    be stored, and nothing here is private (a preset id at most, in memory)."""
+    if not sync_voice_enabled() or not personality_chosen():
+        return ""
+    name = str(active.get("voice_fallback") or "").strip()
+    if not name:
+        return ""
+    try:
+        import jarvis_voices
+        ok, label = jarvis_voices.set_speaker_name(name)
+    except Exception:
+        return ""
+    return str(label) if ok else ""
+
+
 def set_personality(pid, *, keep_dials: bool = False) -> tuple:
-    """Switch to a built-in or saved preset. No card: it changes wording only.
+    """Switch to a built-in or saved preset. No card: it changes wording - and,
+    with "switch Jarvis's spoken voice" on (the default), the PC-wide built-in
+    voice as well, through the same write the Voices screen makes.
+
     Returns (ok, said) where `said` is the preset's in-character switch line."""
     active = preset(pid)
     if active is None:
@@ -1442,6 +1520,7 @@ def set_personality(pid, *, keep_dials: bool = False) -> tuple:
     ok, why = _merge_setting(patch)
     if not ok:
         return False, why
+    _apply_personality_voice(active)
     return True, str(active.get("switch_ack") or "")
 
 
@@ -1465,13 +1544,23 @@ def set_dial(name: str, value) -> tuple:
 
 
 def set_sync_voice(on: bool) -> tuple:
-    """Turn "switch Jarvis's spoken voice to match the personality" on or off."""
+    """Turn "switch Jarvis's spoken voice to match the personality" on or off.
+
+    Turning it ON applies the chosen preset's voice to the PC-wide built-in
+    voice at once (2026-10-28), because that is exactly what the switch
+    promises: before this it changed nothing until the next personality
+    switch, so the switch and the voice both apps showed could disagree. The
+    answer says which voice it is now, so nothing changes silently."""
     if not isinstance(on, bool):
         return False, "The voice-sync switch takes true or false."
     ok, why = _merge_setting({"sync_voice_with_personality": on})
     if not ok:
         return False, why
     if on:
+        label = _apply_personality_voice(current_preset())
+        if label:
+            return True, ("Done - Jarvis's voice follows the chosen personality now, "
+                          f"and its built-in voice is {label}.")
         return True, "Done - Jarvis's voice will now follow the chosen personality."
     return True, "Done - Jarvis will keep your current voice when you switch personalities."
 

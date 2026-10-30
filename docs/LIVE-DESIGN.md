@@ -31,6 +31,18 @@ when you finish a question, goes only to your PC, and is never saved. A
 "Live" sign is on screen the whole time on both devices. Approval cards
 still need a tap. Nothing leaves your own devices.
 
+**Live speaks in the ONE PC-wide voice** (2026-10-28). It always did - a Live
+reply asks `/api/voice/say` for its sound exactly like any other reply, in the
+built-in voice and speed set from either app (`docs/JARVIS-API.md` §15) - but
+nothing on screen said which voice that was, so the owner's report (*"when i
+change the jarvis voice in the android app it still stays the same in jarvis
+live in the android app"*) was really about a setting being overridden
+invisibly by a chosen personality, heard loudest in Live. The phone's Live
+screen now names the voice it is speaking in, from the same read the Voices
+screen uses, and says plainly when the PC has no voice engine and Live is
+using the phone's own offline voice - the one case where a PC voice setting
+cannot reach Live at all.
+
 ## What was built, and what changed (2026-09-28)
 
 **Built** (build plan steps 1-4, 6, 8 and 9 below; step 7 only as far as
