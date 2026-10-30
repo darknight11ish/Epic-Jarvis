@@ -267,6 +267,28 @@ PIN = {
     # BOTH patches to the published base with `git apply` (no fuzz), compiles
     # the result and drives the card's whole life.
     "no-deadline-cards.patch":                 (8, 133),    # position 37
+    # 2026-10-30, unknown-risk-approvable.patch (Gemini's ruling Q2: an action
+    # with no risk row is approvable with maximum friction). FOUR of its five
+    # hunks read text only the owner's PC holds, and every one is honest rather
+    # than drift - no patch in this walk writes it:
+    #   * the table's OPENING line and `# reading anything`, where the eight
+    #     rows are added. The TOP of the table, not the end, because the end is
+    #     different on a PC whose stack has run (chatbot-limits.patch writes
+    #     rows there) and on one where it has not, while the opening is the
+    #     same in both - so one hunk applies to either state;
+    #   * `_UNKNOWN_RISK`'s own two lines at the table's end, beside the new
+    #     `UNCLASSIFIED_WARNING` sentence (the old words are the owner's);
+    #   * `risk_for()`'s docstring, which is the owner's own file;
+    #   * `check()`'s `tier = tiers.get(action, UNKNOWN_TIER)` line, where the
+    #     forced "ask" is applied - deliberately INSIDE check()'s first try, so
+    #     that the hunks around it (`gate-touches`, `gate-outcome`, `no-expiry`,
+    #     `no-deadline`) are not disturbed: `gate-touches.patch`'s own hunk
+    #     starts three lines BELOW this one.
+    # The fifth hunk (`notice_for()`'s body) anchors on approval-notice.patch's
+    # own added block and costs nothing. Checked the other way by
+    # backend/test_gate_unknown_risk.py, which reverses this patch out of the
+    # published base and applies it forwards again, byte for byte.
+    "unknown-risk-approvable.patch":            (4, 20),    # position 162
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under
