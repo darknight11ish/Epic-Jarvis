@@ -57,6 +57,18 @@ real PC:
      reference is the pre-image, NOT `jarvis-backend/`: that folder is a snapshot of the
      owner's live folder with the stack already applied, measured to hold every added
      line of 132 of the 160 patches (see `R.patch_pre_image`).
+ 12. the 2026-10-30 deploy gap: `no-deadline-cards.patch`'s hunk 9 is the ONE hunk
+     whose pre-image no longer exists on the owner's PC - the live INSERT lost the
+     six-line "`raised` is stored WHOLE" comment and kept the `[:1000]` cap, so the
+     hunk's twelve-line pre-image appears 0 times there (and once in the published
+     base), and `apply-patches.ps1` fails the same hunk. It is carried as an explicit
+     OLD -> NEW pair (`adapted_hunks`) whose NEW block adds ONLY the `waited_until`
+     column and value, keeping live's cap. A fixture in the live shape proves the
+     insert once, the second pass, the half-applied finish and the refusal of a
+     differently-edited or duplicated block. The same section proves the chain stays
+     provable AFTER that deploy: no-expiry's regions are rewritten by this later
+     patch, so its entry's `or_probes` is the proof that survives, and the two
+     gate-digest probes were moved onto lines the later patch leaves alone.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
@@ -3239,6 +3251,265 @@ def t_the_no_expiry_chain_carries_965_byte_for_byte():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   no-deadline-cards.patch's hunk 9: the one hunk the live file cannot replay
+# --------------------------------------------------------------------------
+
+NODEADLINE = "no-deadline-cards.patch"
+
+#: The line the patch was cut against, and the line the live gate holds: the
+#: cap gate-touches.patch removed is still on this PC. One substitution apart.
+NODEADLINE_CAP_LESS = "                         json.dumps(raised) if raised else None,"
+NODEADLINE_CAPPED = "                         json.dumps(raised)[:1000] if raised else None,"
+
+
+def no_deadline_fixture(hunks, applied=()):
+    """A gate holding one pre-image block per hunk, in file order, the LIVE shape.
+
+    Hunk 9's block is the one measured on the owner's PC
+    (`tools/hud-deltas/gate-nodeadline-h9-old.txt`), not the patch's own
+    pre-image - that is the whole point of the rule. Every other hunk's block is
+    the patch's own. `applied` names the hunk numbers already at their
+    post-image, which is how a half-applied file is stood up hermetically. The
+    separator lines keep each block unique and are untouched by the plan.
+    """
+    old9 = "\n".join(R._delta_lines(R.NODEADLINE_H9_OLD_FILE))
+    new9 = "\n".join(R._delta_lines(R.NODEADLINE_H9_NEW_FILE))
+    parts = []
+    for index, hunk in enumerate(hunks, 1):
+        parts.append(f"# ---- no-deadline hunk {index} ----")
+        if index == 9:
+            parts.append(new9 if 9 in applied else old9)
+        else:
+            parts.append("\n".join(hunk["new"] if index in applied else hunk["old"]))
+    return "\n".join(parts) + "\n"
+
+
+def no_deadline_result(hunks):
+    """The fixture after every hunk is applied, with hunk 9 in its adapted shape."""
+    new9 = "\n".join(R._delta_lines(R.NODEADLINE_H9_NEW_FILE))
+    parts = []
+    for index, hunk in enumerate(hunks, 1):
+        parts.append(f"# ---- no-deadline hunk {index} ----")
+        parts.append(new9 if index == 9 else "\n".join(hunk["new"]))
+    return "\n".join(parts) + "\n"
+
+
+def t_the_no_deadline_hunk_9_is_carried_from_the_live_shape():
+    """The one hunk of no-deadline-cards.patch the live gate cannot match.
+
+    Measured read-only on the owner's `jarvis_gate.py` (2026-10-30): the patch
+    was cut against a gate whose INSERT carried the six-line "`raised` is stored
+    WHOLE" comment and stored `json.dumps(raised)` UNCAPPED, while the live gate
+    has lost that comment and kept the `[:1000]` cap. Its twelve-line pre-image
+    therefore appears 0 times in the live file (and once in the published base),
+    and `apply-patches.ps1` fails the same hunk on that folder - so the patch
+    cannot carry it and the tool must not guess.
+
+    The entry's `adapted_hunks` carries it as a literal OLD -> NEW pair instead:
+    live's block, and the same block with ONLY the `waited_until` column and its
+    value added. This proves the pair is derived from the patch (not a
+    paraphrase), that it plans cleanly on a gate in the live shape, that a second
+    plan reports ALREADY and stages nothing, that a half-applied gate is
+    finished, and that a differently-edited or duplicated block is REFUSED.
+    """
+    raw = patch_text(NODEADLINE).decode("utf-8")
+    hunks = R.patch_hunks(raw, "jarvis_gate.py")
+    check("no-deadline-cards.patch has sixteen hunks for jarvis_gate.py",
+          len(hunks) == 16, len(hunks))
+    entry = R.DELTA_TABLE[NODEADLINE]["jarvis_gate.py"]
+    check("its entry still carries the other fifteen hunks from the patch itself",
+          entry.get("hunks") is True)
+    check("... and adapts exactly hunk 9", sorted(entry.get("adapted_hunks") or {}) == [9],
+          sorted(entry.get("adapted_hunks") or {}))
+    h9 = (entry.get("adapted_hunks") or {}).get(9) or {}
+    check("... naming an OLD and a NEW block file",
+          h9.get("file") == R.NODEADLINE_H9_NEW_FILE
+          and h9.get("replace_file") == R.NODEADLINE_H9_OLD_FILE, h9)
+    check("... and a post-image probe so a second deploy skips the hunk",
+          bool(h9.get("probes")) and all(
+              any(p in line for line in R._delta_lines(R.NODEADLINE_H9_NEW_FILE))
+              for p in h9.get("probes") or ()), h9.get("probes"))
+
+    old_block = "\n".join(R._delta_lines(R.NODEADLINE_H9_OLD_FILE))
+    new_block = "\n".join(R._delta_lines(R.NODEADLINE_H9_NEW_FILE))
+    patch_old = "\n".join(hunks[8]["old"])
+    patch_new = "\n".join(hunks[8]["new"])
+    # The pair is the patch's own hunk with exactly two measured adjustments: the
+    # leading comment line (gone from live) is dropped, and live's cap is kept.
+    adapted_old = [NODEADLINE_CAPPED if line == NODEADLINE_CAP_LESS else line
+                   for line in hunks[8]["old"][1:]]
+    adapted_new = [NODEADLINE_CAPPED if line == NODEADLINE_CAP_LESS else line
+                   for line in hunks[8]["new"][1:]]
+    check("the OLD block is the patch's pre-image minus the comment live lost, "
+          "with live's cap", old_block == "\n".join(adapted_old),
+          (old_block, "\n".join(adapted_old)))
+    check("... and the NEW block is the patch's own post-image, same two adjustments",
+          new_block == "\n".join(adapted_new))
+    changed = [(a, b) for a, b in zip(old_block.split("\n"), new_block.split("\n"))
+               if a != b]
+    check("... so ONLY the INSERT column list, its placeholders and its value change",
+          len(changed) == 3
+          and changed[0][1].endswith('"created,raised,target_digest,waited_until)"')
+          and changed[1][1].count("?") == changed[1][0].count("?") + 1
+          and changed[2][1].endswith("target_digest, waited_until))"), changed)
+
+    live_text = no_deadline_fixture(hunks)
+    expected = no_deadline_result(hunks)
+    check("the fixture is the LIVE shape at hunk 9: the measured block once, the "
+          "patch's own pre-image zero times",
+          live_text.count(old_block) == 1 and live_text.count(patch_old) == 0,
+          (live_text.count(old_block), live_text.count(patch_old)))
+    check("... and the patch's own hunk-9 post-image is nowhere in it",
+          live_text.count(patch_new) == 0)
+
+    root = tmpdir()
+    try:
+        live = make_base_live(root, "no-deadline", {"jarvis_gate.py": live_text})
+        before = (live / "jarvis_gate.py").read_bytes()
+        # The rule BITES: the entry as it was before this fix (no adapted_hunks)
+        # must refuse this same fixture on hunk 9 - it is the production refusal,
+        # reproduced hermetically. If the rule were removed again, this passes
+        # and the check below fails.
+        old_table = {NODEADLINE: {"jarvis_gate.py": {"probes": entry["probes"],
+                                                     "hunks": True}}}
+        live0 = make_base_live(root, "no-deadline-old-rule", {"jarvis_gate.py": live_text})
+        deltas0, staged0, refusals0 = R.plan_deltas(
+            live0, [NODEADLINE], show=show_patches(NODEADLINE), repo=REPO,
+            state_patches=[], table=old_table)
+        check("without the rule the SAME live-shaped gate is refused on hunk 9 "
+              "(the production refusal, reproduced)",
+              staged0 == {} and len(refusals0) == 1 and "hunk 9" in refusals0[0]
+              and "0 time(s)" in refusals0[0], refusals0)
+        deltas, staged, refusals = R.plan_deltas(
+            live, [NODEADLINE], show=show_patches(NODEADLINE), repo=REPO,
+            state_patches=[])
+        text = staged.get("jarvis_gate.py", "")
+        check("a gate in the owner's live shape plans cleanly", refusals == [], refusals)
+        check("... hunk 9 is applied exactly once, as the column AND its value",
+              text.count(new_block) == 1
+              and text.count('"created,raised,target_digest,waited_until)"') == 1
+              and text.count("target_digest, waited_until))") == 1)
+        check("... the whole result is the patch's post-image with hunk 9 adapted",
+              text == expected, (len(text), len(expected)))
+        check("... the live file was never touched",
+              (live / "jarvis_gate.py").read_bytes() == before)
+        check("... and the action is an insert of sixteen hunks, not 'already'",
+              [d.status for d in deltas] == ["insert"]
+              and deltas[0].anchor == "16 hunk(s)", deltas)
+
+        (live / "jarvis_gate.py").write_bytes(text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [NODEADLINE], show=show_patches(NODEADLINE), repo=REPO,
+            state_patches=[])
+        check("a second plan reports the patch ALREADY_PRESENT, stages nothing",
+              refusals2 == [] and staged2 == {} and [d.status for d in again] == ["already"],
+              (again, staged2, refusals2))
+
+        # A HALF-applied gate: hunks 1-8 done, 9-16 not. It must be FINISHED.
+        live2 = make_base_live(root, "no-deadline-half", {
+            "jarvis_gate.py": no_deadline_fixture(hunks, applied=range(1, 9))})
+        deltas3, staged3, refusals3 = R.plan_deltas(
+            live2, [NODEADLINE], show=show_patches(NODEADLINE), repo=REPO,
+            state_patches=[])
+        check("a half-applied gate is finished to the same bytes, not refused",
+              refusals3 == [] and staged3.get("jarvis_gate.py") == expected,
+              (refusals3, len(staged3.get("jarvis_gate.py", ""))))
+
+        # A DIFFERENTLY-edited hunk-9 block: refuse, never guess.
+        different = live_text.replace(NODEADLINE_CAPPED,
+                                      "                         json.dumps(raised)[:500] if raised else None,", 1)
+        check("the differently-edited fixture really is different",
+              different != live_text and old_block not in different)
+        live3 = make_base_live(root, "no-deadline-different", {"jarvis_gate.py": different})
+        deltas4, staged4, refusals4 = R.plan_deltas(
+            live3, [NODEADLINE], show=show_patches(NODEADLINE), repo=REPO,
+            state_patches=[])
+        check("a gate whose hunk-9 block was edited differently is REFUSED",
+              staged4 == {} and len(refusals4) == 1, (staged4, refusals4))
+        check("... and the refusal names the adapted OLD block file",
+              bool(refusals4) and R.NODEADLINE_H9_OLD_FILE in refusals4[0], refusals4)
+
+        # ... and a DUPLICATED block is refused for the count, not "one of them".
+        doubled = live_text.replace(old_block, old_block + "\n" + old_block, 1)
+        live4 = make_base_live(root, "no-deadline-doubled", {"jarvis_gate.py": doubled})
+        deltas5, staged5, refusals5 = R.plan_deltas(
+            live4, [NODEADLINE], show=show_patches(NODEADLINE), repo=REPO,
+            state_patches=[])
+        check("a gate holding the hunk-9 block twice is REFUSED",
+              staged5 == {} and len(refusals5) == 1, (staged5, refusals5))
+        check("... naming the block file and the count",
+              bool(refusals5) and "2 time(s)" in refusals5[0], refusals5)
+
+        # An adapted index the patch does not HAVE must refuse, not go unused: a
+        # silently-ignored rule is worse than a loud one.
+        table17 = {NODEADLINE: {"jarvis_gate.py": dict(entry, adapted_hunks={17: h9})}}
+        live5 = make_base_live(root, "no-deadline-bad-index", {"jarvis_gate.py": live_text})
+        deltas6, staged6, refusals6 = R.plan_deltas(
+            live5, [NODEADLINE], show=show_patches(NODEADLINE), repo=REPO,
+            state_patches=[], table=table17)
+        check("an adapted hunk the patch does not have is refused, not left unused",
+              staged6 == {} and len(refusals6) == 1 and "adapts hunk(s) 17" in refusals6[0],
+              refusals6)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_no_deadline_chain_keeps_the_earlier_entries_provable():
+    """The chain must still be provable on the gate the FIRST deploy writes.
+
+    no-deadline-cards.patch is applied after two groups of entries whose post-image
+    it rewrites: no-expiry-cards.patch's twelve regions (ten are rewritten) and
+    the two gate-digest literal blocks (their probe lines are rewritten). Without
+    a second proof the next dry run would call already-deployed patches absent
+    and refuse - a deploy that can only ever run once. The proofs held here are:
+    no-expiry's `or_probes`, and the gate-digest probes being lines no later
+    patch touches.
+    """
+    base_gate = BASE_GATE.read_text(encoding="utf-8")
+    raw = patch_text(NODEADLINE).decode("utf-8")
+    files = R.parse_patch_files(raw)
+    added = "\n".join(files["jarvis_gate.py"]["added"])
+    removed = "\n".join(files["jarvis_gate.py"]["removed"])
+    check("no line of the second proof exists in the published base gate",
+          [p for p in R.NODEADLINE_PROBES if p in base_gate] == [],
+          [p for p in R.NODEADLINE_PROBES if p in base_gate])
+
+    entry = R.DELTA_TABLE["no-expiry-cards.patch"]["jarvis_gate.py"]
+    check("no-expiry's entry carries no-deadline's whole probe set as or_probes",
+          tuple(entry.get("or_probes") or ()) == R.NODEADLINE_PROBES)
+    only_later = "\n".join(R.NODEADLINE_PROBES)
+    state, why = R.patch_presence("no-expiry-cards.patch", "jarvis_gate.py", [],
+                                  only_later, pre_image="")
+    check("a gate holding only the later patch's post-image proves no-expiry present",
+          state == R.PRESENT, (state, why))
+    without_or = {k: v for k, v in R.DELTA_TABLE.items() if k != "no-expiry-cards.patch"}
+    without_or["no-expiry-cards.patch"] = {
+        "jarvis_gate.py": {"probes": entry["probes"], "regions": entry["regions"]}}
+    state, why = R.patch_presence("no-expiry-cards.patch", "jarvis_gate.py", [],
+                                  only_later, table=without_or, pre_image="")
+    check("... without or_probes the same gate is NOT provable (the bug it fixes)",
+          state == R.ABSENT, (state, why))
+    state, why = R.patch_presence("no-expiry-cards.patch", "jarvis_gate.py", [],
+                                  "\n".join(R.NODEADLINE_PROBES[:-1]), pre_image="")
+    check("... one line short of the later patch is not proof either",
+          state == R.ABSENT, (state, why))
+
+    for name, old_probe, new_probe in (
+            ("gate-digest-pending.patch",
+             '"SELECT id, detail, prompt, target_digest FROM approvals"',
+             'stored_digest = row["target_digest"]'),
+            ("gate-digest-insert.patch", "created,raised,target_digest)",
+             "target_digest = _pending_target(action, detail, prompt)")):
+        probes = R.DELTA_TABLE[name]["jarvis_gate.py"]["probes"]
+        check(f"{name}'s probe is a line the later patch leaves alone",
+              new_probe in probes
+              and not any(p in added or p in removed for p in probes), probes)
+        check(f"... and the line it used to probe is one the later patch rewrites",
+              old_probe not in probes and (old_probe in added or old_probe in removed),
+              old_probe)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -3263,6 +3534,8 @@ def main():
                t_cloud_escalate_and_f01_are_carried_as_their_hunks,
                t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks,
                t_the_no_expiry_chain_carries_965_byte_for_byte,
+               t_the_no_deadline_hunk_9_is_carried_from_the_live_shape,
+               t_the_no_deadline_chain_keeps_the_earlier_entries_provable,
                t_a_patch_whose_only_match_is_unchanged_context_is_refused,
                t_a_patch_with_no_distinctive_line_is_refused_by_name,
                t_the_dry_run_prints_every_refusal_and_writes_nothing,
