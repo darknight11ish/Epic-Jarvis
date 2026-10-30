@@ -1688,6 +1688,14 @@ export function mountHudEditor(options = {}) {
     style.textContent = [
       ".hud-home-cards{display:flex; flex-direction:column; gap:7px; margin:8px 0 0;}",
       ".hud-home-cards:empty{display:none;}",
+      // Edit HUD in Studio: the strip is a row of its own, below the stage
+      // tabs and above the banner, and it scrolls INSIDE itself. Without this
+      // its full list (24 cards + the editor) made the stage grid shrink the
+      // Stage-top row instead, and the approvals card's drag handle ended up
+      // under the stage tabs (PR #981, hud-edit-geometry.mjs, 2026-10-30).
+      "html[data-hud-shell=\"split-stage\"] body[data-hud-edit=\"on\"] #stage > #hud-home-cards{",
+      " grid-row:5; grid-column:1 / -1; max-height:50vh; overflow-y:auto;}",
+      "body[data-hud-edit=\"on\"] #stage > #hud-home-cards{flex:0 0 auto;}",
       ".hud-home-cards h2{font-family:var(--f-mono); font-size:9.5px; letter-spacing:.14em;",
       " text-transform:uppercase; color:var(--dim); margin:0;}",
       ".hud-home-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));",
