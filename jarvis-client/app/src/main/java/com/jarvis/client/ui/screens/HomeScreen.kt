@@ -117,6 +117,7 @@ import com.jarvis.client.data.FaceSize
 import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.ChatHistory
+import com.jarvis.client.net.ChatLog
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
@@ -1913,6 +1914,22 @@ private fun StatusLine(
         if (!linked || state.stale) {
             Quiet("Retry", onClick = actions.onReconnect)
         }
+
+        // ONE tap from Home to History (the owner's request of 2026-10-29:
+        // "i want the chat history accessible directly from the jarvis hud on
+        // desktop, and one click from the android jarvis app"). It is on the
+        // status line, which is the one row no screen size, menu or setting
+        // hides, so it is there the moment the app opens - not behind Brain or
+        // the More menu (the More menu's "Earlier chats" row stays as well).
+        // It says nothing about any chat, so "Hide memory lists and chat
+        // history" leaves it alone: History itself hides its list until Show is
+        // confirmed, exactly as the Brain's own way in does.
+        Quiet(
+            ChatLog.HOME_ENTRY,
+            color = chrome.textMid,
+            modifier = Modifier.semantics { contentDescription = ChatLog.HOME_ENTRY_TITLE },
+            onClick = actions.onEarlierChats,
+        )
 
         if (onNavToggle != null) {
             NavToggle(shown = navShown, onToggle = onNavToggle)

@@ -558,8 +558,8 @@ def t_the_patch_whitelists_the_routes():
           '"/api/history/tags", "/api/history/tags/suggest"):' in patch)
     check("chat-history.patch routes POST /api/history/tags and /tag",
           '"/api/history/tags", "/api/history/tags/suggest", "/api/history/tag",' in patch
-          and '"/api/history/fork", "/api/history/mark", "/api/history/pin"):'
-          in patch)
+          and '"/api/history/fork", "/api/history/mark", "/api/history/pin",' in patch
+          and '"/api/history/archive"):' in patch)
     check("the routes still sit behind the token and origin checks",
           patch.count("_origin_ok(self)") >= 2 and patch.count("_token_ok(self)") >= 2)
 
