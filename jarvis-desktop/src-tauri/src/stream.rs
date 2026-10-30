@@ -29,6 +29,7 @@
 //! query string, and the server's stream ends by design after an hour —
 //! reconnecting is not an error path here, it is the normal one.
 
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -68,7 +69,12 @@ const MAX_LINE_BYTES: usize = 1024 * 1024;
 /// while a card is waiting. 30 s is the same beat the HUD page's own
 /// `apprPoll` safety net has used since before this (`jarvis_hud.html`,
 /// `setInterval(..., 30000)`), and the same number the phone's `QueueBeat`
-/// re-reads on - one answer, on every surface, to "how stale can a card be".
+/// re-reads on - so "how stale can a card be" has one answer. It is not the
+/// only read on the PC: while the HUD is visible and a card waits, its own
+/// 30 s `apprPoll` and this beat are two independent safety-net reads of the
+/// same route. That is deliberate (either can fail without silencing the
+/// other), and `docs/ARCHITECTURE.md` §6 names both as the exception to
+/// "state changes come from the bus and nowhere else".
 const QUEUE_BEAT: Duration = Duration::from_secs(30);
 
 /// Store key holding the resume point across restarts.
@@ -364,14 +370,55 @@ pub fn spawn(app: AppHandle) {
     });
 }
 
+/// What one wait in the read loop ended with.
+#[derive(Debug)]
+enum ReadStep<T> {
+    /// The body produced something: bytes, its clean end, or an error.
+    Chunk(T),
+    /// The queue's safety-net beat is due; the stream itself is unchanged.
+    Beat,
+    /// Nothing has arrived for `SILENCE_TIMEOUT`.
+    Silence,
+}
+
+/// Waits for whichever comes first: the next stream chunk, the queue beat, or
+/// the socket's absolute silence deadline.
+///
+/// The deadline is a PARAMETER, computed by the caller as `last_chunk_at +
+/// SILENCE_TIMEOUT`. It is deliberately not `tokio::time::timeout` around
+/// `read`: that starts a fresh clock when the future is built, and the loop
+/// rebuilds the read future on every pass - so a beat arm winning every 30 s
+/// restarted the 70 s clock and the silence branch could never run. Here only
+/// the caller's `last_chunk_at` can move the deadline, and only a real chunk
+/// moves that.
+///
+/// `biased`, so a chunk that is already waiting is read before a timer, and a
+/// due silence is decided before a due beat (a dead socket is not a reason to
+/// fetch the queue first).
+async fn next_read_step<R, F>(
+    read: F,
+    beat_at: tokio::time::Instant,
+    silence_at: tokio::time::Instant,
+) -> ReadStep<R>
+where
+    F: Future<Output = R>,
+{
+    tokio::select! {
+        biased;
+        read = read => ReadStep::Chunk(read),
+        _ = tokio::time::sleep_until(silence_at) => ReadStep::Silence,
+        _ = tokio::time::sleep_until(beat_at) => ReadStep::Beat,
+    }
+}
+
 /// Holds one connection open until it ends. `Ok` carries why it ended cleanly;
 /// `Err` carries why it failed.
 async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
         // Deliberately no total timeout: this request is *meant* to hang for
-        // an hour. Silence is caught by SILENCE_TIMEOUT around each read
-        // instead, which is the only thing that can tell a healthy idle stream
+        // an hour. Silence is caught by the absolute deadline in the read loop
+        // below, which is the only thing that can tell a healthy idle stream
         // from a dead one.
         .no_proxy()
         // Never follow a redirect: reqwest would carry X-Jarvis-Token to
@@ -484,50 +531,70 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
     // Lines are cut from raw bytes so a multi-byte character split across two
     // network chunks is never decoded half-way.
     let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
-    // When the queue's own safety-net read last ran. It is re-created from the
-    // REMAINING time on every pass, not from a fresh `sleep(QUEUE_BEAT)`, so a
-    // keepalive arriving every 20 s cannot keep pushing the beat out of reach.
-    let mut last_beat = Instant::now();
+    // When the queue's own safety-net read runs next. Absolute, not rebuilt
+    // from "time since the last pass": a keepalive arriving every 20 s must not
+    // push it out of reach, and a slow read must not let two beats fire back
+    // to back.
+    let mut beat_at = tokio::time::Instant::now() + QUEUE_BEAT;
+    // When the socket is declared dead, unless a real chunk arrives first.
+    //
+    // ABSOLUTE ON PURPOSE (the defect this replaced): the 70 s clock used to
+    // live inside `tokio::time::timeout` around a `response.chunk()` future
+    // that was re-created on every pass. The beat arm wins every 30 s, which
+    // dropped that future and rebuilt the timeout - so the silence clock
+    // restarted every 30 s and `"Jarvis went quiet"` could never fire. The
+    // deadline now belongs to the caller, and ONLY the `Some(bytes)` arm below
+    // moves `last_chunk_at`; the beat does not touch it.
+    let mut last_chunk_at = tokio::time::Instant::now();
 
     loop {
-        let chunk = tokio::select! {
-            read = tokio::time::timeout(SILENCE_TIMEOUT, response.chunk()) => Some(match read {
-                Ok(Ok(Some(bytes))) => bytes,
-                Ok(Ok(None)) => {
-                    // The server ends the stream after an hour by design.
-                    return Ok("the server closed the stream; reconnecting".to_string());
-                }
-                Ok(Err(e)) => {
-                    return Err(format!(
-                        "The connection to Jarvis dropped. Technical detail: the \
-                         event stream broke: {e}"
-                    ))
-                }
-                Err(_) => {
-                    return Err(format!(
-                        "Jarvis went quiet: nothing heard for {} seconds. \
-                         Technical detail: no keepalive for {}s, so the event \
-                         stream is treated as dead.",
-                        SILENCE_TIMEOUT.as_secs(),
-                        SILENCE_TIMEOUT.as_secs()
-                    ))
-                }
-            }),
+        let step = tokio::select! {
+            step = next_read_step(
+                response.chunk(),
+                beat_at,
+                last_chunk_at + SILENCE_TIMEOUT,
+            ) => step,
             _ = wake().notified() => {
                 return Ok("reconnecting at the client's request".to_string());
             }
-            // The queue's fallback beat. See `queue_beat_due`.
-            _ = tokio::time::sleep(QUEUE_BEAT.saturating_sub(last_beat.elapsed())) => None,
         };
 
-        // No bytes this pass, so the buffer is untouched; only the beat runs.
-        let Some(chunk) = chunk else {
-            last_beat = Instant::now();
-            let link = app.state::<StreamState>().link();
-            if queue_beat_due(link.connected, link.stale, link.approvals) {
-                refresh_pending(app, base).await;
+        let chunk = match step {
+            ReadStep::Silence => {
+                return Err(format!(
+                    "Jarvis went quiet: nothing heard for {} seconds. \
+                     Technical detail: no keepalive for {}s, so the event \
+                     stream is treated as dead.",
+                    SILENCE_TIMEOUT.as_secs(),
+                    SILENCE_TIMEOUT.as_secs()
+                ))
             }
-            continue;
+            // The queue's fallback beat. See `queue_beat_due`. It re-arms from
+            // NOW, and it deliberately does not touch `last_chunk_at`.
+            ReadStep::Beat => {
+                beat_at = tokio::time::Instant::now() + QUEUE_BEAT;
+                let link = app.state::<StreamState>().link();
+                if queue_beat_due(link.connected, link.approvals) {
+                    refresh_pending(app, base).await;
+                }
+                continue;
+            }
+            // A real chunk is the only thing that extends the silence
+            // deadline. No bytes this pass would have left it untouched.
+            ReadStep::Chunk(Ok(Some(bytes))) => {
+                last_chunk_at = tokio::time::Instant::now();
+                bytes
+            }
+            ReadStep::Chunk(Ok(None)) => {
+                // The server ends the stream after an hour by design.
+                return Ok("the server closed the stream; reconnecting".to_string());
+            }
+            ReadStep::Chunk(Err(e)) => {
+                return Err(format!(
+                    "The connection to Jarvis dropped. Technical detail: the \
+                     event stream broke: {e}"
+                ))
+            }
         };
 
         buffer.extend_from_slice(&chunk);
@@ -702,21 +769,17 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
 
         // The doorbell. §3 rule 1: the event says something changed, so read
         // the thing that changed — once, here, not once per window.
-        // A failure has already set `stale`. A success while connected (that
-        // is, after this connection's hello) is exactly what "the queue is
-        // confirmed live" means, so it may clear a `stale` left by an earlier
-        // failed read - the same rule the phone's watchdog follows. Without
-        // this, one failed read left the buttons disabled until the stream
-        // happened to reconnect.
+        // A failure has already set `stale`; a success while connected is
+        // exactly what "the queue is confirmed live" means, and
+        // `queue_read_landed` clears a `stale` left by an earlier failed read -
+        // the same rule the phone's watchdog follows. Without that, one failed
+        // read left the buttons disabled until the stream reconnected.
         "approval" => {
             // What was waiting BEFORE the read, so a card being answered
             // elsewhere (which rings this same doorbell) raises nothing: only an
             // arrival does.
             let before = pending_ids(app);
             let read = refresh_pending(app, base).await;
-            if read && app.state::<StreamState>().link().connected {
-                publish_link(app, |link| link.stale = false);
-            }
             let new_card = read && brings_a_new_card(&before, &pending_ids(app));
             // The owner's ask of 2026-10-17: a card that has just arrived PULLS
             // THE HUD UP, instead of leaving him to find the bar and type
@@ -1120,22 +1183,57 @@ fn power_set_by(value: &serde_json::Value) -> Option<String> {
 /// sits there with live-looking Approve/Deny until the stream reconnects on its
 /// own (the server closes it hourly) or the window is reloaded.
 ///
-/// The conditions are the same three the phone's `QueueBeat.due` uses, for the
+/// The conditions are the same two the phone's `QueueBeat.due` uses, for the
 /// same reasons:
 ///
 /// * `approvals > 0` - nothing is drawn from the queue otherwise, so there is
 ///   nothing a stale read could hold open, and an idle PC makes no request at
 ///   all. This is what keeps it from being a poll of the backend.
 /// * `connected` - a stream that is down has its own recovery (`connect_once`'s
-///   backoff loop). A side-fetch over the same dead line would only fail, and
-///   `mark_queue_unread` would then declare the queue untrustworthy.
-/// * `!stale` - a stale link is one nothing may be answered on, and
-///   `refresh_pending` is exactly what would clear that staleness legitimately;
-///   but while it is stale the surfaces are already refusing (rule 4), so a
-///   re-read adds nothing a person can act on. The `hello` frame and
-///   `OnOpen`/`refresh_pending` own that transition.
-fn queue_beat_due(connected: bool, stale: bool, approvals: usize) -> bool {
-    connected && !stale && approvals > 0
+///   backoff loop), and `connected` is false from the moment it drops, so a
+///   read that cannot work is never attempted.
+///
+/// `stale` is deliberately NOT a condition. A failed read is exactly what this
+/// beat must recover from: every failure path (`mark_queue_unread`) sets
+/// `stale`, and a successful read on a connected link clears it again
+/// (`queue_read_landed`). A `!stale` term here - which this function had -
+/// meant one transient `/api/pending` failure stopped the only retry that
+/// could clear it, so Approve stayed refused until the hourly reconnect while
+/// Deny still worked. The phone never had that term: `QueueBeat.due` has
+/// always been `waiting > 0 && connected`, and a success there is the recovery
+/// too. Two conditions, both platforms.
+fn queue_beat_due(connected: bool, approvals: usize) -> bool {
+    connected && approvals > 0
+}
+
+/// What a queue read leaves on the link when it FAILS.
+///
+/// The queue on screen is the last one we knew, not the current one, so the
+/// link is `stale` and rule 4 refuses to act on it. Every failure path in
+/// [`refresh_pending`] funnels through here.
+fn queue_read_failed(link: &mut LinkState) {
+    link.stale = true;
+}
+
+/// What a queue read leaves on the link when it LANDS: the new queue size, and
+/// - only while the stream is connected - `stale` cleared.
+///
+/// The second half is the recovery rule, and it is deliberately here rather
+/// than in each caller: one transient failure sets `stale` (see
+/// [`queue_read_failed`]), and the next successful read is what makes the queue
+/// trustworthy again. `dispatch`'s `approval` arm and the queue beat both need
+/// exactly this, so it lives in one pure function they share - which is also
+/// what lets a test drive failed-then-good with no app handle and no backend.
+///
+/// `connected` guards the connect-time read: [`refresh_pending`] runs once
+/// before the `hello` frame, and a success there must not clear `stale` before
+/// `hello` has said whether the resume point was still usable (that is
+/// [`hello_may_clear_stale`]'s job).
+fn queue_read_landed(link: &mut LinkState, approvals: usize) {
+    link.approvals = approvals;
+    if link.connected {
+        link.stale = false;
+    }
 }
 
 /// Re-reads the approval queue and hands the same list to all three surfaces.
@@ -1261,7 +1359,7 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     }
     #[cfg(not(windows))]
     let _ = left;
-    publish_link(app, |link| link.approvals = items.len());
+    publish_link(app, |link| queue_read_landed(link, items.len()));
     state
         .queue_read
         .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -1540,7 +1638,7 @@ fn mark_queue_unread(app: &AppHandle) {
     app.state::<StreamState>()
         .queue_read
         .store(false, std::sync::atomic::Ordering::Relaxed);
-    publish_link(app, |link| link.stale = true);
+    publish_link(app, queue_read_failed);
 }
 
 /// Whether a `hello` frame may clear `stale` on its own.
@@ -1986,81 +2084,190 @@ mod hud_raise_tests {
     /// This is the desktop half of the owner's 2026-10-29 report - a card
     /// answered on the phone stayed on the bar and the widget because nothing
     /// re-reads `/api/pending` without an `approval` event to ask. The phone's
-    /// `QueueBeat.due` is the same three conditions; a change to either that
+    /// `QueueBeat.due` is the same TWO conditions; a change to either that
     /// stops the two agreeing shows up as a difference between this test and
     /// `QueueBeatTest`.
-    use super::queue_beat_due;
+    use super::{
+        next_read_step, queue_beat_due, queue_read_failed, queue_read_landed, LinkState, ReadStep,
+    };
+    use std::time::Duration;
 
     #[test]
-    fn the_queue_beat_runs_only_for_a_waiting_card_on_a_live_link() {
+    fn the_queue_beat_runs_only_for_a_waiting_card_on_a_connected_link() {
         assert!(
-            queue_beat_due(true, false, 1),
-            "a card waiting on a live link is exactly the case the beat is for"
+            queue_beat_due(true, 1),
+            "a card waiting on a connected link is exactly the case the beat is for"
         );
+        assert!(queue_beat_due(true, 3), "a queue re-reads the same way");
         assert!(
-            queue_beat_due(true, false, 3),
-            "a queue re-reads the same way"
-        );
-        assert!(
-            !queue_beat_due(true, false, 0),
+            !queue_beat_due(true, 0),
             "with nothing waiting there is nothing a stale read could hold open, \
              so an idle PC must make no request at all"
         );
         assert!(
-            !queue_beat_due(false, false, 2),
+            !queue_beat_due(false, 2),
             "a stream that is down has its own recovery; a side-fetch would only fail"
         );
+        // `stale` is deliberately not a parameter: a failed read sets it, and
+        // the next beat's successful read is what clears it. The test below
+        // drives exactly that; `QueueBeatTest` holds the phone to the same two
+        // conditions.
+    }
+
+    /// The recovery half of the "failed beat blocks Approve" defect: one
+    /// failed beat must not switch off the next beat, and that beat's success
+    /// must clear `stale` again.
+    ///
+    /// Both halves are the real functions `mark_queue_unread` and
+    /// `refresh_pending` apply to the link, so this needs no app handle and no
+    /// backend.
+    #[test]
+    fn a_failed_queue_beat_is_recovered_by_the_next_read() {
+        let mut link = LinkState {
+            connected: true,
+            stale: false,
+            approvals: 1,
+            ..LinkState::default()
+        };
+        queue_read_failed(&mut link);
+        assert!(link.stale, "a failed read must mark the queue unread");
         assert!(
-            !queue_beat_due(false, true, 2),
-            "neither condition holds on a link that is both down and stale"
+            queue_beat_due(link.connected, link.approvals),
+            "the beat must still run on a stale link - its own read is the recovery"
         );
+
+        queue_read_landed(&mut link, 0);
         assert!(
-            !queue_beat_due(true, true, 2),
-            "while the link is stale every surface already refuses, so a re-read \
-             adds nothing a person can act on"
+            !link.stale,
+            "a successful read on a connected link is what clears `stale`"
+        );
+        assert_eq!(
+            link.approvals, 0,
+            "the successful read's queue must replace the old one"
         );
     }
 
-    /// CONTROL: the beat is really wired into the read loop, and is re-armed
-    /// from the time it LAST ran rather than from a fresh 30 s on every pass.
+    /// BEHAVIOURAL, not a source pin: silence is decided by an ABSOLUTE
+    /// deadline, so a beat that keeps firing cannot move it.
     ///
-    /// A plain `sleep(QUEUE_BEAT)` created inside the `select!` would be
-    /// cancelled by every keepalive - the backend sends one every ~20 s - so
-    /// the branch could never fire on a healthy connection, which is the exact
-    /// state the beat exists to correct. The source is the only place that
-    /// distinction lives, so it is what this reads.
-    ///
-    /// Each needle is CONCATENATED from pieces on purpose: written whole it
-    /// would appear in this test's own text, `include_str!` would find it
-    /// there, and the check would pass against a source that had lost the
-    /// line - the same trap `tools/check_invoke_grants.py` fell into and now
-    /// refuses ("a helper hiding that literal failed the audit").
-    #[test]
-    fn the_beat_is_wired_into_the_read_loop_and_counts_from_the_last_one() {
-        let source = include_str!("stream.rs");
-        let arm = [
-            "tokio::time::sleep(QUEUE_BEAT",
-            ".saturating_sub(last_beat.elapsed()))",
-        ]
-        .concat();
+    /// This is the regression the old shape had: `tokio::time::timeout` was
+    /// rebuilt around a rebuilt `response.chunk()` on every pass, so each 30 s
+    /// beat restarted the 70 s silence clock and `"Jarvis went quiet"` could
+    /// never fire. If silence never wins, the outer guard expires and this test
+    /// FAILS instead of hanging.
+    #[tokio::test]
+    async fn silence_wins_at_the_absolute_deadline_while_the_beat_keeps_firing() {
+        let silence = Duration::from_millis(300);
+        let beat = Duration::from_millis(100);
+        let started = tokio::time::Instant::now();
+        let last_chunk_at = started;
+        let mut beat_at = started + beat;
+        let mut beats = 0usize;
+
+        let outcome = tokio::time::timeout(silence * 2, async {
+            loop {
+                match next_read_step(
+                    std::future::pending::<()>(),
+                    beat_at,
+                    last_chunk_at + silence,
+                )
+                .await
+                {
+                    ReadStep::Chunk(()) => unreachable!("the read future never resolves"),
+                    ReadStep::Beat => {
+                        beats += 1;
+                        beat_at = tokio::time::Instant::now() + beat;
+                    }
+                    ReadStep::Silence => break "silence",
+                }
+            }
+        })
+        .await;
+
+        let took = started.elapsed();
+        match outcome {
+            Ok("silence") => {}
+            Ok(other) => panic!("the wait ended with {other:?}, not silence"),
+            Err(_) => panic!(
+                "silence never won within {:?}: the beat moved the deadline \
+                 (beats={beats}, took={took:?})",
+                silence * 2
+            ),
+        }
         assert!(
-            source.contains(&arm),
-            "the beat arm must subtract the time since the last beat, or a \
-             keepalive every 20 s keeps it from ever firing"
+            took >= silence,
+            "silence must not be declared before one full period: {took:?}"
         );
-        let ask = [
-            "if queue_beat_due(link.connected, link.stale, ",
-            "link.approvals)",
-        ]
-        .concat();
+        assert!(
+            took < silence * 2,
+            "silence must be decided by its own deadline, not by the test guard: {took:?}"
+        );
+        assert!(
+            beats >= 1,
+            "the beat must really have fired at least once, or the deadline was \
+             never tested against a moving timer"
+        );
+        assert_eq!(
+            last_chunk_at, started,
+            "no chunk arrived, so nothing may have moved the silence deadline"
+        );
+    }
+
+    /// CONTROL: the pre-fix select shape, reduced to its timing, so the defect
+    /// is named and cannot come back disguised.
+    ///
+    /// It is what the loop used to do: a fresh `timeout(silence, read)` on
+    /// every pass, with the beat arm merely starting the next pass. The same
+    /// guard as the test above must NOT get silence out of it - that is the
+    /// regression, and this test passing is proof the old shape was broken.
+    #[tokio::test]
+    async fn control_a_timeout_rebuilt_around_each_read_never_reaches_silence() {
+        let silence = Duration::from_millis(300);
+        let beat = Duration::from_millis(100);
+        let outcome = tokio::time::timeout(silence * 2, async {
+            let mut beat_at = tokio::time::Instant::now() + beat;
+            loop {
+                let chunk: Option<()> = tokio::select! {
+                    // The read future never resolves, so only the timeout can
+                    // win this arm; that is the shape being measured.
+                    _ = tokio::time::timeout(silence, std::future::pending::<()>()) => Some(()),
+                    _ = tokio::time::sleep_until(beat_at) => None,
+                };
+                if chunk.is_none() {
+                    beat_at = tokio::time::Instant::now() + beat;
+                }
+            }
+        })
+        .await;
+        assert!(
+            outcome.is_err(),
+            "the old shape must never report silence inside the guard"
+        );
+    }
+
+    /// CONTROL: the beat is really wired into the read loop and asks the
+    /// two-condition rule before re-reading.
+    ///
+    /// The timing is proven behaviourally above; this pins only the plumbing a
+    /// live stream would be needed to reach. Each needle is CONCATENATED from
+    /// pieces on purpose, so this test's own text cannot satisfy it.
+    #[test]
+    fn the_beat_is_wired_into_the_read_loop_and_asks_the_two_condition_rule() {
+        let source = include_str!("stream.rs");
+        let ask = ["if queue_beat_due(link.connected, ", "link.approvals)"].concat();
         assert!(
             source.contains(&ask),
-            "the beat must ask the rule before re-reading"
+            "the beat must ask the two-condition rule before re-reading"
         );
         let read = ["refresh_pending(app, ", "base).await;"].concat();
         assert!(
             source.contains(&read),
             "and the re-read must be the one queue read every surface follows"
+        );
+        let absolute = ["last_chunk_at + ", "SILENCE_TIMEOUT"].concat();
+        assert!(
+            source.contains(&absolute),
+            "the silence deadline must be absolute, or the beat restarts it"
         );
     }
 }
