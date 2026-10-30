@@ -8119,12 +8119,17 @@ object JarvisRuntime {
      * runs belonged to THIS answer - the facts the voice path gets from its
      * own utterance reply. The watch is read before the send and after it
      * returns, so a tool run between them fails the gate closed.
+     *
+     * [attachment] is the one document attached to this question
+     * ([com.jarvis.client.net.AttachFile]): read on the PC within this turn,
+     * never kept. The bytes are held by the caller only until this returns.
      */
     suspend fun sendTypedChat(
         message: String,
         picture: String? = null,
         provenance: String = com.jarvis.client.net.Provenance.TYPED,
         shared: String? = null,
+        attachment: com.jarvis.client.net.AttachFile.Ready? = null,
     ): String? {
         // A new question owns the one speaker from here (the review's F2,
         // 2026-10-27). Clearing the offer alone stopped NOTHING: the OLD answer
@@ -8143,6 +8148,7 @@ object JarvisRuntime {
             provenance = provenance,
             shared = shared,
             onRoute = { route -> header = route },
+            attachment = attachment,
         )
         val now = readAloudWatch()
         // routeOrNull, NOT route: null is "the PC did not say", and the gate must

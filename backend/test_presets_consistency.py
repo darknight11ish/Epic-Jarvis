@@ -224,9 +224,23 @@ def t_the_manner_event_rings_once_for_a_real_change():
     rec, previous = _with_bus()
     try:
         code, _body = M.handle_set({"personality": "dry_wit"})
+        # ONE real change, TWO named events - and never the same one twice.
+        # #969 (one PC-wide voice, 2026-10-28) made a preset carry its own voice
+        # and APPLY it into the one PC-wide voice setting, so the Voices screens
+        # re-read it exactly as they do after a picker change. That second ring
+        # is the deliberate consequence of "one setting": `manner` says the
+        # preset changed, `voices` says the voice moved with it. Asserting only
+        # ["manner"] (the pre-#969 contract) is what left origin/main's required
+        # backend job red from 2026-10-30 on (#971 wrote this check, #969 merged
+        # after it), and it would make every open PR fail a 50-minute job.
         check("a personality switch rings `manner` once",
-              code == 200 and rec.kinds() == ["manner"], json.dumps(rec.kinds()))
-        frame = rec.frames[-1][1] if rec.frames else {}
+              code == 200 and rec.kinds().count("manner") == 1, json.dumps(rec.kinds()))
+        check("and the voice that moved with it rings `voices` once",
+              rec.kinds().count("voices") == 1, json.dumps(rec.kinds()))
+        check("and no event kind is rung twice",
+              len(rec.kinds()) == len(set(rec.kinds())), json.dumps(rec.kinds()))
+        manner = [frame for kind, frame in rec.frames if kind == "manner"]
+        frame = manner[-1] if manner else {}
         check("the frame carries the new preset and the one manner word",
               isinstance(frame, dict)
               and frame.get("personality") == "dry_wit"
@@ -240,7 +254,7 @@ def t_the_manner_event_rings_once_for_a_real_change():
         rec.frames.clear()
         M.handle_set({"humor": True})
         check("humour rings it too - one doorbell for this whole screen",
-              rec.kinds() == ["manner"], json.dumps(rec.kinds()))
+              rec.kinds().count("manner") == 1, json.dumps(rec.kinds()))
     finally:
         _restore_bus(previous)
 

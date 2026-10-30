@@ -96,7 +96,8 @@
     size the owner chose, so the face never paints at the layout's own size
     and jumps. The three values are the only ones the stylesheet knows
     (`--face-scale` beside `#reactor`); anything else, or unreadable storage,
-    is the layout's own size, which is Medium.
+    is Medium - which since 2026-10-29 is the page's own default scale, so a
+    device that never chose one paints Medium on the first frame.
   */
   try {
     var jarvisFaceSize = localStorage.getItem("jarvis.face.size");
@@ -452,21 +453,29 @@ html[data-hud-shell="split-stage"] .rail-menu-mode{display:none;}
 /* THE FACE SIZE (the owner's ask of 2026-10-28: "in the jarvis faces in the
    left column of the hud there should also be a size option on desktop").
    ONE multiplier, set on :root from THIS device's saved choice before first
-   paint (the head script above): Small 0.75x, Medium the layout's own size,
-   Large 1.25x.
+   paint (the head script above): Small 1x, Medium 1.25x, Large 1.5x.
+
+   THE STEPS WERE RAISED ON 2026-10-29 because the owner said the face models
+   are "too small on the HUD". The three names are unchanged and so is the
+   control; what moved is the number under each name - Small is now the size
+   Medium used to draw, Medium is what Large used to draw, and Large is half
+   again the layout's own size. Nothing here is a new setting: the page's own
+   default (no attribute yet, and the value `faceSizeOf` calls "medium") is
+   1.25, which is where Medium now sits, so the first frame is already
+   Medium's size and cannot flash the old one.
 
    Every rule below that sizes the face keeps ITS OWN base and multiplies it,
    so no shell needs a second rule and none loses its size: the 232px page
    default, the 150px narrow page, Cockpit's 220px and its 96/88px pinned
-   core, Studio's 48px dock, and Ambient's 320/240/190px core all move
+   core, Studio's 120px face, and Ambient's 320/240/190px core all move
    together. Width and height, never `transform: scale()`: the wrap has to
    RESERVE the bigger box, or a Large face would overlap the log instead of
-   pushing it down. 0.75 and 1.25 stay sane at the smallest base (36px/60px
-   for Studio's dock, 66px/120px for the pinned core). */
-html{--face-scale:1;}
-html[data-face-size="small"]{--face-scale:.75;}
-html[data-face-size="medium"]{--face-scale:1;}
-html[data-face-size="large"]{--face-scale:1.25;}
+   pushing it down. 1 and 1.5 stay sane at the smallest base (120px/180px for
+   Studio's face, 88px/132px for the pinned core). */
+html{--face-scale:1.25;}
+html[data-face-size="small"]{--face-scale:1;}
+html[data-face-size="medium"]{--face-scale:1.25;}
+html[data-face-size="large"]{--face-scale:1.5;}
 /* An iframe now, not a canvas: the kit face, see "Arc reactor" in the script.
    Same box as before, click-through so it reads as part of this page rather
    than a window inside it. Round, like the Widget's: the face paints its own
@@ -822,8 +831,18 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 .go-show[hidden]{display:none !important;}
 /* Hide the galaxy (the owner's ask, same day: "also, add an option to hide the
    galaxy under the Galaxy Options menu"). The picture and everything that
-   belongs to it goes; the map's own place holder takes its place with the way
-   back, so the hide is always reversible from where the owner is looking. */
+   belongs to it goes.
+ *
+ * WHAT CHANGED ON 2026-10-29, and why. This block used to be a centred
+ * paragraph and a "Show the galaxy" button filling the empty stage. The owner's
+ * report: with the Galaxy hidden, the face should take that space "instead of
+ * showing the 'The galaxy is hidden. Your brain map is still here...'
+ * description + 'Show the galaxy' button". So the sentence is no longer DRAWN:
+ * it stays in the page as the one thing a screen reader hears when it reaches
+ * the empty map (`.galaxy-off` below is the page's own sr-only shape), and the
+ * way back is a small chip in the stage bar beside [Galaxy options]
+ * (`.galaxy-back`, and the panel's own toggle is the second way). Nothing about
+ * what hiding MEANS changed. */
 html[data-galaxy-hidden] #brain > #galaxy,
 html[data-galaxy-hidden] #brain > #galaxy-overlay,
 html[data-galaxy-hidden] #brain > .legend,
@@ -832,15 +851,18 @@ html[data-galaxy-hidden] #brain > .trace-list,
 html[data-galaxy-hidden] #brain > .trail,
 html[data-galaxy-hidden] #brain > .inspector{display:none !important;}
 .galaxy-off{
-  display:none; position:absolute; inset:0; z-index:2;
-  align-items:center; justify-content:center; flex-direction:column;
-  gap:10px; text-align:center; padding:24px;
+  display:none; position:absolute; z-index:2;
+  width:1px; height:1px; margin:-1px; padding:0; border:0;
+  overflow:hidden; clip-path:inset(50%); white-space:nowrap;
 }
-html[data-galaxy-hidden] .galaxy-off{display:flex !important;}
-.galaxy-off p{
-  margin:0; max-width:38ch; font-family:var(--f-mono); font-size:12px;
-  color:var(--dim); line-height:1.6;
-}
+html[data-galaxy-hidden] .galaxy-off{display:block !important;}
+.galaxy-off p{margin:0; font-size:12px; line-height:1.6;}
+/* The way back while the map is hidden: ONE small chip, in the stage bar, so
+   it never sits on the map's empty space and never covers the conversation.
+   Absent (display:none) unless the map really is hidden, and the panel's own
+   "Show the galaxy" in #galaxy-options is the second way back. */
+.galaxy-back{display:none; align-items:center; gap:6px;}
+html[data-galaxy-hidden] .galaxy-back{display:inline-flex;}
 /* The Studio dock's own door: one more icon in the left column, in the same
    box and glyph language as the five section icons above it. */
 #dock-galaxy-options[aria-expanded="true"]{
@@ -1608,11 +1630,54 @@ html[data-hud-shell="split-stage"][data-hud-tab="galaxy"] #brain{display:flex;}
 html[data-hud-shell="split-stage"] .reactor-wrap{
   flex-direction:row; justify-content:flex-start; gap:14px; padding:10px 18px 4px;
 }
-html[data-hud-shell="split-stage"] #reactor{width:calc(48px * var(--face-scale, 1)); height:calc(48px * var(--face-scale, 1));}
+/* 120px, not the 48px this started as (2026-10-29). The owner's own report -
+   "the Jarvis face models are too small on the HUD" - was measured in THIS
+   shell: a 1280x650 Studio window drew the face at 48px, 60px with Large
+   chosen, beside a conversation column 671px wide and an Inspector Stage
+   549px wide. A face that is 7% of its column is not a face. The row
+   (`flex-direction:row` above) still holds it: the label sits beside it and
+   the log below it is untouched, because the wrap RESERVES whatever box this
+   rule gives it. */
+html[data-hud-shell="split-stage"] #reactor{width:calc(120px * var(--face-scale, 1)); height:calc(120px * var(--face-scale, 1));}
 html[data-hud-shell="split-stage"] .reactor-state{
   position:static; transform:none; font-size:9px;
 }
 html[data-hud-shell="split-stage"] .rail-toggle{display:none;}
+
+/* ---- THE HIDDEN GALAXY'S SPACE BECOMES THE FACE'S (2026-10-29) ---------- *
+ * The owner, verbatim: "when the Galaxy is hidden, the face model should take
+ * up that space instead of showing the 'The galaxy is hidden. Your brain map
+ * is still here...' description + 'Show the galaxy' button".
+ *
+ * In THIS shell both views are on screen at once, so hiding the picture left an
+ * empty 45% Inspector column holding one paragraph and one button - the emptiest
+ * thing in the window, wearing the loudest words. The column is gone now: the
+ * stage is ONE column, the face is the centrepiece of the space it freed, and
+ * the Galaxy's own place holder is the small chip in the bar (`#galaxy-show-
+ * placeholder`, see "the way back" in the style) rather than a paragraph.
+ *
+ * Scoped to the Galaxy TAB on purpose: the Inspector column is also where the
+ * Approvals, Reminders, Memory and Telemetry tabs draw, and hiding the picture
+ * must not take those away. Nothing about what "hidden" MEANS changes - the
+ * picture, its dots, its legend and its trace still go; only the space they
+ * leave is used. */
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #stage{
+  grid-template-columns:minmax(0, 1fr);
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #brain{
+  display:none !important;
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .reactor-wrap{
+  flex-direction:column; justify-content:center; gap:8px;
+  padding:22px 18px 8px;
+}
+/* The freed column's worth of face. 200px x the device's own step, so the
+   three-step control still owns the size (200/250/300 at 1280x650) and the
+   wrap reserves all of it - the log below keeps whatever is left. */
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #reactor{
+  width:calc(200px * var(--face-scale, 1));
+  height:calc(200px * var(--face-scale, 1));
+}
 /* The Studio word row carries the Galaxy options word instead (2026-10-27). */
 html[data-hud-shell="split-stage"] #stage-bar-galaxy-options{display:none;}
 html[data-hud-shell="split-stage"] .appr-badge:not([hidden]){display:inline-flex;}
@@ -1838,6 +1903,17 @@ html[data-hud-shell="center-core"] .reactor-wrap{
   margin-top:58px; padding:0; flex-shrink:0;
 }
 html[data-hud-shell="center-core"] #reactor{width:calc(320px * var(--face-scale, 1)); height:calc(320px * var(--face-scale, 1));}
+/* The one face sized by the WINDOW rather than by a column. Ambient has no
+   column to grow into: the core is the whole stage, with the latest exchange
+   under it. With the 2026-10-29 steps on the 320px base, a 650px-tall window
+   pushed the composer off the bottom (measured: composer at y=691 in a 650
+   window, and the page scrolled to 757). The same three steps run on a 240px
+   base in a short window, so the face still grows Small -> Large and the
+   composer stays on screen; a tall window keeps the 320px base and the bigger
+   face. This is the ONLY place a second base exists, and it is one rule. */
+@media (max-height: 800px){
+  html[data-hud-shell="center-core"] #reactor{width:calc(240px * var(--face-scale, 1)); height:calc(240px * var(--face-scale, 1));}
+}
 html[data-hud-shell="center-core"] .reactor-rings{display:block;}
 html[data-hud-shell="center-core"] .reactor-state{bottom:-8px; letter-spacing:.34em;}
 html[data-hud-shell="center-core"] .core-expand{display:none;}
@@ -2907,6 +2983,15 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
       <button class="ghost" id="stage-bar-galaxy-options" type="button"
               title="Galaxy options: lens, look, search, reset and hide"
               aria-haspopup="dialog" aria-expanded="false">Galaxy options</button>
+      <!-- The way back from a hidden galaxy, for every shell (2026-10-29).
+           While the picture is hidden the main stage no longer holds the
+           paragraph and the button that used to fill it - the face uses that
+           space - so the one small control lives here, beside the Galaxy
+           options door and out of the way of both. Shown by CSS only while
+           `data-galaxy-hidden` is on <html>; it is the same command as the
+           panel's own "Show the galaxy". -->
+      <button class="ghost galaxy-back" id="galaxy-show-placeholder" type="button"
+              title="Show the galaxy again (this device only)">Show the galaxy</button>
       <button class="ghost rail-toggle" id="rail-toggle" type="button"
               aria-controls="rail-right" aria-expanded="false">Telemetry</button>
       <!-- Fixed, outside every card/region/layout document. Same command as
@@ -3053,12 +3138,14 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
 
       <!-- Hide the galaxy (same request, "also, add an option to hide the
            galaxy under the Galaxy Options menu"): while it is hidden the
-           picture is gone and this is what stays, with the way back - the
-           toggle in #galaxy-options is the other way back. -->
+           picture is gone. Since 2026-10-29 this is the SENTENCE ONLY and it is
+           not drawn - it is what a screen reader reaches on the empty map,
+           because the owner asked for the face's space instead of a paragraph,
+           and the way back is the small chip in the stage bar
+           (#galaxy-show-placeholder) plus the toggle in #galaxy-options. -->
       <div class="galaxy-off" id="galaxy-hidden">
         <p>The galaxy is hidden. Your brain map is still here - it is only
            drawn away until you turn it back on.</p>
-        <button type="button" class="ghost" id="galaxy-show-placeholder">Show the galaxy</button>
       </div>
 
       <div class="trace-bar off" id="trace-bar">
@@ -5985,15 +6072,30 @@ async function send(){
         $("r-mem").textContent = route.injected_facts
           ? route.injected_facts + " facts"
           : (route.memory_side === "jarvis" ? "jarvis-side" : "none");
-        $("chip-model").textContent = route.lane;
-        // Gold means the answer left this PC. `where` says so (chat-stream
-        // .patch); an older backend is read by its gate - only "escalate"
-        // picks a cloud lane. This used to test gate === "privacy", a gate
-        // the router never returns, so EVERY answer was painted as cloud.
-        const cloud = route.where ? route.where === "cloud" : route.gate === "escalate";
-        // classList, never className: the chip is a span inside the door and
-        // must never be handed a class list that replaces the page's own.
-        $("chip-model").classList.toggle("hot", cloud);
+        // THE CHIP IS THE DOOR, NOT THE TURN (the owner's field bug, 2026-10-29:
+        // "the header chip can read NO AI MODEL right after a quick-path turn
+        // while the model is up"). A quick-path answer is made with no model at
+        // all, and the PC says so in `lane` - jarvis_quick.LANE is the literal
+        // words "no AI model" - so writing `lane` into the chip unconditionally
+        // told the owner his model was gone when it was answering him. Boot
+        // paints this chip from /api/status's own default_model and nothing
+        // repaints it afterwards, so the false words stayed until a reload.
+        // The rail's #r-model above KEEPS the turn's lane, because that row is
+        // what answered this turn; the chip is what Jarvis is using.
+        const quickTurn = typeof route.quick === "string" && route.quick !== "";
+        const laneWords = typeof route.lane === "string" ? route.lane.trim() : "";
+        const noModelWords = /^no\s+ai\s+model$/i.test(laneWords);
+        if(!quickTurn && laneWords && !noModelWords){
+          $("chip-model").textContent = laneWords;
+          // Gold means the answer left this PC. `where` says so (chat-stream
+          // .patch); an older backend is read by its gate - only "escalate"
+          // picks a cloud lane. This used to test gate === "privacy", a gate
+          // the router never returns, so EVERY answer was painted as cloud.
+          const cloud = route.where ? route.where === "cloud" : route.gate === "escalate";
+          // classList, never className: the chip is a span inside the door and
+          // must never be handed a class list that replaces the page's own.
+          $("chip-model").classList.toggle("hot", cloud);
+        }
       }
     }catch(e){}
 
@@ -6120,6 +6222,22 @@ async function send(){
 /* ==================================================================
  * Wiring
  * ================================================================== */
+/** Is the face ON SCREEN? Almost always "the Talk view is up" - but since
+ *  2026-10-29 there is one more place it can be: the Studio stage with the
+ *  Galaxy hidden, where the face fills the space the picture gave back (see
+ *  "THE HIDDEN GALAXY'S SPACE BECOMES THE FACE'S" in the style) and is drawn
+ *  even though the page's own view is still the Galaxy one. Without this the
+ *  iframe kept `about:blank` there - a blank white disc where the owner was
+ *  promised a face. */
+function faceOnScreen(v){
+  if(v === "talk") return true;
+  try{
+    return document.documentElement.hasAttribute("data-galaxy-hidden")
+      && document.documentElement.getAttribute("data-hud-shell") === "split-stage"
+      && document.body.dataset.hudTab === "galaxy";
+  }catch(e){ return false; }
+}
+
 function setView(v){
   S.view = v;
   document.querySelectorAll(".mode").forEach(b =>
@@ -6128,7 +6246,7 @@ function setView(v){
   $("brain").classList.toggle("on", v === "brain");
   $("stage-title").textContent = v === "talk" ? "Conversation" : "Brain map";
   if(v === "brain") requestAnimationFrame(() => galaxy.resize());
-  reactor.show(v === "talk");
+  reactor.show(faceOnScreen(v));
   galaxy.syncRunning();
 }
 document.querySelectorAll(".mode").forEach(b =>
@@ -6397,6 +6515,11 @@ $("g-spin").addEventListener("click", e => {
     // an empty stage.
     try{ if(hidden) galaxy.releaseCosmos(); }catch(e){}
     try{ galaxy.syncRunning(); }catch(e){}
+    // The face takes the space the picture gave back (2026-10-29), so the one
+    // place that decides whether its iframe runs has to be told about the hide
+    // as well as about the view: without this the iframe kept `about:blank`
+    // and the stage showed a blank disc where the face belongs.
+    try{ reactor.show(faceOnScreen(S.view)); }catch(e){}
   }
 
   function storedHidden(){
@@ -8629,6 +8752,10 @@ subscribe();
     document.documentElement.setAttribute("data-hud-tab", body.dataset.hudTab);
     placeReminders();
     refreshTab();
+    // The Studio stage's Galaxy tab can be the face's home (2026-10-29: the
+    // hidden galaxy's space). Choosing another tab takes it off screen again,
+    // so the one place that decides whether the face iframe runs is told.
+    try { reactor.show(faceOnScreen(S.view)); } catch (e) { /* the first call, before the face exists */ }
   }
 
   tabs.forEach(function (b) {
