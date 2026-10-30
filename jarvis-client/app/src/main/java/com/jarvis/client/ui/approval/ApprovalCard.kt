@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.data.Security
 import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.AsksFirst
 import com.jarvis.client.net.CardSummary
@@ -113,6 +114,7 @@ fun ApprovalCard(
     onDeny: () -> Unit,
     onAmend: suspend (note: String) -> Unit = {},
     swipeAllowed: Boolean = true,
+    security: Security = Security(),
     pictureHidden: Boolean = false,
     modifier: Modifier = Modifier,
     showFooter: Boolean = true,
@@ -128,6 +130,7 @@ fun ApprovalCard(
     onDeny = { _ -> onDeny() },
     onAmend = onAmend,
     swipeAllowed = swipeAllowed,
+    security = security,
     pictureHidden = pictureHidden,
     modifier = modifier,
     showFooter = showFooter,
@@ -175,6 +178,16 @@ fun ApprovalCard(
      * card's help line stops offering the gesture. Buttons are unchanged.
      */
     swipeAllowed: Boolean = true,
+    /**
+     * Security, for the one line under the buttons that says what pressing
+     * Approve will ask for ([SecurityRules.approveCheckWords]) - the owner's
+     * ruling of 2026-10-30: the phone's fingerprint for the same cards the
+     * desktop asks Windows Hello for. Defaulted, so a screen that does not
+     * thread it draws the default method's sentence and nothing else changes;
+     * this line decides NOTHING - [com.jarvis.client.MainActivity.approveItem]
+     * runs the check before any approval is sent, whether or not it is drawn.
+     */
+    security: Security = Security(),
     /**
      * "Hide memory lists and chat history" is on: a "submit this form" card
      * shows a line instead of the form's picture, and never asks for it.
@@ -298,6 +311,16 @@ fun ApprovalCard(
     // decide route is not built on any backend). So approving is refused here
     // and the card says where to choose. Denying needs no option and stays.
     val canApprove = canDecide && !item.needsChoice && !item.pcOnly && heavyGateOk
+
+    // WHAT PRESSING APPROVE WILL ASK FOR (the owner's ruling of 2026-10-30).
+    // Null when Approve asks for nothing, or when this card has no Approve to
+    // press at all: a PC-only card's button is not drawn (it can only be
+    // approved there, with Windows Hello) and a `needsChoice` card's is drawn
+    // but disabled until the PC knows which plan - neither can reach a prompt,
+    // so neither may promise one. The sentence itself is
+    // [SecurityRules.approveCheckWords]'s, from the same rule the check uses.
+    val approveCheck =
+        if (item.pcOnly || item.needsChoice) null else SecurityRules.approveCheckWords(security, item)
 
     // A decision on this screen is felt, not just seen - a swipe is answered
     // with no visual confirmation until the card has already animated off
@@ -819,14 +842,24 @@ fun ApprovalCard(
                         onClick = approvePress,
                     )
                 }
-                if (SecurityRules.riskyByToday(item)) {
-                    Text(
-                        text = "Fingerprint follows",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = chrome.textMid,
-                    )
-                }
             }
+        }
+        // THE ONE LINE THAT SAYS A CHECK IS COMING (the owner's ruling of
+        // 2026-10-30: the phone's fingerprint for the same cards the desktop
+        // asks Windows Hello for). Under the buttons, on its own line, rather
+        // than as a third child of the Row above: a sentence squeezed between
+        // Deny and Approve wraps to three words a line on a narrow phone. The
+        // buttons themselves keep the shared CardWords.BUTTONS ("Deny",
+        // "Approve") word for word, so the two apps' card controls still read
+        // the same. An expired card draws nothing at all (DEF-010), and a card
+        // with no Approve to press has `approveCheck == null`.
+        if (!expired && approveCheck != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = approveCheck,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
         }
         if (showFooter) {
             Spacer(Modifier.height(8.dp))

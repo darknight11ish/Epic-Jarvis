@@ -681,6 +681,15 @@ data class HomeState(
     /** Security's "Swipe to approve or deny" (on by default). */
     val swipeDecides: Boolean = true,
     /**
+     * The phone's own Security settings, for the one line a card shows about
+     * what pressing Approve will ask for (the owner's ruling of 2026-10-30:
+     * the fingerprint for the same cards the desktop asks Windows Hello for).
+     * The rule is [com.jarvis.client.data.SecurityRules.approveCheckWords],
+     * which reads this and nothing else; a screen built without it draws the
+     * default method's sentence and gates nothing differently.
+     */
+    val security: com.jarvis.client.data.Security = com.jarvis.client.data.Security(),
+    /**
      * The PC's own approval-card setting (net/CardSummary): "start short" (the
      * default) draws each card's short summary with an "Explain more" control,
      * "always show everything" draws the whole card. Cosmetic, read from the
@@ -1670,6 +1679,7 @@ private fun ConversationList(
                     },
                     onAmend = { note -> actions.onAmend(item.id, note) },
                     swipeAllowed = state.swipeDecides,
+                    security = state.security,
                     pictureHidden = state.memoryHidden,
                     showFooter = state.pending.size == 1,
                     // UI-AUDIT-2026-09-26 item 6: a new card fades in, and the
