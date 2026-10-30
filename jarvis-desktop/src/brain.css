@@ -2434,6 +2434,25 @@ body {
   border-color: var(--warn);
 }
 
+/* Put away (2026-10-29): a row's own word, in the row's own colours - the
+   archived list is a place, not a warning. */
+.history-mark-archived {
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+
+/* The Archived list switch above the History list, and the one sentence the
+   archived rows carry. */
+.history-archived-toggle[aria-pressed="true"] {
+  font-weight: 700;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.history-archived-note {
+  margin: 4px 0 8px;
+}
+
 .history-more {
   padding-top: 8px;
 }

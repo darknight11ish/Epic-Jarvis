@@ -1,5 +1,6 @@
 package com.jarvis.client.widget
 
+import com.jarvis.client.net.Calendar
 import com.jarvis.client.net.JarvisWidgets
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -232,5 +233,85 @@ object WidgetStates {
         Link.OFFLINE -> "Offline"
         Link.RECONNECTING -> "Reconnecting"
         Link.CONNECTED -> "Connected"
+    }
+
+    // -------------------------------------------------------- calendar ----
+
+    /**
+     * Every outcome of a calendar-widget draw. [CONTENT] is the only one that
+     * draws real events; every other one has words, because the whole rule of
+     * this file is that a draw always ends in a state that says something.
+     */
+    enum class Cal {
+        NOT_STARTED,
+        NOT_PAIRED,
+        /** The PC's own switch is off (design decision D5: the widget STAYS). */
+        OFF,
+        /** The link is down or catching up: nothing has been checked. */
+        STALE,
+        /** The read ran out of its budget. */
+        TIMED_OUT,
+        /** The route answered something this app cannot draw. */
+        FAILED,
+        /**
+         * App lock or "Hide memory lists and chat history" is on. The home
+         * screen is PUBLIC, so this is its own state rather than a redacted
+         * [CONTENT]: there is no title to draw, and the widget says one
+         * sentence instead.
+         */
+        HIDDEN,
+        CONTENT,
+    }
+
+    /**
+     * The calendar widget's outcome, in the order the questions are asked.
+     *
+     * [off] is checked before the link on purpose: the feature being switched
+     * off at the PC is the most useful thing to say, and it needs no read at
+     * all. [hidden] comes before the read and before [Cal.STALE] - a locked
+     * phone has no titles to draw whatever else is wrong, so it says the one
+     * reason that is the owner's, and it never draws a word it has already
+     * read. [off] still wins over [hidden]: that one needs a tap to Settings,
+     * and Settings is where the owner fixes it.
+     *
+     * A widget with real events and a live link is [CONTENT] even while the
+     * list is empty: "Nothing today" is content (a true sentence), not a
+     * failure, and drawing it as an error state would be a lie.
+     */
+    fun calendar(
+        ready: Boolean,
+        paired: Boolean,
+        off: Boolean,
+        hidden: Boolean,
+        live: Boolean,
+        read: Read,
+    ): Cal = when {
+        !ready -> Cal.NOT_STARTED
+        !paired -> Cal.NOT_PAIRED
+        off -> Cal.OFF
+        hidden -> Cal.HIDDEN
+        read == Read.TIMED_OUT -> Cal.TIMED_OUT
+        !live -> Cal.STALE
+        read == Read.CONTENT -> Cal.CONTENT
+        else -> Cal.FAILED
+    }
+
+    /**
+     * The headline and the sub-line a message state shows; `"" to ""` for
+     * [Cal.CONTENT], which draws the date and today's events instead.
+     *
+     * The four sentences the feature's own words module owns ([Calendar.OFF_WIDGET],
+     * [Calendar.HIDDEN], [Calendar.STALE]) are taken from there rather than
+     * re-typed, so the widget, the screen and the Brain row cannot drift apart.
+     */
+    fun calendarWords(state: Cal): Pair<String, String> = when (state) {
+        Cal.NOT_STARTED -> "Jarvis could not start" to "Tap to open and see why"
+        Cal.NOT_PAIRED -> "Calendar needs a pairing token" to "Tap to open Jarvis and pair"
+        Cal.OFF -> Calendar.OFF_WIDGET to Calendar.OFF_WIDGET_SUB
+        Cal.STALE -> Calendar.STALE to Calendar.STALE_SUB
+        Cal.TIMED_OUT -> "Could not reach your PC" to Calendar.STALE_SUB
+        Cal.FAILED -> "Could not read your calendar" to Calendar.STALE_SUB
+        Cal.HIDDEN -> Calendar.HIDDEN to Calendar.HIDDEN_SUB
+        Cal.CONTENT -> "" to ""
     }
 }

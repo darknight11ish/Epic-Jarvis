@@ -77,7 +77,13 @@ exempt from rule 4. The moment the desktop calls it, a warning says to
 reclassify it (`ported` once the phone calls it too, else `todo`). A route in
 `RETIRED` was given up on purpose (an app surface was removed whole, F11): it
 stays `planned`, and having NO call site in either app is a warning that says
-so, never an error - unless an app starts calling it again.
+so, never an error - unless an app starts calling it again. A route in
+`PENDING_CLIENTS` is the fourth case and the only one where the backend came
+first with no client at all: the route really exists, neither app even names
+it, and a later slice owns the screen. It stays `planned`, its absence from
+both apps is a warning that says which slice owns the client, and the moment
+either app calls it the entry is a FAILURE - remove the line and reclassify,
+so a backend-first route cannot quietly stay "pending" after it is wired.
 """
 import os
 import re
@@ -246,6 +252,13 @@ CLASSIFICATION = {
     # (ARCHITECTURE section 8, and the row in its one-sided-on-purpose table).
     # The read-only POST /api/antislop/audit is in BACKEND_ONLY below.
     "/api/antislop": ("ported", "The Anti-Slop filter (2026-10-28; JARVIS-API section 159; backend jarvis_antislop.py, vendoring the MIT-licensed miqdadbadjuber/anti-slop ruleset). GET reads the whole state (enabled, mode, scopes, dials, show_delivery_gate_on_ui_tasks); POST is ONE change at once, with no approval card either way and no model call - it filters the wording of an answer, opens no way out of the PC, reads no folder and takes no action. OFF costs 0 prompt tokens and rewrites nothing. Desktop: Settings, How Jarvis talks, Anti-Slop filter (src-tauri/src/antislop.rs get_antislop/set_antislop, settings window only; the card is src/antislop-settings.js + src/antislop.js). Phone: Settings, How Jarvis talks (net/Antislop.kt, ui/screens/AntislopPlate.kt, JarvisRuntime setAntislop/setAntislopMode), the master switch, the During/After mode and the em-dash box - the three scopes, the Delivery Gate switch and the dials are the desktop card on purpose (ARCHITECTURE section 8). The read-only POST /api/antislop/audit is in BACKEND_ONLY below."),
+    # The Jarvis-owned local calendar's four routes are declared ONCE, at the END
+    # of this table (search `/api/calendar`): `planned`, because the phone calls
+    # all four and the desktop's HUD card is the next slice. #983 declared them
+    # here and #980 declared them there, so the chain merge left the same four
+    # keys in this dict literal twice and the later one silently won - a Python
+    # dict literal keeps the last, so the first note was dead text. Removed here
+    # on 2026-10-29, so the note that is read is the only one there is.
     "/api/thinking": ("ported", "Per-model thinking levels (backend/thinking.patch, jarvis_thinking.py, Section 5.5): off, quick, deep, or auto per running model. GET reads running models and their supported levels; POST is ONE change with no approval card. Both apps hold the change on a stale link. Desktop: Settings, Thinking levels (plain_errors.rs get_thinking/set_thinking, thinking-settings.js). Phone: Settings, Thinking levels (ThinkingPlate.kt, net/Thinking.kt)."),
     "/api/voice/live": ("ported", "Jarvis Live (backend/live.patch, jarvis_live.py; the owner's decision and answers of 2026-09-28; docs/LIVE-DESIGN.md; JARVIS-API section 63): a back-and-forth voice conversation - GET the session (fixed words and numbers, never anything said), POST start (no card; held on a stale link; refused until the owner's voice is trained), stop (never held), extend, resume, mute/unmute. Desktop: the Jarvis bar's Live button and sign, the always-on-top badge and the tray row (live.rs, live-rules.js). Phone: Live screen, the Live microphone service and its notification (LiveScreen.kt, service/LiveService.kt, voice/LiveRules.kt)."),
     "/api/people/dossier": ("ported", "One person's read-only dossier through jarvis_people_crm.build_person_dossier() (Pillar 16/#540; JARVIS-API section 143; LM-4): their own saved facts, kept chat turns, mail headers, open to-dos and next shared event, in the module's own words. Desktop: the people_dossier command (brain/people.rs) and the card in brain.js, opened by clicking a person in People and things - withheld whole under App lock and the hidden lists, BEFORE the PC is asked. Phone: net/PeopleDossier.kt read under EntitiesPlate, inside the plate's own hidden section. Owner-only: the backend refuses another device before the module is imported or the name is read."),
@@ -532,6 +545,7 @@ CLASSIFICATION = {
     "/api/history/tags/suggest": ("ported", "\"Suggest tags overnight\" (the owner's decision of 2026-09-30; docs/JARVIS-API.md section 104, docs/OVERNIGHT-TAGS-DESIGN.md; jarvis_tag_suggest.py, tag-suggest.patch, chat-history.patch): GET reads {enabled, paused, waiting, last_day}; POST {\"enabled\": bool} turns it on with ONE approval card (chat_tags_suggest_on) or off at once. Each suggestion is its own card (chat_tag_suggest) in the ordinary approvals flow; nothing is filed without a tap. Both apps show the switch row in History -> Tags (desktop: brain/history.rs brain_history_tag_suggest, brain.js, history-tags.js; phone: net/TagSuggest.kt, HistoryTags.kt SuggestTagsRow). The suggestion card shows text_hidden while the private lists are hidden (desktop: stream.rs hide_private_cards; phone: PendingRows.kt). Held on a stale link."),
     "/api/history/mark": ("ported", "\"New section here\" (the owner's decision of 2026-09-30; docs/JARVIS-API.md section 106, docs/OVERNIGHT-TAGS-DESIGN.md section 5; jarvis_chat_log.py, chat-history.patch): a view-only divider above one of the owner's messages in a long chat (10+ turns, up to 20 per chat); the conversation read gains marks, markable and mark_why. No card. Both apps draw the button and the divider (desktop: brain/history.rs brain_history_mark, history-view.js, brain.js; phone: net/ChatMark.kt, HistoryScreen.kt). Held on a stale link."),
     "/api/history/settings": ("ported", "\"Keep chat history on this PC\": ON is one approval card (history_enable), OFF is immediate; and \"Delete conversations older than\" (keep_days). Both apps hold ON and every keep change on a stale link; OFF is never held."),
+    "/api/history/archive": ("ported", "Chat archive (the owner's request of 2026-10-29: \"make sure i can archive and delete chats (with a confirm step)\"; docs/JARVIS-API.md section 18.3; jarvis_chat_log.py, chat-history.patch): POST {\"id\": \"<id>\", \"archived\": true|false} -> {\"ok\": true, \"id\", \"archived\"}; reversible, NO approval card, 400 bad body, 404 not_found, 423 locked while the private lists are hidden. The archived list is the same GET /api/history with `archived=1`, ANDed with limit/before/kind/tag, and every row carries `archived`. Desktop: the HUD's own History panel (an always-visible one-click History door, Archive/Unarchive in a row's menu, the Archived chip - all through the ONE hud_history_act command) and the Brain's History tab (#history-archived switch, brain_history_archive). Phone: HistoryScreen.kt, net/ChatLog.kt, net/HistoryView.kt, JarvisRuntime.archiveHistory. Delete still asks its confirm, in both apps."),
     "/api/wiki": ("ported", "The wiki builder's documents and their state (backend/wiki.patch, 2026-09-24). Both apps list them; neither browses files or reads pages - the vault reaches the phone through Syncthing."),
     "/api/wiki/ingest": ("ported", "\"Add to wiki\" for one document, then its job. Raises one approval card (wiki_update); nothing is written before it is answered."),
     # Backups (backend/jarvis_backup.py, backup.patch; the owner's decision
@@ -700,6 +714,24 @@ CLASSIFICATION = {
     "/api/setup": ("ported", "The setup questionnaire's reading (the owner's ask of 2026-10-20: \"a setup questionnaire when someone first starts jarvis (or can be filled out again)\"; backend/jarvis_setup.py, setup.patch; docs/JARVIS-API.md section 147): the fourteen questions and their options in the PC's own words, the current value of every setting they cover, the last accepted answers and when, the last outcomes, and how long one approval card may wait. A read, not held on a stale link. The desktop draws it as Settings -> First-time setup (src-tauri/src/setup_questionnaire.rs, setup-questionnaire.js, setup-settings.js); the phone draws the same questions READ-ONLY on Settings -> First-time setup (net/SetupQuestionnaire.kt, ui/screens/SetupQuestionnairePlate.kt)."),
     "/api/setup/plan": ("ported", "The setup questionnaire's READ-ONLY plan (backend/jarvis_setup.py; docs/JARVIS-API.md section 147): POST the chosen answers and the PC answers what WOULD change, in its own sentences, with one `effect` per change - instant, one of its own approval cards, or blocked on this PC - plus what would not change and why, and the preset RECOMMENDATION (which changes no model). It writes nothing, raises no card, and never carries `confirm`. Both apps ask it: the desktop's Settings card whenever the answers change (setup-settings.js, setup-questionnaire.js), the phone's read-only card on one button (SetupQuestionnaire.kt)."),
     "/api/setup/apply": ("deliberate", "The setup questionnaire's one write (backend/jarvis_setup.py; docs/JARVIS-API.md section 147), and it is the DESKTOP's alone on purpose. With `confirm: true` it calls the EXISTING setters in a fixed safest-first order, ONE at a time, and every loosening change (an asks-first rule, offering a reading tool) raises its OWN existing approval card and waits for it - up to its card patience per card - so an apply can take minutes and needs a person at the PC. Several of those changes are PC-only by the existing rules (jarvis_asks_first refuses a loosening request from another device), so a phone button would either fail halfway or sit behind cards it cannot answer. The phone is read-only: it reads the same questions and may ask for the read-only /api/setup/plan, and says plainly that the changes are made on the PC. Nothing here approves a card, invents a gate action, clears a latch or switches a model. ARCHITECTURE.md section 8."),
+    # ---- Jarvis's own calendar (2026-10-29; JARVIS-API section 163) --------
+    # The four routes are classified `planned` rather than `ported` on purpose,
+    # and this is the honest state of THIS branch, not a wish: the PHONE calls
+    # all four today (net/Calendar.kt, CalendarPlate.kt, CalendarWidget.kt,
+    # CalendarSettingsPlate.kt), and the DESKTOP does not yet - its HUD card and
+    # its two Rust commands are the separate S2 slice (design brief Part 5.5,
+    # `.dsh-scratch/JARVIS-CALENDAR-DESIGN-2026-10-29/REPORT.md`). `ported`
+    # would fail this checker's own rule 4 ("a classified route the desktop no
+    # longer calls") on a route it has never called yet, and `deliberate` would
+    # be a lie because the phone has it. `planned` + the phone is a warning, not
+    # an error, and its own words are exactly true: "the phone calls it; the
+    # desktop does not yet". **When the HUD card lands, flip all four to
+    # `ported`** - the two apps then share one composing read, exactly as Part 3
+    # of the brief recommends.
+    "/api/calendar": ("planned", "Jarvis's own calendar: the events kept on the PC in calendar.db beside schedule.db - not the phone's calendar provider (so the app asks for no calendar permission at all) and not a Google account (backend/jarvis_local_calendar.py, JARVIS-API section 163). The one composing read a screen makes: `?days=N` (1-90) answers the local events, the window it covered, whether the feature is on, and a `sources` block naming Google and iCal honestly. Phone: the Calendar screen's month grid and day list (net/Calendar.kt, ui/screens/CalendarPlate.kt), the Brain row beside Coming up, and the home-screen calendar widget (widget/CalendarWidget.kt). Desktop: the HUD's Calendar rail card is the separate S2 slice."),
+    "/api/calendar/add": ("planned", "One new calendar event, in the owner's own words: title, date, time (or all_day), an optional last day and end time, place, notes, remind_minutes and recurrence. NO approval card, and that is the owner's decision D1 of the 2026-10-29 design brief: it writes one row on the PC he is sitting at and changes nothing outside it, the same reasoning the cardless list already gives for one job on the schedule - with the same guards (there is no bulk form, and every write is ids-only in the audit line). Rule 4 still applies: the phone holds it on a stale link. Phone: the Add sheet on the Calendar screen (JarvisRuntime.calendarAdd). Desktop: the HUD card's own inline Add, in the S2 slice."),
+    "/api/calendar/act": ("planned", "ONE calendar event: delete, or update with the same fields /add takes. No card for either - a delete only makes things quieter, and an update is the same one-row write as an add (decision D1) - and no bulk form: there is deliberately no delete-all and no clear-range, the same rule /api/schedule/act has. The phone asks \"are you sure?\" before a delete because it cannot be undone, and holds both actions on a stale link (JarvisRuntime.calendarUpdate / calendarDelete). Desktop: the S2 slice's hud_calendar_act."),
+    "/api/calendar/settings": ("planned", "The PC's own ON/OFF switch for the whole calendar: `{\"on\": bool}`, stored in calendar-settings.json beside the other little settings files - **no file means ON**, which is what \"on by default\" means, and a damaged file reads as off with a reason rather than silently on. No card either way: it is a preference the owner can change back in one press, the same shape as the Anti-Slop filter and the briefing's senders switch. OFF hides the calendar on both apps and stops the widget updating; it NEVER deletes anything. Phone: the Settings row (CalendarSettingsPlate.kt) and the off state's own \"Turn it on\" (JarvisRuntime.calendarSettings). Desktop: the Settings -> Calendar card is the S2 slice's."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 
@@ -1123,6 +1155,27 @@ RETIRED = {
         "nothing called); the PC route remains, and neither app calls it."),
 }
 
+#: Routes the BACKEND built first, whose client is a later slice: no app
+#: mentions them yet, ON PURPOSE. This is a third state, different from both
+#: tables above - UNREACHABLE is a dead builder that already exists, RETIRED is
+#: a surface given up - and it exists because the docstring's own definition of
+#: `planned` ("built on the backend and neither app calls it yet") had no way
+#: to be recorded when NEITHER app even names the route: every earlier planned
+#: route was at least half-wired. A route here must be classified `planned`.
+#: The PR that wires the first client REMOVES its line and reclassifies the
+#: route; if either app calls a route still listed here, that is an ERROR, so a
+#: stale line cannot hide a wired route.
+#:
+#: EMPTY ON 2026-10-29. It held the four `/api/calendar*` routes while the backend
+#: was written first (JARVIS-API section 164). The phone now calls all four
+#: (`net/Calendar.kt`), which is exactly the "an app already calls it" ERROR this
+#: checker raises, so #980 removed the lines - the rule above says the slice that
+#: wires the first client removes its line. They stay `planned`, which this
+#: checker reports as a warning in its own true words ("the phone calls it; the
+#: desktop does not yet"), and they become `ported` when the HUD card lands. The
+#: mechanism stays for the next backend-first route.
+PENDING_CLIENTS = {}
+
 
 def _nothing_calls_it(route: str) -> str:
     """The one sentence for a route whose declaration still holds: no app calls
@@ -1341,6 +1394,24 @@ def main():
             f"{r} is RETIRED but the phone calls it again. A retired route must be "
             f"called by NEITHER app: remove {r} from RETIRED in "
             "tools/check_parity.py and reclassify it (it is being wired up).")
+    # A backend-first route (PENDING_CLIENTS) must stay `planned` and must be in
+    # no app: the moment a client names it, its line is stale and the slice that
+    # wired it removes the line and reclassifies the route.
+    for r in sorted(set(PENDING_CLIENTS) - set(CLASSIFICATION)):
+        problems.append(
+            f"{r} is in PENDING_CLIENTS but not in CLASSIFICATION. A pending "
+            "route is still classified `planned`; add it there.")
+    for r in sorted(set(PENDING_CLIENTS) & set(CLASSIFICATION)):
+        if CLASSIFICATION[r][0] != "planned":
+            problems.append(
+                f"{r} is in PENDING_CLIENTS but classified "
+                f"{CLASSIFICATION[r][0]!r}; a backend-first route is `planned` "
+                "until its first client lands.")
+    for r in sorted((set(PENDING_CLIENTS) & desk) | (set(PENDING_CLIENTS) & phone)):
+        problems.append(
+            f"{r} is in PENDING_CLIENTS but an app already calls it. Remove it "
+            "from PENDING_CLIENTS in tools/check_parity.py and reclassify it "
+            "(`ported` if both apps call it, else `todo`).")
     for r in sorted(by("planned") & desk):
         warnings.append(f"{r} is 'planned' but the desktop now calls it - reclassify it as "
                         f"'ported' (if the phone calls it too) or 'todo'.")
@@ -1357,6 +1428,11 @@ def main():
             # The route is in no app at all: the phone's only reference to it is
             # a helper nothing calls.
             warnings.append(_nothing_calls_it(r))
+        elif r in PENDING_CLIENTS:
+            # Backend-first by design: the route is real, no client names it
+            # yet, and the slice that wires one removes this line.
+            warnings.append(f"{r} is 'planned' and PENDING (no app calls it yet, "
+                            f"by design): {PENDING_CLIENTS[r]}")
         elif r in RETIRED:
             # The whole surface was retired (F11): the PC route remains and no
             # app is meant to call it. A warning naming the retirement, never a

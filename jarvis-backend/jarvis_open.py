@@ -557,6 +557,13 @@ def _section_for(words: str) -> Optional[str]:
     (jarvis_settings_registry.SECTIONS), never from a second copy here - the
     same reason that module exists. A backend without it (an older install)
     simply has no section to name, and the words are treated as an app.
+
+    A section marked `openable=False` is skipped: it is the feature's own
+    switch, not a place to open (the Jarvis Calendar row - its words are the
+    feature's, and docs/JARVIS-API.md section 163 says "open my calendar" still
+    opens it), so those words go on to be an app's name, which is what they
+    were before that row existed. `getattr` keeps a registry without the field
+    working, where every section is a place.
     """
     if not words:
         return None
@@ -568,7 +575,9 @@ def _section_for(words: str) -> Optional[str]:
         section = R.find_section(words)
     except Exception:
         return None
-    return section.id if section is not None else None
+    if section is None or not getattr(section, "openable", True):
+        return None
+    return section.id
 
 
 def _other_reading(key: str) -> str:

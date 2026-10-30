@@ -776,6 +776,7 @@ object JarvisRuntime {
     @Volatile private var faceJob: Job? = null
     private var widgetJob: Job? = null
     private var boardJob: Job? = null
+    private var calendarWidgetJob: Job? = null
 
     /**
      * The queue's own safety net - [QueueBeat]'s collector.
@@ -1136,6 +1137,26 @@ object JarvisRuntime {
             combine(_link, _stale, _scheduleTick, _widgetsTick, settings.homeWidgets) { _, _, _, _, _ -> }
                 .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
+        }
+        // The calendar widget (2026-10-29): the sixth, and the only one that
+        // shows today's plan. Redrawn when the link comes or goes stale, when
+        // the calendar changes here or on the PC ([calendarTick]), and when App
+        // lock or "Hide memory lists" changes - the home screen is public, so a
+        // title already drawn there has to go the moment either switch goes on,
+        // not up to 30 minutes later. `_stale` is in the combine for the reason
+        // ApprovalWidget's is: a stale transition that reaches no collector
+        // changes what the widget WOULD draw without redrawing it.
+        //
+        // With the app closed, only the launcher's half-hourly tick redraws it
+        // (widget_calendar_info.xml's updatePeriodMillis), so just after
+        // midnight it can still say yesterday for up to half an hour. Fixing
+        // that needs an AlarmManager wake-up, which is not in this slice; the
+        // widget's own comment says so rather than letting it be discovered.
+        calendarWidgetJob?.cancel()
+        calendarWidgetJob = scope.launch {
+            combine(_link, _stale, _calendarTick) { _, _, _ -> }
+                .combine(settings.security) { _, _ -> }
+                .collect { com.jarvis.client.widget.CalendarWidget().updateAll(app) }
         }
         // "Reading phone notifications": turning it off is immediate, so
         // whenever the switch reads as off - pressed here, or learned from
@@ -1783,6 +1804,11 @@ object JarvisRuntime {
             // words). The list on Mind reads itself again; a job that went
             // off is read by id and shown as a notification.
             com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data, event.id)
+            // An event was added, changed or deleted on the PC, or the
+            // calendar's own switch was flipped there (`{"id", "state"}` only
+            // - a doorbell, never a title). The calendar screen, the Brain row
+            // and the home-screen widget read themselves again.
+            com.jarvis.client.net.Calendar.EVENT -> _calendarTick.update { it + 1 }
             // "Ring my phone" (2026-09-28): `{"id", "state", "at", "until",
             // "seconds"}` and no words. Rings on the alarm channel, never for
             // a stale or replayed event (net/FindPhone.kt).
@@ -6409,6 +6435,128 @@ object JarvisRuntime {
         }
     }
 
+    // ----------------------------------------------------- Jarvis Calendar ----
+    // Jarvis's OWN calendar (2026-10-29; net/Calendar.kt, ui/screens/
+    // CalendarPlate.kt, widget/CalendarWidget.kt; docs/JARVIS-API.md section
+    // 163). Events are kept on the PC beside `schedule.db` - not in Android's
+    // own calendar provider, so the app asks for no calendar permission, and
+    // not in a Google account. Both apps and the home-screen widget read the
+    // one list.
+
+    private val _calendarTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one after every change made from this phone, so the calendar
+     * screen, the Brain row and the widget read themselves again. A `calendar`
+     * event from the PC does the same, so a change made on the PC reaches this
+     * phone without a second timer.
+     */
+    val calendarTick: StateFlow<Int> = _calendarTick.asStateFlow()
+
+    /**
+     * `GET /api/calendar?days=N`. A read: never held on a stale link, and a
+     * failure leaves whatever the screens showed alone.
+     */
+    suspend fun calendar(days: Int = com.jarvis.client.net.Calendar.SCREEN_DAYS): ApiResult<JsonObject> =
+        api.calendar(days)
+
+    /**
+     * One new event - no approval card (it writes one row on the owner's own
+     * PC and changes nothing outside it; decision D1 of the 2026-10-29 design),
+     * but HELD on a stale link like every other change (rule 4).
+     *
+     * @return whether the PC took it, and the sentence to show.
+     */
+    suspend fun calendarAdd(fields: com.jarvis.client.ui.screens.CalendarFields): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val cal = com.jarvis.client.net.Calendar
+        val problem = cal.problem(fields.title, fields.date, fields.time, fields.allDay, fields.endDate, fields.endTime)
+        if (problem != null) return false to problem
+        val body = cal.addBody(
+            title = fields.title,
+            date = fields.date,
+            time = fields.time,
+            allDay = fields.allDay,
+            endDate = fields.endDate,
+            endTime = fields.endTime,
+            place = fields.place,
+            notes = fields.notes,
+            remindMinutes = fields.remind.toIntOrNull(),
+            recurrence = fields.recurrence,
+        ) ?: return false to "That is not an event yet - check the date and time."
+        return when (val r = api.calendarWrite(cal.ADD_PATH, body)) {
+            is ApiResult.Ok -> cal.said(r.value).also { (changed, _) ->
+                if (changed) _calendarTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not saved. " + describe(r.error))
+        }
+    }
+
+    /** ONE event changed: its id, and the same fields. Held on a stale link. */
+    suspend fun calendarUpdate(
+        id: String,
+        fields: com.jarvis.client.ui.screens.CalendarFields,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val cal = com.jarvis.client.net.Calendar
+        val problem = cal.problem(fields.title, fields.date, fields.time, fields.allDay, fields.endDate, fields.endTime)
+        if (problem != null) return false to problem
+        val inner = cal.addBody(
+            title = fields.title,
+            date = fields.date,
+            time = fields.time,
+            allDay = fields.allDay,
+            endDate = fields.endDate,
+            endTime = fields.endTime,
+            place = fields.place,
+            notes = fields.notes,
+            remindMinutes = fields.remind.toIntOrNull(),
+            recurrence = fields.recurrence,
+        ) ?: return false to "That is not an event yet - check the date and time."
+        val body = cal.updateBody(id, inner) ?: return false to "That is not one of your events."
+        return when (val r = api.calendarWrite(cal.ACT_PATH, body)) {
+            is ApiResult.Ok -> cal.said(r.value).also { (changed, _) ->
+                if (changed) _calendarTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not saved. " + describe(r.error))
+        }
+    }
+
+    /**
+     * ONE event deleted. Held on a stale link, like every change. Deleting only
+     * makes things quieter, so it asks no card - the same argument
+     * `/api/schedule/act`'s delete has - but the screen asks "are you sure?"
+     * first, because it cannot be undone.
+     */
+    suspend fun calendarDelete(id: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val cal = com.jarvis.client.net.Calendar
+        val body = cal.deleteBody(id) ?: return false to "That is not one of your events."
+        return when (val r = api.calendarWrite(cal.ACT_PATH, body)) {
+            is ApiResult.Ok -> cal.said(r.value).also { (changed, _) ->
+                if (changed) _calendarTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not deleted. " + describe(r.error))
+        }
+    }
+
+    /**
+     * The PC's own ON/OFF switch for the whole calendar. No card either way: it
+     * is a preference the owner can change back in one press, the same shape as
+     * the Anti-Slop filter and the briefing's senders switch. Held on a stale
+     * link like every other change.
+     */
+    suspend fun calendarSettings(on: Boolean): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val cal = com.jarvis.client.net.Calendar
+        return when (val r = api.calendarWrite(cal.SETTINGS_PATH, cal.settingsBody(on))) {
+            is ApiResult.Ok -> cal.said(r.value).also { (changed, _) ->
+                if (changed) _calendarTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+    }
+
     suspend fun addStandbySchedule(start: String, end: String): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         val body = com.jarvis.client.net.Schedule.standbyBody(start, end)
@@ -9432,10 +9580,18 @@ object JarvisRuntime {
     // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The
     // phone reads all of it from the PC and keeps none of it.
 
-    /** `GET /api/history`, one page, newest first. A read: never held. [kind]:
-     *  one kind of conversation ("Live only" and the other filters), or all. */
-    suspend fun history(before: Long? = null, kind: String? = null, tag: String? = null): ApiResult<JsonObject> =
-        api.history(before, kind, tag)
+    /**
+     * `GET /api/history`, one page, newest first. A read: never held. [kind]:
+     * one kind of conversation ("Live only" and the other filters), or all.
+     * [archived]: the archived chats only - the Archived view (the owner's
+     * request of 2026-10-29); the live list never includes them.
+     */
+    suspend fun history(
+        before: Long? = null,
+        kind: String? = null,
+        tag: String? = null,
+        archived: Boolean = false,
+    ): ApiResult<JsonObject> = api.history(before, kind, tag, archived)
 
     // ------------------------------------------------ chat tags ----
     // docs/CHAT-TAGS-DESIGN.md section 10. The tag list and each chat's tag
@@ -9774,6 +9930,45 @@ object JarvisRuntime {
             } else {
                 false to "Not deleted. " + describe(r.error)
             }
+        }
+    }
+
+    /**
+     * Archive ONE chat, or bring it back (`POST /api/history/archive`, the
+     * archive half of the owner's request of 2026-10-29). REVERSIBLE metadata:
+     * no approval card and no confirm - only Delete, which cannot be undone,
+     * keeps its confirm - and only the chat's id and the wanted state are sent,
+     * never a word of the chat. Held on a stale link like every other write
+     * (rule 4), and refused while the lists are hidden, because where a chat is
+     * kept is a word about that chat. The caller moves the row ONLY when
+     * [com.jarvis.client.net.ChatLog.Archive.ok] is true - a refusal says so and
+     * leaves the row exactly where it was.
+     */
+    suspend fun archiveHistory(chatId: String, archived: Boolean): com.jarvis.client.net.ChatLog.Archive {
+        val words = com.jarvis.client.net.ChatLog
+        actionBlocker()?.let { return com.jarvis.client.net.ChatLog.Archive(false, said = it) }
+        if (privateListsHidden) {
+            return com.jarvis.client.net.ChatLog.Archive(false, said = com.jarvis.client.net.ChatTags.FILED_HIDDEN)
+        }
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId)) {
+            return com.jarvis.client.net.ChatLog.Archive(false, said = words.ARCHIVE_GONE)
+        }
+        return when (val r = api.historyArchive(words.archiveBody(chatId, archived))) {
+            is ApiResult.Ok -> words.archiveAnswer(r.value.first, r.value.second).let { answer ->
+                // The PC may not echo `archived`; the request that worked stands.
+                if (answer.ok) answer.copy(archived = answer.archived ?: archived) else answer
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.ChatLog.Archive(
+                false,
+                said = if (r.error == ApiError.NotFound) {
+                    // A 404 with no `ok` body is the route missing on an older
+                    // PC (the same reading the pin route gets); the contract's
+                    // unknown-id 404 arrives as an Ok(404, body) above.
+                    words.ARCHIVE_OLD_PC
+                } else {
+                    "The archive change was not made. " + describe(r.error)
+                },
+            )
         }
     }
 

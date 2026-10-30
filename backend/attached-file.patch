@@ -1,0 +1,65 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -4844,7 +4844,18 @@
+             # _chat_client_fields_off.
+             body = {k: v for k, v in body.items() if k not in _CHAT_CLIENT_FIELDS}
+             if "messages" in body:
+                 body["messages"] = _chat_client_fields_off(body["messages"])
++            # attached-file.patch (2026-10-29): the file the owner attached to a
++            # chat never reaches a relay, whatever route brought the turn here.
++            # jarvis_router.choose() answers gate "file" for such a turn, so
++            # this is the belt to that gate: the words cannot be in a cloud
++            # request even if a client forgot its `has_file` flag, because the
++            # field comes off every message on every hop, unconditionally.
++            if isinstance(body.get("messages"), list):
++                body["messages"] = [
++                    ({k: v for k, v in m.items() if k != "attachment"}
++                     if isinstance(m, dict) else m)
++                    for m in body["messages"]]
+             if lane == local_model and isinstance(body.get("messages"), list):
+                 # rules-first-relay.patch. Ollama puts the Modelfile's SYSTEM
+                 # block (the Jarvis rules) in front only when the first
+@@ -1573,8 +1573,25 @@
+         return bool(jarvis_screen.turn_has_screen(body.get("messages")))
+     except Exception:
+         return False
+ 
+ 
++# attached-file.patch (2026-10-29): does the newest message of this request
++# carry a file the owner attached - the app's `has_file` flag, or the
++# `attachment` field itself? Either one keeps the turn on THIS PC
++# (jarvis_router.choose(has_file=...), gate "file"): a file's words can be
++# anything, and they ride in the NEWEST user turn - the one a cloud request
++# keeps. The flag is a claim and the field is the thing, so both are asked,
++# through jarvis_agent's own one walk. A PC that cannot say stays home.
++def _file_turn(body) -> bool:
++    try:
++        if body.get("has_file") is True:
++            return True
++        import jarvis_agent
++        return bool(jarvis_agent.newest_turn_has_file(body.get("messages")))
++    except Exception:
++        return True
++
++
+ # What the model is told instead of the recalled facts in a temporary chat,
+ # so it never claims to remember or to be saving anything.
+ _TEMPORARY_NOTE = (
+@@ -5600,8 +5619,17 @@
+                 # screen.patch: a turn carrying the owner's screen never
+                 # leaves this PC - not when it is long, not when a cloud lane
+                 # is offered, not when the owner said yes to the cloud for
+                 # it. The router's own gate "screen" (test_router_private_terms).
+                 has_screen=_screen_turn(body),
++                # attached-file.patch (2026-10-29): a turn carrying a file the
++                # owner attached never leaves this PC either - not when it is
++                # long, not when a cloud lane is offered, not when the owner
++                # said yes to the cloud for it, and not on the manual pick
++                # (f01-manual-lane-gate comes through this same call). Its own
++                # gate name, "file", so the route header says why, and it is
++                # answered before the private check, the budget and the offer:
++                # there is nothing to ask about a turn that cannot go.
++                has_file=_file_turn(body),
+             )
+             if jarvis_side_memory and decision.gate == "unavailable":
+                 decision.reason = "escalation off while Jarvis injects memory itself"

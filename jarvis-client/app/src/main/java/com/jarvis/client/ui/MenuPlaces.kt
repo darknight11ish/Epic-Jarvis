@@ -116,6 +116,17 @@ object MenuPlaces {
         // the screen's rows, and a row here is what makes it findable in
         // FindAnything (which lists every phone menu that has a place).
         "all-features" to "settings.all-features",
+        // "Jarvis Calendar" (2026-10-29): the phone's own calendar row
+        // (SettingsScreen.kt, `item(key = "calendar")`, CalendarSettingsPlate.kt)
+        // and the registry's phone-only Section `calendar`, which
+        // test_menu_visibility now requires to be a menu as well
+        // (`settings.calendar`, backend/jarvis_menus.py). It is NEVER hideable -
+        // it is the switch that turns the feature back on - and it is still a
+        // real row with a real menu id, so it needs its PLACE here for the same
+        // reason "all-features" above does: MenuVisibilityTest holds this map to
+        // the screen's rows, and a line here is what makes it findable in
+        // FindAnything (which lists every phone menu that has a place).
+        "calendar" to "settings.calendar",
     )
 
     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */

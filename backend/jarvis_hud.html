@@ -643,6 +643,25 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 @keyframes hot{50%{box-shadow:0 0 0 4px rgb(var(--bad-rgb) / .1);}}
 .act svg{width:19px; height:19px;}
 
+/* ---- A file attached to the chat (2026-10-29) -------------------------- *
+ * One quiet line under the composer: "Attach a file", or the file's name, its
+ * size and "Read on your PC", or the sentence that says why it was refused.
+ * No preview, no page images and no text from the file on screen - the PC
+ * reads it, and the chip only ever names it. Classes, never a style="..."
+ * attribute: the packaged app refuses one it did not nonce (tests/csp.mjs). */
+.attach-bar{
+  flex-shrink:0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  padding:0 18px 11px; font-family:var(--f-body); font-size:12px; color:var(--dim);
+}
+.attach-pick, .attach-clear{
+  font:inherit; color:var(--dim); background:none; border:1px solid var(--line);
+  border-radius:3px; padding:3px 9px;
+}
+.attach-pick:hover, .attach-clear:hover{border-color:var(--line-hot); color:var(--text);}
+.attach-chip{color:var(--text); min-width:0;}
+.attach-chip.bad{color:var(--crit);}
+.attach-chip[hidden], .attach-clear[hidden], .attach-pick[hidden]{display:none;}
+
 /* ---------- BRAIN -------------------------------------------------- */
 #brain{position:relative;}
 #galaxy{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab;}
@@ -1338,7 +1357,35 @@ html.hud-window-hidden *::after{
 .studio-dock{display:none;}
 
 .core-expand{display:none;}
+/* The main strip's History door (2026-10-29). The owner asked for "the chat
+   history accesible directly from the jarvis hud on desktop" even though the
+   rail's clock icon already opened it: that icon is inside the LEFT RAIL, and
+   three of the six shells (Ambient/center-core, Quiet/two-column-right,
+   Bento/single-stage-bento) slide the left rail off-canvas behind [Controls]
+   - so in those the door was two clicks deep and out of sight. This bar sits
+   between the log and the composer in EVERY shell, so one control is always
+   on screen. It opens the SAME #history-sidebar through the same routine
+   (hud-history.js `mount` -> `setOpen`); the rail icon stays. Ambient keeps
+   its own "Show full history" transcript toggle beside it. */
 .history-bar{display:none;}
+/* The strip's History door is drawn only in the shells whose LEFT RAIL IS A
+   DRAWER - center-core, two-column-right, single-stage-bento - because there
+   the rail's own clock icon sits behind [Controls]. In split-stage,
+   three-column and two-column-left the left rail is on screen, so its icon is
+   already one click and the strip costs the conversation height for nothing:
+   measured 2026-10-30, the strip took the hidden-galaxy layout from 30px of
+   conversation to 24px at 1280x650 (hud.mjs, "a hidden galaxy gives its space
+   to the face"). Ambient keeps its own "Show full history" transcript
+   toggle. */
+html[data-hud-shell="center-core"] .history-bar,
+html[data-hud-shell="two-column-right"] .history-bar,
+html[data-hud-shell="single-stage-bento"] .history-bar{
+  display:flex; justify-content:center; align-items:center; gap:8px;
+  padding:3px 0 8px; flex-shrink:0;
+}
+.history-toggle{display:none;}
+.history-open{display:inline-flex; align-items:center; gap:6px; padding:5px 10px; font-size:10.5px;}
+.history-open .glyph{width:13px; height:13px; flex:0 0 auto;}
 #ambient-status{display:none;}
 
 .reactor-rings{display:none; position:absolute; inset:0; pointer-events:none; z-index:0;}
@@ -1649,8 +1696,23 @@ html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #b
   display:none !important;
 }
 html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .reactor-wrap{
-  flex-direction:column; justify-content:center; gap:8px;
-  padding:22px 18px 8px;
+  flex-direction:column; justify-content:center; gap:2px;
+  /* 2026-10-30: the attach line under the composer costs the conversation
+     height, and hud.mjs requires 40px of it left under the grown face at
+     1280x650. The face keeps its pinned 200px base; the room comes from this
+     layout's own margins and the attach line's padding, scoped to this layout
+     only. Measured before: wrap 276 + log 24 + composer 73 + attach 37 in a
+     405px column. */
+  padding:0 18px 0;
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .composer{
+  padding:8px 18px 10px;
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .attach-bar{
+  padding:0 18px 2px;
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .attach-pick{
+  padding:1px 7px; font-size:11px;
 }
 /* The freed column's worth of face. 200px x the device's own step, so the
    three-step control still owns the size (200/250/300 at 1280x650) and the
@@ -2520,7 +2582,7 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
 /* History sidebar styles, moved out of hud-history.js on 2026-10-28:
    the packaged CSP refuses a <style> element built at run time, and this
    page's own <style> carries the nonce. Keep this text here, not in JS. */
-html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-ico:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);}.hh-head:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}/* An open section's chevron points DOWN (rotated 90) and a collapsed one points RIGHT - the other way round read as "collapsed" beside an open section's own rows (seen in the render check, 2026-10-27). */.hh-sec[data-open="1"] .hh-head .glyph.hh-caret{transform:rotate(90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);}.hh-open:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);opacity:1;}.hh-dots:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);}.hh-more:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);}#hh-new:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);}.hh-menu button:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-ico:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);}.hh-head:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}/* An open section's chevron points DOWN (rotated 90) and a collapsed one points RIGHT - the other way round read as "collapsed" beside an open section's own rows (seen in the render check, 2026-10-27). */.hh-sec[data-open="1"] .hh-head .glyph.hh-caret{transform:rotate(90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);}.hh-open:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);opacity:1;}.hh-dots:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);}.hh-more:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);}#hh-new:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);}.hh-menu button:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}/* The archived list (2026-10-29): two chips under the search box - "Your chats" and "Archived" - and the one note that says an archived chat is not carried on from here. Both windows say that sentence (history-actions.js ARCHIVED_NOT_CONTINUED). */#hh-filters{display:flex;gap:6px;margin:0 12px 8px;}.hh-filt{flex:1 1 auto;padding:5px 8px;border:1px solid var(--hh-hair-4);border-radius:8px;background:var(--hh-hair-3);color:var(--hh-fg-soft);font:inherit;font-size:11.5px;cursor:pointer;text-align:center;}.hh-filt:hover,.hh-filt:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-filt:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-filt[aria-pressed="true"]{background:var(--hh-glow);color:var(--hh-accent);}.hh-note-block{margin:2px 12px 8px;padding:6px 8px;border:1px solid var(--hh-hair-4);border-radius:7px;background:var(--hh-hair-3);color:var(--hh-fg-soft);font-size:11px;line-height:1.4;}
   /* THE MAIN SCREEN'S FEATURE-CARD STRIP (PR #981). Moved out of hud-edit.js's
      ensureHomeStyles() on 2026-10-30, for the same reason as the history
      sidebar above: the packaged CSP refuses a <style> element built at run
@@ -3097,10 +3159,24 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
 
       <div id="log" role="log" aria-live="polite"></div>
 
-      <!-- Ambient layout: the log shows the latest exchange as a card, and
-           this opens the whole transcript. In the other layouts it stays
-           hidden (the transcript is already on screen). -->
+      <!-- The HUD's main strip, in every shell (2026-10-29). [History] opens
+           the ONE #history-sidebar hud-history.js draws - the same panel and
+           the same open routine as the clock icon in the left rail (that icon
+           stays, but three shells keep the left rail off-canvas behind
+           [Controls], which is why the owner could not see it). Ambient keeps
+           its own "Show full history" transcript toggle beside it; in the
+           other layouts that toggle stays hidden (the transcript is already
+           on screen) and only the History door is drawn. Styles are in the
+           page's nonced <style>; the click is wired by the external
+           hud-history.js module, so no inline script and no CSP hash moves. -->
       <div class="history-bar">
+        <button class="ghost history-open" id="hud-history-open" type="button"
+                title="History: every conversation kept on this PC"
+                aria-haspopup="dialog" aria-expanded="false"
+                aria-controls="history-sidebar"><svg class="glyph" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true" focusable="false"><path
+                d="M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 7v5l3 2"/></svg><span>History</span></button>
         <button class="ghost history-toggle" id="history-toggle" type="button"
                 aria-pressed="false" aria-controls="log">Show full history</button>
       </div>
@@ -3119,6 +3195,22 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
             <path d="M4 12h15M13 6l6 6-6 6"/>
           </svg>
         </button>
+      </div>
+
+      <!-- A FILE ATTACHED TO THE CHAT (2026-10-29; JARVIS-API.md section 163).
+           The bytes ride on the newest message of the ordinary /api/chat
+           request - no new route - and this PC turns them into text before any
+           model sees them. The page only ever holds them until the send, and
+           then drops them: nothing here writes a file, keeps one, or sends one
+           anywhere but 127.0.0.1. `accept` is the seven kinds my_files already
+           reads; a drag or a paste of anything else is refused in words, not
+           silently ignored. Nothing about it needs Rust. -->
+      <input type="file" id="attach-file" hidden
+             accept=".pdf,.docx,.xlsx,.pptx,.md,.markdown,.txt,.csv">
+      <div class="attach-bar" id="attach-bar">
+        <button type="button" class="attach-pick" id="attach-pick">Attach a file</button>
+        <span class="attach-chip" id="attach-chip" hidden></span>
+        <button type="button" class="attach-clear" id="attach-clear" hidden>Remove</button>
       </div>
     </section>
 
@@ -6001,6 +6093,18 @@ async function send(){
   // did. The PC is still the decider: this is a yes, never a lane, and every
   // privacy gate still runs first.
   if(S.cloudEscalate) body.cloud_yes = true;
+  // A file the owner attached rides on the NEWEST user message of this same
+  // request (JARVIS-API.md section 163) - no new route, no upload. The message
+  // is replaced by a COPY on purpose: `S.messages` is the page's own history
+  // and the next turn re-sends it, so an attachment left there would be
+  // uploaded again and again. The bytes are dropped from the page the moment
+  // they are in the body; the PC is the only thing that ever reads the file.
+  if(ATTACH && body.messages && body.messages.length){
+    const at = body.messages.length - 1;
+    body.messages[at] = Object.assign({}, body.messages[at], {attachment: ATTACH});
+    body.has_file = true;
+    attachClear();
+  }
 
   let node = null, full = "";
   try{
@@ -6270,6 +6374,124 @@ $("input").addEventListener("input", e => {
 });
 $("input").addEventListener("paste", () => { S.inputTag = "pasted"; });
 $("input").addEventListener("drop", () => { S.inputTag = "pasted"; });
+
+/* ---- A file attached to the chat (2026-10-29) -------------------------- *
+ * JARVIS-API.md section 163. Three ways in - the picker, a drag onto the
+ * window, and a file on the clipboard - and ONE shape out: the newest user
+ * message of the ordinary /api/chat body carries
+ *   attachment: {name, mime, size, data}    (base64 of the raw bytes)
+ * with `has_file: true` beside it. No new route, no upload, no Rust.
+ *
+ * The caps and the wording are the backend's own (jarvis_attached_file.py),
+ * and tests/attach.mjs pins both here so the two apps cannot drift.
+ *
+ * NOTHING IS SENT UNTIL SEND IS PRESSED, and the bytes are dropped the moment
+ * they are in the request - `ATTACH` lives for exactly one turn, so a later
+ * turn cannot re-send a file the owner did not attach again. */
+let ATTACH = null;
+const ATTACH_MAX_BYTES = 2500000;
+const ATTACH_KINDS = [".pdf", ".docx", ".xlsx", ".pptx", ".md", ".markdown", ".txt", ".csv"];
+const ATTACH_READ_ON_PC = "Read on your PC.";
+const ATTACH_OUTSIDE = "The words count as outside text, so a web search in this chat will still ask first.";
+const ATTACH_AGAIN = "Attach it again for another question.";
+const ATTACH_REFUSED_KIND = "Jarvis can read PDF, Word, Excel, PowerPoint, Markdown, text and CSV files in a chat, and that one is not a kind Jarvis reads.";
+const ATTACH_REFUSED_PICTURE = "A picture goes in as a picture: attach it with the picture button, and this PC will read its words. Nothing was read from it here.";
+
+/** "1.2 MB", "640 KB", "12 bytes" - the backend's own words for a size. */
+function attachSize(n){
+  if(n >= 1000000) return (n / 1000000).toFixed(1) + " MB";
+  if(n >= 1000) return Math.floor(n / 1000) + " KB";
+  return n + (n === 1 ? " byte" : " bytes");
+}
+
+function attachExt(name){
+  const at = String(name || "").toLowerCase().lastIndexOf(".");
+  return at <= 0 ? "" : String(name).toLowerCase().slice(at);
+}
+
+/** The chip, or the sentence that says why nothing was attached. */
+function attachShow(text, bad){
+  const chip = $("attach-chip");
+  if(!chip) return;
+  chip.textContent = text;
+  chip.classList.toggle("bad", !!bad);
+  chip.hidden = false;
+  const clear = $("attach-clear"), pick = $("attach-pick");
+  if(clear) clear.hidden = !ATTACH;
+  if(pick) pick.hidden = !!ATTACH;
+}
+
+/** Let the file go: the bytes, the chip, everything. */
+function attachClear(){
+  ATTACH = null;
+  const chip = $("attach-chip");
+  if(chip){ chip.textContent = ""; chip.hidden = true; chip.classList.remove("bad"); }
+  const clear = $("attach-clear"), pick = $("attach-pick");
+  if(clear) clear.hidden = true;
+  if(pick) pick.hidden = false;
+}
+
+/** Take one File the owner picked, dropped or pasted. Refuses in words. */
+function attachTake(file){
+  if(!file) return;
+  const name = String(file.name || "the file you attached");
+  const ext = attachExt(name);
+  // Checked BEFORE the file is read, so a 40 MB video is refused without ever
+  // being read (the design's section 8, step 1).
+  if(ATTACH_KINDS.indexOf(ext) < 0){
+    const picture = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic"].indexOf(ext) >= 0;
+    attachClear();
+    attachShow(picture ? ATTACH_REFUSED_PICTURE : ATTACH_REFUSED_KIND, true);
+    return;
+  }
+  if(file.size > ATTACH_MAX_BYTES){
+    attachClear();
+    attachShow("That file is " + attachSize(file.size) + ". Files up to "
+      + attachSize(ATTACH_MAX_BYTES) + " can be attached; for bigger ones, put it in a "
+      + "folder Jarvis may look in.", true);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => { attachClear(); attachShow("That file could not be read here.", true); };
+  reader.onload = () => {
+    const url = String(reader.result || "");
+    const comma = url.indexOf(",");
+    if(comma < 0){ attachClear(); attachShow("That file could not be read here.", true); return; }
+    ATTACH = {name: name, mime: String(file.type || ""), size: file.size,
+              data: url.slice(comma + 1)};
+    attachShow(name + " — " + attachSize(file.size) + " " + ATTACH_READ_ON_PC + " "
+      + ATTACH_OUTSIDE + " " + ATTACH_AGAIN, false);
+  };
+  reader.readAsDataURL(file);
+}
+
+$("attach-pick").addEventListener("click", () => $("attach-file").click());
+$("attach-file").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";                     // the same file can be picked twice
+  attachTake(file);
+});
+$("attach-clear").addEventListener("click", attachClear);
+// A file dropped ANYWHERE on the window: without preventDefault the browser
+// navigates to it and the page is simply gone. Text drags are left alone.
+window.addEventListener("dragover", e => {
+  const types = Array.from((e.dataTransfer && e.dataTransfer.types) || []);
+  if(types.indexOf("Files") >= 0) e.preventDefault();
+});
+window.addEventListener("drop", e => {
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if(!files || !files.length) return;
+  e.preventDefault();
+  attachTake(files[0]);
+});
+// A file on the clipboard (a copied PDF, a screenshot's own file). A TEXT
+// paste is untouched: only a paste that really carries a file comes here.
+window.addEventListener("paste", e => {
+  const files = e.clipboardData && e.clipboardData.files;
+  if(!files || !files.length) return;
+  e.preventDefault();
+  attachTake(files[0]);
+});
 
 $("mic").addEventListener("click", () => voice.listening ? voice.stop() : voice.start(true));
 /* Push-to-talk is the page's Space shortcut, but ONLY while the page itself

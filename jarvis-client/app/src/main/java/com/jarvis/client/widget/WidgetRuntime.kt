@@ -54,4 +54,17 @@ internal object WidgetRuntime {
      */
     suspend fun readWidget(id: String): ApiResult<JsonObject>? =
         WidgetStates.bounded(WidgetStates.READ_TIMEOUT_MS) { JarvisRuntime.widgetShow(id) }
+
+    /**
+     * One `GET /api/calendar?days=N` read for the calendar widget. `null` means
+     * the PC did not answer inside the same budget, which is that widget's
+     * `TIMED_OUT` state ("Could not reach your PC"), never "Nothing today" -
+     * the two are different sentences and only one of them is true.
+     *
+     * A week is asked for and not a day: the widget draws today, and a week
+     * costs the PC one small read while letting the launcher's own 30-minute
+     * tick carry the list across midnight without a second route.
+     */
+    suspend fun readCalendar(days: Int = 7): ApiResult<JsonObject>? =
+        WidgetStates.bounded(WidgetStates.READ_TIMEOUT_MS) { JarvisRuntime.calendar(days) }
 }

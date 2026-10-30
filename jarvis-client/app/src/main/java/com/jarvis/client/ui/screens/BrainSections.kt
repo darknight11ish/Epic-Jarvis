@@ -271,6 +271,14 @@ internal object BrainSections {
                 Plate("today", guard = "brain.work.today"),
                 Plate("widgets", guard = "brain.work.widgets"),
                 Plate("coming-up", guard = "brain.work.coming-up"),
+                // "Jarvis Calendar" (2026-10-29): right beside Coming up on the
+                // screen, and under the same menu guard - the two are one block
+                // of "what is coming", so hiding one must not leave the other
+                // stranded. It is drawn only when Brain was given a way into
+                // the calendar (`onOpenCalendar`), which its own caller always
+                // does; a Brain with no calendar still passes this line, because
+                // a plate that is not placed on the screen is not a lie.
+                Plate("calendar", guard = "brain.work.coming-up"),
                 Plate("spending", guard = "settings.spending"),
                 // Not guarded: the phone has no menu id for the chatbot money
                 // limits page (the desktop's own "Chatbot API keys" id is

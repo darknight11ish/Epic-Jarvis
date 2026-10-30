@@ -84,6 +84,11 @@ import {
   SEARCH_LABEL,
 } from "../src/history-view.js";
 import * as CH from "../src/chat-history.js";
+import {
+  ACTION_LABELS,
+  ROW_ACTIONS,
+  labelFor,
+} from "../src/history-actions.js";
 import { GAME_TEMPORARY, temporaryOutcome } from "../src/memory-used.js";
 import { ERASED_NO_CHAT, eraseChatNamed } from "../src/auto-learn.js";
 import * as K from "./uikit.mjs";
@@ -134,7 +139,7 @@ await check("the contract's list and conversation are read as the PC sends them"
   assert.equal(v.keepDays, 0);
   assert.deepEqual(v.conversations[0], { id: "c0nv-phone-0001", title: "Dentist on Tuesday",
     started: NOW - 3600, updated: NOW - 3300, turns: 6, device: "phone", hasVoice: true, tainted: false,
-    kind: "chat", project: null, tagId: null });
+    kind: "chat", project: null, tagId: null, archived: false });
   const c = readConversation(CONV);
   assert.equal(c.turns.length, 2);
   assert.equal(c.turns[0].provenance, "typed");
@@ -148,8 +153,33 @@ await check("the contract's list and conversation are read as the PC sends them"
   assert.equal(readHistory({ enabled: true, conversations: [] }).recording, false);
 });
 
-await check("the words under a user turn: quiet for typed and voice, said for everything else", async () => {
-  assert.equal(provenanceWords("typed"), "");
+await check("an archived chat says so, and a PC that sends no flag is treated as live", async () => {
+  // The owner's ask of 2026-10-29: "make sure i can archive and delete chats
+  // (with a confirm step)". The PC sends the flag on every conversation row,
+  // and on an opened conversation and a search result too; only its own `true`
+  // means archived, so an older PC (no field) has no archived chats.
+  const rows = readHistory({ ...LIST, conversations: [
+    { id: "c-arch", title: "Old plan", updated: NOW, archived: true },
+    { id: "c-live", title: "Today", updated: NOW - 5, archived: false },
+    { id: "c-old", title: "No flag from an older PC", updated: NOW - 10 }] }).conversations;
+  assert.deepEqual(rows.map((r) => r.archived), [true, false, false]);
+  assert.equal(readConversation({ id: "c", turns: [], archived: true }).archived, true);
+  assert.equal(readConversation({ id: "c", turns: [] }).archived, false);
+  assert.equal(readSearch({ query_ok: true, conversations: [
+    { id: "c", title: "x", archived: true }] }).conversations[0].archived, true,
+    "a search result does not say it is archived");
+  // The words are shared with the HUD, not retyped here.
+  assert.equal(ACTION_LABELS.archive, "Archive");
+  assert.equal(ACTION_LABELS.unarchive, "Unarchive");
+  assert.equal(labelFor("archive", false, false), "Archive");
+  assert.equal(labelFor("archive", false, true), "Unarchive");
+  assert.ok(ROW_ACTIONS.indexOf("archive") > ROW_ACTIONS.indexOf("move"),
+    "Archive is not offered after Move");
+  assert.ok(ROW_ACTIONS.indexOf("archive") < ROW_ACTIONS.indexOf("delete"),
+    "Delete comes before Archive, so Archive is not the reversible offer first");
+});
+
+await check("the words under a user turn: quiet for typed and voice, said for everything else", async () => {  assert.equal(provenanceWords("typed"), "");
   assert.equal(provenanceWords("voice"), "");
   assert.equal(provenanceWords("shared"), "shared from another app");
   assert.equal(provenanceWords("pasted"), "pasted");
@@ -675,7 +705,7 @@ await check("Load older asks for the page before the oldest shown, and adds it u
   await page.close();
   assert.equal(before, 30);
   assert.equal(after, 31);
-  assert.deepEqual(reads.at(-1), { before: NOW - 60 * 30, limit: 30 });
+  assert.deepEqual(reads.at(-1), { before: NOW - 60 * 30, limit: 30, archived: false });
   assert.equal(more, 0, "offered more after a short page");
 });
 
@@ -756,6 +786,86 @@ await check("there is no delete-all anywhere: not on the page, not in Rust", asy
   const rust = read("src-tauri/src/brain/history.rs");
   assert.match(rust, /pub async fn brain_history_delete\(\s*app: AppHandle,\s*id: String,?\s*\)/);
   assert.doesNotMatch(rust, /Vec<String>/, "a list of ids reaches a history command");
+});
+
+await check("Archive asks nothing, leaves the live list, and the Archived list brings it back", async () => {
+  // The owner's ask of 2026-10-29: "make sure i can archive and delete chats
+  // (with a confirm step)". The step is Delete's alone: archiving is
+  // reversible, so a question here would be a question the owner cannot
+  // answer differently.
+  const conversations = many(3);
+  const transcripts = {};
+  for (const c of conversations) {
+    transcripts[c.id] = { id: c.id, title: c.title, kind: "chat", turns: [
+      { role: "user", text: "a question", at: NOW - 90, provenance: "typed", idx: 0 },
+      { role: "assistant", text: "an answer", at: NOW - 89, idx: 1 }] };
+  }
+  const page = await historyTab({ conversations, transcripts });
+  let asked = 0;
+  page.on("dialog", () => { asked += 1; });
+  const liveBefore = await page.locator("#history-list .row-item").count();
+  await page.locator("#history-list .row-item").first()
+    .getByRole("button", { name: /^Archive / }).click();
+  await page.waitForTimeout(300);
+  const writes = await page.evaluate(() => window.__history.archivedWrites);
+  const liveAfter = await page.locator("#history-list .row-item").count();
+  const toast = await page.locator("#toast").innerText();
+  // The Archived list: ONE read with the PC's own `archived=1`, the archived
+  // chat only, and one sentence saying it is not carried on from here.
+  await page.locator("#history-archived").click();
+  await page.waitForTimeout(300);
+  const reads = await page.evaluate(() => window.__history.reads);
+  const archivedRows = await page.locator("#history-list .row-item").allInnerTexts();
+  const note = await page.locator("#history-list .history-archived-note").innerText();
+  const backLabel = await page.locator("#history-archived").innerText();
+  // Reading one is allowed; carrying it on is not.
+  await page.locator("#history-list .row-item").first().getByRole("button", { name: "Open" }).click();
+  await page.waitForTimeout(300);
+  const continueButtons = await page.getByRole("button", { name: "Continue this chat" }).count();
+  const why = await page.locator("#history-transcript .history-continue-why").innerText();
+  await page.getByRole("button", { name: "Close" }).click();
+  // Unarchive, then back to the live list with the chat in it again.
+  await page.locator("#history-list .row-item").first()
+    .getByRole("button", { name: /^Unarchive / }).click();
+  await page.waitForTimeout(300);
+  const writesBack = await page.evaluate(() => window.__history.archivedWrites);
+  const archivedLeft = await page.locator("#history-list .row-item").count();
+  await page.locator("#history-archived").click();
+  await page.waitForTimeout(300);
+  const liveRestored = await page.locator("#history-list .row-item").count();
+  await page.close();
+  assert.equal(asked, 0, "archiving asked a confirm - it is reversible and asks nothing");
+  assert.deepEqual(writes, [{ id: "conv-0000", archived: true }]);
+  assert.equal(liveAfter, liveBefore - 1, "the archived chat stayed in the live list");
+  assert.match(toast, /Archived/);
+  assert.equal(reads.at(-1).archived, true, "the Archived list did not ask the PC for archived=1");
+  assert.equal(archivedRows.length, 1, "the Archived list did not show the one archived chat");
+  assert.match(archivedRows[0], /Conversation 0\b/);
+  assert.match(note, /archived/i, "the archived list does not say why its rows do not open");
+  assert.equal(backLabel, "Back to your chats", "no way back to the live list");
+  assert.equal(continueButtons, 0, "an archived chat still offered Continue");
+  assert.match(why, /Unarchive/, "an archived chat does not say how to carry it on");
+  assert.deepEqual(writesBack, [{ id: "conv-0000", archived: true },
+    { id: "conv-0000", archived: false }]);
+  assert.equal(archivedLeft, 0, "the unarchived chat stayed in the Archived list");
+  assert.equal(liveRestored, liveBefore, "Unarchive did not put the chat back");
+});
+
+await check("a chat already archived on the PC is only under Archived, never in the live list", async () => {
+  const page = await historyTab({ conversations: many(3, (i) => ({ archived: i === 1 })) });
+  const liveRows = await page.locator("#history-list .row-item").allInnerTexts();
+  const liveReads = await page.evaluate(() => window.__history.reads);
+  await page.locator("#history-archived").click();
+  await page.waitForTimeout(300);
+  const archivedRows = await page.locator("#history-list .row-item").allInnerTexts();
+  const archivedReads = await page.evaluate(() => window.__history.reads);
+  await page.close();
+  assert.equal(liveRows.length, 2, "the live list showed an archived chat");
+  assert.ok(!liveRows.some((r) => /Conversation 1\b/.test(r)), JSON.stringify(liveRows));
+  assert.equal(liveReads.at(-1).archived, false, "the live list asked for archived chats");
+  assert.equal(archivedRows.length, 1, "the Archived list did not show the one archived chat");
+  assert.match(archivedRows[0], /Conversation 1\b/);
+  assert.equal(archivedReads.at(-1).archived, true);
 });
 
 await check("the switch shows the contract's words, and on means on", async () => {
@@ -1131,7 +1241,7 @@ await check("CONTROL: only the Brain holds the history commands, and ON is held 
   const holders = (perm) => sets.filter((s) => s.includes(`"${perm}"`))
     .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
   const cmds = ["brain_history_list", "brain_history_open", "brain_history_search",
-    "brain_history_delete", "brain_history_settings"];
+    "brain_history_delete", "brain_history_archive", "brain_history_settings"];
   for (const cmd of cmds) {
     const perm = `allow-${cmd.replace(/_/g, "-")}`;
     assert.deepEqual(holders(perm), ["brain-history"], `${perm} is held by ${holders(perm)}`);
@@ -1151,6 +1261,16 @@ await check("CONTROL: only the Brain holds the history commands, and ON is held 
   assert.match(settings, /if enabled == Some\(true\) \|\| keep_days\.is_some\(\) \{\s*require_link_live/);
   const del = rust.slice(rust.indexOf("pub async fn brain_history_delete("));
   assert.ok(del.indexOf("require_link_live") < del.indexOf("post("), "delete is not held on a stale link");
+  // Archive: one flag, the lock and the link before it posts, and no card.
+  const arch = rust.slice(rust.indexOf("pub async fn brain_history_archive("));
+  assert.ok(arch.indexOf("private_hidden") < arch.indexOf("post("),
+    "archive does not ask the hidden lists first");
+  assert.ok(arch.indexOf("require_link_live") < arch.indexOf("post("),
+    "archive is not held on a stale link");
+  assert.match(arch, /archive_body\(&id, archived\)/, "archive does not share the one body builder");
+  assert.match(arch, /\/api\/history\/archive/, "archive does not reach the documented route");
+  assert.doesNotMatch(arch.slice(0, 900), /approval|card_id/,
+    "archive raises an approval card - reversible tidying must not");
   const open = rust.slice(rust.indexOf("pub async fn brain_history_open("));
   assert.ok(open.indexOf("private_hidden") < open.indexOf("get(&app"), "a transcript opens while hidden");
 });
@@ -1180,7 +1300,7 @@ await check("rows say their kind, a Live session its length, and Show asks the P
   assert.match(rows[1], /Support chat/);
   assert.doesNotMatch(rows[2], /Support chat|Chat with an AI|Comparison/);
   assert.doesNotMatch(status, /reading…/, "History's status line is stuck on reading");
-  assert.deepEqual(reads.at(-1), { before: null, limit: 30, kind: "live" });
+  assert.deepEqual(reads.at(-1), { before: null, limit: 30, kind: "live", archived: false });
   assert.equal(after.length, 1);
   assert.equal(forgetLink, "Forget a time frame…");
 });

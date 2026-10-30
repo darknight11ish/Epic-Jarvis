@@ -53,6 +53,12 @@ model exactly as typed; only the copy on disk is different.
 Not kept: anything from a TEMPORARY chat (`"temporary": true` on the
 request, 2026-09-25) - only the registry's hash of its live message, under
 the provenance "temporary", so automatic learning never saves from it.
+Also not kept: the bytes of a FILE the owner attached to a chat. The
+`attachment` field is taken off every message by `strip_attachment_fields`
+before anything below reads one, so only the owner's own typed words are
+recorded - never the file's text, its base64, or even its name (2026-10-30;
+docs/JARVIS-API.md section 163.5). A name is metadata the feature does not
+need to keep, and keeping less is the safer direction.
 Also not kept: tool output, system or context messages, deep questions, wiki
 jobs, notes (#obs, #log), approval cards - none of them come through here.
 
@@ -98,6 +104,17 @@ the owner's words (CRISIS_TITLE). Chatbot and compare records are written
 whole by record_chatbot, the shape of a support record: role "chatbot",
 outside text, never learned from. A support record is never deleted by
 "Delete conversations older than" (sweep): only by the owner, in History.
+
+ARCHIVING A CHAT (the owner, 2026-10-29; JARVIS-API section 18.3)
+Archiving puts one chat away without deleting anything: a plain `archived_at`
+column in this same encrypted history file, NULL while the chat is in the
+list and the moment it was put away once it is. `GET /api/history` lists only
+the chats not archived unless `?archived=1` asks for the archived ones, and
+`POST /api/history/archive {"id", "archived"}` is the one route that changes
+it; `archived: false` is Unarchive. It is REVERSIBLE and metadata only - no
+text is opened, sealed or rewritten, `updated` does not move, and no approval
+card is raised: putting a chat away reveals nothing and sends nothing, so
+both apps offer it without a confirm step.
 
 SEARCHING WHAT WAS SAID (docs/JARVIS-API.md section 71, 2026-09-28)
 ChatLog.search, for the apps' History search box only (GET
@@ -566,6 +583,39 @@ def _int_cfg(key: str, default: int, lo: int, hi: int) -> int:
 
 # ----------------------------------------------------------- reading a turn
 
+#: The field a file the owner ATTACHED rides in (docs/JARVIS-API.md section
+#: 163.1: a sibling of `content`, on the newest user message, whose `data` is
+#: the file's bytes in base64). It is named here, in the module that keeps
+#: history, because THIS is where the promise "an attached file's words are
+#: never written down" has to be true rather than assumed: no matter what a
+#: caller passes to record_turn, the field is gone before this module reads a
+#: message. jarvis_backup.py asks for the same names (its backup boundary).
+ATTACHMENT_FIELDS = ("attachment",)
+
+
+def strip_attachment_fields(messages):
+    """`messages` with every attachment field taken off every message.
+
+    A COPY, never the caller's list or dicts, and `data` is never read, decoded
+    or copied: this function looks only at which keys are present. An
+    attachment's `content` sibling (the owner's own typed words) is untouched,
+    so the turn is still recorded exactly as it was said - what is left out is
+    only the file, which the feature keeps nowhere (docs/JARVIS-API.md section
+    163.5).
+
+    Non-list input and non-dict entries come back as they were: this is a
+    removal of one known field, not a validator.
+    """
+    if not isinstance(messages, list):
+        return messages
+    out = []
+    for m in messages:
+        if isinstance(m, dict) and any(k in m for k in ATTACHMENT_FIELDS):
+            m = {k: v for k, v in m.items() if k not in ATTACHMENT_FIELDS}
+        out.append(m)
+    return out
+
+
 def _text_of(content):
     """(words, has_picture) of one message's content."""
     if isinstance(content, str):
@@ -759,6 +809,37 @@ def _pin_fail(code: str) -> dict:
 #: characters; the cap only stops a request from carrying a novel to SQLite.
 _PIN_ID_MAX = 128
 
+# ------------------------------------------------------- archived chats
+#
+# "Archive a chat" (the owner, 2026-10-29: "make sure i can archive and delete
+# chats (with a confirm step)"; JARVIS-API section 18.3). Archiving puts a chat
+# away WITHOUT deleting it: one plain `archived_at` column in this same
+# encrypted history file - NULL while the chat is in the list, the moment it
+# was put away once it is. Nothing about the words is stored in it, so nothing
+# is sealed any differently and nothing is sent anywhere.
+#
+# It is REVERSIBLE: Unarchive is the same route with `archived: false`. That is
+# why it raises no approval card and needs no confirm step - it is the owner's
+# own tidying, the same class of change as pinning or filing a chat under a
+# tag. Delete keeps its confirm; putting a chat away can always be undone.
+_ARCHIVE_MESSAGES = {
+    "bad_request": 'An archive needs one chat id and "archived" set to true or false.',
+    "not_found": "No such conversation - it may already have been deleted.",
+    "locked": 'Hidden while App lock or "Hide memory lists and chat history" is on.',
+}
+
+
+def _archive_fail(code: str) -> dict:
+    """{"ok": false, "error", "message"} for POST /api/history/archive - the
+    same classified-refusal shape the pin route answers with."""
+    return {"ok": False, "error": code, "message": _ARCHIVE_MESSAGES[code]}
+
+
+#: The longest id the archive route will even look at. A real conversation id
+#: is 32 characters; the cap only stops a request from carrying a novel to
+#: SQLite, the same cap the pin route uses.
+_ARCHIVE_ID_MAX = 128
+
 
 def _private_view() -> dict:
     """App lock / "Hide memory lists and chat history", as `jarvis_private_view`
@@ -802,6 +883,16 @@ def _tag_where(tag):
     if isinstance(tag, int):
         return "c.tag_id = ?", [tag]
     return "", []
+
+
+def _archived_filter(v) -> bool:
+    """GET /api/history's `archived=` value: True only for 1 or true (any
+    case) - the archived chats and nothing else. Absent, 0, false and any
+    value that cannot be read are the ordinary list, the same leniency `kind`
+    and `tag` already have; the two lists are never mixed."""
+    if isinstance(v, bool):
+        return v
+    return str(v or "").strip().lower() in ("1", "true")
 
 
 def _tag_err(code: str, message: str) -> dict:
@@ -903,7 +994,7 @@ _LAST_AT = ("COALESCE((SELECT MAX(at) FROM turns t2 WHERE t2.conversation_id=c.i
             " c.updated)")
 
 CONV_COLS = ("id", "title", "started", "updated", "device", "kind", "project", "tag_id",
-             "pinned", "pinned_at")
+             "pinned", "pinned_at", "archived_at")
 
 
 def _conv_cols(alias: str = "", *, raw: bool = False) -> str:
@@ -948,20 +1039,24 @@ def _conv_named(row) -> dict:
 
 
 def _row(cid, title, started, updated, turns, device, voice, outside, kind, project,
-         tag_id=None, pinned=None, pinned_at=None) -> dict:
+         tag_id=None, pinned=None, pinned_at=None, archived_at=None) -> dict:
     """One History list row, as GET /api/history and the search send it.
     `tag_id`: the chat's one tag (chat tags, 2026-09-30), or None.
     `pinned`: the owner pinned it to the top of the list (2026-10-27), and
     `pinned_at` when that happened (unix seconds, or None when it is not
     pinned) - so the Pinned group can order itself by the pin and not by the
-    chat's own time."""
+    chat's own time. `archived_at`: when the chat was put away (2026-10-30),
+    or None while it is in the list; the row carries the yes/no as `archived`,
+    always present, so an app that has never heard of archiving reads exactly
+    the rows it always did."""
     return {"id": cid, "title": title,
             "started": int(started or 0), "updated": int(updated or 0),
             "turns": int(turns), "device": device or "unknown",
             "has_voice": bool(voice), "tainted": bool(outside),
             "kind": kind if kind in KINDS else "chat", "project": project or None,
             "tag_id": _tag_id(tag_id), "pinned": bool(pinned),
-            "pinned_at": int(pinned_at) if pinned_at else None}
+            "pinned_at": int(pinned_at) if pinned_at else None,
+            "archived": bool(archived_at)}
 
 
 def _title_from(rows) -> str:
@@ -1237,7 +1332,7 @@ class ChatLog:
         c.execute("CREATE TABLE IF NOT EXISTS conversations ("
                   " id TEXT PRIMARY KEY, title BLOB, started REAL, updated REAL,"
                   " device TEXT, kind TEXT, project TEXT, tag_id INTEGER,"
-                  " pinned INTEGER, pinned_at REAL)")
+                  " pinned INTEGER, pinned_at REAL, archived_at REAL)")
         c.execute("CREATE TABLE IF NOT EXISTS turns ("
                   " conversation_id TEXT NOT NULL, idx INTEGER NOT NULL, at REAL,"
                   " role TEXT, provenance TEXT, device TEXT, lane TEXT,"
@@ -1259,7 +1354,9 @@ class ChatLog:
         cannot be told from an ordinary chat afterwards - nothing marked it -
         so it stays "chat". `project` stays empty: no chat belongs to a
         project until Projects step 4 is built. Plain columns: no key is
-        needed, and no text is opened or rewritten."""
+        needed, and no text is opened or rewritten. Pinning (2026-10-27) and
+        archiving (2026-10-30) are added the same way on the same pass: plain
+        columns, nothing sealed."""
         cols = {r[1] for r in c.execute("PRAGMA table_info(conversations)")}
         with c:
             if "kind" not in cols:
@@ -1279,6 +1376,13 @@ class ChatLog:
                 c.execute("ALTER TABLE conversations ADD COLUMN pinned INTEGER")
             if "pinned_at" not in cols:
                 c.execute("ALTER TABLE conversations ADD COLUMN pinned_at REAL")
+            # Archived chats (JARVIS-API section 18.3, 2026-10-30): a plain
+            # column beside `pinned_at`, NULL while the chat is in the list and
+            # the moment it was archived once it is put away. Nothing about the
+            # words is stored here, so there is nothing to seal: only a number,
+            # and the title stays sealed exactly as it always was.
+            if "archived_at" not in cols:
+                c.execute("ALTER TABLE conversations ADD COLUMN archived_at REAL")
             c.execute("UPDATE conversations SET kind='support' WHERE kind IS NULL AND id IN"
                       " (SELECT DISTINCT conversation_id FROM turns WHERE role='support')")
             c.execute("UPDATE conversations SET kind='chat' WHERE kind IS NULL")
@@ -1858,6 +1962,17 @@ class ChatLog:
         body; returns {"recorded": bool, "why": ...}."""
         if not isinstance(body, dict):
             return {"recorded": False, "why": "not a chat request"}
+        # A file the owner ATTACHED is never kept, and that is enforced HERE
+        # rather than trusted from the caller (2026-10-30). The attachment is a
+        # sibling field of the newest user message; it is taken off a COPY of
+        # the request before ANY reading path below sees a message, so no
+        # history row, title, live-turn hash or learner input can hold the
+        # file's bytes - whatever a caller hands over. jarvis_agent strips the
+        # same field before a model sees it, and jarvis_backup refuses to carry
+        # a body either; this is the one place history is written, so it is the
+        # one that has to be unconditional.
+        body = dict(body)
+        body["messages"] = strip_attachment_fields(body.get("messages"))
         self._housekeeping()
         live = _live_user_messages(body.get("messages"))
         if not live:
@@ -2129,11 +2244,15 @@ class ChatLog:
             return {"enabled": False, "recording": False,
                     "why_not": f"the chat history could not be checked ({type(exc).__name__})"}
 
-    def list(self, limit=LIST_DEFAULT, before=None, kind=None, tag=None) -> dict:
+    def list(self, limit=LIST_DEFAULT, before=None, kind=None, tag=None,
+             archived=False) -> dict:
         """One page of the History list, newest first. `kind`: only that
         kind (KINDS) - "Live only" in both apps; anything else is ignored.
         `tag`: an int (only that tag's chats) or "none" (untagged); anything
-        else is ignored."""
+        else is ignored. `archived`: False (the default) lists only the chats
+        that are NOT archived - the list both apps have always shown - and
+        True lists only the archived ones, the apps' "Archived" view. The two
+        are never mixed, and every row says which one it is with `archived`."""
         self._housekeeping()
         out = self.status()
         out["conversations"] = []
@@ -2177,6 +2296,10 @@ class ChatLog:
         if tag_sql:
             where.append(tag_sql)
             args += tag_args
+        # Archived chats (2026-10-30): the ordinary list is "not archived" and
+        # `archived=1` is the archive, so a chat appears in exactly ONE of the
+        # two lists - never both, never neither.
+        where.append("c.archived_at IS NOT NULL" if archived else "c.archived_at IS NULL")
         clause = (" WHERE " + " AND ".join(where)) if where else ""
         with self._lock, closing(self._connect()) as c:
             rows = c.execute(sql + clause + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
@@ -2187,6 +2310,10 @@ class ChatLog:
                 extra = " AND COALESCE(c.kind, 'chat') = ?" if kind is not None else ""
                 if tag_sql:
                     extra += " AND " + tag_sql
+                # The same archive filter, so the rows that share this page's
+                # last second cannot leak in from the other list.
+                extra += (" AND c.archived_at IS NOT NULL" if archived
+                          else " AND c.archived_at IS NULL")
                 rest = c.execute(sql + " WHERE c.updated >= ? AND c.updated < ?" + extra
                                  + " ORDER BY c.updated DESC, c.id DESC",
                                  [float(sec), float(sec + 1)]
@@ -2200,7 +2327,8 @@ class ChatLog:
             out["conversations"].append(_row(
                 cv["id"], self._title(aead, cv["id"], cv["title"]), cv["started"],
                 cv["updated"], n, cv["device"], bool(voice), bool(outside),
-                cv["kind"], cv["project"], cv["tag_id"], cv["pinned"], cv["pinned_at"]))
+                cv["kind"], cv["project"], cv["tag_id"], cv["pinned"], cv["pinned_at"],
+                cv["archived_at"]))
         return out
 
     def _title(self, aead, cid, blob) -> str:
@@ -2216,7 +2344,9 @@ class ChatLog:
         (CONTINUABLE, and not a chat titled "A difficult moment"), and
         `continue_why` why not when they may not. `history` says whether new
         messages are being kept (`enabled`, `recording`, `why_not`), so
-        "Continue this chat" can warn when they will not be."""
+        "Continue this chat" can warn when they will not be. `archived` says
+        whether the chat is in the archive (2026-10-30) - always present, so
+        an app can tell a chat put away from one still in the list."""
         self._housekeeping()
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
@@ -2257,6 +2387,7 @@ class ChatLog:
                 "kind": kind, "project": conv["project"] or None,
                 "tag_id": _tag_id(conv["tag_id"]), "pinned": bool(conv["pinned"]),
                 "pinned_at": int(conv["pinned_at"]) if conv["pinned_at"] else None,
+                "archived": bool(conv["archived_at"]),
                 "started": int(conv["started"] or 0), "updated": int(conv["updated"] or 0),
                 "continuable": kind in CONTINUABLE and not crisis,
                 "continue_why": (CRISIS_CONTINUE_WHY if crisis
@@ -2295,8 +2426,11 @@ class ChatLog:
 
         What it reaches is exactly what the History list shows: what is
         still kept. A temporary chat was never kept, so it is never found.
-        With history OFF the kept conversations are still searched, as the
-        list still lists them - and nothing new is kept by searching.
+        A chat put away in the archive (2026-10-30) IS still kept, so a
+        search still finds it; its row says `archived: true`, and the apps
+        may show it with that mark. With history OFF the kept conversations
+        are still searched, as the list still lists them - and nothing new is
+        kept by searching.
 
         `kind` (one of KINDS; anything else is ignored) searches only that
         kind, so "Live only" and a typed search combine (the second chat
@@ -2382,7 +2516,7 @@ class ChatLog:
                     break
                 snippet, hits = hit
                 row = _row(cid, title, started, updated, len(rows), device, voice, outside,
-                           rkind, project, tid, pin, pin_at)
+                           rkind, project, tid, pin, pin_at, cv["archived_at"])
                 row.update(snippet=snippet, hits=hits)
                 found.append(row)
         out["conversations"] = found
@@ -2907,6 +3041,55 @@ class ChatLog:
         return 200, {"ok": True, "id": cid, "pinned": bool(pinned),
                      "pinned_at": int(at) if at else None}
 
+    def set_archived(self, cid, archived) -> tuple:
+        """POST /api/history/archive: put one chat away, or take it back out
+        of the archive. (http code, answer). One flag per chat: `archived_at`
+        is the moment it was put away, NULL while it is in the list - so
+        archiving twice is the same as archiving once, and keeps the FIRST
+        moment, exactly as pinning twice keeps the first pin.
+
+        `archived: false` is Unarchive: it clears the column, and the chat is
+        back in the ordinary list where it was. The chat itself is never
+        deleted and nothing about its words is touched: no message is opened,
+        no title is re-sealed, and `updated` does not move (putting a chat
+        away is not an edit), so Unarchive cannot shuffle the list.
+
+        The refusals are the contract (JARVIS-API section 18.3): an id that
+        is not a string, is empty, or is longer than 128 characters is a 400,
+        an `archived` that is not a JSON boolean is a 400, and a chat that is
+        not there is a 404 with **nothing written** - never a ghost row. The
+        id is only ever a bound SQL parameter, so a strange one is simply not
+        found rather than an error the caller could read something into.
+
+        Metadata only, and no approval card: it is the owner's own tidying,
+        the same class of change as a pin or a tag. It reveals nothing (the
+        list already says whether a chat is archived) and sends nothing
+        anywhere, and Unarchive takes it back - which is why it needs no
+        confirm step, unlike Delete."""
+        if not (isinstance(cid, str) and 0 < len(cid) <= _ARCHIVE_ID_MAX):
+            return 400, _archive_fail("bad_request")
+        if not isinstance(archived, bool):
+            return 400, _archive_fail("bad_request")
+        if not self.db_path.exists():
+            return 404, _archive_fail("not_found")
+        with self._lock, closing(self._connect()) as c:
+            got = c.execute("SELECT archived_at FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
+            if got is None:
+                return 404, _archive_fail("not_found")
+            if archived:
+                # Already archived: keep the first moment, so a second archive
+                # cannot reorder an archive view that orders by it.
+                at = got[0] if got[0] else int(self._clock())
+                with c:
+                    c.execute("UPDATE conversations SET archived_at=? WHERE id=?",
+                              (at, cid))
+            else:
+                with c:
+                    c.execute("UPDATE conversations SET archived_at=NULL WHERE id=?",
+                              (cid,))
+        return 200, {"ok": True, "id": cid, "archived": bool(archived)}
+
     def fork(self, cid, upto) -> tuple:
         """POST /api/history/fork: (http code, answer). Copies turns 0..`upto`
         (an `idx` from GET /api/history/conversation, inclusive) of the kept
@@ -2925,6 +3108,8 @@ class ChatLog:
           window); the source's `started` stays. The fork is kind
           "chat" even when copied from a Live session (it is not a Live
           session, and a Live label would tell the History length line a lie).
+          It is also never archived, even from an archived source: it is a new
+          chat the owner made just now, so it must show in the list.
         * Only chats the apps may Continue (CONTINUABLE) and that are not
           titled "A difficult moment"; anything else is `not_forkable`.
         * The source's hush is not copied as it stands: the fork gets its own,
@@ -3004,7 +3189,12 @@ class ChatLog:
                                 else self._seal(aead, new_title.encode("utf-8"),
                                                 self._aad(new, "title")) if col == "title"
                                 else "chat" if col == "kind"
-                                else fork_time if col == "updated" else src[col]
+                                else fork_time if col == "updated"
+                                # A fork is a NEW chat the owner just made, so
+                                # it is never born archived - it must show in
+                                # the list even when its source was put away.
+                                else None if col == "archived_at"
+                                else src[col]
                                 for col in CONV_COLS))
                 marks = ",".join("?" * len(cols))
                 last_user = -1
@@ -3847,7 +4037,9 @@ def _hidden_list(out: dict) -> dict:
 
 def handle_get(path: str, query: str = "") -> tuple:
     """GET /api/history, /api/history/conversation, /api/history/search and
-    /api/history/tags. (code, body)."""
+    /api/history/tags. (code, body). `/api/history` takes `archived=1` (or
+    `true`) for the archived chats only; absent, `0`, `false` or anything
+    unreadable is the ordinary list - every chat that is NOT archived."""
     q = _query(query)
     log = _log()
     if path == "/api/history":
@@ -3864,7 +4056,8 @@ def handle_get(path: str, query: str = "") -> tuple:
         except (TypeError, ValueError):
             before = None
         out = log.list(limit=limit, before=before,
-                       kind=q.get("kind") or None, tag=q.get("tag") or None)
+                       kind=q.get("kind") or None, tag=q.get("tag") or None,
+                       archived=_archived_filter(q.get("archived")))
         # While App lock or "Hide memory lists and chat history" is on, EVERY
         # row is withheld - a pinned one too - so no caller can learn a chat's
         # title (or that it exists) from this route. The hook is absent ->
@@ -3904,8 +4097,8 @@ def handle_get(path: str, query: str = "") -> tuple:
 
 
 def handle_post(route: str, body) -> tuple:
-    """POST /api/history/delete, /settings, /tags, /tag, /pin, /fork, /mark and
-    /tags/suggest. (code, body)."""
+    """POST /api/history/delete, /settings, /tags, /tag, /pin, /archive,
+    /fork, /mark and /tags/suggest. (code, body)."""
     if route == "/api/history/delete":
         if not isinstance(body, dict) or set(body) != {"id"} or not isinstance(body["id"], str):
             return 400, {"error": 'need {"id": "<conversation id>"} - one conversation '
@@ -3941,6 +4134,26 @@ def handle_post(route: str, body) -> tuple:
         code, out = _log().set_pin(body["id"], body["pinned"])
         if code == 200:
             _audit("history.pin", {"pinned": out["pinned"]})
+        return code, out
+    if route == "/api/history/archive":
+        # Archived chats (section 18.3, 2026-10-30): one chat, one reversible
+        # local flag, no card - putting a chat away reveals nothing and sends
+        # nothing. The audit line says which way it went and nothing else: no
+        # title, no words.
+        #
+        # WHILE THE LISTS ARE HIDDEN THIS ROUTE ANSWERS 423 FOR EVERY ID,
+        # before it looks at one, exactly like /api/history/pin: a 200
+        # ("archived it") against a 404 ("no such chat") would tell a locked
+        # PC's caller whether a chat exists. Same body, same sentence,
+        # whatever was asked.
+        view = _private_view()
+        if view["locked"]:
+            return 423, _archive_fail("locked")
+        if not isinstance(body, dict) or set(body) != {"id", "archived"}:
+            return 400, _archive_fail("bad_request")
+        code, out = _log().set_archived(body["id"], body["archived"])
+        if code == 200:
+            _audit("history.archive", {"archived": out["archived"]})
         return code, out
     if route == "/api/history/tags/suggest":
         # Overnight suggested tags (section 104): on = ONE card, off = at once.

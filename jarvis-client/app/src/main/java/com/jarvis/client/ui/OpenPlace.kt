@@ -149,6 +149,14 @@ object OpenPlace {
         // read-only index, not a settings section), so there is no desktop row
         // for this id to name. It changes nothing - the screen only lists.
         "all-features" to Where.Go(Screen.SETTINGS, "all-features"),
+        // "Jarvis Calendar" (2026-10-29; the owner's ask: a full calendar of
+        // Jarvis's own, ON by default and disableable): its one Settings row is
+        // the feature's own ON/OFF switch (SettingsScreen.kt, item "calendar",
+        // always drawn; CalendarSettingsPlate.kt), so "open the calendar" - and
+        // the calendar widget's off-state tap - land on it rather than at the
+        // top of Settings. A PHONE-ONLY registry Section in this slice: the
+        // desktop's own Settings card arrives with the HUD half of the feature.
+        "calendar" to Where.Go(Screen.SETTINGS, "calendar"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).

@@ -29,7 +29,7 @@
          if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
                      "/api/compute", "/api/memory/facts", "/api/memory/export"):
              if not _origin_ok(self):
-@@ -2480,9 +2501,43 @@
+@@ -2480,9 +2501,48 @@
              try:
                  code, out = jarvis_voices.handle_post(route, body)
              except Exception as exc:
@@ -38,10 +38,15 @@
  
 +        if route in ("/api/history/delete", "/api/history/settings",
 +                     "/api/history/tags", "/api/history/tags/suggest", "/api/history/tag",
-+                     "/api/history/fork", "/api/history/mark", "/api/history/pin"):
++                     "/api/history/fork", "/api/history/mark", "/api/history/pin",
++                     "/api/history/archive"):
 +            # chat-history.patch (jarvis_chat_log.py).
 +            #   delete {"id": "<conversation id>"}: that one conversation is
 +            #   deleted. One per request; there is no delete-all.
++            #   archive {"id": "<conversation id>", "archived": true|false}:
++            #   put one chat away, or take it out again (Unarchive). One chat,
++            #   reversible, metadata only, no card - it reveals nothing and
++            #   sends nothing.
 +            #   settings {"enabled": false}: off at once, and a waiting card
 +            #   is withdrawn; what is already kept stays. {"enabled": true}:
 +            #   ONE approval card (history_enable, tier "ask"), 202
