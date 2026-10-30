@@ -130,13 +130,22 @@ class ChatMenuTest {
     // ---- 3. The pinned list: reachable, guarded, newest first ---------------
 
     @Test
-    fun `pinned messages is its own screen, opened from the chat's menu`() {
-        assertTrue("Home has no route to the pinned list", home.contains("actions.onOpenPins()"))
-        assertTrue("the More menu does not name it", home.contains("ChatPins.TITLE"))
+    fun `pinned messages is its own screen, opened from History's header`() {
+        // MOVED 2026-10-30 (the owner's choice: tuck the rare ones away). The
+        // pinned list is one compact "Pinned" action in History's header now -
+        // the SAME PinnedScreen, not a copy, and no longer a More menu row.
+        assertTrue("History cannot open the pinned list", history.contains("onOpenPins: () -> Unit"))
+        assertTrue("History's header does not draw the Pinned action", history.contains("ChatPins.ACTION"))
         assertTrue(
-            "the row has no line under it saying what it is",
-            home.contains("detail = MoreMenuWords.PINNED_DETAIL"),
+            "History's Pinned action does not reach the route",
+            history.contains("onClick = onOpenPins"),
         )
+        assertTrue(
+            "MainActivity does not hand History the pins action",
+            main.contains("onOpenPins = { nav.go(Screen.PINS) }"),
+        )
+        assertFalse("the More menu still carries a pinned row", home.contains("ChatPins.TITLE"))
+        assertFalse("Home still has a pins action of its own", home.contains("actions.onOpenPins"))
         assertTrue(main.contains("Screen.PINS ->"))
         assertTrue("the screen is not registered", SourceFile.read(
             "jarvis-client/app/src/main/java/com/jarvis/client/ui/Nav.kt",
@@ -178,24 +187,60 @@ class ChatMenuTest {
     // ---- 4. Old chats and new chats, where the owner now looks -------------
 
     @Test
-    fun `the menu leads with new chat, earlier chats and the pins`() {
-        val menu = bodyOf("private fun HomeMoreMenu(")
-        val order = listOf("MoreMenuWords.NEW_CHAT", "ChatHistory.EARLIER_CHATS", "ChatPins.TITLE")
+    fun `the menu is five doors, and the modes live one tap deeper`() {
+        // The owner's choice of 2026-10-30, after he photographed the old
+        // sheet ("too many options"): the More menu is short now, and the
+        // three chat modes are one tap deeper behind ONE "Modes" row.
+        val shell = bodyOf("private fun HomeMoreMenu(")
+        val menu = bodyOf("private fun HomeMoreMain(")
+        val modes = bodyOf("private fun HomeMoreModes(")
+        // The shell swaps the dialog's own content for the sub-sheet; there is
+        // no second dialog and no second Back.
+        assertTrue("the More shell does not open the short menu", shell.contains("HomeMoreMain("))
+        assertTrue("the More shell does not open the modes sub-sheet", shell.contains("HomeMoreModes("))
+        assertTrue("the modes page has no way back", shell.contains("modesOpen = false"))
+        // The five doors, in the order the owner reads them.
+        val order = listOf(
+            "MoreMenuWords.NEW_CHAT", "MoreMenuWords.PHOTO", "MoreMenuWords.FILE",
+            "MoreMenuWords.MODES", "MoreMenuWords.QUICK_NOTE",
+        )
         val at = order.map { menu.indexOf(it) }
-        assertTrue("the chat rows are not all in the menu: $at", at.all { it >= 0 })
-        assertEquals("the chat rows are not in the order new, earlier, pinned: $at", at.sorted(), at)
-        // Exactly one "Earlier chats" row - it must not come back twice.
-        val mentions = Regex("ChatHistory\\.EARLIER_CHATS").findAll(home).count()
-        assertEquals("Earlier chats is drawn more than once", 1, mentions)
-        // "New chat" is the same mechanism the idle timer uses, not a new one.
+        assertTrue("the short menu lost a door: $at", at.all { it >= 0 })
+        assertEquals("the short menu's doors are out of order: $at", at.sorted(), at)
+        // The rows that left are GONE, not hidden behind a second copy.
+        assertFalse("Earlier chats is still a More row", menu.contains("ChatHistory.EARLIER_CHATS"))
+        assertFalse("Pinned messages is still a More row", menu.contains("ChatPins.TITLE"))
+        assertFalse("Jarvis Presets is still a More row", menu.contains("MoreMenuWords.PRESETS"))
+        // Earlier chats opened History; History IS the list, so the words come
+        // back nowhere in Home and the status-line control is the one door.
+        assertEquals(
+            "Earlier chats is drawn in Home again",
+            0,
+            Regex("ChatHistory\\.EARLIER_CHATS").findAll(home).count(),
+        )
+        // The three modes behave exactly as they did as rows: same words, same
+        // gates, same one-shot / coach / incognito actions.
+        for (pin in listOf(
+            "Thinking.ONE_SHOT_LABEL",
+            "coach.button",
+            "actions.onToggleTemporary()",
+            "TemporaryChat.START",
+        )) {
+            assertTrue("the Modes sub-sheet lost $pin", modes.contains(pin))
+        }
+        assertTrue("the Modes sub-sheet lost the coach's gate", modes.contains("coach.routeKnown"))
+        assertEquals(
+            "the short menu draws a mode itself instead of the Modes row",
+            0,
+            Regex("Thinking\\.ONE_SHOT_LABEL").findAll(menu).count(),
+        )
+        // "New chat" is the same mechanism the idle timer uses, not a new one,
+        // and the answer's own row and the menu still share the ONE action.
         assertTrue(menu.contains("actions.onNewConversation()"))
         assertTrue(
             "a new chat no longer goes through the chat's own reset",
             main.contains("onNewConversation = { chat.newConversationSaid() }"),
         )
-        // TWO doors, ONE action, and no third way: the More menu's row and the
-        // row under a finished answer both call the action Home hands in, and
-        // HomeScreen never mints a conversation id or resets the session itself.
         assertEquals(
             "the two New chat doors are not one action",
             2,
@@ -211,6 +256,44 @@ class ChatMenuTest {
             home.contains("ChatHistory.newConversationId()"),
         )
         assertFalse("HomeScreen resets the chat session itself", home.contains("newConversationSaid"))
+    }
+
+    @Test
+    fun `History has one filter row, and the Filters sheet holds the rest`() {
+        // The owner's choice of 2026-10-30: the three chip rows became one row
+        // (the tags, scrolling sideways) plus one Filters button, and the sheet
+        // behind it holds every rare filter - unchanged and still combining.
+        assertTrue("History has no single tag row", history.contains("TagFilterChipsRow("))
+        assertTrue("History has no Filters door", history.contains("ChatLog.FILTERS_TITLE"))
+        assertTrue("History has no Filters sheet", history.contains("private fun HistoryFiltersSheet("))
+        assertTrue(
+            "the Filters button never says it is on",
+            history.contains("ChatLog.filtersActive(") && history.contains("ChatLog.filtersTitle("),
+        )
+        val sheet = history.substringAfter("private fun HistoryFiltersSheet(")
+        for (pin in listOf(
+            "ChatLog.FILTERS.forEach",       // the conversation kinds
+            "ChatLog.ARCHIVED",              // the archived view
+            "ChatLog.ARCHIVE_FILTER_TITLE",  // its own name for TalkBack
+            "TagFilterChips(",               // the full tag list, wrapping
+            "ChatTags.EDITOR_TITLE",         // the Tags editor link
+            "ChatLog.FORGET_RANGE_LINK",     // Forget a time frame
+        )) {
+            assertTrue("the Filters sheet lost $pin", sheet.contains(pin))
+        }
+        // The list head draws the ONE row and the button, and no longer draws
+        // the kind chips or the second, wrapping tag row.
+        val head = history.substringAfter("item(key = \"list-head\")").substringBefore("// Delete from a row's menu")
+        assertTrue("the Filters button is not in the list head", head.contains("ChatLog.FILTERS_TITLE"))
+        assertTrue("the single tag row is not in the list head", head.contains("TagFilterChipsRow("))
+        assertFalse("a kind chip row is still drawn in the list head", head.contains("ChatLog.FILTERS.forEach"))
+        assertFalse("a second tag chip row is still drawn in the list head", head.contains("TagFilterChips(view.tags"))
+        // The sheet follows the same private-lists guard the tag names do: a
+        // hidden list must not leave the tag names up behind a dialog.
+        assertTrue(
+            "the Filters sheet ignores the hidden-lists guard",
+            history.contains("if (filtersOpen && !privateHidden)"),
+        )
     }
 
     @Test

@@ -259,11 +259,16 @@ class HistoryArchiveTest {
         assertTrue(history.contains("\"Yes, delete it\""))
         assertTrue(history.contains("\"Keep it\""))
         // The archived chip is drawn in the SAME list-head the hidden-lists
-        // guard already covers: it sits behind the one `if (!privateHidden)`
-        // that draws the search box and the head.
+        // guard already covers. Since 2026-10-30 it lives in the one Filters
+        // sheet that head's button opens (the owner's choice: one row, one
+        // Filters button); the head keeps the button and the single tag row.
         val head = history.substringAfter("item(key = \"list-head\")").substringBefore("// Delete from a row's menu")
-        assertTrue("the Archived chip is not in the guarded list head", head.contains("ChatLog.ARCHIVED"))
-        assertTrue("the guarded list head lost its head", head.contains("ChatLog.FILTERS"))
+        assertTrue("the guarded list head lost its Filters door", head.contains("ChatLog.FILTERS_TITLE"))
+        assertTrue("the guarded list head lost its single tag row", head.contains("TagFilterChipsRow("))
+        val filtersSheet = history.substringAfter("private fun HistoryFiltersSheet(")
+        assertTrue("the Filters sheet lost the Archived view", filtersSheet.contains("ChatLog.ARCHIVED"))
+        assertTrue("the Filters sheet lost the archived title", filtersSheet.contains("ChatLog.ARCHIVE_FILTER_TITLE"))
+        assertTrue("the Filters sheet ignores the hidden-lists guard", history.contains("if (filtersOpen && !privateHidden)"))
 
         // The runtime holds the write on a stale link and behind the hidden
         // guard, sends only the id and the state, and tells an older PC apart.
@@ -291,7 +296,7 @@ class HistoryArchiveTest {
     }
 
     @Test
-    fun `History is one tap from Home's always-on status line, and the older doors stay`() {
+    fun `History is one tap from Home's always-on status line, and it is the one door`() {
         val main = "jarvis-client/app/src/main/java/com/jarvis/client"
         val home = repoFile("$main/ui/screens/HomeScreen.kt").readText()
         // The control is in StatusLine - the row no size, menu or setting
@@ -308,11 +313,13 @@ class HistoryArchiveTest {
         // ...and it goes straight to the History screen, not a second one.
         val activity = repoFile("$main/MainActivity.kt").readText()
         assertTrue(activity.contains("onEarlierChats = { nav.go(Screen.HISTORY) }"))
-        // The existing "Earlier chats" door in the More menu is kept.
-        assertTrue(home.contains("ChatHistory.EARLIER_CHATS"))
-        // Home's one-click control is NOT a second "Earlier chats" row: that
-        // word stays the More menu's own, once.
-        assertEquals(1, Regex("ChatHistory\\.EARLIER_CHATS").findAll(home).count())
+        // 2026-10-30: the More menu's "Earlier chats" row was REMOVED - it
+        // opened this same History screen, so it said nothing the status line
+        // did not. Home now has no copy of that word at all, and this one
+        // control is the door (asserted again across the file, so a second
+        // copy cannot come back unnoticed).
+        assertFalse("the More menu's Earlier chats row came back", home.contains("ChatHistory.EARLIER_CHATS"))
+        assertEquals(0, Regex("ChatHistory\\.EARLIER_CHATS").findAll(home).count())
     }
 
     /** A file of this repository, found from wherever the tests run. */
