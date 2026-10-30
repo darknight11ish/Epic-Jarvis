@@ -6577,15 +6577,19 @@ def _parking_window(place_text: str, now: float):
         inner_place, inner_day = _parking_split_day(m.group("place"))
         day = day or inner_day
         if pattern is _PARKING_RANGE:
-            start_text = (day + " " + m.group("a")).strip() if day else m.group("a")
+            end_text, end_day = _parking_split_day(m.group("b"))
+            # The day word belongs to the WHOLE window, whichever end of it the
+            # owner put it on: "from 4 to 9 on friday" is one Friday evening,
+            # not 4 PM today and 9 AM on the next Friday. So when the end
+            # carries the day, the start is resolved against it too, and the
+            # end is then the same day's clock (or the next day's, for a window
+            # that crosses midnight - "from 10 pm to 2 am").
+            start_day = day or inner_day or end_day
+            start_text = (start_day + " " + m.group("a")).strip() if start_day else m.group("a")
             start = _parking_clock_at(start_text, now)
             if start is None:
                 continue
-            end_text, end_day = _parking_split_day(m.group("b"))
-            if end_day:
-                end = _parking_clock_at(end_text + " " + end_day, start)
-            else:
-                end = _parking_end_after(end_text, start)
+            end = _parking_end_after(end_text, start)
         elif pattern is _PARKING_AT_FOR:
             start_text = (day + " " + m.group("a")).strip() if day else m.group("a")
             start = _parking_clock_at(start_text, now)

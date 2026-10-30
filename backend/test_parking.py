@@ -755,6 +755,33 @@ def t_the_sentences_are_ours():
                  "what is a parking minimum"):
         check(f"grammar: {text!r} is NOT ours", Q.match(text, now) is None,
               Q.match(text, now))
+    # The day word belongs to the WHOLE window, whichever end it is on: "from
+    # 4 to 9 on friday" is one Friday evening (300 min), not 4 PM today and
+    # 9 AM on the next Friday (17 hours over two days).
+    got = Q.match("find cheap parking near pike place from 4 to 9 on friday", now)
+    if got is not None and got.name == "parking_lookup":
+        held = _dt_from(got.f["start"])
+        check("grammar: a day on the END applies to the whole window",
+              held.weekday() == 4 and held.hour == 16
+              and int((got.f["end"] - got.f["start"]) // 60) == 300,
+              (held, got.f["end"] - got.f["start"]))
+    else:
+        check("grammar: a day on the END applies to the whole window", False, got)
+    # And a window that crosses midnight is the next day's clock, not a
+    # negative length.
+    got = Q.match("parking near pike place from 10 pm to 2 am", now)
+    if got is not None and got.name == "parking_lookup":
+        check("grammar: 10 pm to 2 am is four hours, across midnight",
+              int((got.f["end"] - got.f["start"]) // 60) == 240,
+              (got.f["end"] - got.f["start"]))
+    else:
+        check("grammar: 10 pm to 2 am is four hours, across midnight", False, got)
+
+
+def _dt_from(epoch: float):
+    """An epoch as this PC's wall clock, for a readable assertion."""
+    import datetime as _dt
+    return _dt.datetime.fromtimestamp(epoch)
 
 
 def t_a_whole_answer_without_the_model():
