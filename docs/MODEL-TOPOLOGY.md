@@ -93,7 +93,7 @@ func nextLowerAutoNumCtx(numCtx int) (int, bool) {
 An 8B Q4 at 32768 with an f16 cache needs about 9.8 GiB. On a card where that
 does not fit, the ladder drops to 4096, and 4096 is the bottom rung.
 
-Three things are now measured rather than planned:
+These are now measured rather than planned:
 
 - **A 6,000-token prompt does not fit in 4,096, and the start is lost, silently.**
   Measured: a ~5,019-token prompt went to the runner as 2,050 tokens - half the
@@ -105,8 +105,20 @@ Three things are now measured rather than planned:
   tokens, and a 3,112-token prompt at 4,096 produced 984.
 - **16,384 costs 240 MiB more than 4,096 on this model**, because `qwen3.5:9b`
   keeps a cache only for its 8 full-attention layers. Decoding is unchanged
-  (41-43 tokens/s at every size); reading the prompt is what grows, at about
-  1,200 tokens/s.
+  between 4,096 and 16,384 (41-43 tokens/s); reading the prompt is what grows,
+  at about 1,200 tokens/s.
+
+**32,768 and 65,536 were measured on 2026-10-30 and are not recommended.**
+Both loaded 100% on the GPUs (33/33 layers), neither spilled to the processor,
+and both ends of a 30,329- and a 60,227-token prompt survived in the answer,
+cold and warm. But decode fell from 41.9 tokens/s at 16,384 to 33.5 at 32,768
+and 27.4 at 65,536, a cold 60,227-token prompt took 58.5 s to its first token,
+and in the memory conditions measured both sizes were spread over both cards
+(2.2-2.7 GiB of the monitor card's memory) because the 2060 did not have
+enough free room at the moment each was requested - its own previous model and
+the owner's other lane were using it. Nothing was deployed; the setting stays
+16,384. The numbers, the control run and the caveats are in
+[MEASURED-2026-10-30-CONTEXT.md](MEASURED-2026-10-30-CONTEXT.md).
 
 ---
 
