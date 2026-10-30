@@ -1135,9 +1135,41 @@ def _merge_setting(patch: dict) -> tuple:
             except OSError:
                 pass                # no last-good copy this time; the save still goes on
             os.replace(tmp, p)
-            return True, ""
         except OSError as exc:
             return False, SAVE_FAILED.format(why=type(exc).__name__)
+    # Outside the lock, and only once the write really landed: the doorbell
+    # rings AFTER the file the reader will read is in place, so a listener can
+    # never re-read the old state.
+    _publish()
+    return True, ""
+
+
+def _publish() -> None:
+    """Tell anything with an event stream open that "how Jarvis talks" moved.
+
+    ONE writer, ONE doorbell: every setter - a personality, the legacy manner
+    word, humour, a dial, the voice-sync switch, a saved personality - goes
+    through `_merge_setting`, so this is rung from there and nowhere else. The
+    frame carries the whole state so a listener can paint the right row
+    without guessing, but it is a doorbell like every other kind: both apps
+    re-read `GET /api/manner` (the phone's `onEvent` bumps
+    `JarvisRuntime.mannerTick`).
+
+    The repo's shape is one kind per feature - jarvis_antislop.py publishes
+    "antislop", jarvis_devices.py "devices" - so this publishes "manner".
+    Never raises: a backend without an event bus still changes the setting."""
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish("manner", {
+            "manner": current(),
+            "personality": current_personality(),
+            "personality_explicit": personality_chosen(),
+            "humor": humor_enabled(),
+            "voice_sync": sync_voice_enabled(),
+            "dials": dials(),
+        })
+    except Exception:
+        pass
 
 
 def user_personalities() -> list:

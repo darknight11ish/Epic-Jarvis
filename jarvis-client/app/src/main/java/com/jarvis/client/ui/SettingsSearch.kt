@@ -56,6 +56,23 @@ package com.jarvis.client.ui
  * the desktop engine) is read by [SettingsSearchTest] so the two cannot drift
  * on the rules - two clients that describe one box differently is the drift
  * this repository has already paid for once.
+ *
+ * WHICH WORDS CAN ANSWER, AND IN WHAT ORDER (2026-10-28). The rules above say
+ * how well a word matches; this is what a match is allowed to be. A section's
+ * words are of two kinds: the ones it NAMES - its heading, the names of the
+ * controls drawn on it ([Row.titles]), and this index's own synonyms
+ * ([Row.label]) - and the sentences it PRINTS ([Row.quotes]), which mention
+ * other features in passing. Both still match, but a match found only in the
+ * prose no longer answers while another section names what was typed: typing
+ * **"pair"** used to return `VOICE -> APPEARANCE -> DEVICES`, because Voice and
+ * Appearance both print the conditional line "Pair with your desktop first -
+ * these settings live on it." and every hit was the same weakest tier, so the
+ * screen's own order decided it and the card with the button on it came third
+ * (Gemini's F4, measured on the owner's phone). Now Devices names "pair" - its
+ * button is "Pair with your PC" - and the two passing mentions do not answer.
+ * That is [namesIt] and the rule in [matching]; the tiers and [rankPart] are
+ * untouched, so the shared cross-app fixture still holds both engines to one
+ * rule set.
  */
 object SettingsSearch {
 
@@ -341,8 +358,20 @@ object SettingsSearch {
         Row(
             key = "devices", title = "Devices",
             label = "Paired devices; each device's own key; pair a phone; remove a device",
+            // The two buttons the card really draws (DevicesPlate.kt, whose
+            // words are net/Devices.kt's own constants - the row names that
+            // file for the same reason `browser-engine` names
+            // net/BrowserEngine.kt). "Pair with your PC" is here because it is
+            // the way back INTO pairing and the owner went looking for it
+            // (2026-10-28); "Unpair & clear the token" because it is the
+            // control the fixed "Needs your OK" line used to cover, so it must
+            // at least be findable by the words printed on it. Before this the
+            // section matched "pair" only through the synonyms above, the same
+            // weakest tier as the passing mentions in Voice and Appearance -
+            // Gemini's F4.
+            titles = listOf("Pair with your PC", "Unpair & clear the token"),
             quotes = listOf("Devices"),
-            source = JUMP + listOf(PLATES + "DevicesPlate.kt"),
+            source = JUMP + listOf(PLATES + "DevicesPlate.kt", "net/Devices.kt"),
         ),
         Row(
             key = "quick-tiles", title = "Quick Settings tiles",
@@ -516,10 +545,54 @@ object SettingsSearch {
         return listOf(r.title, r.label).plus(r.titles).plus(r.quotes).joinToString(" ")
     }
 
-    /** The keys matching [query], in screen order. Empty query: nothing matched yet. */
+    /**
+     * The keys matching [query], in screen order - and, since 2026-10-28, only
+     * the sections that really answer it.
+     *
+     * A section whose only claim to the query is its own prose ([Row.quotes] -
+     * the sentences it prints, which mention other features in passing) is
+     * dropped while ANY section names what was typed ([namesIt]): the heading,
+     * a control's own name, or one of the index's synonyms. Both halves stay
+     * searchable - if nothing names the words, the prose answers alone, which is
+     * what keeps "pair with your desktop" finding the two sections that print
+     * it. This is a SUBSET of the old answer, so nothing new can appear in the
+     * box's results; it only stops a passing mention from crowding out the
+     * card that has the button on it.
+     *
+     * The order is still the screen's own, because the screen draws its cards in
+     * that order and the phone has no way to re-cut a `LazyColumn`'s items. So
+     * "first" here means "the only answer left", which is the strongest way a
+     * fixed-order screen can say it - and the reason the rule is a filter rather
+     * than a sort by tier, the way the desktop does it
+     * (`jarvis-desktop/src/settings-search.js`, `compareMatches`).
+     */
     fun matching(query: String): List<String> {
         if (normalise(query).isEmpty()) return emptyList()
-        return ROWS.map { it.key }.filter { matches(it, query) }
+        val all = ROWS.map { it.key }.filter { matches(it, query) }
+        val named = all.filter { namesIt(it, query) }
+        return if (named.isEmpty()) all else named
+    }
+
+    /**
+     * Does this section MATCH the query by the words it NAMES - its heading, the
+     * names of the controls drawn on it ([Row.titles]), and the index's own
+     * synonyms ([Row.label]) - rather than only by the sentences it prints
+     * ([Row.quotes])?
+     *
+     * True means "this section is about the thing typed": Devices has a button
+     * called "Pair with your PC", so "pair" names it. A section that merely
+     * mentions the word in a sentence ("Pair with your desktop first - these
+     * settings live on it.", printed inside Voice and Appearance while no
+     * desktop is paired) does not name it, and [matching] will not let that
+     * mention answer while something better does.
+     *
+     * Every word typed must be found on the naming side (AND, the same rule as
+     * [rank]): a section that names half the query and merely prints the other
+     * half is not a name for it.
+     */
+    fun namesIt(key: String, query: String): Boolean {
+        val r = row(key) ?: return false
+        return rankPart(r.title, r.label + " " + r.titles.joinToString(" "), query) > 0
     }
 
     /**

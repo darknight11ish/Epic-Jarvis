@@ -23,7 +23,7 @@
  * (like coder, or general, etc) along with the different personalities of
  * jarvis that i can select"). Above the saved layouts, in the SAME one menu:
  *
- *   * the five local-AI focus presets (`GET /api/presets`, JARVIS-API section
+ *   * the nine local-AI focus presets (`GET /api/presets`, JARVIS-API section
  *     145), with the PC's own `chosen_preset` marking the chosen one;
  *   * Jarvis's ten personalities plus the owner's own "My personalities"
  *     (`GET /api/manner`), with the PC's own `personality` marking the current
@@ -385,7 +385,7 @@ export { USER_ID_RE, MAX_USER_PRESETS };
 /* ── 2. The PC's own presets (node-tested) ───────────────────────────────── */
 
 /**
- * The five local-AI focus presets, in the order the PC lists them
+ * The nine local-AI focus presets, in the order the PC lists them
  * (`GET /api/presets`). Pure, so node tests can prove the reading without a
  * browser. The PC's own `chosen_preset` is the ONLY thing that marks a row
  * chosen - never the click that asked for it.
@@ -1020,7 +1020,7 @@ export function mountHudPresets(options = {}) {
       : (pcReading ? `Reading ${what} from the PC...` : `Open the menu again to read ${what}.`));
   }
 
-  /** The five local-AI focus presets (GET /api/presets), plus the Cloud preset
+  /** The nine local-AI focus presets (GET /api/presets), plus the Cloud preset
    *  beside them when the PC offers one. A row is marked chosen ONLY from the
    *  PC's own `chosen_preset` / `cloud.provider`, and the section says the card
    *  rule in words before any click.
@@ -1294,7 +1294,7 @@ export function mountHudPresets(options = {}) {
     const hadFocus = Boolean(active && scroll.contains(active));
     const key = hadFocus ? focusKey(active) : "";
     scroll.textContent = "";
-    // The owner's presets first (2026-10-27): the five local-AI focus presets
+    // The owner's presets first (2026-10-27): the nine local-AI focus presets
     // (then the Cloud preset and its provider submenu when the PC offers one)
     // and the personalities, then the saved HUD layouts the menu always had.
     scroll.appendChild(renderModelPresets());

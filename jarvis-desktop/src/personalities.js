@@ -6,11 +6,15 @@
  * own `contract/personalities.json` and `jarvis_manner.py` are the owners of
  * what each preset MEANS (prompt, reflex phrases, voice blend). This module is
  * only the page's copy for when the PC is older: it holds the same ten ids,
- * titles and voice pairings as the blueprint's section 2, so Settings can draw
- * the whole grid before the backend half has landed, and `readPersonalities`
- * ALWAYS prefers the PC's answer once the PC sends one. The local copy is
- * marked `source: "local"` and the page says so; nothing here is presented as
- * if the PC had said it.
+ * titles, descriptions, sample lines, switch lines and voice numbers as
+ * `contract/personalities.json` - the same file `tools/gen_personalities.py`
+ * generates the PC's copy from - so Settings can draw the whole grid before
+ * the backend half has landed, and `readPersonalities` ALWAYS prefers the
+ * PC's answer once the PC sends one. The local copy is marked `source:
+ * "local"` and the page says so; nothing here is presented as if the PC had
+ * said it. `tests/personalities.mjs` fails if this copy drifts from the
+ * contract (it was one title behind on 2026-10-28: "Socratic Coach" against
+ * the PC's "Socratic Coach & Tutor").
  *
  * Pure: no DOM, no fetch, no storage, no clock. manner-settings.js draws it,
  * and tests/personalities.mjs holds it to the blueprint's table.
@@ -28,9 +32,9 @@ export const DEFAULT_PRESET = "warm_peer";
 export const LEGACY = Object.freeze({ warm: "warm_peer", plain: "tactical_ops" });
 
 /**
- * The ten built-in presets, in the PC's own order (blueprint section 2, with
- * the Patient Advocate appended as the ninth on 2026-10-24 and the Reflective
- * Coach as the tenth on 2026-10-27).
+ * The ten built-in presets, in the PC's own order, with the contract's own
+ * words (the Patient Advocate is the ninth, added 2026-10-24; the Reflective
+ * Coach the tenth, 2026-10-27).
  * `voice.blend` is the 256-dim style mix the PC uses; `voice.fallback` is the
  * one Kokoro voice it can fall back to; `voice.label` is what the page shows.
  */
@@ -39,22 +43,22 @@ export const PRESETS = Object.freeze([
     id: "warm_peer",
     badge: "Default",
     title: "Warm Collaborator",
-    description: "Friendly and steady, close to how Jarvis normally talks.",
-    quote: "Let's work through it together - I'm right here.",
+    description: "Friendly and on your side, like a good colleague who is already up to speed.",
+    quote: "Two visits; latest May 12. Open it?",
     voice: Object.freeze({
       blend: "af_heart:0.75+af_bella:0.25",
       fallback: "af_heart",
       speed: 1.0,
       label: "Warm American Blend",
     }),
-    switchAck: "Switched to Warm Collaborator - I'm right here with you.",
+    switchAck: "Switched to Warm Collaborator - I\'m right here with you.",
   }),
   Object.freeze({
     id: "classic_butler",
     badge: "2",
     title: "Classic British Butler",
-    description: "Proper British manners, dry wit, always at your service.",
-    quote: "Very good, sir. The schedule is in hand.",
+    description: "Measured and unfailingly proper, with a dry nod and impeccable timing.",
+    quote: "Very good, sir. Held until four.",
     voice: Object.freeze({
       blend: "bm_george:0.65+bm_lewis:0.35",
       fallback: "bm_george",
@@ -67,8 +71,8 @@ export const PRESETS = Object.freeze([
     id: "tactical_ops",
     badge: "3",
     title: "Tactical Mission Control",
-    description: "Short, clipped updates. No small talk, no decoration.",
-    quote: "Copy. Timer running. Standing by.",
+    description: "Calm, clipped flight-director voice: state, action, done.",
+    quote: "Build green. Staging up. Awaiting approval.",
     voice: Object.freeze({
       blend: "am_adam:0.60+bm_george:0.40",
       fallback: "am_michael",
@@ -81,8 +85,8 @@ export const PRESETS = Object.freeze([
     id: "dry_wit",
     badge: "4",
     title: "Dry & Deadpan",
-    description: "Sharp, sarcastic and unimpressed - on purpose.",
-    quote: "Timer set. Try not to burn it this time.",
+    description: "Wry, deadpan delivery with sharp timing and very little mercy.",
+    quote: "Already restored. Bold strategy.",
     voice: Object.freeze({
       blend: "bm_lewis:0.70+am_adam:0.30",
       fallback: "bm_lewis",
@@ -95,8 +99,8 @@ export const PRESETS = Object.freeze([
     id: "friday_partner",
     badge: "5",
     title: "Sharp Tech Partner",
-    description: "A quick engineering partner who gets straight to the point.",
-    quote: "On it, boss - what are we building?",
+    description: "A sharp engineering co-pilot: fast, technical, and already deep in the problem.",
+    quote: "Image rebuild; cache missed on Rust.",
     voice: Object.freeze({
       blend: "bf_isabella:0.60+af_sarah:0.40",
       fallback: "bf_isabella",
@@ -108,37 +112,37 @@ export const PRESETS = Object.freeze([
   Object.freeze({
     id: "socratic_mentor",
     badge: "6",
-    title: "Socratic Coach",
-    description: "Asks the next question so you think it through yourself.",
-    quote: "What do you already know about it?",
+    title: "Socratic Coach & Tutor",
+    description: "Teaches by asking, builds from first principles, and never just gives the answer away.",
+    quote: "Mirror facing a mirror? Start there.",
     voice: Object.freeze({
       blend: "bm_fable:0.70+bm_george:0.30",
       fallback: "bm_fable",
       speed: 0.98,
       label: "Mentor Blend",
     }),
-    switchAck: "Switched to Socratic Coach. Let's think through things from first principles together.",
+    switchAck: "Switched to Socratic Coach. Let\'s think through things from first principles together.",
   }),
   Object.freeze({
     id: "devils_advocate",
     badge: "7",
     title: "No-Nonsense Critic",
-    description: "Finds the hole in the plan before it costs you.",
-    quote: "Bring me your plan and I'll show you where it breaks.",
+    description: "Red-team honesty: finds the weak point in the plan and says it plainly.",
+    quote: "Weak point: nobody fixes it over the weekend.",
     voice: Object.freeze({
       blend: "am_onyx:0.65+bm_george:0.35",
       fallback: "am_onyx",
       speed: 1.04,
       label: "Critic Blend",
     }),
-    switchAck: "No-Nonsense Critic active. Bring me your plan and I'll show you where it breaks.",
+    switchAck: "No-Nonsense Critic active. Bring me your plan and I\'ll show you where it breaks.",
   }),
   Object.freeze({
     id: "calm_stoic",
     badge: "8",
     title: "Calm & Grounded",
-    description: "Quiet, gentle and unhurried. Good for late evenings.",
-    quote: "No rush - take your time.",
+    description: "Low-noise and steady: quiet words, no pressure, clear help.",
+    quote: "One thing at a time; I\'ll hold the list.",
     voice: Object.freeze({
       blend: "af_sky:0.65+af_heart:0.35",
       fallback: "af_sky",
@@ -151,22 +155,22 @@ export const PRESETS = Object.freeze([
     id: "advocate",
     badge: "9",
     title: "Patient Advocate",
-    description: "In your corner for doctor visits, labs, medicines and insurance letters.",
-    quote: "Let's take them one line at a time.",
+    description: "Sits in your corner for doctor visits, lab results, medicines and insurance letters. Puts medical words into plain English and builds clear questions for your care team.",
+    quote: "Let\'s take them one line at a time.",
     voice: Object.freeze({
       blend: "af_heart:0.65+af_bella:0.35",
       fallback: "af_heart",
       speed: 0.94,
       label: "Patient Advocate Blend",
     }),
-    switchAck: "Switched to Patient Advocate. I'm in your corner - we'll go through it one line at a time.",
+    switchAck: "Switched to Patient Advocate. I\'m in your corner - we\'ll go through it one line at a time.",
   }),
   Object.freeze({
     id: "reflect",
     badge: "10",
     title: "Reflective Coach",
-    description: "A calm space to talk something through - it reflects first and asks one gentle question.",
-    quote: "I'm here. What is sitting heaviest?",
+    description: "A calm space to talk something through: it reflects first, asks one gentle question at a time, and will not diagnose you or tell you what to do.",
+    quote: "I\'m here. What is sitting heaviest?",
     voice: Object.freeze({
       blend: "af_heart:0.70+af_bella:0.30",
       fallback: "af_heart",

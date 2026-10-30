@@ -289,9 +289,54 @@ class WidgetStatesTest {
         assertTrue(initial.contains("@string/widget_initial_words"))
     }
 
+    /**
+     * The approvals widget cannot outlive the process that drew it (the owner's
+     * report of 2026-10-29: a card decided on the desktop stayed on the home
+     * screen).
+     *
+     * A Glance draw happens in this app's process and the result is a
+     * RemoteViews the launcher then holds on its own. With
+     * `updatePeriodMillis="0"` nothing ever asks again once the process is
+     * gone - not the stream (it is gone with the process), not `widgetJob` (it
+     * never runs), not `QueueBeat` (ditto) - so the last card drawn was the
+     * card on the home screen, however long ago it was answered. A period makes
+     * the launcher wake the receiver, which re-runs `provideGlance`; a cold
+     * process has an empty queue and a stale link, so it draws
+     * [WidgetStates.Approval.NOT_CHECKED] - never a card it cannot vouch for.
+     *
+     * Read from the XML, as the attribute-only test above does, because a
+     * launcher reads nothing else.
+     */
+    @Test
+    fun `the approvals widget asks the launcher to redraw it eventually`() {
+        val period = Regex("""android:updatePeriodMillis="(\d+)"""")
+        fun millis(name: String): Long {
+            val xml = moduleFile("src/main/res/xml/$name.xml").readText()
+            val found = period.find(xml)?.groupValues?.get(1)
+            assertNotNull("$name.xml has no updatePeriodMillis", found)
+            return found!!.toLong()
+        }
+        assertTrue(
+            "the approvals widget must be redrawn by the launcher: a RemoteViews " +
+                "with no period outlives every decision made after it was drawn",
+            millis("widget_approval_info") > 0,
+        )
+        // 30 minutes is Android's own floor; anything larger is legal but is a
+        // longer stale card, and anything below it is silently raised to it.
+        assertTrue(
+            "Android will not honour less than 30 minutes, so asking for less is a lie",
+            millis("widget_approval_info") >= 1_800_000L,
+        )
+        // The board widget has carried this period since it was written, and the
+        // two are the same rule now rather than one having it by accident.
+        assertTrue(
+            "the board widget's period is the precedent this follows",
+            millis("widget_board_info") > 0,
+        )
+    }
+
     /** A file under the app module, found from wherever the test process starts. */
-    private fun moduleFile(relative: String): File {
-        // Gradle runs unit tests from the module directory; an IDE may run
+    private fun moduleFile(relative: String): File {        // Gradle runs unit tests from the module directory; an IDE may run
         // them from the checkout root. Try every shape of that, walking up
         // until one exists, then fail loudly rather than skip.
         val shapes = listOf(relative, "app/$relative", "jarvis-client/app/$relative")

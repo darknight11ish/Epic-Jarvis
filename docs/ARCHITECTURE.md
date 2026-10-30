@@ -793,6 +793,53 @@ places between screens. Presentation only - no approval logic changed.
   `CardWords.TIMED_OUT`; `timed_out_next` is the phone's own second sentence
   (§8 below).
 
+- **A decided card leaves every live surface within 30 seconds; a killed phone's
+  widget is bounded by 30 minutes (2026-10-29).**
+  The owner's report: *"when a decision/approval card has already been addressed
+  (approved or denied) on either the Android app or the desktop program, make
+  sure the Android widgets (and every other surface that shows a
+  card/notification) update to reflect that - no stale card left showing, no dead
+  Approve/Deny on a resolved card."* The queue itself was already one thing -
+  `GET /api/pending` is the only list a surface draws from, a decided row is
+  gone from the next read, and `jarvis_gate.decide` answers `False` to a second
+  answer so a stale surface cannot record a verdict on a settled row. What was
+  missing was the second half of "one source": a **doorbell that can be missed**.
+  Every surface learned about a decision from the `approval` event, which is
+  `jarvis_events._poll_approvals` diffing ids on the backend's own pump - it
+  publishes only on CHANGE, and it swallows its own exceptions, so one failed
+  database read, one backend restart or a pump that is not running rings
+  nothing. The desktop survived that because its HUD page has carried a
+  30-second safety-net read since long before (`jarvis_hud.html`,
+  `setInterval(() => apprPoll(), 30000)`), and its stream re-reads the queue on
+  every connect and resume. The phone had **no** clock at all: a missed event
+  left the card on the home screen, in the notification drawer and on Home, with
+  a Deny that could only say "no longer waiting", until the app was restarted or
+  the link dropped. So both platforms now ask the same question on the same 30
+  seconds while a card is waiting on a **connected** link -
+  `QueueBeat.due` in `jarvis-client` (re-reading through `refreshPending`, the
+  one assignment `pending` ever gets, so the widget, the drawer and the in-app
+  list clear together) and `queue_beat_due` in `stream.rs` (re-reading through
+  `refresh_pending`, the one queue read all four desktop surfaces follow). Both
+  read **nothing** when the queue is empty, so this is not a poll of an idle PC,
+  and neither can approve or deny anything. `stale` is deliberately not a
+  condition on either side: a failed read is what makes a link stale, and the
+  next successful read is what clears it, so a `!stale` gate would switch off
+  the only retry that could recover - the desktop's first version did exactly
+  that, and one transient `/api/pending` failure held Approve until the hourly
+  reconnect. The HUD page's own 30 s `apprPoll` is still there beside the beat,
+  so while the HUD is visible and a card waits the PC runs **two** independent
+  30 s `/api/pending` reads (§6 names both as the safety-net exception). Two
+  things follow from the phone's process rather than from the rule: the
+  approvals widget now carries `updatePeriodMillis="1800000"` (the board
+  widget's period since it was written), because a RemoteViews drawn by a
+  killed process is otherwise held by the launcher for ever - so a **live**
+  surface is bounded by 30 s, but a killed phone's widget can lag up to
+  **30 minutes**, and a cold draw says "Not checked yet" rather than drawing a
+  card it cannot vouch for (`WidgetStates`). And a decision now says who made
+  it: the phone sends `"by": "phone"` on both `/api/approve` and `/api/deny`
+  (`SignedApproval.BY`), where it used to send only `{"id"}` and inherit the
+  route's `"hud"` default - the field evidence that started this.
+
 - **Two MECHANICAL guards against blind, stacked approvals (2026-10-20).**
   The owner's incident: one "approve all" click approved three backup
   restores, two imports and a device-key registration, because repeated
@@ -1965,7 +2012,22 @@ card - only an app's tap does. The invariants:
 ## 6. Events — one bus
 
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
-changes from it and from nowhere else. Kinds: `approval`, `proposal`,
+changes from it and from nowhere else. **One documented exception: safety-net
+reads of the approval queue** (2026-10-29). A missed ring on that queue is a
+safety problem - a dead card stays on screen, or Approve is held on a queue
+nobody re-read - so it is also confirmed directly: the HUD page's
+`setInterval(() => apprPoll(), 30000)` (`jarvis_hud.html:8133`, which returns
+early while `document.hidden`); the Rust stream's `QUEUE_BEAT` through
+`queue_beat_due` (`stream.rs`, 30 s while a card waits on a connected link, and
+its successful read is also what clears `stale`); the phone's `QueueBeat.due`
+(`jarvis-client`, the same 30 s and the same two conditions); and the one-off
+`/api/pending` reads on connect, `hello`, resume and an `approval` event. While
+the HUD is visible and a card waits, the PC therefore runs **two** independent
+30 s reads - the HUD's own poll and the stream's beat - deliberately, so either
+can fail without silencing the other. The pump is still what ANNOUNCES every
+change: these reads only re-confirm `/api/pending` (they can discover a change
+the pump failed to announce, which is the point), they introduce no state change
+of their own, and none of them can approve or deny anything. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
 `deep`, `memory_saved`, `schedule`, `focus`, `wellbeing`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
@@ -3211,7 +3273,7 @@ are deliberate and recorded rather than left to be discovered:
 | Topic controls: Brain -> Memory -> Topics (**2026-09-30**, JARVIS-API §107) | **Both apps get the rows, the four-choice picker, the "Check these" list, Show them, and add / rename / delete.** **One-sided on purpose:** (a) **editing a topic's keywords is the PC's** (typing a long list of words is deep configuration; the phone shows the count only); (b) **the Galaxy's editable map is the desktop's alone** (standing rule: no editable memory graph on the phone; since 2026-10-26 the phone draws a read-only picture of at most 48 names, with no edit), and it hides people linked only to an Off topic's facts; (c) **the fact words in the check list and in "Show them" are a memory list on both apps**: hidden under "Hide memory lists and chat history" and App lock, and topic **names** are hidden there too (rows read "Topic 1, 41 facts, mode"); (d) **turning a private topic back on is decided by tapping the card on either device** (tier ask; no Windows Hello - nothing leaves the PC), and every change is held on a stale link. |
 | Chatbot money limits: the Raise control, the "Remove the limit" button and the price boxes (`POST /api/chatbot/money`; JARVIS-API §122) | **The READ is on both apps now; the WRITE is the desktop's alone for this step (2026-10-12).** The backend answers a paired phone as well as this PC (`jarvis_chatbot_limits.py`: a raise from a phone raises the same card and is answered with that phone's own fingerprint or PIN; a lowering, a removal and a price correction need no card and may come from either app), and the phone draws the whole page in the PC's own words - every service's limit, what is spent, what is left, its price with `yours`/`default` and the UNVERIFIED mark, and its answer-length cap (`net/Money.kt`, `ui/screens/MoneyPlate.kt`, Brain -> Money and time). What the phone does NOT have yet is the control: it sends no body to this route at all, so `Chatbot.WRITE_PATHS` gains no entry until the caller that uses one exists (CLAUDE.md, "a `WRITE_PATHS` entry must ship with its caller or not at all"), and the plate says plainly that changing a limit from the phone is not built yet. The API key itself stays the PC's on both apps, which is what the PC's own `pc_only` sentence says. `tools/check_parity.py`'s entry is `ported` - it names the read half and says the write half is still to come. |
 | Which picture reader reads the words in a picture: Windows' own text recognition (the default) or RapidOCR (`jarvis_ocr.py`, 2026-10-13) | **The READ is on both apps; the CHOICE is the PC's alone.** `GET /api/second-card`'s `picture_text.engine` already names the reader in use and whether it works, and both apps read that route before a picture is sent - so the Hardware screen says which one answered, in words, on the phone too. What the phone does not have is the switch, and that is deliberate for the same reason as the speech-detector row above ("invisible upgrades get no switch"): the setting is a file on the PC, chosen by measurement, and **nobody can judge which picture reader is better by looking at a phone**. It is not a permission and not a loosening - both readers run locally and neither sends anything anywhere, so there is no card to approve and nothing an approval would decide (`jarvis_ocr.reader()`/`set_reader()`; `py -3 jarvis_ocr.py reader`). There is no new route, so `tools/check_parity.py` has nothing new to classify, and this row is here so the gap is not mistaken for an oversight. **The reader is OFF by default and is not measured as better** - `docs/MEASURED-2026-10-13-ocr-two-readers.md` has what the comparison actually said. |
-| Personality presets, the four tuning dials and "My personalities" (Settings -> How Jarvis talks, 2026-10-23, Personality Presets Slice 2a; a ninth preset, Patient Advocate, added 2026-10-24; a tenth, Reflective Coach, added 2026-10-27) | **Desktop first, one-sided on purpose for now.** The panel - ten built-in presets, four tuning dials, the voice-sync switch and the owner's saved mixes - is the Windows Settings window's (`manner-settings.js`, `personalities.js`). The phone's Mind screen still offers only the older Warm/Plain choice and shows no preset cards, dials, saved mixes or Hear Sample. The data rides on the EXISTING `/api/manner` read and its one-field writes (`personality`, `dials`, `voice_sync`, `custom:{op}`); no route was added, so `tools/check_parity.py` has nothing to classify. The Android half is a later slice, not an invented phone caller: until it lands the phone keeps the behaviour it had before, and neither app claims otherwise. **Hear Sample today plays the preset's base voice only** - the PC's `/api/voice/voices/sample` accepts `{"voice"}` and nothing else, so the blended-voice preview waits for the Kokoro/Live voice slice; the page says so under the grid. **The chat co-creation path added 2026-10-25 is on BOTH apps**, and that is not a reversal of the desktop-first panel decision: `jarvis_personality_creator.py` is called from `jarvis_quick.py`'s fast path on the PC, so "make me a personality ..." is read out of the EXISTING chat request and answered on the PC - no route, no client change, and the phone gets it through the chat box it already has (JARVIS-API §27.7.1). What stays the desktop's is the Settings editor itself: the preset grid, the four dials and the saved-mixes form, where a personality is written by hand. |
+| Personality presets, the four tuning dials and "My personalities" (Settings -> How Jarvis talks, 2026-10-23, Personality Presets Slice 2a; a ninth preset, Patient Advocate, added 2026-10-24; a tenth, Reflective Coach, added 2026-10-27) | **The LIST and the CHOICE are on both apps; the EDITOR stays the desktop's (2026-10-28).** Until that day this row said "Desktop first, one-sided on purpose for now": the phone's Mind screen offered only the older Warm/Plain choice while the PC had ten presets, so it marked "Plain" as in use whenever the PC was on any preset but Warm Collaborator (`manner` is derived on the PC, `jarvis_manner.current()`) - a screen naming a preset Jarvis was not in, the same class of bug as the voice that disagreed with every screen showing it. The owner asked for consistency; now **both apps draw the PC's own `GET /api/manner` `personalities` array** - the same ids, titles, descriptions and order - mark the PC's `personality` and nothing else, and switch with the same one field (`{"personality": "<id>"}`). The desktop's local copy in `personalities.js` is only the older-PC fallback, held word-for-word to `contract/personalities.json` by `tests/personalities.mjs`. The PC rings one `manner` event, and the phone re-reads the same GET on it (`JarvisRuntime.mannerTick`), so neither screen keeps a stale copy. **What is still deliberately one-sided, and why:** the four tuning DIALS, the "My personalities" save/delete form and Hear Sample are the Windows Settings window's (`manner-settings.js`) - writing a personality by hand is deep configuration, the phone has no text-heavy editor for it, and the dials are where a preset's character is actually tuned rather than chosen. The phone says so in one line on the same card (`Manner.DIALS_ON_PC`) instead of drawing a second, weaker humour control that could disagree with the PC's own - the desktop hides its own legacy humour switch for the same reason (`paintPersona()`, `mn.humorTitle.hidden = pc`). The data still rides on the EXISTING `/api/manner` read and its one-field writes (`personality`, `dials`, `voice_sync`, `custom:{op}`); no route was added, so `tools/check_parity.py` has nothing to classify. **Hear Sample today plays the preset's base voice only** - the PC's `/api/voice/voices/sample` accepts `{"voice"}` and nothing else, so the blended-voice preview waits for the Kokoro/Live voice slice; the page says so under the grid. **The chat co-creation path added 2026-10-25 is on BOTH apps**, and that is not a reversal of any panel decision: `jarvis_personality_creator.py` is called from `jarvis_quick.py`'s fast path on the PC, so "make me a personality ..." is read out of the EXISTING chat request and answered on the PC - no route, no client change, and the phone gets it through the chat box it already has (JARVIS-API §27.7.1). |
 
 | **"Update both halves"** — one button that patches the Python backend and then installs the signed Jarvis Desktop release (`update.rs`'s `update_both`, `backend_update.rs`, `backend_update_status`/`set_update_folders`, and the repo tool `tools/update_backend.py`; the owner's own request, made directly, 2026-10-13; three paces and a real progress bar added 2026-10-17) | Written with the feature. **A phone cannot patch a PC's backend.** The patch program (`scripts/apply-patches.ps1`), the repository it lives in, and the Python folder it writes into are all on the PC, and the work is `git apply`, then `pip`, then the test suites - none of which a phone can run, and none of which should sit behind a pairing token that can be used from anywhere on the private network. So there is deliberately **no route**: the phone is not offered a control that cannot work, and `tools/check_parity.py` has nothing to classify because nothing was added to the API. What the phone already does about a version gap stays as it was and is truthful: every route a newer backend grew answers 404 to an older app, and each app says so in the PC's own words (`jarvis-client`'s "Update the backend by running apply-patches.ps1"). The desktop's own half of this - the signed release check - is the desktop's alone for the same reason `install_update` is: it replaces the executable on the PC, which is a thing only the PC has. **The three paces are the same one-sided decision** (2026-10-17): `max_speed`, `responsive` (the default and the recommended one) and `safe` choose how many of the SAME suites `backend/run_suites.py` runs at once while the backend half is updated - 22, 14 and 1 workers on this PC's 24 threads. They are worked out by `tools/update_backend.py --modes-json`, read by `backend_update_status` and shown as a choice when "Update everything" is pressed; an unknown pace is refused before anything runs. There is no phone equivalent because there is no phone half of this feature at all, and the progress bar is painted only from the tool's own `JARVIS-EVENT` rows (`update_progress.rs` -> `backend-update-progress`): its fraction is completed work, never a timer, and on a fallback the bar starts a labelled second (safe) pass rather than pretending the first one is still going. |
 

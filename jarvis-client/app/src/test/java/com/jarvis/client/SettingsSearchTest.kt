@@ -332,12 +332,12 @@ class SettingsSearchTest {
         }
         assertEquals(
             "this test walked no row that names switch titles, so it checks nothing",
-            3,
+            4,
             rowsWalked,
         )
         assertTrue(
             "the SwitchRow reader found too few switches to be reading the screens: it " +
-                "found $switchesFound, and the three rows it walks draw ten between them",
+                "found $switchesFound, and the four rows it walks draw ten between them",
             switchesFound >= 9,
         )
     }
@@ -463,6 +463,66 @@ class SettingsSearchTest {
         )
         // "strict" alone is a body-only word, and it does find the Voice row.
         assertTrue(SettingsSearch.matching("strict").contains("voice"))
+    }
+
+    // ---- A passing mention never answers while a section names it ----------
+    //
+    // Gemini's F4, measured on the owner's phone (2026-10-28): typing "pair"
+    // into Settings' box showed VOICE, then APPEARANCE, then DEVICES - the card
+    // whose button is "Pair with your PC" came THIRD. The first two print the
+    // same conditional sentence, "Pair with your desktop first - these settings
+    // live on it.", and all three hits landed on the same weakest tier, so the
+    // screen's own draw order decided the answer.
+    //
+    // The rule that holds it shut is [SettingsSearch.namesIt]: a section's
+    // heading, the names of the controls drawn on it and the index's own
+    // synonyms are the words it NAMES; the sentences it prints are not, and
+    // they answer only while nothing names what was typed.
+
+    @Test
+    fun `a passing mention never answers while a section names the word`() {
+        // Neither section that prints "Pair with your desktop first" names
+        // "pair": no heading, control name or synonym of theirs says it.
+        assertFalse(
+            "Voice only PRINTS the word - it must not be a name for it",
+            SettingsSearch.namesIt("voice", "pair"),
+        )
+        assertFalse(
+            "Appearance only prints the word too",
+            SettingsSearch.namesIt("appearance", "pair"),
+        )
+        // Devices does: its button is "Pair with your PC", the way back into
+        // pairing. That is the whole of the fix - the section that has the
+        // control on it answers, the two that mention the word do not.
+        assertTrue(SettingsSearch.namesIt("devices", "pair"))
+        assertEquals(
+            "searching \"pair\" must answer with Devices and nothing else",
+            listOf("devices"),
+            SettingsSearch.matching("pair"),
+        )
+        // The button's own words, and the word on the control the fixed
+        // "Needs your OK" line used to cover, must find it as well: the box
+        // answers with the words the screen prints.
+        assertEquals(listOf("devices"), SettingsSearch.matching("pair with your pc"))
+        assertEquals(listOf("devices"), SettingsSearch.matching("unpair"))
+    }
+
+    @Test
+    fun `the printed sentences still answer when nothing names the words`() {
+        // The fix is a filter, not a deletion: when no section NAMES what was
+        // typed, the sections that print it answer, exactly as before. Nothing
+        // names "desktop" in the pairing sense, so both conditional lines do.
+        val found = SettingsSearch.matching("pair with your desktop")
+        assertTrue(
+            "the two sections printing \"Pair with your desktop first\" must still " +
+                "answer when nothing names the words - found $found",
+            found.containsAll(listOf("voice", "appearance")),
+        )
+        // ...and a section found by its own words still answers, unchanged.
+        assertEquals(listOf("voice"), SettingsSearch.matching("Train my voice"))
+        // A query about the voice must not drag Devices in through its new
+        // control names: "your" and "with" are on its button, "voice" is not.
+        assertFalse(SettingsSearch.matching("Train my voice").contains("devices"))
     }
 
     @Test
