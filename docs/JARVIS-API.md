@@ -1726,7 +1726,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
-| `/api/history?limit=&before=` | GET | `brain/history.rs` `brain_history_list` (Brain, History) | `JarvisApi.history` (Brain, Chat history) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. Token + origin. The switch's state (`enabled`, `recording`, `why_not`, `waiting`, `keep_days`, `encrypted`) and `conversations`, newest first: `[{id, title, started, updated, turns, device, has_voice, tainted}]`. `limit` 1-100 (default 30); `before=<updated>` pages to older ones. `503 {"available": false, "error", "reason"}` if `jarvis_chat_log.py` is missing. |
+| `/api/history?limit=&before=&archived=` | GET | `brain/history.rs` `brain_history_list` (Brain, History) | `JarvisApi.history` (Brain, Chat history) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. Token + origin. The switch's state (`enabled`, `recording`, `why_not`, `waiting`, `keep_days`, `encrypted`) and `conversations`, newest first: `[{id, title, started, updated, turns, device, has_voice, tainted, archived}]`. `limit` 1-100 (default 30); `before=<updated>` pages to older ones. `archived=1` (or `true`) lists ONLY the archived chats; absent or `0` is the ordinary list - only the chats NOT archived (added 2026-10-30, §18.3). `503 {"available": false, "error", "reason"}` if `jarvis_chat_log.py` is missing. |
 | `/api/memory/learning` | GET | `brain_memory_learning_status` (`brain/auto_learn.rs`) | `JarvisApi.autoLearnSettings` | `auto-learn.patch`, `jarvis_auto_learn.py`, 2026-09-24 - **§19**. Token + origin. The learning switches in one read: `{"enabled", "auto", "auto_sensitive", "auto_waiting", "sensitive_waiting", "auto_last", "sensitive_last", ...}` (`enabled` is background learning's own switch). Before this, only the POST existed. `503 {"available": false, "error", "reason"}` if `jarvis_auto_learn.py` is missing. |
 | `/api/memory/auto?limit=&before=` | GET | `brain_memory_auto_list` (hidden with the other memory lists under Windows Hello) | `JarvisApi.autoFacts` (hidden under "Hide memory lists and chat history") | `auto-learn.patch` - **§19**. "Saved automatically": `{"facts": [{id, text, saved_at, provenance, device}], "auto", "auto_sensitive"}`, current facts only, newest first; `limit` 1-100 (default 30); `before=<saved_at>` pages to older ones (floored to whole seconds; a page never splits a second). |
 | `/api/memory/profile` | GET | `brain_memory_profile` (`brain/profile.rs`; hidden with the other memory lists under Windows Hello) | `JarvisApi.memoryProfile` / `JarvisRuntime.memoryProfile` (hidden under "Hide memory lists and chat history") | **"Always keep in mind"** (the owner's decision, 2026-09-24; `memory-profile.patch`, `rebuilt/jarvis_memory.py`). Token + origin. The facts the owner pinned, which every local chat question reads word for word (§4): `{"facts": [{"id", "text", "added"}], "chars", "limit"}`, oldest pin first. `chars` is how many characters the listed facts' words use; `limit` is 1,200 (`PROFILE_LIMIT`). Only facts still current are listed: a pinned fact that is forgotten, corrected, runs out or is erased leaves the list by itself. Both apps show "N of 1,200 characters used". `501` from a PC whose `jarvis_memory.py` is older (both apps then say the list is not there yet), `503` memory not running. |
@@ -1946,6 +1946,7 @@ neither app says it would.
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted (the deletion runs before the window is saved, and a failure there answers 500 with what really happened - see §18.3). Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
+| `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
 | `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the 10-minute Undo, the days a spoken request filled in). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item; nothing changes before a person approves. `409` a card already waiting, an Undo still open, or the list changed since it was read (`"changed": true`). |
 | `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis) | `JarvisRuntime.forgetRangeRead` | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label - at most 200 together, else counts only. A read: never held. |
 | `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the card's approval: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
@@ -4265,7 +4266,7 @@ is compacted with `VACUUM` after a delete, at most once an hour.
  "conversations": [{"id": "...", "title": "...", "started": 1790000000,
    "updated": 1790000300, "turns": 6, "device": "phone",
    "has_voice": true, "tainted": false, "kind": "chat", "project": null,
-   "tag_id": null, "pinned": false}]}
+   "tag_id": null, "pinned": false, "archived": false}]}
 ```
 
 Newest first. `limit` 1-100, default 30; `before` pages to older ones
@@ -4289,12 +4290,22 @@ group from them in ONE order - **`pinned_at DESC, updated_at DESC`** (the
 newest pin first; two pins in the same second newest-chat first). The route
 that changes it is `POST /api/history/pin`, below.
 
+Since 2026-10-30 every row also carries `"archived": true|false` - always
+present, false for a chat that is not put away - and `&archived=` chooses
+which of the two lists this is: absent or `0` (and `false`) is the ordinary
+list, ONLY the chats that are not archived; `1` or `true` is the archived
+chats and nothing else. The two lists are never mixed - a chat appears in
+exactly one of them - so an app that has never heard of archiving still reads
+exactly the rows it always did. It composes with `limit`, `before`, `kind`
+and `tag`. The route that changes it is `POST /api/history/archive`, below.
+
 **While App lock or "Hide memory lists and chat history" is on, this route
-withholds EVERY row - a pinned one included.** The answer keeps the switch,
-the counts and `"hidden": true` with `"hidden_count": n`, and its
-`conversations` is empty, so no caller can read a title (or learn that a chat
-exists) from a locked PC. `POST /api/history/pin` refuses too, with `423`
-(see below), for every id - a locked PC must not answer "found" versus "not
+withholds EVERY row - a pinned one included, and an archived one too.** The
+answer keeps the switch, the counts and `"hidden": true` with
+`"hidden_count": n`, and its `conversations` is empty, so no caller can read a
+title (or learn that a chat exists) from a locked PC. `POST
+/api/history/pin` and `POST /api/history/archive` refuse too, with `423` (see
+below), for every id - a locked PC must not answer "found" versus "not
 found".
 
 `GET /api/history/conversation?id=<id>`
@@ -4302,7 +4313,7 @@ found".
 ```json
 {"id": "...", "title": "...", "tainted": false,
  "kind": "chat", "project": null, "started": 1790000000, "updated": 1790000300,
- "tag_id": null, "pinned": false,
+ "tag_id": null, "pinned": false, "archived": false,
  "continuable": true, "continue_why": "",
  "forkable": true, "fork_why": "",
  "turns": [{"idx": 0, "role": "user", "text": "...", "at": 1790000000,
@@ -4392,6 +4403,59 @@ phone lane implements the same route.
 - A PC without this route answers 404 and nothing was written, so an app
   that gets one shows Pin as unavailable rather than retrying: the same
   way both apps already read a missing newer History feature.
+
+`POST /api/history/archive {"id": "<conversation id>", "archived": true|false}`
+
+**Archive one chat** - put it away without deleting it - or (`false`) take it
+back out of the archive (Unarchive). Added 2026-10-30 for the owner's "make
+sure i can archive and delete chats (with a confirm step)": archive is
+reversible, so it needs NO confirm step; delete keeps its own. §18.3 is the
+whole contract.
+
+- `archived: true` puts the chat away; `archived: false` is Unarchive and
+  puts it back exactly where it was - a chat's `updated` does not move
+  (putting it away is not an edit), so Unarchive cannot shuffle the list.
+- **The body is exactly these two keys.** `id` is a conversation id a list
+  just sent, and `archived` must be a JSON boolean: `"yes"`, `1` and `null`
+  are all refused, because an app that sent the wrong type would otherwise
+  silently do the opposite of what it meant.
+- `200 {"ok": true, "id": "<id>", "archived": true|false}` - the state the
+  chat now has, not the state that was asked for. Archiving twice answers 200
+  both times and keeps the FIRST moment it was archived.
+- `400 {"ok": false, "error": "bad_request", "message": "<one plain
+  sentence>"}` - the body is not exactly `{"id", "archived"}`, `archived` is
+  not a boolean, or `id` is not a string, is empty, or is longer than 128
+  characters.
+- `404 {"ok": false, "error": "not_found", "message": "<one plain
+  sentence>"}` - no such conversation (it may have been deleted). **Nothing
+  is written, and no row is created**: archiving can never invent a chat.
+- `423 {"ok": false, "error": "locked", "message": "<App lock, or Hide
+  memory lists and chat history, is on>"}` - the private view is hidden, and
+  this is the answer for EVERY id, whether the chat exists or not: while it
+  is locked there is no 200-versus-404 oracle. Nothing is written. (The same
+  rule the pin route has.)
+- `503` when the history cannot be opened at all, the same answer the other
+  History routes give.
+- **Metadata only, and no approval card.** Archiving stores no text, opens no
+  chat, changes no `updated`, and takes nothing away; Unarchive takes it back.
+  It is the owner's own tidying, the same class of change as a pin or a tag,
+  so it raises no card; the one audit line it writes says which way the flag
+  went and nothing else.
+- The flag lives in the SAME history file every other History fact lives in,
+  as a plain `archived_at` column (empty, or the moment it was archived), so
+  it survives a restart on the PC and both apps read it back from
+  `GET /api/history`. Neither app keeps an archive list of its own, which is
+  what keeps the phone and the PC agreeing: a chat archived on the phone is
+  archived on the PC, and the other way round.
+- `GET /api/history` rows carry it (always present), `GET
+  /api/history/conversation` carries it, and `GET /api/history/search` rows
+  carry it. A chat in the archive is still KEPT: a search still finds it
+  (with `archived: true`), and it can be opened and read like any other. A
+  fork is never archived, even from an archived source: it is a new chat the
+  owner just made and must show in the list.
+- A PC without this route answers 404 and nothing was written, so an app that
+  gets one shows Archive as unavailable rather than retrying: the same way
+  both apps already read a missing newer History feature.
 
 `POST /api/history/settings` - one setting per request:
 
@@ -4619,7 +4683,7 @@ words on the PC for the screen only; one letter, or an older PC, filters
 the LOADED list by title, and says so ("No loaded conversations match that
 search. "Load older" may bring in more to search.").
 
-**Not built** (proposals, for the owner): rename, pin, archive, branching,
+**Not built** (proposals, for the owner): rename, branching,
 edit-and-resend, and any wider chat-word search.
 
 ### 18.7 After the second chat audit (2026-09-28)
