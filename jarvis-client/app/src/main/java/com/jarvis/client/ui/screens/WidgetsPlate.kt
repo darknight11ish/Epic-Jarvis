@@ -177,7 +177,7 @@ internal fun WidgetsSection(canAct: Boolean, privateHidden: Boolean) {
                 TextInput(
                     value = words,
                     onValueChange = { words = it.take(JarvisWidgets.MAX_WORDS) },
-                    placeholder = "What it should show, like my next 3 reminders and a timer button",
+                    placeholder = "What it should show, like my next 3 reminders - or make the count big",
                 )
                 Quiet(if (making) JarvisWidgets.MAKING_LABEL else JarvisWidgets.MAKE_LABEL,
                     enabled = !making, onClick = { make() })

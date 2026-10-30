@@ -1105,6 +1105,22 @@ body {
   color: var(--text);
 }
 
+/* "big" (widget-board.js boardOf, 2026-10-30): the widget's first number is
+   drawn at about three times a block's value, with its label small above it,
+   so a count is what the eye lands on. Only that one part carries the class,
+   so nothing else in the widget changes size. */
+.board-big .board-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.board-big .board-value {
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 700;
+}
+
 .board-items {
   list-style: none;
   margin: 0;

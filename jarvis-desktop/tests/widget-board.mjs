@@ -9,6 +9,9 @@
  *   (fixtures/widget-cases.json, tools/gen_widget_cases.py): an unknown
  *   block or button is left out, an unknown source is private, sizes are
  *   capped, and private words go while hidden;
+ * - the ARRANGEMENT rule is the PC's and the phone's too (the fixture's
+ *   `boards`): which block is drawn large, in what order the rest go, and the
+ *   buttons last - four layouts, a closed list;
  * - the page draws with DOM calls only: a script or tag in a widget's words
  *   is shown as text, never run or parsed;
  * - the buttons are the five Quick Settings tile actions, in the phone's own
@@ -26,10 +29,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   ACTIONS,
+  boardOf,
   DELETE_LABEL,
   EMPTY,
   hideView,
   HIDDEN_WORDS,
+  LAYOUTS,
   LIMITS,
   MISSING,
   NEVER_HELD,
@@ -58,6 +63,24 @@ await check("the drawing rule matches the shared cases, word for word", async ()
     assert.deepEqual(viewOf(c.answer), c.view, `view: ${name}`);
     assert.deepEqual(hideView(viewOf(c.answer)), c.hidden, `hidden: ${name}`);
   }
+});
+
+await check("the four arrangements, and what each one draws, are the shared ones", async () => {
+  assert.deepEqual(LAYOUTS, CASES.layouts);
+  for (const [name, c] of Object.entries(CASES.cases)) {
+    const view = viewOf(c.answer);
+    for (const layout of CASES.layouts) {
+      assert.deepEqual(boardOf(view && { ...view, layout }), c.boards[layout],
+        `board ${layout}: ${name}`);
+    }
+    // boardOf uses the view's OWN layout: what the PC sent is what is drawn.
+    if (view) assert.deepEqual(boardOf(view), c.boards[view.layout], `own: ${name}`);
+  }
+  // An arrangement this app does not know is drawn as the default, never
+  // dropped - a newer PC must still leave a drawable widget.
+  const future = { ok: true, name: "x", layout: "grid", blocks: [{ type: "title", text: "A" }] };
+  assert.equal(viewOf(future).layout, "stack");
+  assert.equal(boardOf(viewOf(future)).blocks.length, 1);
 });
 
 await check("the five buttons, private sources and limits are the PC's", async () => {
@@ -204,6 +227,10 @@ await check("widget window: the chosen widget replaces the face, drawn as text",
   const imgs = await page.locator("#board-blocks img").count();
   const pwned = await page.evaluate(() => window.__pwned === 1);
   const buttons = await page.locator("#board-blocks button").allInnerTexts();
+  // "big" (the morning case's arrangement): ONE number drawn large, still
+  // holding its label and its value, and still just text.
+  const big = await page.locator("#board-blocks .board-big").count();
+  const bigText = big ? await page.locator("#board-blocks .board-big").innerText() : "";
   await page.close();
   assert.equal(faceHidden, true);
   assert.ok(text.includes("<img src=x"), "the tag is shown as words");
@@ -211,6 +238,8 @@ await check("widget window: the chosen widget replaces the face, drawn as text",
   assert.equal(pwned, false);
   assert.ok(text.includes("412 GB free of 931 GB"));
   assert.deepEqual(buttons, ["10-min timer", "Stop everything"]);
+  assert.equal(big, 1, "exactly one block is drawn large");
+  assert.ok(bigText.includes("Unread email") && bigText.includes("4"), bigText);
 });
 
 await check("widget window: ONE widget_board_action per press", async () => {
