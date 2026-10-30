@@ -1604,6 +1604,10 @@ def _segment_words(quote: StayQuote) -> str:
         else:
             parts.append(f"{segment.minutes}m free")
     note = " + ".join(parts)
+    if quote.total_cost_usd == 0.0 and not quote.max_stay_limit_min:
+        # "FREE (285m free)" repeats itself: a stay that costs nothing needs no
+        # breakdown unless a sign's limit was part of the answer.
+        return ""
     if quote.max_stay_limit_min and quote.limit_ends_min is not None:
         note += (f"; {length_words(quote.max_stay_limit_min)} limit ends at "
                  f"{clock_words(quote.limit_ends_min)}")
@@ -1646,7 +1650,10 @@ def _limits_line(result: dict, *, phone: bool) -> str:
     notes = [str(n) for n in (result.get("notes") or []) if str(n).strip()]
     if notes:
         kept = notes[:1] if phone else notes
-        text += " " + "; ".join(kept) + "."
+        joined = "; ".join(kept)
+        # A note starts a sentence here, so it is capitalised rather than left
+        # reading as a continuation of "That is a cost estimate...".
+        text += " " + joined[:1].upper() + joined[1:] + "."
     return text
 
 
@@ -1675,7 +1682,10 @@ def hud_words(result: dict) -> str:
         if result.get("wants_free") and results[0].total_cost_usd > 0:
             lines.append("Nothing nearby is free for that window; this is the "
                          "cheapest legal one.")
-        if any(q.total_cost_usd == 0.0 for q in results):
+        # Only worth a line when the BEST option is not itself free: otherwise
+        # it repeats the number above it.
+        if results[0].total_cost_usd > 0.0 and any(q.total_cost_usd == 0.0
+                                                   for q in results):
             lines.append("Free for that window: "
                          + "; ".join(q.candidate.name for q in results
                                      if q.total_cost_usd == 0.0) + ".")
@@ -1700,7 +1710,7 @@ def phone_words(result: dict) -> str:
                          + rejected[0].rejection_reason + ".")
     else:
         for index, quote in enumerate(results, start=1):
-            price = "free" if quote.total_cost_usd == 0.0 else _money(quote.total_cost_usd)
+            price = _price_label(quote)
             lines.append(f"{index}. {price} - {quote.candidate.name} - "
                          f"{quote.walk_minutes} min walk")
             lines.append(f"   {_geo_uri(quote)}")
