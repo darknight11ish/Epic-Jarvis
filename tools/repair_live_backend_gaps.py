@@ -1,4 +1,4 @@
-"""repair_live_backend_gaps.py - put back the two base-file pieces this PC's
+"""repair_live_backend_gaps.py - put back the three base-file pieces this PC's
 install never received, without touching anything else.
 
 WHY THIS EXISTS (measured 2026-10-30 on the owner's PC)
@@ -27,10 +27,19 @@ patches on this drifted install:
    `expires_in` on this install, so no screen can draw a countdown and a
    routine card can still run out silently - the field test hit exactly that.
 
-All three repairs are exact, anchored, idempotent text insertions. Nothing is
-guessed: if an anchor is missing or appears more than once the tool refuses; if
-a repair is already present it says so and writes nothing; every write is
-backed up first and the result must compile or it is rolled back.
+All three repairs are exact, anchored, idempotent edits. Nothing is guessed: if
+an anchor is missing or appears more than once the tool refuses; if a repair is
+already present it says so and writes nothing; every write is backed up first
+and the result must compile or it is rolled back.
+
+THE CARD TIMER IS TWO HUNKS, NOT ONE (measured 2026-10-30). The patch it copies
+both inserts the `expires_in` block AND changes `pending()`'s SELECT line so the
+row it reads has a `waited_until` column. A repair that inserts only the block
+can never run - the column is not in the dict, `d.pop("waited_until", ...)` is
+always None - and its own probes would still call it applied. So a `Repair` may
+carry `extra_edits`: further exact old/new pairs applied in the SAME write,
+with the same one backup and one compile. A file with only one of the hunks is
+REFUSED rather than re-applied, so this tool can never duplicate the block.
 
 This is a REPAIR for drifted installs, not a new mechanism to prefer: once the
 patch stack can be applied again (`apply-patches.ps1` succeeds), the base files
@@ -62,7 +71,7 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class Repair:
-    """One anchored insertion into one live base file."""
+    """One anchored edit (one insertion, plus any `extra_edits`) in one live file."""
 
     name: str
     filename: str
@@ -76,6 +85,13 @@ class Repair:
     #: new lines; for a changed line it is the new line.
     replace_with: str
     why: str
+    #: Further exact (old, new) text pairs applied in the SAME write as the
+    #: anchor above - one backup, one compile, one swap. The card timer needs
+    #: this: its patch has two functional hunks (the block, and the SELECT line
+    #: that gives the block a column to read) and either one alone is a no-op.
+    #: Each pair's old text must appear exactly once; its new text is the
+    #: positive proof that pair is already in.
+    extra_edits: tuple = ()
 
 
 GATE_ROWS = Repair(
@@ -138,7 +154,22 @@ CARD_TIMER = Repair(
         '                d["expires_in"] = _whole\n'
         "        # Why this is being asked about at all, when the table said otherwise.\n"
     ),
-    why="a card with a limited life cannot show its timer without this",
+    #: The second half of backend/show-card-timer.patch (its SELECT hunk):
+    #: pending() must ask for the column the block above reads. The patch keeps
+    #: the SQL valid by splitting the one added string into two literals - the
+    #: new column on the first line, `" FROM approvals"` on the second - so this
+    #: is exactly that two-line post-image, not a one-line edit (which would
+    #: compile and then fail at run time: "raised,waited_until WHERE ..." has no
+    #: FROM clause). Without the column `d.pop("waited_until", None)` is always
+    #: None - no screen ever gets an `expires_in`, which is a silent no-op this
+    #: tool's probes would call applied. Same one write, one backup, one compile.
+    extra_edits=(
+        ('            "SELECT id,action,tier,detail,prompt,created,raised FROM approvals"\n',
+         '            "SELECT id,action,tier,detail,prompt,created,raised,waited_until"\n'
+         '            " FROM approvals"\n'),
+    ),
+    why="a card with a limited life cannot show its timer without both the "
+        "inserted block and the SELECT column it reads",
 )
 
 REPAIRS = {r.name: r for r in (GATE_ROWS, HISTORY_ROUTES, CARD_TIMER)}
@@ -153,13 +184,27 @@ def read(path: Path) -> str:
 
 
 def check_one(live: Path, repair: Repair) -> str:
-    """'already' or 'missing'. Raises Refused when the file/anchor is unusable."""
+    """'already' or 'missing'. Raises Refused when the file/anchor is unusable.
+
+    A repair with `extra_edits` is several hunks in one file, so a file holding
+    only SOME of them is neither 'already' nor safe to insert again - re-running
+    the insertion would put a second copy of the block in the live file. That
+    half state is REFUSED; the card timer's two hunks (2026-10-30) are why.
+    """
     p = live / repair.filename
     if not p.is_file():
         raise Refused(f"{repair.filename} is not in {live} - is this the live backend folder?")
     text = read(p)
-    if all(probe in text for probe in repair.probes):
+    inserted = all(probe in text for probe in repair.probes)
+    extras = [replacement in text for _old, replacement in repair.extra_edits]
+    if inserted and all(extras):
         return "already"
+    if inserted or any(extras):
+        raise Refused(
+            f"{repair.filename}: the {repair.name!r} repair is only PARTLY present "
+            f"({'the inserted block' if inserted else 'a changed line'} is in, the "
+            "rest is not). Refusing rather than writing it again and duplicating "
+            "code; look at the file by hand.")
     if repair.anchor not in text:
         raise Refused(
             f"{repair.filename}: the anchor for {repair.name!r} is not there any more. "
@@ -168,17 +213,28 @@ def check_one(live: Path, repair: Repair) -> str:
         raise Refused(
             f"{repair.filename}: the anchor for {repair.name!r} appears "
             f"{text.count(repair.anchor)} times; refusing to guess which one.")
+    for old, _replacement in repair.extra_edits:
+        if old not in text:
+            raise Refused(
+                f"{repair.filename}: the second anchor for {repair.name!r} is not "
+                "there any more. Nothing was written; this install has drifted further.")
+        if text.count(old) != 1:
+            raise Refused(
+                f"{repair.filename}: the second anchor for {repair.name!r} appears "
+                f"{text.count(old)} times; refusing to guess which one.")
     return "missing"
 
 
 def apply_one(live: Path, repair: Repair, *, stamp: str) -> str:
-    """Insert the repair after its anchor, compiling before the swap sticks."""
+    """Apply the repair's hunks in one write, compiling before the swap sticks."""
     p = live / repair.filename
     state = check_one(live, repair)
     if state == "already":
         return "already"
     text = read(p)
     new = text.replace(repair.anchor, repair.replace_with, 1)
+    for old, replacement in repair.extra_edits:
+        new = new.replace(old, replacement, 1)
     backup = p.with_name(p.name + f".before-repair-{stamp}")
     shutil.copy2(p, backup)
     fd, tmpname = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(live))
