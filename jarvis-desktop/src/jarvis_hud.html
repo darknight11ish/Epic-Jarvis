@@ -1348,7 +1348,19 @@ html.hud-window-hidden *::after{
    on screen. It opens the SAME #history-sidebar through the same routine
    (hud-history.js `mount` -> `setOpen`); the rail icon stays. Ambient keeps
    its own "Show full history" transcript toggle beside it. */
-.history-bar{
+.history-bar{display:none;}
+/* The strip's History door is drawn only in the shells whose LEFT RAIL IS A
+   DRAWER - center-core, two-column-right, single-stage-bento - because there
+   the rail's own clock icon sits behind [Controls]. In split-stage,
+   three-column and two-column-left the left rail is on screen, so its icon is
+   already one click and the strip costs the conversation height for nothing:
+   measured 2026-10-30, the strip took the hidden-galaxy layout from 30px of
+   conversation to 24px at 1280x650 (hud.mjs, "a hidden galaxy gives its space
+   to the face"). Ambient keeps its own "Show full history" transcript
+   toggle. */
+html[data-hud-shell="center-core"] .history-bar,
+html[data-hud-shell="two-column-right"] .history-bar,
+html[data-hud-shell="single-stage-bento"] .history-bar{
   display:flex; justify-content:center; align-items:center; gap:8px;
   padding:3px 0 8px; flex-shrink:0;
 }

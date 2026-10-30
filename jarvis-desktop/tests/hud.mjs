@@ -1324,6 +1324,7 @@ await check("a hidden galaxy gives its space to the face, and no paragraph fills
   await page.waitForTimeout(150);
   const hidden = await hudGeometry(page);
 
+
   assert.equal(hidden.galaxyHidden, true, "the checkbox did not hide the galaxy");
   assert.equal(hidden.brain, "none", "the empty Inspector column is still on the stage");
   assert.equal(hidden.columns, 1, "the freed column was not given back to the stage");
@@ -3729,29 +3730,47 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
 // "History". So the main strip (between the log and the composer, which every
 // shell draws) carries ONE always-visible door, wired to the SAME panel by the
 // SAME open routine. This drives the real page, in all six shells.
-await check("one always-visible History door in the main strip, in every shell, opening the ONE panel", async () => {
+await check("a History door is one click away in every shell, and the drawer shells draw the strip", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   const shells = ["three-column", "split-stage", "center-core",
     "two-column-left", "two-column-right", "single-stage-bento"];
+  // The strip is drawn only where the LEFT RAIL is a drawer (2026-10-30: in the
+  // on-screen-rail shells it cost the hidden-galaxy conversation height, see
+  // hud.mjs's own "a hidden galaxy gives its space" check). Every shell still
+  // has a History door: the strip's in the drawer shells, the rail's clock icon
+  // in the others.
+  const DRAWERS = new Set(["center-core", "two-column-right", "single-stage-bento"]);
   const facts = {};
   for (const shell of shells) {
     await setHudLook(page, shell);
     facts[shell] = await page.evaluate(() => {
       const door = document.getElementById("hud-history-open");
       const bar = document.querySelector(".history-bar");
+      const rail = document.getElementById("rail-history");
       const box = door ? door.getBoundingClientRect() : null;
+      const railBox = rail ? rail.getBoundingClientRect() : null;
       return {
         doors: document.querySelectorAll("#hud-history-open").length,
         inBar: Boolean(door && bar && bar.contains(door)),
         shown: Boolean(box && box.width > 0 && box.height > 0
           && getComputedStyle(door).display !== "none"),
+        barShown: Boolean(bar && bar.getBoundingClientRect().height > 0
+          && getComputedStyle(bar).display !== "none"),
+        railShown: Boolean(railBox && railBox.width > 0 && railBox.height > 0
+          && getComputedStyle(rail).display !== "none"),
         panels: document.querySelectorAll("#history-sidebar").length,
       };
     });
     assert.equal(facts[shell].doors, 1, `${shell}: not exactly one History door`);
-    assert.equal(facts[shell].inBar, true, `${shell}: the History door is outside the main strip`);
-    assert.equal(facts[shell].shown, true, `${shell}: the History door is not on screen`);
     assert.equal(facts[shell].panels, 1, `${shell}: the page does not draw exactly one History panel`);
+    if (DRAWERS.has(shell)) {
+      assert.equal(facts[shell].inBar, true, `${shell}: its left rail is a drawer, so the History door belongs in the main strip`);
+      assert.equal(facts[shell].shown, true, `${shell}: the drawer shell's History door is not on screen`);
+      assert.equal(facts[shell].barShown, true, `${shell}: the drawer shell has no History strip`);
+    } else {
+      assert.equal(facts[shell].barShown, false, `${shell}: the strip is drawn although its left rail is on screen`);
+      assert.equal(facts[shell].railShown, true, `${shell}: its left rail is on screen but its History icon is not`);
+    }
   }
   // In the shell whose left rail is a drawer, one click on the strip's door
   // opens the panel and puts the keyboard in it.
