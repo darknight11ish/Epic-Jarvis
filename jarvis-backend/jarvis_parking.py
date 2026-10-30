@@ -307,10 +307,6 @@ def _minute_of_day(moment: datetime) -> int:
     return moment.hour * 60 + moment.minute
 
 
-def _day_words(moment: datetime) -> str:
-    return moment.strftime("%a %I:%M %p").replace(" 0", " ").lstrip("0")
-
-
 def length_words(minutes: int) -> str:
     """285 -> "4h 45m", 120 -> "2h", 45 -> "45m"."""
     minutes = max(0, int(minutes))
