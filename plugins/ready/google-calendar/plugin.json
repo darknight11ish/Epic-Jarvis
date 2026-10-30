@@ -3,5 +3,5 @@
   "summary": "Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card.",
   "module": "jarvis_google_calendar",
   "install": "handler",
-  "stack_order": 159
+  "stack_order": 160
 }

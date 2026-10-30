@@ -3,8 +3,10 @@
  *
  * The rows come from jarvis-client/app/src/test/resources/contract/
  * pending-rows.json, which backend/test_approval_contract.py generates from
- * the real `notice_for` (approval-notice.patch) and the real `expires_in`
- * lines (approval-expiry.patch) and checks is still what they produce. The
+ * the real `notice_for` (approval-notice.patch) and checks is still what the
+ * gate produces. Since 2026-10-28 the shipped stack sends NO `expires_in`
+ * (`no-deadline-cards.patch`), so the fixture carries no deadline; the older
+ * backend that still sends one is checked against a row built here. The
  * phone's PendingRowsContractTest decodes the same file. Nothing in it was
  * shaped to suit this client.
  *
@@ -70,11 +72,19 @@ check("the notice is carried, in the gate's own words", () => {
   assert.equal(byId("12").notice.weight, "heavy");
 });
 
-check("expires_in becomes a deadline on this machine's clock; a bad `created` gives none", () => {
-  const a1 = byId("a1");
-  const left = rows.find((r) => r.id === "a1").expires_in;
-  assert.ok(a1.expiresAt >= before + left * 1000 && a1.expiresAt <= Date.now() + left * 1000);
-  assert.equal(byId("t5").expiresAt, null);
+check("no card carries a deadline since 2026-10-28, so no countdown is drawn", () => {
+  // The gate sends no `expires_in` for any card any more (no-deadline-cards
+  // patch: the owner's "if there doesn't need to be a time limit don't have
+  // one"). `expiresAt` is therefore null for every row, the desktop draws no
+  // clock, and the card keeps both buttons until it is answered.
+  for (const a of read.filter(Boolean)) {
+    assert.equal(a.expiresAt, null, `${a.id} still carries a deadline`);
+  }
+  assert.equal(expiryWords(byId("a1").expiresAt), "");
+  // An OLDER backend still sends `expires_in` and must still be understood:
+  // seconds left become a deadline now, on this machine's clock.
+  const old = normaliseApproval({ id: "old", created: 1, expires_in: 150 });
+  assert.ok(old.expiresAt >= before + 150 * 1000 && old.expiresAt <= Date.now() + 150 * 1000);
   // stream.rs stamps expires_at_ms at the read; that one wins.
   assert.equal(normaliseApproval({ id: "x", expires_at_ms: 5, expires_in: 150 }).expiresAt, 5);
 });

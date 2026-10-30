@@ -292,6 +292,20 @@ $PATCHES = @(
     # after the prompt is what keeps a card with no deadline answerable only
     # while it is the live one.
     'no-expiry-cards.patch'
+    # NO card shows a countdown (the owner's ruling of 2026-10-28: "if there
+    # doesn't need to be a time limit don't have one"), and a card whose
+    # request has stopped waiting leaves the queue: #965's read-time sweep is
+    # KEPT, re-keyed on the moment recorded on the row (`waited_until`) plus
+    # the same 60-second grace, so no screen is handed a live Approve that can
+    # only answer 409. A late yes inside the grace is still refused in plain
+    # words, and a Deny always works. Its context is no-expiry-cards' output -
+    # the APPROVAL_NEVER_EXPIRES block, timeout_for()'s docstring, check()'s
+    # deadline line and pending()'s sweep call - so it MUST come after that
+    # patch; its other hunks sit on the module's own INSERT, late-answer block,
+    # decide(), _pending_card_id() and withdraw() docstring, none of which an
+    # earlier patch writes. Its jarvis_owner_check.py half is the shipped
+    # module.
+    'no-deadline-cards.patch'
     # Refuses every spelling of "every network interface" ("0", "0x0", ...)
     # as the bind address. Its context is loopback-too's output (the
     # _loopback_companion function and its call in main()), so it goes

@@ -2,6 +2,17 @@
 
     python3 test_gate_no_expiry.py
 
+THIS SUITE IS ABOUT ITS PATCH IN ISOLATION, AND THE STACK SUPERSEDED PART OF IT
+(2026-10-28). The owner's later ruling - "if there doesn't need to be a time
+limit don't have one" - is carried by `no-deadline-cards.patch`, which is
+applied AFTER this one: no card has a deadline any more, and a routine card is
+no longer ended at fifteen minutes with its row 'expired'. What this file
+still proves, and should, is that `no-expiry-cards.patch` applies to the
+published base and does exactly what its own record says - which is the
+footing the next patch is written against. The SHIPPED behaviour (a card that
+outlives its request, and a late yes refused with the reason) is proven by
+`backend/test_gate_no_deadline.py`, which applies both patches.
+
 WHY THIS EXISTS, AND WHY IT IS NARROW
 
 `rescue/card-expiry-never-expires` (6900be0ac) rescued work that made 23 gate
