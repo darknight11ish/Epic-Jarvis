@@ -634,6 +634,25 @@ html[data-hud-shell="split-stage"] .reactor-wrap.reactor-builtin .reactor-state{
 @keyframes hot{50%{box-shadow:0 0 0 4px rgb(var(--bad-rgb) / .1);}}
 .act svg{width:19px; height:19px;}
 
+/* ---- A file attached to the chat (2026-10-29) -------------------------- *
+ * One quiet line under the composer: "Attach a file", or the file's name, its
+ * size and "Read on your PC", or the sentence that says why it was refused.
+ * No preview, no page images and no text from the file on screen - the PC
+ * reads it, and the chip only ever names it. Classes, never a style="..."
+ * attribute: the packaged app refuses one it did not nonce (tests/csp.mjs). */
+.attach-bar{
+  flex-shrink:0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  padding:0 18px 11px; font-family:var(--f-body); font-size:12px; color:var(--dim);
+}
+.attach-pick, .attach-clear{
+  font:inherit; color:var(--dim); background:none; border:1px solid var(--line);
+  border-radius:3px; padding:3px 9px;
+}
+.attach-pick:hover, .attach-clear:hover{border-color:var(--line-hot); color:var(--text);}
+.attach-chip{color:var(--text); min-width:0;}
+.attach-chip.bad{color:var(--crit);}
+.attach-chip[hidden], .attach-clear[hidden], .attach-pick[hidden]{display:none;}
+
 /* ---------- BRAIN -------------------------------------------------- */
 #brain{position:relative;}
 #galaxy{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab;}
@@ -2984,6 +3003,22 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
             <path d="M4 12h15M13 6l6 6-6 6"/>
           </svg>
         </button>
+      </div>
+
+      <!-- A FILE ATTACHED TO THE CHAT (2026-10-29; JARVIS-API.md section 163).
+           The bytes ride on the newest message of the ordinary /api/chat
+           request - no new route - and this PC turns them into text before any
+           model sees them. The page only ever holds them until the send, and
+           then drops them: nothing here writes a file, keeps one, or sends one
+           anywhere but 127.0.0.1. `accept` is the seven kinds my_files already
+           reads; a drag or a paste of anything else is refused in words, not
+           silently ignored. Nothing about it needs Rust. -->
+      <input type="file" id="attach-file" hidden
+             accept=".pdf,.docx,.xlsx,.pptx,.md,.markdown,.txt,.csv">
+      <div class="attach-bar" id="attach-bar">
+        <button type="button" class="attach-pick" id="attach-pick">Attach a file</button>
+        <span class="attach-chip" id="attach-chip" hidden></span>
+        <button type="button" class="attach-clear" id="attach-clear" hidden>Remove</button>
       </div>
     </section>
 
@@ -5864,6 +5899,18 @@ async function send(){
   // did. The PC is still the decider: this is a yes, never a lane, and every
   // privacy gate still runs first.
   if(S.cloudEscalate) body.cloud_yes = true;
+  // A file the owner attached rides on the NEWEST user message of this same
+  // request (JARVIS-API.md section 163) - no new route, no upload. The message
+  // is replaced by a COPY on purpose: `S.messages` is the page's own history
+  // and the next turn re-sends it, so an attachment left there would be
+  // uploaded again and again. The bytes are dropped from the page the moment
+  // they are in the body; the PC is the only thing that ever reads the file.
+  if(ATTACH && body.messages && body.messages.length){
+    const at = body.messages.length - 1;
+    body.messages[at] = Object.assign({}, body.messages[at], {attachment: ATTACH});
+    body.has_file = true;
+    attachClear();
+  }
 
   let node = null, full = "";
   try{
@@ -6102,6 +6149,124 @@ $("input").addEventListener("input", e => {
 });
 $("input").addEventListener("paste", () => { S.inputTag = "pasted"; });
 $("input").addEventListener("drop", () => { S.inputTag = "pasted"; });
+
+/* ---- A file attached to the chat (2026-10-29) -------------------------- *
+ * JARVIS-API.md section 163. Three ways in - the picker, a drag onto the
+ * window, and a file on the clipboard - and ONE shape out: the newest user
+ * message of the ordinary /api/chat body carries
+ *   attachment: {name, mime, size, data}    (base64 of the raw bytes)
+ * with `has_file: true` beside it. No new route, no upload, no Rust.
+ *
+ * The caps and the wording are the backend's own (jarvis_attached_file.py),
+ * and tests/attach.mjs pins both here so the two apps cannot drift.
+ *
+ * NOTHING IS SENT UNTIL SEND IS PRESSED, and the bytes are dropped the moment
+ * they are in the request - `ATTACH` lives for exactly one turn, so a later
+ * turn cannot re-send a file the owner did not attach again. */
+let ATTACH = null;
+const ATTACH_MAX_BYTES = 2500000;
+const ATTACH_KINDS = [".pdf", ".docx", ".xlsx", ".pptx", ".md", ".markdown", ".txt", ".csv"];
+const ATTACH_READ_ON_PC = "Read on your PC.";
+const ATTACH_OUTSIDE = "The words count as outside text, so a web search in this chat will still ask first.";
+const ATTACH_AGAIN = "Attach it again for another question.";
+const ATTACH_REFUSED_KIND = "Jarvis can read PDF, Word, Excel, PowerPoint, Markdown, text and CSV files in a chat, and that one is not a kind Jarvis reads.";
+const ATTACH_REFUSED_PICTURE = "A picture goes in as a picture: attach it with the picture button, and this PC will read its words. Nothing was read from it here.";
+
+/** "1.2 MB", "640 KB", "12 bytes" - the backend's own words for a size. */
+function attachSize(n){
+  if(n >= 1000000) return (n / 1000000).toFixed(1) + " MB";
+  if(n >= 1000) return Math.floor(n / 1000) + " KB";
+  return n + (n === 1 ? " byte" : " bytes");
+}
+
+function attachExt(name){
+  const at = String(name || "").toLowerCase().lastIndexOf(".");
+  return at <= 0 ? "" : String(name).toLowerCase().slice(at);
+}
+
+/** The chip, or the sentence that says why nothing was attached. */
+function attachShow(text, bad){
+  const chip = $("attach-chip");
+  if(!chip) return;
+  chip.textContent = text;
+  chip.classList.toggle("bad", !!bad);
+  chip.hidden = false;
+  const clear = $("attach-clear"), pick = $("attach-pick");
+  if(clear) clear.hidden = !ATTACH;
+  if(pick) pick.hidden = !!ATTACH;
+}
+
+/** Let the file go: the bytes, the chip, everything. */
+function attachClear(){
+  ATTACH = null;
+  const chip = $("attach-chip");
+  if(chip){ chip.textContent = ""; chip.hidden = true; chip.classList.remove("bad"); }
+  const clear = $("attach-clear"), pick = $("attach-pick");
+  if(clear) clear.hidden = true;
+  if(pick) pick.hidden = false;
+}
+
+/** Take one File the owner picked, dropped or pasted. Refuses in words. */
+function attachTake(file){
+  if(!file) return;
+  const name = String(file.name || "the file you attached");
+  const ext = attachExt(name);
+  // Checked BEFORE the file is read, so a 40 MB video is refused without ever
+  // being read (the design's section 8, step 1).
+  if(ATTACH_KINDS.indexOf(ext) < 0){
+    const picture = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic"].indexOf(ext) >= 0;
+    attachClear();
+    attachShow(picture ? ATTACH_REFUSED_PICTURE : ATTACH_REFUSED_KIND, true);
+    return;
+  }
+  if(file.size > ATTACH_MAX_BYTES){
+    attachClear();
+    attachShow("That file is " + attachSize(file.size) + ". Files up to "
+      + attachSize(ATTACH_MAX_BYTES) + " can be attached; for bigger ones, put it in a "
+      + "folder Jarvis may look in.", true);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => { attachClear(); attachShow("That file could not be read here.", true); };
+  reader.onload = () => {
+    const url = String(reader.result || "");
+    const comma = url.indexOf(",");
+    if(comma < 0){ attachClear(); attachShow("That file could not be read here.", true); return; }
+    ATTACH = {name: name, mime: String(file.type || ""), size: file.size,
+              data: url.slice(comma + 1)};
+    attachShow(name + " — " + attachSize(file.size) + " " + ATTACH_READ_ON_PC + " "
+      + ATTACH_OUTSIDE + " " + ATTACH_AGAIN, false);
+  };
+  reader.readAsDataURL(file);
+}
+
+$("attach-pick").addEventListener("click", () => $("attach-file").click());
+$("attach-file").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";                     // the same file can be picked twice
+  attachTake(file);
+});
+$("attach-clear").addEventListener("click", attachClear);
+// A file dropped ANYWHERE on the window: without preventDefault the browser
+// navigates to it and the page is simply gone. Text drags are left alone.
+window.addEventListener("dragover", e => {
+  const types = Array.from((e.dataTransfer && e.dataTransfer.types) || []);
+  if(types.indexOf("Files") >= 0) e.preventDefault();
+});
+window.addEventListener("drop", e => {
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if(!files || !files.length) return;
+  e.preventDefault();
+  attachTake(files[0]);
+});
+// A file on the clipboard (a copied PDF, a screenshot's own file). A TEXT
+// paste is untouched: only a paste that really carries a file comes here.
+window.addEventListener("paste", e => {
+  const files = e.clipboardData && e.clipboardData.files;
+  if(!files || !files.length) return;
+  e.preventDefault();
+  attachTake(files[0]);
+});
 
 $("mic").addEventListener("click", () => voice.listening ? voice.stop() : voice.start(true));
 /* Push-to-talk is the page's Space shortcut, but ONLY while the page itself
@@ -7991,8 +8156,9 @@ async function apprDecide(id, ok, el){
       headers:{"Content-Type":"application/json", "X-Jarvis-Client":"hud"},
       body: JSON.stringify({id, by:"hud"})});
     const j = await r.json();
-    // 409 means it already timed out or was answered elsewhere. Say so rather
-    // than letting the tap look like it approved something.
+    // 409 means it was answered elsewhere, or - since cards stopped expiring
+    // (2026-10-28) - the request that raised it has finished waiting, so a yes
+    // could not run. Say so rather than letting the tap look like it approved.
     if(!j.ok){
       // PWA slice 2, Gemini ruling Q3(b): a browser cannot SIGN a risky
       // approval (that needs the paired phone's enrolled key, or the PC's
@@ -8000,9 +8166,12 @@ async function apprDecide(id, ok, el){
       // instead of claiming it is "no longer waiting".
       const risky = j.key === "no_approval_key"
         || /approval key/i.test(String(j.error || ""));
+      // The PC's own sentence when it sent one (the late-approval refusal says
+      // exactly which of the two happened); never "already decided" when the
+      // server did not say that.
       el.querySelector(".det").textContent = risky
         ? "This is a risky approval: answer it on your PC or your paired phone."
-        : "This request is no longer waiting — " + (j.error || "already decided.");
+        : (j.error || "This request is no longer waiting — it was answered or withdrawn.");
     }
   }catch(e){}
   setTimeout(() => { el.remove(); apprPoll(); }, 1200);

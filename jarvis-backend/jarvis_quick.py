@@ -4765,6 +4765,14 @@ CHANGE_BY_ASKING = frozenset({
     # real True/False (`_read_antislop`), so the read-back below is a read and
     # not a claim.
     "antislop",
+    # The Jarvis-owned local calendar (2026-10-29): the same shape as the
+    # Anti-Slop filter above. `set_jarvis_calendar` calls the module's own
+    # `handle_settings`, the one function its route and its typed switch call,
+    # and reads the same stored value back - a preference either way, with no
+    # card, no model call and nothing deleted when it is turned off. Its reader
+    # (`_read_jarvis_calendar`) answers a real True/False, so the read-back is a
+    # read and not a claim.
+    "jarvis_calendar",
     # The five PC-notification switches. They ride `jarvis_limits.change`, and
     # all seven of those rows are `loosening="none"` on purpose: a switch that
     # only decides whether this PC shows its owner a toast may not wait behind
@@ -6294,7 +6302,7 @@ def _run_connect(f: dict) -> Result:
     svc = C.SERVICES[sid]
     boxes = " and ".join(f.label for f in svc.fields)
     return Result(
-        f"{svc.name}. One card is waiting in the Jarvis window on this PC: type the "
+        f"{svc.name}. One card is waiting in the HUD window on this PC: type the "
         f"{boxes} there and press Save. " + CONNECT_SAFE_NOTE + " Then I run one real "
         "test and tell you exactly what it proved.",
         "connect_account")

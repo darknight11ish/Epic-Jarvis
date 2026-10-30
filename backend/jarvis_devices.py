@@ -1602,12 +1602,15 @@ def _gate_module():
 def _take_off(rid, why: str) -> bool:
     """Withdraw a waiting card if this backend has `jarvis_gate.withdraw`.
 
-    Only the pairing and approval-key cards can reach this. They are the cards
-    that no longer have a clock (jarvis_gate.APPROVAL_NEVER_EXPIRES), so a
-    cancelled or replaced one would otherwise wait on the owner's screen for
-    ever. getattr, not a plain call: a backend without that patch has no
-    withdraw, and this must leave such a backend exactly as it was - there the
-    card still lapses on its own, as every card always did.
+    Only the pairing and approval-key cards reach this, and they must: by the
+    owner's 2026-10-23 ruling they have no request-side wait at all
+    (`jarvis_gate.APPROVAL_NEVER_EXPIRES`; their rows carry no `waited_until`),
+    so the 2026-10-28 read-time sweep never touches them and a cancelled or
+    replaced one would otherwise wait on the owner's screen for ever,
+    answerable but never answerable-to-anything (the same reason `withdraw()`
+    exists at all). getattr, not a plain call: a backend without that patch has
+    no withdraw, and this must leave such a backend exactly as it was - there
+    the card still lapses on its own, as every card did before the ruling.
 
     True only when a waiting card was really taken off (withdraw() answers
     False for an id it does not know or one already answered), so a caller can
@@ -1740,11 +1743,13 @@ class Session:
         self.why = ""
         self.device_id: Optional[str] = None
         #: The gate's own id for this session's card, once anything knows it
-        #: (BUG B-1). A pair_device card has NO deadline since #773
-        #: (jarvis_gate.APPROVAL_NEVER_EXPIRES), so `check()` does not come
-        #: back until somebody answers the card: cancel, a new start and the
-        #: ten-minute expiry all have to withdraw it by an id nothing has
-        #: returned yet. `_watch_card` learns it, `_end` withdraws it.
+        #: (BUG B-1). A pair_device card has NO request-side wait since #773
+        #: (jarvis_gate.APPROVAL_NEVER_EXPIRES; its row carries no
+        #: `waited_until`, so the 2026-10-28 read-time sweep never touches it),
+        #: so `check()` does not come back until somebody answers the card:
+        #: cancel, a new start and the ten-minute SESSION expiry all have to
+        #: withdraw it by an id nothing has returned yet. `_watch_card` learns
+        #: it, `_end` withdraws it.
         self.card_id: Optional[str] = None
         #: The card's own words, built once when the phone claims (see
         #: `_card_of`). `_waiting_card` names the card from these while the
@@ -2135,12 +2140,13 @@ def _decide(s: Session, gate: Callable, tier_of: Callable) -> None:
             # Cancelled, replaced, burnt or expired while the card waited:
             # withdrawn - approving it makes no key.
             #
-            # Take the card off the list too. A pair_device card has no clock
-            # any more (jarvis_gate.APPROVAL_NEVER_EXPIRES - the owner's ruling
-            # of 2026-10-23), so without this it would wait on screen for ever
-            # offering a decision that can no longer do anything. On a backend
-            # without that patch `_take_off` finds no `withdraw` and does
-            # nothing, exactly as before.
+            # Take the card off the list too. A pair_device card waits with no
+            # `waited_until` (the owner's 2026-10-23 ruling, and the 2026-10-28
+            # read-time sweep only settles routine cards that have one), so
+            # without this it would wait on screen for ever offering a decision
+            # that can no longer do anything. On a backend without that patch
+            # `_take_off` finds no `withdraw` and does nothing, exactly as
+            # before.
             _take_off(getattr(v, "request_id", None),
                       "the pairing it asked about was cancelled or replaced")
             _audit("devices.pair", {"state": "withdrawn", "card": outcome})

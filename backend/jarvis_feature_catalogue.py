@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 142 rows from features/features.json.
+The owner's feature list, as data: 143 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 2b640df02d7f6e44f1e698db4a11ac4ae3b53d705f15644e80118094302d64a3); the apps' Features pages read their own
+`features/features.json` (sha256 a2ca1bb3f16cc338354d7e51bc83ffbeef992eb68e8b2578c44b293b92549043); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "2b640df02d7f6e44f1e698db4a11ac4ae3b53d705f15644e80118094302d64a3"
+SOURCE_SHA256 = "a2ca1bb3f16cc338354d7e51bc83ffbeef992eb68e8b2578c44b293b92549043"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -890,6 +890,17 @@ FEATURES = (
         "covers": ["home-calendar-email"],
     },
     {
+        "id": "jarvis-calendar",
+        "group": "Home",
+        "title": "Jarvis Calendar",
+        "what": "Your own calendar, kept by Jarvis on this PC: the events you add are shown beside Google Calendar and iCal, never sent to either, and never synced out.",
+        "where": "Ask \"turn off the Jarvis calendar\". The Calendar screen in each app is the next slice; the store and its routes are built now.",
+        "asks": "Adding, changing or deleting ONE of your own events raises no card: it writes one row on your own PC and has no bulk form. Turning the whole calendar off is instant and keeps every event.",
+        "limit": "Local only: no Google sync, no invitations, no sharing, and no reminder ringing yet (the reminder time is stored for later). Editing a repeating event changes the whole series, not one occurrence.",
+        "surface": "both",
+        "covers": [],
+    },
+    {
         "id": "weather-sky",
         "group": "Home",
         "title": "Weather and the sky behind the animals",
@@ -1007,11 +1018,10 @@ FEATURES = (
         "group": "Phone",
         "title": "Floating Jarvis",
         "what": "A small floating face, or a bubble, over your other apps.",
-        "where": "Settings, Floating Jarvis.",
+        "where": "Settings, Floating Jarvis on the phone; Settings, Appearance, Floating face on the PC.",
         "asks": "No card.",
         "limit": "Bubble mode may need more than this setting before Android shows it at all - try it on the real phone.",
-        "surface": "phone",
-        "surface_reason": "The phone's Floating Jarvis is the app's own icon with a status dot (AvatarOverlayService.kt), not the animal - the desktop's floating face draws the real animal, so there is no animal on the phone to sleep, keep still or take a serious pose (docs/ARCHITECTURE.md section 8).",
+        "surface": "both",
         "aliases": ["floating jarvis", "floating face"],
         "covers": ["settings.floating-avatar", "phone-extras"],
     },
@@ -1217,11 +1227,10 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Notifications",
         "what": "Which of Jarvis's notifications this PC shows - alarms and urgent alerts, reminders and to-dos, the morning briefing, and \"website needs you\" - plus quiet hours and a test button.",
-        "where": "Settings, Notifications.",
+        "where": "Settings, Notifications. On the phone, Settings, Notifications from Jarvis.",
         "asks": "No card - it only chooses which of the PC's own notifications appear.",
-        "limit": "Desktop only. On the phone these are Android's own per-channel notification controls, reached from the \"Notifications from Jarvis\" row on Settings.",
-        "surface": "desktop",
-        "surface_reason": "On the phone these are Android's own per-channel notification controls, reached from the \"Notifications from Jarvis\" row on Settings (the row's own limit).",
+        "limit": "The phone changes the same seven kinds in its own Settings, under \"Notifications from Jarvis\", where every row says it is the PC's; Android's own per-channel controls sit beside them.",
+        "surface": "both",
         "covers": ["settings.notifications", "phone-notifications"],
     },
     {

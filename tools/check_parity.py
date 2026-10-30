@@ -77,7 +77,13 @@ exempt from rule 4. The moment the desktop calls it, a warning says to
 reclassify it (`ported` once the phone calls it too, else `todo`). A route in
 `RETIRED` was given up on purpose (an app surface was removed whole, F11): it
 stays `planned`, and having NO call site in either app is a warning that says
-so, never an error - unless an app starts calling it again.
+so, never an error - unless an app starts calling it again. A route in
+`PENDING_CLIENTS` is the fourth case and the only one where the backend came
+first with no client at all: the route really exists, neither app even names
+it, and a later slice owns the screen. It stays `planned`, its absence from
+both apps is a warning that says which slice owns the client, and the moment
+either app calls it the entry is a FAILURE - remove the line and reclassify,
+so a backend-first route cannot quietly stay "pending" after it is wired.
 """
 import os
 import re
@@ -246,6 +252,15 @@ CLASSIFICATION = {
     # (ARCHITECTURE section 8, and the row in its one-sided-on-purpose table).
     # The read-only POST /api/antislop/audit is in BACKEND_ONLY below.
     "/api/antislop": ("ported", "The Anti-Slop filter (2026-10-28; JARVIS-API section 159; backend jarvis_antislop.py, vendoring the MIT-licensed miqdadbadjuber/anti-slop ruleset). GET reads the whole state (enabled, mode, scopes, dials, show_delivery_gate_on_ui_tasks); POST is ONE change at once, with no approval card either way and no model call - it filters the wording of an answer, opens no way out of the PC, reads no folder and takes no action. OFF costs 0 prompt tokens and rewrites nothing. Desktop: Settings, How Jarvis talks, Anti-Slop filter (src-tauri/src/antislop.rs get_antislop/set_antislop, settings window only; the card is src/antislop-settings.js + src/antislop.js). Phone: Settings, How Jarvis talks (net/Antislop.kt, ui/screens/AntislopPlate.kt, JarvisRuntime setAntislop/setAntislopMode), the master switch, the During/After mode and the em-dash box - the three scopes, the Delivery Gate switch and the dials are the desktop card on purpose (ARCHITECTURE section 8). The read-only POST /api/antislop/audit is in BACKEND_ONLY below."),
+    # The Jarvis-owned local calendar, S1 (2026-10-29; JARVIS-API section 164):
+    # the store, the four routes and the typed switch are built; neither app
+    # calls them yet because the HUD card, the phone plate and the widget are
+    # the next slices (the owner's decision, decisions.d/2026-10-29-jarvis-
+    # calendar.md). No gate entry: nothing leaves the PC.
+    "/api/calendar": ("planned", "Jarvis Calendar S1: GET the window (default 7 days, 1-90) or ONE stored event by ?id=, with a sources block saying Google and iCal are not on a screen yet (JARVIS-API section 164). The store is calendar.db on this PC, ON by default, OFF hides and keeps. No app calls it yet: the HUD card and the phone plate are S2/S3 and build against this contract."),
+    "/api/calendar/add": ("planned", "Jarvis Calendar S1: ONE local event, title required, date and times kept as wall clock (never an epoch) with an optional count/until recurrence. Cardless by the owner's 2026-10-29 ruling - one row on this PC, no bulk form, ids-only audit. No app calls it yet (S2/S3)."),
+    "/api/calendar/act": ("planned", "Jarvis Calendar S1: delete or update ONE local event by id; any bulk verb answers 400 'no_bulk'. Cardless by the owner's 2026-10-29 ruling. No app calls it yet (S2/S3)."),
+    "/api/calendar/settings": ("planned", "Jarvis Calendar S1: {on: true|false} - the whole feature's switch, ON with no file, OFF hides every surface and keeps every event. No card either way. No app calls it yet (S2/S3)."),
     "/api/thinking": ("ported", "Per-model thinking levels (backend/thinking.patch, jarvis_thinking.py, Section 5.5): off, quick, deep, or auto per running model. GET reads running models and their supported levels; POST is ONE change with no approval card. Both apps hold the change on a stale link. Desktop: Settings, Thinking levels (plain_errors.rs get_thinking/set_thinking, thinking-settings.js). Phone: Settings, Thinking levels (ThinkingPlate.kt, net/Thinking.kt)."),
     "/api/voice/live": ("ported", "Jarvis Live (backend/live.patch, jarvis_live.py; the owner's decision and answers of 2026-09-28; docs/LIVE-DESIGN.md; JARVIS-API section 63): a back-and-forth voice conversation - GET the session (fixed words and numbers, never anything said), POST start (no card; held on a stale link; refused until the owner's voice is trained), stop (never held), extend, resume, mute/unmute. Desktop: the Jarvis bar's Live button and sign, the always-on-top badge and the tray row (live.rs, live-rules.js). Phone: Live screen, the Live microphone service and its notification (LiveScreen.kt, service/LiveService.kt, voice/LiveRules.kt)."),
     "/api/people/dossier": ("ported", "One person's read-only dossier through jarvis_people_crm.build_person_dossier() (Pillar 16/#540; JARVIS-API section 143; LM-4): their own saved facts, kept chat turns, mail headers, open to-dos and next shared event, in the module's own words. Desktop: the people_dossier command (brain/people.rs) and the card in brain.js, opened by clicking a person in People and things - withheld whole under App lock and the hidden lists, BEFORE the PC is asked. Phone: net/PeopleDossier.kt read under EntitiesPlate, inside the plate's own hidden section. Owner-only: the backend refuses another device before the module is imported or the name is read."),
@@ -1141,6 +1156,26 @@ RETIRED = {
         "nothing called); the PC route remains, and neither app calls it."),
 }
 
+#: Routes the BACKEND built first, whose client is a later slice: no app
+#: mentions them yet, ON PURPOSE. This is a third state, different from both
+#: tables above - UNREACHABLE is a dead builder that already exists, RETIRED is
+#: a surface given up - and it exists because the docstring's own definition of
+#: `planned` ("built on the backend and neither app calls it yet") had no way
+#: to be recorded when NEITHER app even names the route: every earlier planned
+#: route was at least half-wired. A route here must be classified `planned`.
+#: The PR that wires the first client REMOVES its line and reclassifies the
+#: route; if either app calls a route still listed here, that is an ERROR, so a
+#: stale line cannot hide a wired route.
+PENDING_CLIENTS = {
+    "/api/calendar": (
+        "Jarvis Calendar S1 (2026-10-29; JARVIS-API section 164): the store and "
+        "the four routes are built, and the HUD card / phone plate / widget are "
+        "the next slices (decisions.d/2026-10-29-jarvis-calendar.md)."),
+    "/api/calendar/add": "Jarvis Calendar S1: the add route; the HUD/phone writes are the next slices (JARVIS-API section 164).",
+    "/api/calendar/act": "Jarvis Calendar S1: the one-event delete/update route; the HUD/phone writes are the next slices (JARVIS-API section 164).",
+    "/api/calendar/settings": "Jarvis Calendar S1: the feature switch; neither app draws it yet, by design (JARVIS-API section 164).",
+}
+
 
 def _nothing_calls_it(route: str) -> str:
     """The one sentence for a route whose declaration still holds: no app calls
@@ -1359,6 +1394,24 @@ def main():
             f"{r} is RETIRED but the phone calls it again. A retired route must be "
             f"called by NEITHER app: remove {r} from RETIRED in "
             "tools/check_parity.py and reclassify it (it is being wired up).")
+    # A backend-first route (PENDING_CLIENTS) must stay `planned` and must be in
+    # no app: the moment a client names it, its line is stale and the slice that
+    # wired it removes the line and reclassifies the route.
+    for r in sorted(set(PENDING_CLIENTS) - set(CLASSIFICATION)):
+        problems.append(
+            f"{r} is in PENDING_CLIENTS but not in CLASSIFICATION. A pending "
+            "route is still classified `planned`; add it there.")
+    for r in sorted(set(PENDING_CLIENTS) & set(CLASSIFICATION)):
+        if CLASSIFICATION[r][0] != "planned":
+            problems.append(
+                f"{r} is in PENDING_CLIENTS but classified "
+                f"{CLASSIFICATION[r][0]!r}; a backend-first route is `planned` "
+                "until its first client lands.")
+    for r in sorted((set(PENDING_CLIENTS) & desk) | (set(PENDING_CLIENTS) & phone)):
+        problems.append(
+            f"{r} is in PENDING_CLIENTS but an app already calls it. Remove it "
+            "from PENDING_CLIENTS in tools/check_parity.py and reclassify it "
+            "(`ported` if both apps call it, else `todo`).")
     for r in sorted(by("planned") & desk):
         warnings.append(f"{r} is 'planned' but the desktop now calls it - reclassify it as "
                         f"'ported' (if the phone calls it too) or 'todo'.")
@@ -1375,6 +1428,11 @@ def main():
             # The route is in no app at all: the phone's only reference to it is
             # a helper nothing calls.
             warnings.append(_nothing_calls_it(r))
+        elif r in PENDING_CLIENTS:
+            # Backend-first by design: the route is real, no client names it
+            # yet, and the slice that wires one removes this line.
+            warnings.append(f"{r} is 'planned' and PENDING (no app calls it yet, "
+                            f"by design): {PENDING_CLIENTS[r]}")
         elif r in RETIRED:
             # The whole surface was retired (F11): the PC route remains and no
             # app is meant to call it. A warning naming the retirement, never a
