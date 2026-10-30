@@ -267,6 +267,26 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.calendar",
+    "title": "Jarvis Calendar",
+    "about": "Your own events, kept on your PC: the month view, the day list and the home-screen widget.",
+    "apps": [
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "row",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "Never hideable: it is the feature's own ON/OFF switch, and hiding the row that turns the feature back on would leave a switched-off calendar with no way to switch it on.",
+    "names": [
+      "jarvis calendar",
+      "the jarvis calendar"
+    ]
+  },
+  {
     "id": "settings.devices",
     "title": "Devices",
     "about": "Every paired device with its own key.",
@@ -2768,6 +2788,7 @@ export const NEVER_HIDE = [
   "settings.first-run",
   "settings.setup-questionnaire",
   "settings.all-features",
+  "settings.calendar",
   "settings.devices",
   "settings.animal-options",
   "settings.security",
@@ -2931,6 +2952,7 @@ export const ALIASES = {
   "idle timeout": "settings.idle-new",
   "inbox": "safety.approvals",
   "inside jokes": "brain.memory.between-us",
+  "jarvis calendar": "settings.calendar",
   "jarvis's voice": "settings.voices",
   "jarvis's voices": "settings.voices",
   "keyboard shortcuts": "settings.shortcuts",
