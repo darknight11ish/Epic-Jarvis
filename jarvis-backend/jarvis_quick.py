@@ -1451,6 +1451,14 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "find cheap parking near ..." (jarvis_parking.py, 2026-10-30) ----------------
+    # The word "parking" is required by the grammar, so this cannot take a
+    # sentence from another intent; it is placed AFTER the voice reflex and the
+    # clock/date answers for the same reason those run first.
+    got = _parking_lookup(s, now)
+    if got is not None:
+        return got
+
     # --- Today cards (jarvis_today.py, 2026-09-28) ------------------------------------
     got = _today(s, now)
     if got is not None:
@@ -6413,6 +6421,283 @@ MEDIA_MISSING = ("Your PC's Jarvis cannot control music or video yet - run apply
                  "on the PC.")
 
 
+# --------------------------------------------------------------------------
+#   "find cheap parking near ..." (jarvis_parking.py, 2026-10-30)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK: "find me cheap parking near Pike Place Market tomorrow from
+# 4:15 PM to 9:00 PM". It is answered here rather than by the model because the
+# arithmetic is exact and a model's is not: a sign's rates are a set of time
+# windows, and quoting one rate for the whole stay is how a $9.38 curb becomes a
+# $21.38 garage. All of the pricing lives in `jarvis_parking.py`; this section
+# only recognises the sentence and hands it a place and a window.
+#
+# NO MODEL TOOL. The blueprint that asked for this (2026-10-29) wanted a
+# `find_parking` tool with a switch, off by default. It is deliberately not
+# added: `jarvis_agent.py`'s tool list is the six-slot Live budget on the 8 GB
+# card, and a sentence this grammar answers needs no slot at all. A model tool
+# would be a separate change with its own budget line.
+#
+# WHAT THE DEVICE GETS. The PC's own screen gets the full breakdown - every
+# legal option and its minute-by-minute maths. A request that plainly did NOT
+# come from this PC gets the short form: two options, a `geo:` link each, and
+# not one desktop-only phrase. `answer_turn(client_surface=...)` can say which
+# outright; otherwise the answer is inferred with
+# `jarvis_owner_check.from_this_pc`, the same function every PC-only action
+# already uses, because `/api/chat`'s body carries no client kind and this path
+# never sees the `X-Jarvis-Client` header. That is said plainly here rather
+# than claimed as a header check it does not do.
+
+_PARKING_LEAD = re.compile(
+    r"^(?:(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:please\s+)?"
+    r"(?:(?:find|get|show|give)\s+(?:me\s+)?"
+    r"|where\s+(?:is|are)\s+(?:the\s+|there\s+|some\s+)?"
+    r"|is\s+there\s+(?:any\s+|a\s+|some\s+)?"
+    r"|how\s+(?:much|expensive)\s+is\s+(?:the\s+)?"
+    r"|what\s+is\s+(?:the\s+)?|what's\s+(?:the\s+)?)?"
+    r"(?:(?:the|a|an|any|some)\s+)?"
+    r"(?:(?:cheapest|cheap|free|closest|nearest)\s+)?(?:legal\s+)?"
+    r"parking(?:\s+(?:lot|lots|garage|garages|space|spaces))?\s*")
+
+_PARKING_CALENDAR = re.compile(
+    r"^(?:for\s+)?my\s+(?:next\s+)?(?:meeting|event|appointment|calendar\s+event)"
+    r"(?:\s+(?:at|near|in|by)\s+(?P<place>.+))?$")
+
+_PARKING_RANGE = re.compile(
+    r"^(?P<place>.+?)\s+(?:from|between)\s+(?P<a>.+?)\s+"
+    r"(?:to|and|until|till|through)\s+(?P<b>.+)$")
+_PARKING_AT_FOR = re.compile(
+    r"^(?P<place>.+?)\s+at\s+(?P<a>.+?)\s+for\s+(?P<dur>.+)$")
+_PARKING_FOR = re.compile(r"^(?P<place>.+?)\s+for\s+(?P<dur>.+)$")
+
+#: A day phrase at the END of a place ("pike place market tomorrow") or of an
+#: end time ("9 pm on thursday"). It is moved into the time text, where
+#: `parse_when` already knows what to do with it.
+_PARKING_TAIL_DAY = re.compile(
+    r"^(?P<rest>.+?)\s+(?P<day>(?:on\s+)?(?:today|tomorrow|tonight|next\s+" + _WD +
+    r"|" + _WD + r"))$")
+
+_PARKING_LEAD_PREP = re.compile(r"^(?:near|around|by|in|at|for|to)\s+")
+
+#: A place is a name, not a paragraph. Anything longer is not a sentence this
+#: grammar should be pricing.
+_PARKING_MAX_PLACE = 80
+
+
+def _parking_split_day(text: str) -> tuple:
+    """"pike place market tomorrow" -> ("pike place market", "tomorrow")."""
+    text = str(text or "").strip()
+    m = _PARKING_TAIL_DAY.fullmatch(text)
+    if m and m.group("rest").strip():
+        return m.group("rest").strip(), m.group("day").strip()
+    return text, ""
+
+
+def _parking_place(text: str) -> Optional[str]:
+    """The place out of what the owner said, or None when there is not one."""
+    place, _day = _parking_split_day(text)
+    place = _PARKING_LEAD_PREP.sub("", place).strip(" ,;")
+    # "the parking situation near X", "parking prices at X": the noun after
+    # "parking" is the owner's subject, not part of the place.
+    place = re.sub(r"^(?:situation|options?|prices?|costs?|rates?|fees?)\s+", "", place)
+    place = re.sub(r"\s+", " ", place)
+    if not place or len(place) > _PARKING_MAX_PLACE or not re.search(r"[a-z]", place):
+        return None
+    # "near me" is not answered here: this PC has no idea where the owner is
+    # standing, and a guessed point would be a wrong answer rather than a
+    # missing one. The sentence falls through to the model, which can ask.
+    if place in ("me", "here", "there", "this", "that", "it"):
+        return None
+    return place
+
+
+def _parking_clock_at(text: str, now: float) -> Optional[float]:
+    """The next time `text` names, as an epoch. None if it names no time."""
+    got = parse_when(text, now, "reminder")
+    if got is None or got.rule is not None:
+        return None
+    return got.at
+
+
+def _parking_end_after(text: str, start: float) -> Optional[float]:
+    """The first time the clock in `text` reads AFTER `start`.
+
+    The day it lands on is the start's own day when that is still ahead, else
+    the next one - so "from 10 pm to 2 am" is four hours, not minus twenty.
+    """
+    import datetime as _dt
+    c = parse_clock(text)
+    if c is None:
+        return None
+    started = _dt.datetime.fromtimestamp(start)
+    best: Optional[float] = None
+    for hours in _hour24(c, None):
+        for add in (0, 1):
+            day = started + _dt.timedelta(days=add)
+            try:
+                moment = day.replace(hour=hours, minute=c.mm, second=0, microsecond=0)
+            except ValueError:                      # pragma: no cover - DST edge
+                continue
+            if moment > started and (best is None or moment.timestamp() < best):
+                best = moment.timestamp()
+    return best
+
+
+def _parking_window(place_text: str, now: float):
+    """"pike place from 4:15 pm to 9 pm" -> (place, start epoch, end epoch).
+
+    None when the sentence says no place, or a window that is not a window. A
+    sentence with NO time at all is the next two hours, and the answer always
+    says which window it used - so a default is visible rather than silent.
+    """
+    body = place_text.strip()
+    _place, day = _parking_split_day(body)
+
+    for pattern in (_PARKING_RANGE, _PARKING_AT_FOR, _PARKING_FOR):
+        m = pattern.fullmatch(body)
+        if m is None:
+            continue
+        inner_place, inner_day = _parking_split_day(m.group("place"))
+        day = day or inner_day
+        if pattern is _PARKING_RANGE:
+            start_text = (day + " " + m.group("a")).strip() if day else m.group("a")
+            start = _parking_clock_at(start_text, now)
+            if start is None:
+                continue
+            end_text, end_day = _parking_split_day(m.group("b"))
+            if end_day:
+                end = _parking_clock_at(end_text + " " + end_day, start)
+            else:
+                end = _parking_end_after(end_text, start)
+        elif pattern is _PARKING_AT_FOR:
+            start_text = (day + " " + m.group("a")).strip() if day else m.group("a")
+            start = _parking_clock_at(start_text, now)
+            if start is None:
+                continue
+            length = parse_duration(m.group("dur"))
+            # `parse_duration` answers in SECONDS (its own docstring), and the
+            # epoch arithmetic here is in seconds too - no unit change.
+            end = start + length if length else None
+        else:
+            # "parking near X for 3 hours": no start time said, so it is now.
+            start = now
+            length = parse_duration(m.group("dur"))
+            end = start + length if length else None
+        if end is None or end <= start:
+            continue
+        good = _parking_place(inner_place)
+        if good is None:
+            return None
+        return good, start, end
+
+    # No time said at all: the next two hours, said back in the answer.
+    good = _parking_place(body)
+    if good is None:
+        return None
+    return good, now, now + 2 * 3600.0
+
+
+def _parking_lookup(s: str, now: Optional[float] = None) -> Optional[Intent]:
+    """"find cheap parking near X from A to B" and its close phrasings."""
+    now = time.time() if now is None else now
+    m = _PARKING_LEAD.match(s)
+    if m is None:
+        return None
+    rest = s[m.end():].strip()
+    if not rest:
+        return None
+    # "free parking" is a wish, not a different sentence: it only changes what
+    # the answer says when nothing free was found.
+    wants_free = bool(re.search(r"\bfree\b", s[:m.end()]))
+
+    calendar = _PARKING_CALENDAR.fullmatch(rest)
+    if calendar is not None:
+        place = _parking_place(calendar.group("place") or "") or ""
+        return Intent("parking_calendar", {"place": place, "wants_free": wants_free})
+
+    got = _parking_window(rest, now)
+    if got is None:
+        return None
+    place, start, end = got
+    return Intent("parking_lookup", {"place": place, "start": start, "end": end,
+                                     "wants_free": wants_free})
+
+
+def _client_surface(peer, local, given: Optional[str] = None) -> str:
+    """Which words an answer should use: "hud" or "phone".
+
+    `given` wins when a caller really knows (the tests, and any future caller
+    that does read the header). Otherwise a request that plainly did NOT come
+    from this PC gets the phone's short form - `jarvis_owner_check.from_this_pc`
+    is the project's own answer to "is this the PC", with its documented
+    "cannot be placed counts as this PC" rule, so nothing here is stricter or
+    looser than every PC-only action already is. A path that cannot ask at all
+    gets the fuller answer: a shorter one might drop something a client needed,
+    and a longer one never breaks a client.
+    """
+    if given:
+        return "phone" if str(given).strip().lower() == "phone" else "hud"
+    try:
+        import jarvis_owner_check as OC
+        if OC.from_this_pc(peer, local) is False:
+            return "phone"
+    except Exception:
+        pass
+    return "hud"
+
+
+PARKING_MISSING = ("Your PC's Jarvis cannot look up parking yet - run apply-patches.ps1 "
+                   "on the PC, which copies jarvis_parking.py.")
+
+
+def _run_parking(intent: Intent, client_surface: str = "hud",
+                 now: Optional[float] = None) -> Result:
+    """Price the stay, in the words the device that asked can use."""
+    import datetime as _dt
+    try:
+        import jarvis_parking as P
+    except Exception:
+        return Result(PARKING_MISSING, intent.name)
+    moment = _dt.datetime.fromtimestamp(time.time() if now is None else now)
+    surface = "phone" if str(client_surface).lower() == "phone" else "hud"
+
+    if intent.name == "parking_calendar":
+        try:
+            event = P.next_event_with_a_place(now=moment)
+        except Exception:
+            event = None
+        if event is None:
+            return Result(
+                "I could not find a calendar event in the next day that has a "
+                "place on it, so there is nowhere to price. Tell me where and "
+                "when instead, like \"parking near Pike Place from 4 pm to 9 pm\".",
+                intent.name)
+        start, end = P.event_window(event)
+        result = None
+        coordinates = P.looks_like_coordinates(event["where"])
+        if coordinates is not None:
+            # The location already IS a point, so nothing needs looking up and
+            # the one-step answer is available.
+            result = P.find_parking(None, start, end, lat=coordinates[0],
+                                    lon=coordinates[1], label=event["where"],
+                                    wants_free=bool(intent.f.get("wants_free")))
+        words = P.calendar_words(result, event, client_surface=surface)
+        # The reply quotes the calendar's own location line, so this turn counts
+        # as having read outside text - the conservative direction, and the same
+        # rule a briefing that quotes event titles follows.
+        return Result(words, intent.name, read=["calendar_read"])
+
+    place = str(intent.f.get("place") or "").strip()
+    if not place:
+        return Result("I did not catch where to look for parking.", intent.name)
+    base = time.time() if now is None else now
+    start = _dt.datetime.fromtimestamp(float(intent.f.get("start") or base))
+    end = _dt.datetime.fromtimestamp(float(intent.f.get("end") or (base + 7200)))
+    result = P.find_parking(place, start, end,
+                            wants_free=bool(intent.f.get("wants_free")))
+    return Result(P.reply(result, client_surface=surface), intent.name)
+
+
 def _forget_range(s: str, now: float) -> Optional[Intent]:
     """"forget what you learned last week", "delete my chats from 1 to 15
     September" - jarvis_forget_range.parse_phrase. Without that module, or
@@ -7743,7 +8028,8 @@ def _run_feature_change_apply(f: dict, peer, local) -> Result:
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
-        peer=None, local=None, messages=None, desktop=None) -> Optional[Result]:
+        peer=None, local=None, messages=None, desktop=None,
+        client_surface: Optional[str] = None) -> Optional[Result]:
     """Do it. None hands the sentence to the model after all.
     `conversation`: the request's conversation_id ("cancel that" works only
     within one). `seen`: when the owner last talked to Jarvis before this
@@ -7751,7 +8037,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     on ..." (2026-09-27). `peer`/`local`: the request's own address, read the
     same way owner-check.patch's do_POST wrapper reads it - so a setting on
     jarvis_owner_check.PC_ONLY_ACTIONS can refuse a request that did not
-    truly come from this PC (jarvis_settings_registry.py, 2026-09-27)."""
+    truly come from this PC (jarvis_settings_registry.py, 2026-09-27).
+    `client_surface`: "hud" or "phone" when the caller really knows which
+    device asked (2026-10-30, the parking answer's two lengths); otherwise
+    `_client_surface` infers it from `peer`/`local`."""
     n, f = intent.name, intent.f
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
@@ -7768,6 +8057,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # that already exists and already has its own permission model.
     if n == "voice_speed":
         return _run_voice_speed(intent)
+    # "find cheap parking near ..." (2026-10-30): read-only, no card, no model.
+    # The two intents are in READ_ONLY_INTENTS - they call two public map
+    # services and change nothing, so they must not take away what "cancel
+    # that" would undo.
+    if n in ("parking_lookup", "parking_calendar"):
+        return _run_parking(intent, _client_surface(peer, local, client_surface), now)
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
@@ -8323,6 +8618,10 @@ READ_ONLY_INTENTS = frozenset({
     # fixed answer that reads nothing and imports nothing, so it must not
     # clear what "cancel that" would take back.
     "notion_export",
+    # "find cheap parking near ..." (2026-10-30): it calls two public map
+    # services and a local cache, opens no card and changes nothing, so it must
+    # not clear what "cancel that" would take back.
+    "parking_calendar", "parking_lookup",
     "open_app", "open_chat", "pc_help", "personality_create",
     "personality_create_failed", "personality_create_help",
     "personality_create_refused", "personality_describe", "personality_refine",
@@ -8675,7 +8974,8 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
 def answer(text, *, sched=None, now: Optional[float] = None,
            conversation: Optional[str] = None, seen: Optional[float] = None,
            temporary: bool = False, private: bool = False, peer=None, local=None,
-           messages=None, desktop=None) -> Optional[Result]:
+           messages=None, desktop=None,
+           client_surface: Optional[str] = None) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
     in it; `seen`: when the owner last talked to Jarvis before this turn;
@@ -8736,7 +9036,8 @@ def answer(text, *, sched=None, now: Optional[float] = None,
         import jarvis_schedule
         sched = jarvis_schedule.get()
     res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary,
-             peer=peer, local=local, messages=messages, desktop=desktop)
+             peer=peer, local=local, messages=messages, desktop=desktop,
+             client_surface=client_surface)
     if res is not None:
         try:
             sched.mark_command(text)
@@ -8888,7 +9189,8 @@ def _touch(now: Optional[float]) -> Optional[float]:
 
 
 def answer_turn(body, *, sched=None, now: Optional[float] = None,
-                peer=None, local=None, private: Optional[bool] = None) -> Optional[Result]:
+                peer=None, local=None, private: Optional[bool] = None,
+                client_surface: Optional[str] = None) -> Optional[Result]:
     """For /api/chat: the fast path's answer to this turn, or None. Every
     chat request counts as the owner being here ("what did I miss?" asks
     since the one before), whoever's words it carries. `peer`/`local`: the
@@ -8950,7 +9252,8 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
                                            temporary=temporary, private=private,
                                            peer=peer, local=local,
                                            messages=body.get("messages"),
-                                           desktop=desktop)
+                                           desktop=desktop,
+                                           client_surface=client_surface)
     if res is None and conversation and not private:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.
