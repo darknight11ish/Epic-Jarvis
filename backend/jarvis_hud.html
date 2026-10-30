@@ -2445,6 +2445,211 @@ body[data-hud-edit="on"] #hud-safety{display:flex;}
    the packaged CSP refuses a <style> element built at run time, and this
    page's own <style> carries the nonce. Keep this text here, not in JS. */
 html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;inset:0;z-index:88;background:var(--hh-backdrop);opacity:0; pointer-events:none;transition:opacity .16s ease;}#hh-backdrop.hh-on{opacity:1;pointer-events:auto;}.hh-panel{position:fixed;top:0;left:0;bottom:0;z-index:89;width:304px;max-width:86vw; display:flex;flex-direction:column;background:var(--hh-panel-bg);color:var(--hh-panel-fg); border-right:1px solid var(--hh-hair);box-shadow:18px 0 40px var(--hh-shadow); font-family:var(--font-ui,"Segoe UI",system-ui,sans-serif); font-size:13px;line-height:1.35;transform:translateX(-104%); transition:transform .18s var(--ease, ease);visibility:hidden;}.hh-panel.hh-on{transform:none;visibility:visible;}#hh-head{display:flex;align-items:center;gap:6px;padding:12px 12px 6px;}#hh-title{flex:1 1 auto;margin:0;font-size:15px;font-weight:600;letter-spacing:.01em;}.hh-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px; padding:0;border:0;border-radius:7px;background:transparent;color:var(--hh-fg-soft);cursor:pointer;}.hh-ico:hover,.hh-ico:focus-visible{background:var(--hh-hair-2);color:var(--hh-white);}.hh-ico:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-ico[aria-pressed="true"]{color:var(--hh-accent);background:var(--hh-glow);}#hh-search{margin:2px 12px 8px;display:flex;align-items:center;gap:7px; padding:0 9px;height:32px;border-radius:8px;background:var(--hh-hair-3); border:1px solid var(--hh-hair-4);}#hh-search svg{width:15px;height:15px;color:var(--hh-fg-mute);flex:0 0 auto;}#hh-search input{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--hh-panel-fg); font:inherit;font-size:12.5px;outline:none;}#hh-search input::placeholder{color:var(--hh-fg-mute);}#hh-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:2px 8px 14px; scrollbar-width:thin;}.hh-sec{margin-top:6px;}.hh-head{display:flex;align-items:center;gap:7px;width:100%;height:26px;padding:0 6px; border:0;border-radius:6px;background:transparent;color:var(--hh-fg-mute-2);font:inherit; font-size:11.5px;font-weight:600;letter-spacing:.02em;text-transform:none;cursor:pointer; text-align:left;}.hh-head:hover,.hh-head:focus-visible{background:var(--hh-hair-4);color:var(--hh-line-2);}.hh-head:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-head .glyph{width:13px;height:13px;flex:0 0 auto;transition:transform .14s ease;}/* An open section's chevron points DOWN (rotated 90) and a collapsed one points RIGHT - the other way round read as "collapsed" beside an open section's own rows (seen in the render check, 2026-10-27). */.hh-sec[data-open="1"] .hh-head .glyph.hh-caret{transform:rotate(90deg);}.hh-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-count{flex:0 0 auto;color:var(--hh-fg-mute-3);font-weight:500;}.hh-rows{margin:1px 0 0;padding:0;list-style:none;}.hh-item{position:relative;display:flex;align-items:center;gap:1px;}.hh-open{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0;padding:5px 2px 5px 7px; margin:0;border:0;border-radius:7px;background:transparent;color:var(--hh-line-3);font:inherit; font-size:12.5px;cursor:pointer;text-align:left;}.hh-open:hover,.hh-open:focus-visible{background:var(--hh-hair-5);color:var(--hh-white);}.hh-open:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-open[aria-current="true"]{background:var(--hh-glow-2);color:var(--hh-accent-pale);}.hh-open[aria-current="true"] .hh-t{font-weight:600;}.hh-open .glyph{width:13px;height:13px;flex:0 0 auto;color:var(--hh-fg-mute-4);}.hh-open[aria-current="true"] .glyph{color:var(--hh-accent);}.hh-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hh-age{flex:0 0 auto;color:var(--hh-fg-mute-5);font-size:11px;font-variant-numeric:tabular-nums;}.hh-dots{flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px; background:transparent;color:var(--hh-fg-mute-4);cursor:pointer;opacity:0;}.hh-item:hover .hh-dots,.hh-item:focus-within .hh-dots{opacity:1;}.hh-dots:hover,.hh-dots:focus-visible,.hh-dots[aria-expanded="true"]{ background:var(--hh-hair-6);color:var(--hh-white);opacity:1;}.hh-dots:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-more{display:block;width:100%;margin:0;padding:4px 7px;border:0;border-radius:7px; background:transparent;color:var(--hh-fg-mute-6);font:inherit;font-size:11.5px;text-align:left;cursor:pointer;}.hh-more:hover,.hh-more:focus-visible{background:var(--hh-hair-4);color:var(--hh-panel-fg);}.hh-more:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}#hh-foot{flex:0 0 auto;border-top:1px solid var(--hh-hair-5);padding:8px 12px 10px; display:flex;flex-direction:column;gap:6px;}#hh-say{margin:0;color:var(--hh-fg-mute-6);font-size:11.5px;min-height:0;}#hh-say:empty{display:none;}#hh-new{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:0; border-radius:8px;background:var(--hh-glow-3);color:var(--hh-accent-soft);font:inherit;font-size:12.5px; cursor:pointer;}#hh-new:hover,#hh-new:focus-visible{background:var(--hh-hair-7);}#hh-new:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu{position:fixed;z-index:90;min-width:186px;padding:5px;border-radius:9px; background:var(--hh-panel-bg-2);border:1px solid var(--hh-shadow-2);box-shadow:0 14px 32px var(--hh-glow-4); display:flex;flex-direction:column;}.hh-menu[hidden]{display:none;}.hh-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0; border-radius:6px;background:transparent;color:var(--hh-line-4);font:inherit;font-size:12.5px; text-align:left;cursor:pointer;}.hh-menu button:hover,.hh-menu button:focus-visible{background:var(--hh-hair);}.hh-menu button:focus-visible{outline:2px solid var(--ice);outline-offset:1px;}.hh-menu button[data-danger="1"]{color:var(--hh-danger);}.hh-menu .hh-sep{height:1px;margin:4px 6px;background:var(--hh-hair);}.hh-menu .hh-mtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis; white-space:nowrap;}.hh-menu .hh-note{padding:2px 9px 6px;color:var(--hh-fg-mute-6);font-size:11px;}.hh-tagdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+
+/* ---- CALENDAR (2026-10-29, the owner's desktop HUD calendar) --------- *
+ *  ONE rail card (#rail-calendar, directly above #rail-reminders) and ONE
+ *  full calendar panel (#calendar-panel, after #shell). The card says what
+ *  is next; the panel is the month/week/day calendar with the one Add/Edit
+ *  form. Both draw from the SAME GET /api/calendar read, and both are hidden
+ *  the moment the PC's own answer says the feature is off (`on: false`) -
+ *  nothing here is deleted by a switch.
+ *
+ *  Every colour is a theme token, so all three themes paint it; the type is
+ *  the page's own mono/UI pair; nothing is an image and nothing comes from
+ *  the network.
+ * --------------------------------------------------------------------- */
+#rail-calendar .cal-card-when{margin:2px 0 6px; font-family:var(--f-mono);
+  font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--dim);}
+.cal-card-list{display:flex; flex-direction:column; gap:4px;}
+.cal-card-row{display:flex; align-items:baseline; gap:7px; min-width:0;}
+.cal-card-time{flex:0 0 auto; font-family:var(--f-mono); font-size:10.5px;
+  color:var(--text-faint); font-variant-numeric:tabular-nums;}
+.cal-card-title{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; font-size:12px; color:var(--text);}
+.cal-card-row[data-state="past"] .cal-card-title{color:var(--dim);}
+.cal-card-row[data-state="now"] .cal-card-time{color:var(--ice);}
+.cal-card-state{flex:0 0 auto; font-family:var(--f-mono); font-size:9px;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--dim);}
+.cal-card-more{margin:2px 0 0; font-family:var(--f-mono); font-size:10px; color:var(--dim);}
+.cal-empty{margin:2px 0; font-size:12px; line-height:1.45; color:var(--dim);}
+.cal-note{margin:6px 0 0; padding:6px 8px; border:1px solid var(--line); border-radius:4px;
+  background:rgb(var(--accent-rgb) / .06); font-size:11px; line-height:1.45; color:var(--text);}
+.cal-note[hidden]{display:none !important;}
+.cal-error{margin:6px 0 0; padding:6px 8px; border:1px solid rgb(var(--bad-rgb) / .55);
+  border-radius:4px; font-size:11px; line-height:1.4; color:var(--bad-text);}
+.cal-error[hidden]{display:none !important;}
+.cal-card-actions{display:flex; flex-wrap:wrap; gap:5px; margin-top:8px;}
+.cal-card-actions .rem-btn{padding:3px 8px;}
+
+/* The full calendar. A popover sheet, the same shape as #galaxy-options: it
+   is drawn over the stage, Escape / Close / a click outside dismiss it, and
+   focus goes in and comes back to the button that opened it. */
+#calendar-panel{
+  position:fixed; z-index:72; left:50%; top:50%; transform:translate(-50%, -50%);
+  width:min(980px, calc(100vw - 28px)); height:min(700px, calc(100vh - 28px));
+  display:flex; flex-direction:column; gap:9px; overflow:hidden;
+  padding:12px 14px 14px; border:1px solid var(--line-hot); border-radius:8px;
+  background:var(--surface-sunken); box-shadow:var(--shadow-pane);
+  font-family:var(--f-mono); color:var(--text);
+}
+#calendar-panel[hidden]{display:none !important;}
+#calendar-panel:focus{outline:none;}
+.cal-head{display:flex; align-items:center; gap:10px;}
+.cal-head .hud-label{margin:0;}
+.cal-head-when{flex:1 1 auto; font-size:11px; color:var(--dim);}
+.cal-close{padding:2px 7px; border:1px solid transparent; border-radius:3px;
+  background:transparent; color:var(--dim); font:inherit; font-size:14px; line-height:1;}
+.cal-close:hover{color:var(--text); border-color:var(--line);}
+.cal-close:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.cal-toolbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.cal-nav{display:flex; align-items:center; gap:4px;}
+.cal-nav .rem-btn{padding:3px 9px; font-size:11px;}
+.cal-period{flex:1 1 auto; min-width:120px; font-size:14px; color:var(--text);
+  letter-spacing:.02em;}
+.cal-views{display:flex; gap:2px; padding:2px; border:1px solid var(--line);
+  border-radius:5px; background:var(--plate-2);}
+.cal-view{padding:4px 10px; border:0; border-radius:3px; background:transparent;
+  color:var(--dim); font:inherit; font-size:11px; cursor:pointer;}
+.cal-view[aria-selected="true"]{background:rgb(var(--accent-rgb) / .18); color:var(--text);}
+.cal-view:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.cal-banner{margin:0; padding:6px 9px; border:1px solid rgb(var(--accent-rgb) / .4);
+  border-radius:4px; background:rgb(var(--accent-rgb) / .07); font-size:11px;
+  line-height:1.45; color:var(--text);}
+.cal-banner[hidden]{display:none !important;}
+.cal-body{flex:1 1 auto; min-height:0; display:grid;
+  grid-template-columns:minmax(0, 1fr) 250px; gap:12px;}
+.cal-main{min-width:0; min-height:0; overflow:auto; display:flex; flex-direction:column;}
+.cal-side{min-width:0; min-height:0; overflow:auto; border-left:1px solid var(--line);
+  padding-left:12px; display:flex; flex-direction:column; gap:6px;}
+html[data-cal-view="day"] .cal-body{grid-template-columns:minmax(0, 1fr);}
+html[data-cal-view="day"] .cal-side{display:none;}
+
+/* Month: a real grid, Sunday first, six weeks always so the height is stable. */
+.cal-weekdays{display:grid; grid-template-columns:repeat(7, minmax(0, 1fr));
+  border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:4px;}
+.cal-weekdays span{font-size:9.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--dimmer); text-align:center;}
+.cal-month{display:flex; flex-direction:column; gap:3px; flex:1 1 auto;}
+.cal-week-row{position:relative; flex:1 1 auto; min-height:52px;}
+.cal-cells{display:grid; grid-template-columns:repeat(7, minmax(0, 1fr));
+  height:100%;}
+.cal-cell{position:relative; display:flex; flex-direction:column; align-items:stretch;
+  gap:2px; min-width:0; padding:2px 3px 3px; margin:0; text-align:left;
+  border:1px solid var(--line); border-right:0; background:var(--plate-2);
+  color:var(--text); font:inherit; cursor:pointer; overflow:hidden;}
+.cal-cell:last-child{border-right:1px solid var(--line);}
+.cal-cell:hover{border-color:var(--line-hot); background:var(--plate);}
+.cal-cell:focus-visible{outline:2px solid var(--ice); outline-offset:-2px;}
+.cal-cell[data-outside="true"]{opacity:.5;}
+.cal-cell[data-today="true"] .cal-num{color:var(--ice); border-color:var(--ice);}
+.cal-cell[data-selected="true"]{background:rgb(var(--accent-rgb) / .13);
+  box-shadow:inset 0 0 0 1px var(--ice);}
+.cal-num{flex:0 0 auto; align-self:flex-start; min-width:17px; height:17px;
+  padding:0 4px; border:1px solid transparent; border-radius:9px;
+  font-size:11px; line-height:16px; text-align:center; font-variant-numeric:tabular-nums;}
+.cal-chips{display:flex; flex-direction:column; gap:1px; min-height:0; overflow:hidden;}
+.cal-chip{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:9.5px; line-height:13px; color:var(--text);}
+.cal-chip-time{color:var(--text-faint); margin-right:3px;}
+.cal-chip[data-state="past"]{color:var(--dim);}
+.cal-more{font-size:9px; color:var(--dim); line-height:12px;}
+.cal-bars{position:absolute; left:0; right:0; top:0; pointer-events:none;}
+.cal-bar{position:absolute; height:14px; line-height:12px; padding:0 5px;
+  border:1px solid rgb(var(--accent-rgb) / .45); border-radius:3px;
+  background:rgb(var(--accent-rgb) / .18); color:var(--text);
+  font-size:9.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  pointer-events:auto; cursor:pointer; text-align:left;}
+.cal-bar:hover{border-color:var(--ice);}
+.cal-bar:focus-visible{outline:2px solid var(--ice); outline-offset:0;}
+.cal-bar[data-continues="end"]{border-top-right-radius:0; border-bottom-right-radius:0;}
+.cal-bar[data-continues="start"]{border-top-left-radius:0; border-bottom-left-radius:0;}
+.cal-bar[data-state="past"]{opacity:.65;}
+
+/* Week: seven day columns, one all-day/spanning band, then each day's timed
+   events in time order. No hour grid is faked: a timed event's start is its
+   own label, which is what a narrow HUD column can show honestly. */
+.cal-week{display:flex; flex-direction:column; gap:6px; flex:1 1 auto; min-height:0;}
+.cal-week-band{position:relative; min-height:16px;}
+.cal-week-cols{display:grid; grid-template-columns:repeat(7, minmax(0, 1fr));
+  gap:4px; flex:1 1 auto; min-height:0;}
+.cal-wcol{display:flex; flex-direction:column; gap:3px; min-width:0;
+  border:1px solid var(--line); border-radius:4px; background:var(--plate-2);
+  padding:4px 4px 6px; overflow-y:auto;}
+.cal-wcol[data-today="true"]{border-color:var(--ice);}
+.cal-whead{display:flex; flex-direction:column; gap:1px; padding:4px 4px 0;
+  border:0; background:transparent; color:var(--text); font:inherit; cursor:pointer;
+  text-align:center;}
+.cal-whead:hover{color:var(--ice);}
+.cal-whead:focus-visible{outline:2px solid var(--ice); outline-offset:-2px;}
+.cal-wdayname{font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim);}
+.cal-wdaynum{font-size:13px; font-variant-numeric:tabular-nums;}
+.cal-wcol[data-today="true"] .cal-wdaynum{color:var(--ice);}
+.cal-event{display:flex; flex-direction:column; gap:1px; width:100%; padding:4px 5px;
+  border:1px solid var(--line); border-radius:4px; background:transparent;
+  color:var(--text); font:inherit; text-align:left; cursor:pointer;}
+.cal-event:hover{border-color:var(--line-hot);}
+.cal-event:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.cal-event-time{font-size:9.5px; color:var(--text-faint); font-variant-numeric:tabular-nums;}
+.cal-event-title{font-size:11px; line-height:1.3;}
+.cal-event[data-state="past"] .cal-event-title{color:var(--dim);}
+.cal-event-state{font-size:8.5px; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--dim);}
+.cal-event-state[data-now="true"]{color:var(--ice);}
+
+/* The selected day's list, and the Day view's wider copy of it. */
+.cal-day-head{display:flex; align-items:baseline; gap:8px; margin:0 0 4px;}
+.cal-day-head h3{margin:0; font-size:12.5px; color:var(--text); font-weight:500;}
+.cal-day-head .rem-btn{margin-left:auto; padding:2px 7px; font-size:10px;}
+.cal-day-list{display:flex; flex-direction:column; gap:6px;}
+.cal-day-event{padding:7px 8px; border:1px solid var(--line); border-radius:5px;
+  background:var(--plate-2); display:flex; flex-direction:column; gap:3px;}
+.cal-day-event[data-state="past"]{opacity:.8;}
+.cal-day-top{display:flex; align-items:baseline; gap:7px;}
+.cal-day-time{flex:0 0 auto; font-size:10.5px; color:var(--text-faint);
+  font-variant-numeric:tabular-nums;}
+.cal-day-title{flex:1 1 auto; min-width:0; font-size:12px; color:var(--text);
+  overflow-wrap:anywhere;}
+.cal-day-meta{margin:0; font-size:10.5px; line-height:1.4; color:var(--dim);
+  overflow-wrap:anywhere;}
+.cal-day-actions{display:flex; flex-wrap:wrap; gap:4px; margin-top:2px;}
+.cal-day-actions .rem-btn{padding:2px 7px; font-size:10px;}
+.cal-day-empty{margin:2px 0; font-size:11.5px; line-height:1.5; color:var(--dim);}
+.cal-hidden-word{color:var(--dim); font-style:italic;}
+
+/* The one Add/Edit form. Every field is the contract's own; the labels are the
+   owner's words, and nothing is sent until Save. */
+.cal-form{flex:0 0 auto; border-top:1px solid var(--line); padding-top:9px;
+  display:flex; flex-direction:column; gap:7px;}
+.cal-form[hidden]{display:none !important;}
+.cal-form-head{display:flex; align-items:baseline; gap:8px;}
+.cal-form-head strong{font-size:12px; font-weight:600; color:var(--text);}
+.cal-form-head span{font-size:10px; color:var(--dim);}
+.cal-form-grid{display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px 8px;}
+.cal-field{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.cal-field > span{font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim);}
+.cal-field.cal-wide{grid-column:span 2;}
+.cal-field input[type="text"], .cal-field input[type="date"], .cal-field input[type="time"],
+.cal-field select, .cal-field textarea{width:100%; min-width:0; padding:5px 7px;
+  border:1px solid var(--line); border-radius:3px; background:var(--plate-2);
+  color:var(--text); font-family:var(--f-mono); font-size:11px;}
+.cal-field textarea{resize:vertical; min-height:34px; line-height:1.4;}
+.cal-field input:focus, .cal-field select:focus, .cal-field textarea:focus{
+  outline:none; border-color:var(--line-hot);}
+.cal-field.cal-check{flex-direction:row; align-items:center; gap:6px;}
+.cal-field.cal-check > span{order:2;}
+.cal-field.cal-check input{order:1; margin:0;}
+.cal-form-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.cal-form-row .rem-btn{padding:3px 10px; font-size:11px;}
+.cal-form-error{margin:0; color:var(--bad-text); font-size:11px; line-height:1.4;}
+.cal-form-error[hidden]{display:none !important;}
+.cal-form-said{margin:0; color:var(--dim); font-size:10.5px;}
+.cal-form-said[hidden]{display:none !important;}
+.cal-form-note{font-size:9.5px; color:var(--text-faint);}
+@media (max-width: 760px){
+  .cal-body{grid-template-columns:minmax(0, 1fr);}
+  .cal-side{display:none;}
+  .cal-form-grid{grid-template-columns:repeat(2, minmax(0, 1fr));}
+}
 </style>
 
 <!-- ==================================================================== *
@@ -2674,6 +2879,24 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
           <path d="M8.7 14.3c1.9 1.6 4.7 1.6 6.6 0"/>
         </svg>
         <span class="rt-label">Faces</span>
+      </button>
+      <!-- The Calendar door (2026-10-29, the owner's desktop HUD calendar).
+           It lives HERE, in the one rail block no shell hides, for the reason
+           the Presets button does: the Studio shell (split-stage) hides
+           .rail-nav, .rail-lanes and .rail-systems, and its right rail too -
+           so a Calendar put only in the right rail's card would be
+           unreachable in the layout the owner runs. It opens the ONE
+           #calendar-panel; it is not a stage tab and not a second calendar. -->
+      <button type="button" class="rail-toolbar-btn" id="rail-calendar-open"
+              title="Calendar: your own events, kept on this PC"
+              aria-label="Calendar: your own events, kept on this PC"
+              aria-haspopup="dialog" aria-expanded="false">
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <rect x="3.5" y="5.5" width="17" height="15" rx="1.5"/>
+          <path d="M3.5 10h17M8 3.5v4M16 3.5v4"/>
+        </svg>
+        <span class="rt-label">Calendar</span>
       </button>
       <!-- Why Live did not start, for a screen reader. The button's title
            carries the on/off wording; the READABLE refusal is the stage's
@@ -3095,6 +3318,38 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
     </div>
 
 
+    <!-- Calendar (2026-10-29, the owner's desktop HUD calendar). ONE card,
+         drawn from the SAME GET /api/calendar read the full panel
+         (#calendar-panel, after #shell) draws from - so the card and the
+         calendar are one list, never two. The titles, places and notes are
+         blanked in Rust while App lock / "Hide memory lists" is on (dates,
+         times and counts stay), and this card is re-read when the PC says the
+         lists hid again.
+
+         A CARD THE OWNER CAN PLACE: it is in hud-layout.js's CARD_REGISTRY as
+         `calendar` and in hud-edit.js's MOVABLE_IDS, so Edit HUD lists it,
+         moves it between the left rail, the stage top and the right rail,
+         hides it and restores it like every other card. Its markup home is the
+         right rail, directly above the waiting cards.
+
+         EVERY STATE IS SAID IN WORDS: off ("The Jarvis Calendar is off..."),
+         empty ("Nothing in the next 7 days."), and a read that failed. The
+         card is never blank and never silently vanishes. -->
+    <div class="rail-section bento-calendar" id="rail-calendar" hidden>
+      <div class="hud-label">Calendar</div>
+      <p class="cal-card-when" id="cal-card-when">&nbsp;</p>
+      <p class="cal-error" id="cal-card-error" role="alert" hidden></p>
+      <p class="cal-note" id="cal-card-note" hidden></p>
+      <div class="cal-card-list" id="cal-card-list">
+        <p class="cal-empty" id="cal-card-empty">Loading your calendar&hellip;</p>
+      </div>
+      <div class="cal-card-actions" id="cal-card-actions">
+        <button type="button" class="rem-btn" id="cal-open" data-cal-open>Open calendar</button>
+        <button type="button" class="rem-btn" id="cal-add" data-cal-add>+ Add event</button>
+      </div>
+    </div>
+
+
     <!-- Reminders (2026-10-21, the owner's dedicated menu). ONE section drawn
          from the SAME GET /api/schedule read the Brain's Coming up uses; the
          Studio stage tab / dock icon, the Cockpit Bento card and the Ambient
@@ -3267,6 +3522,129 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
     </div>
   </aside>
 </div>
+
+<!-- ============ CALENDAR ============ -->
+<!-- The owner's calendar (2026-10-29): his OWN events, kept on this PC, drawn
+     from the ONE `GET /api/calendar` the card above also reads. This is a
+     popover sheet like #galaxy-options - the page draws it, the doors open it
+     (the card's two buttons, the rail's Calendar button), Escape / Close / a
+     click outside dismiss it, and focus goes in and comes back to its door.
+
+     THE THREE VIEWS ARE ONE PANEL, NOT THREE CALENDARS: Month is the grid,
+     Week is seven day columns with the all-day/spanning band, Day is the
+     selected day's own list. The right-hand column is the selected day's
+     events, so clicking any day in the grid or the week shows what is on it
+     without leaving the view.
+
+     THE ADD/EDIT FORM IS THE CONTRACT'S OWN FIELDS and nothing else: title,
+     date, time (or all-day), end date/time, place, notes, reminder minutes,
+     recurrence. A title, a place and notes are the owner's words, so Rust
+     blanks them under App lock and this page draws the hidden line instead -
+     it never invents a title it was not given. A reminder is STORED in this
+     slice, not fired (the store and the ring are another slice's job), and
+     the form says so in words rather than pretending.
+
+     NOTHING HERE IS A NEW ROUTE OR ASSET: the read is hud_proxy.rs's
+     `/api/calendar?days=N`, the two writes are `hud_calendar_add` and
+     `hud_calendar_act` (capabilities/hud.json's `hud-calendar` set), and the
+     page's own POSTs stay refused by hud_bootstrap.js. -->
+<section id="calendar-panel" role="dialog" aria-modal="false"
+         aria-labelledby="cal-panel-title" tabindex="-1" hidden>
+  <div class="cal-head">
+    <span class="hud-label" id="cal-panel-title">Calendar</span>
+    <span class="cal-head-when" id="cal-head-when"></span>
+    <button type="button" class="cal-close" id="cal-close"
+            aria-label="Close the calendar" title="Close the calendar">&#10005;</button>
+  </div>
+  <div class="cal-toolbar">
+    <div class="cal-nav">
+      <button type="button" class="rem-btn" id="cal-prev" aria-label="Previous">&#8249;</button>
+      <button type="button" class="rem-btn" id="cal-today">Today</button>
+      <button type="button" class="rem-btn" id="cal-next" aria-label="Next">&#8250;</button>
+    </div>
+    <div class="cal-period" id="cal-period" aria-live="polite"></div>
+    <div class="cal-views" role="tablist" aria-label="Calendar view">
+      <button type="button" class="cal-view" data-cal-view="month" role="tab" aria-selected="true">Month</button>
+      <button type="button" class="cal-view" data-cal-view="week" role="tab" aria-selected="false">Week</button>
+      <button type="button" class="cal-view" data-cal-view="day" role="tab" aria-selected="false">Day</button>
+    </div>
+  </div>
+  <p class="cal-banner" id="cal-banner" hidden></p>
+  <div class="cal-body">
+    <div class="cal-main">
+      <div class="cal-month" id="cal-month">
+        <div class="cal-weekdays" aria-hidden="true">
+          <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span>
+          <span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div id="cal-grid"></div>
+      </div>
+      <div class="cal-week" id="cal-week-view" hidden>
+        <div class="cal-week-band" id="cal-week-band"></div>
+        <div class="cal-week-cols" id="cal-week-cols"></div>
+      </div>
+      <div class="cal-day" id="cal-day-view" hidden></div>
+    </div>
+    <div class="cal-side" id="cal-side">
+      <div class="cal-day-head">
+        <h3 id="cal-side-title">Today</h3>
+        <button type="button" class="rem-btn" id="cal-side-add">+ Add</button>
+      </div>
+      <div class="cal-day-list" id="cal-side-list"></div>
+    </div>
+  </div>
+  <form class="cal-form" id="cal-form" autocomplete="off" hidden>
+    <div class="cal-form-head">
+      <strong id="cal-form-title">New event</strong>
+      <span id="cal-form-where"></span>
+    </div>
+    <div class="cal-form-grid">
+      <label class="cal-field cal-wide"><span>Event</span>
+        <input id="cal-title" type="text" maxlength="300" placeholder="Dentist"></label>
+      <label class="cal-field"><span>Date</span>
+        <input id="cal-date" type="date"></label>
+      <label class="cal-field cal-check"><span>All day</span>
+        <input id="cal-allday" type="checkbox"></label>
+      <label class="cal-field"><span>Starts</span>
+        <input id="cal-time" type="time" value="09:00"></label>
+      <label class="cal-field"><span>Ends</span>
+        <input id="cal-time-end" type="time" value="10:00"></label>
+      <label class="cal-field"><span>Last day</span>
+        <input id="cal-date-end" type="date"></label>
+      <label class="cal-field"><span>Remind</span>
+        <select id="cal-remind">
+          <option value="">No reminder</option>
+          <option value="5">5 minutes before</option>
+          <option value="10">10 minutes before</option>
+          <option value="15">15 minutes before</option>
+          <option value="30">30 minutes before</option>
+          <option value="60">1 hour before</option>
+          <option value="120">2 hours before</option>
+          <option value="1440">1 day before</option>
+        </select></label>
+      <label class="cal-field"><span>Place</span>
+        <input id="cal-place" type="text" maxlength="300" placeholder="optional"></label>
+      <label class="cal-field"><span>Repeats</span>
+        <select id="cal-repeat">
+          <option value="">Does not repeat</option>
+          <option value="daily">Every day</option>
+          <option value="weekly">Every week</option>
+          <option value="monthly">Every month</option>
+        </select></label>
+      <label class="cal-field cal-wide"><span>Notes</span>
+        <textarea id="cal-notes" maxlength="2000" rows="2"
+                  placeholder="optional; kept on this PC"></textarea></label>
+    </div>
+    <p class="cal-form-error" id="cal-form-error" role="alert" hidden></p>
+    <p class="cal-form-said" id="cal-form-said" hidden></p>
+    <div class="cal-form-row">
+      <button type="submit" class="rem-btn" id="cal-save">Add event</button>
+      <button type="button" class="rem-btn" id="cal-cancel">Cancel</button>
+      <button type="button" class="rem-btn danger" id="cal-delete" hidden>Delete</button>
+      <span class="cal-form-note">A reminder is saved with the event; this slice does not ring it.</span>
+    </div>
+  </form>
+</section>
 
 <!-- ============ GALAXY OPTIONS ============ -->
 <!-- The owner's ONE surface for every galaxy-only control (2026-10-27: "i
@@ -9628,6 +10006,1229 @@ subscribe();
         say("The PC could not be asked to stop.");
       });
     });
+  }());
+
+  /* ── the calendar (2026-10-29) ────────────────────────────────────────── */
+  /*  The owner's own events, kept on this PC, read through ONE route.
+   *
+   *  WHAT THIS OWNS. The rail card (#rail-calendar), the calendar sheet
+   *  (#calendar-panel) with its three views, and the one Add/Edit form. Both
+   *  surfaces draw from the SAME normalized read, so the card can never say
+   *  something the calendar does not.
+   *
+   *  THE READ IS `/api/calendar?days=90` through the shell
+   *  (`hud_proxy.rs` allows that one path and only a whole `days` value from 1
+   *  to 90). The two WRITES are the shell's own commands - `hud_calendar_add`
+   *  and `hud_calendar_act` - because this page holds no pairing token; its
+   *  own POSTs stay refused by hud_bootstrap.js. Neither write raises a card:
+   *  one row on this PC, changed back in one press, and there is no list form
+   *  and no delete-all in either command.
+   *
+   *  TITLES ARE PRIVATE. Rust blanks every title, place and note while App
+   *  lock or "Hide memory lists" is on (the dates, times and counts stay).
+   *  This page therefore draws the hidden line - never a remembered title -
+   *  and it forgets what it drew when the PC says the lists hid again
+   *  (`private-hidden`), the same rule the Galaxy and the Reminders panel
+   *  keep, because a page is only as private as its LAST read.
+   *
+   *  A CARD THE OWNER CAN PLACE (his rule: every easily-accessible feature must
+   *  be addable to the main screen from Edit HUD). The card is in
+   *  `hud-layout.js`'s CARD_REGISTRY as `calendar` and in `hud-edit.js`'s
+   *  MOVABLE_IDS + CARD_DOM, and every built-in preset carries it - so Edit HUD
+   *  lists it, moves it between the left rail, the stage top and the right
+   *  rail, hides it and puts it back. `contract/hud-presets.json` mirrors the
+   *  presets, and tests/hud-calendar.mjs holds all of it together. The markup
+   *  home is the right rail, directly above the waiting cards.
+   *
+   *  EVERY STATE IS SAID IN WORDS - off, empty, and a read that failed. The
+   *  feature's own switch is read from the PC's answer (`on`), never kept here:
+   *  OFF paints "The Jarvis Calendar is off" and keeps every event, an empty
+   *  window says "Nothing in the next 7 days.", and a read that failed says
+   *  what failed. There is no countdown and no ticking label anywhere: a time
+   *  is shown as a time ("14:30"), never as "in 3 hours".
+   *
+   *  WHAT IT DOES NOT DO. It does not fire reminders (the field is stored, the
+   *  ring is another slice), it does not read Google or iCal into the grid
+   *  (those stay in chat; the sheet's sources line says so), and it writes no
+   *  setting: the PC's `on` flag is read, and Settings' own switch is what
+   *  changes it.
+   * ------------------------------------------------------------------- */
+  (function () {
+    "use strict";
+    if (window.__hudCalendar) return;
+    var card = document.getElementById("rail-calendar");
+    var panel = document.getElementById("calendar-panel");
+    if (!card || !panel) return;
+
+    var DAY_MS = 86400000;
+    var READ_DAYS = 90;          // the contract's cap, and one read per beat
+    var READ_MS = 5 * 60 * 1000; // the card's own refresh while the HUD is up
+    var VIEWS = ["month", "week", "day"];
+    var MONTHS = ["January", "February", "March", "April", "May", "June",
+                  "July", "August", "September", "October", "November", "December"];
+    var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
+                    "Friday", "Saturday"];
+    var WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    // The store's OWN three words, and the only ones it accepts:
+    // jarvis_local_calendar.RECURRENCES is ("none", "daily", "weekly",
+    // "monthly"), and its _recurrence refuses anything else with a 400. No
+    // repeat arrives as "none" (or ""), which is why the two are absent here -
+    // there is nothing to say about an event that does not repeat.
+    var REPEAT_WORDS = { daily: "Every day", weekly: "Every week",
+                         monthly: "Every month" };
+    var ID_RE = /^c[0-9a-f]{10}$/;
+
+    /* The feature's own switch (the owner's decision: ON by default,
+     * disableable). When it is OFF this page still SAYS SO, in these words -
+     * never a blank card and never a card that silently vanishes, which reads
+     * as a calendar that broke. Nothing is deleted by the switch, and every
+     * event stays on the PC, so the sentence says both. */
+    var OFF_NOTE = "The Jarvis Calendar is off. Nothing was deleted - every event is still on this PC.";
+    var OFF_HINT = "Turn it on in Jarvis Settings, or ask me to turn the Jarvis calendar on.";
+    var OFF_BANNER = "The Jarvis Calendar is off, so there is nothing to draw. "
+      + "Nothing was deleted - every event is still on this PC. " + OFF_HINT;
+
+    var state = {
+      view: "month",
+      month: null,        // {y, m} - the month the grid shows
+      selected: "",       // YYYY-MM-DD
+      editId: null,       // the event being edited
+      read: null,         // the normalized answer
+      loading: false,
+      open: false,
+      busy: false,
+      said: "",
+      saidAt: 0,
+      lastRead: 0,
+      door: null,
+      armedAt: 0
+    };
+    var timer = null;
+
+    function $(id) { return document.getElementById(id); }
+    function txt(v) { return typeof v === "string" ? v : ""; }
+    function el(tag, cls, words) {
+      var node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (words !== undefined && words !== null) node.textContent = String(words);
+      return node;
+    }
+    function noop() {}
+    function pad2(n) { return (n < 10 ? "0" : "") + n; }
+    function isoOf(d) {
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    }
+    function toDate(iso) {
+      var p = String(iso).split("-");
+      return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), 12, 0, 0);
+    }
+    /** A real `YYYY-MM-DD`, or "" - February 30 is not a day. */
+    function parseDay(v) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(txt(v))) return "";
+      var d = toDate(v);
+      return isNaN(d.getTime()) ? "" : (isoOf(d) === v ? v : "");
+    }
+    function todayISO() { return isoOf(new Date()); }
+    function addDays(iso, n) {
+      var d = toDate(iso);
+      d.setDate(d.getDate() + n);
+      return isoOf(d);
+    }
+    function dayOfWeek(iso) { return toDate(iso).getDay(); }
+    /** Midnight at the start of a `YYYY-MM-DD`, as epoch milliseconds.
+     *
+     *  `toDate` anchors at NOON on purpose: that is the safe anchor when only
+     *  the day matters, because a daylight-saving jump can never move noon onto
+     *  another date. An event's MOMENT needs midnight though - 12:00 plus a
+     *  14:30 start is 02:30 the next morning, which read every event as
+     *  "upcoming" - so the anchor is dropped here, once, and both moments are
+     *  computed from it. */
+    function dayStart(iso) {
+      var d = toDate(iso);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    }
+    function startOfWeek(iso) { return addDays(iso, -dayOfWeek(iso)); }
+    function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
+    function monthOf(iso) { return Number(iso.slice(5, 7)); }
+    function yearOf(iso) { return Number(iso.slice(0, 4)); }
+    function clockOf(v) {
+      var s = txt(v);
+      return /^([01]\d|2[0-3]):[0-5]\d$/.test(s) ? s : "";
+    }
+    function minutesOf(clock) { return Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3)); }
+    function zoneName() {
+      try {
+        return new Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      } catch (e) { return ""; }
+    }
+    function longDay(iso) {
+      var d = toDate(iso);
+      return WEEKDAYS[d.getDay()] + " " + d.getDate() + " " + MONTHS[d.getMonth()]
+        + " " + d.getFullYear();
+    }
+    function shortDay(iso) {
+      var d = toDate(iso);
+      return WEEKDAYS[d.getDay()].slice(0, 3) + " " + d.getDate() + " " + MONTHS[d.getMonth()].slice(0, 3);
+    }
+
+    /* ---- the read, normalized once ------------------------------------ */
+    function isEvent(v) {
+      return v && typeof v === "object"
+        && typeof v.id === "string" && v.id.length >= 4 && v.id.length <= 64
+        && Boolean(parseDay(txt(v.date)));
+    }
+    function eventOf(v) {
+      var date = parseDay(txt(v.date));
+      var end = parseDay(txt(v.end_date)) || date;
+      // The store says "none" for a one-off event; an empty repeat box is how
+      // this form says the same thing, and the two must not read differently.
+      var repeat = txt(v.recurrence);
+      return {
+        id: txt(v.id), title: txt(v.title), date: date,
+        time: clockOf(v.time), endTime: clockOf(v.end_time),
+        endDate: end >= date ? end : date,
+        allDay: v.all_day === true,
+        place: txt(v.place), notes: txt(v.notes),
+        remind: typeof v.remind_minutes === "number" ? v.remind_minutes : null,
+        repeat: repeat === "none" ? "" : repeat,
+        tz: txt(v.tz), source: txt(v.source) || "local",
+        hidden: v.hidden === true
+      };
+    }
+    /** The PC's own answer, in the page's words. `on` absent means on: the
+     *  contract's default is on, and a missing switch file is on by design. */
+    function readCalendar(src) {
+      var a = src && typeof src === "object" ? src : {};
+      var available = a.available !== false;
+      var events = available && Array.isArray(a.events) ? a.events.filter(isEvent).map(eventOf) : [];
+      var win = a.window && typeof a.window === "object"
+        ? { start: parseDay(txt(a.window.start)), end: parseDay(txt(a.window.end)) } : null;
+      return {
+        available: available,
+        on: a.on !== false,
+        why: available ? "" : (txt(a.error) || txt(a.why)),
+        days: typeof a.days === "number" ? a.days : READ_DAYS,
+        window: win && win.start && win.end ? win : null,
+        events: events,
+        sources: a.sources && typeof a.sources === "object" ? a.sources : null,
+        hidden: available && a.hidden === true,
+        hiddenCount: typeof a.hidden_count === "number" ? a.hidden_count : 0
+      };
+    }
+    function events() { return state.read ? state.read.events : []; }
+    function wordsHidden() { return Boolean(state.read && state.read.hidden); }
+    function byId(id) {
+      var found = null;
+      events().forEach(function (ev) { if (ev.id === id) found = ev; });
+      return found;
+    }
+
+    /* ---- the calendar's own arithmetic (pure, and the tests' own) ------ */
+    /** Six weeks of days, Sunday first, for a 1-based month. */
+    function monthGrid(year, month) {
+      var start = startOfWeek(year + "-" + pad2(month) + "-01");
+      var weeks = [];
+      for (var w = 0; w < 6; w++) {
+        var week = [];
+        for (var d = 0; d < 7; d++) week.push(addDays(start, w * 7 + d));
+        weeks.push(week);
+      }
+      return weeks;
+    }
+    function weekOf(iso) {
+      var start = startOfWeek(iso);
+      var week = [];
+      for (var d = 0; d < 7; d++) week.push(addDays(start, d));
+      return week;
+    }
+    function spanOf(ev) {
+      return { start: ev.date, end: ev.endDate && ev.endDate >= ev.date ? ev.endDate : ev.date };
+    }
+    /** True for anything the month grid's all-day band draws as a bar: an
+     *  all-day event (one day or many), or a timed event that spans days. */
+    function isBar(ev) {
+      var span = spanOf(ev);
+      return ev.allDay || span.end > span.start;
+    }
+    /** Every bar a week shows, clipped to it, with a lane so two never
+     *  overlap. The bar's own start day and end day are the real ones. */
+    function barsFor(week, list) {
+      var first = week[0], last = week[6];
+      var bars = [];
+      (list || []).forEach(function (ev) {
+        if (!isBar(ev)) return;
+        var span = spanOf(ev);
+        if (span.end < first || span.start > last) return;
+        var start = span.start < first ? first : span.start;
+        var end = span.end > last ? last : span.end;
+        var col = week.indexOf(start);
+        var endCol = week.indexOf(end);
+        bars.push({
+          id: ev.id, title: ev.title, event: ev,
+          start: span.start, end: span.end,
+          col: col, span: endCol - col + 1, lane: 0,
+          before: span.start < first, after: span.end > last,
+          allDay: ev.allDay, hidden: ev.hidden
+        });
+      });
+      bars.sort(function (a, b) { return a.col - b.col || b.span - a.span; });
+      var lanes = [];   // each lane is the last occupied column
+      bars.forEach(function (bar) {
+        var lane = 0;
+        while (lanes[lane] !== undefined && lanes[lane] >= bar.col) lane++;
+        bar.lane = lane;
+        lanes[lane] = bar.col + bar.span - 1;
+      });
+      return bars;
+    }
+    /** The timed events whose own start day is this one. */
+    function eventsOn(day) {
+      return events().filter(function (ev) { return !ev.allDay && ev.date === day; })
+        .sort(function (a, b) {
+          var am = a.time ? minutesOf(a.time) : -1;
+          var bm = b.time ? minutesOf(b.time) : -1;
+          return am - bm || a.title.localeCompare(b.title);
+        });
+    }
+    /** Every event that covers this day, all-day and spanning ones included -
+     *  what a day's own list shows. */
+    function eventsCovering(day) {
+      return events().filter(function (ev) {
+        var span = spanOf(ev);
+        return span.start <= day && day <= span.end;
+      }).sort(function (a, b) {
+        if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+        var am = a.time ? minutesOf(a.time) : -1;
+        var bm = b.time ? minutesOf(b.time) : -1;
+        return am - bm || a.title.localeCompare(b.title);
+      });
+    }
+    function startMoment(ev) {
+      var mins = ev.allDay ? 0 : (ev.time ? minutesOf(ev.time) : 0);
+      return dayStart(ev.date) + mins * 60000;
+    }
+    function endMoment(ev) {
+      var span = spanOf(ev);
+      var mins = ev.allDay ? 24 * 60 : (ev.endTime ? minutesOf(ev.endTime)
+        : (ev.time ? minutesOf(ev.time) + 60 : 24 * 60));
+      return dayStart(span.end) + mins * 60000;
+    }
+    /** "past" (it has ended), "now" (it is happening), "upcoming". */
+    function eventState(ev, now) {
+      var at = typeof now === "number" ? now : Date.now();
+      if (endMoment(ev) <= at) return "past";
+      if (startMoment(ev) <= at) return "now";
+      return "upcoming";
+    }
+    function timeWords(ev) {
+      if (ev.allDay) return "All day";
+      if (!ev.time) return "";
+      return ev.time + (ev.endTime ? "\u2013" + ev.endTime : "");
+    }
+    function remindWords(minutes) {
+      if (minutes === 0) return "Reminds at the start";
+      if (minutes % 1440 === 0) return "Reminds " + (minutes / 1440) + (minutes === 1440 ? " day" : " days") + " before";
+      if (minutes % 60 === 0) return "Reminds " + (minutes / 60) + (minutes === 60 ? " hour" : " hours") + " before";
+      return "Reminds " + minutes + " minutes before";
+    }
+
+    /* ---- drawing the rail card ---------------------------------------- */
+    var cardWhen = $("cal-card-when");
+    var cardError = $("cal-card-error");
+    var cardNote = $("cal-card-note");
+    var cardList = $("cal-card-list");
+    var cardActions = $("cal-card-actions");
+
+    function paintCard(read) {
+      cardWhen.textContent = shortDay(todayISO()) + " \u00b7 " + (zoneName() || "this PC");
+      cardError.hidden = true;
+      cardNote.hidden = true;
+      cardList.replaceChildren();
+      // Every state is said in words, and the buttons only exist when there is
+      // something they can really do. A blank card is never one of the states.
+      if (!read.on) {
+        cardNote.textContent = OFF_NOTE;
+        cardNote.hidden = false;
+        cardActions.hidden = true;
+        cardList.appendChild(el("p", "cal-empty", OFF_HINT));
+        return;
+      }
+      cardActions.hidden = false;
+      if (!read.available) {
+        cardError.textContent = read.why || "Your PC's Jarvis does not have the calendar yet.";
+        cardError.hidden = false;
+        cardList.appendChild(el("p", "cal-empty", "Nothing to show until it answers."));
+        return;
+      }
+      if (read.hidden) {
+        cardNote.textContent = read.hiddenCount + (read.hiddenCount === 1 ? " event" : " events")
+          + " \u00b7 Hidden - open Jarvis to see them.";
+        cardNote.hidden = false;
+        return;
+      }
+      var rows = nextEvents(4);
+      if (!rows.length) {
+        cardList.appendChild(el("p", "cal-empty", "Nothing in the next 7 days."));
+        return;
+      }
+      rows.forEach(function (ev) {
+        var row = el("div", "cal-card-row");
+        row.setAttribute("data-state", eventState(ev));
+        row.appendChild(el("span", "cal-card-time", ev.allDay ? "All day" : (ev.time || "")));
+        var title = el("span", "cal-card-title",
+          ev.hidden ? "Hidden" : (ev.title || "Untitled event"));
+        row.appendChild(title);
+        if (eventState(ev) === "now") row.appendChild(el("span", "cal-card-state", "Now"));
+        cardList.appendChild(row);
+      });
+      var later = nextEvents(200).length - rows.length;
+      if (later > 0) cardList.appendChild(el("p", "cal-card-more", "+" + later + " more in the next 7 days"));
+    }
+    /** The next few events that have not already ended, today first. The card
+     *  says "in the next 7 days", so the window is bounded to seven days and
+     *  the "+N more" count is of that same window - never of everything. */
+    function nextEvents(n) {
+      var now = Date.now();
+      var from = todayISO();
+      var until = addDays(from, 7);
+      return events().filter(function (ev) {
+        return spanOf(ev).end >= from && ev.date <= until && eventState(ev, now) !== "past";
+      }).sort(function (a, b) { return startMoment(a) - startMoment(b); }).slice(0, n);
+    }
+
+    /* ---- drawing the sheet -------------------------------------------- */
+    var banner = $("cal-banner");
+    var period = $("cal-period");
+    var grid = $("cal-grid");
+    var weekBand = $("cal-week-band");
+    var weekCols = $("cal-week-cols");
+    var dayView = $("cal-day-view");
+    var sideList = $("cal-side-list");
+    var sideTitle = $("cal-side-title");
+    var monthView = $("cal-month");
+    var weekView = $("cal-week-view");
+
+    function paintPanel(read) {
+      if (panel.hidden) return;
+      read = read || state.read;
+      var loading = !read;
+      if (loading) {
+        read = { available: false, on: true, why: "", events: [], window: null,
+                 hidden: false, hiddenCount: 0 };
+      }
+      if (!state.month) {
+        var at = state.selected || todayISO();
+        state.month = { y: yearOf(at), m: monthOf(at) };
+      }
+      document.documentElement.setAttribute("data-cal-view", state.view);
+      period.textContent = periodWords();
+      $("cal-head-when").textContent = (zoneName() ? "Times in " + zoneName() : "Times in this PC's zone");
+      var views = panel.querySelectorAll("[data-cal-view]");
+      Array.prototype.forEach.call(views, function (b) {
+        b.setAttribute("aria-selected", String(b.getAttribute("data-cal-view") === state.view));
+      });
+      // The banner says the one true thing that changes what the grid means:
+      // a fresh confirmation, the lock, or the PC not answering. Never a
+      // remembered title.
+      banner.hidden = false;
+      if (loading) {
+        banner.textContent = "Loading your calendar\u2026";
+      } else if (state.said && Date.now() - state.saidAt < 8000) {
+        banner.textContent = state.said;
+      } else if (!read.on) {
+        // The switch, said plainly. Nothing is deleted, so the sentence says
+        // so, and nothing on this panel pretends a day is empty.
+        banner.textContent = OFF_BANNER;
+      } else if (!read.available) {
+        banner.textContent = "The calendar isn't available right now: "
+          + (read.why || "your PC's Jarvis did not answer.") + " Everything else in Jarvis still works.";
+      } else if (read.hidden) {
+        banner.textContent = "App lock is on: titles, places and notes are hidden. "
+          + "The dates, times and counts are still right.";
+      } else {
+        banner.hidden = true;
+      }
+      // While the feature is off there is nothing this panel may write: the
+      // store answers 409 to an add, so the form and the door that opens it are
+      // taken away rather than left to fail. (The form is only closed when it
+      // was closed by the switch - an open form is not disturbed by a repaint,
+      // or picking a day would throw away what the owner had typed.)
+      panel.setAttribute("data-cal-off", read.on ? "false" : "true");
+      if (!read.on) $("cal-form").hidden = true;
+      $("cal-side-add").hidden = !read.on;
+      monthView.hidden = state.view !== "month";
+      weekView.hidden = state.view !== "week";
+      dayView.hidden = state.view !== "day";
+      if (state.view === "month") renderMonth(read);
+      else if (state.view === "week") renderWeek(read);
+      else renderDay(read);
+      if (state.view === "day") { sideList.replaceChildren(); return; }
+      renderSide(read);
+    }
+
+    function periodWords() {
+      if (state.view === "month") {
+        return MONTHS[state.month.m - 1] + " " + state.month.y;
+      }
+      if (state.view === "week") {
+        var week = weekOf(state.selected || todayISO());
+        return shortDay(week[0]) + " \u2013 " + shortDay(week[6]) + " " + yearOf(week[6]);
+      }
+      return longDay(state.selected || todayISO());
+    }
+
+    function select(day) {
+      var d = parseDay(day);
+      if (!d) return;
+      var hadFocus = Boolean(grid && grid.contains(document.activeElement));
+      state.selected = d;
+      if (state.view === "month") state.month = { y: yearOf(d), m: monthOf(d) };
+      paintPanel(state.read);
+      var cell = grid.querySelector('[data-cal-day="' + d + '"]');
+      if (hadFocus && cell) cell.focus();
+    }
+
+    function cell(day) {
+      var b = el("button", "cal-cell");
+      b.type = "button";
+      b.setAttribute("data-cal-day", day);
+      b.setAttribute("role", "gridcell");
+      var list = eventsOn(day);
+      var words = longDay(day);
+      if (!state.read || !state.read.available) words += ", not read from the PC";
+      else if (list.length) {
+        words += ", " + list.length + (list.length === 1 ? " event" : " events")
+          + (wordsHidden() ? " (titles hidden)" : ": " + list.map(function (ev) {
+            return (ev.time ? ev.time + " " : "") + (ev.title || "untitled");
+          }).join(", "));
+      } else words += ", nothing";
+      b.setAttribute("aria-label", words);
+      if (day === todayISO()) b.setAttribute("data-today", "true");
+      if (day === state.selected) {
+        b.setAttribute("data-selected", "true");
+        b.setAttribute("aria-current", "date");
+      }
+      if (monthOf(day) !== state.month.m || yearOf(day) !== state.month.y) {
+        b.setAttribute("data-outside", "true");
+      }
+      b.appendChild(el("span", "cal-num", String(Number(day.slice(8)))));
+      var chips = el("div", "cal-chips");
+      list.slice(0, 2).forEach(function (ev) {
+        var chip = el("span", "cal-chip");
+        chip.setAttribute("data-state", eventState(ev));
+        if (ev.time) chip.appendChild(el("span", "cal-chip-time", ev.time));
+        chip.appendChild(document.createTextNode(
+          ev.hidden || wordsHidden() ? "Hidden" : (ev.title || "Untitled")));
+        chips.appendChild(chip);
+      });
+      if (list.length > 2) chips.appendChild(el("span", "cal-more", "+" + (list.length - 2) + " more"));
+      b.appendChild(chips);
+      return b;
+    }
+
+    function barButton(bar) {
+      var label = (bar.allDay ? "" : (bar.event.time ? bar.event.time + " " : ""))
+        + (bar.hidden || wordsHidden() ? "Hidden" : (bar.title || "Untitled"));
+      var b = el("button", "cal-bar", label);
+      b.type = "button";
+      b.setAttribute("data-cal-bar", bar.id);
+      b.setAttribute("data-cal-day", bar.start);
+      b.setAttribute("data-span-start", bar.start);
+      b.setAttribute("data-span-end", bar.end);
+      b.setAttribute("data-lane", String(bar.lane));
+      b.setAttribute("aria-label", label + ", " + longDay(bar.start)
+        + (bar.end !== bar.start ? " to " + longDay(bar.end) : ""));
+      b.style.left = "calc(100% * " + bar.col + " / 7 + 2px)";
+      b.style.width = "calc(100% * " + bar.span + " / 7 - 4px)";
+      b.style.top = (bar.lane * 16) + "px";
+      if (bar.before) b.setAttribute("data-continues", "start");
+      if (bar.after) b.setAttribute("data-continues", "end");
+      if (eventState(bar.event) === "past") b.setAttribute("data-state", "past");
+      return b;
+    }
+
+    function renderMonth(read) {
+      var weeks = monthGrid(state.month.y, state.month.m);
+      grid.replaceChildren();
+      weeks.forEach(function (week) {
+        var row = el("div", "cal-week-row");
+        var bars = barsFor(week, read.events);
+        var lanes = 0;
+        bars.forEach(function (bar) { lanes = Math.max(lanes, bar.lane + 1); });
+        if (bars.length) {
+          var strip = el("div", "cal-bars");
+          strip.style.height = (lanes * 16) + "px";
+          bars.forEach(function (bar) { strip.appendChild(barButton(bar)); });
+          row.appendChild(strip);
+        }
+        var cells = el("div", "cal-cells");
+        cells.style.paddingTop = (lanes ? lanes * 16 + 2 : 0) + "px";
+        week.forEach(function (day) { cells.appendChild(cell(day)); });
+        row.appendChild(cells);
+        grid.appendChild(row);
+      });
+    }
+
+    function eventButton(ev) {
+      var b = el("button", "cal-event");
+      b.type = "button";
+      b.setAttribute("data-cal-id", ev.id);
+      b.setAttribute("data-cal-day", ev.date);
+      b.setAttribute("data-state", eventState(ev));
+      b.appendChild(el("span", "cal-event-time", timeWords(ev)));
+      b.appendChild(el("span", "cal-event-title",
+        ev.hidden || wordsHidden() ? "Hidden" : (ev.title || "Untitled event")));
+      if (eventState(ev) === "now") b.appendChild(el("span", "cal-event-state", "Now"));
+      return b;
+    }
+
+    function renderWeek(read) {
+      var week = weekOf(state.selected || todayISO());
+      var bars = barsFor(week, read.events);
+      var lanes = 0;
+      bars.forEach(function (bar) { lanes = Math.max(lanes, bar.lane + 1); });
+      weekBand.replaceChildren();
+      weekBand.style.height = (lanes ? lanes * 16 + 4 : 0) + "px";
+      bars.forEach(function (bar) { weekBand.appendChild(barButton(bar)); });
+      // "No events this week" is said once, in words, rather than leaving
+      // seven empty columns to be read as a failure.
+      var any = read.events.some(function (ev) {
+        var span = spanOf(ev);
+        return span.end >= week[0] && span.start <= week[6];
+      });
+      var empty = $("cal-week-empty");
+      if (any && empty) empty.remove();
+      if (!any && !empty) {
+        empty = el("p", "cal-day-empty", "No events this week.");
+        empty.id = "cal-week-empty";
+        weekView.insertBefore(empty, weekCols);
+      }
+      weekCols.replaceChildren();
+      week.forEach(function (day) {
+        var col = el("div", "cal-wcol");
+        if (day === todayISO()) col.setAttribute("data-today", "true");
+        if (day === state.selected) col.setAttribute("data-selected", "true");
+        var head = el("button", "cal-whead");
+        head.type = "button";
+        head.setAttribute("data-cal-day", day);
+        head.setAttribute("aria-label", longDay(day));
+        head.appendChild(el("span", "cal-wdayname", WEEKDAY_SHORT[dayOfWeek(day)]));
+        head.appendChild(el("span", "cal-wdaynum", String(Number(day.slice(8)))));
+        col.appendChild(head);
+        eventsOn(day).forEach(function (ev) { col.appendChild(eventButton(ev)); });
+        weekCols.appendChild(col);
+      });
+    }
+
+    /** One day's events, in full: the side column and the Day view both use
+     *  this, so the two can never word the same event differently. */
+    function renderDayList(box, day) {
+      box.replaceChildren();
+      var list = eventsCovering(day);
+      var before = state.read && state.read.window && day < state.read.window.start;
+      var off = Boolean(state.read && !state.read.on);
+      if (!list.length) {
+        if (off) {
+          box.appendChild(el("p", "cal-day-empty",
+            "The Jarvis Calendar is off, so this day is not being read."));
+        } else if (before) {
+          box.appendChild(el("p", "cal-day-empty", "Jarvis's calendar starts on "
+            + longDay(state.read.window.start) + ", so this day was not read."));
+        } else if (state.read && state.read.available === false) {
+          box.appendChild(el("p", "cal-day-empty", "The calendar could not be read, so this is not a claim that the day is empty."));
+        } else {
+          box.appendChild(el("p", "cal-day-empty", "Nothing on " + longDay(day) + "."));
+        }
+      }
+      list.forEach(function (ev) { box.appendChild(dayEvent(ev, day)); });
+      if (!wordsHidden() && (state.read && state.read.sources)) {
+        box.appendChild(sourcesLine(state.read.sources));
+      }
+    }
+
+    function sourcesLine(sources) {
+      var bits = [];
+      var say = function (key, onWords, offWords) {
+        var s = sources[key];
+        if (!s || typeof s !== "object") return;
+        var st = txt(s.state);
+        if (st === "on" || st === "ready") bits.push(onWords);
+        else if (st === "not_on_a_screen" || st === "chat_only") bits.push(offWords);
+      };
+      say("local", "Your own events, on this PC", "Your own events");
+      say("google", "Google Calendar is drawn here too", "Google Calendar is read in chat only");
+      say("ical", "Your iCal calendar is drawn here too", "Your iCal calendar is read in chat only");
+      var line = el("p", "cal-day-meta", bits.filter(Boolean).join(" \u00b7 "));
+      line.setAttribute("data-cal-sources", "1");
+      return line;
+    }
+
+    function dayEvent(ev, day) {
+      var box = el("div", "cal-day-event");
+      box.setAttribute("data-cal-id", ev.id);
+      box.setAttribute("data-cal-day", day);
+      var st = eventState(ev);
+      if (st !== "upcoming") box.setAttribute("data-state", st);
+      var top = el("div", "cal-day-top");
+      top.appendChild(el("span", "cal-day-time", timeWords(ev)));
+      var hidden = ev.hidden || wordsHidden();
+      top.appendChild(el("span", "cal-day-title", hidden ? "Hidden while App lock is on"
+        : (ev.title || "Untitled event")));
+      if (st === "now") top.appendChild(el("span", "cal-event-state", "Now"));
+      else if (st === "past") top.appendChild(el("span", "cal-event-state", "Passed"));
+      box.appendChild(top);
+      var meta = [];
+      if (!hidden) {
+        if (ev.place) meta.push(ev.place);
+        if (ev.notes) meta.push(ev.notes);
+      }
+      if (ev.repeat && REPEAT_WORDS[ev.repeat]) meta.push(REPEAT_WORDS[ev.repeat]);
+      if (ev.remind !== null) meta.push(remindWords(ev.remind));
+      if (ev.tz && ev.tz !== zoneName()) meta.push("Written in " + ev.tz);
+      if (meta.length) box.appendChild(el("p", "cal-day-meta", meta.join(" \u00b7 ")));
+      if (!hidden) {
+        var actions = el("div", "cal-day-actions");
+        var edit = el("button", "rem-btn", "Edit");
+        edit.type = "button";
+        edit.setAttribute("data-cal-edit", ev.id);
+        var del = el("button", "rem-btn danger", "Delete");
+        del.type = "button";
+        del.setAttribute("data-cal-delete", ev.id);
+        actions.appendChild(edit);
+        actions.appendChild(del);
+        box.appendChild(actions);
+      }
+      return box;
+    }
+
+    function renderSide(read) {
+      var day = state.selected || todayISO();
+      sideTitle.textContent = longDay(day);
+      renderDayList(sideList, day);
+    }
+
+    function renderDay(read) {
+      renderDayList(dayView, state.selected || todayISO());
+    }
+
+    /* ---- the read ------------------------------------------------------ */
+    function scheduleRead() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (!state.read || !state.read.on) return;
+      timer = setTimeout(function () { timer = null; refresh(true); }, READ_MS);
+    }
+    /** What a failed read says, in words. A PC whose Jarvis has no calendar yet
+     *  is the common one, so it gets its own sentence rather than an HTTP code:
+     *  the code is shown only when nothing better is known. */
+    function readFailure(status, why) {
+      if (why) return why;
+      if (status === 404) {
+        return "Your PC's Jarvis does not have the calendar yet. Update Jarvis on the PC to add it.";
+      }
+      if (status === 401 || status === 403) {
+        return "Your PC's Jarvis refused the read (HTTP " + status + "). Pair this app again if it keeps saying that.";
+      }
+      return "Your PC's Jarvis answered HTTP " + status + ".";
+    }
+    function refresh(force) {
+      if (state.loading) return Promise.resolve();
+      if (!force && state.lastRead && Date.now() - state.lastRead < 15000) {
+        paint();
+        return Promise.resolve();
+      }
+      state.loading = true;
+      var path = "/api/calendar?days=" + READ_DAYS;
+      return window.fetch(path, { cache: "no-store", headers: { "X-Jarvis-Client": "hud" } })
+        .then(function (r) {
+          return r.json().catch(function () { return null; }).then(function (data) {
+            if (!r.ok) {
+              var why = data && (data.error || data.why);
+              state.read = readCalendar({ available: false,
+                error: readFailure(r.status, why) });
+            } else {
+              state.read = readCalendar(data);
+            }
+          });
+        })
+        .catch(function () {
+          state.read = readCalendar({ available: false,
+            error: "Cannot reach your PC's Jarvis right now. Your events are kept on the PC." });
+        })
+        .then(function () {
+          state.loading = false;
+          state.lastRead = Date.now();
+          if (!state.selected) state.selected = todayISO();
+          if (!state.month) state.month = { y: yearOf(state.selected), m: monthOf(state.selected) };
+          // OFF is PAINTED, not hidden: the card keeps its place and says the
+          // calendar is off, in words, so a switch can never look like a
+          // calendar that broke. Nothing is read again until the owner says so
+          // (a window focus or the next HUD load), because a feature that is
+          // off must not keep polling.
+          paint();
+          scheduleRead();
+        });
+    }
+
+    function paint() {
+      var read = state.read;
+      if (!read) { card.hidden = false; return; }
+      card.hidden = false;
+      paintCard(read);
+      paintPanel(read);
+    }
+
+    /* ---- opening and closing ------------------------------------------ */
+    function open(opts) {
+      opts = opts || {};
+      state.door = opts.door || document.activeElement || null;
+      panel.hidden = false;
+      state.open = true;
+      Array.prototype.forEach.call(document.querySelectorAll("[data-cal-open], [data-cal-add], #rail-calendar-open"),
+        function (b) { b.setAttribute("aria-expanded", "true"); });
+      if (!state.selected) state.selected = todayISO();
+      if (!state.month) state.month = { y: yearOf(state.selected), m: monthOf(state.selected) };
+      if (opts.view && VIEWS.indexOf(opts.view) >= 0) state.view = opts.view;
+      paintPanel(state.read);
+      if (!state.read || Date.now() - state.lastRead > 60000) refresh(true);
+      panel.focus();
+      // Adds are only opened when the feature is on: the store refuses a write
+      // while it is off, and a form that can only fail is worse than no form.
+      if (opts.add && (!state.read || state.read.on)) openForm(null, opts.day);
+    }
+    function close() {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      state.open = false;
+      state.editId = null;
+      $("cal-form").hidden = true;
+      Array.prototype.forEach.call(document.querySelectorAll("[data-cal-open], [data-cal-add], #rail-calendar-open"),
+        function (b) { b.setAttribute("aria-expanded", "false"); });
+      if (state.door && typeof state.door.focus === "function") {
+        try { state.door.focus(); } catch (e) { noop(); }
+      }
+    }
+
+    /* ---- the one form -------------------------------------------------- */
+    function formValues() {
+      var date = parseDay($("cal-date").value) || txt($("cal-date").value);
+      var endDate = parseDay($("cal-date-end").value);
+      var remind = $("cal-remind").value;
+      return {
+        title: $("cal-title").value.trim(),
+        date: date,
+        allDay: $("cal-allday").checked,
+        time: clockOf($("cal-time").value),
+        endTime: clockOf($("cal-time-end").value),
+        endDate: endDate || date,
+        place: $("cal-place").value.trim(),
+        notes: $("cal-notes").value.trim(),
+        remind: remind === "" ? null : parseInt(remind, 10),
+        repeat: $("cal-repeat").value
+      };
+    }
+    /** The `hud_calendar_add` arguments: the contract's own fields, and only
+     *  the ones with a value. Exposed for the tests. */
+    function addArgs(v) {
+      v = v || formValues();
+      var args = { title: v.title, date: v.date, allDay: Boolean(v.allDay) };
+      if (!v.allDay) {
+        args.time = v.time;
+        args.endTime = v.endTime;
+        if (v.endDate && v.endDate !== v.date) args.endDate = v.endDate;
+      } else if (v.endDate && v.endDate !== v.date) {
+        args.endDate = v.endDate;
+      }
+      if (v.place) args.place = v.place;
+      if (v.notes) args.notes = v.notes;
+      if (v.remind !== null && !isNaN(v.remind)) args.remindMinutes = v.remind;
+      if (v.repeat) args.recurrence = v.repeat;
+      return args;
+    }
+    /** The `change` object `hud_calendar_act` takes. Its keys are SERDE's own
+     *  field names (end_date, all_day, remind_minutes): the camelCase rule is
+     *  for a command's top-level arguments, not for a struct inside one. */
+    function changeArgs(v) {
+      v = v || formValues();
+      return {
+        title: v.title,
+        date: v.date,
+        all_day: Boolean(v.allDay),
+        time: v.allDay ? "" : v.time,
+        end_time: v.allDay ? "" : v.endTime,
+        end_date: v.endDate || v.date,
+        place: v.place,
+        notes: v.notes,
+        remind_minutes: v.remind,
+        recurrence: v.repeat
+      };
+    }
+    function actArgs(id, action, change) {
+      var args = { id: id, action: action };
+      if (change) args.change = change;
+      return args;
+    }
+
+    function showError(words) {
+      var line = $("cal-form-error");
+      line.textContent = String(words || "The PC did not save that.");
+      line.hidden = false;
+    }
+    function clearError() { $("cal-form-error").hidden = true; }
+
+    function validate(v) {
+      if (!v.title) return "An event needs a title.";
+      if (!v.date || !parseDay(v.date)) return "Pick a real date for the event.";
+      if (!v.allDay) {
+        if (!v.time) return "Pick a start time, or tick All day.";
+        if (!v.endTime) return "Pick an end time, or tick All day.";
+        if (v.endDate < v.date) return "The last day cannot be before the first.";
+        if (v.endDate === v.date && minutesOf(v.endTime) <= minutesOf(v.time)) {
+          return "The end must be after the start.";
+        }
+      } else if (v.endDate && v.endDate < v.date) {
+        return "The last day cannot be before the first.";
+      }
+      return "";
+    }
+
+    function openForm(ev, day) {
+      // Nothing can be added, changed or deleted while the feature is off - the
+      // store answers 409 - so the form is not opened at all. The banner is
+      // already saying why.
+      if (state.read && !state.read.on) return;
+      var v = ev ? {
+        title: ev.title, date: ev.date, allDay: ev.allDay,
+        time: ev.time || "09:00", endTime: ev.endTime || "10:00",
+        endDate: ev.endDate, place: ev.place, notes: ev.notes,
+        remind: ev.remind, repeat: ev.repeat
+      } : {
+        title: "", date: day || state.selected || todayISO(), allDay: false,
+        time: "09:00", endTime: "10:00", endDate: day || state.selected || todayISO(),
+        place: "", notes: "", remind: null, repeat: ""
+      };
+      state.editId = ev ? ev.id : null;
+      $("cal-form-title").textContent = ev ? "Edit event" : "New event";
+      $("cal-form-where").textContent = shortDay(v.date);
+      $("cal-title").value = v.title;
+      $("cal-date").value = v.date;
+      $("cal-allday").checked = Boolean(v.allDay);
+      $("cal-time").value = v.time;
+      $("cal-time-end").value = v.endTime;
+      $("cal-date-end").value = v.endDate || v.date;
+      $("cal-place").value = v.place || "";
+      $("cal-notes").value = v.notes || "";
+      $("cal-remind").value = v.remind === null || v.remind === undefined ? "" : String(v.remind);
+      $("cal-repeat").value = v.repeat || "";
+      $("cal-save").textContent = ev ? "Save changes" : "Add event";
+      $("cal-delete").hidden = !ev;
+      $("cal-delete").textContent = "Delete";
+      $("cal-delete").removeAttribute("data-armed");
+      clearError();
+      $("cal-form").hidden = false;
+      syncAllDay();
+      $("cal-title").focus();
+    }
+
+    function syncAllDay() {
+      var allDay = $("cal-allday").checked;
+      $("cal-time").disabled = allDay;
+      $("cal-time-end").disabled = allDay;
+      $("cal-time").closest(".cal-field").style.opacity = allDay ? ".5" : "";
+      $("cal-time-end").closest(".cal-field").style.opacity = allDay ? ".5" : "";
+    }
+
+    function submit(event) {
+      event.preventDefault();
+      if (state.busy) return;
+      if (state.read && !state.read.on) {
+        showError(OFF_NOTE + " " + OFF_HINT);
+        return;
+      }
+      var v = formValues();
+      var problem = validate(v);
+      if (problem) { showError(problem); return; }
+      clearError();
+      state.busy = true;
+      $("cal-save").disabled = true;
+      var editing = state.editId;
+      var call = editing
+        ? invoke("hud_calendar_act", actArgs(editing, "update", changeArgs(v)))
+        : invoke("hud_calendar_add", addArgs(v));
+      call.then(function (reply) {
+        if (reply && reply.ok === false) {
+          throw new Error(reply.error || "The PC did not save the event.");
+        }
+        state.said = txt(reply && reply.said) || (editing ? "Event changed." : "Event added.");
+        state.saidAt = Date.now();
+        state.editId = null;
+        $("cal-form").hidden = true;
+        return refresh(true);
+      }).catch(function (e) {
+        showError(String((e && e.message) || e || "The PC did not save the event."));
+      }).then(function () {
+        state.busy = false;
+        $("cal-save").disabled = false;
+      });
+    }
+
+    function removeEvent(id) {
+      if (state.busy || !id) return;
+      if (state.read && !state.read.on) {
+        showError(OFF_NOTE + " " + OFF_HINT);
+        return;
+      }
+      var btn = $("cal-delete");
+      if (btn.getAttribute("data-armed") !== "1") {
+        btn.setAttribute("data-armed", "1");
+        btn.textContent = "Press again to delete";
+        state.armedAt = Date.now();
+        setTimeout(function () {
+          if (Date.now() - state.armedAt < 3800) return;
+          btn.removeAttribute("data-armed");
+          btn.textContent = "Delete";
+        }, 4000);
+        return;
+      }
+      btn.removeAttribute("data-armed");
+      state.busy = true;
+      invoke("hud_calendar_act", actArgs(id, "delete")).then(function (reply) {
+        if (reply && reply.ok === false) throw new Error(reply.error || "The PC did not delete it.");
+        state.said = txt(reply && reply.said) || "Event deleted.";
+        state.saidAt = Date.now();
+        state.editId = null;
+        $("cal-form").hidden = true;
+        return refresh(true);
+      }).catch(function (e) {
+        showError(String((e && e.message) || e || "The PC did not delete it."));
+      }).then(function () {
+        state.busy = false;
+        btn.textContent = "Delete";
+      });
+    }
+
+    function invoke(name, args) {
+      var core = window.__TAURI__ && window.__TAURI__.core;
+      if (!core || typeof core.invoke !== "function") {
+        return Promise.reject(new Error("The calendar needs the Jarvis desktop window."));
+      }
+      return core.invoke(name, args);
+    }
+
+    /* ---- navigation ---------------------------------------------------- */
+    function jumpTo(day) {
+      var d = parseDay(day) || todayISO();
+      state.selected = d;
+      state.month = { y: yearOf(d), m: monthOf(d) };
+    }
+    function stepMonth(n) {
+      if (!state.month) return;
+      var m = state.month.m + n, y = state.month.y;
+      while (m < 1) { m += 12; y -= 1; }
+      while (m > 12) { m -= 12; y += 1; }
+      state.month = { y: y, m: m };
+      var day = state.selected;
+      if (yearOf(day) !== y || monthOf(day) !== m) {
+        state.selected = y + "-" + pad2(m) + "-" + pad2(Math.min(Number(day.slice(8)), daysInMonth(y, m)));
+      }
+      paintPanel(state.read);
+    }
+    function prev() {
+      if (state.view === "month") stepMonth(-1);
+      else if (state.view === "week") jumpTo(addDays(state.selected, -7));
+      else jumpTo(addDays(state.selected, -1));
+      paintPanel(state.read);
+    }
+    function next() {
+      if (state.view === "month") stepMonth(1);
+      else if (state.view === "week") jumpTo(addDays(state.selected, 7));
+      else jumpTo(addDays(state.selected, 1));
+      paintPanel(state.read);
+    }
+    function todayAction() {
+      jumpTo(todayISO());
+      paintPanel(state.read);
+      var cell = grid.querySelector('[data-cal-day="' + state.selected + '"]');
+      if (cell) cell.focus();
+    }
+
+    /* ---- wiring -------------------------------------------------------- */
+    function on(selector, event, fn) {
+      Array.prototype.forEach.call(document.querySelectorAll(selector), function (node) {
+        node.addEventListener(event, fn);
+      });
+    }
+    on("[data-cal-open]", "click", function (event) { open({ door: event.currentTarget }); });
+    on("[data-cal-add]", "click", function (event) {
+      open({ door: event.currentTarget, add: true });
+    });
+    var railDoor = $("rail-calendar-open");
+    if (railDoor) railDoor.addEventListener("click", function () { open({ door: railDoor }); });
+    $("cal-close").addEventListener("click", close);
+    $("cal-prev").addEventListener("click", prev);
+    $("cal-next").addEventListener("click", next);
+    $("cal-today").addEventListener("click", todayAction);
+    Array.prototype.forEach.call(panel.querySelectorAll("[data-cal-view]"), function (b) {
+      b.addEventListener("click", function () {
+        var v = b.getAttribute("data-cal-view");
+        if (VIEWS.indexOf(v) < 0) return;
+        state.view = v;
+        paintPanel(state.read);
+      });
+    });
+    $("cal-allday").addEventListener("change", syncAllDay);
+    $("cal-cancel").addEventListener("click", function () {
+      state.editId = null;
+      $("cal-form").hidden = true;
+      clearError();
+    });
+    $("cal-form").addEventListener("submit", submit);
+    $("cal-delete").addEventListener("click", function () { removeEvent(state.editId); });
+    $("cal-side-add").addEventListener("click", function () { openForm(null, state.selected); });
+
+    // One delegated click, so a cell, a chip's day, a bar, an Edit or a Delete
+    // all work however many times the grid is redrawn.
+    panel.addEventListener("click", function (event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+      var edit = target.closest("[data-cal-edit]");
+      if (edit) { var ev = byId(edit.getAttribute("data-cal-edit")); if (ev) openForm(ev); return; }
+      var del = target.closest("[data-cal-delete]");
+      if (del) {
+        var id = del.getAttribute("data-cal-delete");
+        var row = del.closest(".cal-day-event");
+        if (row && del.getAttribute("data-armed") !== "1") {
+          del.setAttribute("data-armed", "1");
+          del.textContent = "Press again to delete";
+          setTimeout(function () {
+            if (del.isConnected) { del.removeAttribute("data-armed"); del.textContent = "Delete"; }
+          }, 4000);
+          return;
+        }
+        if (row && id) {
+          state.busy = true;
+          invoke("hud_calendar_act", actArgs(id, "delete")).then(function (reply) {
+            state.said = txt(reply && reply.said) || "Event deleted.";
+            state.saidAt = Date.now();
+            return refresh(true);
+          }).catch(function (e) {
+            showError(String((e && e.message) || e));
+          }).then(function () { state.busy = false; });
+        }
+        return;
+      }
+      var bar = target.closest("[data-cal-bar]");
+      if (bar) {
+        var barEvent = byId(bar.getAttribute("data-cal-bar"));
+        select(bar.getAttribute("data-cal-day"));
+        if (barEvent && !wordsHidden()) openForm(barEvent);
+        return;
+      }
+      // An event's own chip or week box opens its editor; the row in a day's
+      // list does too. Under the lock there is nothing safe to edit, so the
+      // click only selects its day.
+      var eventNode = target.closest("[data-cal-id]");
+      if (eventNode) {
+        var chosen = byId(eventNode.getAttribute("data-cal-id"));
+        if (chosen && !wordsHidden()) openForm(chosen);
+        else if (chosen) select(chosen.date);
+        return;
+      }
+      var dayNode = target.closest("[data-cal-day]");
+      if (dayNode) {
+        select(dayNode.getAttribute("data-cal-day"));
+        return;
+      }
+    });
+
+    if (grid) {
+      grid.addEventListener("keydown", function (event) {
+        var steps = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+        var step = steps[event.key];
+        if (!step) return;
+        event.preventDefault();
+        select(addDays(state.selected || todayISO(), step));
+      });
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || panel.hidden) return;
+      var target = event.target;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+          || target.isContentEditable)) return;
+      event.preventDefault();
+      close();
+    });
+
+    document.addEventListener("pointerdown", function (event) {
+      if (panel.hidden) return;
+      var t = event.target;
+      if (!t || !t.closest) return;
+      if (panel.contains(t) || card.contains(t)) return;
+      if (t.closest("#rail-calendar-open") || t.closest("[data-cal-open]") || t.closest("[data-cal-add]")) return;
+      close();
+    }, true);
+
+    // A read when the HUD gets focus again, which is how a switch turned back
+    // on in Settings becomes visible: while the feature is off this page makes
+    // no read at all, so nothing polls a feature the owner turned off.
+    window.addEventListener("focus", function () {
+      if (!state.read || !state.read.on || Date.now() - state.lastRead > 60000) refresh(true);
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) return;
+      if (!state.read || !state.read.on || Date.now() - state.lastRead > 60000) refresh(true);
+    });
+
+    // The lock's own event: forget what was drawn FIRST, then ask again - the
+    // same rule the Galaxy and the Reminders panel keep, because a page is
+    // only as private as its last read.
+    var privacy = window.__TAURI__ && window.__TAURI__.event;
+    if (privacy && typeof privacy.listen === "function") {
+      privacy.listen("private-hidden", function () {
+        cardList.replaceChildren();
+        sideList.replaceChildren();
+        dayView.replaceChildren();
+        grid.replaceChildren();
+        weekCols.replaceChildren();
+        weekBand.replaceChildren();
+        refresh(true);
+      }).catch(noop);
+      privacy.listen("security-changed", function () { refresh(true); }).catch(noop);
+    }
+
+    // The test hook: the pure pieces this block is built from, exposed so
+    // tests/hud-calendar.mjs can drive the real page instead of a copy of it.
+    window.__hudCalendar = {
+      state: state,
+      today: todayISO,
+      monthGrid: monthGrid,
+      weekOf: weekOf,
+      barsFor: barsFor,
+      read: readCalendar,
+      readFailure: readFailure,
+      stateOf: eventState,
+      spanOf: spanOf,
+      eventsOn: eventsOn,
+      eventsCovering: eventsCovering,
+      addArgs: addArgs,
+      changeArgs: changeArgs,
+      actArgs: actArgs,
+      formValues: formValues,
+      validate: validate,
+      open: open,
+      close: close,
+      refresh: refresh,
+      paint: paint,
+      select: select,
+      openForm: openForm,
+      words: { off: OFF_NOTE, offHint: OFF_HINT, offBanner: OFF_BANNER,
+               repeat: REPEAT_WORDS }
+    };
+
+    // The first paint says "loading" honestly; the read follows at once.
+    cardWhen.textContent = shortDay(todayISO()) + " \u00b7 " + (zoneName() || "this PC");
+    refresh(true);
   }());
 </script>
 <!-- The one shared rule: what a not-running model is called, and the DOM

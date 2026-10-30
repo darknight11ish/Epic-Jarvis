@@ -2427,6 +2427,12 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // ONE job - held on a stale link, no card, never a list form and never
       // a delete-all (Ruling 15: clear-list stays the Brain's).
       "hud-schedule",
+      // The Calendar card's writes (2026-10-29, the owner's desktop HUD
+      // calendar): add ONE local event, or change/delete ONE event, through
+      // the backend's own two routes - held on a stale link, no card, no list
+      // form and no delete-all. Its READ is hud_get's /api/calendar?days=N,
+      // and the settings switch is NOT this window's.
+      "hud-calendar",
       // The History panel's pin / file / delete (2026-10-27, the owner asked
       // for "a history tab with a column icon" whose panel "looks like all the
       // coversations in the deepseek harness", with "pinnable chats, project
@@ -2498,12 +2504,14 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
     "the H2 change must not take the H1 read grant away");
   const writeish = cap.permissions.filter((name) => [
     "hud-layout-write", "hud-approvals", "focus-presets", "hud-voice", "hud-schedule",
-    "hud-history", "hud-personalities", "hud-cloud-escalate", "hud-faces", "hud-lane",
+    "hud-calendar", "hud-history", "hud-personalities", "hud-cloud-escalate", "hud-faces",
+    "hud-lane",
   ].includes(name));
   assert.deepEqual(writeish.sort(),
-    ["focus-presets", "hud-approvals", "hud-cloud-escalate", "hud-faces", "hud-history",
-      "hud-lane", "hud-layout-write", "hud-personalities", "hud-schedule", "hud-voice"],
-    "the HUD window gained a write command beyond its own layout, Reminders, ONE chat's pin/file/delete, the wording-only personality switch, the cloud escalate switch, the face models picker and the lane's own start");
+    ["focus-presets", "hud-approvals", "hud-calendar", "hud-cloud-escalate", "hud-faces",
+      "hud-history", "hud-lane", "hud-layout-write", "hud-personalities", "hud-schedule",
+      "hud-voice"],
+    "the HUD window gained a write command beyond its own layout, Reminders, the calendar's one event, ONE chat's pin/file/delete, the wording-only personality switch, the cloud escalate switch, the face models picker and the lane's own start");
   assert.match(cap.description, /hud-layout-write/);
   assert.match(cap.description, /owner-approved/);
   assert.match(cap.description, /holds NO pairing token/);

@@ -111,7 +111,7 @@
           "options": {}
         },
         {
-          "id": "waiting",
+          "id": "calendar",
           "region": "right_rail",
           "order": 0,
           "col_span": 12,
@@ -121,9 +121,19 @@
           "options": {}
         },
         {
-          "id": "telemetry",
+          "id": "waiting",
           "region": "right_rail",
           "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 2,
           "col_span": 12,
           "row_span": 2,
           "visible": true,
@@ -133,7 +143,7 @@
         {
           "id": "tools",
           "region": "right_rail",
-          "order": 2,
+          "order": 3,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -143,7 +153,7 @@
         {
           "id": "brain_stats",
           "region": "right_rail",
-          "order": 3,
+          "order": 4,
           "col_span": 12,
           "row_span": 2,
           "visible": true,
@@ -153,7 +163,7 @@
         {
           "id": "budget",
           "region": "right_rail",
-          "order": 4,
+          "order": 5,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -163,7 +173,7 @@
         {
           "id": "voice_stats",
           "region": "right_rail",
-          "order": 5,
+          "order": 6,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -297,7 +307,7 @@
           }
         },
         {
-          "id": "waiting",
+          "id": "calendar",
           "region": "right_rail",
           "order": 0,
           "col_span": 12,
@@ -307,9 +317,19 @@
           "options": {}
         },
         {
-          "id": "telemetry",
+          "id": "waiting",
           "region": "right_rail",
           "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 2,
           "col_span": 12,
           "row_span": 2,
           "visible": true,
@@ -319,7 +339,7 @@
         {
           "id": "tools",
           "region": "right_rail",
-          "order": 2,
+          "order": 3,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -329,7 +349,7 @@
         {
           "id": "brain_stats",
           "region": "right_rail",
-          "order": 3,
+          "order": 4,
           "col_span": 12,
           "row_span": 2,
           "visible": true,
@@ -339,7 +359,7 @@
         {
           "id": "budget",
           "region": "right_rail",
-          "order": 4,
+          "order": 5,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -349,7 +369,7 @@
         {
           "id": "voice_stats",
           "region": "right_rail",
-          "order": 5,
+          "order": 6,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -453,7 +473,7 @@
           "options": {}
         },
         {
-          "id": "waiting",
+          "id": "calendar",
           "region": "right_rail",
           "order": 0,
           "col_span": 12,
@@ -463,9 +483,19 @@
           "options": {}
         },
         {
-          "id": "telemetry",
+          "id": "waiting",
           "region": "right_rail",
           "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 2,
           "col_span": 12,
           "row_span": 2,
           "visible": false,
@@ -475,7 +505,7 @@
         {
           "id": "tools",
           "region": "right_rail",
-          "order": 2,
+          "order": 3,
           "col_span": 12,
           "row_span": 1,
           "visible": false,
@@ -485,7 +515,7 @@
         {
           "id": "brain_stats",
           "region": "right_rail",
-          "order": 3,
+          "order": 4,
           "col_span": 12,
           "row_span": 2,
           "visible": false,
@@ -495,7 +525,7 @@
         {
           "id": "budget",
           "region": "right_rail",
-          "order": 4,
+          "order": 5,
           "col_span": 12,
           "row_span": 1,
           "visible": false,
@@ -505,7 +535,7 @@
         {
           "id": "voice_stats",
           "region": "right_rail",
-          "order": 5,
+          "order": 6,
           "col_span": 12,
           "row_span": 1,
           "visible": false,
@@ -609,9 +639,19 @@
           "options": {}
         },
         {
-          "id": "waiting",
+          "id": "calendar",
           "region": "right_rail",
           "order": 0,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "waiting",
+          "region": "right_rail",
+          "order": 1,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -621,7 +661,7 @@
         {
           "id": "telemetry",
           "region": "right_rail",
-          "order": 1,
+          "order": 2,
           "col_span": 12,
           "row_span": 2,
           "visible": false,
@@ -631,7 +671,7 @@
         {
           "id": "tools",
           "region": "right_rail",
-          "order": 2,
+          "order": 3,
           "col_span": 12,
           "row_span": 1,
           "visible": false,
@@ -641,7 +681,7 @@
         {
           "id": "brain_stats",
           "region": "right_rail",
-          "order": 3,
+          "order": 4,
           "col_span": 12,
           "row_span": 2,
           "visible": false,
@@ -651,7 +691,7 @@
         {
           "id": "budget",
           "region": "right_rail",
-          "order": 4,
+          "order": 5,
           "col_span": 12,
           "row_span": 1,
           "visible": false,
@@ -661,7 +701,7 @@
         {
           "id": "voice_stats",
           "region": "right_rail",
-          "order": 5,
+          "order": 6,
           "col_span": 12,
           "row_span": 1,
           "visible": false,
@@ -765,7 +805,7 @@
           "options": {}
         },
         {
-          "id": "waiting",
+          "id": "calendar",
           "region": "right_rail",
           "order": 0,
           "col_span": 12,
@@ -775,9 +815,19 @@
           "options": {}
         },
         {
-          "id": "telemetry",
+          "id": "waiting",
           "region": "right_rail",
           "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 2,
           "col_span": 12,
           "row_span": 4,
           "visible": true,
@@ -787,7 +837,7 @@
         {
           "id": "tools",
           "region": "right_rail",
-          "order": 2,
+          "order": 3,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -797,7 +847,7 @@
         {
           "id": "brain_stats",
           "region": "right_rail",
-          "order": 3,
+          "order": 4,
           "col_span": 12,
           "row_span": 2,
           "visible": true,
@@ -807,7 +857,7 @@
         {
           "id": "budget",
           "region": "right_rail",
-          "order": 4,
+          "order": 5,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -817,7 +867,7 @@
         {
           "id": "voice_stats",
           "region": "right_rail",
-          "order": 5,
+          "order": 6,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -951,7 +1001,7 @@
           }
         },
         {
-          "id": "waiting",
+          "id": "calendar",
           "region": "right_rail",
           "order": 0,
           "col_span": 12,
@@ -961,9 +1011,19 @@
           "options": {}
         },
         {
-          "id": "telemetry",
+          "id": "waiting",
           "region": "right_rail",
           "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": true,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 2,
           "col_span": 12,
           "row_span": 2,
           "visible": true,
@@ -973,7 +1033,7 @@
         {
           "id": "tools",
           "region": "right_rail",
-          "order": 2,
+          "order": 3,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -983,7 +1043,7 @@
         {
           "id": "brain_stats",
           "region": "right_rail",
-          "order": 3,
+          "order": 4,
           "col_span": 12,
           "row_span": 4,
           "visible": true,
@@ -993,7 +1053,7 @@
         {
           "id": "budget",
           "region": "right_rail",
-          "order": 4,
+          "order": 5,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -1003,7 +1063,7 @@
         {
           "id": "voice_stats",
           "region": "right_rail",
-          "order": 5,
+          "order": 6,
           "col_span": 12,
           "row_span": 1,
           "visible": true,
@@ -1107,7 +1167,7 @@
           "options": {}
         },
         {
-          "id": "waiting",
+          "id": "calendar",
           "region": "right_rail",
           "order": 0,
           "col_span": 12,
@@ -1117,9 +1177,19 @@
           "options": {}
         },
         {
-          "id": "telemetry",
+          "id": "waiting",
           "region": "right_rail",
           "order": 1,
+          "col_span": 12,
+          "row_span": 1,
+          "visible": false,
+          "collapsed": false,
+          "options": {}
+        },
+        {
+          "id": "telemetry",
+          "region": "right_rail",
+          "order": 2,
           "col_span": 12,
           "row_span": 2,
           "visible": false,
@@ -1129,7 +1199,7 @@
         {
           "id": "tools",
           "region": "right_rail",
-          "order": 2,
+          "order": 3,
           "col_span": 12,
           "row_span": 1,
           "visible": false,
@@ -1139,7 +1209,7 @@
         {
           "id": "brain_stats",
           "region": "right_rail",
-          "order": 3,
+          "order": 4,
           "col_span": 12,
           "row_span": 2,
           "visible": false,
@@ -1149,7 +1219,7 @@
         {
           "id": "budget",
           "region": "right_rail",
-          "order": 4,
+          "order": 5,
           "col_span": 12,
           "row_span": 1,
           "visible": false,
@@ -1159,7 +1229,7 @@
         {
           "id": "voice_stats",
           "region": "right_rail",
-          "order": 5,
+          "order": 6,
           "col_span": 12,
           "row_span": 1,
           "visible": false,

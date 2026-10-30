@@ -3319,18 +3319,22 @@ html[data-cal-view="day"] .cal-side{display:none;}
 
 
     <!-- Calendar (2026-10-29, the owner's desktop HUD calendar). ONE card,
-         directly above Reminders, drawn from the SAME GET /api/calendar read
-         the full panel (#calendar-panel, after #shell) draws from - so the
-         card and the calendar are one list, never two. The titles, places and
-         notes are blanked in Rust while App lock / "Hide memory lists" is on
-         (dates, times and counts stay), and this card is re-read when the PC
-         says the lists hid again. The card is HIDDEN, not emptied, when the
-         PC's own answer says the feature is off (`on: false`): a switch that
-         hides must not look like a calendar that broke, and nothing stored is
-         deleted by it. It is not a CARD_REGISTRY card on purpose - see the
-         script's own comment for the one reason (the layout contract is a
-         different slice's file, and a card the presets do not carry would be a
-         control Edit HUD could list but never place). -->
+         drawn from the SAME GET /api/calendar read the full panel
+         (#calendar-panel, after #shell) draws from - so the card and the
+         calendar are one list, never two. The titles, places and notes are
+         blanked in Rust while App lock / "Hide memory lists" is on (dates,
+         times and counts stay), and this card is re-read when the PC says the
+         lists hid again.
+
+         A CARD THE OWNER CAN PLACE: it is in hud-layout.js's CARD_REGISTRY as
+         `calendar` and in hud-edit.js's MOVABLE_IDS, so Edit HUD lists it,
+         moves it between the left rail, the stage top and the right rail,
+         hides it and restores it like every other card. Its markup home is the
+         right rail, directly above the waiting cards.
+
+         EVERY STATE IS SAID IN WORDS: off ("The Jarvis Calendar is off..."),
+         empty ("Nothing in the next 7 days."), and a read that failed. The
+         card is never blank and never silently vanishes. -->
     <div class="rail-section bento-calendar" id="rail-calendar" hidden>
       <div class="hud-label">Calendar</div>
       <p class="cal-card-when" id="cal-card-when">&nbsp;</p>
@@ -3339,7 +3343,7 @@ html[data-cal-view="day"] .cal-side{display:none;}
       <div class="cal-card-list" id="cal-card-list">
         <p class="cal-empty" id="cal-card-empty">Loading your calendar&hellip;</p>
       </div>
-      <div class="cal-card-actions">
+      <div class="cal-card-actions" id="cal-card-actions">
         <button type="button" class="rem-btn" id="cal-open" data-cal-open>Open calendar</button>
         <button type="button" class="rem-btn" id="cal-add" data-cal-add>+ Add event</button>
       </div>
@@ -3623,11 +3627,9 @@ html[data-cal-view="day"] .cal-side{display:none;}
       <label class="cal-field"><span>Repeats</span>
         <select id="cal-repeat">
           <option value="">Does not repeat</option>
-          <option value="day">Every day</option>
-          <option value="weekday">Every weekday</option>
-          <option value="week">Every week</option>
-          <option value="month">Every month</option>
-          <option value="year">Every year</option>
+          <option value="daily">Every day</option>
+          <option value="weekly">Every week</option>
+          <option value="monthly">Every month</option>
         </select></label>
       <label class="cal-field cal-wide"><span>Notes</span>
         <textarea id="cal-notes" maxlength="2000" rows="2"
@@ -10009,10 +10011,10 @@ subscribe();
   /* ── the calendar (2026-10-29) ────────────────────────────────────────── */
   /*  The owner's own events, kept on this PC, read through ONE route.
    *
-   *  WHAT THIS OWNS. The rail card (#rail-calendar, above Reminders), the
-   *  calendar sheet (#calendar-panel) with its three views, and the one
-   *  Add/Edit form. Both surfaces draw from the SAME normalized read, so the
-   *  card can never say something the calendar does not.
+   *  WHAT THIS OWNS. The rail card (#rail-calendar), the calendar sheet
+   *  (#calendar-panel) with its three views, and the one Add/Edit form. Both
+   *  surfaces draw from the SAME normalized read, so the card can never say
+   *  something the calendar does not.
    *
    *  THE READ IS `/api/calendar?days=90` through the shell
    *  (`hud_proxy.rs` allows that one path and only a whole `days` value from 1
@@ -10029,15 +10031,21 @@ subscribe();
    *  (`private-hidden`), the same rule the Galaxy and the Reminders panel
    *  keep, because a page is only as private as its LAST read.
    *
-   *  WHY THE CARD IS NOT A `CARD_REGISTRY` CARD. That registry feeds the saved
-   *  layout document, and `contract/hud-presets.json` mirrors every preset's
-   *  cards byte for byte; a card added to the presets without that contract
-   *  would fail tests/hud-layout.mjs, and the contract belongs to a different
-   *  slice. A registry row that no preset carries would be worse than none:
-   *  Edit HUD would list a card it could never place. So the calendar is a
-   *  fixed rail section with a real DOM id and its own tests instead - and the
-   *  day the layout contract learns about it, this comment is the place that
-   *  says to add all three in one change.
+   *  A CARD THE OWNER CAN PLACE (his rule: every easily-accessible feature must
+   *  be addable to the main screen from Edit HUD). The card is in
+   *  `hud-layout.js`'s CARD_REGISTRY as `calendar` and in `hud-edit.js`'s
+   *  MOVABLE_IDS + CARD_DOM, and every built-in preset carries it - so Edit HUD
+   *  lists it, moves it between the left rail, the stage top and the right
+   *  rail, hides it and puts it back. `contract/hud-presets.json` mirrors the
+   *  presets, and tests/hud-calendar.mjs holds all of it together. The markup
+   *  home is the right rail, directly above the waiting cards.
+   *
+   *  EVERY STATE IS SAID IN WORDS - off, empty, and a read that failed. The
+   *  feature's own switch is read from the PC's answer (`on`), never kept here:
+   *  OFF paints "The Jarvis Calendar is off" and keeps every event, an empty
+   *  window says "Nothing in the next 7 days.", and a read that failed says
+   *  what failed. There is no countdown and no ticking label anywhere: a time
+   *  is shown as a time ("14:30"), never as "in 3 hours".
    *
    *  WHAT IT DOES NOT DO. It does not fire reminders (the field is stored, the
    *  ring is another slice), it does not read Google or iCal into the grid
@@ -10061,10 +10069,24 @@ subscribe();
     var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
                     "Friday", "Saturday"];
     var WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    var REPEAT_WORDS = { day: "Every day", weekday: "Every weekday",
-                         week: "Every week", month: "Every month",
-                         year: "Every year" };
+    // The store's OWN three words, and the only ones it accepts:
+    // jarvis_local_calendar.RECURRENCES is ("none", "daily", "weekly",
+    // "monthly"), and its _recurrence refuses anything else with a 400. No
+    // repeat arrives as "none" (or ""), which is why the two are absent here -
+    // there is nothing to say about an event that does not repeat.
+    var REPEAT_WORDS = { daily: "Every day", weekly: "Every week",
+                         monthly: "Every month" };
     var ID_RE = /^c[0-9a-f]{10}$/;
+
+    /* The feature's own switch (the owner's decision: ON by default,
+     * disableable). When it is OFF this page still SAYS SO, in these words -
+     * never a blank card and never a card that silently vanishes, which reads
+     * as a calendar that broke. Nothing is deleted by the switch, and every
+     * event stays on the PC, so the sentence says both. */
+    var OFF_NOTE = "The Jarvis Calendar is off. Nothing was deleted - every event is still on this PC.";
+    var OFF_HINT = "Turn it on in Jarvis Settings, or ask me to turn the Jarvis calendar on.";
+    var OFF_BANNER = "The Jarvis Calendar is off, so there is nothing to draw. "
+      + "Nothing was deleted - every event is still on this PC. " + OFF_HINT;
 
     var state = {
       view: "month",
@@ -10113,6 +10135,19 @@ subscribe();
       return isoOf(d);
     }
     function dayOfWeek(iso) { return toDate(iso).getDay(); }
+    /** Midnight at the start of a `YYYY-MM-DD`, as epoch milliseconds.
+     *
+     *  `toDate` anchors at NOON on purpose: that is the safe anchor when only
+     *  the day matters, because a daylight-saving jump can never move noon onto
+     *  another date. An event's MOMENT needs midnight though - 12:00 plus a
+     *  14:30 start is 02:30 the next morning, which read every event as
+     *  "upcoming" - so the anchor is dropped here, once, and both moments are
+     *  computed from it. */
+    function dayStart(iso) {
+      var d = toDate(iso);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    }
     function startOfWeek(iso) { return addDays(iso, -dayOfWeek(iso)); }
     function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
     function monthOf(iso) { return Number(iso.slice(5, 7)); }
@@ -10146,6 +10181,9 @@ subscribe();
     function eventOf(v) {
       var date = parseDay(txt(v.date));
       var end = parseDay(txt(v.end_date)) || date;
+      // The store says "none" for a one-off event; an empty repeat box is how
+      // this form says the same thing, and the two must not read differently.
+      var repeat = txt(v.recurrence);
       return {
         id: txt(v.id), title: txt(v.title), date: date,
         time: clockOf(v.time), endTime: clockOf(v.end_time),
@@ -10153,7 +10191,7 @@ subscribe();
         allDay: v.all_day === true,
         place: txt(v.place), notes: txt(v.notes),
         remind: typeof v.remind_minutes === "number" ? v.remind_minutes : null,
-        repeat: txt(v.recurrence),
+        repeat: repeat === "none" ? "" : repeat,
         tz: txt(v.tz), source: txt(v.source) || "local",
         hidden: v.hidden === true
       };
@@ -10267,16 +10305,14 @@ subscribe();
       });
     }
     function startMoment(ev) {
-      var d = toDate(ev.date);
       var mins = ev.allDay ? 0 : (ev.time ? minutesOf(ev.time) : 0);
-      return d.getTime() + mins * 60000;
+      return dayStart(ev.date) + mins * 60000;
     }
     function endMoment(ev) {
       var span = spanOf(ev);
-      var d = toDate(span.end);
       var mins = ev.allDay ? 24 * 60 : (ev.endTime ? minutesOf(ev.endTime)
         : (ev.time ? minutesOf(ev.time) + 60 : 24 * 60));
-      return d.getTime() + mins * 60000;
+      return dayStart(span.end) + mins * 60000;
     }
     /** "past" (it has ended), "now" (it is happening), "upcoming". */
     function eventState(ev, now) {
@@ -10302,12 +10338,23 @@ subscribe();
     var cardError = $("cal-card-error");
     var cardNote = $("cal-card-note");
     var cardList = $("cal-card-list");
+    var cardActions = $("cal-card-actions");
 
     function paintCard(read) {
       cardWhen.textContent = shortDay(todayISO()) + " \u00b7 " + (zoneName() || "this PC");
       cardError.hidden = true;
       cardNote.hidden = true;
       cardList.replaceChildren();
+      // Every state is said in words, and the buttons only exist when there is
+      // something they can really do. A blank card is never one of the states.
+      if (!read.on) {
+        cardNote.textContent = OFF_NOTE;
+        cardNote.hidden = false;
+        cardActions.hidden = true;
+        cardList.appendChild(el("p", "cal-empty", OFF_HINT));
+        return;
+      }
+      cardActions.hidden = false;
       if (!read.available) {
         cardError.textContent = read.why || "Your PC's Jarvis does not have the calendar yet.";
         cardError.hidden = false;
@@ -10389,6 +10436,10 @@ subscribe();
         banner.textContent = "Loading your calendar\u2026";
       } else if (state.said && Date.now() - state.saidAt < 8000) {
         banner.textContent = state.said;
+      } else if (!read.on) {
+        // The switch, said plainly. Nothing is deleted, so the sentence says
+        // so, and nothing on this panel pretends a day is empty.
+        banner.textContent = OFF_BANNER;
       } else if (!read.available) {
         banner.textContent = "The calendar isn't available right now: "
           + (read.why || "your PC's Jarvis did not answer.") + " Everything else in Jarvis still works.";
@@ -10398,6 +10449,14 @@ subscribe();
       } else {
         banner.hidden = true;
       }
+      // While the feature is off there is nothing this panel may write: the
+      // store answers 409 to an add, so the form and the door that opens it are
+      // taken away rather than left to fail. (The form is only closed when it
+      // was closed by the switch - an open form is not disturbed by a repaint,
+      // or picking a day would throw away what the owner had typed.)
+      panel.setAttribute("data-cal-off", read.on ? "false" : "true");
+      if (!read.on) $("cal-form").hidden = true;
+      $("cal-side-add").hidden = !read.on;
       monthView.hidden = state.view !== "month";
       weekView.hidden = state.view !== "week";
       dayView.hidden = state.view !== "day";
@@ -10568,8 +10627,12 @@ subscribe();
       box.replaceChildren();
       var list = eventsCovering(day);
       var before = state.read && state.read.window && day < state.read.window.start;
+      var off = Boolean(state.read && !state.read.on);
       if (!list.length) {
-        if (before) {
+        if (off) {
+          box.appendChild(el("p", "cal-day-empty",
+            "The Jarvis Calendar is off, so this day is not being read."));
+        } else if (before) {
           box.appendChild(el("p", "cal-day-empty", "Jarvis's calendar starts on "
             + longDay(state.read.window.start) + ", so this day was not read."));
         } else if (state.read && state.read.available === false) {
@@ -10655,6 +10718,19 @@ subscribe();
       if (!state.read || !state.read.on) return;
       timer = setTimeout(function () { timer = null; refresh(true); }, READ_MS);
     }
+    /** What a failed read says, in words. A PC whose Jarvis has no calendar yet
+     *  is the common one, so it gets its own sentence rather than an HTTP code:
+     *  the code is shown only when nothing better is known. */
+    function readFailure(status, why) {
+      if (why) return why;
+      if (status === 404) {
+        return "Your PC's Jarvis does not have the calendar yet. Update Jarvis on the PC to add it.";
+      }
+      if (status === 401 || status === 403) {
+        return "Your PC's Jarvis refused the read (HTTP " + status + "). Pair this app again if it keeps saying that.";
+      }
+      return "Your PC's Jarvis answered HTTP " + status + ".";
+    }
     function refresh(force) {
       if (state.loading) return Promise.resolve();
       if (!force && state.lastRead && Date.now() - state.lastRead < 15000) {
@@ -10669,7 +10745,7 @@ subscribe();
             if (!r.ok) {
               var why = data && (data.error || data.why);
               state.read = readCalendar({ available: false,
-                error: why || ("The PC answered HTTP " + r.status + ".") });
+                error: readFailure(r.status, why) });
             } else {
               state.read = readCalendar(data);
             }
@@ -10682,17 +10758,13 @@ subscribe();
         .then(function () {
           state.loading = false;
           state.lastRead = Date.now();
-          if (!state.read.on) {
-            // Off means off: the card and the sheet go away entirely, nothing
-            // is deleted, and Reminders is untouched. A read on the next HUD
-            // focus is what brings it back when the switch does.
-            card.hidden = true;
-            if (!panel.hidden) close();
-            scheduleRead();
-            return;
-          }
           if (!state.selected) state.selected = todayISO();
           if (!state.month) state.month = { y: yearOf(state.selected), m: monthOf(state.selected) };
+          // OFF is PAINTED, not hidden: the card keeps its place and says the
+          // calendar is off, in words, so a switch can never look like a
+          // calendar that broke. Nothing is read again until the owner says so
+          // (a window focus or the next HUD load), because a feature that is
+          // off must not keep polling.
           paint();
           scheduleRead();
         });
@@ -10701,7 +10773,6 @@ subscribe();
     function paint() {
       var read = state.read;
       if (!read) { card.hidden = false; return; }
-      if (!read.on) { card.hidden = true; return; }
       card.hidden = false;
       paintCard(read);
       paintPanel(read);
@@ -10710,7 +10781,6 @@ subscribe();
     /* ---- opening and closing ------------------------------------------ */
     function open(opts) {
       opts = opts || {};
-      if (state.read && !state.read.on) return;
       state.door = opts.door || document.activeElement || null;
       panel.hidden = false;
       state.open = true;
@@ -10722,7 +10792,9 @@ subscribe();
       paintPanel(state.read);
       if (!state.read || Date.now() - state.lastRead > 60000) refresh(true);
       panel.focus();
-      if (opts.add) openForm(null, opts.day);
+      // Adds are only opened when the feature is on: the store refuses a write
+      // while it is off, and a form that can only fail is worse than no form.
+      if (opts.add && (!state.read || state.read.on)) openForm(null, opts.day);
     }
     function close() {
       if (panel.hidden) return;
@@ -10821,6 +10893,10 @@ subscribe();
     }
 
     function openForm(ev, day) {
+      // Nothing can be added, changed or deleted while the feature is off - the
+      // store answers 409 - so the form is not opened at all. The banner is
+      // already saying why.
+      if (state.read && !state.read.on) return;
       var v = ev ? {
         title: ev.title, date: ev.date, allDay: ev.allDay,
         time: ev.time || "09:00", endTime: ev.endTime || "10:00",
@@ -10865,6 +10941,10 @@ subscribe();
     function submit(event) {
       event.preventDefault();
       if (state.busy) return;
+      if (state.read && !state.read.on) {
+        showError(OFF_NOTE + " " + OFF_HINT);
+        return;
+      }
       var v = formValues();
       var problem = validate(v);
       if (problem) { showError(problem); return; }
@@ -10894,6 +10974,10 @@ subscribe();
 
     function removeEvent(id) {
       if (state.busy || !id) return;
+      if (state.read && !state.read.on) {
+        showError(OFF_NOTE + " " + OFF_HINT);
+        return;
+      }
       var btn = $("cal-delete");
       if (btn.getAttribute("data-armed") !== "1") {
         btn.setAttribute("data-armed", "1");
@@ -11114,7 +11198,7 @@ subscribe();
     }
 
     // The test hook: the pure pieces this block is built from, exposed so
-    // tests/calendar.mjs can drive the real page instead of a copy of it.
+    // tests/hud-calendar.mjs can drive the real page instead of a copy of it.
     window.__hudCalendar = {
       state: state,
       today: todayISO,
@@ -11122,9 +11206,11 @@ subscribe();
       weekOf: weekOf,
       barsFor: barsFor,
       read: readCalendar,
+      readFailure: readFailure,
       stateOf: eventState,
       spanOf: spanOf,
       eventsOn: eventsOn,
+      eventsCovering: eventsCovering,
       addArgs: addArgs,
       changeArgs: changeArgs,
       actArgs: actArgs,
@@ -11135,7 +11221,9 @@ subscribe();
       refresh: refresh,
       paint: paint,
       select: select,
-      openForm: openForm
+      openForm: openForm,
+      words: { off: OFF_NOTE, offHint: OFF_HINT, offBanner: OFF_BANNER,
+               repeat: REPEAT_WORDS }
     };
 
     // The first paint says "loading" honestly; the read follows at once.
