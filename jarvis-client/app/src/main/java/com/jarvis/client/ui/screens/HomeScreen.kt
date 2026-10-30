@@ -553,6 +553,15 @@ data class HomeState(
      * picture itself is never in this state - only its size, in words.
      */
     val pictureLine: String? = null,
+    /**
+     * The line for a document waiting to go with the next question
+     * ("taxes.pdf — 1.2 MB. Read on your PC."), or null when none is attached
+     * ([com.jarvis.client.net.AttachFile]). The file's bytes are never in this
+     * state - only its name and size, in words.
+     */
+    val attachLine: String? = null,
+    /** True while a picked document is being read into memory. */
+    val attachBusy: Boolean = false,
     /** True while the PC reads the attached picture for "Photo to reminder". */
     val photoFinding: Boolean = false,
     /**
@@ -915,6 +924,15 @@ data class HomeActions(
     val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
+    /**
+     * Open the system's file picker for one document (PDF, Word, Excel,
+     * PowerPoint, text, Markdown or CSV). No storage permission and no new
+     * route: the picker hands over one file's bytes, which are read into
+     * memory, and the PC reads them within the question they were sent with.
+     */
+    val onAttachFile: () -> Unit = {},
+    /** Drop the attached document without sending it. */
+    val onRemoveAttach: () -> Unit = {},
     /**
      * Puts the recent captured notifications' redacted text into the same
      * "shared text" chip the Share sheet and the clipboard hotkey use
@@ -4137,9 +4155,10 @@ private fun Composer(
     // A picture still being prepared is not attached yet: sending now would
     // send the words without it and leave the photo to ride the NEXT question
     // (2026-10-24). The Photo button already refuses during that window; Send
-    // and the keyboard's Send action did not.
+    // and the keyboard's Send action did not. A document being read is the
+    // same window, and the same rule (2026-10-29).
     val canSend = (text.isNotBlank() || state.sharedLine != null) &&
-        state.link == LinkState.CONNECTED && !state.pictureBusy
+        state.link == LinkState.CONNECTED && !state.pictureBusy && !state.attachBusy
 
     Column(
         Modifier
@@ -4198,6 +4217,13 @@ private fun Composer(
             enabled = !state.photoFinding && state.link == LinkState.CONNECTED,
             onClick = actions.onFindDateInPicture,
         )
+    }
+    // A document waiting to go with the next question. Dismiss drops it, and
+    // its bytes with it - nothing was written anywhere to drop.
+    if (state.attachBusy) {
+        VoiceStrip("Reading the file…", tone = chrome.textMid)
+    } else if (state.attachLine != null) {
+        VoiceStrip(state.attachLine, tone = chrome.textMid, onDismiss = actions.onRemoveAttach)
     }
     // Text shared from another app: sent as its own message, before what is
     // typed, never mixed into it. Dismiss drops it.
@@ -4694,6 +4720,18 @@ private fun HomeMoreMenu(
                         !state.streaming && !state.pictureBusy,
                 ) { onDismiss(); actions.onAttachPicture() }
             }
+
+            // A document for the next question (2026-10-29): PDF, Word, Excel,
+            // PowerPoint, text, Markdown or CSV, read on the PC within that one
+            // turn. No switch and no capability of its own - the row is offered
+            // whenever a question could be sent, and the chip under the box is
+            // the promise that it will be read there.
+            MoreRow(
+                MoreMenuWords.FILE,
+                detail = MoreMenuWords.FILE_DETAIL,
+                enabled = state.link == LinkState.CONNECTED &&
+                    !state.streaming && !state.attachBusy,
+            ) { onDismiss(); actions.onAttachFile() }
 
             // Think about this one (the owner's decision, 2026-10-11): a
             // one-question flag. The label says which state the next press

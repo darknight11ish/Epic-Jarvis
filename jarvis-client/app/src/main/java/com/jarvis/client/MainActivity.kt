@@ -59,6 +59,7 @@ import com.jarvis.client.face.FaceQuality
 import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.AttachFile
 import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.PhotoReminder
 import com.jarvis.client.net.CustomVoices
@@ -540,6 +541,90 @@ class MainActivity : FragmentActivity() {
             }
         }.getOrNull() ?: return CustomVoices.Picked(ByteArray(0), null, "That file could not be read.")
         return CustomVoices.picked(bytes, limit)
+    }
+
+    /**
+     * A document to send with the next question ([AttachFile]), or null. In
+     * memory only - never saved, never in a Bundle (a rotation drops it; the
+     * owner picks it again), never logged.
+     */
+    private val attachedFile = mutableStateOf<AttachFile.Ready?>(null)
+
+    /** True while a picked document is being read into memory. */
+    private val attachBusy = mutableStateOf(false)
+
+    /**
+     * The system's file picker, for one document - the same
+     * `ActivityResultContracts.OpenDocument()` the custom-voice WAV uses, with
+     * no storage permission (the owner chooses one file and the app may read
+     * that one, once). The list is narrow on purpose ([AttachFile.MIME_TYPES]):
+     * the seven kinds `my_files` already reads, and nothing that would let a
+     * 400 MB video be picked only to be refused.
+     */
+    private val pickAttachFile = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        attachBusy.value = true
+        lifecycleScope.launch {
+            when (val out = withContext(Dispatchers.IO) { readAttachFile(uri) }) {
+                is AttachFile.Picked.Ok -> attachedFile.value = out.file
+                is AttachFile.Picked.Refused -> JarvisRuntime.setNotice(out.why)
+            }
+            attachBusy.value = false
+        }
+    }
+
+    /**
+     * One document, read once, into memory: the name from
+     * `OpenableColumns.DISPLAY_NAME` (the provider's own name for it), the
+     * kind checked BEFORE the file is opened, then at most one byte over
+     * [AttachFile.MAX_BYTES] - the same "one byte over" the WAV picker uses,
+     * so a 40 MB file is refused with its real size in the sentence instead of
+     * being read in full. Nothing is copied anywhere: the bytes live in the
+     * returned [AttachFile.Ready] and nowhere else.
+     */
+    private fun readAttachFile(uri: Uri): AttachFile.Picked {
+        val columns = arrayOf(
+            android.provider.OpenableColumns.DISPLAY_NAME,
+            android.provider.OpenableColumns.SIZE,
+        )
+        var name: String? = null
+        var stated = -1L
+        runCatching {
+            contentResolver.query(uri, columns, null, null, null)?.use { c ->
+                // By NAME, not by position: a provider is not obliged to hand
+                // the columns back in the order they were asked for.
+                val nameAt = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val sizeAt = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (c.moveToFirst()) {
+                    name = if (nameAt >= 0 && !c.isNull(nameAt)) c.getString(nameAt) else null
+                    stated = if (sizeAt >= 0 && !c.isNull(sizeAt)) c.getLong(sizeAt) else -1L
+                }
+            }
+        }
+        val mime = runCatching { contentResolver.getType(uri) }.getOrNull()
+        // A kind this app does not read is refused before a byte is read.
+        if (AttachFile.kindFor(name, mime) == null) {
+            return AttachFile.Picked.Refused(AttachFile.wrongKind(AttachFile.shownName(name)))
+        }
+        // The provider's own size, when it states one: a 40 MB file is refused
+        // with its real size in the sentence and nothing is read.
+        if (stated > AttachFile.MAX_BYTES) return AttachFile.Picked.Refused(AttachFile.tooBig(stated))
+        val limit = AttachFile.MAX_BYTES
+        val bytes = runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val out = java.io.ByteArrayOutputStream()
+                val buf = ByteArray(64 * 1024)
+                while (out.size() <= limit) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                }
+                out.toByteArray()
+            }
+        }.getOrNull() ?: return AttachFile.Picked.Refused(AttachFile.UNREADABLE)
+        return AttachFile.picked(bytes, name, mime)
     }
 
     /**
@@ -3542,6 +3627,11 @@ class MainActivity : FragmentActivity() {
                             pictureLine = picture.value?.let {
                                 ChatPicture.attachedLine(it, wordsOnly = !SecondCard.visionAvailable(secondCard))
                             },
+                            // A document waiting to go with the next question:
+                            // its name and size in words, never its bytes
+                            // (net/AttachFile). Read on the PC within that turn.
+                            attachLine = attachedFile.value?.let { AttachFile.attachedLine(it) },
+                            attachBusy = attachBusy.value,
                             sharedLine = sharedHeld?.let { Provenance.sharedLine(it) },
                             lookLine = lookLine,
                             watchSign = watchSign,
@@ -3642,6 +3732,11 @@ class MainActivity : FragmentActivity() {
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value
+                                    // The document attached to THIS question, if
+                                    // one is. Its bytes are held by this local
+                                    // only: they are read on the PC within the
+                                    // turn, never kept here, and dropped with it.
+                                    val doc = attachedFile.value
                                     // Where the words came from, and any shared
                                     // text held beside them - both read NOW,
                                     // as the question goes (section 18).
@@ -3667,7 +3762,16 @@ class MainActivity : FragmentActivity() {
                                         draft = ""
                                         draftPasted = false
                                         sharedHeld = null
-                                        scope.launch { JarvisRuntime.sendTypedChat(text, provenance = tag, shared = shared) }
+                                        // The chip goes as the bytes leave: a
+                                        // name left behind would look attached
+                                        // to the NEXT question, and the file is
+                                        // not re-sent (nothing about it is kept).
+                                        attachedFile.value = null
+                                        scope.launch {
+                                            JarvisRuntime.sendTypedChat(
+                                                text, provenance = tag, shared = shared, attachment = doc,
+                                            )
+                                        }
                                     } else {
                                         // With a picture, the PC is asked first
                                         // whether Pictures still works; if not,
@@ -3683,7 +3787,11 @@ class MainActivity : FragmentActivity() {
                                                 draftPasted = false
                                                 if (sharedHeld == shared) sharedHeld = null
                                                 picture.value = null
-                                                JarvisRuntime.sendTypedChat(text, picture = pic.dataUri, provenance = tag, shared = shared)
+                                                attachedFile.value = null
+                                                JarvisRuntime.sendTypedChat(
+                                                    text, picture = pic.dataUri, provenance = tag,
+                                                    shared = shared, attachment = doc,
+                                                )
                                             }
                                         }
                                     }
@@ -3696,6 +3804,11 @@ class MainActivity : FragmentActivity() {
                                     )
                                 },
                                 onRemovePicture = { picture.value = null },
+                                // One document for the next question: the
+                                // system picker, the narrow list, no storage
+                                // permission. Nothing is sent by choosing it.
+                                onAttachFile = { pickAttachFile.launch(AttachFile.MIME_TYPES) },
+                                onRemoveAttach = { attachedFile.value = null },
                                 // Fills the SAME shared-text chip the Share
                                 // sheet already uses - the owner still
                                 // presses Send. Never sent, learned, or read

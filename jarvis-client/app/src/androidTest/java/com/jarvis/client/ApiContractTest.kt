@@ -454,6 +454,44 @@ class ApiContractTest {
     }
 
     /**
+     * A document attached to a question (2026-10-29), read off the wire from
+     * the real ChatSession: one `attachment` object on the newest user message
+     * (`name`, `mime`, `size`, raw base64 `data`), `has_file: true` at the top
+     * level beside `has_image`, and NOTHING carried on the next question - the
+     * bytes are sent once and never kept.
+     */
+    @Test
+    fun anAttachedFileRidesInTheNewestMessageAndIsNotKept() = runBlocking {
+        fun answer(text: String) = MockResponse().setResponseCode(200)
+            .setHeader("Content-Type", "text/plain").setBody(text)
+        val file = com.jarvis.client.net.AttachFile.picked(
+            "hello".toByteArray(), "taxes.pdf",
+        ) as com.jarvis.client.net.AttachFile.Picked.Ok
+        val chat = ChatSession(api)
+
+        routes["/api/chat"] = answer("It is a tax form.")
+        chat.send("what does this say?", attachment = file.file)
+        val first = org.json.JSONObject(server.takeRequest(10, TimeUnit.SECONDS)!!.body.readUtf8())
+        assertEquals(true, first.getBoolean("has_file"))
+        assertEquals(false, first.getBoolean("has_image"))
+        val msgs = first.getJSONArray("messages")
+        val last = msgs.getJSONObject(msgs.length() - 1)
+        assertEquals("user", last.getString("role"))
+        assertEquals("what does this say?", last.getString("content"))
+        val att = last.getJSONObject("attachment")
+        assertEquals("taxes.pdf", att.getString("name"))
+        assertEquals("application/pdf", att.getString("mime"))
+        assertEquals(5, att.getInt("size"))
+        assertEquals("aGVsbG8=", att.getString("data"))
+
+        routes["/api/chat"] = answer("Fine.")
+        chat.send("and the second page?")
+        val second = org.json.JSONObject(server.takeRequest(10, TimeUnit.SECONDS)!!.body.readUtf8())
+        assertFalse("has_file must be absent on a question with no file", second.has("has_file"))
+        assertFalse("the file must not survive in the conversation", second.toString().contains("aGVsbG8="))
+    }
+
+    /**
      * Chat history on the PC (docs/JARVIS-API.md section 18), read off the
      * wire from the real ChatSession: every request says which conversation
      * it belongs to and that it came from the phone, each question says

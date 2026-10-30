@@ -74,6 +74,20 @@ internal object MoreMenuWords {
     /** The Photo key that used to sit at the start of the composer row. */
     const val PHOTO = "Photo"
 
+    /**
+     * "Attach a file" (2026-10-29): one PDF, Word, Excel, PowerPoint, text,
+     * Markdown or CSV file, read on the owner's PC within the question it is
+     * sent with. No new permission, no upload route and no switch.
+     */
+    const val FILE = "Attach a file"
+
+    /**
+     * Under "Attach a file": what really happens to it, so the row is not
+     * mistaken for an upload that is kept somewhere. The chip above the box
+     * says the rest (the outside-text sentence).
+     */
+    const val FILE_DETAIL = "PDF, Word, Excel, PowerPoint, text, Markdown or CSV, up to 2.5 MB. Read on your PC."
+
     /** The Notifications key while phone notifications are on and one was captured. */
     const val NOTIFICATIONS = "Notifications"
 
