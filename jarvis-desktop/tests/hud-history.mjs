@@ -24,7 +24,15 @@
  *   - the current chat is marked, and only it;
  *   - the three writes this panel may send are pin / tag / delete and
  *     nothing else, with the exact shapes the Rust command takes - and the
- *     delete sentence is the Brain's own, word for word;
+ *     delete sentence is the Brain's own, word for word (ARCHIVE joined them
+ *     on 2026-10-29: one reversible flag, no question, and the Archived list
+ *     is the same read with `archived=1`);
+ *   - an archived chat is put away, not deleted: one Archived section, no
+ *     confirm, never opened from the live list, and Unarchive brings it back;
+ *   - the page's main strip carries ONE History door in every shell whose left
+ *     layout shell, and it calls the SAME open routine as the rail icon (one
+ *     panel, one list - the owner's ask of 2026-10-29: "i want the chat
+ *     history accesible directly from the jarvis hud on desktop");
  *   - the page's half is wired: one external script (no new inline block),
  *     `window.hudHistoryHost` with its three functions, all three vendored
  *     copies of the page byte-identical, the module byte-identical in
@@ -223,6 +231,48 @@ check("every row carries what the panel draws, and only one is current", () => {
   assert.equal(w2.kind, "chat");
   assert.equal(w2.tag_id, 1);
   assert.equal(w2.pinned, false);
+  // Put away (2026-10-29): only the PC's own `true` says so.
+  assert.equal(H.rowOf({ id: "c", archived: true }, NOW, "").archived, true);
+  assert.equal(H.rowOf({ id: "c", archived: false }, NOW, "").archived, false);
+  assert.equal(H.rowOf({ id: "c" }, NOW, "").archived, false);
+});
+
+/* ── the archived list ────────────────────────────────────────────────── */
+
+check("the Archived list is ONE section: pins and tags do not regroup it", () => {
+  const list = [
+    row("a", "Away one", 100, { archived: true, pinned: true, tag_id: 1 }),
+    row("b", "Away two", 50, { archived: true, tag_id: 3 }),
+    row("c", "Still live", 10),
+  ];
+  const got = H.buildSections(list, TAGS, { now: NOW, archived: true });
+  assert.equal(got.length, 1, "the archived list was grouped like the live one");
+  assert.equal(got[0].key, "archived");
+  assert.equal(got[0].title, "Archived");
+  assert.deepEqual(got[0].rows.map((r) => r.id), ["b", "a"],
+    "the archived list is not newest first");
+  assert.equal(got[0].count, 2);
+  assert.equal(H.buildSections([], [], { now: NOW, archived: true }).length, 0);
+  // The live list still groups exactly as it always has.
+  assert.deepEqual(build().map((s) => s.key), ["pinned", "tag:1", "tag:3", "none"]);
+});
+
+check("a long archived list caps and remembers its collapse like any other", () => {
+  const many = Array.from({ length: 8 }, (_, i) =>
+    row("x" + i, "Away " + i, (i + 1) * 60, { archived: true }));
+  const capped = H.buildSections(many, [], { now: NOW, cap: 5, archived: true });
+  assert.equal(capped[0].rows.length, 5);
+  assert.equal(capped[0].more, 3);
+  const opened = H.buildSections(many, [], {
+    now: NOW, cap: 5, archived: true, expanded: { "!archived": true },
+  });
+  assert.equal(opened[0].rows.length, 8);
+  const collapsed = H.buildSections(many, [], {
+    now: NOW, archived: true, expanded: { archived: false },
+  });
+  assert.equal(collapsed[0].open, false);
+  assert.equal(collapsed[0].rows.length, 0);
+  assert.equal(collapsed[0].count, 8, "a collapsed section still says how many");
 });
 
 /* ── search ───────────────────────────────────────────────────────────── */
@@ -281,9 +331,9 @@ check("sorting never reorders the sections themselves", () => {
   ]);
 });
 
-/* ── the three writes ─────────────────────────────────────────────────── */
+/* ── the writes ───────────────────────────────────────────────────────── */
 
-check("a write is pin, tag or delete - one chat, and that action's own value", () => {
+check("a write is pin, tag, archive or delete - one chat, and that action's own value", () => {
   assert.deepEqual(H.actArgs("pin", "conv-aaaa", true), {
     action: "pin",
     id: "conv-aaaa",
@@ -304,6 +354,17 @@ check("a write is pin, tag or delete - one chat, and that action's own value", (
     id: "conv-aaaa",
     tag: null,
   });
+  // Archiving: ONE flag, both ways - reversible, so no confirm and no card.
+  assert.deepEqual(H.actArgs("archive", "conv-aaaa", true), {
+    action: "archive",
+    id: "conv-aaaa",
+    archived: true,
+  });
+  assert.deepEqual(H.actArgs("archive", "conv-aaaa", false), {
+    action: "archive",
+    id: "conv-aaaa",
+    archived: false,
+  });
   assert.deepEqual(H.actArgs("delete", "conv-aaaa"), {
     action: "delete",
     id: "conv-aaaa",
@@ -312,6 +373,8 @@ check("a write is pin, tag or delete - one chat, and that action's own value", (
     ["pin", "conv-aaaa", "yes"],
     ["pin", "conv-aaaa"],
     ["archive", "conv-aaaa"],
+    ["archive", "conv-aaaa", "yes"],
+    ["archive", "conv-aaaa", 1],
     ["tag", "conv-aaaa", "7"],
     ["tag", "conv-aaaa", 0],
     ["tag", "conv-aaaa", -1],
@@ -319,6 +382,46 @@ check("a write is pin, tag or delete - one chat, and that action's own value", (
   ]) {
     assert.equal(H.actArgs(...bad), null, JSON.stringify(bad) + " was accepted");
   }
+  // The browser's POST bodies are the documented shapes: archive sends the id
+  // and the one flag, and nothing else; delete is unchanged (no archived key).
+  assert.deepEqual(H.actBody("archive", "conv-aaaa", true), {
+    id: "conv-aaaa",
+    archived: true,
+  });
+  assert.deepEqual(H.actBody("archive", "conv-aaaa", false), {
+    id: "conv-aaaa",
+    archived: false,
+  });
+  assert.deepEqual(H.actBody("delete", "conv-aaaa"), { id: "conv-aaaa" });
+  assert.equal(Object.hasOwn(H.actBody("delete", "conv-aaaa"), "archived"), false);
+});
+
+check("the archive labels are the shared table's, and the Delete question did not move", () => {
+  assert.equal(H.ACTION_LABELS.archive, "Archive");
+  assert.equal(H.ACTION_LABELS.unarchive, "Unarchive");
+  assert.equal(H.labelFor("archive", false, false), "Archive");
+  assert.equal(H.labelFor("archive", false, true), "Unarchive");
+  assert.deepEqual([...H.ROW_ACTIONS], ["open", "pin", "move", "archive", "delete"]);
+  // Delete's confirmation is exactly what it was (the brief: keep it).
+  assert.equal(H.DELETE_QUESTION, "Delete this conversation?");
+  assert.ok(H.DELETE_REMOVES.includes("cannot be undone"));
+  assert.ok(H.DELETE_KEEPS_FACTS.includes("Forget a time frame"));
+  // Both windows read these from ONE file (2026-10-29, the same Gemini ruling
+  // that shared pin/tag/delete): no second copy of any archived word.
+  const sources = [MODULE, ACTIONS, read(SRC, "history-view.js"), read(SRC, "brain.js")];
+  for (const name of ["ARCHIVED", "ARCHIVED_NOT_CONTINUED", "ARCHIVE_DONE",
+    "UNARCHIVE_DONE", "ARCHIVE_CURRENT_DONE", "ROW_ACTIONS"]) {
+    const found = sources.filter((text) =>
+      new RegExp(`(?:export\\s+)?(?:const|var|let)\\s+${name}\\s*=`).test(text));
+    assert.equal(found.length, 1, name + " is defined in " + found.length + " files");
+  }
+  assert.match(ACTIONS, /export const ARCHIVED_NOT_CONTINUED =/,
+    "the shared module lost the archived sentence");
+  assert.match(MODULE, /import \{[^}]*ARCHIVED_NOT_CONTINUED[^}]*\} from "\.\/history-actions\.js"/,
+    "the HUD no longer imports the shared archived words");
+  assert.match(read(SRC, "brain.js"),
+    /import \{[^}]*ARCHIVED_NOT_CONTINUED[^}]*\} from "\.\/history-actions\.js"/,
+    "the Brain no longer imports the shared archived words");
 });
 
 check("the delete words are ONE copy, the one both windows read", () => {
@@ -357,16 +460,111 @@ check("the row menu's labels come from the shared table, not from literals here"
   assert.equal(H.ACTION_LABELS.delete, "Delete");
   assert.equal(H.labelFor("pin", false), "Pin chat");
   assert.equal(H.labelFor("pin", true), "Unpin chat");
-  for (const action of ["open", "pin", "move", "delete"]) {
+  for (const action of ["open", "pin", "move", "archive", "delete"]) {
     assert.ok(H.ACTION_LABELS[action], action + " has no label");
     assert.ok(
       MODULE.includes('ACTION_LABELS.' + action) || MODULE.includes('labelFor("' + action),
       action + " is labelled with a literal in the HUD"
     );
   }
-  // ... and the Brain's own History row uses the same table.
+  // ... and the Brain's own History row uses the same table. Its archive label
+  // is `historyLabelFor` because the Galaxy constellation already imported a
+  // `labelFor` of its own; the table it reads is the shared one.
   assert.match(read(SRC, "brain.js"), /button\(ACTION_LABELS\.delete/);
-  assert.match(read(SRC, "brain.js"), /import \{ ACTION_LABELS \} from "\.\/history-actions\.js"/);
+  assert.match(read(SRC, "brain.js"), /ACTION_LABELS[\s\S]{0,500}\} from "\.\/history-actions\.js"/);
+  assert.match(read(SRC, "brain.js"), /historyLabelFor\("archive"/,
+    "the Brain's Archive label is not from the shared table");
+  assert.match(read(SRC, "brain.js"), /labelFor as historyLabelFor/,
+    "the Brain no longer imports the shared labelFor");
+});
+
+check("Archive asks no question in the menu; Delete keeps its confirm", () => {
+  const menuAt = MODULE.indexOf("function openMenu(row, anchor)");
+  const body = MODULE.slice(menuAt,
+    MODULE.indexOf("/* ---- delete, with the page's own are-you-sure ---- */", menuAt));
+  const archAt = body.indexOf('var archive = menuItem(labelFor("archive"');
+  assert.notEqual(archAt, -1, "the row menu has no Archive item");
+  const archItem = body.slice(archAt, body.indexOf("var del =", archAt));
+  assert.match(archItem, /act\("archive", row\.id, true\)/,
+    "Archive does not send the one archive action");
+  assert.doesNotMatch(archItem, /askDelete/, "Archive asks a confirm - it is reversible");
+  const delAt = body.indexOf("var del =");
+  assert.match(body.slice(delAt, delAt + 400), /askDelete\(row, anchor\)/,
+    "Delete no longer asks its question");
+  // The archived list's own menu: Unarchive first, Delete still asks, and no
+  // Open (an archived chat is not carried on from here).
+  const archViewAt = body.indexOf("if (row.archived === true) {");
+  assert.notEqual(archViewAt, -1, "the archived list has no menu of its own");
+  const archView = body.slice(archViewAt,
+    body.indexOf("var open = menuItem(ACTION_LABELS.open", archViewAt));
+  assert.match(archView, /act\("archive", row\.id, false\)/,
+    "the archived list offers no Unarchive");
+  assert.match(archView, /askDelete\(row, anchor\)/,
+    "Delete does not ask in the archived list");
+  assert.doesNotMatch(archView, /openChat\(row\)/,
+    "an archived row still opens from the archived list");
+  // A click on an archived row says why it will not open, and does not open it.
+  const openAt = MODULE.indexOf("function openChat(row)");
+  assert.match(MODULE.slice(openAt, openAt + 600), /ARCHIVED_NOT_CONTINUED/,
+    "opening an archived chat does not say why it will not");
+  assert.match(MODULE.slice(openAt, openAt + 2000), /conv\.archived === true/,
+    "a chat archived on the PC since the list was read can still be opened");
+});
+
+check("ONE always-visible History door in the main strip calls the SAME open routine", () => {
+  // The page's main strip is between the log and the composer, so it is drawn
+  // in every layout shell. Exactly one History door lives there; the rail's
+  // clock icon stays as the other door.
+  const barAt = PAGE.indexOf('<div class="history-bar">');
+  const composerAt = PAGE.indexOf('<div class="composer">');
+  assert.ok(barAt > 0 && barAt < composerAt, "the history strip is not above the composer");
+  const doorAt = PAGE.indexOf('id="hud-history-open"');
+  assert.ok(doorAt > barAt && doorAt < composerAt, "the one-click door is not in the main strip");
+  assert.equal((PAGE.match(/id="hud-history-open"/g) || []).length, 1,
+    "the page has more than one History door");
+  assert.match(PAGE, /<button class="ghost history-open" id="hud-history-open"/,
+    "the History door is not a page button");
+  // Drawn where the LEFT RAIL IS A DRAWER - center-core, two-column-right,
+  // single-stage-bento - because there the rail's own clock icon is behind
+  // [Controls]. The shells whose left rail is on screen keep that icon and no
+  // strip: measured 2026-10-30, the strip took the hidden-galaxy layout from
+  // 30px of conversation to 24px at 1280x650 (hud.mjs). Ambient's transcript
+  // toggle stays Ambient-only.
+  const DRAWER_SHELLS = ["center-core", "two-column-right", "single-stage-bento"];
+  const SCREENED_SHELLS = ["split-stage", "three-column", "two-column-left"];
+  assert.match(PAGE, /\.history-bar\{display:none;\}/,
+    "the history strip is shown by the base rule, in every shell");
+  for (const shell of DRAWER_SHELLS) {
+    assert.match(PAGE, new RegExp(`html\\[data-hud-shell="${shell}"\\] \\.history-bar`),
+      `${shell}: its left rail is a drawer, so its History door is two clicks deep`);
+  }
+  for (const shell of SCREENED_SHELLS) {
+    assert.doesNotMatch(PAGE, new RegExp(`html\\[data-hud-shell="${shell}"\\] \\.history-bar`),
+      `${shell}: the strip is drawn although its left rail is on screen`);
+  }
+  assert.match(PAGE, /\.history-toggle\{display:none;\}/,
+    "the Ambient transcript toggle is no longer Ambient-only");
+  assert.match(PAGE, /html\[data-hud-shell="center-core"\] \.history-toggle\{display:inline-flex;\}/,
+    "Ambient lost its Show-full-history toggle");
+  // ONE open routine, two doors: the rail icon and the strip door both call
+  // `setOpen`, and the panel is created once.
+  assert.equal((MODULE.match(/function setOpen\(on\)/g) || []).length, 1,
+    "the HUD has more than one open routine");
+  assert.equal((MODULE.match(/panel\.id = "history-sidebar"/g) || []).length, 1,
+    "the HUD creates more than one panel");
+  assert.match(MODULE, /var stripBtn = doc\.getElementById\("hud-history-open"\)/,
+    "the module never finds the page's one-click door");
+  const clickAt = MODULE.indexOf('stripBtn.addEventListener("click"');
+  assert.notEqual(clickAt, -1, "the one-click door has no click handler");
+  assert.match(MODULE.slice(clickAt, clickAt + 600), /setOpen\(true\)/,
+    "the one-click door does not open the panel through setOpen");
+  assert.match(MODULE, /railBtn\.addEventListener\("click"[\s\S]{0,140}setOpen\(!/,
+    "the rail icon no longer uses the same setOpen");
+  assert.match(MODULE, /open: function \(\) \{\s*state\.opener = stripBtn \|\| railBtn;\s*setOpen\(true\);/,
+    "window.hudHistory.open is not the same open routine");
+  // No new inline script: the click is wired by the external module, so the
+  // page's inline-script count and every CSP hash are untouched.
+  assert.equal((PAGE.match(/src="hud-history\.js"/g) || []).length, 1);
 });
 
 /* ── glyphs ───────────────────────────────────────────────────────────── */
@@ -596,6 +794,34 @@ check("the lock takes the words out of the three History reads", () => {
   }
   assert.match(rustLock, /crate::brain::history::redact_list/);
   assert.match(rustLock, /crate::brain::history::redact_tags/);
+});
+
+check("archiving is ONE action on the same command, one body builder for both windows", () => {
+  // The HUD's archive is the same `hud_history_act` command (no new command,
+  // no new permission on this window), and the body is the shared builder the
+  // Brain's own archive command also calls (2026-10-29).
+  assert.match(rustHistory, /pub\(crate\) fn archive_body\(id: &str, archived: bool\)/);
+  assert.match(rustHistory, /"archive" => \{/);
+  assert.match(rustHistory, /Ok\(\("\/api\/history\/archive", archive_body\(id, archived\)\?\)\)/);
+  assert.match(rustHistory, /pub async fn brain_history_archive\(/,
+    "the Brain has no archive command of its own");
+  assert.match(rustLib, /brain::history::brain_history_archive,/,
+    "the Brain's archive command is not registered");
+  assert.match(rustBuild, /"brain_history_archive",/,
+    "the Brain's archive command has no permission in build.rs");
+  const brainSet = surfaces.slice(surfaces.indexOf('identifier = "brain-history"'));
+  assert.match(brainSet.slice(0, 1600), /"allow-brain-history-archive"/,
+    "the Brain's archive permission is not in the brain-history set");
+  assert.match(surfaces, /archive or bring back ONE chat/i,
+    "the HUD's History set does not describe the archive action");
+  // The archived list is a READ on the same allow-list entry (`archived=1`),
+  // and the lock redacts it like every other History read (the path is split
+  // at '?', so the flag cannot walk around the redaction).
+  assert.match(rustHistory, /"archived" if archived\.is_none\(\) => \{/);
+  assert.match(rustHistory, /if archived == Some\(true\) \{\s*path\.push_str\(&format!\("\{sep\}archived=1"\)\)/);
+  const lockAt = rustLock.indexOf("pub fn redact_hud_read");
+  assert.match(rustLock.slice(lockAt, lockAt + 900), /let route = path\.split\('\?'\)\.next\(\)/,
+    "the lock no longer splits a read's query off before matching it");
 });
 
 check("the HUD's static whitelist, the patcher and the base all carry both files", () => {

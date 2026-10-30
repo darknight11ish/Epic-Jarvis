@@ -15,6 +15,10 @@
 //! * [`brain_history_delete`] - `POST /api/history/delete`, one id. There is
 //!   no "delete all" here or on the server: irreversible bulk actions stay
 //!   off the API.
+//! * [`brain_history_archive`] - `POST /api/history/archive`, one id and one
+//!   direction (the owner's ask of 2026-10-29: "make sure i can archive and
+//!   delete chats"). Reversible, so no question and no card; the archived
+//!   list is `GET /api/history?archived=1`.
 //! * [`brain_history_settings`] - `POST /api/history/settings`, ONE field
 //!   per request. Turning history ON only raises an approval card (tier
 //!   `ask`), and is held while the event stream is stale (rule 4), exactly
@@ -200,7 +204,7 @@ pub(crate) fn list_path(
     before: Option<f64>,
     kind: Option<&str>,
 ) -> Result<String, String> {
-    list_path_tagged(limit, before, kind, None)
+    list_path_tagged(limit, before, kind, None, false)
 }
 
 /// A tag filter for the list: `none` (untagged) or a whole tag id. Anything
@@ -215,12 +219,15 @@ pub(crate) fn tag_filter(tag: &str) -> Result<String, String> {
     }
 }
 
-/// [`list_path`] narrowed to one tag (`tag=<id>` or `tag=none`).
+/// [`list_path`] narrowed to one tag (`tag=<id>` or `tag=none`) and/or to the
+/// archived chats (`archived=1`; `false` asks for the live list, which is the
+/// PC's default and so sends no parameter).
 pub(crate) fn list_path_tagged(
     limit: Option<u32>,
     before: Option<f64>,
     kind: Option<&str>,
     tag: Option<&str>,
+    archived: bool,
 ) -> Result<String, String> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let mut path = format!("/api/history?limit={limit}");
@@ -237,6 +244,11 @@ pub(crate) fn list_path_tagged(
     }
     if let Some(t) = tag.filter(|t| !t.is_empty()) {
         path.push_str(&format!("&tag={}", tag_filter(t)?));
+    }
+    // The archived list is a list of its own (the PC lists ONLY archived chats
+    // for `archived=1`); the live list sends nothing, which is the PC default.
+    if archived {
+        path.push_str("&archived=1");
     }
     Ok(path)
 }
@@ -303,12 +315,15 @@ fn seconds_text(v: &str) -> Option<String> {
 }
 
 /// `/api/history`'s query as the HUD may send it: at most one each of
-/// `limit`, `before`, `kind` and `tag`, in any order, rebuilt in one order.
+/// `limit`, `before`, `kind`, `tag` and `archived`, in any order, rebuilt in
+/// one order. `archived` has one spelling - the PC's own `archived=1` - so
+/// the archived list the sidebar shows is exactly the PC's archived list.
 fn hud_list_path(query: &str) -> Option<String> {
     let mut limit: Option<u32> = None;
     let mut before: Option<String> = None;
     let mut kind: Option<&str> = None;
     let mut tag: Option<String> = None;
+    let mut archived: Option<bool> = None;
     for pair in query.split('&') {
         let (key, value) = pair.split_once('=')?;
         if value.is_empty() {
@@ -321,6 +336,14 @@ fn hud_list_path(query: &str) -> Option<String> {
                 kind = Some(*KINDS.iter().find(|k| **k == value)?);
             }
             "tag" if tag.is_none() => tag = Some(tag_filter(value).ok()?),
+            // The archived list is on or off, one spelling each, at most once.
+            "archived" if archived.is_none() => {
+                archived = Some(match value {
+                    "1" => true,
+                    "0" => false,
+                    _ => return None,
+                })
+            }
             _ => return None,
         }
     }
@@ -340,17 +363,23 @@ fn hud_list_path(query: &str) -> Option<String> {
     }
     if let Some(t) = tag {
         path.push_str(&format!("{sep}tag={t}"));
+        sep = '&';
+    }
+    if archived == Some(true) {
+        path.push_str(&format!("{sep}archived=1"));
     }
     Some(path)
 }
 
 /// One History read the HUD sidebar may make, as a path to send, or `None`.
 ///
-/// * `/api/history` (optional `limit`, `before`, `kind`, `tag`) - the list.
+/// * `/api/history` (optional `limit`, `before`, `kind`, `tag`, `archived=1`) -
+///   the list, or the archived list.
 /// * `/api/history/conversation?id=` - one chat, for a click on a row.
 /// * `/api/history/tags` - the owner's tags with their counts (the groups).
 ///
-/// Pinning is NOT a read: it is `hud_history_act`, below.
+/// Pinning, filing, archiving and deleting are NOT reads: they are
+/// `hud_history_act`, below.
 pub(crate) fn history_read_path(path: &str) -> Option<String> {
     if path.is_empty()
         || !path.bytes().all(|b| (0x21..0x7f).contains(&b))
@@ -380,9 +409,10 @@ pub(crate) fn history_read_path(path: &str) -> Option<String> {
 /// What ONE History write from the HUD sidebar sends: the route and body, or
 /// why not. Pure - every refusal below is held by a test without a Tauri app.
 ///
-/// Three actions, the same three the Brain's History tab offers on one chat:
+/// Four actions, the same four the Brain's History tab offers on one chat:
 /// `pin` (`pinned` true or false), `tag` (`tag` a tag id, or JSON null to
-/// take the tag off) and `delete`. Anything else is refused, and a field the
+/// take the tag off), `archive` (`archived` true or false: put it away, or
+/// bring it back) and `delete`. Anything else is refused, and a field the
 /// action does not use is refused rather than ignored: a page that sent
 /// "pin" with a tag meant something this command does not do.
 pub(crate) fn hud_act_body(
@@ -390,6 +420,7 @@ pub(crate) fn hud_act_body(
     id: &str,
     pinned: Option<bool>,
     tag: Option<&serde_json::Value>,
+    archived: Option<bool>,
 ) -> Result<(&'static str, serde_json::Value), String> {
     let id = checked_id(id)?;
     let mixed = || "That request mixed two History actions up, so nothing was sent.".to_string();
@@ -398,7 +429,7 @@ pub(crate) fn hud_act_body(
             let pinned = pinned.ok_or_else(|| {
                 "A pin has to say which way: true to pin, false to take it off.".to_string()
             })?;
-            if tag.is_some() {
+            if tag.is_some() || archived.is_some() {
                 return Err(mixed());
             }
             Ok((
@@ -407,7 +438,7 @@ pub(crate) fn hud_act_body(
             ))
         }
         "tag" => {
-            if pinned.is_some() {
+            if pinned.is_some() || archived.is_some() {
                 return Err(mixed());
             }
             let tag_id = match tag {
@@ -421,16 +452,30 @@ pub(crate) fn hud_act_body(
             // The SAME body builder the Brain's History tab uses.
             Ok(("/api/history/tag", tag_chat_body(id, tag_id)?))
         }
-        "delete" => {
+        // Archiving is reversible, asks no question, and is ONE flag in each
+        // direction - the same body builder the Brain's own archive command
+        // uses, so the two windows cannot drift into two requests.
+        "archive" => {
+            let archived = archived.ok_or_else(|| {
+                "An archive change has to say which way: true to archive, false to put it back."
+                    .to_string()
+            })?;
             if pinned.is_some() || tag.is_some() {
+                return Err(mixed());
+            }
+            Ok(("/api/history/archive", archive_body(id, archived)?))
+        }
+        "delete" => {
+            if pinned.is_some() || tag.is_some() || archived.is_some() {
                 return Err(mixed());
             }
             // ... and the same delete builder.
             Ok(("/api/history/delete", delete_body(id)?))
         }
-        _ => {
-            Err("The History sidebar can pin, file or delete one chat - nothing else.".to_string())
-        }
+        _ => Err(
+            "The History sidebar can pin, file, archive or delete one chat - nothing else."
+                .to_string(),
+        ),
     }
 }
 
@@ -542,6 +587,36 @@ pub(crate) fn delete_answer(status: u16, body: &str) -> Result<serde_json::Value
     }
     if status == 404 {
         return Ok(serde_json::json!({ "ok": true, "gone": true }));
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
+/// [`brain_history_archive`]'s reading. A 2xx must say `ok` and which way
+/// the chat now is (`archived`). Anything else is the PC's own plain
+/// sentence when it sent one - a bad id (`bad_request`), an id naming no
+/// chat (`not_found`), or `locked` while "Hide memory lists and chat
+/// history" is on - else a plain line with the status code.
+pub(crate) fn archive_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body)
+            .filter(|v| {
+                v.get("ok").and_then(|o| o.as_bool()) == Some(true)
+                    && v.get("archived").is_some_and(|a| a.is_boolean())
+            })
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    // The PC's failures are classified: `{"ok": false, "error": "<code>",
+    // "message": "<one plain sentence>"}`. The sentence is shown as it is.
+    if let Some(said) = parsed(body)
+        .filter(|v| v.get("ok").and_then(|o| o.as_bool()) == Some(false))
+        .and_then(|v| {
+            v.get("message")
+                .and_then(|m| m.as_str())
+                .map(str::to_string)
+        })
+        .filter(|m| !m.trim().is_empty())
+    {
+        return Err(said);
     }
     Err(commands::backend_refusal(status, body))
 }
@@ -713,6 +788,19 @@ pub(crate) fn tag_chat_body(id: &str, tag_id: Option<i64>) -> Result<serde_json:
 /// different requests in the two windows.
 pub(crate) fn delete_body(id: &str) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({ "id": checked_id(id)? }))
+}
+
+/// The body for `POST /api/history/archive`: the id and one flag - true puts
+/// the chat away, false brings it back (JARVIS-API.md section 18, "Chat
+/// history", the archived list; the owner's ask of 2026-10-29).
+///
+/// ONE builder for BOTH surfaces - the Brain's History tab and the HUD's
+/// History sidebar both reach this route through it (the HUD's own
+/// [`hud_act_body`] calls it) - so "archived" cannot come to mean two
+/// different requests in the two windows, exactly like [`delete_body`]. It is
+/// reversible and raises no card; deleting keeps its confirm.
+pub(crate) fn archive_body(id: &str, archived: bool) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({ "id": checked_id(id)?, "archived": archived }))
 }
 
 /// The `error` codes the PC's fork route answers with (JARVIS-API section
@@ -1009,7 +1097,9 @@ async fn post(
 }
 
 /// One page of conversations, newest first. `before`: the `updated` of the
-/// oldest one already shown, for "Load older". Reads only.
+/// oldest one already shown, for "Load older". `archived`: true shows the
+/// archived chats only (the PC's own `archived=1`), false or absent the live
+/// list. Reads only.
 #[tauri::command]
 pub async fn brain_history_list(
     app: AppHandle,
@@ -1017,8 +1107,15 @@ pub async fn brain_history_list(
     limit: Option<u32>,
     kind: Option<String>,
     tag: Option<String>,
+    archived: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let path = list_path_tagged(limit, before, kind.as_deref(), tag.as_deref())?;
+    let path = list_path_tagged(
+        limit,
+        before,
+        kind.as_deref(),
+        tag.as_deref(),
+        archived == Some(true),
+    )?;
     let (status, body) = get(&app, &path).await?;
     let answer = list_answer(status, &body)?;
     Ok(if crate::lock::private_hidden(&app) {
@@ -1297,8 +1394,34 @@ pub async fn brain_history_delete(app: AppHandle, id: String) -> Result<serde_js
     delete_answer(status, &text)
 }
 
+/// Puts ONE conversation away, or brings it back (the owner's ask of
+/// 2026-10-29: "make sure i can archive and delete chats"). `archived: true`
+/// hides it from the live History list and shows it under "Archived";
+/// `false` puts it back. It is reversible, so it asks NO question and raises
+/// no card - deleting still keeps its confirm.
+///
+/// It names a chat, so it is answered only while the private lists are shown
+/// and the link is live, the same two rules the HUD's own History write
+/// keeps (`hud_history_act`, the other surface of [`archive_body`]): a
+/// chat's title is the owner's words.
+#[tauri::command]
+pub async fn brain_history_archive(
+    app: AppHandle,
+    id: String,
+    archived: bool,
+) -> Result<serde_json::Value, String> {
+    if crate::lock::private_hidden(&app) {
+        return Err(HISTORY_STILL_HIDDEN.to_string());
+    }
+    require_link_live(&app)?;
+    let body = archive_body(&id, archived)?;
+    let (status, text) = post(&app, "/api/history/archive", body).await?;
+    archive_answer(status, &text)
+}
+
 /// The HUD's History sidebar: pin or unpin ONE chat, file ONE chat under a
-/// tag, or delete ONE chat (2026-10-27; JARVIS-API section 18.3).
+/// tag, archive or unarchive ONE chat, or delete ONE chat (2026-10-27;
+/// JARVIS-API section 18.3; archiving added 2026-10-29).
 ///
 /// It lives here rather than in `hud_proxy.rs` on purpose: these are the
 /// History routes the Brain's own tab already uses, with the same bodies
@@ -1310,9 +1433,9 @@ pub async fn brain_history_delete(app: AppHandle, id: String) -> Result<serde_js
 ///   a chat's title is the owner's words, and no route that names a chat is
 ///   answered while "Hide memory lists" or App lock is on.
 /// * **Held on a stale link** (rule 4), before anything is sent.
-/// * **No approval card**, and nothing loosened: pinning, filing and deleting
-///   ONE chat are the owner's own tidying, exactly what the Brain's History
-///   tab does with the same routes.
+/// * **No approval card**, and nothing loosened: pinning, filing, archiving
+///   and deleting ONE chat are the owner's own tidying, exactly what the
+///   Brain's History tab does with the same routes.
 #[tauri::command]
 pub async fn hud_history_act(
     app: AppHandle,
@@ -1320,12 +1443,13 @@ pub async fn hud_history_act(
     id: String,
     pinned: Option<bool>,
     tag: Option<serde_json::Value>,
+    archived: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     if crate::lock::private_hidden(&app) {
         return Err(HISTORY_STILL_HIDDEN.to_string());
     }
     require_link_live(&app)?;
-    let (path, body) = hud_act_body(&action, &id, pinned, tag.as_ref())?;
+    let (path, body) = hud_act_body(&action, &id, pinned, tag.as_ref(), archived)?;
     let (status, text) = post(&app, path, body).await?;
     if (200..300).contains(&status) {
         return parsed(&text).ok_or_else(|| UNREADABLE.to_string());
@@ -1404,23 +1528,50 @@ mod tests {
     #[test]
     fn a_tag_filter_is_a_whole_id_or_none() {
         assert_eq!(
-            list_path_tagged(None, None, None, Some("3")).unwrap(),
+            list_path_tagged(None, None, None, Some("3"), false).unwrap(),
             "/api/history?limit=30&tag=3"
         );
         assert_eq!(
-            list_path_tagged(None, None, Some("live"), Some("none")).unwrap(),
+            list_path_tagged(None, None, Some("live"), Some("none"), false).unwrap(),
             "/api/history?limit=30&kind=live&tag=none"
         );
         assert_eq!(
-            list_path_tagged(None, None, None, Some("")).unwrap(),
+            list_path_tagged(None, None, None, Some(""), false).unwrap(),
             "/api/history?limit=30"
         );
         for bad in ["3&limit=100", "-1", "0", "03", "all", "1.5", "None"] {
             assert!(
-                list_path_tagged(None, None, None, Some(bad)).is_err(),
+                list_path_tagged(None, None, None, Some(bad), false).is_err(),
                 "{bad}"
             );
         }
+    }
+
+    /// The archived list is a list of its own (the owner's ask of 2026-10-29):
+    /// the PC's one spelling is `archived=1`, the live list sends nothing, and
+    /// asking for the archived list does not stop the other filters combining.
+    #[test]
+    fn the_archived_list_asks_the_pcs_own_archived_flag() {
+        assert_eq!(
+            list_path_tagged(None, None, None, None, false).unwrap(),
+            "/api/history?limit=30"
+        );
+        assert_eq!(
+            list_path_tagged(None, None, None, None, true).unwrap(),
+            "/api/history?limit=30&archived=1"
+        );
+        assert_eq!(
+            list_path_tagged(
+                Some(30),
+                Some(1_790_000_300.0),
+                Some("live"),
+                Some("none"),
+                true
+            )
+            .unwrap(),
+            "/api/history?limit=30&before=1790000300&kind=live&tag=none&archived=1",
+            "the archived list is one more filter, never a second route"
+        );
     }
 
     /// The HUD sidebar's three reads, and only those. The allow-list in
@@ -1447,6 +1598,16 @@ mod tests {
             "/api/history?limit=30&before=1790000300.25&kind=live&tag=3",
             "the parameters come back in one fixed order, and `before` keeps the page's digits"
         );
+        // The archived list: the sidebar's "Archived" filter (2026-10-29).
+        assert_eq!(
+            history_read_path("/api/history?limit=100&archived=1").unwrap(),
+            "/api/history?limit=100&archived=1"
+        );
+        assert_eq!(
+            history_read_path("/api/history?archived=0").unwrap(),
+            "/api/history",
+            "archived=0 is the live list, and the live list asks for nothing"
+        );
         // One chat, for a click on a row.
         assert_eq!(
             history_read_path("/api/history/conversation?id=conv-aaaa").unwrap(),
@@ -1471,6 +1632,10 @@ mod tests {
             "/api/history?kind=secret",
             "/api/history?q=hello",
             "/api/history?tag=all",
+            "/api/history?archived=2",
+            "/api/history?archived=true",
+            "/api/history?archived=1&archived=1",
+            "/api/history?archived=",
             "/api/history?limit=10&",
             "/api/history?limit=10#frag",
             "/api/history?limit=10&why=1",
@@ -1490,43 +1655,87 @@ mod tests {
         }
     }
 
-    /// One pin, one tag or one delete, and nothing else: the body is built
-    /// from checked parts, so a page cannot turn this into another route,
-    /// another chat, or a request that means two things.
+    /// One pin, one tag, one archive or one delete, and nothing else: the body
+    /// is built from checked parts, so a page cannot turn this into another
+    /// route, another chat, or a request that means two things.
     #[test]
-    fn the_hud_history_write_is_one_of_three_actions() {
-        let pin = hud_act_body("pin", "conv-aaaa", Some(true), None).unwrap();
+    fn the_hud_history_write_is_one_of_four_actions() {
+        let pin = hud_act_body("pin", "conv-aaaa", Some(true), None, None).unwrap();
         assert_eq!(pin.0, "/api/history/pin");
         assert_eq!(
             pin.1,
             serde_json::json!({"id": "conv-aaaa", "pinned": true})
         );
-        let unpin = hud_act_body("pin", "conv-aaaa", Some(false), None).unwrap();
+        let unpin = hud_act_body("pin", "conv-aaaa", Some(false), None, None).unwrap();
         assert_eq!(
             unpin.1,
             serde_json::json!({"id": "conv-aaaa", "pinned": false})
         );
-        let filed = hud_act_body("tag", "conv-aaaa", None, Some(&serde_json::json!(7))).unwrap();
+        let filed =
+            hud_act_body("tag", "conv-aaaa", None, Some(&serde_json::json!(7)), None).unwrap();
         assert_eq!(filed.0, "/api/history/tag");
         assert_eq!(filed.1, serde_json::json!({"id": "conv-aaaa", "tag_id": 7}));
-        let unfiled =
-            hud_act_body("tag", "conv-aaaa", None, Some(&serde_json::Value::Null)).unwrap();
+        let unfiled = hud_act_body(
+            "tag",
+            "conv-aaaa",
+            None,
+            Some(&serde_json::Value::Null),
+            None,
+        )
+        .unwrap();
         assert_eq!(
             unfiled.1,
             serde_json::json!({"id": "conv-aaaa", "tag_id": null})
         );
-        let gone = hud_act_body("delete", "conv-aaaa", None, None).unwrap();
+        // Archiving, both ways: reversible, one flag, no confirm (2026-10-29).
+        let put_away = hud_act_body("archive", "conv-aaaa", None, None, Some(true)).unwrap();
+        assert_eq!(put_away.0, "/api/history/archive");
+        assert_eq!(
+            put_away.1,
+            serde_json::json!({"id": "conv-aaaa", "archived": true})
+        );
+        let brought_back = hud_act_body("archive", "conv-aaaa", None, None, Some(false)).unwrap();
+        assert_eq!(
+            brought_back.1,
+            serde_json::json!({"id": "conv-aaaa", "archived": false})
+        );
+        let gone = hud_act_body("delete", "conv-aaaa", None, None, None).unwrap();
         assert_eq!(gone.0, "/api/history/delete");
         assert_eq!(gone.1, serde_json::json!({"id": "conv-aaaa"}));
-        // A pin with no direction, an action that is not one of the three,
+        // A pin with no direction, an action that is not one of the four,
         // a field the action does not use, a tag that is not a tag id, and an
         // id that is not this PC's: all refused before anything is sent.
-        assert!(hud_act_body("pin", "conv-aaaa", None, None).is_err());
-        assert!(hud_act_body("pin", "conv-aaaa", Some(true), Some(&serde_json::json!(1))).is_err());
-        assert!(hud_act_body("archive", "conv-aaaa", None, None).is_err());
-        assert!(hud_act_body("delete", "conv-aaaa", Some(true), None).is_err());
-        assert!(hud_act_body("tag", "conv-aaaa", Some(true), None).is_err());
-        assert!(hud_act_body("tag", "conv-aaaa", None, None).is_err());
+        assert!(hud_act_body("pin", "conv-aaaa", None, None, None).is_err());
+        assert!(hud_act_body(
+            "pin",
+            "conv-aaaa",
+            Some(true),
+            Some(&serde_json::json!(1)),
+            None
+        )
+        .is_err());
+        assert!(hud_act_body("archive", "conv-aaaa", None, None, None).is_err());
+        assert!(
+            hud_act_body("archive", "conv-aaaa", Some(true), None, Some(true)).is_err(),
+            "an archive mixed with a pin is two actions"
+        );
+        assert!(
+            hud_act_body(
+                "archive",
+                "conv-aaaa",
+                None,
+                Some(&serde_json::json!(1)),
+                Some(true)
+            )
+            .is_err(),
+            "an archive mixed with a tag is two actions"
+        );
+        assert!(hud_act_body("unarchive", "conv-aaaa", None, None, Some(false)).is_err());
+        assert!(hud_act_body("delete", "conv-aaaa", Some(true), None, None).is_err());
+        assert!(hud_act_body("delete", "conv-aaaa", None, None, Some(false)).is_err());
+        assert!(hud_act_body("tag", "conv-aaaa", Some(true), None, None).is_err());
+        assert!(hud_act_body("tag", "conv-aaaa", None, None, Some(true)).is_err());
+        assert!(hud_act_body("tag", "conv-aaaa", None, None, None).is_err());
         for bad in [
             serde_json::json!(0),
             serde_json::json!(-1),
@@ -1536,25 +1745,30 @@ mod tests {
             serde_json::json!({}),
         ] {
             assert!(
-                hud_act_body("tag", "conv-aaaa", None, Some(&bad)).is_err(),
+                hud_act_body("tag", "conv-aaaa", None, Some(&bad), None).is_err(),
                 "{bad} was taken as a tag"
             );
         }
         for bad in ["", "short", "conv aaaa", "conv/aaaa", "../../etc/passwd"] {
             assert!(
-                hud_act_body("delete", bad, None, None).is_err(),
+                hud_act_body("delete", bad, None, None, None).is_err(),
+                "{bad} was taken as an id"
+            );
+            assert!(
+                hud_act_body("archive", bad, None, None, Some(true)).is_err(),
                 "{bad} was taken as an id"
             );
         }
     }
 
-    /// Filing and deleting ONE chat are the Brain's own requests, not a second
-    /// set of them: the HUD's builder hands back exactly what
-    /// [`tag_chat_body`] and [`delete_body`] build for the same chat, so the
-    /// two windows cannot drift into sending two different bodies to one
-    /// route (the Gemini ruling of 2026-10-27: share the row-action helpers).
+    /// Filing, archiving and deleting ONE chat are the Brain's own requests,
+    /// not a second set of them: the HUD's builder hands back exactly what
+    /// [`tag_chat_body`], [`archive_body`] and [`delete_body`] build for the
+    /// same chat, so the two windows cannot drift into sending two different
+    /// bodies to one route (the Gemini ruling of 2026-10-27: share the
+    /// row-action helpers; archiving joined that rule on 2026-10-29).
     #[test]
-    fn the_hud_files_and_deletes_with_the_brains_own_bodies() {
+    fn the_hud_files_archives_and_deletes_with_the_brains_own_bodies() {
         for id in ["conv-aaaa", "conv-0001-abcd"] {
             for tag in [None, Some(1), Some(12)] {
                 let value = match tag {
@@ -1562,17 +1776,116 @@ mod tests {
                     Some(n) => serde_json::json!(n),
                 };
                 assert_eq!(
-                    hud_act_body("tag", id, None, Some(&value)).unwrap(),
+                    hud_act_body("tag", id, None, Some(&value), None).unwrap(),
                     ("/api/history/tag", tag_chat_body(id, tag).unwrap()),
                     "the HUD's tag body drifted from the Brain's"
                 );
             }
+            for archived in [true, false] {
+                assert_eq!(
+                    hud_act_body("archive", id, None, None, Some(archived)).unwrap(),
+                    ("/api/history/archive", archive_body(id, archived).unwrap()),
+                    "the HUD's archive body drifted from the Brain's"
+                );
+            }
             assert_eq!(
-                hud_act_body("delete", id, None, None).unwrap(),
+                hud_act_body("delete", id, None, None, None).unwrap(),
                 ("/api/history/delete", delete_body(id).unwrap()),
                 "the HUD's delete body drifted from the Brain's"
             );
         }
+    }
+
+    /// One flag and one chat, exactly two keys - the body the PC's archive
+    /// route takes. A bad id never reaches a URL or a body.
+    #[test]
+    fn an_archive_body_is_one_chat_and_one_direction() {
+        let away = archive_body("conv-0001-abcd", true).unwrap();
+        assert_eq!(
+            away,
+            serde_json::json!({"id": "conv-0001-abcd", "archived": true})
+        );
+        assert_eq!(away.as_object().unwrap().len(), 2, "{away}");
+        let back = archive_body("conv-0001-abcd", false).unwrap();
+        assert_eq!(
+            back,
+            serde_json::json!({"id": "conv-0001-abcd", "archived": false})
+        );
+        for bad in ["", "short", "conv aaaa", "conv/aaaa", "../../etc/passwd"] {
+            assert!(archive_body(bad, true).is_err(), "{bad} was taken as an id");
+        }
+    }
+
+    /// The Brain's archive reading: a 2xx that says `ok` and which way; any
+    /// refusal the PC classified is shown with its own plain sentence (a bad
+    /// id, an id naming no chat, or `locked` while the lists are hidden).
+    #[test]
+    fn an_archive_answer_is_a_direction_or_the_pcs_own_sentence() {
+        let away = archive_answer(
+            200,
+            r#"{"ok":true,"id":"conv-12345678","archived":true,"extra":1}"#,
+        )
+        .unwrap();
+        assert_eq!(away["archived"], true);
+        assert_eq!(away["id"], "conv-12345678");
+        let back =
+            archive_answer(200, r#"{"ok":true,"id":"conv-12345678","archived":false}"#).unwrap();
+        assert_eq!(back["archived"], false);
+        // A 2xx without the flag is not a success this page can draw from; a
+        // 2xx without the id is fine (the command already knows which chat it
+        // asked about).
+        assert!(archive_answer(200, r#"{"ok":true,"id":"conv-12345678"}"#).is_err());
+        assert!(
+            archive_answer(200, r#"{"ok":true,"id":"conv-12345678","archived":"yes"}"#).is_err()
+        );
+        assert_eq!(
+            archive_answer(200, r#"{"ok":true,"archived":true}"#).unwrap()["archived"],
+            true
+        );
+        assert!(archive_answer(200, "not json").is_err());
+        assert!(archive_answer(200, r#"{"ok":false,"archived":true}"#).is_err());
+        // The PC's failures, as it sends them.
+        assert_eq!(
+            archive_answer(
+                404,
+                r#"{"ok":false,"error":"not_found","message":"That conversation is no longer kept."}"#
+            )
+            .unwrap_err(),
+            "That conversation is no longer kept."
+        );
+        assert_eq!(
+            archive_answer(
+                423,
+                r#"{"ok":false,"error":"locked","message":"Your chat history is hidden."}"#
+            )
+            .unwrap_err(),
+            "Your chat history is hidden."
+        );
+        assert_eq!(
+            archive_answer(400, r#"{"ok":false,"error":"bad_request"}"#).unwrap_err(),
+            "Bad_request"
+        );
+        assert_eq!(
+            archive_answer(500, r#"{"error":"the history store is locked"}"#).unwrap_err(),
+            "The history store is locked"
+        );
+    }
+
+    /// The Brain's archive command asks the lock and the link, in that order,
+    /// before it sends anything - the same two rules every other History write
+    /// here keeps. Read from the source, because both live on the Tauri app.
+    #[test]
+    fn the_archive_command_asks_the_lock_and_the_link() {
+        let src = include_str!("history.rs");
+        let name = "pub async fn brain_history_archive(";
+        let at = src.find(name).expect(name);
+        let body = &src[at..at + 900.min(src.len() - at)];
+        assert!(body.contains("private_hidden"), "{name} ignores the lock");
+        let live = body.find("require_link_live").expect(name);
+        assert!(
+            live < body.find("post(").unwrap(),
+            "{name} posts before rule 4"
+        );
     }
 
     /// The command itself asks the lock and the link, in that order, before

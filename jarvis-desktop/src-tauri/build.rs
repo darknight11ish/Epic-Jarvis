@@ -319,6 +319,12 @@ fn main() {
             // every memory list. Brain only.
             "brain_conversation_facts",
             "brain_history_delete",
+            // Puts ONE chat away, or brings it back (the owner's ask of
+            // 2026-10-29: "make sure i can archive and delete chats").
+            // Reversible, no card; the Brain window only, like Delete beside
+            // it - the HUD's own History write reaches the same route through
+            // `hud_history_act`.
+            "brain_history_archive",
             "brain_history_settings",
             // Backend supervision — settings window only
             "supervisor_status",
