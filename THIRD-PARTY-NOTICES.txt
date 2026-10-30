@@ -314,6 +314,24 @@ ONNX Runtime 1.22.0 (Microsoft), MIT - https://github.com/microsoft/onnxruntime
   memory search's meaning model and re-ranker directly
   (backend/rebuilt/jarvis_memory.py, 2026-10-21).
 
+Gradle 9.6.0 (Gradle Inc.), Apache-2.0 - https://gradle.org
+  The Android Gradle wrapper: `gradlew.bat` and `gradle-wrapper.jar` are
+  Gradle's OWN files, copied BYTE FOR BYTE into this repository
+  (backend/jarvis-android-gradlew.bat, backend/jarvis-android-wrapper.jar)
+  and from there into every Android app Jarvis generates on the owner's PC
+  (backend/jarvis_android_builder.py, 2026-10-30). They are never modified:
+  `gradlew.bat` still carries its own `SPDX-License-Identifier: Apache-2.0`
+  header, and backend/test_android_builder.py pins both files to the copies
+  jarvis-client builds with. What they DOWNLOAD is not shipped here: the
+  gradle-9.6.0-bin.zip distribution (about 130 MB) is fetched on a first
+  build from services.gradle.org and checked against the SHA-256 in
+  jarvis-client/gradle/wrapper/gradle-wrapper.properties before it is run.
+  The Android Gradle plugin 9.4.0 that a build then resolves from Google's
+  Maven is also Apache-2.0.
+  The Gradle wrapper files are not distributed in any release of Jarvis
+  itself; they travel with the backend folder and with an app the owner
+  builds for themselves.
+
 sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
   The PC's speech-to-text, spoken replies and Silero VAD. The model files
   the owner downloads carry their own licences: NVIDIA Parakeet TDT 0.6B v2

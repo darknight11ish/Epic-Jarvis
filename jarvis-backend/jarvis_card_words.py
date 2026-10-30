@@ -251,6 +251,11 @@ TITLES = {
     "register_approval_key": "let a phone approve risky actions with its fingerprint or PIN",
     # --- the app builder (docs/APP-BUILDER-DESIGN.md)
     "app_merge_change": "add its change to one of your apps",
+    # The app builder's last two steps (2026-10-30, the owner's question "can
+    # jarvis build android apps? that i can sideload into my phone?"). Each is
+    # ONE card, and the card's own text carries the exact command and folder.
+    "app_build_android": "build its Android app with Gradle",
+    "app_install_android": "put that app on your phone",
     # --- action receipts (2026-10-14): putting one recorded change back
     "undo_action": "put back a change it made",
     # --- the blind credential vault (2026-10-14): keeping ONE secret under a
@@ -428,6 +433,8 @@ SUMMARY = {
     "register_approval_key": "let a phone approve with its fingerprint",
     # --- the app builder
     "app_merge_change": "add its change to one of your apps",
+    "app_build_android": "build its Android app",
+    "app_install_android": "put it on your phone",
     # --- action receipts (2026-10-14): putting one recorded change back
     "undo_action": "put back the change shown",
     # --- the blind credential vault (2026-10-14)

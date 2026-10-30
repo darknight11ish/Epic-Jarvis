@@ -437,6 +437,10 @@ HARD_LIMITS = frozenset({
     # folder Jarvis runs from. It must never become a standing yes.
     "desktop_update",
     "app_merge_change",
+    # The app builder's last two steps (2026-10-30): a Gradle build on this PC
+    # and an install on the phone. Both refuse any tier but "ask", and a "no"
+    # must never become a standing rule (jarvis_gate._NO_RULE_FROM_DENIAL).
+    "app_build_android", "app_install_android",
     "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
@@ -472,6 +476,7 @@ MUST_ASK = frozenset({
     "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
+    "app_build_android", "app_install_android",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
     # The owner's uncensored opt-ins (2026-10-10, Decision 5): each module's
@@ -583,7 +588,11 @@ GROUPS = (
                                 "delete_file", "spend_money", "power_manage",
                                 "docker_service_start", "docker_service_stop",
                                 "app_merge_change", "pair_device", "unretire_shared_key",
-                                "register_approval_key"]),
+                                "register_approval_key",
+                                # The app builder's last two steps (2026-10-30):
+                                # ONE card each, on this PC only, and the card
+                                # carries the exact command it will run.
+                                "app_build_android", "app_install_android"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       # The owner's uncensored opt-ins (2026-10-10,

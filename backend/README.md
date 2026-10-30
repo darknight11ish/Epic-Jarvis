@@ -19880,3 +19880,88 @@ model, a lane this PC does not offer, and no router at all; the local pick is
 shown unchanged; and the CONTROL lifts the OLD `_manual_decision()` - the
 defect - out of the patch's own removed lines and shows it returning the CLOUD
 lane for the same tainted turn, which is what fails on today's code.
+
+# Building an Android app and putting it on your phone: `jarvis_android_builder.py` (2026-10-30)
+
+## In plain words
+
+You asked: *"can jarvis build android apps? that i can sideload into my
+phone? if not add them"*. Before this, no: milestones C, F and G of
+`docs/APP-BUILDER-DESIGN.md` were unbuilt and nothing in the backend had ever
+started a program that was not git. Now three steps exist, and **two of them
+cost an approval card**:
+
+1. **Write the app.** Jarvis writes a FIXED, minimal Android project into one
+   app task's copy. The app itself is a web page - `index.html`, `app.js`,
+   `app.css` - shown in one WebView. That is the only part a model may write,
+   plus the app's name and two colours; every Gradle file, the manifest and
+   the Kotlin activity are strings in this module. **No card**: the files land
+   in a task's own copy and nothing runs them (the same rule as every other
+   file Jarvis writes).
+2. **Build it.** ONE risky card naming the exact command
+   (`<task copy>\gradlew.bat assembleDebug`), the folder, the toolchain it
+   found, and the plain fact that a FIRST build downloads Gradle and the
+   Android Gradle plugin from the internet.
+3. **Put it on your phone.** ONE risky card naming the exact
+   `adb install -r <the .apk this build made>`. That is a **sideload** - never
+   the Play Store - and Jarvis has no uninstall, so it stays until you remove
+   it.
+
+Both cards are `ask`, both are RISKY (Windows Hello on the PC, the screen lock
+on the phone), and neither denial becomes a standing rule. Both are answered
+on either device; the ROUTES are PC only, because the Android SDK and the
+phone's cable are on this machine.
+
+## What the generated app is, and is not
+
+It declares **no permission at all** - not even INTERNET - so it cannot reach
+the internet, cannot read your files and cannot call Jarvis's own routes. Its
+WebView has file access off, content access off, and refuses every navigation.
+It has no dependencies, so a build fetches a toolchain and not a dependency
+graph. It is signed with this PC's Android debug key: right for sideloading,
+wrong for anything else, and there is no release signing here on purpose.
+
+## Needs
+
+The Android SDK (`ANDROID_HOME`), a Java 17 JDK (`JAVA_HOME`), and the two
+Gradle wrapper files this repository ships beside the module
+(`jarvis-android-gradlew.bat`, `jarvis-android-wrapper.jar` - Gradle's own,
+Apache-2.0, credited in `THIRD-PARTY-NOTICES.txt`). **No Gradle install is
+needed**: the wrapper downloads and checks the distribution itself. `adb` is
+called by full path from the SDK's `platform-tools`. If any of it is missing,
+the card is not raised and the sentence names what to install.
+
+## What the code does
+
+`plan_template` checks everything before a byte is written (the app is an
+Android app, the task's copy exists and has no project yet, the title, both
+colours, and the three web files by their closed list, size and type), then
+`write_template` writes 15 files with LF endings. `plan_build` and
+`plan_install` build the two commands as LISTS, and `run_build` and
+`run_install` refuse anything but exactly those - a tampered `argv` runs
+nothing. The build runs with `jarvis_child_env.inherited()` (never a token, key
+or password) plus `ANDROID_HOME`, `ANDROID_SDK_ROOT` and `JAVA_HOME`; its
+output goes to `build/jarvis-build.log` inside the task's copy (gitignored) and
+only the END is kept. Success needs exit 0 **and** the APK. Routes:
+`docs/JARVIS-API.md` section 168.
+
+## Limits, said plainly
+
+- The **first** build on a PC downloads about 130 MB of Gradle plus the
+  Android Gradle plugin. A warm build of this exact template was measured on
+  the owner's PC on 2026-10-30 at **53.6 s** (2,469,448-byte APK); a cold one
+  was never measured here, and it will be minutes.
+- A small local model writes small apps. This slice does not even let it write
+  the app's structure - it writes a page.
+- No per-app icon yet: the phone shows the system icon and your own app name.
+  A generated icon is a later decision.
+- The generated app cannot reach the internet, so it cannot call Jarvis. An app
+  that talks to something is a separate decision with its own card.
+- Windows only, in the honest sense: the SDK, the JDK and the wrapper are on
+  this PC.
+
+## How to check it
+
+`python -B backend/test_android_builder.py` (no Gradle, no adb, no network: a
+fake `_run` records the command and makes the APK, a fake gate records the
+card). The real build above was a manual measurement, not a test.

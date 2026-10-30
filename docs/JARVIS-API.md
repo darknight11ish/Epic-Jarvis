@@ -27103,3 +27103,195 @@ page the host's own card list, clicks Save, and asserts the boxes come from
 `card.fields`, the secret box is masked, the NEWEST waiting card is the one drawn,
 the boxes are empty after the save and the values reached the backend as one card
 id plus the declared fields - with no token in the page.
+
+
+## 168. Building an Android app from chat, and putting it on your phone (added 2026-10-30)
+
+**Why this section number.** The last section on `main` when this was written
+was 162, and four in-flight branches had already claimed 163-167 (the numbers
+are named in this branch's brief as off-limits). **168 is the next free
+number**, and this section is appended at the very END of the file so a
+conflict here is two appends and both sides are kept (`CLAUDE.md`, "Appending
+to a shared file").
+
+**The owner's question (2026-10-30):** *"can jarvis build android apps? that
+i can sideload into my phone? if not add them"*. The answer before this
+section was **no**: milestones C (run a command), F (native Android projects)
+and G (install the debug APK) of `docs/APP-BUILDER-DESIGN.md` were unbuilt,
+and nothing in the backend had ever started a program that was not git.
+
+**What is built.** The narrowest full path from a chat description to an app
+on the phone, in three steps, of which TWO COST A CARD:
+
+The four routes, exactly as they are answered:
+
+``text
+GET  /api/projects/<id>/app/tasks/<task>/android
+POST /api/projects/<id>/app/tasks/<task>/android/template
+POST /api/projects/<id>/app/tasks/<task>/android/build
+POST /api/projects/<id>/app/tasks/<task>/android/install
+``
+
+| Step | Route | Card | Tier |
+|---|---|---|---|
+| Write the fixed project | `POST /api/projects/<id>/app/tasks/<task>/android/template` | **none** | - |
+| Build it | `POST …/android/build` | **one** (`app_build_android`) | `ask` |
+| Put it on the phone | `POST …/android/install` | **one** (`app_install_android`) | `ask` |
+| See where it stands | `GET …/android` | none | - |
+
+All three POSTs are **PC only** (`403 pc_only`, `pc_only: true`): the Android
+SDK and the phone's cable are on this machine. The CARDS are not PC-only -
+either device may approve one, so the owner can say yes from the sofa while
+the PC does the work - and both are **risky** (`jarvis_gate._RISK`: reversible
+"no"), so they ask for Windows Hello on the PC and the screen lock on the
+phone, and a denial never becomes a standing rule
+(`jarvis_gate._NO_RULE_FROM_DENIAL`).
+
+### 168.1 The template: what Jarvis writes, and what it will not take from a model
+
+The project is FIXED. It is strings inside `backend/jarvis_android_builder.py`,
+and the only pieces that vary are **validated values**:
+
+| Varies | Validation |
+|---|---|
+| The app's package | derived from the app folder's name, `^[a-z][a-z0-9_]{0,39}$`, always under `com.jarvis.made.` |
+| The app's name (the label on the phone) | `^[A-Za-z0-9 .,!?():+-]{1,40}$` - no quotes, because an Android string resource treats `'` as a delimiter and a stray one is a BUILD error |
+| Two colours | `#rrggbb` |
+| `assets/index.html`, `assets/app.js`, `assets/app.css` | a CLOSED list of three names; text; at most 96 KB each |
+
+Everything else is written by Jarvis: `settings.gradle.kts`,
+`build.gradle.kts`, `gradle.properties`,
+`gradle/wrapper/gradle-wrapper.properties`, `app/build.gradle.kts`,
+`AndroidManifest.xml`, `MainActivity.kt`, `strings.xml`, `colors.xml`,
+`themes.xml`, and the two Gradle wrapper files (Gradle's own: the jar is byte for byte `jarvis-client`'s, and the batch file is the same file with the CRLF endings cmd.exe needs put back on the way, because this repository stores text as LF). A request
+that names any other file - or hides a path in an asset's name - is refused
+with a sentence, never resolved.
+
+**The template's properties, all measured on 2026-10-30** (a real build of
+exactly this project; `docs/APP-BUILDER-DESIGN.md` and the scratch note
+`.dsh-scratch/ANDROID-APP-BUILDER-2026-10-30.md` carry the numbers):
+
+* Gradle **9.6.0**, with `distributionSha256Sum` set, so a tampered download
+  is refused rather than run; Android Gradle plugin **9.4.0**; `compileSdk`
+  36, `minSdk` 33, `targetSdk` 36 - the same toolchain `jarvis-client` builds
+  with, so the PC has ONE set of numbers to trust.
+* **No dependencies at all** - no AndroidX, no Compose - so a first build
+  fetches a toolchain and not a dependency graph.
+* **No permissions at all.** The manifest declares no `<uses-permission>`, not
+  even `INTERNET`, and `MainActivity` sets `allowFileAccess = false`,
+  `allowContentAccess = false` and refuses EVERY navigation. The app cannot
+  reach the internet, cannot read the phone's files and cannot call Jarvis's
+  own routes - proved from the built APK with `aapt2 dump badging`, which
+  shows no permission line.
+* Debug only. No release signing, no shrinking, never the Play Store (rule 5).
+
+### 168.2 `POST /api/projects/<id>/app/tasks/<task>/android/template`
+
+Body: `{"title"?: str, "background"?: "#rrggbb", "accent"?: "#rrggbb",
+"assets"?: {"index.html"?: str, "app.js"?: str, "app.css"?: str}}`. Every
+field is optional: with none, the app is called its own project title, uses
+two defaults, and gets a **working** page, which is what makes a first build
+possible without a single model call.
+
+* **200** `{"ok": true, "template": {"ok", "files", "package", "title"},
+  "status": {…168.4…}}`
+* **400** a plain sentence: not an Android project, a title with a quote in
+  it, a colour that is not `#rrggbb`, a fourth web file, one larger than
+  96 KB, one that is not text, or a task that already has a project (a second
+  write is refused, never a silent overwrite).
+* **403** `pc_only` from the phone.
+* **404** no such project, not an app project, no such task.
+
+No card: the files land only in that task's own copy, and nothing runs them
+(`docs/APP-BUILDER-DESIGN.md`, "Write files in a task's copy: no card").
+
+### 168.3 `POST /api/projects/<id>/app/tasks/<task>/android/build`
+
+Raises **ONE** card, `app_build_android`, and answers `202`:
+`{"ok": true, "waiting": true, "card": "app_build_android", "command":
+"<task copy>\gradlew.bat assembleDebug", "message": …}`.
+
+The card's own words carry: the exact command, the exact folder, the SDK and
+JDK paths it found, that **the FIRST build downloads the Gradle distribution
+(~130 MB) and the Android Gradle plugin** from `services.gradle.org`,
+`dl.google.com` and `repo.maven.apache.org` with **nothing of the owner's
+sent**, and the APK path it will produce.
+
+A yes runs **exactly** `[<task copy>\gradlew.bat, "assembleDebug"]` with
+`cwd` = the task's copy:
+
+* the environment is `jarvis_child_env.inherited()` - the same allowlist every
+  child program gets, never a token, key or password - plus `ANDROID_HOME`,
+  `ANDROID_SDK_ROOT`, `JAVA_HOME`, and `GRADLE_OPTS=-Dorg.gradle.daemon=false`
+  so no Gradle process outlives the card;
+* the time limit is 25 minutes, and the output goes to a FILE
+  (`build/jarvis-build.log`, gitignored) with only its END kept, because a cap
+  applied after reading megabytes into memory is not a cap;
+* success requires `exit 0` **and** that the APK exists. Exit 0 without an
+  APK is a failure.
+
+Refusals: **400** (no project yet, no Android project), **409** a card for
+this task is already waiting, **503** the settings file has the action at a
+tier other than `ask` (naming the line), or the PC is missing the SDK, the
+JDK or the wrapper files (the sentence names what to install).
+
+### 168.4 `POST /api/projects/<id>/app/tasks/<task>/android/install`
+
+Raises **ONE** card, `app_install_android`, answering `202` with the command
+in the body. The card names the exact `adb install -r <apk>`, the file, its
+size, that it is a **SIDELOAD** and never the Play Store, and that Jarvis has
+no uninstall - so what it installs stays until the owner removes it.
+
+A yes runs **exactly** `[<sdk>\platform-tools\adb.exe, "install", "-r",
+<the apk>]`:
+
+* adb is called by **full path** (it is not on PATH on this PC, measured);
+* the APK must be a real file **inside the task's own copy**, at the one path
+  the build writes, ending `.apk`, and not empty - anything else is refused;
+* there is **no** `shell`, `uninstall`, `push`, `pull`, `exec-out` or `-s
+  <serial>` anywhere in the module: a source scan in
+  `backend/test_android_builder.py` fails the suite if one is added;
+* the time limit is 3 minutes.
+
+### 168.5 `GET /api/projects/<id>/app/tasks/<task>/android`
+
+`{"ok", "app", "task", "template": bool, "toolchain": {"sdk", "java", "adb",
+"missing"}, "build": {"ready", "refused", "command"}, "install": {"ready",
+"refused", "command"}, "apk": {"path", "bytes"}, "waiting": "build"|"install"|
+null, "last": {"kind", "outcome", "message", "at"}}`. No secrets and no file
+contents; the two `command` strings are what a card WOULD run, so the owner
+can see the plan before any card exists.
+
+### 168.6 What this deliberately does not do
+
+No `npm`, no Capacitor, no release signing, no keystore of the owner's, no
+Play Store, no `adb shell`, no device management, no arbitrary command - the
+Gradle task name and both commands are module constants - and no model call.
+Nothing is installed before a build has made the file. The card state is in
+memory: a backend restart drops a waiting card and the task simply stays, so
+it can be built again.
+
+**The two apps.** Neither has a screen for this: the routes are PC only, the
+cards arrive in the card list BOTH apps already draw, and `ARCHITECTURE.md`
+section 8 says why the phone has no build button (the SDK and the cable are
+not on it).
+
+**Wiring.** No patch: the routes come from `jarvis_android_builder.install()`,
+called by the drop-in folder `plugins/ready/android-builder`. The gate rows
+are in `jarvis-backend/jarvis_gate.py`, the tier lines in
+`backend/rebuilt/jarvis-framework.toml`, and the two Gradle wrapper files are
+carried as beside-files (`backend/jarvis-android-gradlew.bat`,
+`backend/jarvis-android-wrapper.jar`, Apache-2.0, credited in
+`THIRD-PARTY-NOTICES.txt`).
+
+**Tests.** `backend/test_android_builder.py`: the template writes every file
+with no placeholder left, the wrapper files are jarvis-client's own (the jar byte for byte, the batch file line endings aside, and the GENERATED batch file CRLF); the manifest declares no permission; every bad name,
+colour, title, asset and path is refused; the build command is exactly
+`<task copy>/gradlew.bat assembleDebug` in exactly the task copy and a
+tampered argv runs nothing; no yes means no run, and a stale-stream gate
+answer runs nothing; the environment holds no token, key or password; the
+install accepts only the APK inside the copy and no other adb form exists; the
+gate rows, tier lines and drop-in folder are all in place. **No test runs a
+real Gradle build or a real adb install** - a CI runner has no Android SDK and
+no phone. The build in section 168.1 was a manual measurement on the owner's
+PC, reported as such.

@@ -49,6 +49,11 @@ FAILED, PASSED, SKIPPED = [], [], []
 NO_PATCH = {
     "antislop",
     "google-calendar",
+    # The app builder's last two steps (2026-10-30, JARVIS-API section 168):
+    # `jarvis_android_builder.install()` answers its four routes, called by the
+    # drop-in loader, so the folder is the whole of its wiring and no patch is
+    # added to `jarvis_hud.py`.
+    "android-builder",
     "auto-router",
     "media-index",
     "notion-obsidian",
