@@ -1668,8 +1668,23 @@ html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #b
   display:none !important;
 }
 html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .reactor-wrap{
-  flex-direction:column; justify-content:center; gap:8px;
-  padding:22px 18px 8px;
+  flex-direction:column; justify-content:center; gap:2px;
+  /* 2026-10-30: the attach line under the composer costs the conversation
+     height, and hud.mjs requires 40px of it left under the grown face at
+     1280x650. The face keeps its pinned 200px base; the room comes from this
+     layout's own margins and the attach line's padding, scoped to this layout
+     only. Measured before: wrap 276 + log 24 + composer 73 + attach 37 in a
+     405px column. */
+  padding:0 18px 0;
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .composer{
+  padding:8px 18px 10px;
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .attach-bar{
+  padding:0 18px 2px;
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .attach-pick{
+  padding:1px 7px; font-size:11px;
 }
 /* The freed column's worth of face. 200px x the device's own step, so the
    three-step control still owns the size (200/250/300 at 1280x650) and the
