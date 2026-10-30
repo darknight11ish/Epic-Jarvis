@@ -88,6 +88,10 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_antislop.py": 8,
     "backend/test_account_secrets.py": 1,
     "backend/test_animal.py": 6,
+    # 2026-10-30: the Android app builder landed with six pins in its new
+    # suite (its "bite" harness and the plan/refusal assertions). Recorded
+    # debt, not an approval; the ratchet only turns DOWN.
+    "backend/test_android_builder.py": 6,
     "backend/test_api_doc.py": 3,
     "backend/test_apply_outcomes.py": 7,
     "backend/test_approval_notice.py": 4,
