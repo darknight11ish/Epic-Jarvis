@@ -1347,6 +1347,11 @@ pub fn run() {
             // `set_appearance` above. Cosmetic, no card, and no binding,
             // colour or animal field can ride along.
             appearance::hud_set_face,
+            // The HUD's Look switch (2026-10-28, the owner's "galaxy models"):
+            // ONE look id, proved against `galaxy-presets.js`'s list and saved
+            // through the SAME `set_appearance` above, so the phone draws it and
+            // a reload keeps it. Cosmetic, no card, one field.
+            appearance::hud_set_galaxy_look,
             appearance::appearance_snapshot,
             appearance::appearance_colours,
             update::update_status,

@@ -252,5 +252,94 @@ def corrupt_file_recovers():
     assert view["bindings"] == {}, view
 check("a corrupt file reports itself instead of taking the surface down", corrupt_file_recovers)
 
+# -------------------------------------------------------- the Galaxy's look ----
+#
+# "Galaxy models": the owner's ask of 2026-10-28 was that the face model AND the
+# Galaxy follow one another between the desktop and the phone. The look used to
+# be a per-device `localStorage` key on the PC that nothing else could see; now
+# it is a key in this same document, so it is one value both apps read, and the
+# `appearance` event carries it to whichever app is open.
+#
+# These checks pin the part that is the SERVER's: the look list comes from the
+# page module that builds the looks (never typed here), an id it does not know
+# is refused, and the merge keeps the look when a save is about the face or the
+# colours.
+
+def galaxy_looks_are_the_modules_own():
+    looks = ns["_galaxy_looks"]()
+    assert looks, "no galaxy-presets.js found - the look cannot be checked"
+    # The default first, then every built look, in the module's own order.
+    assert looks[0] == "constellation", looks
+    assert "planetary-orbit" in looks, looks
+    assert "zen-ring" in looks, looks
+    # Read from the module, not typed: the count is the module's own.
+    js = (REPO / "jarvis-desktop" / "src" / "galaxy-presets.js").read_text(encoding="utf-8")
+    built = js.split("BUILT_PRESETS = Object.freeze([", 1)[1].split("])", 1)[0]
+    assert len(built.split("{ id:")) - 1 == len(looks) - 1, (looks, built[:80])
+check("the galaxy look list is the page module's own", galaxy_looks_are_the_modules_own)
+
+def a_known_look_is_kept():
+    code, out = ns["_appearance_save"]({"galaxy": "planetary-orbit"})
+    assert code == 200, (code, out)
+    view = ns["_appearance_view"]()
+    assert view["galaxy"] == "planetary-orbit", view
+check("a galaxy look the module builds is stored", a_known_look_is_kept)
+
+def an_unknown_look_is_refused():
+    before = ns["_appearance_view"]()
+    code, out = ns["_appearance_save"]({"galaxy": "hypercube"})
+    assert code == 400, (code, out)
+    assert "hypercube" in out.get("error", ""), out
+    after = ns["_appearance_view"]()
+    assert after["galaxy"] == before["galaxy"], (before, after)
+    assert after["updated"] == before["updated"], "a refused save changed the file"
+check("a galaxy look no renderer knows is refused, not dropped", an_unknown_look_is_refused)
+
+def the_three_keys_do_not_erase_each_other():
+    ns["_appearance_save"]({"face": "orbit",
+                            "bindings": {"idle": {"pattern": "solid", "color": "ice-3"}},
+                            "galaxy": "nebula"})
+    # A face-only save, from the Faces window or the HUD's faces icon.
+    code, out = ns["_appearance_save"]({"face": "redpanda"})
+    assert code == 200, (code, out)
+    # A look-only save, from the Look switch.
+    code, out = ns["_appearance_save"]({"galaxy": "dna-helix"})
+    assert code == 200, (code, out)
+    # A colours-only save, from the phone.
+    code, out = ns["_appearance_save"]({"bindings": {"thinking": {"pattern": "comet"}}})
+    assert code == 200, (code, out)
+    view = ns["_appearance_view"]()
+    assert view["face"] == "redpanda", view
+    assert view["galaxy"] == "dna-helix", view
+    # `bindings` is the one key that replaces rather than merges inside itself:
+    # the caller sends the map it means, and the phone sends all eight states.
+    # That is the written rule, so this pins it rather than lamenting it.
+    assert view["bindings"] == {"thinking": {"pattern": "comet"}}, view
+check("the face, the look and the colours never erase one another",
+      the_three_keys_do_not_erase_each_other)
+
+def a_look_can_be_cleared():
+    ns["_appearance_save"]({"face": "orbit", "bindings": {"idle": {"pattern": "solid"}},
+                            "galaxy": "star-map"})
+    code, out = ns["_appearance_save"]({"galaxy": None})
+    assert code == 200, (code, out)
+    view = ns["_appearance_view"]()
+    assert view["galaxy"] is None, view
+    # Clearing the look clears nothing else - the same rule as the face.
+    assert view["face"] == "orbit", view
+    assert view["bindings"]["idle"]["pattern"] == "solid", view
+check("an explicit null clears the look and nothing else", a_look_can_be_cleared)
+
+def the_event_carries_the_look():
+    ns["published"] = []
+    ns["_appearance_save"]({"galaxy": "radar-dome"})
+    doc = ns["published"][-1][1]
+    assert doc["galaxy"] == "radar-dome", doc
+    # The event is the whole merged document, so a client that repaints from
+    # it - which is every open client - never loses the face or the colours.
+    assert "face" in doc and "bindings" in doc, doc
+check("the appearance event carries the look with the rest of the document",
+      the_event_carries_the_look)
+
 print("" if not fails else f"\n{len(fails)} failed: {fails}")
 sys.exit(1 if fails else 0)

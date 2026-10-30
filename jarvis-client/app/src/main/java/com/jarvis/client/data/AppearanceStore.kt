@@ -9,6 +9,7 @@ import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Palette
 import com.jarvis.client.face.Params
 import com.jarvis.client.face.Pattern
+import com.jarvis.client.net.GalaxyLook
 import com.jarvis.client.ui.theme.Chrome
 import com.jarvis.client.ui.theme.Themes
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +56,29 @@ class AppearanceStore(context: Context) {
 
     private val _bindings = MutableStateFlow(loadBindings())
     val bindings: StateFlow<Bindings> = _bindings.asStateFlow()
+
+    private val _galaxy = MutableStateFlow(GalaxyLook.byId(prefs.getString(KEY_GALAXY, null)))
+
+    /**
+     * The Galaxy's look (the owner's "galaxy models", 2026-10-28).
+     *
+     * Shared, not per device: it is one key in `/api/appearance`, next to the
+     * face, so choosing a look on either app draws it on both. It used to be a
+     * `localStorage` key on the PC alone, which meant the phone could not know
+     * it, let alone draw it.
+     *
+     * [GalaxyLook.Constellation] is the desktop's own default and is not a flat
+     * layout - the desktop's is its force simulation - so the phone draws its
+     * zen ring for it. The picture says which look it is actually drawing
+     * ([com.jarvis.client.net.GalaxyPicture.Picture.drawn]) rather than letting
+     * the two apps disagree in silence.
+     */
+    val galaxy: StateFlow<GalaxyLook> = _galaxy.asStateFlow()
+
+    fun setGalaxy(value: GalaxyLook) {
+        prefs.edit { putString(KEY_GALAXY, value.id) }
+        _galaxy.value = value
+    }
 
     private val _faceSize = MutableStateFlow(FaceSize.byId(prefs.getString(KEY_FACE_SIZE, null)))
 
@@ -414,17 +438,24 @@ class AppearanceStore(context: Context) {
     }
 
     /**
-     * `POST /api/appearance`'s body, per `docs/APPEARANCE-API.md`: `face` and
-     * `bindings`, nothing else - the server owns `updated` and stamps it
-     * itself, and the theme is deliberately not here. Faces and bindings are a
-     * shared vocabulary across the owner's devices; the theme is a per-screen
-     * taste the desktop's own CSS and this app's Compose theme cannot share
-     * drawing code for anyway, and the contract does not ask for it.
+     * `POST /api/appearance`'s body, per `docs/APPEARANCE-API.md`: `face`,
+     * `bindings` and `galaxy`, nothing else - the server owns `updated` and
+     * stamps it itself, and the theme is deliberately not here. Faces, state
+     * colours and the Galaxy's look are a shared vocabulary across the owner's
+     * devices; the theme is a per-screen taste the desktop's own CSS and this
+     * app's Compose theme cannot share drawing code for anyway, and the
+     * contract does not ask for it.
      */
     fun toSyncDocument(): JSONObject {
         val root = JSONObject()
         _faceId.value.takeIf { it.isNotBlank() }?.let { root.put("face", it) }
         root.put("bindings", bindingsToJson(_bindings.value))
+        // The look travels too (2026-10-28). The constellation is left OUT
+        // rather than sent as "constellation": it is what the desktop shows
+        // when nobody has chosen one, and a phone that has never been near the
+        // switch must not overwrite a look chosen on the PC.
+        _galaxy.value.takeIf { it.id != GalaxyLook.Constellation.id }
+            ?.let { root.put("galaxy", it.id) }
         return root
     }
 
@@ -434,10 +465,18 @@ class AppearanceStore(context: Context) {
      * tolerate-both-directions rule; a state missing from `bindings` keeps
      * the spec default, the same as [loadBindings] already does for a local
      * document with gaps in it.
+     *
+     * An ABSENT `galaxy` (or an empty one) means the PC is on its default look,
+     * and that is applied as the constellation - otherwise a look chosen on the
+     * phone would stick here while the PC went back to its own, which is the
+     * private-language problem in a new place.
      */
     fun applySyncDocument(doc: JSONObject) {
         doc.optString("face").takeIf { it.isNotEmpty() }?.let { setFace(it) }
         doc.optJSONObject("bindings")?.let { setBindings(parseBindings(it)) }
+        if (doc.has("galaxy")) {
+            setGalaxy(GalaxyLook.byId(doc.optString("galaxy")))
+        }
         // animal.patch (2026-09-28): the shared animal switches ride along.
         // Never sent back - [toSyncDocument] leaves them out, and the PC
         // ignores them in a POST; they change through POST /api/animal.
@@ -576,6 +615,7 @@ class AppearanceStore(context: Context) {
         const val KEY_FOLLOW_SYSTEM = "follow_system"
         const val KEY_FACE = "face"
         const val KEY_BINDINGS = "bindings"
+        const val KEY_GALAXY = "galaxy"
         const val KEY_FACE_SIZE = "face_size"
         const val KEY_LOOK = "look"
         const val KEY_PREFERRED_DARK = "preferred_dark"

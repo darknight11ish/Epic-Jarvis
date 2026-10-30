@@ -473,6 +473,15 @@ jobs:
       # would let the two drift apart with every test still green.
       - name: Lip-sync - the phone's golden fixture matches lipsync.js
         run: python tools/gen_lipsync.py --check
+      # The Galaxy's eight flat looks are worked out twice - galaxy-presets.js on
+      # the desktop, GalaxyLayouts.kt on the phone - and the phone's
+      # GalaxyPictureTest checks its copy against a fixture the JavaScript
+      # writes. A stale fixture would let the two drift apart with every test
+      # still green; a look ADDED to galaxy-presets.js changes this fixture, so
+      # the phone's test fails naming the look it has never heard of until that
+      # look is ported (2026-10-28, the owner's "galaxy models").
+      - name: Galaxy looks - the phone's golden fixture matches galaxy-presets.js
+        run: python tools/gen_galaxy_picture_cases.py --check
       # The sun, the moon and the weather behind the animals are worked out
       # twice - sky.js on the desktop, Sky.kt on the phone - and the phone's
       # SkyTest checks its copy against a fixture the JavaScript writes; the

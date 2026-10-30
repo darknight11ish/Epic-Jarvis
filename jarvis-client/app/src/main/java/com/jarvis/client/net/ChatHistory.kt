@@ -137,15 +137,21 @@ object ChatHistory {
      * picture keep their less-trusted tag: the picture does not make them
      * the owner's. The PC does the same when it keeps the turn
      * (backend/jarvis_chat_log.py, `record_turn`), so both ends agree.
+     *
+     * [file] is only "a document rides with this question" ([AttachFile]): an
+     * attached file is never kept, so there is nothing here to carry it, and
+     * it changes no tag - a caption is a picture's own word. It exists so a
+     * question sent with only a file attached still becomes a message.
      */
     fun asking(
         question: String,
         provenance: String = Provenance.TYPED,
         shared: String? = null,
         picture: Boolean = false,
+        file: Boolean = false,
     ): List<UserTurn> = buildList {
         if (!shared.isNullOrBlank()) add(UserTurn(shared, Provenance.SHARED))
-        if (question.isNotBlank() || picture || isEmpty()) {
+        if (question.isNotBlank() || picture || file || isEmpty()) {
             val own = provenance == Provenance.TYPED || provenance == Provenance.VOICE
             add(UserTurn(question, if (picture && own) Provenance.PICTURE_CAPTION else provenance))
         }
@@ -191,6 +197,14 @@ object ChatHistory {
      * message's `content` is the words and then the picture
      * ([ChatPicture.userContent]), the shape the desktop sends. Earlier turns
      * are always words only.
+     *
+     * With a [file] ([AttachFile]), the LAST new message carries one extra
+     * sibling key, `attachment`: `{name, mime, size, data}` - the four fields
+     * the PC's `jarvis_attached_file` reads. It is a sibling of `content`, not
+     * a part inside it, because the PC replaces it with a `text` part after it
+     * has read the file (REPORT.md section 8), and it rides with exactly this
+     * one message: a later question never carries it again, because it was
+     * never kept.
      */
     fun messages(
         window: List<Exchange>,
@@ -213,6 +227,8 @@ object ChatHistory {
          * shows a model the picture. Never in Live, never on the history.
          */
         screen: ScreenLook.Attach? = null,
+        /** A document the owner attached to this one question ([AttachFile]). */
+        file: AttachFile.Ready? = null,
     ): JsonArray =
         buildJsonArray {
             for (ex in window) {
@@ -225,54 +241,58 @@ object ChatHistory {
                 // NEWEST message only, never replayed with the history.
                 val cut = interrupted?.takeIf { i == asking.lastIndex && it.isNotBlank() }
                 val liveHere = live && i == asking.lastIndex && u.provenance == Provenance.VOICE
-                if (liveHere) {
+                val msg: JsonObject = if (liveHere) {
                     val base = userTurn(u) + (if (cut != null) mapOf("interrupted" to JsonPrimitive(cut)) else emptyMap())
-                    add(JsonObject(base + ("live" to JsonPrimitive(true))))
+                    JsonObject(base + ("live" to JsonPrimitive(true)))
                 } else if (picture != null && i == asking.lastIndex) {
                     val onScreen = screen?.words
-                    add(
-                        buildJsonObject {
-                            put("role", "user")
-                            put(
-                                "content",
-                                if (onScreen != null) {
-                                    JsonArray(ChatPicture.userContent(u.text, picture) + screenTextPart(onScreen))
-                                } else {
-                                    ChatPicture.userContent(u.text, picture)
-                                },
-                            )
-                            put("provenance", u.provenance)
-                            if (cut != null) put("interrupted", cut)
-                            if (screen?.pictureIsScreen == true) {
-                                put(ScreenRules.SCREEN_FIELD, ScreenRules.SCREEN_PHONE)
-                            }
-                        },
-                    )
+                    buildJsonObject {
+                        put("role", "user")
+                        put(
+                            "content",
+                            if (onScreen != null) {
+                                JsonArray(ChatPicture.userContent(u.text, picture) + screenTextPart(onScreen))
+                            } else {
+                                ChatPicture.userContent(u.text, picture)
+                            },
+                        )
+                        put("provenance", u.provenance)
+                        if (cut != null) put("interrupted", cut)
+                        if (screen?.pictureIsScreen == true) {
+                            put(ScreenRules.SCREEN_FIELD, ScreenRules.SCREEN_PHONE)
+                        }
+                    }
                 } else if (screen?.words != null && i == asking.lastIndex) {
-                    add(
-                        buildJsonObject {
-                            put("role", "user")
-                            put(
-                                "content",
-                                buildJsonArray {
-                                    add(
-                                        buildJsonObject {
-                                            put("type", "text")
-                                            put("text", u.text)
-                                        },
-                                    )
-                                    add(screenTextPart(screen.words))
-                                },
-                            )
-                            put("provenance", u.provenance)
-                            if (cut != null) put("interrupted", cut)
-                        },
-                    )
+                    buildJsonObject {
+                        put("role", "user")
+                        put(
+                            "content",
+                            buildJsonArray {
+                                add(
+                                    buildJsonObject {
+                                        put("type", "text")
+                                        put("text", u.text)
+                                    },
+                                )
+                                add(screenTextPart(screen.words))
+                            },
+                        )
+                        put("provenance", u.provenance)
+                        if (cut != null) put("interrupted", cut)
+                    }
                 } else if (cut != null) {
-                    add(JsonObject(userTurn(u) + ("interrupted" to JsonPrimitive(cut))))
+                    JsonObject(userTurn(u) + ("interrupted" to JsonPrimitive(cut)))
                 } else {
-                    add(userTurn(u))
+                    userTurn(u)
                 }
+                val attached = file?.takeIf { i == asking.lastIndex }
+                add(
+                    if (attached == null) {
+                        msg
+                    } else {
+                        JsonObject(msg + ("attachment" to AttachFile.part(attached)))
+                    },
+                )
             }
         }
 
@@ -291,6 +311,12 @@ object ChatHistory {
      * the PC will accept; `device` always. `temporary: true` only for a
      * temporary chat ([TemporaryChat], docs/JARVIS-API.md section 18.1) -
      * never `false`, so an ordinary request is exactly what it was.
+     *
+     * `has_file: true` only when a [file] rides in the newest message, beside
+     * `has_image` - the PC's own router gate, the one that keeps a turn
+     * carrying a file on this machine. Like `temporary` and `cloud_yes` it is
+     * never sent as `false`: an ordinary question is byte for byte the request
+     * it always was, which the fixtures from the PC's own tests check.
      */
     fun requestBody(
         window: List<Exchange>,
@@ -320,10 +346,18 @@ object ChatHistory {
          * and it never changes the PC's own WHEN choice.
          */
         think: Boolean = false,
+        /**
+         * The document the owner attached to THIS question ([AttachFile]),
+         * or null. It is read on the PC within this turn and never kept; the
+         * next question does not carry it, and nothing about it is stored
+         * here, in a preference or on disk.
+         */
+        file: AttachFile.Ready? = null,
     ): String =
         buildJsonObject {
-            put("messages", messages(window, asking, picture, interrupted, live, screen))
+            put("messages", messages(window, asking, picture, interrupted, live, screen, file))
             put("has_image", picture != null)
+            if (file != null) put("has_file", true)
             put("stream", true)
             put("auto", true)
             if (conversationId != null && validConversationId(conversationId)) {

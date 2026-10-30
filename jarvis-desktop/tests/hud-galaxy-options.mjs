@@ -226,14 +226,79 @@ check("the hide preference is device-local and read before the map runs", () => 
   // One attribute, one CSS home: the picture and its furniture, not the mode.
   assert.match(HUD, /html\[data-galaxy-hidden\] #brain > #galaxy,/,
     "the CSS does not hide the galaxy canvas");
-  assert.match(HUD, /html\[data-galaxy-hidden\] \.galaxy-off\{display:flex !important;\}/,
-    "the place holder does not come back when the galaxy is hidden");
+  // 2026-10-29: the place holder is a SCREEN-READER sentence now, not a
+  // paragraph that fills the stage. The owner's words were that the face model
+  // should take that space "instead of showing the 'The galaxy is hidden...'
+  // description + 'Show the galaxy' button", so the old `display:flex` pin
+  // would now be a pin on the bug. What still has to hold: the sentence is in
+  // the page while the map is hidden, it is not DRAWN, and the way back is the
+  // one small chip in the stage bar (and the panel's own Show).
+  assert.match(HUD, /html\[data-galaxy-hidden\] \.galaxy-off\{display:block !important;\}/,
+    "the place holder's own sentence is not in the page while the galaxy is hidden");
+  assert.match(HUD, /\.galaxy-off\{[\s\S]{0,400}?clip-path:inset\(50%\)/,
+    "the place holder is drawn as a paragraph again - the owner asked for the space, not the words");
+  assert.match(HUD, /html\[data-galaxy-hidden\] \.galaxy-back\{display:inline-flex;\}/,
+    "there is no small way back from a hidden galaxy in the stage bar");
 });
 
 check("the drawing loop treats a hidden galaxy as a reason to stop", () => {
   const shouldRun = between(HUD, "function shouldRun(){", "}", 600);
   assert.match(shouldRun, /data-galaxy-hidden/,
     "shouldRun() does not know the galaxy can be hidden");
+});
+
+/* ── 7. The look is SHARED now (2026-10-28) ──────────────────────────────── */
+
+// The owner: "including changing the jarvis face model and galaxy models".
+// The look used to be this device's own `localStorage` key and nothing else.
+// It is now `galaxy` in the same appearance document the face uses, so the
+// phone draws it and the Brain window can see it. The browser half of this
+// (a look really repaints the picture) is tests/hud-galaxy-looks.mjs; these are
+// the structural halves that run anywhere, in a second.
+
+check("the Look switch writes the shared look through ONE command", () => {
+  const setLook = between(HUD, "function setLook(id, tellPc){", "\n  }", 2400);
+  assert.match(setLook, /lookRemember\(want\)/,
+    "the switch stopped remembering the choice on this device (a plain browser has no shell)");
+  assert.match(setLook, /__jarvisGalaxyLook/,
+    "the switch does not tell the PC, so the phone cannot follow it");
+  // The one write is a command and an id. No route, no token, no whole document.
+  assert.doesNotMatch(setLook, /fetch\(|jfetch|postAppearance|set_appearance/,
+    "the Look switch writes a document or reaches the network instead of the one narrow command");
+  assert.match(PRESETS, /export async function setGalaxyLookOnPc\(win, id\)/,
+    "hud-presets.js has no setGalaxyLookOnPc()");
+  assert.match(PRESETS, /call\("hud_set_galaxy_look", \{ look: id \}/,
+    "setGalaxyLookOnPc() does not send exactly one look id through hud_set_galaxy_look");
+});
+
+check("a look chosen elsewhere arrives on the appearance event", () => {
+  // The adoption lives in the module that OWNS the look (`adoptLook`, beside
+  // lookStored), not in the reactor's `adopt()`. It used to sit in `adopt()`,
+  // which is another function's scope: `lookEngine`, `lookId` and `setLook`
+  // were not in it, so every push threw ReferenceError and the switcher never
+  // painted at all (measured 2026-10-29 by tests/hud.mjs and
+  // hud-galaxy-looks.mjs). What this check pins is the BEHAVIOUR - a pushed
+  // document applies the look and is not written back - wherever the code that
+  // does it lives.
+  const adopt = between(HUD, "function adoptLook(){", "\n  }", 900);
+  assert.match(adopt, /ownerLook\(\)/,
+    "the page ignores the document's galaxy, so a look chosen on the phone never reaches this window");
+  assert.match(adopt, /setLook\(want, false\)/,
+    "the page applies the document's look either not at all or by writing it back");
+  assert.match(HUD, /addEventListener\("jarvis-appearance", adoptLook\)/,
+    "nothing listens for the appearance event, so a pushed look never arrives");
+  // The shared value WINS over this device's key, or the phone's choice would
+  // be overwritten by whatever this window last stored.
+  const stored = between(HUD, "function lookStored(){", "\n  }", 900);
+  assert.match(stored, /storedPreset\(shared\)/,
+    "lookStored() still prefers this device's own key over the owner's shared look");
+});
+
+check("a look the PC did not take is SAID, not left silent", () => {
+  assert.ok(HUD.includes('id="galaxy-look-note"'),
+    "there is no status line for a look that stayed on this device");
+  assert.match(HUD, /Saved on this device\. The PC could not be told/,
+    "a failed look save says nothing, so the window claims a sync it did not get");
 });
 
 console.log();

@@ -1189,18 +1189,22 @@ def _list_ical(days_ahead: int, *, now: Optional[datetime] = None) -> dict:
 
 #: The owner-facing answer when no way in is chosen, and it has to be TRUE ON
 #: THE PHONE as well as the PC. The phone field test of 2026-10-29 (B2) found
-#: the old "Settings, Accounts, pick the private link or Google sign-in" sent
-#: the owner to a screen the phone does not have at all - searching its Settings
-#: for "account" answers "Nothing here matches". So the way in is named as the
-#: PC's, and BOTH steps that really turn a read on are here: the private iCal
-#: link is pasted into the Accounts card (a secret, so it is typed on the PC
-#: only), and that way is then chosen with one command in the backend folder.
+#: an old sentence that sent the owner to "Settings, Accounts, pick the private
+#: link or Google sign-in" on a phone that has no Accounts screen; the HUD field
+#: test of the same day found that the newer text named a Google sign-in ROW
+#: that does not exist. So this names only places that exist: the Accounts card
+#: on the PC for the read-only private iCal link, the one command that CHOOSES
+#: that way (`mode ical` - main's own step, restored 2026-10-30), and the
+#: one-time Google sign-in commands in SETUP_DOC for the read/write way.
 #: "not connected yet" is said ONCE - `answer()` hands this sentence on as it
 #: stands rather than prefixing "Not connected yet - " to it.
+SETUP_DOC = "docs/GOOGLE-CALENDAR-SETUP.md"
+
 _NOT_CONNECTED_WORDS = (
-    "Google Calendar is not connected yet. On the PC, open Settings, Accounts and "
-    "paste in your calendar's private iCal link, then run "
-    "`py -3 jarvis_google_calendar.py mode ical` in the backend folder.")
+    "Google Calendar is not connected yet. On the PC, open Settings, Accounts, "
+    "paste in your calendar's private iCal link (read-only), then run "
+    "`py -3 jarvis_google_calendar.py mode ical` in the backend folder. For the "
+    "read/write way, run the one-time Google sign-in commands in " + SETUP_DOC + ".")
 
 #: A reason that already says this is a whole answer, not a clause to hang
 #: another "Not connected yet - " in front of. The B2 defect: the phone read
@@ -1764,8 +1768,6 @@ def status() -> dict:
 # --------------------------------------------------------------------------
 #   The chat sentences - deterministic, and each one is a fact
 # --------------------------------------------------------------------------
-
-SETUP_DOC = "docs/GOOGLE-CALENDAR-SETUP.md"
 
 _CONNECT = re.compile(
     r"(?i)\b(?:connect|link|set up|setup|hook up|add)\b.{0,40}\b(?:google\s+)?calendar\b"

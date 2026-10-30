@@ -2340,6 +2340,21 @@ export async function setFaceOnPc(win, id) {
   return call("hud_set_face", { face: id }, "action", win);
 }
 
+/** The HUD's own hud_set_galaxy_look, one look id (2026-10-28).
+ *
+ *  The owner's "galaxy models": the Galaxy's LOOK is now one key in the same
+ *  appearance document as the face, so choosing one in the HUD's Look switch is
+ *  what the phone draws and what the Brain window shows - and a look chosen
+ *  there arrives here on the ppearance event. Same shape and same road as
+ *  [setFaceOnPc]: this page holds no token, so ONE narrow Rust command is the
+ *  only way a look leaves the window, and it carries an id and nothing else.
+ */
+export async function setGalaxyLookOnPc(win, id) {
+  const core = shellCoreOf(win);
+  if (!core) throw new Error(FACE_NO_SHELL);
+  return call("hud_set_galaxy_look", { look: id }, "action", win);
+}
+
 /**
  * Mount the face models panel behind `#rail-faces` in the HUD's left column.
  *
@@ -2495,6 +2510,18 @@ export function mountFacePicker(options = {}) {
       if (again && typeof again.focus === "function") again.focus({ preventScroll: true });
     }
     paintSizes();
+    // THE FIRST OPEN'S CLIP (the owner's field bug, 2026-10-29: "the faces
+    // panel is clipped on its first open ... Close off-screen; reopens fine").
+    // The panel is placed when `open()` runs, and at that moment the face list
+    // has not been read yet - the spec is imported lazily by `readSpec()`, so
+    // the panel is still one "Reading the face list..." line tall, is put just
+    // under its door, and only THEN grows to its full 25 rows (468px in a
+    // 650px window: measured, the panel's own top stayed at 495 and its Close
+    // sat at 928-952, off the bottom). The second open measured the grown panel
+    // and landed correctly, which is why it looked like a first-open-only bug.
+    // Placing after every render that lands while the panel is open is the
+    // whole fix: a repaint that changes the panel's height re-places it.
+    if (panel && !panel.hidden) place();
   }
 
   /** ONE face click. The mark is NOT set from this click: the save's own
