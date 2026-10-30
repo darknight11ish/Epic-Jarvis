@@ -109,8 +109,19 @@ mod tests {
             })
         );
         // The page's all-day tick is the same form with the times left out.
-        let all_day = add_body("Trip", "2026-11-03", None, None, None, true,
-            None, None, None, None).unwrap();
+        let all_day = add_body(
+            "Trip",
+            "2026-11-03",
+            None,
+            None,
+            None,
+            true,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(all_day["all_day"], true);
         assert!(all_day.get("time").is_none(), "{all_day}");
     }

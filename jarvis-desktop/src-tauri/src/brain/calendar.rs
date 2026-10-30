@@ -33,10 +33,13 @@ const NOTES_MAX: usize = 2_000;
 /// in this slice.
 const REMIND_MAX: i64 = 10_080;
 /// The recurrence words the page offers, and the only ones this builder lets
-/// out. The route documents `recurrence` without spelling its vocabulary, so
-/// this is a closed set rather than free text: the same short words the
-/// schedule's own repeat rule uses ("day", "weekday", "week", "month", "year").
-const RECURRENCE: [&str; 5] = ["day", "weekday", "week", "month", "year"];
+/// out. They are the BACKEND's own vocabulary, not the page's idea of it:
+/// `jarvis_local_calendar.RECURRENCES` is `("none", "daily", "weekly",
+/// "monthly")`, and its `_recurrence` refuses anything else with a 400 - so a
+/// page sending "week" would have been refused by the store every time. No
+/// repeat is the empty string on the wire (see [`put_recurrence`]), which the
+/// store reads as "none". A closed set, never free text.
+const RECURRENCE: [&str; 3] = ["daily", "weekly", "monthly"];
 /// The event id's shape in the contract: "c" + 10 lowercase hex.
 const ID_LEN: usize = 11;
 
@@ -109,9 +112,8 @@ pub(crate) fn add_body(
     if title.chars().count() > TITLE_MAX {
         return Err(format!("A title can be up to {TITLE_MAX} characters."));
     }
-    let start = parse_day(date).ok_or_else(|| {
-        "The date must be a real day written like 2026-11-03.".to_string()
-    })?;
+    let start = parse_day(date)
+        .ok_or_else(|| "The date must be a real day written like 2026-11-03.".to_string())?;
     let mut body = serde_json::json!({ "title": title, "date": date, "all_day": all_day });
     let map = body.as_object_mut().expect("a JSON object");
 
@@ -134,17 +136,14 @@ pub(crate) fn add_body(
             }
         }
     } else {
-        let start_min = parse_time(time.unwrap_or("")).ok_or_else(|| {
-            "A timed event needs a start time written like 14:30.".to_string()
-        })?;
-        map.insert(
-            "time".into(),
-            serde_json::json!(time.unwrap_or("").trim()),
-        );
+        let start_min = parse_time(time.unwrap_or(""))
+            .ok_or_else(|| "A timed event needs a start time written like 14:30.".to_string())?;
+        map.insert("time".into(), serde_json::json!(time.unwrap_or("").trim()));
         let end = match end_time.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(t) => Some(parse_time(t).ok_or_else(|| {
-                "The end time must be written like 15:15.".to_string()
-            })?),
+            Some(t) => Some(
+                parse_time(t)
+                    .ok_or_else(|| "The end time must be written like 15:15.".to_string())?,
+            ),
             None => None,
         };
         let end_day = match end_date.map(str::trim).filter(|s| !s.is_empty()) {
@@ -167,7 +166,10 @@ pub(crate) fn add_body(
                 serde_json::json!(end_time.unwrap_or("").trim()),
             );
             if end_day != start {
-                map.insert("end_date".into(), serde_json::json!(end_date.unwrap_or("").trim()));
+                map.insert(
+                    "end_date".into(),
+                    serde_json::json!(end_date.unwrap_or("").trim()),
+                );
             }
         }
     }
@@ -229,8 +231,7 @@ pub(crate) fn act_body(
                         None
                     } else {
                         let parsed = parse_day(day).ok_or_else(|| {
-                            "The last day must be a real day written like 2026-11-03."
-                                .to_string()
+                            "The last day must be a real day written like 2026-11-03.".to_string()
                         })?;
                         body["end_date"] = serde_json::json!(day);
                         Some(parsed)
@@ -248,17 +249,28 @@ pub(crate) fn act_body(
                 // An all-day event has no times of day: clear them rather than
                 // leaving a stale 14:30 under a day-long event.
                 if change.time.as_deref().is_some_and(|t| !t.trim().is_empty())
-                    || change.end_time.as_deref().is_some_and(|t| !t.trim().is_empty())
+                    || change
+                        .end_time
+                        .as_deref()
+                        .is_some_and(|t| !t.trim().is_empty())
                 {
                     return Err("An all-day event has no times.".to_string());
                 }
                 body["time"] = serde_json::json!("");
                 body["end_time"] = serde_json::json!("");
             } else {
-                let start_min = put_time(&mut body, "time", change.time.as_deref(),
-                    "The start time must be written like 14:30.")?;
-                let end_min = put_time(&mut body, "end_time", change.end_time.as_deref(),
-                    "The end time must be written like 15:15.")?;
+                let start_min = put_time(
+                    &mut body,
+                    "time",
+                    change.time.as_deref(),
+                    "The start time must be written like 14:30.",
+                )?;
+                let end_min = put_time(
+                    &mut body,
+                    "end_time",
+                    change.end_time.as_deref(),
+                    "The end time must be written like 15:15.",
+                )?;
                 // Both ends known and on one day is the only pair an edit can
                 // prove out of order; a single end is the store's own check.
                 if let (Some(start), Some(end_min)) = (start, end_min) {
@@ -267,9 +279,9 @@ pub(crate) fn act_body(
                         if same_day && end_min <= start_min {
                             return Err("The end must be after the start.".to_string());
                         }
-                        if end_day.is_some_and(|end| day_minutes(end) + end_min
-                            <= day_minutes(start) + start_min)
-                        {
+                        if end_day.is_some_and(|end| {
+                            day_minutes(end) + end_min <= day_minutes(start) + start_min
+                        }) {
                             return Err("The end must be after the start.".to_string());
                         }
                     }
@@ -366,7 +378,9 @@ fn put_recurrence(body: &mut serde_json::Value, recurrence: Option<&str>) -> Res
 fn is_id(id: &str) -> bool {
     id.len() == ID_LEN
         && id.starts_with('c')
-        && id[1..].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        && id[1..]
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 /// A day written `YYYY-MM-DD`, as a real calendar date.
@@ -375,7 +389,11 @@ fn parse_day(day: &str) -> Option<(i32, u32, u32)> {
     if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
         return None;
     }
-    if !b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit()) {
+    if !b
+        .iter()
+        .enumerate()
+        .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+    {
         return None;
     }
     let year: i32 = day[0..4].parse().ok()?;
@@ -419,7 +437,11 @@ fn parse_time(time: &str) -> Option<i64> {
     if b.len() != 5 || b[2] != b':' {
         return None;
     }
-    if !b.iter().enumerate().all(|(i, c)| i == 2 || c.is_ascii_digit()) {
+    if !b
+        .iter()
+        .enumerate()
+        .all(|(i, c)| i == 2 || c.is_ascii_digit())
+    {
         return None;
     }
     let hours: i64 = time[0..2].parse().ok()?;
@@ -485,7 +507,7 @@ mod tests {
             Some("High Street"),
             Some("Bring the form"),
             Some(30),
-            Some("week"),
+            Some("weekly"),
         )
         .unwrap();
         assert_eq!(
@@ -499,7 +521,7 @@ mod tests {
                 "place": "High Street",
                 "notes": "Bring the form",
                 "remind_minutes": 30,
-                "recurrence": "week",
+                "recurrence": "weekly",
             }),
             "a same-day event must not send an end_date the store did not ask for"
         );
@@ -522,9 +544,15 @@ mod tests {
         .unwrap();
         assert_eq!(body["all_day"], true);
         assert_eq!(body["end_date"], "2026-11-05");
-        assert!(body.get("time").is_none(), "an all-day event kept a time: {body}");
+        assert!(
+            body.get("time").is_none(),
+            "an all-day event kept a time: {body}"
+        );
         assert!(body.get("end_time").is_none(), "{body}");
-        assert!(body.get("place").is_none(), "an empty box is not sent: {body}");
+        assert!(
+            body.get("place").is_none(),
+            "an empty box is not sent: {body}"
+        );
     }
 
     #[test]
@@ -554,48 +582,232 @@ mod tests {
             assert!(body.is_err(), "this should have been refused: {body:?}");
         };
         // No title, and a title longer than the reader's own cap.
-        ok(add_body("", "2026-11-03", Some("09:00"), None, None, false, None, None, None, None));
-        ok(add_body("   ", "2026-11-03", Some("09:00"), None, None, false, None, None, None, None));
-        ok(add_body(&"x".repeat(TITLE_MAX + 1), "2026-11-03", Some("09:00"),
-            None, None, false, None, None, None, None));
+        ok(add_body(
+            "",
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        ));
+        ok(add_body(
+            "   ",
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        ));
+        ok(add_body(
+            &"x".repeat(TITLE_MAX + 1),
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        ));
         // A day that is not a day: 30 February, month 13, the wrong shape.
-        for day in ["2026-02-30", "2026-13-01", "2026-1-01", "03/11/2026", "2026-11-00"] {
-            ok(add_body("x", day, Some("09:00"), None, None, false, None, None, None, None));
+        for day in [
+            "2026-02-30",
+            "2026-13-01",
+            "2026-1-01",
+            "03/11/2026",
+            "2026-11-00",
+        ] {
+            ok(add_body(
+                "x",
+                day,
+                Some("09:00"),
+                None,
+                None,
+                false,
+                None,
+                None,
+                None,
+                None,
+            ));
         }
         // A timed event with no time, or a time that is not one.
-        ok(add_body("x", "2026-11-03", None, None, None, false, None, None, None, None));
-        ok(add_body("x", "2026-11-03", Some("24:00"), None, None, false, None, None, None, None));
-        ok(add_body("x", "2026-11-03", Some("9:00"), None, None, false, None, None, None, None));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        ));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("24:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        ));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("9:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        ));
         // Ends before it starts, on one day and across days.
-        ok(add_body("x", "2026-11-03", Some("15:00"), None, Some("14:00"), false,
-            None, None, None, None));
-        ok(add_body("x", "2026-11-03", Some("15:00"), None, Some("15:00"), false,
-            None, None, None, None));
-        ok(add_body("Trip", "2026-11-03", None, Some("2026-11-02"), None, true,
-            None, None, None, None));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("15:00"),
+            None,
+            Some("14:00"),
+            false,
+            None,
+            None,
+            None,
+            None,
+        ));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("15:00"),
+            None,
+            Some("15:00"),
+            false,
+            None,
+            None,
+            None,
+            None,
+        ));
+        ok(add_body(
+            "Trip",
+            "2026-11-03",
+            None,
+            Some("2026-11-02"),
+            None,
+            true,
+            None,
+            None,
+            None,
+            None,
+        ));
         // Caps, a reminder out of range, and a repeat word that is not offered.
-        ok(add_body("x", "2026-11-03", Some("09:00"), None, None, false,
-            Some(&"p".repeat(PLACE_MAX + 1)), None, None, None));
-        ok(add_body("x", "2026-11-03", Some("09:00"), None, None, false,
-            None, Some(&"n".repeat(NOTES_MAX + 1)), None, None));
-        ok(add_body("x", "2026-11-03", Some("09:00"), None, None, false,
-            None, None, Some(REMIND_MAX + 1), None));
-        ok(add_body("x", "2026-11-03", Some("09:00"), None, None, false,
-            None, None, Some(-1), None));
-        ok(add_body("x", "2026-11-03", Some("09:00"), None, None, false,
-            None, None, None, Some("hourly")));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            Some(&"p".repeat(PLACE_MAX + 1)),
+            None,
+            None,
+            None,
+        ));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            None,
+            Some(&"n".repeat(NOTES_MAX + 1)),
+            None,
+            None,
+        ));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            Some(REMIND_MAX + 1),
+            None,
+        ));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            Some(-1),
+            None,
+        ));
+        ok(add_body(
+            "x",
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            Some("hourly"),
+        ));
     }
 
     #[test]
     fn a_heightened_repeat_is_the_pages_five_words_and_nothing_else() {
         for word in RECURRENCE {
-            let body = add_body("x", "2026-11-03", Some("09:00"), None, None, false,
-                None, None, None, Some(word)).unwrap();
+            let body = add_body(
+                "x",
+                "2026-11-03",
+                Some("09:00"),
+                None,
+                None,
+                false,
+                None,
+                None,
+                None,
+                Some(word),
+            )
+            .unwrap();
             assert_eq!(body["recurrence"], word);
         }
         // The empty box means "does not repeat": no key at all.
-        let body = add_body("x", "2026-11-03", Some("09:00"), None, None, false,
-            None, None, None, Some("  ")).unwrap();
+        let body = add_body(
+            "x",
+            "2026-11-03",
+            Some("09:00"),
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            Some("  "),
+        )
+        .unwrap();
         assert!(body.get("recurrence").is_none(), "{body}");
     }
 
@@ -611,11 +823,21 @@ mod tests {
         for action in ["add", "delete_all", "clear", "move", "snooze", ""] {
             assert!(act_body(id, action, None).is_err(), "{action} was allowed");
         }
-        for bad in ["", "c012345678", "c01234567890", "s0123456789", "C0123456789",
-                    "c012345678g", "c0123456789 "] {
+        for bad in [
+            "",
+            "c012345678",
+            "c01234567890",
+            "s0123456789",
+            "C0123456789",
+            "c012345678g",
+            "c0123456789 ",
+        ] {
             assert!(act_body(bad, "delete", None).is_err(), "{bad} was allowed");
         }
-        let change = CalendarChange { title: Some("x".into()), ..Default::default() };
+        let change = CalendarChange {
+            title: Some("x".into()),
+            ..Default::default()
+        };
         assert!(act_body(id, "delete", Some(&change)).is_err());
     }
 
@@ -635,21 +857,39 @@ mod tests {
         assert!(act_body(id, "update", None).is_err());
         assert!(act_body(id, "update", Some(&CalendarChange::default())).is_err());
         // The same caps and shapes apply on an update.
-        let too_long = CalendarChange { notes: Some("n".repeat(NOTES_MAX + 1)), ..Default::default() };
+        let too_long = CalendarChange {
+            notes: Some("n".repeat(NOTES_MAX + 1)),
+            ..Default::default()
+        };
         assert!(act_body(id, "update", Some(&too_long)).is_err());
-        let bad_day = CalendarChange { date: Some("2026-02-30".into()), ..Default::default() };
+        let bad_day = CalendarChange {
+            date: Some("2026-02-30".into()),
+            ..Default::default()
+        };
         assert!(act_body(id, "update", Some(&bad_day)).is_err());
-        let bad_repeat = CalendarChange { recurrence: Some("fortnight".into()), ..Default::default() };
+        let bad_repeat = CalendarChange {
+            recurrence: Some("fortnight".into()),
+            ..Default::default()
+        };
         assert!(act_body(id, "update", Some(&bad_repeat)).is_err());
         // Emptying the repeat box is a CLEAR, not an omission.
-        let clear = CalendarChange { recurrence: Some("  ".into()), ..Default::default() };
-        assert_eq!(act_body(id, "update", Some(&clear)).unwrap()["recurrence"], "");
+        let clear = CalendarChange {
+            recurrence: Some("  ".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            act_body(id, "update", Some(&clear)).unwrap()["recurrence"],
+            ""
+        );
     }
 
     #[test]
     fn an_all_day_tick_clears_the_times_and_refuses_new_ones() {
         let id = "c0123456789";
-        let tick = CalendarChange { all_day: Some(true), ..Default::default() };
+        let tick = CalendarChange {
+            all_day: Some(true),
+            ..Default::default()
+        };
         assert_eq!(
             act_body(id, "update", Some(&tick)).unwrap(),
             json!({"id": id, "do": "update", "all_day": true,
@@ -661,8 +901,14 @@ mod tests {
             ..Default::default()
         };
         assert!(act_body(id, "update", Some(&mixed)).is_err());
-        let untick = CalendarChange { all_day: Some(false), ..Default::default() };
-        assert_eq!(act_body(id, "update", Some(&untick)).unwrap()["all_day"], false);
+        let untick = CalendarChange {
+            all_day: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(
+            act_body(id, "update", Some(&untick)).unwrap()["all_day"],
+            false
+        );
     }
 
     #[test]
@@ -677,7 +923,7 @@ mod tests {
                 {"id": "c0123456789", "title": "Dentist", "date": "2026-11-03",
                  "time": "14:30", "all_day": false, "place": "High Street",
                  "notes": "Bring Priya's form", "remind_minutes": 30,
-                 "recurrence": "week", "tz": "America/Los_Angeles", "source": "local"},
+                 "recurrence": "weekly", "tz": "America/Los_Angeles", "source": "local"},
                 {"id": "c012345678a", "title": "", "date": "2026-11-04",
                  "all_day": true, "place": "", "notes": "", "source": "local"}
             ]

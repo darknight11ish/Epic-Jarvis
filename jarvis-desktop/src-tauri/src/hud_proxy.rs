@@ -120,28 +120,34 @@ pub fn allowed_get(path: &str) -> Option<String> {
         None => (path, None),
     };
     if HUD_GET_PATHS.contains(&route) {
+        // The calendar is the ONE path on this list that carries a query
+        // (2026-10-29): `?days=N`, a whole number from 1 to 90, and nothing
+        // else. The page asks for 90 once and draws its month/week/day views
+        // from that one window, so that is the only value it sends; a sign, a
+        // padding zero, a second parameter or anything but digits is refused
+        // here, before the request leaves this window. The path is rebuilt
+        // from the number that was checked, exactly as the History reads below
+        // are - so what reaches the PC is never the page's own string.
+        //
+        // This check sits INSIDE the list test on purpose: the list stays the
+        // one place that says which routes this window may read, and a route
+        // that is not on it never reaches a query parser at all.
+        if route == CALENDAR_PATH {
+            let value = query?.strip_prefix("days=")?;
+            if value.is_empty()
+                || value.len() > 2
+                || value.starts_with('0')
+                || !value.bytes().all(|b| b.is_ascii_digit())
+            {
+                return None;
+            }
+            let days: u32 = value.parse().ok()?;
+            if !(1..=90).contains(&days) {
+                return None;
+            }
+            return Some(format!("{CALENDAR_PATH}?days={days}"));
+        }
         return query.is_none().then(|| route.to_string());
-    }
-    // The calendar's ONE query (2026-10-29): `?days=N`, a whole number from 1
-    // to 90. The page asks for 90 once and draws its month/week/day views from
-    // that window, so this is the only value it sends; a sign, a padding zero,
-    // a second parameter or anything but digits is refused before the request
-    // leaves this window. The path is rebuilt from the number that was checked,
-    // exactly as the History reads below are.
-    if route == CALENDAR_PATH {
-        let value = query?.strip_prefix("days=")?;
-        if value.is_empty()
-            || value.len() > 2
-            || value.starts_with('0')
-            || !value.bytes().all(|b| b.is_ascii_digit())
-        {
-            return None;
-        }
-        let days: u32 = value.parse().ok()?;
-        if !(1..=90).contains(&days) {
-            return None;
-        }
-        return Some(format!("{CALENDAR_PATH}?days={days}"));
     }
     if route == RETRIEVE_PATH {
         let q = query?.strip_prefix("q=")?;
@@ -412,6 +418,12 @@ mod tests {
     #[test]
     fn the_page_reads_are_allowed_exactly() {
         for path in HUD_GET_PATHS {
+            // The calendar is the ONE path on this list whose read always
+            // carries its window, so the bare path is not one this page sends -
+            // it is checked on its own below, with the query it does send.
+            if path == CALENDAR_PATH {
+                continue;
+            }
             assert_eq!(allowed_get(path).as_deref(), Some(path));
         }
         // The rail's nine presets, added 2026-10-21 - and only as a plain
@@ -425,9 +437,15 @@ mod tests {
             allowed_get("/api/retrieve?q=what%20is%20on%20today").as_deref(),
             Some("/api/retrieve?q=what%20is%20on%20today")
         );
-        // The calendar (2026-10-29): the exact path, and its ONE query with a
-        // whole number from 1 to 90 - the page's own window, and nothing else.
-        assert_eq!(allowed_get("/api/calendar").as_deref(), Some("/api/calendar"));
+        // The calendar (2026-10-29): its ONE query, a whole number from 1 to
+        // 90 - the page's own window, and nothing else. The bare path is NOT a
+        // path this page asks for, and refusing it is what also refuses
+        // `?id=<id>` without a second rule.
+        assert_eq!(
+            allowed_get("/api/calendar"),
+            None,
+            "the page asks for a window, never the bare path"
+        );
         for days in ["1", "7", "42", "90"] {
             let path = format!("/api/calendar?days={days}");
             assert_eq!(allowed_get(&path).as_deref(), Some(path.as_str()));
