@@ -487,10 +487,11 @@ def evaluate_parking_stay(
         # cap twice - and the answer below says when that happened.
         cost = min(cost, float(cand.daily_max_usd) * max(1, len(days_seen)))
     if cand.flat_usd is not None:
-        # A place that publishes only a day price charges it for any stay. The
-        # free/piecewise arithmetic above still ran, so the segments still show
-        # what the sign says; the total is the price the place publishes.
-        cost = float(cand.flat_usd)
+        # A place that publishes only a day price charges it for each day the
+        # stay touches. The free/piecewise arithmetic above still ran, so the
+        # segments still show what the sign says; the total is the price the
+        # place publishes.
+        cost = float(cand.flat_usd) * max(1, len(days_seen))
 
     cost = round(cost, 2)
     if cost == 0.0:
@@ -797,12 +798,16 @@ def _place_key(place: str) -> str:
 
 def default_transport(method: str, url: str, *, body: Optional[bytes] = None,
                       headers: Optional[dict] = None,
-                      timeout: float = 12.0) -> Tuple[int, bytes]:
+                      timeout: float = 8.0) -> Tuple[int, bytes]:
     """One HTTPS request, and its (status, bytes).
 
     The only function in this file that touches the network. Every caller takes
     a `transport=` that defaults to this one, and the suites always pass their
     own, so a test run makes no request at all.
+
+    EIGHT SECONDS, because this runs inside a chat turn and Overpass's own
+    query carries `[timeout:8]`: a parking answer may be slow, but it may not
+    leave the owner waiting on a service that has stopped answering.
     """
     request = urllib.request.Request(url, data=body, method=str(method).upper())
     request.add_header("User-Agent", USER_AGENT)
@@ -813,16 +818,20 @@ def default_transport(method: str, url: str, *, body: Optional[bytes] = None,
 
 
 def _payload(status: int, raw, *, what: str) -> dict:
-    """The JSON body of a response, or a plain refusal naming `what`."""
+    """The JSON body of a response, or a plain refusal naming `what`.
+
+    A LIST is a valid body here: Nominatim answers with a JSON array, and
+    treating that as "something unexpected" made every place name unfindable.
+    """
     if status != 200:
         return {"ok": False, "reason": f"{what} answered HTTP {status}"}
     try:
         if isinstance(raw, bytes):
             raw = raw.decode("utf-8", "replace")
-        got = json.loads(raw or "{}")
+        got = json.loads(raw or "null")
     except Exception:
         return {"ok": False, "reason": f"{what} answered something that is not JSON"}
-    if not isinstance(got, dict):
+    if not isinstance(got, (dict, list)):
         return {"ok": False, "reason": f"{what} answered something unexpected"}
     return {"ok": True, "body": got}
 
@@ -1246,8 +1255,10 @@ def _osm_candidate(element: dict, lat: float, lon: float) -> Optional[ParkingCan
                 rates_known = True
                 kind = "street_paid" if parking_lane else kind
 
-    if not bands and rates_known and kind in ("lot", "garage") and fee_tag != "no":
-        # A lot with no price at all is not a free lot.
+    if not bands and flat_usd is None and rates_known \
+            and kind in ("lot", "garage") and fee_tag != "no":
+        # A lot with no price at all is not a free lot. (A lot that publishes
+        # only a DAY price is priced by `flat_usd` above and is not this case.)
         if not (park_ride or transit):
             rates_known = False
 
@@ -1603,6 +1614,14 @@ def _geo_uri(quote: StayQuote) -> str:
 
 
 def _limits_line(result: dict, *, phone: bool) -> str:
+    """What this answer cannot know - on BOTH devices, because it is the one
+    sentence that keeps an estimate from reading like a booking.
+
+    A provider that failed is named on the phone too (one clause, not the whole
+    list): "Nothing within walking distance is legal" is a claim about the
+    world, and it must never be printed when what really happened is that a
+    service did not answer.
+    """
     text = NOT_KNOWING
     if result.get("unknown"):
         count = int(result["unknown"])
@@ -1610,8 +1629,10 @@ def _limits_line(result: dict, *, phone: bool) -> str:
                  f"{'do' if count != 1 else 'does'} not publish a price, so "
                  f"{'they are' if count != 1 else 'it is'} left out rather than "
                  f"guessed.")
-    if result.get("notes") and not phone:
-        text += " " + "; ".join(str(n) for n in result["notes"]) + "."
+    notes = [str(n) for n in (result.get("notes") or []) if str(n).strip()]
+    if notes:
+        kept = notes[:1] if phone else notes
+        text += " " + "; ".join(kept) + "."
     return text
 
 
@@ -1700,7 +1721,7 @@ def calendar_words(result: dict, event: dict, *, client_surface: str = "hud") ->
     back and gives the exact sentence to say - deliberately NOT sending the
     calendar's own words to a public map service.
     """
-    if result is not None and result.get("ok"):
+    if result is not None:
         head = (f"Your next event with a place starts at "
                 f"{clock_words(_minute_of_day(event['start']))} - parking for "
                 f"its window:\n")

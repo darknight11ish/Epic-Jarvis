@@ -2487,6 +2487,11 @@ $SHIPPED = @(
     # SHIPPED list.
     'jarvis_connect_account.py'
     'jarvis_connect_account_wiring.py'
+    # What a parking stay costs, minute by minute (2026-10-30, the parking
+    # blueprint of 2026-10-29). Its sentences are answered by jarvis_quick.py
+    # (already shipped above), so this adds no patch, no route, no gate list
+    # and no tool. Standard library only, so requirements.lock does not move.
+    'jarvis_parking.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

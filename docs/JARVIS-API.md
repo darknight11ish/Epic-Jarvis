@@ -27070,3 +27070,238 @@ page the host's own card list, clicks Save, and asserts the boxes come from
 `card.fields`, the secret box is masked, the NEWEST waiting card is the one drawn,
 the boxes are empty after the save and the values reached the backend as one card
 id plus the declared fields - with no token in the page.
+
+## 164. What a parking stay costs, minute by minute, from public data (added 2026-10-30)
+
+The owner's ask, of 2026-10-29: *"find me cheap parking near Pike Place Market
+tomorrow from 4:15 PM to 9:00 PM"*. The answer he had been able to get before
+this was a model's guess, and a guess is expensive twice - once in the wrong
+number, and once in the ticket.
+
+A parking sign is not one number. It is a set of time windows - a weekday
+morning rate, an afternoon rate, an evening rate, a Saturday rate, a Sunday
+that is free, a "2 hour max" that itself only applies during the day - and the
+honest answer walks the stay one minute at a time. Two mistakes that costs
+money, and that this section exists to record as fixed:
+
+1. **The tail-end overlap.** A blockface with a 2-hour limit enforced
+   08:00-18:00 is **legal** for a 16:15-21:00 stay: only 105 of those minutes
+   fall inside the enforced hours, and at 18:00 the limit expires for the
+   night. A check that compares the STAY (285 min) with the sign (120 min)
+   hides the cheapest legal place on the street.
+2. **The static rate.** Quoting the 4:15 PM rate for that 4h 45m stay says
+   $21.38. The real cost is $9.38, because the rate drops at 5 and is zero at
+   8. The answer shows the arithmetic: `105m @ $2.00/hr + 180m free after
+   6:00 PM; 2h limit ends at 6:00 PM`.
+
+**No route, no card, no model tool, no new dependency.** The whole feature is
+one shipped module, `backend/jarvis_parking.py`, and a sentence grammar in
+`backend/jarvis_quick.py` (§21). `requirements.lock` does not move: it is
+standard library only (`urllib.request`, `urllib.parse`, `json`, `math`,
+`re`, `sqlite3`, `datetime`).
+
+**There is deliberately NO `find_parking` model tool.** The blueprint that
+asked for this feature (2026-10-29) wanted one, behind a switch that defaulted
+off, so the six-tool Live budget on the 8 GB card would be untouched. A tool
+that must stay off is not worth a slot: the sentence grammar answers the same
+request with **zero model tokens and zero tool slots**, so nothing was added to
+`jarvis_agent.py` at all. A model tool remains a possible later change with its
+own budget line.
+
+### 164.1 What it is, and what it plainly is not
+
+* It is a **cost estimate** from public parking data.
+* It is **not** a booking, a reservation, or navigation.
+* It does **not** know: a tow-away or no-stopping sign that is not in the data,
+  a permit zone the owner does not hold, a garage whose price is not published
+  in a form this module can read, a sign that has changed since the data was
+  last refreshed, or the cost of a ticket for overstaying.
+* A place whose price is **not published is never quoted as $0.00**. It is
+  counted, and the answer says how many were left out: *"3 places nearby do
+  not publish a price, so they are left out rather than guessed."*
+* The last line of every answer says all of that in one sentence, on both
+  devices.
+
+### 164.2 What leaves this PC - coordinates and a radius, and one place name
+
+The owner's own instruction, 2026-10-29: *"never send personal data - send
+coordinates/radius only"*. What each request carries:
+
+| service | what is sent | what is never sent |
+|---|---|---|
+| Seattle SDOT Blockface, ArcGIS REST (`services.arcgis.com/.../Blockface/FeatureServer/0/query`) | a bounding box of latitude/longitude, a radius, and `f=json` | a name, an address, a chat word, a calendar entry |
+| OpenStreetMap Overpass (`overpass-api.de/api/interpreter`) | latitude, longitude, a radius, in one `[out:json][timeout:8]` query | the same |
+| Nominatim (`nominatim.openstreetmap.org/search`) | **the place name the owner himself typed or said** | a chat message, a calendar TITLE, a note, anything read out of memory |
+
+Nominatim is the one lookup that necessarily carries words rather than a point:
+it is what turns "Pike Place Market" into a latitude and longitude. A location
+that is **already** a coordinate pair (`47.6094, -122.3425`, or a `geo:` URI)
+makes **no request at all** - the pair is read directly.
+
+No API key, token, cookie or account is involved anywhere. Nothing is logged.
+Every answer is cached locally in `parking-cache.db` beside the module for 24
+hours (overridable with `JARVIS_PARKING_DB`), so asking the same question twice
+makes no request the second time. Every network call takes an injected
+`transport=` callable, so `backend/test_parking.py` makes no request at all and
+CI never reaches Seattle, Overpass or Nominatim.
+
+### 164.3 The integrator, and its dataclasses
+
+`backend/jarvis_parking.py` exports:
+
+| name | what it is |
+|---|---|
+| `RateBand(days_of_week, start_min, end_min, rate_per_hour, max_stay_min=None, no_parking=False)` | one time-of-day rule, `[start_min, end_min)` in minutes after midnight, days as Python weekdays (0 = Monday) |
+| `ParkingCandidate(id, name, kind, lat, lon, distance_m, spaces, rpz_zone, daily_max_usd, rate_bands, source, source_url, rates_known, flat_usd)` | one place, normalized across the two providers; `rates_known=False` means "there is parking here but nobody published the price", and such a place is counted, never priced |
+| `CostSegment(minutes, rate_per_hour, start_min, limit_min)` | one unbroken stretch of a stay at one rate - what the answer prints |
+| `StayQuote(candidate, legal, rejection_reason, total_cost_usd, paid_minutes, free_minutes, enforced_minutes, max_stay_limit_min, walk_minutes, summary_line, segments, free_from_min, limit_ends_min)` | what one stay there costs, and whether it is legal at all |
+| `evaluate_parking_stay(cand, start_dt, end_dt, allow_rpz_permit=None)` | the minute-granularity integrator: rate tiers, the legal tail-end overlap, a stay across midnight, a Sunday or after-hours window, a day cap, a flat day price, a permit zone, a no-parking band |
+| `parse_charge`, `parse_maxstay`, `parse_osm_conditional_window` | the OpenStreetMap tag readers: `"2.00 USD/hour"`, `"2 hours"`, `"no @ (Mo-Fr 18:00-08:00; Sa-Su)"` |
+| `find_parking(place, start_dt, end_dt, ...)` | geocode, both providers, every quote, cheapest legal first; returns a dict, never raises |
+| `reply(result, client_surface="hud"\|"phone")` | the words (see 164.5) |
+
+**The max-stay rule is counted over the minutes that MATCH the band**, never
+over the whole stay, and a refusal names the real overlap: *"Exceeds 2h time
+limit (150 min overlap during enforced hours)"*, not a count of the minute the
+limit was noticed.
+
+### 164.4 The two providers, and what each one gives
+
+| source | what it is used for | the honest limit |
+|---|---|---|
+| **Seattle SDOT Blockface** (`PARKING_CATEGORY`, `WKD_RATE1..3`, `WKD_START1..3`, `WKD_END1..3`, `SAT_*`, `SUN_*`, `PARKING_TIME_LIMIT`, `PARKING_SPACES`, `RPZ_ZONE`, `START_TIME_WKD`/`END_TIME_WKD`) | Seattle's own per-block curb pricing, three weekday tiers, three Saturday tiers and a Sunday tier | it is asked **only** inside Seattle's bounding box (`47.48 <= lat <= 47.74`, `-122.44 <= lon <= -122.24`) |
+| **OpenStreetMap / Overpass** | off-street lots, garages and mapped street lanes, **anywhere in the world** - and beside the Seattle layer, so surface lots are not missing | OSM is crowd-sourced: a lot with no `fee`/`charge` tag is unknown, not free |
+
+The city publishes Saturday and Sunday tiers separately. **A tier it does not
+publish is not a charge** (Seattle's own documented convention, and what makes
+a Sunday stay free); a time-limited block's Saturday window is used **only when
+the layer publishes one**, and is not invented otherwise. A blockface the city
+marks "No Parking Allowed", and an OSM element with `access=private` (or `no`,
+`customers`, `employees`), are dropped in the adapter and never offered.
+
+A lot that publishes **only** a day price (`12.00 USD/day`) is charged that
+price for each day the stay touches: a short stay is over-quoted and a long one
+never under-quoted, which is the only direction this module is allowed to be
+wrong in.
+
+### 164.5 The quick path, and the two devices' words
+
+`backend/jarvis_quick.py` recognises the sentence, so neither answer touches
+the model or a tool slot:
+
+| said | intent |
+|---|---|
+| "find cheap parking near `<place>` from `<time>` to `<time>` [on `<day>`]" | `parking_lookup` |
+| "where is free parking near `<place>` at `<time>` for `<N>` hours" | `parking_lookup` (with `wants_free`) |
+| "cheapest parking at `<place>` tomorrow from `<time>` to `<time>`" | `parking_lookup` |
+| "how much is parking near `<place>` from 4 to 6 pm", "is there parking near `<place>`" | `parking_lookup` |
+| "find cheap parking for my next meeting [at `<place>`]" | `parking_calendar` |
+
+A place is only taken when it follows a locative word (`near`, `at`, `around`,
+`by`, `in`, `for`, `to`): "what is a parking minimum" is **not** a lookup for
+"minimum", and it goes to the model, which can ask. "parking near me" is not
+answered here either - this PC does not know where the owner is standing, and a
+guessed point would be a wrong answer rather than a missing one.
+
+No time said at all is the **next two hours**, and the answer always says which
+window it used, so a default is visible rather than silent.
+
+**Both intents are in `READ_ONLY_INTENTS`**: they change nothing, open no card,
+and must not take away what "cancel that" would undo.
+
+**In a private chat they are not answered here at all.** The whole fast path is
+off in a private chat (`jarvis_quick.answer`'s own rule), so the sentence goes to
+the model and **no request is made** - which is the right default for a private
+chat and is why nothing special was added for it.
+
+| device | what it gets |
+|---|---|
+| the PC (`client_surface="hud"`) | the full breakdown: up to three legal options, each with its minute-by-minute maths and its walk time, then what it cannot know |
+| a phone (`client_surface="phone"`) | two thumb-sized options, a `geo:` link each (`geo:47.60940,-122.34250?q=...`), and **not one desktop-only phrase** - `backend/test_parking.py` checks the short answer against `DESKTOP_ONLY` |
+
+**How the device is known, said plainly.** `/api/chat`'s body carries no client
+kind, and `jarvis_quick.answer_turn` never sees the `X-Jarvis-Client` header, so
+this path does **not** read it. `answer_turn(client_surface=...)` takes an
+explicit answer when a caller really knows; otherwise the reply is inferred with
+`jarvis_owner_check.from_this_pc(peer, local)` - the project's own "is this the
+PC" test, with its documented "cannot be placed counts as this PC" rule. A
+request that plainly did **not** come from this PC therefore gets the phone's
+short form; everything else gets the PC's full one. That is the honest shape of
+what is available today, and a header-reading caller can change it without
+touching this module.
+
+### 164.6 The calendar bridge, and the one thing it will not do
+
+"parking for my next meeting" reads the next upcoming event that has a
+**location**, through `jarvis_google_calendar.list_events` (§161) when that
+module and a way in are available, and degrades to one plain sentence when they
+are not. The parking window is the event's own, **15 minutes either side**.
+
+It reads the event's **times and its location line**. It never reads, returns
+or sends the event's **title**.
+
+**It deliberately does not send the location line to a public map service.** A
+calendar entry is private even when the venue in it is public, and the rule this
+module is built on is that only a place name the owner said out loud, or a
+latitude and longitude, ever leaves the PC. So the answer quotes the venue back
+locally and offers the **exact sentence to say, with the times already filled
+in**:
+
+```
+Your next event with a place is at Pike Place Market, and parking for it would
+run 2:45 PM to 4:15 PM (15 minutes either side). I have not sent the event's
+own words to a map service, on purpose: say "parking near Pike Place Market"
+and I will look it up from your own words.
+```
+
+Saying it makes it the owner's own words and the lookup runs normally. When the
+event's location **already is** a coordinate pair there is nothing to send, and
+the lookup runs in one step. And when the owner says a place in the SAME
+sentence - "find cheap parking for my next meeting at the space needle" - that
+place is his own words too, so it is looked up at once with the event's padded
+window, and the calendar's location line is still not sent anywhere.
+
+The reply quotes the calendar's own location line, so the turn counts as having
+read outside text (`read=["calendar_read"]`) - the same conservative rule a
+briefing that quotes event titles follows.
+
+### 164.7 Tests
+
+`backend/test_parking.py` - **137 checks, no network** (every socket and every
+`urlopen` is made to fail for the whole run, and every provider call is handed a
+recording fixture). It proves, among the rest:
+
+* the six mandatory mutation-killing checks: the tail-end overlap is legal
+  ($3.50, 105 paid + 180 free), an exceeded limit is refused with the **real**
+  150-minute overlap, three rate tiers total **$30.50**, a Sunday and an
+  after-hours window are **FREE ($0.00)**, a private lot and a "No Parking
+  Allowed" blockface appear nowhere, and the phone's answer has a `geo:` link
+  and zero desktop-only strings;
+* both adapters from fixtures shaped like the real answers, the tag readers,
+  the local cache (a second lookup asks nothing, a stale entry is asked again,
+  a broken cache is a miss), a permit zone, a flat day price, an unpublished
+  price never quoted at zero, and every failure degrading to a plain sentence;
+* the privacy rule: the area services receive coordinates and a radius, the
+  geocoder receives only the owner's own words, a coordinate pair makes no
+  request at all, and no request ever carries an event title;
+* the calendar bridge with an injected reader, its 15-minute padding, and that
+  it does not put the calendar on the wire;
+* the quick path end to end with `find_parking` recorded, so the wiring is
+  proven with no socket, and `backend/test_quick_wins.py` holds the same path
+  to answering without the model and without opening a socket.
+
+The three base checks apply as for any shipped module: the byte-identical twin
+`jarvis-backend/jarvis_parking.py`, its entry in both `SHIPPED` lists
+(`backend/_where.py` and `scripts/apply-patches.ps1`), and the re-taken
+`jarvis-backend/_where.py`.
+
+**One manual check the owner may run on his own PC**, with no personal data in
+it, is a single live call to each public service for a well-known public place:
+
+```
+py -3 -c "import jarvis_parking as P; print(P.find_parking('Pike Place Market', __import__('datetime').datetime(2026,11,2,10,0), __import__('datetime').datetime(2026,11,2,13,0)))"
+```
+
+That was **not** run in this checkout (no live call is made by any test or by
+CI), so "the real services answer" is NOT-TESTABLE here and is the owner's
+field check.

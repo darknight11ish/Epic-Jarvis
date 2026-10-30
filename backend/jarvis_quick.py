@@ -271,6 +271,23 @@ only place a value is typed, and the page posts it to a host-only route. It
 runs BEFORE the Settings-only refusal, because the card is the same act
 Settings performs, and it supersedes that sentence for the calendar and GitHub
 only (the rest still get it, unchanged).
+
+WHAT PARKING COSTS (2026-10-30). "find cheap parking near Pike Place Market
+tomorrow from 4:15 PM to 9:00 PM", "where is free parking near X at 5 pm for 2
+hours", "cheapest parking at X tomorrow from 4 to 9", "how much is parking near
+X from 4 to 6 pm" and "find cheap parking for my next meeting [at X]" are
+answered here, from `jarvis_parking.py`'s minute-by-minute pricing. No model,
+no tool slot, no card: it reads two public parking services and this PC's own
+calendar, and changes nothing (both intents are in READ_ONLY_INTENTS). The
+answer is written twice - the PC's screen gets every legal option with its
+maths, a phone gets two options and a `geo:` link - and `client_surface=`
+chooses when the caller knows; see `_client_surface` for why the header is NOT
+what decides it here. The calendar bridge reads the next event that HAS a
+place, and deliberately does not send that event's own words to a map service:
+it quotes the venue back with the padded window and the sentence to say, and
+"parking near <the venue>" then looks it up from the owner's own words. A place
+is only taken when it follows a locative word, so "what is a parking minimum"
+stays the model's.
 """
 from __future__ import annotations
 
@@ -6615,6 +6632,14 @@ def _parking_lookup(s: str, now: Optional[float] = None) -> Optional[Intent]:
         place = _parking_place(calendar.group("place") or "") or ""
         return Intent("parking_calendar", {"place": place, "wants_free": wants_free})
 
+    # A place is named AFTER a preposition: "parking NEAR pike place",
+    # "parking AT the airport", "parking FOR two hours near ...". Without one,
+    # the words after "parking" are the owner's SUBJECT and not a place -
+    # "what is a parking minimum" must not become a lookup for "minimum" - so
+    # the sentence goes to the model, which can ask him what he means.
+    if _PARKING_LEAD_PREP.match(rest) is None:
+        return None
+
     got = _parking_window(rest, now)
     if got is None:
         return None
@@ -6681,6 +6706,15 @@ def _run_parking(intent: Intent, client_surface: str = "hud",
             result = P.find_parking(None, start, end, lat=coordinates[0],
                                     lon=coordinates[1], label=event["where"],
                                     wants_free=bool(intent.f.get("wants_free")))
+        else:
+            # A place the OWNER said in the same sentence ("... for my next
+            # meeting at Pike Place") is his own words, so it may be looked up
+            # exactly as any other sentence of his. The calendar's own location
+            # line is still not sent anywhere - that is the module's rule.
+            said = str(intent.f.get("place") or "").strip()
+            if said:
+                result = P.find_parking(said, start, end,
+                                        wants_free=bool(intent.f.get("wants_free")))
         words = P.calendar_words(result, event, client_surface=surface)
         # The reply quotes the calendar's own location line, so this turn counts
         # as having read outside text - the conservative direction, and the same
