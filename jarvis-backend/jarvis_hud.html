@@ -2563,6 +2563,12 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
      what the editor adds - `.hud-home-*`, or `#stage > #hud-home-cards` - so
      none of this reaches a part of the page the strip does not own. */
   .hud-home-cards{display:flex; flex-direction:column; gap:7px; margin:8px 0 0;}
+  /* The main-screen cards belong to the Talk stage. On the Galaxy tab the
+     picture owns the stage, and the strip's 118px squeezed the space the hidden
+     galaxy gives the face until hud.mjs's hidden-galaxy check failed on main
+     (2026-10-30: "only 24px of conversation is left"). Edit HUD still shows its
+     own editor there, so the strip is not hidden while editing. */
+  html[data-hud-tab="galaxy"] body:not([data-hud-edit="on"]) #stage > #hud-home-cards{display:none;}
   .hud-home-cards:empty{display:none;}
   /* Edit HUD in Studio: the strip is a row of its own, below the stage tabs
      and above the banner, and it scrolls INSIDE itself. Without this its full
