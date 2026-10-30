@@ -52,7 +52,7 @@ The tool also holds the two registries to each other: every `app="desktop"`
 section in `jarvis_settings_registry.py` must have a desktop-only menu in
 `jarvis_menus.py` (or be a row inside one), and the phone's own
 `OpenPlace.PC_ONLY` list - which is what actually answers "only on your PC"
-when the owner says "open notifications" - must name it. Two files that
+when the owner says "open shortcuts" - must name it. Two files that
 disagree about the same section are exactly the drift the audit's section 6.3
 found nine times.
 
