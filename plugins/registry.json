@@ -7,8 +7,8 @@
     "core": 135,
     "missing": 0
   },
-  "folder_count": 12,
-  "ready_count": 40,
+  "folder_count": 13,
+  "ready_count": 41,
   "folders": [
     {
       "name": "skill-hub",
@@ -104,6 +104,14 @@
       "install": "handler",
       "stack_order": 160,
       "summary": "Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "jarvis-calendar",
+      "module": "jarvis_local_calendar",
+      "install": "handler",
+      "stack_order": 161,
+      "summary": "Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch turns every surface off while keeping every event.",
       "why": "born as a folder: it replaces no patch"
     }
   ],

@@ -631,7 +631,11 @@ CHAT_HISTORY_DB = "chat-history.db"
 SOURCE_DBS = ("memory.db", CHAT_HISTORY_DB, "schedule.db", "feedback.db", "projects.db",
               "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db",
               "tasks.db", "knowledge.db", "traces.db",
-              "receipts.db", "voiceprint.db", "price-radar.db", "health.db")
+              "receipts.db", "voiceprint.db", "price-radar.db", "health.db",
+              # The Jarvis calendar's own events (2026-10-29). Backups copy a
+              # LIST of files, not the folder, so a name missing here silently
+              # drops every event; the file is kept while the feature is off.
+              "calendar.db")
 
 
 #: How long a snapshot/table-count connection waits for a lock before giving

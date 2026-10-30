@@ -27350,3 +27350,204 @@ the owner's words, and `backend/test_backup.py` decrypts the archived history an
 scans every archive member to prove no backup carries the file's body, its
 base64 or its name. The HUD half is `jarvis-desktop/tests/attach.mjs`, which
 pins the caps, the wording and the part shape.
+
+---
+
+## 164. Jarvis's own calendar: one local store both apps and the widget read (added 2026-10-29)
+
+**What this is, in the owner's words.** "full fledged easy to use calendar built
+into Jarvis ... disabled but on by default". It is Jarvis's **own** calendar: the
+events are kept in one SQLite file on this PC, shown beside Google Calendar and
+iCal, never merged into either and **never synced out**. It is a **third
+reader**, not a fourth `jarvis_google_calendar.MODES` value - that list means
+*which one calendar Jarvis reads*, so a `local` entry there would make the local
+calendar **replace** Google instead of sit beside it. Google's and iCal's modules
+are unchanged.
+
+The module is `backend/jarvis_local_calendar.py` (and its `jarvis-backend/`
+twin); its four routes come from its own `install(handler_cls, *, origin_ok,
+token_ok, read_body)`, called by `plugins/ready/jarvis-calendar/plugin.json`, so
+it needs **no patch** and no change to `jarvis_hud.py`. There is no gate entry:
+nothing leaves the PC, so there is no egress to approve.
+
+**This section is S1's contract.** The HUD card, the phone plate and the
+home-screen widget are the next slices and build against exactly these answer
+shapes. No app calls them yet (`tools/check_parity.py` classifies the four as
+`planned`), and this section says so rather than implying a screen exists.
+
+### 164.1 Where the data lives, and the switch
+
+`calendar.db` in the Jarvis settings folder, beside `schedule.db` and
+`memory.db` (`JARVIS_CALENDAR_DB` overrides it, for tests and the self-check).
+Plain SQLite, opened with `jarvis_sqlite.connect` - the connection **closes**
+when its `with` block ends - and created with the `_SCHEMA` +
+`_ADDED_COLUMNS` migration pattern `jarvis_schedule` uses. It is **not**
+encrypted, the same boundary this project already accepts for reminders (the
+Windows account plus BitLocker); a calendar is closer to a reminder than to the
+sealed chat transcript. `calendar.db` is on `jarvis_backup.SOURCE_DBS`, because
+backups copy a **list of files**, not a folder - a missing name silently drops
+every event.
+
+The switch is `calendar-settings.json` beside it
+(`JARVIS_CALENDAR_SETTINGS` overrides it):
+
+- **no file = ON**, which is what "on by default" means;
+- **OFF hides every surface, refuses writes in words, and KEEPS every event**;
+- **a damaged file is OFF**, with a `why` sentence saying the file could not be
+  read - a silent "on" from a file nothing can read is the wrong direction.
+
+ON, OFF and damaged are also the three states `GET /api/calendar` reports: the
+feature is **effectively on** only when the switch says on *and* the store can be
+read.
+
+**The same switch by typing, before either Settings page draws it.** The
+registry's `BoolSetting("jarvis_calendar", ...)` answers "turn off the Jarvis
+calendar" / "turn on the Jarvis calendar" through the feature lane
+(`jarvis_quick`'s `CHANGE_BY_ASKING`), calling
+`jarvis_settings_registry.set_jarvis_calendar` -> this module's
+`handle_settings`, the identical function the route calls, so the three doors
+cannot disagree. Its setting aliases are "local calendar", "the local calendar",
+"jarvis local calendar" and "my local calendar". **"calendar" alone is
+deliberately not an alias**: `_SETTING_NOISE` strips "jarvis", so a bare
+"calendar" entry would also catch "turn off Google calendar" - the matcher
+accepts a request containing every word of an alias - and flipping this switch
+on a sentence about Google's calendar is exactly the wrong-switch failure the
+registry's own rule forbids. "turn off Google calendar" still resolves to
+nothing, which is the safe answer.
+
+### 164.2 The event
+
+One row per event. The response object is:
+
+| field | type | meaning |
+|---|---|---|
+| `id` | string | `"c"` + 10 lowercase hex, unique (`c0a1b2c3d4`) |
+| `title` | string | 1..300 characters; required on add |
+| `date` | `YYYY-MM-DD` | the day the event starts, **as the clock reads** |
+| `time` | `HH:MM` or null | null for an all-day event |
+| `end_date` | `YYYY-MM-DD` | same as `date` unless it spans days |
+| `end_time` | `HH:MM` or null | null when all-day; must be after `time` on the same day |
+| `all_day` | bool | true when there is no time |
+| `place` | string | 0..300, may be empty |
+| `notes` | string | 0..2000, may be empty |
+| `remind_minutes` | int or null | 0..40320; **stored only - nothing rings in v1** |
+| `recurrence` | string | `none`, `daily`, `weekly` or `monthly` |
+| `recur_count` | int or null | 1..500; counts from the series start, as RFC 5545 COUNT does |
+| `recur_until` | `YYYY-MM-DD` or null | last day the series may land on |
+| `tz` | string | the zone it was written in, informational (the PC's own name unless the client sends one) |
+| `created`, `updated` | float | epoch seconds, ordering/bookkeeping only |
+| `source` | string | always `"local"` |
+
+**The date and time are the record, never an epoch.** An event stored as a bare
+epoch moves to 14:00 in summer and 13:00 in winter after a daylight-saving
+change, and the owner notices exactly that; `jarvis_schedule`'s own docstring
+states the same rule ("A daily 07:00 stays 07:00 across a clock change"). The
+epoch is computed **on read** for ordering, and it follows this PC's own clock:
+a time that does not exist goes at the moment of the jump (02:30 on a
+spring-forward night becomes 03:00), a time that happens twice takes the first
+reading. `backend/test_local_calendar.py` proves both edges against a real IANA
+zone (and the self-check proves them on the shipped clock path).
+
+**Recurrence, v1.** Four modes with the RFC's own two cuts. Occurrences are
+expanded **inside the read window only**, capped at 400 per event and 200 in the
+answer (`"truncated": true` when the cap was hit). A monthly event on the 31st
+is **clamped to the month's last day** - 31 January, 28 February in a common
+year (29 in a leap year), 31 March - so a short month does not make the series
+disappear. There is no `series_id` and no exception date: editing or deleting a
+repeating event changes or removes the **whole series**, and the object form
+`{"mode": "weekly", "count": 5, "until": "2026-12-31"}` is accepted as well as
+the plain string.
+
+**Caps.** 200 events returned per read (window at most 90 days), 2,000 events
+stored. A full store answers **409** in words and never silently drops the
+newest event.
+
+### 164.3 Every route
+
+All four are behind the server's own origin check and `X-Jarvis-Token`, the same
+rules as every other host route; there is **no new permission model**. Reads are
+safe. The three writes are **host-only writes** for now - the HUD commands that
+will call them are the next slice - and each answers in words, never with a
+silent no-op.
+
+```
+GET  /api/calendar?days=7
+GET  /api/calendar?id=<id>
+POST /api/calendar/add
+POST /api/calendar/act
+POST /api/calendar/settings
+```
+
+| route | body / query | answers | card |
+|---|---|---|---|
+| `GET /api/calendar` | `?days=7` (1-90, default 7) | 200 `{available, on, days, window:{start,end}, events:[event...], sources:{local:{state,count}, google:{state:"not_on_a_screen"}, ical:{state:"not_on_a_screen"}}}`; `truncated` when the 200 cap was hit; `why` when the switch's file is damaged | no |
+| `GET /api/calendar?id=` | the event's id | 200 `{available, on, event, source}` - the **stored series**, not one occurrence; 404 `{ok:false, reason:"no_such_event"}` | no |
+| `POST /api/calendar/add` | `{title (required), date?, time?, end_date?, end_time?, all_day?, place?, notes?, remind_minutes?, recurrence?, recur_count?, recur_until?, tz?}` | 200 `{ok:true, event, said}`; 400 in words for a bad or unknown field; 409 `reason:"full"` or `reason:"off"` | **none** - the 2026-10-29 cardless ruling |
+| `POST /api/calendar/act` | `{id, do:"delete"}` or `{id, do:"update", ...same fields...}` | 200 `{ok:true, id}` or `{ok:true, event, said}`; 404 `reason:"no_such_event"`; 400 `reason:"no_bulk"` for any bulk verb; 409 `reason:"off"` | **none** - see below |
+| `POST /api/calendar/settings` | `{on: true \| false}` | 200 `{ok:true, on, said}`; 400 when `on` is not a boolean | **none** - a preference you can change back in one press |
+
+**Deliberately absent: no delete-all, no clear-range, no bulk form of any kind.**
+`/api/schedule/act` keeps the same rule for the same reason, and this project has
+already refused bulk approvals once. A body that asks for `delete_all`, `clear`,
+`clear_range`, `delete_range` or `bulk` gets 400 `reason:"no_bulk"` and the
+sentence that says one event at a time.
+
+**OFF, exactly.** The read answers 200 with `"on": false`, `events: []` and the
+stored count (never a title); an add or an act answers 409 `reason:"off"` in
+words; the settings route still works. Nothing is deleted, and turning it back
+on shows everything again.
+
+**A damaged database** answers `available: false`, `on: false`, `events: []` and
+a `why` sentence naming the exception **type only** - never a row, never the
+file's contents - rather than a traceback.
+
+### 164.4 Why the writes raise no card
+
+`docs/ARCHITECTURE.md`'s "Cardless by design" table carries **one local
+calendar event** on the reasoning of its "One job on the schedule" row: one
+event per request, no list form, no delete-all, the audit line carries **ids and
+outcomes only** and never the title, place or note (`calendar.add`,
+`calendar.change`, `calendar.delete`), and rule 4's stale-link hold still blocks
+ACTING wherever a surface draws the write. The owner's decision and its limits
+are the `decisions.d/2026-10-29-jarvis-calendar.md` fragment. A write still needs
+the server's origin and token; the feature adds no gate entry, no key, no socket
+and no model call.
+
+### 164.5 Honest limits, and what the next slices own
+
+- **No screen yet** in either app: the HUD card, the phone plate and the Android
+  widget are S2-S4 and build against 164.2-164.3. Until then the feature's entry
+  in Settings > "All features and abilities" says the typed switch works and the
+  screens are the next slice.
+- **Google and iCal are not on this route.** `sources` says
+  `"not_on_a_screen"` for both and the local read never touches either module.
+  When their read is wired to a screen, its events slot into the same list with
+  `"source": "google"` / `"ical"` and the screens need no change.
+- **No reminder rings** (`remind_minutes` is stored for a later slice), **no
+  invitations or attendees, no sharing, no `.ics`/CalDAV publishing, no
+  per-occurrence edit, no colours or drag-to-move, and no natural-language add**
+  through the model - "add a meeting Tuesday 3pm" stays §161's sentence.
+- **The phone's widget is Android-only by nature.** When it lands it adds no
+  route: every read it makes is `GET /api/calendar`, which both apps also call,
+  and the one-sided reason goes in `docs/ARCHITECTURE.md` §8 then.
+
+**Tests.** `backend/test_local_calendar.py` (88 checks: all four routes through a
+stand-in Handler, each one refusing a cross-origin request (403) and a missing
+token (401) before it does any work; the owner's own phrase "turn off the Jarvis
+calendar" driven through the real chat grammar, which answers in this module's
+own words and really flips the switch; add/update/delete,
+title/date/time/end validation, an unknown field refused, the 2,000-event cap,
+no delete-all, OFF hides and keeps and refuses writes, no settings file is ON, a
+damaged settings file is OFF with a `why`, a damaged database is said not
+crashed, the DST wall clock against a real zone, daily/weekly/monthly expansion
+including the 31st, a one-day window, a multi-day overlap, `calendar.db` on the
+backup list, no socket/HTTP/model import, and `self_check()` itself). The
+self-check is one command:
+
+```
+py -3 jarvis_local_calendar.py check
+```
+
+It seeds a throwaway folder, proves add / list / act / settings / backup-list /
+recurrence / DST (17 checks), prints `PASS` and the counts, and removes its own
+folder.

@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 142,
+  "feature_count": 143,
   "features": [
     {
       "id": "typing",
@@ -4183,6 +4183,70 @@
         ]
       },
       "label_note": ""
+    },
+    {
+      "id": "jarvis-calendar",
+      "name": "Jarvis Calendar",
+      "group": "Home",
+      "surface": "both",
+      "where": "Ask \"turn off the Jarvis calendar\". The Calendar screen in each app is the next slice; the store and its routes are built now.",
+      "control": {
+        "type": "title",
+        "setting_keys": [
+          "jarvis_calendar"
+        ],
+        "turn_on": "turn on Jarvis Calendar",
+        "turn_off": "turn off Jarvis Calendar",
+        "adjust": [],
+        "intent": "settings_bool"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Ask \"turn off the Jarvis calendar\" (the Settings card is the next slice).",
+        "search": [
+          "Jarvis Calendar"
+        ],
+        "found": false
+      },
+      "phone": {
+        "section": null,
+        "location": "Ask \"turn off the Jarvis calendar\" (the Calendar screen is the next slice).",
+        "search": [
+          "Jarvis Calendar"
+        ],
+        "found": false
+      },
+      "status": "planned",
+      "owner": "setup-ui",
+      "reason": "The store and the four routes are built and the typed switch works; no desktop SETTINGS_ROWS row or phone Settings row draws it yet - the UI slice owns those.",
+      "label": "Switchable / Adjustable (Typed & Settings)",
+      "label_evidence": {
+        "example_phrase": "turn off Jarvis Calendar",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "switch",
+        "reason_code": "command",
+        "owner": "voiceprint-wiring",
+        "reason": "",
+        "settings_gap": {
+          "controls": [
+            "jarvis_calendar"
+          ],
+          "desktop": "setup-ui",
+          "phone": "setup-ui",
+          "reason": "The typed switch and the four routes are real now; both Settings halves are the calendar UI slice's, so no page draws them yet."
+        },
+        "label_source": "Switchable / Adjustable (Typed & Settings)"
+      },
+      "own_keys": [
+        "jarvis_calendar"
+      ],
+      "own_intents": [
+        "settings_bool"
+      ],
+      "own_actions": {},
+      "label_note": "The typed switch works today; the Calendar Settings card and the phone row are the next slice."
     },
     {
       "id": "weather-sky",
@@ -8376,6 +8440,23 @@
       "status": "planned",
       "owner": "setup-ui",
       "reason": "typed switch works but no SETTINGS_ROWS row puts it on the desktop page - the card is bespoke, not a generated toggle"
+    },
+    {
+      "key": "jarvis_calendar",
+      "names": [
+        "local calendar",
+        "the local calendar",
+        "jarvis local calendar",
+        "my local calendar"
+      ],
+      "section": null,
+      "desktop_row": null,
+      "turn_on": "turn on jarvis calendar",
+      "turn_off": "turn off jarvis calendar",
+      "resolved": true,
+      "status": "planned",
+      "owner": "setup-ui",
+      "reason": "typed switch works; no SETTINGS_ROWS row or phone row draws it yet - the Calendar Settings card is the UI slice's"
     }
   ],
   "setting_rows": [
@@ -10563,6 +10644,13 @@
       "status": "planned",
       "owner": "voiceprint-wiring",
       "reason": "named choice setting newly wired; setter test/proof still pending"
+    },
+    {
+      "kind": "feature",
+      "id": "jarvis-calendar",
+      "status": "planned",
+      "owner": "setup-ui",
+      "reason": "typed switch and four routes built; desktop and phone Settings rows are the calendar UI slice's"
     }
   ],
   "settings_only": [
@@ -11739,10 +11827,10 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 70
+      "not-a-setting": 71
     },
     "Switchable / Adjustable (Typed & Settings)": {
-      "planned": 28,
+      "planned": 29,
       "enforced": 14
     },
     "PC-Only Setting (Honest Refusal on Phone)": {
@@ -11756,11 +11844,11 @@
     }
   },
   "label_counts": {
-    "Switchable / Adjustable (Typed & Settings)": 42,
-    "Settings-Only (By Design — Security Boundary)": 2,
-    "PC-Only Setting (Honest Refusal on Phone)": 15,
     "Command-Only (Runs When You Ask — No Switch Needed)": 71,
-    "Always On (Core Safety Rule — Cannot Be Turned Off)": 12
+    "Switchable / Adjustable (Typed & Settings)": 43,
+    "PC-Only Setting (Honest Refusal on Phone)": 15,
+    "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
+    "Settings-Only (By Design — Security Boundary)": 2
   },
   "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real."
 }

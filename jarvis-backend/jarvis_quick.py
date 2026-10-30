@@ -4792,6 +4792,14 @@ CHANGE_BY_ASKING = frozenset({
     # real True/False (`_read_antislop`), so the read-back below is a read and
     # not a claim.
     "antislop",
+    # The Jarvis-owned local calendar (2026-10-29): the same shape as the
+    # Anti-Slop filter above. `set_jarvis_calendar` calls the module's own
+    # `handle_settings`, the one function its route and its typed switch call,
+    # and reads the same stored value back - a preference either way, with no
+    # card, no model call and nothing deleted when it is turned off. Its reader
+    # (`_read_jarvis_calendar`) answers a real True/False, so the read-back is a
+    # read and not a claim.
+    "jarvis_calendar",
     # The five PC-notification switches. They ride `jarvis_limits.change`, and
     # all seven of those rows are `loosening="none"` on purpose: a switch that
     # only decides whether this PC shows its owner a toast may not wait behind

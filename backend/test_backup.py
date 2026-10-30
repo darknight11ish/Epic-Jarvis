@@ -658,14 +658,17 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     # ("I wanted it encrypted as well and part of that file"), which took the
     # exclusions from 8 to 7 and the carried databases from 17 to 18 - it lives
     # in its own medical/ folder and now travels under db/medical/health.db.
+    # calendar.db (the Jarvis-owned local calendar, 2026-10-29) took the carried
+    # databases from 18 to 19: a calendar is closer to a reminder than to the
+    # sealed chat transcript, so it is kept and backed up like schedule.db.
     # Both numbers are asserted rather than derived, on purpose - the point is
     # that adding a database is a decision somebody has to make here as well as
     # in the module, and this is the line that asks.
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases of the owner's install, split 18 + 7, are all accounted for",
-          len(B.SOURCE_DBS) == 18 and len(B.NOT_BACKED_UP) == 7,
+    check("the databases of the owner's install, split 19 + 7, are all accounted for",
+          len(B.SOURCE_DBS) == 19 and len(B.NOT_BACKED_UP) == 7,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 

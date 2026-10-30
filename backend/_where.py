@@ -426,6 +426,14 @@ SHIPPED = (
     # install(), called by plugins/ready/antislop - no patch of its own. A
     # cardless preference either way, like the prompt coach.
     "jarvis_antislop.py",
+    # The Jarvis-owned local calendar (2026-10-29): the owner's own events in
+    # `calendar.db`, ON when no settings file says otherwise, OFF keeps every
+    # row. GET /api/calendar and the three writes come from its own install(),
+    # called by plugins/ready/jarvis-calendar - no patch of its own. The three
+    # writes are cardless by the owner's 2026-10-29 ruling (one event, no bulk,
+    # ids-only audit), recorded in decisions.d/ and ARCHITECTURE's cardless
+    # table.
+    "jarvis_local_calendar.py",
     "jarvis_card_words.py",
     # The approval card's short summary and the "Start short" / "Always show
     # everything" choice (the owner's request of 2026-10-09, card-prefs.patch):
