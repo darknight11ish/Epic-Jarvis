@@ -37,6 +37,9 @@ use crate::commands;
 
 pub mod auto_learn;
 pub mod briefing;
+// Jarvis's own local calendar's desktop half (2026-10-29): the HUD's two write
+// bodies, every field capped, and the read's redaction under App lock.
+pub mod calendar;
 pub mod chatbot;
 pub mod conversation_facts;
 pub mod decks;

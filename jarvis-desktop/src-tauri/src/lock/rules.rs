@@ -565,6 +565,11 @@ pub fn redact_graph(body: serde_json::Value) -> serde_json::Value {
 ///   `brain::schedule::redact_list` the Brain window uses: the words of every
 ///   reminder, to-do item and named list are taken out, while kinds, times
 ///   and counts stay, so the tab can still group and count them.
+/// * `/api/calendar` (the HUD calendar, 2026-10-29) through
+///   `brain::calendar::redact_read`: an event's title, place and notes are the
+///   owner's words, so they become `""` while the date, time, all-day flag,
+///   reminder minutes, recurrence and counts stay - the calendar can still be
+///   drawn and say "3 events - hidden".
 ///
 /// `/api/memory/pending` is NOT changed: the HUD shows only how many cards
 /// wait, never their words (jarvis_hud.html), and the Brain's own hidden
@@ -581,6 +586,16 @@ pub fn redact_hud_read(path: &str, body: &str) -> String {
         },
         "/api/schedule" => match serde_json::from_str::<serde_json::Value>(body) {
             Ok(v) => crate::brain::schedule::redact_list(v).to_string(),
+            Err(_) => serde_json::json!({ "available": false, "hidden": true }).to_string(),
+        },
+        // The HUD calendar (2026-10-29). An event's title, place and notes are
+        // the owner's own words, in the same class as a reminder's, so the read
+        // keeps its dates, times, all-day flags, reminder minutes and counts
+        // and loses those three - `brain::calendar::redact_read` is the one
+        // place that decides it. The `?days=N` query is already gone from
+        // `route`, so the check is on the plain path.
+        "/api/calendar" => match serde_json::from_str::<serde_json::Value>(body) {
+            Ok(v) => crate::brain::calendar::redact_read(v).to_string(),
             Err(_) => serde_json::json!({ "available": false, "hidden": true }).to_string(),
         },
         // The HUD's History sidebar (2026-10-27). A chat's title is the
@@ -711,6 +726,62 @@ mod tests {
         assert_eq!(v["todo"][0]["rank"], 0, "a rank is a number, kept");
         assert_eq!(
             redact_hud_read("/api/schedule", "not json"),
+            r#"{"available":false,"hidden":true}"#
+        );
+    }
+
+    /// The HUD calendar is the owner's words too (2026-10-29): while App lock
+    /// or the hidden lists are on, the titles, places and notes go and the
+    /// dates, times, all-day flags, reminder minutes and counts stay, so the
+    /// card and the grid can still be drawn without reading a single word.
+    /// The `?days=` query must be ignored when the route is matched, or the
+    /// read would pass through in the clear.
+    #[test]
+    fn the_hud_calendar_read_loses_its_titles_but_keeps_its_days() {
+        let body = serde_json::json!({
+            "available": true,
+            "on": true,
+            "days": 90,
+            "window": {"start": "2026-10-29", "end": "2027-01-26"},
+            "sources": {"local": {"state": "on", "count": 1},
+                        "google": {"state": "not_on_a_screen"},
+                        "ical": {"state": "not_on_a_screen"}},
+            "events": [
+                {"id": "c0123456789", "title": "Dentist for Priya", "date": "2026-11-03",
+                 "time": "14:30", "end_date": "2026-11-03", "end_time": "15:30",
+                 "all_day": false, "place": "High Street clinic",
+                 "notes": "Bring her form", "remind_minutes": 30, "recurrence": "week",
+                 "tz": "America/Los_Angeles", "source": "local"},
+                {"id": "c012345678a", "title": "Trip", "date": "2026-11-04",
+                 "end_date": "2026-11-06", "all_day": true, "place": "", "notes": "",
+                 "remind_minutes": null, "recurrence": "", "tz": "America/Los_Angeles",
+                 "source": "local"}
+            ]
+        });
+        let out = redact_hud_read("/api/calendar?days=90", &body.to_string());
+        for word in ["Dentist", "Priya", "High Street", "Bring", "Trip"] {
+            assert!(!out.contains(word), "{word} survived the lock: {out}");
+        }
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["available"], true);
+        assert_eq!(v["on"], true);
+        assert_eq!(v["hidden"], true);
+        assert_eq!(v["hidden_count"], 2, "both events had a title: {out}");
+        assert_eq!(v["days"], 90);
+        assert_eq!(v["window"]["start"], "2026-10-29");
+        assert_eq!(v["sources"]["local"]["count"], 1);
+        assert_eq!(v["events"][0]["date"], "2026-11-03", "the day stays");
+        assert_eq!(v["events"][0]["time"], "14:30", "the time stays");
+        assert_eq!(v["events"][0]["end_time"], "15:30");
+        assert_eq!(v["events"][0]["all_day"], false);
+        assert_eq!(v["events"][0]["remind_minutes"], 30);
+        assert_eq!(v["events"][0]["tz"], "America/Los_Angeles");
+        assert_eq!(v["events"][0]["source"], "local");
+        assert_eq!(v["events"][1]["end_date"], "2026-11-06", "a span stays");
+        assert_eq!(v["events"][1]["all_day"], true);
+        // A body that is not JSON becomes the honest hidden reply.
+        assert_eq!(
+            redact_hud_read("/api/calendar", "not json"),
             r#"{"available":false,"hidden":true}"#
         );
     }

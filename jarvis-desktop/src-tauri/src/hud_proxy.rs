@@ -50,7 +50,15 @@ use crate::ChatState;
 /// `/api/models/rollback` are NOT here and stay refused (a switch is a change
 /// with its card, never a read), and `?recommend=1` is not a path the page
 /// asks for, so the catalogue fetch stays off this window too.
-pub const HUD_GET_PATHS: [&str; 10] = [
+///
+/// `/api/calendar` (2026-10-29, the owner's desktop HUD calendar): the one
+/// composing read both apps call, with ONE query - `?days=N`, 1 to 90, checked
+/// in [`allowed_get`] because it is the HUD's only read here that carries one.
+/// It is a read of the owner's OWN events on this PC: no network, no card. Its
+/// writes are NOT here - `/api/calendar/add`, `/api/calendar/act` and
+/// `/api/calendar/settings` stay refused, and the first two go through
+/// `hud_calendar_add` / `hud_calendar_act`, which hold the stale-link rule.
+pub const HUD_GET_PATHS: [&str; 11] = [
     "/api/status",
     "/api/graph",
     "/api/pending",
@@ -58,6 +66,10 @@ pub const HUD_GET_PATHS: [&str; 10] = [
     "/api/memory/pending",
     "/api/presets",
     "/api/schedule",
+    // The HUD calendar's window (2026-10-29): the owner's own local events,
+    // read-only. Its `?days=N` is checked by `allowed_get`; the writes are the
+    // two commands in hud_calendar.rs, never the page's own POSTs.
+    "/api/calendar",
     // The owner-secret hand-off card's pending list (2026-10-26): read-only,
     // the cards the host measured; filling/cancelling are the two shell
     // commands in hud_secret_handoff.rs, never the page's own POSTs.
@@ -74,6 +86,10 @@ pub const HUD_GET_PATHS: [&str; 10] = [
 
 /// The retrieval trace: `/api/retrieve?q=<the question>`, and nothing else.
 const RETRIEVE_PATH: &str = "/api/retrieve";
+
+/// The calendar's read, whose one query (`?days=N`) is checked in
+/// [`allowed_get`]. Named once so the list, the check and the tests agree.
+const CALENDAR_PATH: &str = "/api/calendar";
 
 /// A question longer than this is not one the page sends (it sends the
 /// user's own message, which the chat box keeps short).
@@ -105,6 +121,27 @@ pub fn allowed_get(path: &str) -> Option<String> {
     };
     if HUD_GET_PATHS.contains(&route) {
         return query.is_none().then(|| route.to_string());
+    }
+    // The calendar's ONE query (2026-10-29): `?days=N`, a whole number from 1
+    // to 90. The page asks for 90 once and draws its month/week/day views from
+    // that window, so this is the only value it sends; a sign, a padding zero,
+    // a second parameter or anything but digits is refused before the request
+    // leaves this window. The path is rebuilt from the number that was checked,
+    // exactly as the History reads below are.
+    if route == CALENDAR_PATH {
+        let value = query?.strip_prefix("days=")?;
+        if value.is_empty()
+            || value.len() > 2
+            || value.starts_with('0')
+            || !value.bytes().all(|b| b.is_ascii_digit())
+        {
+            return None;
+        }
+        let days: u32 = value.parse().ok()?;
+        if !(1..=90).contains(&days) {
+            return None;
+        }
+        return Some(format!("{CALENDAR_PATH}?days={days}"));
     }
     if route == RETRIEVE_PATH {
         let q = query?.strip_prefix("q=")?;
@@ -388,6 +425,20 @@ mod tests {
             allowed_get("/api/retrieve?q=what%20is%20on%20today").as_deref(),
             Some("/api/retrieve?q=what%20is%20on%20today")
         );
+        // The calendar (2026-10-29): the exact path, and its ONE query with a
+        // whole number from 1 to 90 - the page's own window, and nothing else.
+        assert_eq!(allowed_get("/api/calendar").as_deref(), Some("/api/calendar"));
+        for days in ["1", "7", "42", "90"] {
+            let path = format!("/api/calendar?days={days}");
+            assert_eq!(allowed_get(&path).as_deref(), Some(path.as_str()));
+        }
+        // It is rebuilt from the checked number, so a leading zero or a second
+        // parameter can never ride through as part of "the page's own" path.
+        assert_eq!(
+            allowed_get("/api/calendar?days=007").as_deref(),
+            None,
+            "a padded number is not one the page sends"
+        );
     }
 
     #[test]
@@ -425,6 +476,24 @@ mod tests {
             "/api/retrieve?q=a=b",
             "/api/retrieve?q=has space",
             "/api/pending\n",
+            // The calendar may READ its own window and nothing else: every
+            // write stays refused (the two commands are the only door, and the
+            // settings switch is not this window's), and `?days=` is bounded.
+            "/api/calendar/add",
+            "/api/calendar/act",
+            "/api/calendar/settings",
+            "/api/calendar/",
+            "/api/calendar?days=0",
+            "/api/calendar?days=91",
+            "/api/calendar?days=999",
+            "/api/calendar?days=-1",
+            "/api/calendar?days=1.5",
+            "/api/calendar?days=abc",
+            "/api/calendar?days=",
+            "/api/calendar?days=07",
+            "/api/calendar?days=90&x=1",
+            "/api/calendar?id=c0123456789",
+            "/api/calendar?x=days=90",
         ] {
             assert_eq!(allowed_get(path), None, "{path:?} was allowed");
         }

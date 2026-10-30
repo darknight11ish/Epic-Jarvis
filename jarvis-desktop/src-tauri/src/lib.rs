@@ -44,6 +44,7 @@ pub mod frame_feed;
 pub mod handoff;
 pub mod hardware;
 pub mod hotkeys;
+pub mod hud_calendar;
 pub mod hud_layout;
 pub mod hud_proxy;
 pub mod hud_schedule;
@@ -971,6 +972,12 @@ pub fn run() {
             // routes the Brain uses, held on a stale link. HUD window only.
             hud_schedule::hud_schedule_add,
             hud_schedule::hud_schedule_act,
+            // The HUD calendar's writes (2026-10-29, the owner's desktop HUD
+            // request): add ONE local event, or change/delete ONE event, on the
+            // backend contract's own two routes, held on a stale link. There is
+            // no delete-all and no list form. HUD window only.
+            hud_calendar::hud_calendar_add,
+            hud_calendar::hud_calendar_act,
             // The HUD History sidebar's one write (2026-10-27, the owner's
             // request: "pinnable chats, project organization by chat"):
             // pin/unpin ONE chat, file ONE chat under a tag, or delete ONE

@@ -121,6 +121,13 @@ fn main() {
             // Brain uses, held on a stale link, no card. HUD window only.
             "hud_schedule_add",
             "hud_schedule_act",
+            // The HUD calendar's writes (2026-10-29, the owner's desktop HUD
+            // request): add ONE local event, or change/delete ONE event. The
+            // page holds no token, so these two are its only write door; each
+            // is held on a stale link by the command itself, and there is no
+            // delete-all and no list form. HUD window only.
+            "hud_calendar_add",
+            "hud_calendar_act",
             // The HUD History sidebar's ONE write (2026-10-27, the owner's
             // request for "pinnable chats, project organization by chat"):
             // pin/unpin ONE chat, file ONE chat under a tag, or delete ONE

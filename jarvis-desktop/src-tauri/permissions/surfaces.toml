@@ -2081,6 +2081,23 @@ permissions = [
   "allow-hud-schedule-act",
 ]
 
+# The HUD calendar's writes (2026-10-29, the owner's desktop HUD request for a
+# real calendar in Jarvis). Its READ needs nothing new: `GET /api/calendar?days=N`
+# goes through `hud-link`'s `hud-get`, whose `allowed_get` accepts that one
+# route with one bounded `days` value and nothing else, and whose reply loses
+# every title, place and note in `lock/rules.rs` while App lock or "Hide memory
+# lists" is on. This set is only the two write commands: add ONE local event,
+# and change or delete ONE event. No approval card (one row on this PC, changed
+# back in one press), no list form, no delete-all and no clear-range, and both
+# are held on a stale link like the Brain's.
+[[set]]
+identifier = "hud-calendar"
+description = "Add ONE local calendar event, and change or delete ONE event. No card, no list form, never a delete-all or a clear-range, held on a stale link."
+permissions = [
+  "allow-hud-calendar-add",
+  "allow-hud-calendar-act",
+]
+
 # The HUD History sidebar's ONE write (2026-10-27, the owner's request: "both
 # should have pinnable chats, project organization by chat, and more"). The
 # sidebar's READS need nothing new: they are `hud-get`'s three History paths
