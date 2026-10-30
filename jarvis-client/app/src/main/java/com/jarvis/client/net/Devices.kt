@@ -230,11 +230,22 @@ object Devices {
                 "the QR code."
         }
 
-    /** The line under a device's name: "phone · paired 3 Sep · last used 2 min ago". */
+    /**
+     * The line under a device's name: "phone · paired 3 Sep · last active 2 min ago".
+     *
+     * "LAST ACTIVE", NOT "LAST USED" (phone field test, 2026-10-29, REPORT.md
+     * B6). The PC writes `last_seen` on ANY request the device makes, at most
+     * once a minute (`jarvis_devices.wrap_token_ok` -> `_note_seen`), and this
+     * app's own background reads count - the model-lane poll alone is one every
+     * 90 seconds (`ModelWords.POLL_MS`). So the number is "when this phone last
+     * checked in with the PC", and a phone sitting in a pocket with the app
+     * open read "last used just now" beside a phone the owner had not touched.
+     * The old wording claimed deliberate use, which the number cannot support.
+     */
     fun detailLine(device: Device, nowSec: Long, locale: Locale = Locale.getDefault()): String {
         val parts = mutableListOf(if (device.kind == "pc") "PC" else device.kind)
         device.created?.let { parts += "paired " + day(it, locale) }
-        device.lastSeen?.let { parts += "last used " + ago(nowSec - it) }
+        device.lastSeen?.let { parts += "last active " + ago(nowSec - it) }
         return parts.joinToString(" · ")
     }
 

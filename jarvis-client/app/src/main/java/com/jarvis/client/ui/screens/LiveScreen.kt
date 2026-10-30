@@ -41,6 +41,7 @@ import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Face
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.net.Provenance
+import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
@@ -52,6 +53,7 @@ import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.LiveMicGate
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.VoiceSession
+import com.jarvis.client.voice.VoiceNow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -212,6 +214,11 @@ fun LiveScreen(
     val security by JarvisRuntime.settings.security.collectAsState()
     val voiceStatus by JarvisRuntime.voice.status.collectAsState()
     val mic by JarvisRuntime.liveMic.collectAsState()
+    // Which voice the last reply was really spoken in, and the PC's one voice
+    // setting that names it (voice/VoiceNow.kt): the Live notes underneath say
+    // both, so a voice change made in either app can be seen as well as heard.
+    val voiceNow by JarvisRuntime.voice.voiceNow.collectAsState()
+    val voices by JarvisRuntime.customVoices.collectAsState()
     // Temporary chat is on: a Live session is then not kept in History either
     // (the owner, 2026-09-29), so this screen says so - before it starts, too.
     val temporary by JarvisRuntime.chat.temporary.collectAsState()
@@ -496,6 +503,16 @@ fun LiveScreen(
             if (on) {
                 val notes = buildList {
                     mic?.let { add(it) }
+                    // WHICH VOICE Live IS SPEAKING IN (2026-10-28, the owner:
+                    // "when i change the jarvis voice in the android app it
+                    // still stays the same in jarvis live in the android app").
+                    // Live asks the PC for the sound of every reply, in the one
+                    // voice both apps show, so this names that voice from the
+                    // same read the Voices screen uses - and says plainly when
+                    // the phone is on its own voice instead, which no PC
+                    // setting can change (voice/VoiceNow.kt).
+                    val voicesNow = (voices as? CustomVoices.Read.Loaded)?.status
+                    VoiceNow.line(voicesNow, voiceNow)?.let { add(it) }
                     if (security.appLock) {
                         add(
                             if (security.liveEnd == LiveEnd.SCREEN_LOCK) {

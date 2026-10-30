@@ -17,10 +17,12 @@ never sends"). Picked up by the ease-of-use audit's own "do first" table, row
 4 (docs/EASE-OF-USE-AUDIT-2026-09-27.md): "about 5-8 real sentences Jarvis
 already understands without the AI model ... They replace the 10 shortcut
 rows in the empty Jarvis bar, with one line 'More: right-click the Jarvis
-icon by the clock.' Also one 'what can you do?' command answered from the
-same list, 3 examples on walkthrough screen 2, and a Help answer in both
-apps. Tapping a line fills the box and never sends." The audit's own critic
-(docs/ease-audit-2026-09-27/critic.md section 3.3) scoped the fuller original
+icon by the clock.' (that one line now ends "on the PC" - see FOOTER below,
+and the 2026-10-29 phone field test's B4). Also one 'what can you do?'
+command answered from the same list, 3 examples on walkthrough screen 2, and
+a Help answer in both apps. Tapping a line fills the box and never sends."
+The audit's own critic (docs/ease-audit-2026-09-27/critic.md section 3.3)
+scoped the fuller original
 design (docs/CUTTING-EDGE-2026-09-26-round2-experience.md section 3: a
 searchable, grouped "/" command palette) down to "one list, in fewer places":
 this flat list, the footer line, Help, and the "what can you do?" intent -
@@ -65,10 +67,17 @@ TITLE = "Things you can say"
 DETAIL = ("Real sentences Jarvis already answers without the AI model. Tap one to put it in "
           "the box - it does not send.")
 
-#: The line replacing the bar's 10 shortcut-key rows (the exact words the
-#: ease-of-use audit's do-first table row 4 gives; see the module docstring).
-#: Points at Settings -> Shortcuts, where the rebindable hotkeys already live.
-FOOTER = "More: right-click the Jarvis icon by the clock."
+#: The line closing the list (the ease-of-use audit's do-first table row 4
+#: asked for a line here; see the module docstring). It points at Settings ->
+#: Shortcuts, where the rebindable hotkeys already live, reached by right-
+#: clicking the tray icon.
+#:
+#: "on the PC" is part of the sentence on purpose (phone field test, B4,
+#: 2026-10-29): a phone reads this same sentence from "what can you do?" and
+#: has no tray icon to right-click - so the line names where the action lives
+#: instead of offering an impossible one. The desktop reading is still true:
+#: it IS the PC, and both apps carry these words as a contract constant.
+FOOTER = "More: right-click the Jarvis icon by the clock on the PC."
 
 #: The list itself - see the module docstring for what each one does and how
 #: it was checked. Order matters: it is the order both apps show, and the

@@ -35,9 +35,14 @@ export const TITLE = "Things you can say";
 export const DETAIL = "Real sentences Jarvis already answers without the AI model. Tap one to " +
   "put it in the box - it does not send.";
 
-/** The line replacing the bar's old shortcut rows, pointing at Settings ->
- *  Shortcuts, where the rebindable hotkeys live now. */
-export const FOOTER = "More: right-click the Jarvis icon by the clock.";
+/** The line closing the list, pointing at Settings -> Shortcuts, where the
+ *  rebindable hotkeys live now (reached by right-clicking the Jarvis icon by
+ *  the clock). "on the PC" is part of the sentence on purpose (phone field
+ *  test B4, 2026-10-29): the phone reads this same line in "what can you
+ *  do?", and a phone cannot right-click a PC tray icon - so the line names
+ *  where the action lives. The desktop reading is still true: it IS the PC,
+ *  and both apps carry these words as a contract constant. */
+export const FOOTER = "More: right-click the Jarvis icon by the clock on the PC.";
 
 /** The list itself, in the order it is shown - jarvis_sayable.SENTENCES,
  *  word for word (test_sayable.py proves every one really works). */

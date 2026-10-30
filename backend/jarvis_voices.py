@@ -630,35 +630,74 @@ def speaker_view() -> dict:
             "choices": rows, "pack": K.pack_words(kind)}
 
 
-def set_speaker(body) -> tuple:
-    """POST /api/voice/voices/speaker {"speaker": "<a name from
-    speaker.choices>"}: at once, no card either way (see above)."""
+def _store_speaker(name: str) -> tuple:
+    """(code, why) - the ONE write of the built-in voice, after the checks a
+    person's own pick gets (it must be a name the pack offers; a blend made for
+    Jarvis is voice-checked first). 200 and "" when it was stored.
+
+    Every path that changes which built-in voice speaks goes through here:
+    `POST /api/voice/voices/speaker` (both apps' pickers, and the chat sentence
+    that calls the same function) and a chosen personality applying its voice
+    (`set_speaker_name`, jarvis_manner). One `voices/state.json` write, one
+    audit line, one `voices` event - which is why a voice changed in either app
+    is heard and shown in the other (2026-10-28)."""
     kind = table_kind()
     ids = {r["id"] for r in _speaker_rows(kind)}
-    if not isinstance(body, dict) or set(body) != {"speaker"} \
-            or not isinstance(body["speaker"], str) or body["speaker"] not in ids:
-        return 400, {"ok": False, "error": "choose one of the listed voices"}
-    choice = body["speaker"]
-    if choice in K.MIX:
+    if name not in ids:
+        return 400, "choose one of the listed voices"
+    if name in K.MIX:
         # Ashby and Clara: the voice check first - Jarvis must not speak in
         # anything that sounds like the owner's own voice. Made once per set
         # of voice prints (blend_check keeps the answer).
         if not _TRY_LOCK.acquire(blocking=False):
-            return 429, {"ok": False, "error": CHECK_BUSY}
+            return 429, CHECK_BUSY
         try:
-            chk = blend_check(choice)
+            chk = blend_check(name)
         finally:
             _TRY_LOCK.release()
         if not chk.get("ok"):
-            return (503 if chk.get("unchecked") else 400), {"ok": False, "error": chk["why"]}
-    err = _write_state(speaker=choice)
+            return (503 if chk.get("unchecked") else 400), chk["why"]
+    err = _write_state(speaker=name)
     if err:
-        return 500, {"ok": False, "error": err}
-    _audit("voices.speaker", {"speaker": choice})
+        return 500, err
+    _audit("voices.speaker", {"speaker": name})
     _publish({"what": "speaker", "outcome": "set"})
+    return 200, ""
+
+
+def set_speaker(body) -> tuple:
+    """POST /api/voice/voices/speaker {"speaker": "<a name from
+    speaker.choices>"}: at once, no card either way (see above)."""
+    if not isinstance(body, dict) or set(body) != {"speaker"} \
+            or not isinstance(body["speaker"], str):
+        return 400, {"ok": False, "error": "choose one of the listed voices"}
+    choice = body["speaker"]
+    code, why = _store_speaker(choice)
+    if code != 200:
+        return code, {"ok": False, "error": why}
     return 200, {"ok": True,
-                "message": f"Jarvis's built-in voice is now {K.label_of(choice)}.",
-                "speaker": speaker_view()}
+                 "message": f"Jarvis's built-in voice is now {K.label_of(choice)}.",
+                 "speaker": speaker_view()}
+
+
+def set_speaker_name(name) -> tuple:
+    """Store `name` as the built-in voice for a caller that is not a route -
+    today the one caller is a chosen personality applying its voice to this
+    PC-wide setting (jarvis_manner._apply_personality_voice), when the owner
+    kept "switch Jarvis's spoken voice" on.
+
+    (ok, label-or-reason): `label` is the voice's word for a screen ("British
+    (male) - George"), `reason` the plain sentence why nothing changed. NO
+    CARD, one write, one `voices` event - the same pair the route makes, so
+    neither app needs to know which way round the change came. Nothing extra
+    is written: the audit line is the route's own."""
+    label = str(name or "").strip()
+    if not label:
+        return False, "choose one of the listed voices"
+    code, reason = _store_speaker(label)
+    if code != 200:
+        return False, reason
+    return True, K.label_of(label)
 
 
 def migrate_saved_choices() -> list:

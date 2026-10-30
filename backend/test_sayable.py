@@ -143,6 +143,13 @@ def t_answer_turn_end_to_end():
         for one in S.SENTENCES:
             check(f"the answer names {one!r}", one in res.reply, res.reply)
         check("the answer names the footer line", S.FOOTER in res.reply, res.reply)
+        # B4, phone field test 2026-10-29: the phone reads this very answer and
+        # has no tray icon to right-click, so the line has to say where the
+        # action lives. Both halves below are the fix: the PC is named, and the
+        # bare desktop-only wording ("... by the clock.") is gone.
+        check("the answer says the right-click is on the PC", "on the PC" in res.reply, res.reply)
+        check("the old PC-only wording is gone",
+              "right-click the Jarvis icon by the clock." not in res.reply, res.reply)
     finally:
         sched.close()
 
@@ -150,9 +157,11 @@ def t_answer_turn_end_to_end():
 def t_view_is_fixed_text_no_card_no_secret():
     code, v = S.handle_get()
     check("GET: 200, available", code == 200 and v["available"] is True)
-    check("the title and footer are the audit's own words",
+    check("the title is the audit's own words, and the footer is the PC's own line",
           v["title"] == "Things you can say"
-          and v["footer"] == "More: right-click the Jarvis icon by the clock.")
+          and v["footer"] == "More: right-click the Jarvis icon by the clock on the PC.")
+    check("the footer names the PC, so the phone is not told to do an impossible thing",
+          "on the PC" in v["footer"], v["footer"])
     check("the served sentences are exactly SENTENCES, in order",
           v["sentences"] == list(S.SENTENCES))
     check("the served walkthrough examples are exactly WALKTHROUGH_EXAMPLES",

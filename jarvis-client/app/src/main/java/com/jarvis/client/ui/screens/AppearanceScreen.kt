@@ -7,6 +7,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -71,6 +73,7 @@ import com.jarvis.client.face.FaceView
 import com.jarvis.client.face.Faces
 import com.jarvis.client.face.Pattern
 import com.jarvis.client.face.warmCritterShaders
+import com.jarvis.client.net.GalaxyLook
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
@@ -137,6 +140,7 @@ private const val EDIT_SETTLE_MS = 2_000L
  * deep config editing is about the backend; every control on this screen is
  * a paint choice.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppearanceScreen(
     current: Chrome,
@@ -151,6 +155,17 @@ fun AppearanceScreen(
     /** How big the face is drawn on Home. Stored on this phone only. */
     faceSize: FaceSize = FaceSize.DEFAULT,
     onPickFaceSize: (FaceSize) -> Unit = {},
+    /**
+     * The Galaxy's look (2026-10-28, the owner's "galaxy models").
+     *
+     * Shared, unlike [faceSize]: it is the same key in the same appearance
+     * document as the face, so this screen changes the look the desktop HUD
+     * draws and the desktop changes this phone's picture. Defaults to the
+     * desktop's own default, so a caller that has not been taught about looks
+     * yet shows what the phone showed before.
+     */
+    galaxy: GalaxyLook = GalaxyLook.Constellation,
+    onPickGalaxy: (GalaxyLook) -> Unit = {},
     onBack: () -> Unit,
     /** What the store refused, e.g. "one theme change at a time". Null hides it. */
     notice: String? = null,
@@ -494,6 +509,42 @@ fun AppearanceScreen(
                     // else here.
                     AppearanceShared.groupWords(sharedStatus),
                 )
+            }
+
+            // The Galaxy's look (2026-10-28): the owner's "galaxy models".
+            //
+            // One shared key in the same document as the face, so picking a look
+            // here draws it on the PC's Galaxy and picking one there redraws the
+            // picture here - no reload, because both apps repaint from the
+            // `appearance` event. Every look listed is drawn with the desktop's
+            // own flat layout (`GalaxyLayouts`, checked against the desktop's
+            // numbers by GalaxyPictureTest); the constellation is the PC's own
+            // physics picture, so this phone draws its zen ring for it and the
+            // Galaxy plate's caption says which one is on screen.
+            item(key = "galaxy") {
+                Section("Galaxy look") {
+                    Plate {
+                        Text(
+                            "The same look on your desktop's Galaxy. Every one is " +
+                                "drawn here with your desktop's own layout.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid,
+                        )
+                        Gap(10)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            GalaxyLook.entries.forEach { entry ->
+                                OptionChip(
+                                    entry.label,
+                                    isSelected = entry == galaxy,
+                                    onClick = { onPickGalaxy(entry) },
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             item(key = "face") {

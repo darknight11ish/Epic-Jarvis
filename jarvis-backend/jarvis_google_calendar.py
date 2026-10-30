@@ -1187,6 +1187,27 @@ def _list_ical(days_ahead: int, *, now: Optional[datetime] = None) -> dict:
             "read_only": True, "days": max(1, min(_DAYS_CAP, int(days_ahead)))}
 
 
+#: The owner-facing answer when no way in is chosen, and it has to be TRUE ON
+#: THE PHONE as well as the PC. The phone field test of 2026-10-29 (B2) found
+#: the old "Settings, Accounts, pick the private link or Google sign-in" sent
+#: the owner to a screen the phone does not have at all - searching its Settings
+#: for "account" answers "Nothing here matches". So the way in is named as the
+#: PC's, and BOTH steps that really turn a read on are here: the private iCal
+#: link is pasted into the Accounts card (a secret, so it is typed on the PC
+#: only), and that way is then chosen with one command in the backend folder.
+#: "not connected yet" is said ONCE - `answer()` hands this sentence on as it
+#: stands rather than prefixing "Not connected yet - " to it.
+_NOT_CONNECTED_WORDS = (
+    "Google Calendar is not connected yet. On the PC, open Settings, Accounts and "
+    "paste in your calendar's private iCal link, then run "
+    "`py -3 jarvis_google_calendar.py mode ical` in the backend folder.")
+
+#: A reason that already says this is a whole answer, not a clause to hang
+#: another "Not connected yet - " in front of. The B2 defect: the phone read
+#: "Not connected yet - Google Calendar is not connected yet - ...".
+_SAYS_NOT_CONNECTED = re.compile(r"(?i)\bnot connected\b")
+
+
 def list_events(days_ahead: int = 7, *, now: Optional[datetime] = None,
                 transport: Optional[Callable] = None) -> dict:
     """The next N days, by whichever way is chosen. Card-free: a read of the
@@ -1197,8 +1218,7 @@ def list_events(days_ahead: int = 7, *, now: Optional[datetime] = None,
     chosen = mode()
     if chosen == "off":
         return {"ok": False, "connected": False, "events": [],
-                "reason": "Google Calendar is not connected yet - Settings, "
-                          "Accounts, pick the private link or Google sign-in"}
+                "reason": _NOT_CONNECTED_WORDS}
     if chosen == "ical":
         return _list_ical(days_ahead, now=now)
     try:
@@ -1893,9 +1913,10 @@ def answer(text: str, *, now: Optional[datetime] = None) -> Optional[str]:
     """The deterministic chat answer for one of the three calendar sentences,
     or None (so a caller can fall through to the model).
 
-    Returns ONE SENTENCE (a `str`), never a Result and never a dictionary -
-    `jarvis_quick.answer()` returns `Optional[Result]`, so a caller that wires
-    this in must wrap the sentence (see WIRING at the top of this module).
+    Returns ONE STRING (the whole reply - one or two plain sentences), never a
+    Result and never a dictionary - `jarvis_quick.answer()` returns
+    `Optional[Result]`, so a caller that wires this in must wrap the reply (see
+    WIRING at the top of this module).
 
     Reads are card-free; a proposed event is only PROPOSED here - nothing is
     sent to Google by this function, and no approval card is raised by it.
@@ -1908,10 +1929,16 @@ def answer(text: str, *, now: Optional[datetime] = None) -> Optional[str]:
     if _WHATSON.search(said):
         got = list_events(7, now=now)
         if not got.get("ok"):
-            why = str(got.get("reason") or "pick a way in Settings, Accounts.")
+            why = str(got.get("reason") or "").strip()
             if got.get("connected"):
-                return why
-            return "Not connected yet - " + why
+                return why or "the calendar could not be read just now"
+            if not why:
+                return _NOT_CONNECTED_WORDS
+            # SAY "NOT CONNECTED YET" ONCE. A reason that already says it (the
+            # mode-off answer does) is the whole owner-facing reply; prefixing
+            # it again is the B2 defect the phone field test of 2026-10-29 read
+            # out as "Not connected yet - Google Calendar is not connected yet".
+            return why if _SAYS_NOT_CONNECTED.search(why) else "Not connected yet - " + why
         rows = got.get("events") or []
         if not rows:
             return ("Nothing in your " + ("private iCal link" if got.get("read_only")

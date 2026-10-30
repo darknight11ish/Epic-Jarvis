@@ -144,6 +144,34 @@ object Entities {
     fun topicsHiddenLine(n: Int): String? =
         if (n <= 0) null else TOPICS_HIDDEN.replace("{n}", n.toString())
 
+    /**
+     * Which Galaxy look this picture is, in words (2026-10-28).
+     *
+     * The look is one shared value in `/api/appearance`, and the phone draws
+     * every look the desktop builds with the desktop's own flat layout. The one
+     * it cannot draw is the desktop's default `constellation`, whose picture is
+     * the PC's own physics simulation - so that one is said plainly rather than
+     * passed off as the same picture, and a look this build has never heard of
+     * is named as the fall-back it is (`APPEARANCE-SYNC-PROPOSAL.md` §2: fall
+     * back, and say so).
+     */
+    fun galaxyLookLine(asked: GalaxyLook, drawn: String): String {
+        val shown = if (drawn == GalaxyLook.Constellation.id) {
+            "the zen ring"
+        } else {
+            "the " + GalaxyLook.byId(drawn).label.lowercase()
+        }
+        return when {
+            asked == GalaxyLook.Constellation &&
+                drawn == asked.id ->
+                "Galaxy look: " + asked.label +
+                    ", which your desktop draws as its own picture. Here it is the zen ring."
+            asked.id == drawn -> "Galaxy look: " + asked.label + ", the same as your desktop."
+            else -> "Galaxy look: " + asked.label +
+                " on your desktop. This phone draws " + shown + "."
+        }
+    }
+
     /** "1 fact" / "4 facts". */
     fun factCount(n: Int): String = if (n == 1) "1 fact" else "$n facts"
 

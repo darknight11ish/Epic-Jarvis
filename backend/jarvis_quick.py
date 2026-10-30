@@ -4112,6 +4112,15 @@ def _settings_choice(s: str) -> Optional[Intent]:
         if chosen is not None:
             return Intent("settings_choice",
                           {"key": "voice_speaker", "value": chosen})
+        # ...except a made-for-Jarvis blend this PC has not made (Ashby,
+        # Clara): it is a real voice that is absent, so it gets the honest
+        # "not made yet" answer rather than falling to the model (REPORT.md B3,
+        # 2026-10-29 phone field test). Every other unknown name still falls
+        # through as before - "use the passive voice" is not a voice request.
+        said = (m.group(1) or "").strip()
+        if setting is not None and R.choice_not_made_words(setting, said):
+            return Intent("settings_choice_bad",
+                          {"key": "voice_speaker", "words": said})
     m = _SET_CHOICE_HELP.fullmatch(s)
     if m:
         name = (m.group(1) or m.group(2) or "").strip()
@@ -7210,11 +7219,20 @@ def _run_settings_choice(f: dict, peer, local) -> Result:
 
 
 def _run_settings_choice_bad(f: dict) -> Result:
-    """A value the named setting does not have: say the real options."""
+    """A value the named setting does not have: say the real options.
+
+    EXCEPT a Jarvis-made blend (Ashby, Clara) this PC has not made yet: that
+    voice exists and is absent, not unknown, so it answers with the picker's own
+    "not made yet" sentence instead of the whole voice list
+    (`jarvis_settings_registry.choice_not_made_words`; the 2026-10-29 phone
+    field test, REPORT.md B3)."""
     import jarvis_settings_registry as R
     setting = next((c for c in R.CHOICE_SETTINGS if c.key == f["key"]), None)
     if setting is None:
         return Result(SETTINGS_MISSING, "settings_choice_bad")
+    not_made = R.choice_not_made_words(setting, str(f.get("words") or ""))
+    if not_made:
+        return Result(not_made, "settings_choice_bad")
     return Result(R.choice_bad_words(setting), "settings_choice_bad")
 
 
