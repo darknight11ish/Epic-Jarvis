@@ -491,6 +491,12 @@ def t_the_build_refuses_without_a_project_or_a_toolchain():
     A.sdk_root = lambda: None
     saved_java = A.java_home
     A.java_home = lambda: None
+    # The Windows guard comes BEFORE the toolchain check in plan_build, so on a
+    # Linux CI runner (the required `backend` job runs on Ubuntu) the refusal is
+    # "Windows only" and this check never sees the SDK sentence. The module reads
+    # WINDOWS at call time for exactly this; set it like sdk_root/java_home.
+    saved_windows = A.WINDOWS
+    A.WINDOWS = True
     try:
         plan = A.plan_build(name, task)
         check("no Android SDK: refused, and the sentence names what is missing",
@@ -498,7 +504,7 @@ def t_the_build_refuses_without_a_project_or_a_toolchain():
         check("... and the command is empty, so nothing could run",
               plan.argv == [], plan.argv)
     finally:
-        A.sdk_root, A.java_home = saved, saved_java
+        A.sdk_root, A.java_home, A.WINDOWS = saved, saved_java, saved_windows
     check("the task's copy was never touched by a refusal", tdir.is_dir())
 
 
