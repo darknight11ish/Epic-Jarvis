@@ -65,6 +65,12 @@ THE ROUTES (four, all behind the server's own origin and X-Jarvis-Token)
   POST /api/calendar/settings - {"on": true|false} - a preference you can
        change back in one press, so no card either way.
 
+  Every write rings the calendar doorbell (`_publish`): `jarvis_events.BUS`
+  publishes the kind "calendar" - the one net/Calendar.kt reads - so the
+  phone's screen, its Brain row and its home-screen widget re-read
+  GET /api/calendar instead of waiting for a timer. The payload is an id and
+  an outcome, never a title.
+
   The three writes are cardless BY THE OWNER'S RULING OF 2026-10-29 recorded
   in `decisions.d/` and in `docs/ARCHITECTURE.md`'s "Cardless by design"
   table: the reasoning is the "One job on the schedule" row's, word for word -
@@ -256,6 +262,7 @@ def set_on(on: bool) -> dict:
     tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, path)
     _audit("calendar.settings", {"on": on})
+    _publish("settings")
     return settings()
 
 
@@ -692,6 +699,7 @@ def _insert(fields: dict) -> dict:
              fields["tz"], now, now))
     row = _row(eid)
     _audit("calendar.add", {"id": eid, "repeats": fields["recurrence"] != "none"})
+    _publish("added", eid)
     return _view(row)
 
 
@@ -708,6 +716,7 @@ def _save(eid: str, fields: dict) -> dict:
              time.time(), eid))
     row = _row(eid)
     _audit("calendar.change", {"id": eid})
+    _publish("changed", eid)
     return _view(row)
 
 
@@ -842,6 +851,25 @@ def _audit(event: str, detail: dict) -> None:
         pass
 
 
+def _publish(state: str, event_id: str = "") -> None:
+    """Ring the doorbell: something changed, so re-read GET /api/calendar.
+
+    The repo's shape is one kind per feature - `jarvis_animal.py` publishes
+    "appearance", `jarvis_devices.py` "devices", `jarvis_antislop.py`
+    "antislop" - and this publishes "calendar", the kind `net/Calendar.kt` in
+    the phone declares as `EVENT`. The payload is `{"id", "state"}`: an id and
+    what happened, never a title. The owner's own words are read back only
+    through the route, which already enforces the server's token and origin
+    checks. Never raises: a backend without an event bus still changes the
+    calendar.
+    """
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish("calendar", {"id": event_id, "state": state})
+    except Exception:                   # noqa: BLE001 - a doorbell never fails a write
+        pass
+
+
 def _off_answer() -> tuple:
     return 409, {"ok": False, "reason": "off",
                  "error": ("The Jarvis calendar is off. Turn it on in Settings "
@@ -926,6 +954,7 @@ def handle_act(body) -> tuple:
         with _LOCK, _connect() as c:
             c.execute("DELETE FROM events WHERE id = ?", (event_id,))
         _audit("calendar.delete", {"id": event_id})
+        _publish("deleted", event_id)
         return 200, {"ok": True, "id": event_id, "said": "Deleted."}
     existing = _view(row)
     body = {k: v for k, v in body.items() if k not in ("id", "do")}
