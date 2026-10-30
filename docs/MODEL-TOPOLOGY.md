@@ -49,18 +49,27 @@ second card" below); nothing else here has been rewritten from measurement.
 
 ---
 
-## The thing that is wrong right now
+## The deployed context, measured (2026-10-30)
 
-**The deployed context is 4096 tokens unless `jarvis-primary` (the Modelfile
-in `backend/`) is the model loaded, and nothing in the request chooses it.**
+**The deployed context is 16,384 tokens, and it is measured on the owner's PC,
+not calculated** ([MEASURED-2026-10-30-CONTEXT.md](MEASURED-2026-10-30-CONTEXT.md)).
+`OLLAMA_CONTEXT_LENGTH=16384` is set for the owner's Windows user; both of this
+PC's Ollama servers report `context_length: 16384` for the model they hold, and
+the runner's own command line carries `-c 16384`. At that size the everyday
+model (`qwen3.5:9b`) reports 5.40 GiB and the 12 GB card still had 3,815 MiB
+free, at 38-43 tokens/s.
 
-A local chat turn posts to Ollama's own `OLLAMA_URL/v1/chat/completions`
+This section used to say the deployed context was 4,096 and that nothing in the
+request chose it. **The second half is still right; the first is not.** A local
+chat turn posts to Ollama's own `OLLAMA_URL/v1/chat/completions`
 (`ollama-direct.patch`; since `chat-stream.patch`, through
 `jarvis_agent.run_local_turn`). That sends `model`, `messages`, `stream`,
 `temperature`, `max_tokens` (1,024 unless the app asks otherwise),
-`reasoning_effort: "none"` and, with tools on, `tools`. Grep for `num_ctx` and
-there is no hit: the OpenAI-compatible surface has no field for context
-length, so no request could set it even if someone wanted to.
+`reasoning_effort: "none"` and, with tools on, `tools` - and the
+OpenAI-compatible surface has no field for context length, so no request can
+choose the size. What changed is the machine: the environment variable does,
+which is one of the two routes "Setup" below describes. **A fresh install
+without it still gets 4,096**, which is why the ladder is kept.
 
 What the request side *can* do, and now does: ask Ollama what the loaded
 model really has (`/api/ps`, then the Modelfile via `/api/show`, else 4,096)
@@ -69,7 +78,7 @@ model switched to from the phone, or a missing `jarvis-primary`, no longer
 means Ollama silently cutting the start of the conversation. It does not make
 the window any bigger - only the Modelfile or the environment does that.
 
-So Ollama picks. `server/sched.go`:
+So a machine with neither picks. `server/sched.go`:
 
 ```go
 func nextLowerAutoNumCtx(numCtx int) (int, bool) {
@@ -81,18 +90,35 @@ func nextLowerAutoNumCtx(numCtx int) (int, bool) {
 }
 ```
 
-An 8B Q4 at 32768 with an f16 cache needs about 9.8 GiB. It does not fit, so
-the ladder drops to 4096, and 4096 is the bottom rung.
+An 8B Q4 at 32768 with an f16 cache needs about 9.8 GiB. On a card where that
+does not fit, the ladder drops to 4096, and 4096 is the bottom rung.
 
-Two consequences, both currently live:
+These are now measured rather than planned:
 
-- **A 6,000-token prompt does not fit.** It is roughly 1.5× the window.
+- **A 6,000-token prompt does not fit in 4,096, and the start is lost, silently.**
+  Measured: a ~5,019-token prompt went to the runner as 2,050 tokens - half the
+  window - and a marker placed at its start was gone, while the one at its end
+  was still there.
 - **The answer's allowance comes out of the same window.** Ollama's compat
-  layer maps `max_tokens` to `num_predict`. The HUD window used to ask for
-  2,048 - half of a 4,096 window. Every window now gets 1,024 (the
-  Modelfile's `num_predict`), set by the PC.
+  layer maps `max_tokens` to `num_predict`, and the answer stops at the window
+  edge: a 15,403-token prompt at 16,384 produced 981 of a requested 1,024
+  tokens, and a 3,112-token prompt at 4,096 produced 984.
+- **16,384 costs 240 MiB more than 4,096 on this model**, because `qwen3.5:9b`
+  keeps a cache only for its 8 full-attention layers. Decoding is unchanged
+  between 4,096 and 16,384 (41-43 tokens/s); reading the prompt is what grows,
+  at about 1,200 tokens/s.
 
-Everything anyone has planned on this machine about context has been theory.
+**32,768 and 65,536 were measured on 2026-10-30 and are not recommended.**
+Both loaded 100% on the GPUs (33/33 layers), neither spilled to the processor,
+and both ends of a 30,329- and a 60,227-token prompt survived in the answer,
+cold and warm. But decode fell from 41.9 tokens/s at 16,384 to 33.5 at 32,768
+and 27.4 at 65,536, a cold 60,227-token prompt took 58.5 s to its first token,
+and in the memory conditions measured both sizes were spread over both cards
+(2.2-2.7 GiB of the monitor card's memory) because the 2060 did not have
+enough free room at the moment each was requested - its own previous model and
+the owner's other lane were using it. Nothing was deployed; the setting stays
+16,384. The numbers, the control run and the caveats are in
+[MEASURED-2026-10-30-CONTEXT.md](MEASURED-2026-10-30-CONTEXT.md).
 
 ---
 
@@ -132,8 +158,15 @@ current figure). Without it, a `q8_0` cache does not load at all.
 One time, in the environment — a Modelfile cannot express these:
 
 ```powershell
-setx OLLAMA_KV_CACHE_TYPE q8_0; setx OLLAMA_KEEP_ALIVE -1; Write-Host "Saved for new windows: close this one and Ollama, then start them again"
+setx OLLAMA_KV_CACHE_TYPE q8_0; setx OLLAMA_KEEP_ALIVE -1; setx OLLAMA_CONTEXT_LENGTH 16384; Write-Host "Saved for new windows: close this one and Ollama, then start them again"
 ```
+
+`OLLAMA_CONTEXT_LENGTH=16384` is what makes the deployed window 16,384
+(measured 2026-10-30; [MEASURED-2026-10-30-CONTEXT.md](MEASURED-2026-10-30-CONTEXT.md)
+has the numbers and the exact undo). Without it Ollama picks 4,096 for a model
+whose own Modelfile names no `num_ctx`, which is the live everyday model
+(`qwen3.5:9b`). 16,384 is the largest size measured on this PC: at it the
+model takes 5.40 GiB and leaves 3,815 MiB of the 12 GB card free.
 
 Then:
 
@@ -503,8 +536,11 @@ planned card" is now the fitted one - see the next paragraph.)
 **It is installed, and the pair has now been measured** (2026-10-05): both
 cards are present; the everyday model is running on the 12 GB card, which
 `nvidia-smi` calls GPU 0 (the 2080 SUPER is GPU 1 and runs the desktop); it is
-**100% on the card** with nothing spilling to the processor; its context is
-4,096 while the 16,384 this page documents **fits** with room to spare
+**100% on the card** with nothing spilling to the processor. On 2026-10-05 its
+context was still 4,096 while the 16,384 this page documents **fit** with room
+to spare - and **on 2026-10-30 the deployed context really was 16,384, measured**
+([MEASURED-2026-10-30-CONTEXT.md](MEASURED-2026-10-30-CONTEXT.md)), which is
+what that 2026-10-05 measurement said to do
 ([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md); re-measure
 with `scripts\measure-cards.ps1`, described in
 [MEASURE-CARDS.md](MEASURE-CARDS.md)). So the spill this page and

@@ -1452,8 +1452,9 @@ profile     fact_id INTEGER PRIMARY KEY, added REAL, how TEXT ("tap")
 ```
 
 - **A hard cap: the pinned facts' words may add up to 1,200 characters**
-  (`PROFILE_LIMIT`, about 300 tokens - some 7% of the 4,096-token context
-  the primary model runs with today, re-read every turn). A pin that would
+  (`PROFILE_LIMIT`, about 300 tokens - under 2% of the 16,384-token context
+  the primary model runs with on this PC, measured 2026-10-30, re-read every
+  turn). A pin that would
   pass it is refused in words: "That would make the list too long - unpin
   something first". The check and the write are one transaction.
 - **Only the owner's own tap pins** - a fact they can see, no approval card
