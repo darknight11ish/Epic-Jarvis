@@ -3294,12 +3294,16 @@ async function decideApproval(approved, optionId = null) {
     const message = String(
       (error && error.message) || error || "the decision could not be sent"
     );
-    // The server answers 409 when the id is unknown, expired, or already
-    // decided. That is not a failure to report as one — someone answered it,
-    // possibly on the phone — so say so and let the queue update close the card.
+    // The server answers 409 when the id is unknown, already decided, or -
+    // since cards stopped expiring (2026-10-28) - when the request that raised
+    // the card has finished waiting, so nothing could run from a yes. That is
+    // not a failure to report as one: someone answered it elsewhere, or the
+    // asker is gone. Say both, and let the queue update close the card. It used
+    // to read "Already handled somewhere else", which was untrue for the
+    // second case: nothing had been handled.
     const handled = /409|already/i.test(message);
     outcomeHint = handled
-      ? "Already handled somewhere else."
+      ? "That card is not waiting any more — it was answered, or the request that asked has finished. Nothing ran from this tap."
       // "Nothing was approved. Windows Hello is not set up ..." (lock/rules.rs
       // not_approved_words) already says what happened and what to do.
       : /^Nothing was approved\./.test(message) ? message

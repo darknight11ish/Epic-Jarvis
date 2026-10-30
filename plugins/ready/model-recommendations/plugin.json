@@ -4,5 +4,5 @@
   "module": "jarvis_model_recommendations",
   "install": "handler",
   "replaces_patch": "model-recommendations.patch",
-  "stack_order": 155
+  "stack_order": 156
 }
