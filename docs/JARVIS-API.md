@@ -27160,7 +27160,7 @@ chooses the channel.
 
 ### Tests
 
-`backend/test_notification_styles.py` (155 checks: the menu kept and everything off it refused, no
+`backend/test_notification_styles.py` (160 checks: the menu kept and everything off it refused, no
 room in the spec for private data, drafts only from the owner's own words, a tainted chat refused, the
 store's caps and expiry and re-check on read, which style is live being the newest that claims a kind,
 the routes behind token/origin with the body cap, and the typed grammar) and
