@@ -2,6 +2,8 @@ package com.jarvis.client.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -669,6 +671,11 @@ private fun CalendarEventSheet(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
+                // The form and the Save/Cancel row are taller than this phone,
+                // and without a scroll the row sat BELOW the screen - no event
+                // could be saved from the phone at all (field test 2026-10-30).
+                // The whole body scrolls; the form itself is unchanged.
+                .verticalScroll(rememberScrollState())
                 .padding(bottom = 28.dp),
         ) {
             Text(
