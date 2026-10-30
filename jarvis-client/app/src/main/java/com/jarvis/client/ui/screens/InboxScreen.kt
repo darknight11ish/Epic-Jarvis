@@ -68,6 +68,22 @@ fun InboxScreen(
     digest: List<DigestItem>,
     undo: List<UndoEntry>,
     jobs: List<JobRecord>,
+    /**
+     * How many approval cards are waiting for the owner - `JarvisRuntime.pending.size`,
+     * the same list Home's "N waiting" line counts (`HomeScreen.kt`) and the
+     * "Open the card" line shows. Required, so a caller cannot leave the header
+     * counting something else again.
+     *
+     * This is NOT [Attention.pending]. That field counts the arbiter's queued
+     * intents - things Jarvis wants to TELL the owner (`jarvis_arbiter.pending_count`,
+     * the "notches the reactor's rim ring draws"), which is what Brain's budget
+     * plate says as "N things waiting to be told". This header used it to say
+     * "waiting" too, so the 2026-10-29 field test read "3 of 3 spoken
+     * interruptions left. 0 waiting." directly above a "Needs your OK" card -
+     * twice, four minutes apart - while Home's count of the list below said
+     * "1 waiting" at the same moment.
+     */
+    pendingCards: Int,
     onOpenApproval: (String) -> Unit,
     onRevert: (UndoEntry) -> Unit,
     onCancelJob: (JobRecord) -> Unit,
@@ -135,7 +151,9 @@ fun InboxScreen(
             reads.any { it == SectionRead.Read }
         )
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
-        TopBar("Inbox", onBack, subtitle = budgetLine(attention))
+        // `null`, not "", when the line has nothing to say: TopBar would draw an
+        // empty second line under the title and make the bar taller for nothing.
+        TopBar("Inbox", onBack, subtitle = budgetLine(attention, pendingCards).takeIf { it.isNotEmpty() })
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
@@ -487,10 +505,42 @@ private fun ReadProblem(
     }
 }
 
-private fun budgetLine(a: Attention): String = when {
-    a.blockedBy != null -> "Silent — ${a.blockedBy}. ${a.pending} waiting."
-    a.limit > 0 -> "${a.remaining} of ${a.limit} spoken interruptions left. ${a.pending} waiting."
-    else -> "${a.pending} waiting."
+/**
+ * The Inbox's one subtitle line: the interruption budget (a real fact, worded
+ * as it always was) and then how many approval cards are waiting for the owner.
+ *
+ * The count is [pendingCards] - the size of the same list Home's "N waiting"
+ * line counts and the "Open the card" line shows - and NOT [Attention.pending].
+ * `Attention.pending` counts queued things Jarvis wants to tell the owner; this
+ * header was using it to say "0 waiting", so the 2026-10-29 field test saw
+ *
+ *     Inbox / 3 of 3 spoken interruptions left. 0 waiting.
+ *
+ * printed directly above a "Needs your OK / Jarvis wants to switch to a
+ * different AI model / Open the card →" card, twice, four minutes apart, while
+ * Home said "Connected · 1 waiting" at the same moment. Counting a different
+ * fact is how a screen says "nothing is waiting" over something that is.
+ *
+ * A zero-card line makes NO claim about waiting at all rather than "0 waiting.":
+ * the whole fault was the word "waiting" describing a fact that does not decide
+ * the card below it. The interruption-budget words themselves are untouched.
+ *
+ * `internal` rather than `private` so [com.jarvis.client.InboxCountTest] can
+ * hold this rule without drawing Compose, the same way `brainSection` and
+ * `PlateList` are tested.
+ */
+internal fun budgetLine(a: Attention, pendingCards: Int): String {
+    val budget = when {
+        a.blockedBy != null -> "Silent — ${a.blockedBy}."
+        a.limit > 0 -> "${a.remaining} of ${a.limit} spoken interruptions left."
+        else -> ""
+    }
+    val cards = when {
+        pendingCards == 1 -> "1 card waiting."
+        pendingCards > 1 -> "$pendingCards cards waiting."
+        else -> ""
+    }
+    return listOf(budget, cards).filter { it.isNotEmpty() }.joinToString(" ")
 }
 
 @Composable

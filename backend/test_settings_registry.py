@@ -1534,5 +1534,84 @@ def t_a_page_only_switch_is_not_stolen_by_the_tolerant_matcher():
           and R.find_bool_setting_words("learning in the background") is not None)
 
 
+def t_a_blend_that_is_not_made_says_so_instead_of_the_voice_list():
+    """B3, phone field test 2026-10-29 (REPORT.md): "change your voice to Ashby"
+    answered "That is not one of the choices for the built-in voice. Say one of:
+    af bella, ... british male lewis." - a 22-name refusal that never said Ashby
+    exists - while the Voices screen said "Ashby and Clara, two voices made for
+    Jarvis, are not made yet. To make them, run the one line under 'Make Ashby
+    and Clara'..." (jarvis_kokoro.BLENDS_TO_MAKE, the picker's own note).
+
+    The two chat shapes the owner uses both answer with that picker sentence,
+    and an unknown name still gets the real voice list.
+    """
+    import jarvis_kokoro as K
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+    import jarvis_voices as JV
+
+    ashby = next(k for k, row in K.MIX.items() if row.get("name") == "Ashby")
+    clara = next(k for k, row in K.MIX.items() if row.get("name") == "Clara")
+    # A pack without the blends: the exact state the field test was in. The
+    # registry reads the pack at match time, so this drives the real map.
+    real_view = JV.speaker_view
+
+    def no_blends_view():
+        view = dict(real_view() or {})
+        view["choices"] = [{"id": "af_bella",
+                            "label": "American (female) - Bella"},
+                           {"id": "bm_george",
+                            "label": "British (male) - George"}]
+        return view
+
+    JV.speaker_view = no_blends_view
+    try:
+        check("this pack really does not offer the blends",
+              all(pid not in R._voice_speaker_choices() for pid in (ashby, clara)),
+              R._voice_speaker_choices())
+        said = R.choice_not_made_words(R._choice("voice_speaker"), "Ashby")
+        check("the blend is named, in the picker's own words",
+              said == K.BLENDS_TO_MAKE, said)
+        said = R.choice_not_made_words(R._choice("voice_speaker"), "Ashby (made for Jarvis)")
+        check("...and by its picker label too", said == K.BLENDS_TO_MAKE, said)
+        check("a name that is no blend is left to the generic refusal",
+              R.choice_not_made_words(R._choice("voice_speaker"), "Nobody") == "", None)
+
+        for sentence, word in (
+                ("change your voice to Ashby", "Ashby"),
+                ("set your voice to Ashby", "Ashby"),
+                ("change his voice to Ashby", "Ashby"),
+                ("change your voice to Clara", "Clara")):
+            got = Q.match(sentence)
+            check(f"{sentence!r} is answered, not refused by the voice list",
+                  got is not None and got.name in ("settings_choice_bad", "control_bad"),
+                  got)
+            reply = (Q._run_settings_choice_bad(got.f).reply
+                     if got is not None and got.name == "settings_choice_bad" else "")
+            check(f"...and {word} is said to be not made yet, as the Voices screen says",
+                  reply.startswith(K.BLENDS_TO_MAKE), reply)
+
+        # The second chat shape: "use the Ashby voice" used to fall through to
+        # the model when the blend was absent; it must answer the same way.
+        got = Q.match("use the Ashby voice")
+        check("'use the Ashby voice' is answered, not handed to the model",
+              got is not None and got.name == "settings_choice_bad"
+              and got.f.get("key") == "voice_speaker", got)
+        reply = Q._run_settings_choice_bad(got.f).reply if got is not None else ""
+        check("...with the same not-made-yet sentence", reply == K.BLENDS_TO_MAKE, reply)
+
+        # An unknown voice keeps the generic refusal with the real names, which
+        # is the answer the 2026-10-28 work already made honest.
+        got = Q.match("change your voice to Nobody")
+        reply = (Q._run_settings_choice_bad(got.f).reply if got is not None else "")
+        check("an unknown voice still gets the real voice list, not the blend note",
+              "not one of the choices" in reply and K.BLENDS_TO_MAKE not in reply, reply)
+        check("...and the passive voice is still not a voice request",
+              Q.match("use the passive voice") is None
+              or Q.match("use the passive voice").f.get("key") != "voice_speaker", None)
+    finally:
+        JV.speaker_view = real_view
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
