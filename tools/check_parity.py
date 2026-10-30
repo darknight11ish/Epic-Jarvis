@@ -532,6 +532,7 @@ CLASSIFICATION = {
     "/api/history/tags/suggest": ("ported", "\"Suggest tags overnight\" (the owner's decision of 2026-09-30; docs/JARVIS-API.md section 104, docs/OVERNIGHT-TAGS-DESIGN.md; jarvis_tag_suggest.py, tag-suggest.patch, chat-history.patch): GET reads {enabled, paused, waiting, last_day}; POST {\"enabled\": bool} turns it on with ONE approval card (chat_tags_suggest_on) or off at once. Each suggestion is its own card (chat_tag_suggest) in the ordinary approvals flow; nothing is filed without a tap. Both apps show the switch row in History -> Tags (desktop: brain/history.rs brain_history_tag_suggest, brain.js, history-tags.js; phone: net/TagSuggest.kt, HistoryTags.kt SuggestTagsRow). The suggestion card shows text_hidden while the private lists are hidden (desktop: stream.rs hide_private_cards; phone: PendingRows.kt). Held on a stale link."),
     "/api/history/mark": ("ported", "\"New section here\" (the owner's decision of 2026-09-30; docs/JARVIS-API.md section 106, docs/OVERNIGHT-TAGS-DESIGN.md section 5; jarvis_chat_log.py, chat-history.patch): a view-only divider above one of the owner's messages in a long chat (10+ turns, up to 20 per chat); the conversation read gains marks, markable and mark_why. No card. Both apps draw the button and the divider (desktop: brain/history.rs brain_history_mark, history-view.js, brain.js; phone: net/ChatMark.kt, HistoryScreen.kt). Held on a stale link."),
     "/api/history/settings": ("ported", "\"Keep chat history on this PC\": ON is one approval card (history_enable), OFF is immediate; and \"Delete conversations older than\" (keep_days). Both apps hold ON and every keep change on a stale link; OFF is never held."),
+    "/api/history/archive": ("ported", "Chat archive (the owner's request of 2026-10-29: \"make sure i can archive and delete chats (with a confirm step)\"; docs/JARVIS-API.md section 18.3; jarvis_chat_log.py, chat-history.patch): POST {\"id\": \"<id>\", \"archived\": true|false} -> {\"ok\": true, \"id\", \"archived\"}; reversible, NO approval card, 400 bad body, 404 not_found, 423 locked while the private lists are hidden. The archived list is the same GET /api/history with `archived=1`, ANDed with limit/before/kind/tag, and every row carries `archived`. Desktop: the HUD's own History panel (an always-visible one-click History door, Archive/Unarchive in a row's menu, the Archived chip - all through the ONE hud_history_act command) and the Brain's History tab (#history-archived switch, brain_history_archive). Phone: HistoryScreen.kt, net/ChatLog.kt, net/HistoryView.kt, JarvisRuntime.archiveHistory. Delete still asks its confirm, in both apps."),
     "/api/wiki": ("ported", "The wiki builder's documents and their state (backend/wiki.patch, 2026-09-24). Both apps list them; neither browses files or reads pages - the vault reaches the phone through Syncthing."),
     "/api/wiki/ingest": ("ported", "\"Add to wiki\" for one document, then its job. Raises one approval card (wiki_update); nothing is written before it is answered."),
     # Backups (backend/jarvis_backup.py, backup.patch; the owner's decision
@@ -775,21 +776,6 @@ PHONE_ONLY = {
     # needs. Move this to CLASSIFICATION as "ported" the moment the desktop's own
     # card calls the route.
     "/api/card-prefs": ("desktop-todo", "\"Approval cards read short\" (the owner's request of 2026-10-09; docs/JARVIS-API.md section 127; backend/jarvis_card_summary.py, card-prefs.patch): the \"Start short\" / \"Always show everything\" choice for each approval card, kept in card-prefs.json so both apps read one value. The PHONE has it today (net/CardSummary.kt, ui/screens/ApprovalCardsPlate.kt, Settings under Appearance); the desktop's own card is NOT built yet, which is why this is desktop-todo rather than phone-only. docs/DESKTOP-APPROVAL-CARD-PREF.md names what it needs (src/main.js's refreshApproval, a settings.html card, and the `mode` field it reads); until then the desktop changes the setting by asking, and jarvis_settings_registry.SECTIONS keeps its settings.approval-cards row app=\"phone\" so \"open approval cards\" never names a place the desktop does not have."),
-    # Chat archive (the owner's request of 2026-10-29: "make sure i can archive
-    # and delete chats (with a confirm step)"). This is the phone half: a row
-    # menu's Archive/Unarchive (net/ChatLog.kt, net/HistoryView.kt,
-    # ui/screens/HistoryScreen.kt, JarvisRuntime.archiveHistory) and the backend
-    # route it writes to. `GET /api/history` already existed and now takes
-    # `archived=1`; that one is classified above and needs no change here.
-    #
-    # "desktop-todo", never "phone-only": the desktop's own History gets the
-    # same Archive/Unarchive row and archived view from a PARALLEL branch of
-    # this same 2026-10-30 batch, and this branch was asked not to edit
-    # jarvis-desktop/. Move this to CLASSIFICATION as "ported" the moment the
-    # desktop's History calls the route; leaving it here after that would fail
-    # check_parity's own "the desktop now calls it too" rule, which is the
-    # prompt to do it.
-    "/api/history/archive": ("desktop-todo", "Chat archive (the owner's request of 2026-10-29: \"make sure i can archive and delete chats (with a confirm step)\"; POST /api/history/archive {\"id\", \"archived\"} -> {\"ok\", \"id\", \"archived\"}, reversible, NO approval card, 404 unknown, 400 bad body): the PHONE has it today - the row menu's Archive/Unarchive and the visible \"Archived\" view, read from the same GET /api/history with `archived=1` (net/ChatLog.kt, net/HistoryView.kt, ui/screens/HistoryScreen.kt, JarvisRuntime.archiveHistory, net/JarvisApi.historyArchive). The desktop's own History gets the same row and view from a parallel branch of this 2026-10-30 batch; this branch was asked not to edit jarvis-desktop/, which is why this is desktop-todo rather than phone-only."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 
