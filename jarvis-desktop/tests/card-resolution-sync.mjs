@@ -242,14 +242,22 @@ check("Rust emits approvals-changed from the one read, and the beat re-uses it",
     /state\s*\.pending\s*\.lock\(\)/,
     "and it is the read that replaces the cached queue",
   );
-  assert.match(refresh, /publish_link\(app, \|link\| link\.approvals = items\.len\(\)\)/,
-    "the tray's count comes from the same read");
+  assert.match(
+    refresh,
+    /publish_link\(app, \|link\| queue_read_landed\(link, items\.len\(\)\)\)/,
+    "the tray's count comes from the same read, and a connected success clears stale",
+  );
   // The fallback beat calls THAT function rather than a second reader.
-  const beat = block(src, "let Some(chunk) = chunk else {");
+  const beat = block(src, "ReadStep::Beat => {");
   assert.match(
     beat,
-    /if queue_beat_due\(link\.connected, link\.stale, link\.approvals\) \{[\s\S]*?refresh_pending\(app, base\)\.await/,
+    /if queue_beat_due\(link\.connected, link\.approvals\) \{[\s\S]*?refresh_pending\(app, base\)\.await/,
     "the beat must re-read through the one queue read",
+  );
+  assert.doesNotMatch(
+    beat,
+    /last_chunk_at/,
+    "the beat must never move the silence deadline",
   );
 });
 
