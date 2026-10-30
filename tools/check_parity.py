@@ -775,6 +775,21 @@ PHONE_ONLY = {
     # needs. Move this to CLASSIFICATION as "ported" the moment the desktop's own
     # card calls the route.
     "/api/card-prefs": ("desktop-todo", "\"Approval cards read short\" (the owner's request of 2026-10-09; docs/JARVIS-API.md section 127; backend/jarvis_card_summary.py, card-prefs.patch): the \"Start short\" / \"Always show everything\" choice for each approval card, kept in card-prefs.json so both apps read one value. The PHONE has it today (net/CardSummary.kt, ui/screens/ApprovalCardsPlate.kt, Settings under Appearance); the desktop's own card is NOT built yet, which is why this is desktop-todo rather than phone-only. docs/DESKTOP-APPROVAL-CARD-PREF.md names what it needs (src/main.js's refreshApproval, a settings.html card, and the `mode` field it reads); until then the desktop changes the setting by asking, and jarvis_settings_registry.SECTIONS keeps its settings.approval-cards row app=\"phone\" so \"open approval cards\" never names a place the desktop does not have."),
+    # Chat archive (the owner's request of 2026-10-29: "make sure i can archive
+    # and delete chats (with a confirm step)"). This is the phone half: a row
+    # menu's Archive/Unarchive (net/ChatLog.kt, net/HistoryView.kt,
+    # ui/screens/HistoryScreen.kt, JarvisRuntime.archiveHistory) and the backend
+    # route it writes to. `GET /api/history` already existed and now takes
+    # `archived=1`; that one is classified above and needs no change here.
+    #
+    # "desktop-todo", never "phone-only": the desktop's own History gets the
+    # same Archive/Unarchive row and archived view from a PARALLEL branch of
+    # this same 2026-10-30 batch, and this branch was asked not to edit
+    # jarvis-desktop/. Move this to CLASSIFICATION as "ported" the moment the
+    # desktop's History calls the route; leaving it here after that would fail
+    # check_parity's own "the desktop now calls it too" rule, which is the
+    # prompt to do it.
+    "/api/history/archive": ("desktop-todo", "Chat archive (the owner's request of 2026-10-29: \"make sure i can archive and delete chats (with a confirm step)\"; POST /api/history/archive {\"id\", \"archived\"} -> {\"ok\", \"id\", \"archived\"}, reversible, NO approval card, 404 unknown, 400 bad body): the PHONE has it today - the row menu's Archive/Unarchive and the visible \"Archived\" view, read from the same GET /api/history with `archived=1` (net/ChatLog.kt, net/HistoryView.kt, ui/screens/HistoryScreen.kt, JarvisRuntime.archiveHistory, net/JarvisApi.historyArchive). The desktop's own History gets the same row and view from a parallel branch of this 2026-10-30 batch; this branch was asked not to edit jarvis-desktop/, which is why this is desktop-todo rather than phone-only."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 

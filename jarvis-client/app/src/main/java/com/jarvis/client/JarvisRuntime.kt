@@ -9427,10 +9427,18 @@ object JarvisRuntime {
     // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The
     // phone reads all of it from the PC and keeps none of it.
 
-    /** `GET /api/history`, one page, newest first. A read: never held. [kind]:
-     *  one kind of conversation ("Live only" and the other filters), or all. */
-    suspend fun history(before: Long? = null, kind: String? = null, tag: String? = null): ApiResult<JsonObject> =
-        api.history(before, kind, tag)
+    /**
+     * `GET /api/history`, one page, newest first. A read: never held. [kind]:
+     * one kind of conversation ("Live only" and the other filters), or all.
+     * [archived]: the archived chats only - the Archived view (the owner's
+     * request of 2026-10-29); the live list never includes them.
+     */
+    suspend fun history(
+        before: Long? = null,
+        kind: String? = null,
+        tag: String? = null,
+        archived: Boolean = false,
+    ): ApiResult<JsonObject> = api.history(before, kind, tag, archived)
 
     // ------------------------------------------------ chat tags ----
     // docs/CHAT-TAGS-DESIGN.md section 10. The tag list and each chat's tag
@@ -9769,6 +9777,45 @@ object JarvisRuntime {
             } else {
                 false to "Not deleted. " + describe(r.error)
             }
+        }
+    }
+
+    /**
+     * Archive ONE chat, or bring it back (`POST /api/history/archive`, the
+     * archive half of the owner's request of 2026-10-29). REVERSIBLE metadata:
+     * no approval card and no confirm - only Delete, which cannot be undone,
+     * keeps its confirm - and only the chat's id and the wanted state are sent,
+     * never a word of the chat. Held on a stale link like every other write
+     * (rule 4), and refused while the lists are hidden, because where a chat is
+     * kept is a word about that chat. The caller moves the row ONLY when
+     * [com.jarvis.client.net.ChatLog.Archive.ok] is true - a refusal says so and
+     * leaves the row exactly where it was.
+     */
+    suspend fun archiveHistory(chatId: String, archived: Boolean): com.jarvis.client.net.ChatLog.Archive {
+        val words = com.jarvis.client.net.ChatLog
+        actionBlocker()?.let { return com.jarvis.client.net.ChatLog.Archive(false, said = it) }
+        if (privateListsHidden) {
+            return com.jarvis.client.net.ChatLog.Archive(false, said = com.jarvis.client.net.ChatTags.FILED_HIDDEN)
+        }
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId)) {
+            return com.jarvis.client.net.ChatLog.Archive(false, said = words.ARCHIVE_GONE)
+        }
+        return when (val r = api.historyArchive(words.archiveBody(chatId, archived))) {
+            is ApiResult.Ok -> words.archiveAnswer(r.value.first, r.value.second).let { answer ->
+                // The PC may not echo `archived`; the request that worked stands.
+                if (answer.ok) answer.copy(archived = answer.archived ?: archived) else answer
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.ChatLog.Archive(
+                false,
+                said = if (r.error == ApiError.NotFound) {
+                    // A 404 with no `ok` body is the route missing on an older
+                    // PC (the same reading the pin route gets); the contract's
+                    // unknown-id 404 arrives as an Ok(404, body) above.
+                    words.ARCHIVE_OLD_PC
+                } else {
+                    "The archive change was not made. " + describe(r.error)
+                },
+            )
         }
     }
 

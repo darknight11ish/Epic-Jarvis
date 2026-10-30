@@ -127,9 +127,19 @@ private const val FILING_BANNER_MS = 10 * 60 * 1000L
  * "You're here" on the chat Home is in. A long section shows only five rows
  * and one "Show N more" over what is already loaded; "Load older" still
  * brings more from the PC. Each row's overflow menu carries Open, Pin/Unpin,
- * Move to and Delete. Pinning is metadata (only the chat's id and the wanted
- * state are sent, no approval card); a refusal says so and leaves the row
- * exactly where it was.
+ * Move to, Archive/Unarchive and Delete. Pinning is metadata (only the chat's
+ * id and the wanted state are sent, no approval card); a refusal says so and
+ * leaves the row exactly where it was.
+ *
+ * **Archive** (the owner's request of 2026-10-29: "make sure i can archive and
+ * delete chats (with a confirm step)"): the menu's Archive row reads Unarchive
+ * on an archived chat, and a visible "Archived" chip beside the "Show" chips
+ * opens the archived view (the same list read with `archived=1`). It is
+ * reversible, so it asks nothing first - only Delete keeps its confirm - and
+ * the row moves only after the PC says yes. Every row's own `archived` flag
+ * decides which view it belongs to ([ChatLog.inView]), so an older PC that
+ * ignores `archived=1` cannot put a live chat in the archived view. The
+ * hidden-lists guard is the same one the live list keeps.
  *
  * "Hide memory lists and chat history" (Security) hides the list and any open conversation
  * until Show is confirmed, the same as Brain's memory lists. The settings
@@ -209,6 +219,12 @@ fun HistoryScreen(
     // The row whose overflow menu is open, and the row a pin request is out for.
     var menuFor by remember { mutableStateOf<String?>(null) }
     var pinning by remember { mutableStateOf<String?>(null) }
+    // The Archived view (the archive half of the owner's request of 2026-10-29:
+    // "make sure i can archive and delete chats (with a confirm step)").
+    // A view choice only, like the sort, kept over a rotation; it holds no
+    // word of a chat. The row an archive request is out for is separate.
+    var archivedView by rememberSaveable { mutableStateOf(false) }
+    var archiving by remember { mutableStateOf<String?>(null) }
     // The row Delete was picked on, waiting for its confirm; and the request.
     var deleteFor by remember { mutableStateOf<ChatLog.Summary?>(null) }
     var deleteBusy by remember { mutableStateOf(false) }
@@ -302,11 +318,13 @@ fun HistoryScreen(
     var oldPc by remember { mutableStateOf(false) }
     // The words to find at once in the conversation opened from a result.
     var findFirst by remember { mutableStateOf("") }
-    val wordSearch = !oldPc && search.trim().length >= ChatLog.SEARCH_MIN
+    val wordSearch = !oldPc && !archivedView && search.trim().length >= ChatLog.SEARCH_MIN
     // Each change of the words (or of the hidden state) starts one search
     // after a short pause; a newer change cancels the older one, answer and
-    // all. Nothing is asked while the lists are hidden.
-    LaunchedEffect(search, privateHidden, oldPc, kind) {
+    // all. Nothing is asked while the lists are hidden, and no word search runs
+    // in the Archived view: the PC's search has no archived parameter, so its
+    // results would be live chats in a view that shows only archived ones.
+    LaunchedEffect(search, privateHidden, oldPc, kind, archivedView) {
         found = null
         searchError = null
         if (privateHidden || !wordSearch) {
@@ -385,12 +403,19 @@ fun HistoryScreen(
             reads += 1
         }
     }
-    LaunchedEffect(reads, kind, tagFilter) {
-        when (val r = JarvisRuntime.history(kind = kind.ifEmpty { null }, tag = tagFilter.ifEmpty { null })) {
+    LaunchedEffect(reads, kind, tagFilter, archivedView) {
+        when (val r = JarvisRuntime.history(
+            kind = kind.ifEmpty { null },
+            tag = tagFilter.ifEmpty { null },
+            archived = archivedView,
+        )) {
             is ApiResult.Ok -> {
                 val page = ChatLog.page(r.value)
                 status = page.status
-                rows = page.conversations
+                // The PC already sends only the view asked for; inView is the
+                // client half, so an older PC that ignores `archived=1` can
+                // never put a live chat in the archived view.
+                rows = ChatLog.inView(page.conversations, archivedView)
                 mayHaveOlder = page.mayHaveOlder
                 readError = null
             }
@@ -468,6 +493,38 @@ fun HistoryScreen(
                 }
             } finally {
                 pinning = null
+                menuFor = null
+            }
+        }
+    }
+
+    // Archive ONE chat from a row's overflow menu, or bring it back
+    // (the owner's request of 2026-10-29). NO confirm: archiving is reversible,
+    // unlike Delete, whose confirm below is unchanged. The PC's answer is the
+    // only thing that moves the row: a refusal says so and leaves it exactly
+    // where it was, and on a yes it leaves the view it is no longer part of.
+    fun archiveChat(row: ChatLog.Summary) {
+        if (archiving != null) return
+        val want = !row.archived
+        archiving = row.id
+        listSaid = null
+        scope.launch {
+            try {
+                val w = JarvisRuntime.archiveHistory(row.id, want)
+                if (w.ok) {
+                    val now = w.archived ?: want
+                    rows = rows?.let { list ->
+                        ChatLog.inView(HistoryView.withArchive(list, row.id, now), archivedView)
+                    }
+                    // A word-search result cannot be archived-in-place: the
+                    // search lists live chats only, so the hit goes with the row.
+                    found = found?.let { f -> f.copy(found = f.found.filterNot { it.row.id == row.id }) }
+                    listSaid = ChatLog.archiveSaid(now)
+                } else {
+                    listSaid = w.said ?: ChatLog.ARCHIVE_REFUSED
+                }
+            } finally {
+                archiving = null
                 menuFor = null
             }
         }
@@ -703,7 +760,10 @@ fun HistoryScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Kicker("Conversations")
+                            // The heading says which list this is, so the
+                            // archived view can never be mistaken for the live
+                            // one (the owner's request of 2026-10-29).
+                            Kicker(if (archivedView) "Archived conversations" else "Conversations")
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 // The tag editor (docs/CHAT-TAGS-DESIGN.md).
                                 if (!tagsOld) {
@@ -716,7 +776,9 @@ fun HistoryScreen(
                         }
                         Gap(4)
                         // "Show": every kind, Live only, support chats, chats
-                        // with other AIs, comparisons.
+                        // with other AIs, comparisons - and the Archived view
+                        // (the owner's request of 2026-10-29), which shares the
+                        // chip row so it is visible without a menu.
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -742,6 +804,25 @@ fun HistoryScreen(
                                     },
                                 )
                             }
+                            // One tap shows what has been archived; tapping it
+                            // again goes back to the live list. A view choice
+                            // only - nothing is sent by the tap itself, the
+                            // list is read again for the view it picks.
+                            Quiet(
+                                if (archivedView) "• ${ChatLog.ARCHIVED}" else ChatLog.ARCHIVED,
+                                color = if (archivedView) chrome.textHi else chrome.textMid,
+                                modifier = Modifier.semantics {
+                                    contentDescription = ChatLog.ARCHIVE_FILTER_TITLE +
+                                        if (archivedView) ", chosen" else ""
+                                },
+                                onClick = {
+                                    archivedView = !archivedView
+                                    rows = null
+                                    mayHaveOlder = false
+                                    readError = null
+                                    listSaid = null
+                                },
+                            )
                         }
                         // "All" and one chip per tag: shows one tag's chats.
                         if (view != null && groupedTags) {
@@ -763,7 +844,14 @@ fun HistoryScreen(
                                 color = if (err != null) chrome.warnInk else chrome.textLo,
                             )
                             shown.isEmpty() -> Text(
-                                if (kind.isNotEmpty() || tagFilter.isNotEmpty()) ChatLog.FILTER_NONE else ChatLog.EMPTY,
+                                when {
+                                    // "No chats" in the archived view must never
+                                    // read as "no chats at all".
+                                    archivedView && kind.isEmpty() && tagFilter.isEmpty() -> ChatLog.ARCHIVED_EMPTY
+                                    archivedView -> ChatLog.ARCHIVED_NONE_FILTER
+                                    kind.isNotEmpty() || tagFilter.isNotEmpty() -> ChatLog.FILTER_NONE
+                                    else -> ChatLog.EMPTY
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = chrome.textMid,
                             )
@@ -837,10 +925,12 @@ fun HistoryScreen(
                                 menuOpen = menuFor == hit.row.id,
                                 moveOpen = moveFor == hit.row.id,
                                 pinBusy = pinning == hit.row.id,
+                                archiveBusy = archiving == hit.row.id,
                                 nowSeconds = nowSeconds,
                                 menuAllowed = wanted == null,
                                 deleteOpen = deleteFor?.id == hit.row.id,
                                 deleteBusy = deleteBusy,
+                                onArchive = { archiveChat(hit.row) },
                                 onDelete = { deleteChat(hit.row) },
                                 onKeep = { deleteFor = null },
                                 onToggleMenu = {
@@ -884,10 +974,12 @@ fun HistoryScreen(
                             menuOpen = menuFor == row.id,
                             moveOpen = moveFor == row.id,
                             pinBusy = pinning == row.id,
+                            archiveBusy = archiving == row.id,
                             nowSeconds = nowSeconds,
                             menuAllowed = wanted == null,
                             deleteOpen = deleteFor?.id == row.id,
                             deleteBusy = deleteBusy,
+                            onArchive = { archiveChat(row) },
                             onDelete = { deleteChat(row) },
                             onKeep = { deleteFor = null },
                             onToggleMenu = {
@@ -986,11 +1078,22 @@ fun HistoryScreen(
                                         loadingOlder = true
                                         scope.launch {
                                             try {
-                                                when (val r = JarvisRuntime.history(before, kind.ifEmpty { null }, tagFilter.ifEmpty { null })) {
+                                                when (val r = JarvisRuntime.history(
+                                                    before,
+                                                    kind.ifEmpty { null },
+                                                    tagFilter.ifEmpty { null },
+                                                    archivedView,
+                                                )) {
                                                     is ApiResult.Ok -> {
                                                         val page = ChatLog.page(r.value)
                                                         val had = rows.orEmpty()
-                                                        val next = ChatLog.append(had, page.conversations)
+                                                        // The same view filter the first page
+                                                        // got: an older PC cannot leak a live
+                                                        // chat into the archived view here either.
+                                                        val next = ChatLog.append(
+                                                            had,
+                                                            ChatLog.inView(page.conversations, archivedView),
+                                                        )
                                                         rows = next
                                                         // No progress means no more to load.
                                                         mayHaveOlder = page.mayHaveOlder && next.size > had.size
@@ -1153,6 +1256,7 @@ private fun ConversationRow(
     menuOpen: Boolean,
     moveOpen: Boolean,
     pinBusy: Boolean,
+    archiveBusy: Boolean,
     nowSeconds: Long,
     menuAllowed: Boolean,
     deleteOpen: Boolean,
@@ -1161,6 +1265,7 @@ private fun ConversationRow(
     onPin: () -> Unit,
     onToggleMove: () -> Unit,
     onMove: (Int?) -> Unit,
+    onArchive: () -> Unit,
     onAskDelete: () -> Unit,
     onDelete: () -> Unit,
     onKeep: () -> Unit,
@@ -1174,6 +1279,7 @@ private fun ConversationRow(
         menuOpen = menuOpen,
         moveOpen = moveOpen,
         pinBusy = pinBusy,
+        archiveBusy = archiveBusy,
         nowSeconds = nowSeconds,
         menuAllowed = menuAllowed,
         deleteOpen = deleteOpen,
@@ -1182,6 +1288,7 @@ private fun ConversationRow(
         onPin = onPin,
         onToggleMove = onToggleMove,
         onMove = onMove,
+        onArchive = onArchive,
         onAskDelete = onAskDelete,
         onDelete = onDelete,
         onKeep = onKeep,
@@ -1203,6 +1310,7 @@ private fun ChatRowCard(
     menuOpen: Boolean,
     moveOpen: Boolean,
     pinBusy: Boolean,
+    archiveBusy: Boolean,
     nowSeconds: Long,
     menuAllowed: Boolean,
     deleteOpen: Boolean,
@@ -1213,6 +1321,7 @@ private fun ChatRowCard(
     onPin: () -> Unit,
     onToggleMove: () -> Unit,
     onMove: (Int?) -> Unit,
+    onArchive: () -> Unit,
     onAskDelete: () -> Unit,
     onDelete: () -> Unit,
     onKeep: () -> Unit,
@@ -1293,12 +1402,14 @@ private fun ChatRowCard(
                 row = row,
                 tags = tags,
                 pinBusy = pinBusy,
+                archiveBusy = archiveBusy,
                 onOpen = open,
                 onPin = onPin,
                 onMove = {
                     onToggleMenu()
                     onToggleMove()
                 },
+                onArchive = onArchive,
                 onDelete = onAskDelete,
             )
         }
@@ -1331,29 +1442,37 @@ private fun ChatRowCard(
     }
 }
 
-/** The row's overflow menu: Open, Pin/Unpin, Move to, Delete - in that order. */
+/**
+ * The row's overflow menu: Open, Pin/Unpin, Move to, Archive/Unarchive,
+ * Delete - in that order. Archive reads "Unarchive" on an archived row: it is
+ * the same reversible request the other way, and it asks nothing first, unlike
+ * Delete which keeps its confirm.
+ */
 @Composable
 private fun ChatActions(
     row: ChatLog.Summary,
     tags: List<ChatTags.Tag>,
     pinBusy: Boolean,
+    archiveBusy: Boolean,
     onOpen: () -> Unit,
     onPin: () -> Unit,
     onMove: () -> Unit,
+    onArchive: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val chrome = LocalChrome.current
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         HistoryView.menu(tags, filing = false).forEach { action ->
             MenuAction(
-                HistoryView.actionLabel(action, row.pinned),
+                HistoryView.actionLabel(action, row.pinned, archived = row.archived),
                 color = if (action == HistoryView.Action.DELETE) chrome.badInk else chrome.textHi,
-                enabled = !pinBusy,
+                enabled = !pinBusy && !archiveBusy,
                 onClick = {
                     when (action) {
                         HistoryView.Action.OPEN -> onOpen()
                         HistoryView.Action.PIN -> onPin()
                         HistoryView.Action.MOVE -> onMove()
+                        HistoryView.Action.ARCHIVE -> onArchive()
                         HistoryView.Action.DELETE -> onDelete()
                     }
                 },
@@ -1425,6 +1544,7 @@ private fun FoundRow(
     menuOpen: Boolean,
     moveOpen: Boolean,
     pinBusy: Boolean,
+    archiveBusy: Boolean,
     nowSeconds: Long,
     menuAllowed: Boolean,
     deleteOpen: Boolean,
@@ -1433,6 +1553,7 @@ private fun FoundRow(
     onPin: () -> Unit,
     onToggleMove: () -> Unit,
     onMove: (Int?) -> Unit,
+    onArchive: () -> Unit,
     onAskDelete: () -> Unit,
     onDelete: () -> Unit,
     onKeep: () -> Unit,
@@ -1457,6 +1578,7 @@ private fun FoundRow(
         menuOpen = menuOpen,
         moveOpen = moveOpen,
         pinBusy = pinBusy,
+        archiveBusy = archiveBusy,
         nowSeconds = nowSeconds,
         menuAllowed = menuAllowed,
         deleteOpen = deleteOpen,
@@ -1467,6 +1589,7 @@ private fun FoundRow(
         onPin = onPin,
         onToggleMove = onToggleMove,
         onMove = onMove,
+        onArchive = onArchive,
         onAskDelete = onAskDelete,
         onDelete = onDelete,
         onKeep = onKeep,

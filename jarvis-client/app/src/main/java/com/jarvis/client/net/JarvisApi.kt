@@ -1805,9 +1805,17 @@ class JarvisApi(
     // docs/JARVIS-API.md section 18 (2026-09-24). See [ChatLog] for the
     // shapes, the words and the rules; these only carry them.
 
-    /** `GET /api/history`: the switch and one page of conversations, newest first. */
-    suspend fun history(before: Long? = null, kind: String? = null, tag: String? = null): ApiResult<JsonObject> =
-        probe(ChatLog.listPath(before, kind = kind, tag = tag))
+    /**
+     * `GET /api/history`: the switch and one page of conversations, newest
+     * first. [archived] true asks for the archived chats only (`&archived=1`,
+     * the owner's request of 2026-10-29); the live list never includes them.
+     */
+    suspend fun history(
+        before: Long? = null,
+        kind: String? = null,
+        tag: String? = null,
+        archived: Boolean = false,
+    ): ApiResult<JsonObject> = probe(ChatLog.listPath(before, kind = kind, tag = tag, archived = archived))
 
     /**
      * `GET /api/history/tags` (docs/CHAT-TAGS-DESIGN.md section 10): the
@@ -1906,6 +1914,16 @@ class JarvisApi(
      * token and `X-Jarvis-Client: hud`, and the token is never logged.
      */
     suspend fun historyPin(json: String): ApiResult<Pair<Int, JsonObject?>> = historyWrite(ChatLog.PIN_PATH, json)
+
+    /**
+     * `POST /api/history/archive` (the owner's request of 2026-10-29): [json] is
+     * [ChatLog.archiveBody], exactly `{"id", "archived"}`. Reversible, so no
+     * confirm and no approval card; the status and body come back whole so the
+     * PC's own sentence reaches the owner. Same rules as [historyPin] - the
+     * pairing token and `X-Jarvis-Client: hud`, and the token is never logged.
+     */
+    suspend fun historyArchive(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        historyWrite(ChatLog.ARCHIVE_PATH, json)
 
     /** One JSON POST to a History route, the answer whole (status and body), like [forkPost]. */
     private suspend fun historyWrite(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
