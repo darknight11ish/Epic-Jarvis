@@ -85,6 +85,11 @@ def t_the_patch_is_registered_last():
     # own `count=1` branch - and jarvis_gate.py not at all, so it cannot
     # rewrite the stale rows this patch removes either.
     later = {"screen-attach.patch", "prompt-coach.patch",
+             # attached-file.patch (2026-10-29, the owner's "a file in a chat"):
+             # ONE hunk, in jarvis_hud.py only (the attach line on the chat
+             # request), appended after this patch and immediately before
+             # plugin-loader.patch - it rewrites nothing this patch wrote.
+             "attached-file.patch",
              # reminder-actions.patch (2026-10-27): two hunks in jarvis_gate.py
              # only - a `_NO_RULE_FROM_DENIAL` line and a `_RISK` row - both
              # ADDED after the rows this patch removes, and it rewrites neither.

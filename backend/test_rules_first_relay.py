@@ -83,6 +83,23 @@ def _patched():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _changes(patch_name):
+    """The lines a patch really ADDS or REMOVES - not the context it quotes.
+
+    The check below asks whether a later patch rewrites the relay's own code.
+    Until 2026-10-30 it asked whether the patch TEXT mentions `_open(` or
+    `_chat_client_fields_off` anywhere, and that was right while every later
+    patch touched other regions. attached-file.patch inserts a scrub block
+    immediately after those same lines, so `git diff` quotes
+    `body["messages"] = _chat_client_fields_off(...)` as CONTEXT - it changes
+    nothing - and the old check called that touching the relay. Only `-` and
+    `+` lines are changes; context lines are what the patch found there.
+    """
+    lines = (HERE / patch_name).read_text(encoding="utf-8").splitlines(True)
+    return "".join(l for l in lines
+                   if l.startswith(("-", "+")) and not l.startswith(("---", "+++")))
+
+
 def t_its_place_in_the_stack():
     order = _stack.order()
     # Last when it was written; brain-reads.patch (2026-09-28) now follows it.
@@ -91,9 +108,20 @@ def t_its_place_in_the_stack():
     # whose lines it builds on (below) - and that the whole list applies,
     # which _stack proves.
     for later in order[order.index(PATCH) + 1:] if PATCH in order else []:
-        text = (HERE / later).read_text(encoding="utf-8")
-        check(f"{later}, after it, does not touch _open()",
-              "def _open(" not in text and "_chat_client_fields_off" not in text)
+        changed = _changes(later)
+        check(f"{later}, after it, changes no line of _open() or its scrub",
+              "def _open(" not in changed and "_chat_client_fields_off" not in changed)
+    # ...and the one patch that does add a line next to them (attached-file.patch,
+    # 2026-10-29) is checked the other way round: its CHANGES are the scrub
+    # block, not a rewrite of the relay's lines. Named here rather than left to
+    # the loop above, so a future change to that patch cannot quietly turn into
+    # a rewrite of _open().
+    if "attached-file.patch" in order:
+        added = _changes("attached-file.patch")
+        check("attached-file.patch adds its scrub without rewriting the relay's own lines",
+              'k != "attachment"' in added
+              and "_chat_client_fields_off" not in added
+              and "def _open(" not in added)
     check(f"{PATCH} is in apply-patches.ps1's list, and no later patch rewrites its lines",
           PATCH in order and not _stack.later_rewriting(PATCH, "keep_rules_first"), order[-3:])
     for earlier in ("ollama-direct.patch", "chat-history.patch", "cloud-one-turn.patch",

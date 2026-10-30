@@ -517,7 +517,17 @@ await check("copy/paste JSON is the only move path (no file, blob, object URL)",
     "download=", "<input"]) {
     assert.equal(presetsCode.includes(forbidden), false,
       `hud-presets.js contains ${forbidden}`);
-    if (forbidden === "<input") continue; // the page's own chat box is an <input>
+  }
+  // 2026-10-29 (#979, "a file in a chat"): the HUD's chat gained ONE hidden file
+  // input for its attach control. It is NOT the presets move path - the loop
+  // above still proves hud-presets.js has no file/blob/object-URL/download road -
+  // and it is the page's ONLY file input, so a second one fails here.
+  const fileInputs = [...codeOnly(page).matchAll(/<input[^>]*type="file"[^>]*>/g)].map((m) => m[0]);
+  assert.equal(fileInputs.length, 1,
+    `the page has ${fileInputs.length} file inputs, not the one attach control`);
+  assert.match(fileInputs[0], /id="attach-file"/);
+  assert.match(fileInputs[0], /hidden/);
+  for (const forbidden of ["showOpenFilePicker", "createObjectURL", "download="]) {
     assert.equal(codeOnly(page).includes(forbidden), false, `the page contains ${forbidden}`);
   }
   assert.match(presetsSrc, /navigator\.clipboard/);

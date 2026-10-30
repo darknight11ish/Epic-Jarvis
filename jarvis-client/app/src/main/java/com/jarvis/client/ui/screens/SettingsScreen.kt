@@ -208,6 +208,13 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // "All features and abilities" (2026-10-22): the searchable directory of
     // all 140 features. A row added at the end moves no other number.
     "all-features" to 32,
+    // "Jarvis Calendar" (2026-10-29, the owner's ask: a full calendar of
+    // Jarvis's own, ON by default, and "disableable in Settings"). One switch:
+    // the PC's own `calendar-settings.json`, read and written through
+    // GET /api/calendar and POST /api/calendar/settings, so the phone and the
+    // desktop can never disagree about whether it is on. A row added at the end
+    // moves no other number.
+    "calendar" to 33,
 )
 
 /**
@@ -889,6 +896,16 @@ fun SettingsScreen(
             // what every searchable row carries: a search hides the other cards
             // instead of leaving this one behind (SettingsSearchTest holds it).
             if (drawn("all-features")) item(key = "all-features") { FeatureDirectorySection() }
+
+            // "Jarvis Calendar" (2026-10-29): the one switch that turns the
+            // feature on or off for BOTH apps and the home-screen widget. On by
+            // default, because the owner asked for a calendar built into
+            // Jarvis; OFF hides rather than deletes (CalendarSettingsPlate.kt).
+            // It is NOT a hideable menu - no menu id exists for it and none is
+            // invented here - so, like "What asks first" and "App control", the
+            // row is always drawn. A row added at the end moves no other row's
+            // position (see SETTINGS_ITEM_INDEX).
+            if (drawn("calendar")) item(key = "calendar") { CalendarSettingsSection(canAct = canAct) }
             item(key = "tail") { Gap(24) }
         }
     }

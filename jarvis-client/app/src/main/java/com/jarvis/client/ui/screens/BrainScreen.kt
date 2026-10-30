@@ -308,6 +308,12 @@ fun BrainScreen(
      * menus" list. Null hides the line.
      */
     onOpenMenuList: (() -> Unit)? = null,
+    /**
+     * "Jarvis Calendar" (the owner's ask of 2026-10-29): opens the calendar
+     * screen from the row beside Coming up. Null (the default) hides the way
+     * in - a screen this app does not have cannot be promised by a button.
+     */
+    onOpenCalendar: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // Which menus this phone has hidden or folded (docs/MENU-VISIBILITY-DESIGN.md). A link that
@@ -1097,6 +1103,28 @@ fun BrainScreen(
                             showPrivateBusy = showPrivateBusy,
                             onShowPrivate = onShowPrivate,
                         )
+                    }
+                }
+
+                // "Jarvis Calendar" (the owner's ask of 2026-10-29): the row
+                // beside Coming up, which opens the calendar screen
+                // (CalendarPlate.kt, JARVIS-API section 163). It shares Coming
+                // up's own menu id rather than inventing a second one: the two
+                // are one block of "what is coming", the id already exists, and
+                // a new id would be a registry change on both apps for a row
+                // that only ever moves with its neighbour. Null callback: this
+                // Brain was not given a way into the calendar, so the plate is
+                // not drawn at all (see the parameter's own note).
+                val openCalendar = onOpenCalendar
+                if (openCalendar != null) {
+                    if (menus.shows("brain.work.coming-up")) plate("calendar", drawn = { true }) {
+                        MenuFrame(menus, "brain.work.coming-up") {
+                            CalendarSection(
+                                canAct = canAct,
+                                privateHidden = privateHidden,
+                                onOpen = openCalendar,
+                            )
+                        }
                     }
                 }
 
