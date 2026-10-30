@@ -553,6 +553,10 @@ export function readHistory(answer) {
         // Chat tags (docs/CHAT-TAGS-DESIGN.md): the tag's id, or null when
         // untagged - and from a PC that has no tags yet.
         tagId: Number.isInteger(c.tag_id) && c.tag_id > 0 ? c.tag_id : null,
+        // Put away from the live list (the owner's ask of 2026-10-29). The
+        // PC always sends it on a conversation row; an older PC sends nothing,
+        // and its chats are all live (`false`).
+        archived: c.archived === true,
       })),
   };
 }
@@ -585,6 +589,10 @@ export function readConversation(answer) {
     // older PC sends neither field, so nothing is offered and nothing said.
     forkable: a.forkable === true,
     forkWhy: a.forkable === true ? "" : typeof a.forkable === "boolean" ? text(a.fork_why).trim() || FORK_NO : "",
+    // Whether the PC keeps this chat put away (2026-10-29). The conversation
+    // read carries it too; only the PC's `true` says so, and an older PC sends
+    // nothing.
+    archived: a.archived === true,
     // "New section here": only the PC's explicit `true` offers the button; an
     // older PC sends none of the three, so nothing is drawn.
     marks: readMarks(a.marks),
@@ -794,6 +802,10 @@ export function readSearch(answer) {
           kind: readKind(c.kind),
           project: text(c.project) || null,
           tagId: Number.isInteger(c.tag_id) && c.tag_id > 0 ? c.tag_id : null,
+          // Search still finds archived chats (the PC did not narrow it), so
+          // each result says whether it is put away - and then is not carried
+          // on from here (2026-10-29).
+          archived: c.archived === true,
           hits: num(c.hits) ?? 0,
           snippet: {
             role: ["user", "assistant", "title"].includes(s.role) ? s.role : "user",
