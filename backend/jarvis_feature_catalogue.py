@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 142 rows from features/features.json.
+The owner's feature list, as data: 143 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 2b640df02d7f6e44f1e698db4a11ac4ae3b53d705f15644e80118094302d64a3); the apps' Features pages read their own
+`features/features.json` (sha256 22c284acff51eade204d46b617fae18b0d9de9bfe4af0e104d2165df7d112358); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "2b640df02d7f6e44f1e698db4a11ac4ae3b53d705f15644e80118094302d64a3"
+SOURCE_SHA256 = "22c284acff51eade204d46b617fae18b0d9de9bfe4af0e104d2165df7d112358"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -888,6 +888,17 @@ FEATURES = (
         "surface": "desktop",
         "surface_reason": "The private calendar link is read from the PC's Accounts settings by the PC's own backend, and the phone has no calendar-link card of its own.",
         "covers": ["home-calendar-email"],
+    },
+    {
+        "id": "jarvis-calendar",
+        "group": "Home",
+        "title": "Jarvis Calendar",
+        "what": "Your own calendar, kept by Jarvis on this PC: the events you add are shown beside Google Calendar and iCal, never sent to either, and never synced out.",
+        "where": "Ask \"turn off the Jarvis calendar\". The Calendar screen in each app is the next slice; the store and its routes are built now.",
+        "asks": "Adding, changing or deleting ONE of your own events raises no card: it writes one row on your own PC and has no bulk form. Turning the whole calendar off is instant and keeps every event.",
+        "limit": "Local only: no Google sync, no invitations, no sharing, and no reminder ringing yet (the reminder time is stored for later). Editing a repeating event changes the whole series, not one occurrence.",
+        "surface": "both",
+        "covers": [],
     },
     {
         "id": "weather-sky",

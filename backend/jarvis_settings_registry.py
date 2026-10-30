@@ -677,6 +677,28 @@ def antislop_words() -> str:
                 f"({type(exc).__name__}), so I will not guess whether it is on.")
 
 
+# --- the Jarvis-owned local calendar (jarvis_local_calendar.py, 2026-10-29) --
+#
+# A PREFERENCE, CARDLESS EITHER WAY, the same class as the prompt coach and the
+# Anti-Slop filter: OFF only hides the calendar and KEEPS every event, ON shows
+# the same ones again, and it opens no network door, reads no folder and takes
+# no action. The typed sentence and the HUD/phone switch call the SAME module
+# function, so they cannot disagree about the state.
+
+def set_jarvis_calendar(on: bool, *, peer=None, local=None) -> Outcome:
+    """Turn the owner's own calendar on or off. No card either way."""
+    try:
+        import jarvis_local_calendar as LC
+    except Exception:
+        return _missing("the Jarvis calendar")
+    try:
+        code, out = LC.handle_settings({"on": bool(on)})
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Outcome(False, "The Jarvis calendar's setting could not be saved "
+                              f"({type(exc).__name__}).")
+    return _say(code, out or {})
+
+
 # --- background learning (jarvis_auto_learn.py) ---------------------------
 
 def set_background_learning(on: bool, *, peer=None, local=None) -> Outcome:
@@ -2037,6 +2059,17 @@ BOOL_SETTINGS: tuple = (
     BoolSetting("antislop",
                ("anti-slop", "anti slop", "slop filter"),
                None, set_antislop),
+    # The Jarvis-owned local calendar (2026-10-29): ON when no settings file
+    # says otherwise, OFF hides every surface and keeps every event. Its
+    # `section` is None because the Settings card that will draw this switch
+    # is the next slice - a SettingRow here would have to be spliced into
+    # settings.html and driven by a Tauri command, and a page row with nothing
+    # behind it is a dead control. The typed switch is real now, and the
+    # contract records the desktop/phone halves as planned, honestly.
+    BoolSetting("jarvis_calendar",
+               ("local calendar", "the local calendar", "jarvis local calendar",
+                "my local calendar"),
+               None, set_jarvis_calendar),
     BoolSetting("ask_before_every_search",
                ("asking before every web search", "ask before every search",
                 "asking before every search"),

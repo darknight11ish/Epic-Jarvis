@@ -1034,7 +1034,12 @@ def t_settings_gaps_are_real_named_and_owned():
     bool_keys = {b.key for b in R.BOOL_SETTINGS}
     choice_keys = {c.key for c in R.CHOICE_SETTINGS}
     by_id = {r["id"]: r for r in FG.control_matrix()}
-    check("no Settings gap is left recorded", set(FG.SETTINGS_GAPS) == set(),
+    # ONE gap is recorded, and it is real: the Jarvis calendar's typed switch
+    # and four routes are built, and neither Settings page draws the switch
+    # yet (the Calendar UI slice owns both halves). The check used to demand an
+    # empty table, which was true only while no gap existed.
+    check("only the one real Settings gap is recorded",
+          set(FG.SETTINGS_GAPS) == {"jarvis-calendar"},
           sorted(FG.SETTINGS_GAPS))
     for fid, gap in FG.SETTINGS_GAPS.items():
         row = by_id.get(fid)
@@ -1897,7 +1902,10 @@ def t_the_card_sentence_is_only_where_a_card_really_is():
     # settings audit's G1 gave its learning switches the `learning` card and its
     # covers now name TWO switches - so the counts are not the same side's 15 or
     # 13, they are the merged tree's 14.
-    check("there are single-switch Switchable rows to check", len(single) == 14,
+    # 15 after the 2026-10-29 Jarvis calendar slice: its registry switch is
+    # one key and its feature row is a single-switch Switchable row (the
+    # desktop/phone Settings cards are the UI slice, recorded as SETTINGS_GAPS).
+    check("there are single-switch Switchable rows to check", len(single) == 15,
           len(single))
     R = FG._registry()
     real_keys = {b.key for b in getattr(R, "BOOL_SETTINGS", ())}

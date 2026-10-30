@@ -43,12 +43,15 @@ FAILED, PASSED, SKIPPED = [], [], []
 
 #: The no-patch drop-ins: the ten that were the whole of the 2026-10-28 gap,
 #: plus `model-recommendations` (the 2026-10-28 advisor's own install block lives
-#: in its backend module, so its folder replaces no patch). They replace no
-#: patch, so `$PATCHES` cannot name them; their own `plugin.json` is the
-#: manifest. Adding another is a catalogue-count change: put it here too.
+#: in its backend module, so its folder replaces no patch) and `jarvis-calendar`
+#: (the 2026-10-29 local calendar, whose routes come from its own install()).
+#: They replace no patch, so `$PATCHES` cannot name them; their own
+#: `plugin.json` is the manifest. Adding another is a catalogue-count change:
+#: put it here too.
 NO_PATCH = {
     "antislop",
     "google-calendar",
+    "jarvis-calendar",
     "auto-router",
     "media-index",
     "notion-obsidian",

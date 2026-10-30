@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **40 drop-in modules**, in [`ready/`](ready/) -
+- **41 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **28** replace a patch, and are generated from it;
-  - **12** replace no patch: they were born as folders, and
+  - **13** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **133 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -56,7 +56,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 12 were never patches. There is nothing in the core
+These 13 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -77,6 +77,7 @@ it is one `apply-patches.ps1` copies in.
 | 157 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
 | 158 | `antislop` | the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings. |
 | 159 | `google-calendar` | Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card. |
+| 160 | `jarvis-calendar` | Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch turns every surface off while keeping every event. |
 
 ## What stays in the core
 

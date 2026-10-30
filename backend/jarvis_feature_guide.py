@@ -372,6 +372,16 @@ def _read_antislop():
     return M.is_enabled() is True
 
 
+def _read_jarvis_calendar():
+    """The Jarvis calendar's switch (2026-10-29): ON when no file says otherwise.
+
+    Read from the module itself. A damaged settings file reads OFF there (with
+    a reason the route carries), which is the safe direction for "is it on?".
+    """
+    import jarvis_local_calendar as M
+    return M.is_on() is True
+
+
 def _read_auto_learn(key: str):
     import jarvis_auto_learn as M
     return M.settings().get(key) is True
@@ -518,6 +528,7 @@ STATE_READERS = {
     "lights_without_card": _read_lights_without_card,
     "prompt_coach": _read_prompt_coach,
     "antislop": _read_antislop,
+    "jarvis_calendar": _read_jarvis_calendar,
     "ask_before_every_search": lambda: _read_search("ask_every_time"),
     "web_search": lambda: _read_search("enabled"),
     "smartwatch_notifications": _read_watch_notify,
@@ -1468,6 +1479,11 @@ EXTRA_CONTROLS = {
     # the phone has no Settings row of its own for it, and its directory sends
     # that name to the big-model row instead (2026-10-23, #749).
     "big-model": ("big_coder",),
+    # The Jarvis-owned local calendar (2026-10-29) has its own typed switch
+    # from the day its store lands; no Settings row links it yet, so the
+    # matrix is told by hand rather than through a `covers` section that the
+    # pages do not have.
+    "jarvis-calendar": ("jarvis_calendar",),
 }
 
 #: Features that ARE command-controllable but have NO desktop Settings control
@@ -1489,7 +1505,21 @@ EXTRA_CONTROLS = {
 #: The dict is kept (and still checked by tools/check_feature_controls.py and
 #: backend/test_feature_guide.py) so the next real gap is recorded in the one
 #: place the matrix reads, rather than being noticed by nobody.
-SETTINGS_GAPS = {}
+#:
+#: 2026-10-29: the Jarvis calendar's typed switch is real and its four routes
+#: are built, but neither Settings page draws the switch yet - the Calendar
+#: Settings card and the phone row are the UI slice's. Recorded here rather
+#: than as a fake `covers` section the pages do not have.
+SETTINGS_GAPS = {
+    "jarvis-calendar": {
+        "controls": ["jarvis_calendar"],
+        "desktop": "setup-ui",
+        "phone": "setup-ui",
+        "reason": ("The typed switch and the four routes are real now; both "
+                   "Settings halves are the calendar UI slice's, so no page "
+                   "draws them yet."),
+    },
+}
 
 #: Feature ids whose ADJUST phrase does not sit behind a `settings.<id>` cover
 #: (the catalogue names a Brain page), with the Settings place that proves it.
@@ -1570,6 +1600,9 @@ OWN_CONTROLS = {
     "web-search": (("web_search",), ("search_use", "settings_bool"), {}),
     "what-asks-first": ((), ("settings_asks_first",), {}),
     "write-like-me": (("write_like_me",), ("settings_bool",), {}),
+    # The Jarvis calendar (2026-10-29): its typed switch is its own control,
+    # linked by EXTRA_CONTROLS because no Settings card draws it yet.
+    "jarvis-calendar": (("jarvis_calendar",), ("settings_bool",), {}),
     "look-at-this": (("screen_picture",), ("feature_switch",), {}),
 }
 OWN_ACTIONS = {
@@ -2062,6 +2095,9 @@ CARD_FREE_SWITCHES = frozenset({
     "pictures",       # "BOTH directions ... neither asks" registry:736-738
     "antislop",       # "No card either way - it changes only how an answer is
                       # worded" (the Anti-Slop filter's own setter, 2026-10-28)
+    # The Jarvis calendar's switch hides or shows the owner's own events and
+    # keeps every one of them: no card either way (2026-10-29).
+    "jarvis_calendar",
 })
 
 #: The Settings place the owner is sent to for an ability with no switch. The
