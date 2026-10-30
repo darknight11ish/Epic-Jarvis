@@ -415,18 +415,28 @@ out") because it believed the row. `backend/test_pending_expiry_on_read.py`
 proves an overdue card leaves while a live one stays. The bounded cost: an
 overdue row can still be served for up to that 60-second grace and until the
 next read after it, and a card that expires while a screen is already open sits
-there until that screen next reads the queue — which since 2026-10-29 is at most
-**30 seconds** on any surface a person is looking at (a card waiting, a live
-link; see below). **No client-side "clear expired" control exists, and none is
-needed** — the card is gone from the next read and nothing can be approved by a
-card that is not served. The phone's own halves are one line in
-`MainActivity.onResume` that re-reads this route when the app comes to the front
-(2026-10-28), and `QueueBeat` — one re-read every 30 s while a card is waiting on
-a CONNECTED link, which is also what clears a card **decided elsewhere**
-(`JarvisRuntime`; the widget, the notification and Home all draw from that one
-`pending`). The desktop's HUD, widget and bar re-read on the events they already
-receive, and `stream.rs` adds the same 30-second re-read beside them
-(`queue_beat_due`) for the case where the `approval` event never arrives.
+there until that screen next reads the queue — which since 2026-10-29 is at
+most **30 seconds while the app is running and the link is live**. That is not
+one number for every surface: a killed phone's widget keeps the last RemoteViews
+the launcher drew until the widget's own update,
+`android:updatePeriodMillis="1800000"`, so it can lag up to **30 minutes**; and
+while the desktop's stream is down there is no beat at all, so its bound is the
+next event or reconnect. A stale-but-connected desktop link recovers on the next
+beat, because that read is what clears `stale` (the `approval` event's success
+and the beat share one rule, `stream.rs`'s `queue_read_landed`). **No client-side
+"clear expired" control exists, and none is needed** — the card is gone from the
+next read and nothing can be approved by a card that is not served. The phone's
+own halves are one line in `MainActivity.onResume` that re-reads this route when
+the app comes to the front (2026-10-28), and `QueueBeat` — one re-read every 30 s
+while a card is waiting on a CONNECTED link, which is also what clears a card
+**decided elsewhere** (`JarvisRuntime`; the widget, the notification and Home all
+draw from that one `pending`). The desktop's HUD, widget and bar re-read on the
+events they already receive, and `stream.rs` adds the same 30-second re-read
+beside them (`queue_beat_due`) for the case where the `approval` event never
+arrives. While the HUD is visible and a card waits, that is TWO independent 30 s
+`/api/pending` reads on the PC - the HUD page's own `apprPoll` and the stream's
+beat - which is deliberate (either can fail without silencing the other) and is
+named in `ARCHITECTURE.md` §6.
 
 ### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
 
