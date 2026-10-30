@@ -3332,6 +3332,45 @@ def choice_bad_words(setting: ChoiceSetting) -> str:
             f"Say one of: {options}.")
 
 
+def choice_not_made_words(setting: ChoiceSetting, words: str) -> str:
+    """The answer when `words` names a Jarvis-made blend this PC has not made.
+
+    The 2026-10-29 phone field test (REPORT.md B3): typing "change your voice
+    to Ashby" answered with the generic "That is not one of the choices for the
+    built-in voice. Say one of: <22 labels>." - which never said Ashby exists -
+    while the Voices screen said "Ashby and Clara, two voices made for Jarvis,
+    are not made yet. To make them, run the one line under \"Make Ashby and
+    Clara\"..." (`jarvis_kokoro.BLENDS_TO_MAKE`, the picker's own note). A blend
+    the pack does not offer is not an UNKNOWN voice: it is a known voice that is
+    absent, and the answer must say that, in the same words the picker shows.
+
+    Empty string for every other case, so the caller keeps the generic refusal.
+    Reads `jarvis_kokoro` only for the names - nothing about a voice is typed
+    twice here, and a blend this PC really offers is never this answer's case.
+    """
+    if getattr(setting, "key", "") != "voice_speaker":
+        return ""
+    said = _choice_key(words)
+    if not said:
+        return ""
+    try:
+        import jarvis_kokoro as K
+    except Exception:                        # noqa: BLE001 - no pack, no claim
+        return ""
+    try:
+        offered = setting.options()
+    except Exception:                        # noqa: BLE001 - say the generic words
+        return ""
+    for pid, row in K.MIX.items():
+        if pid in offered:
+            continue                          # this PC really has it - not absent
+        names = {_choice_key(str(row.get("name") or "")),
+                 _choice_key(str(row.get("label") or ""))}
+        if said in names:
+            return K.BLENDS_TO_MAKE
+    return ""
+
+
 # --------------------------------------------------------------------------
 #   "What can I change?" (the owner's decision, 2026-10-10)
 # --------------------------------------------------------------------------

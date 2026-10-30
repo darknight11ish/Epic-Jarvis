@@ -2740,6 +2740,10 @@ class MainActivity : FragmentActivity() {
                             digest = digest,
                             undo = undo,
                             jobs = jobs,
+                            // The cards waiting for OK, from the one list Home's
+                            // "N waiting" line and the "Open the card" line use -
+                            // not Attention.pending (queued things to be told).
+                            pendingCards = pending.size,
                             pastApprovals = pastApprovals,
                             // "Past approvals" (ui/screens/ApprovalsScreen.kt):
                             // the rows moved to their own screen, reachable from

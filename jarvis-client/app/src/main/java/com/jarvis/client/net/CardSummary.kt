@@ -138,10 +138,19 @@ object CardSummary {
      * `summary` is the short line, or null when the card has none to show
      * (either it is already drawn above the card, or there is nothing but the
      * detail). `body` is the whole text - the card's own `notice.full` and its
-     * `detail` together - or "" when nothing is unfolded. `control` is whether
-     * an "Explain more"/"Show less" control is drawn at all: never under
-     * "always show everything" (nothing is folded away), and never when opening
-     * the card would show nothing more than the summary already does.
+     * `detail` together, as WORDS ([CardBodyWords]: a command or a plan stays
+     * exactly as the PC sent it, machine JSON is said in plain words or left
+     * out, never drawn raw) - or "" when nothing is unfolded. `control` is
+     * whether an "Explain more"/"Show less" control is drawn at all: never
+     * under "always show everything" (nothing is folded away), and never when
+     * opening the card would show nothing more than the summary already does.
+     *
+     * A card whose PC sent NO short summary still starts folded when it has no
+     * readable whole text of its own either - a row whose only text was machine
+     * JSON, which the field test of 2026-10-29 (REPORT.md B7) caught being drawn
+     * as `{ "from": … }`. Its readable line is then the card's own title, which
+     * [com.jarvis.client.ui.approval.ApprovalCard] already draws, and the
+     * control opens that machine text in plain words.
      *
      * @param mode the PC's setting ([View.mode]); anything else is the default
      * @param summary the row's own short words (`notice.summary`), or null
@@ -168,19 +177,25 @@ object CardSummary {
     ): Shown {
         val open = mode == ALWAYS_FULL || expanded
         val short = summary?.trim()?.takeIf { it.isNotEmpty() }
-        // The whole card: the PC's own `full` text, and then the row's own
-        // detail - both of which "Explain more" reveals, exactly as the card
-        // draws them today.
+        // The whole card, as words: the PC's own `full` text, and then the
+        // row's own detail - both of which "Explain more" reveals, exactly as
+        // the card draws them today. Nothing raw: a JSON `detail` becomes a
+        // sentence or labelled lines, and unreadable machine text is dropped.
+        val fullWords = CardBodyWords.words(full)
+        val detailWords = CardBodyWords.words(detail)
         val whole = listOfNotNull(
-            full?.trim()?.takeIf { it.isNotEmpty() },
-            detail?.trim()?.takeIf { it.isNotEmpty() },
+            fullWords.takeIf { it.isNotBlank() },
+            detailWords.takeIf { it.isNotBlank() },
         ).joinToString("\n\n")
-        // Folded: the short line replaces the whole text. There is one thing
-        // worth reading at a glance, and the card's own `detail` is not it -
-        // that is what the control is for.
+        // Folded with no short line to fold to, and nothing readable of its own
+        // to show either: the card's title is the readable line, and the
+        // control opens the machine text in plain words. Without this the
+        // machine text itself was drawn unfolded - the field-test bug.
+        val nothingReadableToShow = short == null && fullWords.isBlank() && whole.isNotEmpty()
         val body = when {
             open -> whole
             short != null -> ""
+            nothingReadableToShow -> ""
             else -> whole
         }
         val control = mode != ALWAYS_FULL && whole.isNotEmpty() && body != whole

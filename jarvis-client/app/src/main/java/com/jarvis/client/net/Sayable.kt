@@ -9,7 +9,9 @@ package com.jarvis.client.net
  * 'More: right-click the Jarvis icon by the clock.' Also one 'what can you
  * do?' command answered from the same list, 3 examples on walkthrough
  * screen 2, and a Help answer in both apps. Tapping a line fills the box
- * and never sends."
+ * and never sends." (That one line now ends "on the PC" - see [FOOTER]
+ * below and the 2026-10-29 phone field test's B4: a phone read the audit's
+ * original line from "what can you do?" and has no tray icon to click.)
  *
  * The words are `backend/jarvis_sayable.py`'s - the same "one source, both
  * apps read it" pattern `Manner.kt` and `CardWords.kt` use. Unlike a live,
@@ -36,10 +38,14 @@ object Sayable {
     const val DETAIL: String = "Real sentences Jarvis already answers without the AI model. " +
         "Tap one to put it in the box - it does not send."
 
-    /** The line replacing the bar's old shortcut rows on the desktop, pointing at
-     *  Settings -> Shortcuts, where the rebindable hotkeys live now. Kept here too
-     *  so the phone's own "What can I say?" answer can quote it. */
-    const val FOOTER: String = "More: right-click the Jarvis icon by the clock."
+    /** The line closing the list, pointing at Settings -> Shortcuts on the PC,
+     *  where the rebindable hotkeys live (reached by right-clicking the Jarvis
+     *  icon by the clock). The phone does not draw it, but carries the same
+     *  words so a future screen and SayableContractTest cannot drift.
+     *  "on the PC" is part of the sentence on purpose (phone field test B4,
+     *  2026-10-29): the phone reads this same line from "what can you do?",
+     *  and it cannot right-click a PC tray icon. */
+    const val FOOTER: String = "More: right-click the Jarvis icon by the clock on the PC."
 
     /** The list itself, in the order it is shown - jarvis_sayable.SENTENCES, word
      *  for word (backend/test_sayable.py proves every one really works). */
