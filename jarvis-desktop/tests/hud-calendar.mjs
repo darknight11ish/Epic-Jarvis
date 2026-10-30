@@ -422,32 +422,57 @@ await check("a timed event is past, now or upcoming - and that is the only state
   assert.deepEqual(["past", "now", "upcoming"].includes(api.stateOf(at(0))), true);
 });
 
-await check("the three views draw their own words, and only one is open at a time", () => {
-  live.api.open();
-  assert.equal(live.nodes.get("calendar-panel").hidden, false);
-  assert.equal(words(live.nodes.get("cal-banner")), "",
+await check("the three views draw their own words, and only one is open at a time", async () => {
+  // FIXED dates and an explicit month, so this check does not depend on the
+  // hour CI runs at (an event "90 minutes from now" lands on the next day near
+  // midnight, and the views would then be a different month from its day).
+  const fixed = await settle(runCalendar({
+    body: {
+      ...READ_BODY,
+      window: { start: "2026-11-01", end: "2027-01-30" },
+      events: [
+        { id: "c0123456789", title: "Dentist", date: "2026-11-03", time: "09:00",
+          end_date: "2026-11-03", end_time: "10:00", all_day: false, place: "",
+          notes: "", remind_minutes: null, recurrence: "none",
+          tz: "America/Los_Angeles", source: "local" },
+        { id: "c012345678a", title: "Trip", date: "2026-11-04", time: null,
+          end_date: "2026-11-06", end_time: null, all_day: true, place: "",
+          notes: "", remind_minutes: null, recurrence: "weekly",
+          tz: "America/Los_Angeles", source: "local" },
+      ],
+    },
+  }));
+  fixed.api.state.month = { y: 2026, m: 11 };
+  fixed.api.state.selected = "2026-11-03";
+  fixed.api.state.view = "month";
+  fixed.api.open();
+  assert.equal(fixed.nodes.get("calendar-panel").hidden, false);
+  assert.equal(words(fixed.nodes.get("cal-banner")), "",
     "a healthy read still says something in the banner");
-  // Month: six week rows with seven cells each, and today's event on it.
-  const grid = live.nodes.get("cal-grid");
+  // Month: six week rows with seven cells each, and that day's event on it.
+  const grid = fixed.nodes.get("cal-grid");
   assert.equal(grid.children.length, 6);
   for (const row of grid.children) {
     const cells = row.children[row.children.length - 1];
     assert.equal(cells.children.length, 7, "a month week row does not have seven cells");
   }
-  assert.match(words(grid), /Dentist/, "the month grid does not draw today's event");
+  assert.match(words(grid), /Dentist/, "the month grid does not draw that day's event");
+  // The multi-day event is ONE bar in the month grid, across the days it spans.
+  const bars = [...words(grid).matchAll(/Trip/g)].length;
+  assert.equal(bars, 1, `the spanning event drew ${bars} bars in the month grid`);
   // Week: seven columns, and the spanning event in the band above them.
-  live.api.state.view = "week";
-  live.api.paint(live.api.state.read);
-  assert.equal(live.nodes.get("cal-week-cols").children.length, 7);
-  assert.match(words(live.nodes.get("cal-week-band")), /Trip|All day/,
+  fixed.api.state.view = "week";
+  fixed.api.paint(fixed.api.state.read);
+  assert.equal(fixed.nodes.get("cal-week-cols").children.length, 7);
+  assert.match(words(fixed.nodes.get("cal-week-band")), /Trip/,
     "the week view drew no bar for the all-day event");
   // Day: one day's list, in full.
-  live.api.state.view = "day";
-  live.api.state.selected = TODAY;
-  live.api.paint(live.api.state.read);
-  assert.match(words(live.nodes.get("cal-day-view")), /Dentist/,
+  fixed.api.state.view = "day";
+  fixed.api.state.selected = "2026-11-03";
+  fixed.api.paint(fixed.api.state.read);
+  assert.match(words(fixed.nodes.get("cal-day-view")), /Dentist/,
     "the day view is blank on a day with an event");
-  live.api.state.view = "month";
+  fixed.api.state.view = "month";
 });
 
 await check("the week and day views say an empty day in words, never nothing at all", async () => {
