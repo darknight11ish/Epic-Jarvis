@@ -1216,7 +1216,15 @@ def t_the_default_plumbing_builds_itself():
     got = []
 
     class Verdict:
+        # The gate's own Verdict shape: _decide() reads .tier, .outcome and
+        # P._person_said_yes() off it. A bool here is exactly the bug this test
+        # was widened to catch (the owner approved the card and the module still
+        # refused with "the gate answered at tier 'unknown'").
         allowed = True
+        tier = "ask"
+        outcome = "approved"
+        reason = ""
+        request_id = "req-test"
 
     fake_gate = types.ModuleType("jarvis_gate")
     fake_gate.check = lambda action, **kw: (got.append((action, kw)), Verdict())[1]
@@ -1250,12 +1258,49 @@ def t_the_default_plumbing_builds_itself():
             sys.modules.pop("jarvis_events", None)
         else:
             sys.modules["jarvis_events"] = real_events
-    check("the default gate asks jarvis_gate.check and returns its yes",
-          yes is True and got and got[-1][0] == "app_build_android", got)
+    check("the default gate asks jarvis_gate.check and hands back its Verdict",
+          getattr(yes, "tier", None) == "ask" and getattr(yes, "outcome", None) == "approved"
+          and got and got[-1][0] == "app_build_android", (yes, got))
     check("the default tier_of reads the policy table", tier == "ask", tier)
     check("the default spawn really starts a background thread", ran == [True], ran)
     check("a raised card publishes the approval doorbell both apps re-read",
           published and published[-1][0] == "approval", published)
+
+
+def t_an_approved_card_actually_runs_the_build():
+    """Found on the owner's PC (2026-10-30): the card was approved on the
+    desktop, and the module still answered "the gate answered at tier
+    'unknown'". Cause: the plumbing's gate returned a bool instead of the
+    gate's Verdict, so _decide() could not see the person's yes. This drives
+    _decide() with both shapes and proves which one runs the build."""
+    class Approved:
+        allowed = True
+        tier = "ask"
+        outcome = "approved"
+        reason = ""
+        request_id = "req-approved"
+
+    plan = A.CommandPlan(kind="build", project="p", task="t", tdir=_TMP / "verdict-task",
+                         argv=["cmd", "/c", "true"], cwd=_TMP, seconds=1)
+
+    def run_decide(gate):
+        calls = []
+        real_run = A.run_build
+        A.run_build = lambda plan, approved=False: (calls.append(approved), {"ok": True})[1]
+        try:
+            A._decide(plan, "tok-" + str(id(gate)), "app_build_android", gate,
+                      lambda _a: "ask")
+        finally:
+            A.run_build = real_run
+            A._reset_for_tests()
+        return calls
+
+    ran = run_decide(lambda *a: Approved())
+    check("a person-approved Verdict runs the build, exactly once", ran == [True], ran)
+
+    ran_bool = run_decide(lambda *a: True)
+    check("a bool instead of the Verdict does NOT run the build (the old bug)",
+          ran_bool == [], ran_bool)
 
 
 def main():

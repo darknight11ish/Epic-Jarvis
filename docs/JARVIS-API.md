@@ -27565,7 +27565,7 @@ nothing leaves the PC, so there is no egress to approve.
 **This section is the backend's contract.** The phone's plate and home-screen
 widget, and the desktop's HUD card, are the slices that build on exactly these
 answer shapes; both landed (the phone's in its own slice, the desktop's in
-§166), so all four routes are now `ported` in `tools/check_parity.py` rather
+§168), so all four routes are now `ported` in `tools/check_parity.py` rather
 than `planned`.
 
 ### 164.1 Where the data lives, and the switch
@@ -27660,8 +27660,8 @@ newest event.
 All four are behind the server's own origin check and `X-Jarvis-Token`, the same
 rules as every other host route; there is **no new permission model**. Reads are
 safe. The three writes are host-only writes: the desktop's two go through the
-HUD's own commands (`hud_calendar_add` / `hud_calendar_act`, §166.4) and its
-switch through `calendar_settings` (§166.5), and each answers in words, never
+HUD's own commands (`hud_calendar_add` / `hud_calendar_act`, §168.4) and its
+switch through `calendar_settings` (§168.5), and each answers in words, never
 with a silent no-op.
 
 ```
@@ -27710,7 +27710,7 @@ and no model call.
 ### 164.5 Honest limits, and what the later slices own
 
 - **Both apps draw it now.** The desktop's HUD card, month/week/day sheet, one
-  form and Settings switch are §166; the phone's plate, day list and
+  form and Settings switch are §168; the phone's plate, day list and
   home-screen widget are this section's phone half. Settings' entry for the
   feature names the switch in both apps, and the feature row says `enforced`.
 - **Google and iCal are not on this route.** `sources` says
@@ -27985,7 +27985,7 @@ That was **not** run in this checkout (no live call is made by any test or by
 CI), so "the real services answer" is NOT-TESTABLE here and is the owner's
 field check.
 
-## 166. Building an Android app from chat, and putting it on your phone (added 2026-10-30)
+## 166. Building an Android app and putting it on your phone: four routes, no entry point yet (added 2026-10-30)
 
 **Why this section number.** The last section on `main` when this was written
 was 162, and four in-flight branches had already claimed 163-167 (the numbers
@@ -28000,8 +28000,13 @@ section was **no**: milestones C (run a command), F (native Android projects)
 and G (install the debug APK) of `docs/APP-BUILDER-DESIGN.md` were unbuilt,
 and nothing in the backend had ever started a program that was not git.
 
-**What is built.** The narrowest full path from a chat description to an app
-on the phone, in three steps, of which TWO COST A CARD:
+**What is built.** The four routes below are the narrowest full path from an
+app description to an app on the phone, in three steps, of which TWO COST A
+CARD. **What is not built is the way in.** No chat sentence, no model tool and
+no button in either app calls these routes yet; only this module's own tests
+call them, and the tests drive the module's handlers directly. So the path is
+complete for a caller and there is no caller: an entry point still has to be
+written, and these contracts are what it would be built against.
 
 The four routes, exactly as they are answered:
 
@@ -28074,7 +28079,7 @@ two defaults, and gets a **working** page, which is what makes a first build
 possible without a single model call.
 
 * **200** `{"ok": true, "template": {"ok", "files", "package", "title"},
-  "status": {…168.4…}}`
+  "status": {…166.5…}}`
 * **400** a plain sentence: not an Android project, a title with a quote in
   it, a colour that is not `#rrggbb`, a fourth web file, one larger than
   96 KB, one that is not text, or a task that already has a project (a second

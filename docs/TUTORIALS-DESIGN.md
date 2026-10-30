@@ -1,8 +1,11 @@
 # Tutorials and FAQ — design
 
-Status: **BUILT** (2026-10-05). Everything below is implemented; this section at
-the top says where each piece lives, so the design and the code can be read
-together.
+Status: **BUILT** (2026-10-05), with one part added 2026-10-30 that is text only.
+Sections 1-8 below are implemented; the interactive-tutorials part after them is
+its first slice, and the `try`/`used` part after that is design only, as its own
+heading says. **The part dated 2026-10-30 at the very end is written but NOT yet
+in `backend/jarvis_tutorials.py`** — read it as the text to carry into the
+catalogue, not as words the app already says.
 
 * `backend/jarvis_tutorials.py` — the catalogue (an intro plus a tutorial per
   major part), the 20-question FAQ, and the owner's progress in
@@ -205,6 +208,10 @@ The intro, then one per major part. Each is 4–8 steps and two minutes.
 Plus **the FAQ** as its own section in both apps (right-hand side of the same
 window on the PC; its own list on the phone).
 
+**Two walkthroughs written on 2026-10-30** — archive a chat, and attach a file —
+are in the part at the end of this file. They extend tutorials 5 and 13, in the
+catalogue's own step shape.
+
 ## 6. The FAQ
 
 Written from the app's real behaviour, in the owner's own words, with a "where
@@ -278,6 +285,10 @@ hold it verbatim.
     guardrail, not a fault.
 20. **How do I get a tutorial back?** Tutorials → "Show this one again". A
     tutorial whose steps changed is offered again by itself.
+
+**Questions 21-31, for the features that landed on 2026-10-30, are in the part
+at the end of this file** — the same voice, the same four groups, numbered on
+from here so they can be appended to the catalogue without renumbering it.
 
 ## 7. Build order
 
@@ -650,4 +661,354 @@ The refusals are docs/EDUCATION-TAB-DESIGN.md §5.4's, and they hold here:
 **The thing that must not happen first is the state.** A `used` written by
 anything other than an observed action is the same lie as a `done` earned by
 pressing Next, one level up.
+
+---
+
+# What the 2026-10-30 features add — FAQ answers and two walkthroughs
+
+Status: **WRITTEN HERE, NOT YET IN THE CATALOGUE** (2026-10-30). The questions
+and lessons the two apps show come from `backend/jarvis_tutorials.py`, and that
+module still holds the 2026-10-05 content — 20 questions, and a catalogue that
+has grown from the 23-tutorial outline in §5 to 36 entries (both counted by
+importing the module on 2026-10-30). What follows is the text to carry into it:
+the same voice, the same four groups, numbered on from question 20, and two
+walkthroughs that extend tutorials that already exist. **This is not a claim
+that the app already says it.** §6 says of itself "This is the content; the
+module will hold it verbatim", and this part is written in that spirit — the
+catalogue is the thing that would have to change.
+
+Every answer was checked against `origin/main` at `21add9d53` on 2026-10-30;
+§5 below says where. Where something is not measured — the animation on a real
+phone, the app builder driven from a button — the answer says so in the sentence
+that makes the claim, not in a footnote.
+
+## 1. Eleven more questions for the FAQ
+
+The numbers are the order the flat list takes; the group headings say where each
+question reads best.
+
+**Everyday use — after question 10**
+
+21. **Where is my chat history now?**
+    On the PC, press **History** on the HUD's main strip — the clock button — or
+    open **Brain → History**. On the phone, tap **History** on Home's status
+    line, the row no screen size, menu or setting hides; **Brain → History** and
+    the More menu's earlier-chats row still work too. Both apps read the same
+    list from the PC, so a chat seen on one is on the other. While App lock or
+    "Hide memory lists and chat history" is on, the list is hidden until you
+    prove it is you: the PC asks for Windows Hello and the phone asks for your
+    fingerprint or PIN. *Where to change it:* PC — Settings → Security →
+    "Windows Hello for memory lists and chat history"; phone — Settings →
+    Fingerprint for private lists.
+
+22. **What does Archive do, and how do I get a chat back?**
+    Archive puts one chat away without deleting it, so the everyday list stays
+    short. It is reversible: open the **Archived** list and choose
+    **Unarchive**, and the chat goes back where it was. It asks nothing first
+    and raises no approval card, because it stores no words and sends nothing;
+    **Delete** is the one that still asks you to confirm. An archived chat is
+    still kept and still searchable — it is simply not in the main list. *Where
+    to change it:* the row's menu in History, then Archive or Unarchive; the
+    **Archived** list is a chip beside "Your chats" in the HUD's sidebar (the
+    Brain's History tab has one **Archived** button that reads "Back to your
+    chats" to return) and on the phone it is the **Archived** chip beside the
+    Show chips.
+
+23. **How do I add an event to Jarvis's own calendar?**
+    On the phone: **Brain → Jarvis Calendar → Open the calendar**, pick the day,
+    then **Add**. Type what it is, the date and the times, and press **Save**.
+    Tap an event to change it; **Delete** asks "Yes, delete it" first. On the
+    PC: the HUD's **Calendar** card, then **+ Add event**; **Open calendar**
+    gives the Month, Week and Day views. If the card is not on your main screen,
+    press **Edit HUD** and add it. The events live on your PC only and are never
+    synced anywhere. *Where to change it:* **Settings → Jarvis Calendar** is the
+    one ON/OFF switch in both apps; OFF hides every surface and keeps every
+    event. Two honest limits: nothing rings yet — the remind-me box is saved,
+    but nothing rings — and asking in chat turns the calendar on or off but does
+    not add an event.
+
+24. **How do I put a widget on my home screen?**
+    Say what it should show — a heading, numbers, short lists, a bar, and up to
+    four one-tap buttons from a fixed menu ("my next 3 reminders, my to-do count
+    and a 10-minute timer button") — and Jarvis makes a **preview**. Nothing is
+    added until you press **Add**; **Discard** throws the preview away. You can
+    ask for an arrangement too ("put my reminders at the top", "make the count
+    big"). Then, on the phone, open **Brain → Widgets** and find **On your home
+    screen**: choose which saved widget each **Jarvis widget** slot shows, then
+    press **Put it on my home screen**. The phone asks your launcher to place
+    it; a launcher may show its own confirm or refuse, and Jarvis says which of
+    the three things happened instead of claiming it worked. If your home
+    screen will not add a widget by itself, touch and hold it, choose
+    **Widgets**, then **Jarvis**, then "Jarvis widget 1", "2" or "3".
+
+25. **How do I style my notifications?**
+    Say what you want in chat — "make my Jarvis notifications look like a warm
+    orange pulse" — and Jarvis answers with a **preview**: a colour from a short
+    list (ice, azure, indigo, ember — the warm orange — rose, mono), a figure
+    (spark, ring, dot, star, arrow or none), a motion (still, pulse, flip or
+    spinner) and a speed (slow, normal, fast). Nothing is applied until you
+    press **Add**; **Discard** throws the preview away. You can also make one in
+    **Settings → Notifications from Jarvis → Notification styles**. It changes
+    only how your own notifications look: it adds no button, no permission and
+    no text of its own, and an approval card still offers Deny only. While App
+    lock or "Hide memory lists and chat history" is on — or the phone has no
+    secure lock screen — the plain notification is used instead.
+
+26. **How do I get a feature onto the main screen?**
+    Press **Edit HUD** on the HUD. The editor shows what is on the main screen
+    and everything that could be on it; add the one you want, drag it where you
+    want it, and press **Done**. Any built-in feature card can be added this
+    way, including one a later release adds — a saved layout gets it back at its
+    default place instead of hiding it. The approvals queue, Stop everything,
+    app lock and the stale-link warning are deliberately not in the list, so no
+    layout can hide them. *Where:* the **Edit HUD** button on the HUD. One
+    honest limit: this is the PC's editor — the phone's equivalent screen is the
+    next slice and is not built yet.
+
+**Privacy and rules — after question 4**
+
+27. **Does my PDF go to the cloud?**
+    No. A file attached in a chat is read on your PC by the same reader that
+    reads a folder Jarvis may look in: it is never uploaded, never written to a
+    temporary file, and never kept with the chat. Only the words it read are
+    used, for that one turn, up to 12,000 characters — a longer file says how
+    much was left out. PDF, Word, Excel, PowerPoint, text, Markdown and CSV are
+    the kinds it reads, one file per turn, up to 2.5 MB; a picture goes in with
+    the picture button, and a bigger file belongs in a folder Jarvis may look
+    in. The reader used to lose the first 16 KB of every PDF and Office file;
+    that was fixed on 2026-10-30, so the whole file is read now.
+
+28. **What does Jarvis send when I ask about parking?**
+    It sends a latitude, a longitude and a radius to the public parking data
+    (Seattle's own block-by-block prices inside Seattle, OpenStreetMap
+    everywhere), and the place name you said to the map lookup that turns it
+    into a point. It does not send your chat, your calendar, a memory fact or a
+    note. The answer is a cost estimate, not a booking: parking is priced minute
+    by minute across the sign's own rates, a place that publishes no price is
+    named rather than guessed, and every answer says what it cannot know. The PC
+    gets the full breakdown; the phone gets two options with a map link. Say
+    "find cheap parking near Pike Place Market from 4:15 pm to 9 pm", or "how
+    much is parking near ... from 4 pm to 9 pm". A latitude and longitude you
+    give instead skips the map lookup, so no words are sent at all.
+
+29. **Why does my widget hide its words?**
+    A widget draws only what Jarvis already shows you — your reminders, timers,
+    to-dos, "now playing", a few counts and a free-space bar — and some of those
+    are your own words. With "Hide memory lists and chat history" or App lock
+    on, the widget keeps its shape and replaces those words with "Hidden - open
+    Jarvis to see it." Nothing is missing; it waits until you prove it is you.
+    The counts that carry no words (to-dos left, unread mail, disk space) stay
+    visible. *Where to change it:* the same setting named in question 21.
+
+**Setup and upkeep — after question 20**
+
+30. **Why is the window 16,384 and not bigger?**
+    16,384 tokens — a token is a small piece of text, roughly three quarters of
+    a word — is how much of the conversation the local model can hold at once,
+    and it is what your PC is set to. It was measured: at 16,384 the model read
+    a 15,409-token prompt whole, while 4,096 silently lost the beginning of a
+    5,019-token one. 32,768 and 65,536 were measured too, and both work, but
+    they are slower: about 33.5 and 27.4 tokens a second against 41.9, a cold
+    first token takes most of a minute at 64K, and in the memory conditions
+    measured both sizes spread the model over both cards. So 16,384 stays. A
+    fresh install that does not set `OLLAMA_CONTEXT_LENGTH=16384` still gets
+    4,096. *Where:* the numbers, the check and the undo are in
+    `docs/MEASURED-2026-10-30-CONTEXT.md`.
+
+31. **How do I build an app and put it on my phone?**
+    Three steps, all on the PC: write a fixed, minimal Android project into one
+    app task (no card — the files land in that task's own copy and nothing runs
+    them); build it with Gradle; install it on the paired phone over its cable.
+    The last two are each meant to raise one approval card that names the exact
+    command and folder, and nothing is ever auto-approved — a card is decided
+    with Windows Hello on the PC or the screen lock on the phone, and a denial
+    never becomes a standing rule. The app it makes declares no permission at
+    all — not even internet — and is a debug build, never the Play Store. It
+    needs the Android SDK (Google's tools that turn a project into an app) and a
+    JDK (the Java kit Gradle needs) on the PC. Three honest limits: **there is
+    no button in either app and no chat sentence that starts this yet** — the
+    three steps are the PC's own addresses in `docs/JARVIS-API.md` §166; **at
+    `21add9d53` the two cards cannot be raised through the installed plugin at
+    all** — the build and install addresses answer "503 TypeError" before a card
+    exists, and PR #996 is the fix, so treat build-and-install as blocked rather
+    than working until it lands; and Jarvis has no uninstall, so what it
+    installs stays until you remove it.
+
+## 2. Two walkthroughs
+
+Both extend a tutorial that already exists, and both are driven on screens that
+exist today. They are written in the catalogue's own shape: each numbered step
+is a step card's `title` and `body`, and its *Where* line is the card's `where`.
+
+### 2.1 Put a chat away, and get it back
+
+*Extends tutorial 5, "Records, history and what is kept". Section: both. Two
+minutes.*
+
+1. **Open History where you are.** On the PC, press **History** on the HUD's
+   main strip. On the phone, tap **History** on Home's status line.
+   *Where:* PC — the HUD's main strip; phone — Home's status line. The Brain's
+   History entry opens the same list on both.
+
+2. **Open the chat's menu.** On the PC, press the three-dot **More** button at
+   the end of the row. On the phone, press the **⋮** at the end of the row (its
+   name is "Chat actions").
+   *Where:* the row itself, in History. The Brain's History tab offers the same
+   actions from its own row menu.
+
+3. **Choose Archive.** Nothing is deleted, nothing asks "are you sure?", and no
+   approval card appears. The chat leaves the list you were in. If it was the
+   chat the HUD was showing, the HUD starts a new conversation rather than
+   leaving you in a hidden one.
+   *Where:* the row's menu.
+
+4. **Look at the archived list.** On the PC, press the **Archived** chip beside
+   **Your chats** at the top of the sidebar; in the Brain's History tab the
+   control is the **Archived** button beside the search box. On the phone, tap
+   the **Archived** chip beside the **Show** chips.
+   *Where:* the two chips above the list.
+
+5. **Bring it back.** In the archived list the same menu now reads
+   **Unarchive**. Choose it, and the chat returns to the everyday list exactly
+   where it was — archiving does not move its "last used" time, so it cannot
+   jump to the top.
+   *Where:* the archived row's menu.
+
+6. **If the list is hidden, prove it is you.** While "Hide memory lists and
+   chat history" or App lock is on, History says it is hidden: the phone shows
+   "Hidden. Tap Show and confirm it is you." and the PC shows how many
+   conversations are hidden until Windows Hello confirms it is you. Archive and
+   Unarchive are refused until then, so nothing can be changed blind.
+   *Where:* the History list itself; **Show** on the phone, Windows Hello on the
+   PC.
+
+**What it does not do.** Archive is not delete: the words stay in the encrypted
+history on the PC, a search still finds the chat, and a backup still carries it
+until it ages out. Delete keeps its own confirm, word for word. On the PC an
+archived chat says "This chat is archived. Unarchive it to continue it." — take
+it out of the archive first if you want to carry on with it. Nothing leaves the
+PC, and no card is raised by any of the six steps.
+
+### 2.2 Attach a file and ask about it
+
+*Extends tutorial 13, "Documents, files and search". Section: both. Two
+minutes.*
+
+1. **Attach the file before you send.** On the PC, press **Attach a file** under
+   the chat box — or drag a file onto the window, or paste one from the
+   clipboard. On the phone, open **More** and choose **Attach a file**.
+   *Where:* PC — under the composer; phone — the More menu. The phone's row says
+   exactly what is allowed: "PDF, Word, Excel, PowerPoint, text, Markdown or
+   CSV, up to 2.5 MB. Read on your PC."
+
+2. **Check the chip.** The file's name, its size and **Read on your PC.** appear
+   under the box, with a way to remove it before sending. If it is the wrong
+   kind or too big, the same line says so in words and nothing is attached.
+   *Where:* under the box, on both apps.
+
+3. **Ask your question and send.** The file rides with that one message. Ask
+   what you want to know about it — "what does this say about the deposit?" —
+   and send.
+   *Where:* the chat box.
+
+4. **Answer the card if one appears.** If reading files is set to "Ask me
+   first", one approval card appears before a byte is read. Its detail holds the
+   file's name and size and never a word of it; a no reads nothing.
+   *Where:* the approval card, on either app.
+
+5. **Read the answer, and the amount it left out.** The PC reads up to 12,000
+   characters of the file, and the answer says when it showed only part of a
+   longer one. The file's words are treated as information, never as
+   instructions, and a card raised after the answer says it was proposed after
+   Jarvis read the file you attached.
+   *Where:* the answer itself.
+
+6. **Attach it again for a second question.** The chip is gone after sending.
+   The file is not kept with the chat and is not added to any folder list, so a
+   follow-up about the same file needs it attached again. What is kept is your
+   question and the answer, as any other turn is.
+   *Where:* the same Attach a file control.
+
+**What it does not do.** One file per turn, 2.5 MB at most; a bigger file
+belongs in a folder Jarvis may look in. A picture goes in with the picture
+button, not this one. The file is never uploaded, never written to a temporary
+file, and never inside a backup. Before the 2026-10-30 fix the first 16 KB of
+every PDF and Office file was lost in transit — a Windows pipe said it could
+rewind and did not — so a PDF could come back with its opening pages missing or
+a Word file could fail outright; the reader now copies the pipe into memory
+first, still without writing it to disk, and reads the whole file.
+
+## 3. Why there is no app-builder walkthrough
+
+The app builder is the one new feature this week that cannot be written as a
+walkthrough without inventing a control, and §2 of the interactive-tutorial
+design above forbids exactly that: "It never invents a control."
+
+What exists today is real: `backend/jarvis_android_builder.py` writes the fixed
+project, and its two commands were measured on the owner's PC on 2026-10-30 (one
+real build of exactly this template, 53.6 s, `BUILD SUCCESSFUL`; the changelog
+fragment names the numbers). What does not exist is a way in from either app, or
+from chat: a search of `origin/main` for `android/template` finds the module and
+its test and nothing else, and `docs/JARVIS-API.md` §166 says plainly "Neither
+has a screen for this". The two cards are meant to be the approval step, but at
+`21add9d53` the installed wrapper cannot raise them (see question 31); its field
+test is the open PR #996. So question 31 answers how it works and says what is
+missing, and a step card waits for the button — the same rule the 2026-10-10
+part sets out: a step that points at a control that is not there is worse than
+prose.
+
+## 4. What was proven, and what was not, on 2026-10-30
+
+A test that passed is not a run on the owner's own machines, and the two are
+kept apart here the way the top of this file keeps them apart. **BLOCKED and
+NOT-TESTABLE are never passes.**
+
+| Feature | Proven | Not proven — the honest row |
+|---|---|---|
+| History door, archive and Archived list (PC) | The page was driven in Playwright across all six HUD shells, and the archive route has its own backend tests | The installed WebView2 window and the live Python route end to end were not driven (the change's own note) |
+| History door, archive (phone) | The Android app compiles in CI and its JVM tests pass | That change makes no claim about a run on a phone |
+| Jarvis Calendar store and routes | 88 backend checks: add/change/delete, the caps, OFF keeping every event, the DST wall clock, recurrence, no bulk form | A real calendar read in a rebuilt desktop, and any run on a phone, are the owner's field checks |
+| Calendar card and sheet (PC) | 33 browser-free page checks and the Rust tests | The real WebView2 window — "the geometry of the sheet in the real window is the owner's eye rather than a test" (§168.7) |
+| Parking | 140 offline checks, every socket made to fail, and the phone's short answer with its map link | "The real services answer" is NOT-TESTABLE here: no test and no CI makes a live call, so it is the owner's field check |
+| Attachments | The reader on a real PDF and a real `.docx` bigger than 16 KB, through both reading paths; the file never written, never in a history row and never in a backup | Not proven on a phone: no APK from that change has been installed (its own note) |
+| Widgets and their arrangements | The four arrangements proven as rules by both apps' tests against the shared fixture; the three slots held equal to the manifest | No widget has been seen drawn on a real launcher or an emulator yet |
+| "Put it on my home screen" | Every sentence and all three receivers pinned by JVM tests | The pin itself was not driven on a phone: NOT-TESTABLE until the field test |
+| Notification styles | 160 backend checks and the JVM decision tests (locked means the plain notification; each motion's frames) | The animation on a screen — there is no phone or emulator at this desk |
+| Edit HUD (PC) | 25 page checks: add, remove, reorder, and the folded-away fix | The phone's equivalent editor is not built at all (the next slice) |
+| App builder | One real build of exactly this template on the owner's PC, 53.6 s, `BUILD SUCCESSFUL` | The two cards cannot be raised through the installed plugin at `21add9d53` (503 TypeError, fixed by the open PR #996), and no test runs Gradle or adb |
+| Context 16,384 | Measured on the owner's PC: the deployed value, the 4K/8K/16K ladder, 32K/64K, and what 4K did to a long prompt | Sustained multi-turn use — and the phone and voice lanes — were not measured at any of those sizes |
+
+## 5. Where each answer was checked
+
+Read in this worktree, whose `HEAD` is `origin/main` at `21add9d53`. A
+`path:line` is a place in that tree. §4's rows come from these same files, and
+from the `changelog.d/` fragment each change shipped with.
+
+| What this part says | Where it was checked |
+|---|---|
+| History is on the HUD's main strip and on Home's status line | `jarvis-desktop/src/jarvis_hud.html:3384-3401` (the door, titled "History: every conversation kept on this PC"); `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt:1918-1933`; `jarvis-client/app/src/main/java/com/jarvis/client/net/ChatLog.kt:946-947` ("History", "Chat history, kept on your PC") |
+| Archive is one chat, reversible, with no card and no confirm | `docs/JARVIS-API.md:4489-4540` (§18.3); `jarvis-desktop/src/history-actions.js:48-49, 64-81`; `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HistoryScreen.kt:500-530` |
+| Archived is a visible list on both apps | `jarvis-desktop/src/hud-history.js:638-651` ("Your chats" / "Archived"); `jarvis-desktop/src/brain.js:6815-6840`; `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HistoryScreen.kt:136, 766` |
+| Hidden until Show / Windows Hello | `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SecurityScreen.kt:330-341` (the exact words); `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HistoryScreen.kt:581-583, 721`; `jarvis-desktop/src/brain.js:6011-6014`; `docs/JARVIS-API.md:4384-4391` (the route withholds every row, archived included) |
+| Where the hide-lists switch lives | `jarvis-desktop/src/settings.html:1662, 1693-1697`; `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SecurityScreen.kt:201-214` |
+| The calendar is Jarvis's own, kept on the PC, with four routes | `docs/JARVIS-API.md:27509-27708` (§164), especially 27532-27555 and 27640-27648 |
+| The calendar's one switch, and OFF keeps every event | `jarvis-desktop/src/calendar-settings.js:56-59, 101`; `docs/JARVIS-API.md:27545-27555, 27650-27653, 28354-28364` |
+| The phone's calendar screen and its words | `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt:1109-1129`; `jarvis-client/app/src/main/java/com/jarvis/client/net/Calendar.kt:71, 84-94, 127-144`; `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/CalendarPlate.kt:400, 682, 828, 916` |
+| The HUD's calendar card, Add event and three views | `jarvis-desktop/src/jarvis_hud.html:3566-3576` (card and its two buttons), `3779-3797` (tabs), `3869` (the form's submit); `docs/JARVIS-API.md:28259-28287` |
+| No reminder rings yet | `docs/JARVIS-API.md:27587` ("stored only - nothing rings in v1") and 27681 |
+| Chat turns the calendar on or off but cannot add an event | `backend/jarvis_quick.py:4862-4869` (the switch is in `CHANGE_BY_ASKING`); `docs/JARVIS-API.md:27683-27684` ("no natural-language add through the model") |
+| Widgets: preview then Add, three home-screen slots, four arrangements, "Put it on my home screen" | `docs/JARVIS-API.md:16115-16215` (§86); `jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisWidgets.kt:47-73, 93, 128-132, 143` |
+| A widget's private words hide under the setting | `docs/JARVIS-API.md:16163-16177`; `jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisWidgets.kt:67` |
+| Notification styles: preview/Add, closed menu, look only, plain when locked | `docs/JARVIS-API.md:28139-28240` (§167); `jarvis-client/app/src/main/java/com/jarvis/client/net/NotificationStyle.kt:50-74, 238-249`; `jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt:243-244` (`notificationsLocked`) |
+| Edit HUD adds any feature card, and the phone has no equivalent editor | `jarvis-desktop/src/hud-edit.js:1427, 1669` (the button), `1819` (the panel); `docs/JARVIS-API.md:28340-28353`; `changelog.d/2026-10-29-hud-edit-main-screen-cards.md` ("This slice is the desktop half... The phone's equivalent edit screen is the next slice"); `docs/HUD-MAIN-SCREEN-CARDS-2026-10-29.md` (status line) |
+| Parking: public data, minute by minute, phone short answer with a map link | `docs/JARVIS-API.md:27710-27947` (§165), especially 27733-27737 and 27859-27860 |
+| Which parking sentences the PC recognises | `backend/jarvis_quick.py:6837-6868` (the leads and the range shapes), 6990-7015. Measured in this checkout: "find cheap parking near ... from 4:15 pm to 9 pm" and "how much is parking near ... from 4 to 9 pm" both match; "what does parking cost near ..." does **not** match and goes to the model |
+| Attachments: 2.5 MB, one per turn, seven kinds, read on the PC, nothing written | `docs/JARVIS-API.md:27307-27506` (§163); `jarvis-client/app/src/main/java/com/jarvis/client/net/AttachFile.kt:50, 103, 137`; `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/MoreMenuWords.kt:82, 89`; `jarvis-desktop/src/jarvis_hud.html:3430-3435, 6771` |
+| The 16 KB loss and its fix | `backend/jarvis_documents.py:1697-1701` (the comment and the copy); `changelog.d/2026-10-30-attached-files-pipe-rewind.md` |
+| The app builder's two cards, no permissions, debug only | `docs/JARVIS-API.md:27949-28138` (§166); `backend/jarvis_android_builder.py:1-115`; the measured build is in `changelog.d/2026-10-30-android-app-builder.md` |
+| The two cards cannot be raised through the installed plugin at this commit | `backend/jarvis_android_builder.py:1283-1344` (`install()` calls `handle_post` with no gate, tier or spawn) and `1237-1270` (`handle_post` needs those for the two card routes, so `_raise` raises `TypeError`, caught at 1275-1276 as 503); the field test is the open PR #996's own report |
+| No button or chat sentence starts the app builder | `git grep android/template` finds `backend/jarvis_android_builder.py` and `backend/test_android_builder.py` only; `docs/JARVIS-API.md:28115-28118` ("Neither has a screen for this") |
+| The deployed window is 16,384; 32K/64K were measured and are slower | `docs/MEASURED-2026-10-30-CONTEXT.md:102-108` (the table), 167-214 (the follow-up and the decision); `docs/MODEL-TOPOLOGY.md:54-58` |
+| The catalogue is still the 2026-10-05 content | `backend/jarvis_tutorials.py` (`FAQ` has 20 entries; `CATALOGUE` has 36); `docs/JARVIS-API.md:20152-20182` (§114); `docs/HANDOFF-2026-10-05-tutorials-and-ci.md:24` |
+| The proven / not-proven rows in §4 | `changelog.d/2026-10-30-history-one-click-door.md`, `2026-10-30-phone-history-archive-and-one-tap.md`, `2026-10-29-jarvis-calendar.md`, `2026-10-30-calendar-hud-settings-and-fail-closed.md`, `2026-10-30-parking-cost-estimator.md`, `2026-10-29-attached-files-phone.md`, `2026-10-30-widget-layouts.md`, `2026-10-30-widget-put-on-home-screen.md`, `2026-10-30-notification-styles.md`, `2026-10-29-hud-edit-main-screen-cards.md`, `2026-10-30-android-app-builder.md`, `2026-10-30-context-16k-measured.md`; and the `docs/JARVIS-API.md` sections named above |
 
