@@ -375,6 +375,46 @@ NOEXPIRY_REGIONS = (
                 "its",)},
 )
 
+#: no-deadline-cards.patch's hunk 9 - the one hunk of its sixteen that is NOT a
+#: literal replay of the patch. The other fifteen are carried from the patch's
+#: own bytes; this pair is carried as an explicit OLD -> NEW block instead,
+#: because the hunk's pre-image does not exist in the live file (measured
+#: 2026-10-30):
+#:
+#:   * the patch was cut (2026-10-28) against a gate that still had the six-line
+#:     "`raised` is stored WHOLE ..." comment and stored `json.dumps(raised)`
+#:     UNCAPPED - gate-touches.patch's post-image. This PC's live gate holds
+#:     neither: the comment is gone and the `[:1000]` cap is back, while the
+#:     `target_digest` column IS there (so the gate-digest-insert entry is
+#:     already present and never rewrites this block).
+#:   * so the hunk's 12-line pre-image appears 0 times in the live file (and
+#:     exactly 1 time in the published base). `apply-patches.ps1` fails the same
+#:     hunk on this folder, so no replay of the stack can carry it either.
+#:   * the pair below adds ONLY the `waited_until` column and its value. It
+#:     deliberately keeps live's `[:1000]` cap and does not re-add the comment:
+#:     a deploy must not quietly undo a choice the live file already made (the
+#:     same rule the no-expiry region 2/7 context follows for its 180 seconds).
+#:
+#: Either block missing, or appearing anywhere but exactly once, refuses the
+#: whole file rather than guessing. The new block's column line is the hunk-9
+#: override's own probe, so a second deploy skips it instead of replacing twice.
+NODEADLINE_H9_OLD_FILE = "gate-nodeadline-h9-old.txt"
+NODEADLINE_H9_NEW_FILE = "gate-nodeadline-h9-new.txt"
+
+#: The six lines `no-deadline-cards.patch`'s own entry proves presence with, one
+#: from each of six different regions. Declared once because TWO entries use
+#: them: its own, and `no-expiry-cards.patch`'s `or_probes` (that patch's regions
+#: are rewritten by this one - see the entry). None of the six exists in the
+#: published base or in the patch's own pre-image.
+NODEADLINE_PROBES = (
+    "NO TIMER IS DRAWN ON A CARD, AND A CARD WHOSE REQUEST HAS FINISHED LEAVES",
+    "SINCE 2026-10-28 THIS IS THE REQUEST'S PATIENCE, NOT THE CARD'S LIFETIME.",
+    "def _wait_open(row: Any) -> bool:",
+    '"created,raised,target_digest,waited_until)"',
+    '_audit("gate.wait_finished"',
+    "def still_waiting(request_id: str) -> bool:",
+)
+
 #: PWA Slice 3a (2026-10-23): the browser's own files. The page at "/" was the
 #: only file the server could answer, so every stylesheet, font and module the
 #: page loads was a 404 in a normal browser - a half-dressed HUD whose shell
@@ -403,12 +443,19 @@ GATE_GUARDS_CHECK_ANCHOR = "def check(action: str,"
 
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
+#:   or_probes: a second set that proves presence when a LATER patch in the stack
+#:           has rewritten this patch's own text (no-expiry's regions, rewritten
+#:           by no-deadline). ALL of them must be present too; used only where
+#:           that later patch's hunks were cut against this patch's output.
 #:   anchor: the exact line the patch's added lines are inserted BEFORE (must appear once)
 #:   file:   a literal block (a fix with no `.patch`), inserted at `anchor`
 #:   replace_file: a literal block that REPLACES the named old block (must appear once)
 #:   hunks:  True = carry the patch's OWN hunks (a patch that changes several
 #:           disjoint regions of one file); each hunk's pre-image block is
 #:           replaced by its post-image block, in file order.
+#:   adapted_hunks: with `hunks`, {index: {file, replace_file, probes}} for a hunk
+#:           the patch cannot replay because the live file holds a different
+#:           block; that pair replaces the patch's own two blocks for the hunk.
 #: A patch touching a patched file that is absent and has no entry here is refused, not
 #: guessed. Adding a new HUD patch is one small entry, not new code.
 DELTA_TABLE = {
@@ -557,6 +604,15 @@ DELTA_TABLE = {
     # EACH carries post-image probes, so a second deploy sees them as ALREADY
     # and a half-applied gate is refused (old block not exactly once), never
     # guessed at.
+    # `no-deadline-cards.patch` (deployed after these three) rewrites the two
+    # lines these entries used to probe: its hunk 12 rewrites `_pending_card_id`'s
+    # SELECT (adding `action, waited_until`) and its hunk 9 adds the
+    # `waited_until` column to the INSERT. A probe must be a line LATER patches
+    # leave alone, or the first clean dry run after this deploy would call these
+    # already-deployed entries absent and refuse. The probes below are the
+    # digest's own lines, and survive every later patch: the row's digest read,
+    # and the digest computed for the INSERT. Measured on the staged gate with
+    # no-deadline-cards.patch applied, 2026-10-30.
     "gate-digest-init.patch": {
         "jarvis_gate.py": {
             "probes": ("ADD COLUMN target_digest TEXT",),
@@ -566,7 +622,7 @@ DELTA_TABLE = {
     },
     "gate-digest-pending.patch": {
         "jarvis_gate.py": {
-            "probes": ('"SELECT id, detail, prompt, target_digest FROM approvals"',
+            "probes": ('stored_digest = row["target_digest"]',
                        "if stored_digest:"),
             "file": GATE_DIGEST_PENDING_NEW_FILE,
             "replace_file": GATE_DIGEST_PENDING_OLD_FILE,
@@ -574,7 +630,7 @@ DELTA_TABLE = {
     },
     "gate-digest-insert.patch": {
         "jarvis_gate.py": {
-            "probes": ("created,raised,target_digest)",),
+            "probes": ("target_digest = _pending_target(action, detail, prompt)",),
             "file": GATE_DIGEST_INSERT_NEW_FILE,
             "replace_file": GATE_DIGEST_INSERT_OLD_FILE,
         },
@@ -620,9 +676,22 @@ DELTA_TABLE = {
     # entry the probes were the #773 eight, all of which a live gate deployed by
     # #773 satisfies - so the tool said ALREADY_PRESENT and `_expire_overdue`
     # stayed off the owner's PC. That is what the twelve-probe tuple fixes.
+    #
+    # `no-deadline-cards.patch` is applied AFTER this one and rewrites TEN of
+    # these twelve regions again (its hunks were cut against this patch's own
+    # output, so a gate carrying both holds no-deadline's text where #965's
+    # regions were; only regions 5 and 6 still match their block - measured
+    # 2026-10-30). All twelve probes therefore fail on that gate, and without a
+    # second proof a second deploy would re-refuse a patch it had already
+    # applied. `or_probes` is that proof: every no-deadline hunk that rewrote a
+    # region here was cut against this patch's output, so that patch's complete
+    # six-probe post-image means this patch was carried first. A gate with
+    # neither set still goes region by region, and is still refused when a
+    # region's OLD block is not exactly once - nothing is guessed.
     "no-expiry-cards.patch": {
         "jarvis_gate.py": {
             "probes": tuple(r["probes"][0] for r in NOEXPIRY_REGIONS),
+            "or_probes": NODEADLINE_PROBES,
             "regions": NOEXPIRY_REGIONS,
         },
     },
@@ -640,17 +709,19 @@ DELTA_TABLE = {
     # whole patch counts as present, and a half-applied file is finished by the
     # per-hunk check rather than replaced twice. Its `jarvis_owner_check.py`
     # half is a SHIPPED module, copied whole by deploy step 1.
+    # Hunk 9 is the exception: on this PC the block it edits exists in a shape
+    # no hunk pre-image matches (see NODEADLINE_H9_* above), so `adapted_hunks`
+    # substitutes the measured live block and the block with the column added.
+    # The other fifteen hunks are still the patch's own bytes.
     "no-deadline-cards.patch": {
         "jarvis_gate.py": {
-            "probes": (
-                "NO TIMER IS DRAWN ON A CARD, AND A CARD WHOSE REQUEST HAS FINISHED LEAVES",
-                "SINCE 2026-10-28 THIS IS THE REQUEST'S PATIENCE, NOT THE CARD'S LIFETIME.",
-                "def _wait_open(row: Any) -> bool:",
-                '"created,raised,target_digest,waited_until)"',
-                '_audit("gate.wait_finished"',
-                "def still_waiting(request_id: str) -> bool:",
-            ),
+            "probes": NODEADLINE_PROBES,
             "hunks": True,
+            "adapted_hunks": {
+                9: {"file": NODEADLINE_H9_NEW_FILE,
+                    "replace_file": NODEADLINE_H9_OLD_FILE,
+                    "probes": ('"created,raised,target_digest,waited_until)"',)},
+            },
         },
     },
     # PWA Slice 3a (2026-10-23): the browser's own files, as TWO literal
@@ -1337,7 +1408,11 @@ def patch_presence(patch: str, target: str, added: Iterable[str], live_text: str
 
     * A table entry has explicit probes, chosen from several regions of the patch, and
       ALL of them must be present - so a half-inserted block is not mistaken for a
-      complete one. Absent probes mean ABSENT (there is a rule to carry it).
+      complete one. Absent probes mean ABSENT (there is a rule to carry it). An entry
+      may also carry `or_probes`: a later patch in the same stack can rewrite this
+      patch's own text, and where that later patch's hunks were cut against THIS
+      patch's output, its complete post-image proves this one too. ALL of `or_probes`
+      must then be present; a partial set proves nothing.
     * A patch with no entry is PRESENT when at least one of its added lines that is
       absent from its OWN pre-image is present. Later patches legitimately rewrite
       neighbouring lines, so any one such line is enough; but a line that is also on
@@ -1359,6 +1434,14 @@ def patch_presence(patch: str, target: str, added: Iterable[str], live_text: str
     if probes:
         missing = [str(p) for p in probes if str(p) not in live_text]
         if not missing:
+            return PRESENT, ""
+        # A LATER patch in the same stack can rewrite this patch's own text: every
+        # no-expiry region is rewritten by no-deadline-cards.patch, whose hunks were
+        # cut against no-expiry's output. Where that is true, the later patch's
+        # complete post-image is the second proof of presence, and `or_probes` names
+        # it. A partial set proves nothing, exactly like `probes`.
+        also = tuple(entry.get("or_probes") or ())
+        if also and all(str(p) in live_text for p in also):
             return PRESENT, ""
         return ABSENT, (f"{len(missing)} of its {len(probes)} probe(s) are absent from "
                         f"the live file")
@@ -1551,36 +1634,72 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
                 # deploy is clean and a partially deployed file finishes. Any
                 # hunk whose pre-image block is missing or not exactly once
                 # refuses the whole file - a shifted live HUD is never guessed at.
+                # `adapted_hunks` is the one exception (no-deadline-cards.patch's
+                # hunk 9): for a hunk whose live block the patch cannot match, its
+                # own OLD -> NEW pair replaces the patch's two blocks. The pair's
+                # `probes` decide "already there"; a block that is not exactly
+                # once refuses the file, and an index the patch does not have
+                # refuses it too rather than leaving the rule silently unused.
                 hunks = patch_hunks(raw, target)
                 if not hunks:
                     refusals.append(
                         f"{patch} -> {target}: its entry says hunks, but the patch "
                         f"has no hunk for this file; refusing to guess.")
                     continue
+                adapted = entry.get("adapted_hunks") or {}
+                unknown = sorted(set(adapted) - set(range(1, len(hunks) + 1)))
+                if unknown:
+                    refusals.append(
+                        f"{patch} -> {target}: its entry adapts hunk(s) "
+                        f"{', '.join(str(i) for i in unknown)} but the patch has "
+                        f"{len(hunks)} hunk(s); refusing to guess.")
+                    continue
                 region_error = ""
                 changed = False
                 for index, hunk in enumerate(hunks, 1):
-                    old = "\n".join(hunk["old"])
-                    new = "\n".join(hunk["new"])
-                    added = [a for a in hunk["added"] if str(a).strip()]
-                    # Already applied: every one of this hunk's OWN added lines is
-                    # in the file AND its pre-image block is gone. Both halves are
-                    # needed: a removal can re-add a line at a different indentation
-                    # (feedback's `record_turn` call), so an added line may also
-                    # appear in the pre-image - only a gone pre-image block proves
-                    # the hunk was applied.
-                    if added and all(a in text for a in added) and old not in text:
-                        continue
+                    override = adapted.get(index) or {}
+                    if override:
+                        try:
+                            new_lines = _delta_lines(str(override.get("file") or ""))
+                            old_lines = _delta_lines(
+                                str(override.get("replace_file") or ""))
+                            own_probes = tuple(str(p) for p in
+                                               (override.get("probes") or ()))
+                        except Exception as exc:                  # noqa: BLE001
+                            region_error = (
+                                f"{patch} -> {target}: the block file for hunk "
+                                f"{index} could not be read "
+                                f"({type(exc).__name__}); refusing to guess.")
+                            break
+                        if own_probes and all(p in text for p in own_probes):
+                            continue
+                        old = "\n".join(old_lines)
+                        new = "\n".join(new_lines)
+                        label = (f"hunk {index}'s adapted pre-image block "
+                                 f"(replacing {override.get('replace_file')!r})")
+                    else:
+                        old = "\n".join(hunk["old"])
+                        new = "\n".join(hunk["new"])
+                        added = [a for a in hunk["added"] if str(a).strip()]
+                        # Already applied: every one of this hunk's OWN added lines
+                        # is in the file AND its pre-image block is gone. Both
+                        # halves are needed: a removal can re-add a line at a
+                        # different indentation (feedback's `record_turn` call), so
+                        # an added line may also appear in the pre-image - only a
+                        # gone pre-image block proves the hunk was applied.
+                        if added and all(a in text for a in added) and old not in text:
+                            continue
+                        label = f"hunk {index}'s pre-image block"
                     if not old or old == new:
-                        region_error = (f"{patch} -> {target}: hunk {index} has no "
+                        region_error = (f"{patch} -> {target}: {label} has no "
                                         f"pre-image block to replace; refusing to guess.")
                         break
                     count = text.count(old)
                     if count != 1:
                         region_error = (
-                            f"{patch} -> {target}: hunk {index}'s pre-image block "
-                            f"appears {count} time(s) in the live file; expected "
-                            f"exactly 1. Refusing rather than guessing. {APPLY_HINT}")
+                            f"{patch} -> {target}: {label} appears {count} time(s) "
+                            f"in the live file; expected exactly 1. Refusing rather "
+                            f"than guessing. {APPLY_HINT}")
                         break
                     text = text.replace(old, new, 1)
                     changed = True

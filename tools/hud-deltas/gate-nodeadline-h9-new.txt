@@ -1,0 +1,11 @@
+                    c.execute(
+                        "INSERT INTO approvals (id,action,tier,detail,prompt,state,"
+                        "created,raised,target_digest,waited_until)"
+                        " VALUES (?,?,?,?,?,'pending',?,?,?,?)",
+                        (rid, action, tier, json.dumps(detail)[:4000],
+                         (prompt or "")[:2000], now,
+                         json.dumps(raised)[:1000] if raised else None,
+                         target_digest, waited_until))
+                c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
