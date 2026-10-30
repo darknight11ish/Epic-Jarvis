@@ -170,9 +170,26 @@ for (const c of cases) {
     nodes,
     links,
     total: c.entities.length,
+    // 4. every look's OWN flat layout of the same names, so the phone's port
+    //    of each one (GalaxyLayouts.kt) is held to the desktop's own numbers.
+    //    The ids come from the module, never typed here: a look added to
+    //    galaxy-presets.js appears in the fixture, and the phone's test fails
+    //    naming it until that look is ported.
+    looks: Object.fromEntries(presets.BUILT_PRESETS.map((p) => {
+      const l = presets.layoutFor(p.id, graph.nodes);
+      return [p.id, l ? l.nodes.map((n) => [n.x, n.y]) : null];
+    })),
   });
 }
-process.stdout.write(JSON.stringify(out, null, 2) + "\n");
+process.stdout.write(JSON.stringify(
+  {
+    // The look list, ids AND labels, straight out of the module: the phone's
+    // GalaxyLook is a copy of this, and its test compares the two so a look
+    // renamed on the desktop cannot stay stale on the phone.
+    looks: presets.BUILT_PRESETS.map((p) => ({ id: p.id, label: p.label })),
+    cases: out,
+  },
+  null, 2) + "\n");
 """
 
 
@@ -196,15 +213,22 @@ def build() -> dict:
         "_comment": (
             "Made by tools/gen_galaxy_picture_cases.py from the desktop's REAL "
             "jarvis-desktop/src/galaxy-view.js (orderedEntities, buildEntityGraph) "
-            "and jarvis-desktop/src/galaxy-presets.js (layoutZenRing). Do not edit by hand."
+            "and jarvis-desktop/src/galaxy-presets.js (layoutZenRing and every "
+            "look in BUILT_PRESETS). Do not edit by hand."
         ),
         "_contract": (
             "Positions are the desktop's layout units; the phone's fit() scales "
             "them to its canvas. 48 is the phone's cap, applied before the links: "
-            "a dropped name gets no dot and no link."
+            "a dropped name gets no dot and no link. Each case's `looks` holds "
+            "that look's own positions for the SAME names, in the same order - "
+            "so GalaxyLayouts.kt's port of each look is checked against the "
+            "desktop's numbers, and a look missing from the phone is a test that "
+            "fails naming it."
         ),
         "max_nodes": 48,
-        "cases": computed,
+        "looks": computed["looks"],
+        "look_ids": [look["id"] for look in computed["looks"]],
+        "cases": computed["cases"],
     }
 
 
