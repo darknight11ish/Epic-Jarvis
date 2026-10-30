@@ -27518,10 +27518,11 @@ token_ok, read_body)`, called by `plugins/ready/jarvis-calendar/plugin.json`, so
 it needs **no patch** and no change to `jarvis_hud.py`. There is no gate entry:
 nothing leaves the PC, so there is no egress to approve.
 
-**This section is S1's contract.** The HUD card, the phone plate and the
-home-screen widget are the next slices and build against exactly these answer
-shapes. No app calls them yet (`tools/check_parity.py` classifies the four as
-`planned`), and this section says so rather than implying a screen exists.
+**This section is the backend's contract.** The phone's plate and home-screen
+widget, and the desktop's HUD card, are the slices that build on exactly these
+answer shapes; both landed (the phone's in its own slice, the desktop's in
+§166), so all four routes are now `ported` in `tools/check_parity.py` rather
+than `planned`.
 
 ### 164.1 Where the data lives, and the switch
 
@@ -27614,9 +27615,10 @@ newest event.
 
 All four are behind the server's own origin check and `X-Jarvis-Token`, the same
 rules as every other host route; there is **no new permission model**. Reads are
-safe. The three writes are **host-only writes** for now - the HUD commands that
-will call them are the next slice - and each answers in words, never with a
-silent no-op.
+safe. The three writes are host-only writes: the desktop's two go through the
+HUD's own commands (`hud_calendar_add` / `hud_calendar_act`, §166.4) and its
+switch through `calendar_settings` (§166.5), and each answers in words, never
+with a silent no-op.
 
 ```
 GET  /api/calendar?days=7
@@ -27661,12 +27663,12 @@ are the `decisions.d/2026-10-29-jarvis-calendar.md` fragment. A write still need
 the server's origin and token; the feature adds no gate entry, no key, no socket
 and no model call.
 
-### 164.5 Honest limits, and what the next slices own
+### 164.5 Honest limits, and what the later slices own
 
-- **No screen yet** in either app: the HUD card, the phone plate and the Android
-  widget are S2-S4 and build against 164.2-164.3. Until then the feature's entry
-  in Settings > "All features and abilities" says the typed switch works and the
-  screens are the next slice.
+- **Both apps draw it now.** The desktop's HUD card, month/week/day sheet, one
+  form and Settings switch are §166; the phone's plate, day list and
+  home-screen widget are this section's phone half. Settings' entry for the
+  feature names the switch in both apps, and the feature row says `enforced`.
 - **Google and iCal are not on this route.** `sources` says
   `"not_on_a_screen"` for both and the local read never touches either module.
   When their read is wired to a screen, its events slot into the same list with
@@ -27675,9 +27677,9 @@ and no model call.
   invitations or attendees, no sharing, no `.ics`/CalDAV publishing, no
   per-occurrence edit, no colours or drag-to-move, and no natural-language add**
   through the model - "add a meeting Tuesday 3pm" stays §161's sentence.
-- **The phone's widget is Android-only by nature.** When it lands it adds no
-  route: every read it makes is `GET /api/calendar`, which both apps also call,
-  and the one-sided reason goes in `docs/ARCHITECTURE.md` §8 then.
+- **The phone's widget is Android-only by nature.** It adds no route: every read
+  it makes is `GET /api/calendar`, which both apps also call. The one-sided
+  reason for the widget itself is in `docs/ARCHITECTURE.md` §8.
 
 **Tests.** `backend/test_local_calendar.py` (88 checks: all four routes through a
 stand-in Handler, each one refusing a cross-origin request (403) and a missing
@@ -27938,6 +27940,183 @@ py -3 -c "import jarvis_parking as P; print(P.find_parking('Pike Place Market', 
 That was **not** run in this checkout (no live call is made by any test or by
 CI), so "the real services answer" is NOT-TESTABLE here and is the owner's
 field check.
+
+## 166. Calendar in the HUD: the card, three views, one form, its place in Edit HUD and its Settings switch (desktop, added 2026-10-30)
+
+**What this is, in the owner's words.** "a full fledged easy to use calendar
+built into Jarvis", local only, drawn in the HUD, **disableable in Settings**,
+and - the standing rule of 2026-10-22 - *addable to the main screen from Edit
+HUD*. §164 is the store and the four routes; §164's own phone half draws the
+phone's plate and widget. **This section is the DESKTOP half**: the HUD's
+Calendar card, its month/week/day sheet, its one Add/Edit form, its row in the
+Edit HUD editor, and the Settings switch that turns the whole thing off. No
+route is added by any of it - every read and write here is one of §164.3's
+five.
+
+**This section number.** §164 is the backend slice's contract and §165 the
+parking answer; the calendar's own desktop slice was written while 166 was
+free, and it sits here in numeric order rather than at the end of the file.
+Nothing else was renumbered.
+
+### 166.1 What the owner sees
+
+One **rail card** (`#rail-calendar`, directly above the Reminders card) and one
+**full sheet** (`#calendar-panel`, over the stage, dismissed by Escape, its
+Close button, or a click outside - the same shape as `#galaxy-options`). Both
+draw from the SAME `GET /api/calendar?days=90` read, so the card and the sheet
+can never disagree about the owner's day.
+
+- The card says what is next: today's clock and zone, then up to four events
+  that have not already ended, each with its time (or "All day"), its title, a
+  "Now" marker for the one happening, and a "+N more in the next 7 days" line.
+  Its window is seven days **on purpose** - the sentence it shows is "in the
+  next 7 days", so the count is of that same window, never of everything.
+- The sheet has three views, switched by a `role="tab"` strip and stored in
+  `html[data-cal-view]`: **Month** (always six full weeks, Sunday first, so the
+  height never jumps; a multi-day event is ONE bar clipped to the week, with
+  lanes so two never overlap), **Week** (the seven columns around the chosen
+  day, the same bars), and **Day** (an hour-free list in time order - no hour
+  grid is faked). Arrow keys move the chosen day; every view names an empty day
+  in words rather than showing a blank.
+- **One form**, used for both Add and Edit: title, date, all-day, start and end
+  time, last day, place, notes, reminder minutes and the repeat choice. Delete
+  is in the same form, asks "press again to delete" first because a delete
+  cannot be undone, and is hidden until an event is being edited.
+- **Every state is a sentence**, never a blank: OFF, an empty window, a day
+  with nothing on it, a read that failed (with the PC's own reason where it
+  gave one), and the App-lock read ("titles, places and notes are hidden; the
+  dates, times and counts are still right"). A card that vanishes reads as a
+  fault, so the OFF card keeps its place and says so.
+
+### 166.2 The page itself, and what the twins are
+
+The calendar's script is one block INSIDE `jarvis-desktop/src/jarvis_hud.html`
+(the heading `/* ── the calendar (2026-10-29) ──`), not a module: the page is
+vendored to the backend and must stay byte-identical in its three copies
+(`backend/jarvis_hud.html` and `jarvis-backend/jarvis_hud.html`), which
+`tests/hud-calendar.mjs` proves. Its test hook is `window.__hudCalendar`, and
+`tests/hud-calendar.mjs` takes that block out of the real page and runs it
+against a tiny fake document - the real logic, with no browser.
+
+### 166.3 The read, and the lock
+
+`GET /api/calendar?days=N` is the ONE read, on `hud_proxy.rs`'s fixed
+`HUD_GET_PATHS` list. It is also the only path on that list that carries a
+query, so `allowed_get` accepts exactly `days=` 1-90 with no sign, no padding
+zero, no second parameter, and rebuilds the path from the number it checked -
+what reaches the PC is never the page's own string. `/api/calendar/add`,
+`/api/calendar/act` and `/api/calendar/settings` are **refused** here: the
+writes are the two commands below.
+
+While App lock or "Hide memory lists" is on, `lock/rules.rs` runs the answer
+through `brain::calendar::redact_read`: every event keeps its id, date, times,
+all-day flag, reminder minutes, recurrence, zone and source, while the title,
+place and notes become `""`, and `hidden`/`hidden_count` say how many titles
+were blanked - so the card can still say "3 events - hidden" and the sheet can
+still draw the shape of the week. A body that is not JSON becomes
+`{available:false, hidden:true}` rather than the unreadable original.
+
+### 166.4 The two writes
+
+`hud_calendar_add` and `hud_calendar_act` (`src-tauri/src/hud_calendar.rs`) are
+the page's only way to write: the HUD holds no token, so the page cannot POST.
+Both are **held on a stale link** (`brain::require_link_live`), and both build
+their body in `brain/calendar.rs`, which is the one place the shape is decided:
+
+- `add_body`: one event, title required and capped at 300 characters, a real
+  `YYYY-MM-DD` day, `HH:MM` times, an end that cannot be before the start, an
+  all-day tick that drops the times, place ≤300, notes ≤2,000, a reminder
+  0-10,080 minutes, and a repeat word from the store's own three plus "none".
+  An empty optional box is simply not sent.
+- `act_body`: exactly two verbs, `delete` or `update` (with the same fields),
+  one id of the store's own shape (`c` + 10 lowercase hex). There is no list
+  form, no delete-all and no clear-range - the same narrowness
+  `/api/schedule/act` has - and a delete that carries fields is refused.
+
+**No approval card, for either** - the owner's 2026-10-29 ruling (decision D1 of
+the design brief): one row on this PC, no bulk form, ids-only in the audit line.
+The other direction of the same ruling: **the switch is not a HUD write**. The
+page only READS the PC's `on` flag and says the feature is off in words;
+`capabilities/hud.json` records why the switch is not that window's.
+
+### 166.5 Its place in Edit HUD, and the Settings row
+
+- **Edit HUD.** The calendar is a real registry card: `CARD_REGISTRY`'s
+  `"calendar"` row (label "Calendar", `right_rail`, `col_span` 12, ordered above
+  the waiting cards, not protected), `MOVABLE_IDS`, and `CARD_DOM.calendar ->
+  ["#rail-calendar"]`. Every built-in preset in `src/hud-layout.js` carries it,
+  and `contract/hud-presets.json` mirrors them. The half that makes it true for
+  the OWNER rather than only for a fresh install is `withRegistryCards` in
+  `src/hud-edit.js`: a saved layout is a CLOSED list, so a card a later release
+  adds is both invisible and unaddable unless it is put back - that function
+  re-adds any movable card the document does not name, at its registry
+  defaults, **in memory** (opening the HUD is not an edit; the first real change
+  saves the document that by then carries it), and it never un-hides a card the
+  owner hid himself.
+- **Settings.** `settings.html`'s "Jarvis Calendar" card
+  (`src/calendar-settings.js`) draws the ONE switch: `{"on": true|false}` on
+  `POST /api/calendar/settings`, the same route and the same value the phone's
+  `CalendarSettingsPlate.kt` row and the typed sentence "turn off the Jarvis
+  calendar" reach. On the desktop it goes through the `calendar_settings`
+  command (`src-tauri/src/calendar_settings.rs`), which reads the switch from
+  `GET /api/calendar?days=1`'s `on` (there is no GET settings route) and
+  **drops every event, title, place and count in Rust** - the Settings window
+  draws one row and cannot read the owner's day. No card either way, immediate,
+  never held on a stale link (the same class as the Anti-Slop filter), and
+  **OFF never deletes an event**.
+- The row it used to have in `jarvis_feature_guide.SETTINGS_GAPS` (a typed
+  switch with no page to draw it) is **closed and removed**: both Settings
+  halves exist now, and `contract/feature-controls.json`'s `jarvis-calendar` row
+  moved from `planned` to `enforced` with a real desktop and phone location.
+
+Both apps have every one of these surfaces, so `tools/check_parity.py`
+classifies the four calendar routes `ported` and there is **nothing one-sided
+to record in `docs/ARCHITECTURE.md` §8** for this feature. The one difference
+that stays is a shape, not a missing half: the desktop draws a month/week/day
+sheet in its own window and the phone draws its own plate and home-screen
+widget, from the same read.
+
+### 166.6 Failing closed
+
+A shape neither app understands must never be drawn as a real calendar, and
+this bit was wrong before it shipped (2026-10-30):
+
+- The page's `readCalendar` used to treat every object as a calendar unless it
+  said `available: false`. So `?id=`'s answer `{"ok":true,"event":{...}}`, a
+  bare event, and an empty body all became **"an available calendar with no
+  events"** - drawn as *"Nothing in the next 7 days"*, the most reassuring
+  possible lie about the owner's own day. It now requires a real boolean
+  `available` AND, when true, an `events` array; anything else is refused in
+  words ("answered in a shape this window does not understand ... your events
+  are kept on the PC") and draws nothing.
+- The two write handlers used to test `reply.ok === false`, so an answer with no
+  `ok` at all - an empty body, an older backend - was reported as **"Event
+  added."** over a write that may never have happened. They now require
+  `ok: true` positively.
+- The Settings command applies the same rule in Rust: an answer that does not
+  carry `on` as a real boolean is an error, never "off" and never "on".
+
+### 166.7 What is proven, and what is not
+
+- `jarvis-desktop/tests/hud-calendar.mjs`: **33 checks, browser-free** (it runs
+  the page's own block against a fake document). Every state in words; the
+  three views; the bars and their lanes; the form's exact argument objects for
+  both commands; the one allowed read and its bounded query; the redaction arm;
+  the registry card, `MOVABLE_IDS`, `CARD_DOM`, every preset and the contract;
+  a saved layout getting the card back; the three copies byte-identical; and
+  the two fail-closed checks above.
+- Rust, beside the code: `brain/calendar.rs` (10 tests - the exact bodies, the
+  caps, the refusals, the redaction, and no network of its own),
+  `hud_calendar.rs` (2 - the form is the contract, one change is one event and
+  two verbs) and `calendar_settings.rs` (5 - one field per request, the read is
+  the switch and never an event, an answer without `on` is an error).
+  `lock/rules.rs`'s own test names `/api/calendar` in the redaction arm.
+- `backend/test_local_calendar.py` is §164's 88 checks; `tools/check_parity.py`
+  must print "No undecided drift." with the four rows `ported`.
+- **NOT proven here:** the real WebView2 window. This desk has no Playwright
+  (the page-level `tests/hud.mjs` and `tests/shots.mjs` cannot run), so a
+  rebuilt and installed desktop is the field check, and the geometry of the
+  sheet in the real window is the owner's eye rather than a test.
 
 ## 167. Notification styles: a closed look for the phone's notifications, described by talking (phone and backend, added 2026-10-30)
 
