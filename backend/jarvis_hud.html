@@ -3335,6 +3335,12 @@ html.hh-open, html.hh-open body{overflow:hidden;}#hh-backdrop{position:fixed;ins
          that, so a button here always does something when it is shown. -->
     <span class="look-actions" id="galaxy-look-actions" hidden></span>
   </div>
+  <!-- Why the look stayed on this device, when the PC could not be told
+       (2026-10-28). Empty when the PC has it, which is the normal case: the
+       switch writes through `hud_set_galaxy_look`, the same save the face
+       uses, so the phone draws the same Galaxy. A page with no shell has no
+       road at all, and says nothing here because there is nothing to sync to. -->
+  <p class="look-note" id="galaxy-look-note" role="status" aria-live="polite"></p>
   <div class="go-row">
     <label class="go-label" for="gsearch">Search</label>
     <input id="gsearch" type="text" placeholder="Search the brain…" autocomplete="off">
@@ -3904,6 +3910,12 @@ const reactor = (() => {
     ready = true;
     sync();
     post();
+    // The Galaxy's look follows the SAME document, but the Galaxy owns that
+    // half: it hangs its own listener on `jarvis-appearance` (adoptLook in the
+    // galaxy module below). Not here - `lookEngine`, `lookId` and `setLook`
+    // are that module's own, and this function is in the reactor's, so naming
+    // them here was a ReferenceError that killed the switcher's whole paint
+    // (measured 2026-10-29 by tests/hud.mjs and hud-galaxy-looks.mjs).
   }
   window.addEventListener("jarvis-appearance", e => adopt(e.detail));
 
@@ -4310,9 +4322,38 @@ const galaxy = (() => {
    *  A device that has NEVER chosen a look gets the owner's default instead
    *  (Planetary Orrery, 2026-10-27). The id comes from galaxy-cosmos.js itself,
    *  never a copy of it here; until that module has loaded this answers the
-   *  constellation, and the module's arrival applies the default. */
+   *  constellation, and the module's arrival applies the default.
+   *
+   *  Since 2026-10-28 the OWNER'S look is not this device's key any more: it is
+   *  `galaxy` in the shared appearance document, so the PC's two windows and
+   *  the phone all show one Galaxy (the owner: "including changing the jarvis
+   *  face model and galaxy models"). This device's key is still read, and is
+   *  what a plain browser with no shell falls back to - a browser has no
+   *  appearance document at all.
+   *
+   *  It is read through `window.__jarvisAppearance`, the page's own seam:
+   *  hud_bootstrap.js sets that BEFORE it dispatches `jarvis-appearance`, so it
+   *  is always the current document. The reactor's `appearance` is a `let`
+   *  inside that module's own function, invisible here - naming it here threw
+   *  ReferenceError and this function is what the switcher's first paint calls,
+   *  so the whole look menu came up empty (measured 2026-10-29). */
+  function ownerAppearance(){
+    return window.__jarvisAppearance || null;
+  }
+
+  /** The owner's look id from the shared document, or "" when this page has no
+   *  document (a plain browser) or the document has no look in it. */
+  function ownerLook(){
+    const doc = ownerAppearance();
+    return doc && typeof doc.galaxy === "string" ? doc.galaxy : "";
+  }
+
   function lookStored(){
     if(!lookEngine) return null;
+    const shared = ownerLook();
+    if(shared){
+      return lookEngine.storedPreset(shared);
+    }
     try{
       const raw = localStorage.getItem(lookEngine.PRESET_STORAGE_KEY);
       if(raw === null && cosmosModule) return cosmosModule.COSMOS_DEFAULT_LOOK;
@@ -4325,6 +4366,7 @@ const galaxy = (() => {
    *  silently overriding whatever it had. */
   function lookChosen(){
     if(!lookEngine) return true;
+    if(ownerLook()) return true;
     try{ return localStorage.getItem(lookEngine.PRESET_STORAGE_KEY) !== null; }
     catch(e){ return true; }
   }
@@ -4392,8 +4434,15 @@ const galaxy = (() => {
 
   /** Show one look: lay it out, remember it, keep the switcher in step. Anything
    *  the module does not recognise reads as the constellation, so a bad value
-   *  from an older build cannot break this page. */
-  function setLook(id){
+   *  from an older build cannot break this page.
+   *
+   *  `tellPc` is false only when the look CAME FROM the appearance document -
+   *  replaying the owner's own choice back at the server would be a write on
+   *  every event, and two windows echoing each other is how a setting starts
+   *  rewriting itself. From the switch, the look is posted through this
+   *  window's narrow `hud_set_galaxy_look` (`hud-presets.js`), the same save
+   *  the face uses, so the phone draws it too. */
+  function setLook(id, tellPc){
     if(!lookEngine) return lookOf();
     const want = lookEngine.storedPreset(id);
     lookId = want;
@@ -4401,7 +4450,28 @@ const galaxy = (() => {
     applyLens();               // replaces every node, so the look is re-placed
     const select = document.getElementById("galaxy-look");
     if(select) select.value = want;
+    if(tellPc !== false && typeof window.__jarvisGalaxyLook === "function"
+       && window.__TAURI__ && window.__TAURI__.core){
+      // Fire and forget, but say when the PC could not be told: this window
+      // keeps its own key either way, so the change is real here and the phone
+      // may still be on the old Galaxy - and silence would claim otherwise.
+      Promise.resolve()
+        .then(() => window.__jarvisGalaxyLook(window, want))
+        .then((loaded) => {
+          const note = loaded && typeof loaded.note === "string" ? loaded.note.trim() : "";
+          const shared = Boolean(loaded && loaded.shared === true);
+          lookSay(shared ? "" : (note || "Saved on this device only."));
+        })
+        .catch(() => lookSay("Saved on this device. The PC could not be told, so your phone may still show a different Galaxy."));
+    }
     return want;
+  }
+
+  /** The Look row's own status line: empty when the PC has the look. Never a
+   *  claim the save did not earn - the same rule the face picker follows. */
+  function lookSay(words){
+    const el = document.getElementById("galaxy-look-note");
+    if(el) el.textContent = words || "";
   }
 
   function loadLookEngine(){
@@ -4416,6 +4486,28 @@ const galaxy = (() => {
     }).catch(() => null);   // no module beside the page: the constellation stays
     return lookLoading;
   }
+
+  /** The owner's look, from the shared appearance document (2026-10-28). A look
+   *  chosen on the phone or in the Brain window arrives on the same
+   *  `jarvis-appearance` event that repaints the face, so this window's Galaxy
+   *  matches without a reload. `false` = "do not tell the PC back": this look
+   *  came FROM the PC, and two windows echoing each other is how a setting
+   *  starts rewriting itself.
+   *
+   *  The listener lives HERE, in the module that owns `lookEngine`, `lookId` and
+   *  `setLook` - not in the reactor. The reactor's `adopt()` is in a different
+   *  function that cannot see them, and naming them there threw ReferenceError
+   *  on every push (measured 2026-10-29). The reactor's listener is registered
+   *  first, and hud_bootstrap.js has already set `window.__jarvisAppearance`
+   *  before dispatching, so by the time this runs the document is current. */
+  function adoptLook(){
+    if(!lookEngine) return;
+    const shared = ownerLook();
+    if(!shared) return;
+    const want = lookEngine.storedPreset(shared);
+    if(want !== lookId) setLook(want, false);
+  }
+  window.addEventListener("jarvis-appearance", adoptLook);
 
   /** Load galaxy-cosmos.js: the 3D engine's pure half, then the engine itself
    *  only when a look needs it. Failure here is the flat picture, not an error. */
@@ -9693,6 +9785,15 @@ import { mountHudPresets, mountCurrentModels } from "./hud-presets.js";
  * tests/hud-current-models.mjs, and there is no reason to disturb a pin that
  * is still true. */
 import { mountFacePicker } from "./hud-presets.js";
+/* And the Look switch's one write, on a THIRD line for the same reason:
+ * tests/face-models-rail.mjs pins the line above verbatim, so a second name
+ * riding it would fail a pin that is otherwise still true. The Galaxy code is
+ * in the page's own earlier script block, which cannot import this module, so
+ * the function goes on the page's own namespace - the same way
+ * window.__jarvisHudEdit and window.__jarvisAppearance already cross that
+ * line. Nothing but the look id is passed, and the command proves it. */
+import { setGalaxyLookOnPc } from "./hud-presets.js";
+window.__jarvisGalaxyLook = setGalaxyLookOnPc;
 /* PWA slice 2: a plain browser keeps per-DEVICE layouts (localStorage, via
  * hud-layout-store.js) instead of the host PC's store, so the editor and the
  * Layouts menu are offered there too. The store still uses Tauri IPC when
