@@ -145,12 +145,17 @@ def t_the_patch_and_the_base():
     # same rule test_gate_touches.py, test_gate_risk_rows.py, test_referee.py,
     # test_screen_attach.py and test_devices.py use: every new patch is
     # appended, so the next one pushes this one up the list, and that is not a
-    # defect in either of them. ONE is there now:
+    # defect in either of them. TWO are there now:
     # learning-extract-reason.patch (2026-10-28, DEF-017) touches
     # jarvis_extract.py only - ONE file, no install block, no route, no gate
     # row - so it rewrites nothing this patch wrote and the loader's anchor
-    # ("Before the main socket") is untouched by both.
-    later = {"learning-extract-reason.patch"}
+    # ("Before the main socket") is untouched by both; and
+    # attached-file.patch (2026-10-29, file attachment in chat) is stacked
+    # after it: its hunks are the router call's `has_file=` line and a strip in
+    # `_open`, and it adds no install block, route or gate row of its own
+    # (test_attached_file.py proves its context is what the earlier patches
+    # wrote). Neither moves the loader's anchor.
+    later = {"learning-extract-reason.patch", "attached-file.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names
