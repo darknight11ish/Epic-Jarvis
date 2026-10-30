@@ -146,14 +146,41 @@ class SignedApprovalTest {
     }
 
     @Test
-    fun `the approve body is the old one without a signature and carries one with it`() {
-        assertEquals("""{"id":"a1"}""", SignedApproval.approveBody("a1", null))
+    fun `the approve body is the old one plus who answered, and carries a signature when there is one`() {
+        assertEquals("""{"id":"a1","by":"phone"}""", SignedApproval.approveBody("a1", null))
         val body = obj(SignedApproval.approveBody("a1", SignedApproval.Signature("d3f9a1c2e", "N", "SIG")))
         assertEquals("a1", (body["id"] as JsonPrimitive).content)
+        assertEquals("phone", (body["by"] as JsonPrimitive).content)
         val sig = body["signature"] as JsonObject
         assertEquals("d3f9a1c2e", (sig["device"] as JsonPrimitive).content)
         assertEquals("N", (sig["nonce"] as JsonPrimitive).content)
         assertEquals("SIG", (sig["sig"] as JsonPrimitive).content)
+    }
+
+    /**
+     * The other half of the owner's 2026-10-29 field evidence: a DENY tapped on
+     * the phone was stored by the PC as `decided_by:"hud"`, because the phone
+     * sent only `{"id"}` and `jarvis_hud.py`'s route defaults an absent `by` to
+     * the HUD. `docs/JARVIS-API.md` §7 carried that as an open disagreement
+     * between the two clients; it is closed here.
+     *
+     * Both bodies, in one test, because an approve that says who answered and a
+     * deny that does not is the same bug half-fixed - and deny is the one the
+     * owner actually taps on a lock screen.
+     */
+    @Test
+    fun `approve and deny both say this phone answered`() {
+        assertEquals("""{"id":"a1","by":"phone"}""", SignedApproval.denyBody("a1"))
+        val approve = obj(SignedApproval.approveBody("a1", null))
+        val deny = obj(SignedApproval.denyBody("a1"))
+        assertEquals(
+            "one answer to \"who decided this?\", whichever way the card was answered",
+            (approve["by"] as JsonPrimitive).content,
+            (deny["by"] as JsonPrimitive).content,
+        )
+        // The value itself: not "hud" (the browser HUD's), not
+        // "desktop_spotlight" (the desktop's). Those two are other surfaces.
+        assertEquals("phone", SignedApproval.BY)
     }
 
     @Test

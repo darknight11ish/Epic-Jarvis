@@ -292,6 +292,20 @@ $PATCHES = @(
     # after the prompt is what keeps a card with no deadline answerable only
     # while it is the live one.
     'no-expiry-cards.patch'
+    # NO card shows a countdown (the owner's ruling of 2026-10-28: "if there
+    # doesn't need to be a time limit don't have one"), and a card whose
+    # request has stopped waiting leaves the queue: #965's read-time sweep is
+    # KEPT, re-keyed on the moment recorded on the row (`waited_until`) plus
+    # the same 60-second grace, so no screen is handed a live Approve that can
+    # only answer 409. A late yes inside the grace is still refused in plain
+    # words, and a Deny always works. Its context is no-expiry-cards' output -
+    # the APPROVAL_NEVER_EXPIRES block, timeout_for()'s docstring, check()'s
+    # deadline line and pending()'s sweep call - so it MUST come after that
+    # patch; its other hunks sit on the module's own INSERT, late-answer block,
+    # decide(), _pending_card_id() and withdraw() docstring, none of which an
+    # earlier patch writes. Its jarvis_owner_check.py half is the shipped
+    # module.
+    'no-deadline-cards.patch'
     # Refuses every spelling of "every network interface" ("0", "0x0", ...)
     # as the bind address. Its context is loopback-too's output (the
     # _loopback_companion function and its call in main()), so it goes
@@ -1835,6 +1849,36 @@ $PATCHES = @(
     # after f01-manual-lane-gate.patch, and its context is the `_local_llm`
     # block of the owner's own file, which no patch before it writes.
     'learning-extract-reason.patch'
+
+    # attached-file.patch (2026-10-29, the owner's "file attachment in chat",
+    # both apps at once; the design is .dsh-scratch/
+    # FILE-UPLOAD-FEASIBILITY-2026-10-29/REPORT.md sections 7-8): the file the
+    # owner attaches rides in the NEWEST user message of the /api/chat request
+    # that already exists, and this PC turns it into text before any model sees
+    # it - no route, no upload, no temporary store, nothing written to disk.
+    # TWO hunks, both in jarvis_hud.py:
+    #   1. `_file_turn`, beside screen.patch's `_screen_turn` (its context is
+    #      that patch's own lines), and `has_file=_file_turn(body),` in the ONE
+    #      jarvis_router.choose() call - context: cloud-escalate.patch's
+    #      `has_screen=` line and f01-manual-lane-gate's own call shape, so it
+    #      goes after both and after screen.patch.
+    #   2. the relay belt in `_open()`, on chat-history.patch's own
+    #      `_chat_client_fields_off` lines: the `attachment` field comes off
+    #      every message of every relay request, unconditionally, whatever route
+    #      got the turn there. The router's gate "file" is the brace; this is
+    #      the belt, and it is why the file's words cannot be in a cloud request
+    #      even when a client forgot its `has_file` flag.
+    # The `attachment` field is NOT put in _CHAT_CLIENT_FIELDS, and that is not
+    # an oversight: that list is applied to the messages BEFORE the local
+    # answering loop is handed them, so a field on it would be gone before
+    # jarvis_agent.with_file_text could read it. The relay's own copy is what
+    # needs stripping, and hunk 2 strips it there.
+    # The reader itself is jarvis_attached_file.py (shipped whole, no patch):
+    # jarvis_agent.with_file_text replaces the field with a text part and
+    # jarvis_router.choose() answers gate "file". Needs jarvis_attached_file.py
+    # copied in (the $SHIPPED list above does it); without it every attachment
+    # is refused in plain words and nothing is read.
+    'attached-file.patch'
     'plugin-loader.patch'
 )
 
@@ -2487,6 +2531,18 @@ $SHIPPED = @(
     # SHIPPED list.
     'jarvis_connect_account.py'
     'jarvis_connect_account_wiring.py'
+    # A file the owner ATTACHED to a chat (2026-10-29, the owner chose "both
+    # apps at once"; the design is .dsh-scratch/FILE-UPLOAD-FEASIBILITY-2026-10-29/
+    # REPORT.md): validation by kind, magic bytes and size, the never-read
+    # names, the zip-bomb refusal, the converter over a STREAM (jarvis_documents'
+    # new stdin mode, so nothing is written to disk), the 12,000-character cap,
+    # the chat-marker strip and the outside-text sentence.
+    # jarvis_agent.with_file_text calls it and jarvis_router.choose(has_file=...)
+    # answers gate "file"; attached-file.patch adds the ONE line to the HUD's
+    # router call and the relay belt. No route of its own, no new switch and no
+    # new permission on either app. The same entry is at the end of
+    # backend/_where.py's SHIPPED list.
+    'jarvis_attached_file.py'
     # What a parking stay costs, minute by minute (2026-10-30, the parking
     # blueprint of 2026-10-29). Its sentences are answered by jarvis_quick.py
     # (already shipped above), so this adds no patch, no route, no gate list

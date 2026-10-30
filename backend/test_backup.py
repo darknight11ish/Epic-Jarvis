@@ -4340,6 +4340,79 @@ def t_nits_an_oversized_or_damaged_last_restore_is_ignored():
     check("a damaged record file is ignored", B._load_restore_result() == {})
 
 
+def t_an_attached_files_body_is_never_in_a_backup():
+    """An attached file's body never rides in a `.jbak` (2026-10-30, finding 1).
+
+    Two halves, both proven on the archive that is really built: the history
+    row the backup carries holds only the owner's own words (decrypted with the
+    key the archive itself carries - exclusion, not merely encryption), and no
+    member of the archive holds the file's plain text, its base64 or its name.
+    The backup boundary's own guard leaves out and NAMES a settings file that
+    somehow holds a body.
+    """
+    import base64
+    import jarvis_chat_log as CH
+
+    secret = "The access code for the shed is 4417-QUARTZ"
+    raw = b"%PDF-1.4\n" + secret.encode("utf-8") + b"\n%%EOF\n"
+    att = {"name": "tenancy-notes.pdf", "mime": "application/pdf",
+           "size": len(raw), "data": base64.b64encode(raw).decode("ascii")}
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    log = CH.ChatLog(conf / "chat-history.db", conf / "chat-history.json", lambda: _K1)
+    out = log.record_turn(
+        {"conversation_id": "conv-attach01", "device": "desktop",
+         "messages": [{"role": "user", "content": "a private word", "attachment": att}]},
+        lane="test", turn={"answer": "Noted.", "finish_reason": "stop"})
+    check("the turn carrying an attachment is recorded", out.get("recorded"), out)
+    row = log.get("conv-attach01")
+    texts = [t["text"] for t in row["turns"]] if row else []
+    check("the stored row is the owner's own words only", texts[:1] == ["a private word"], texts)
+    check("... never the file's body, its base64 or its name",
+          not any(secret in t or att["data"][:40] in t or "tenancy-notes.pdf" in t
+                  for t in texts), texts)
+
+    with _FakeCredentials() as cm:
+        cm.items["Jarvis Backend/chat history key"] = base64.b64encode(_K1).decode()
+        zip_bytes, manifest = B.build_archive()
+    check("the archive carries the history and the key that opens it",
+          manifest["chat_history_key"] is True
+          and "chat-history.db" in manifest["databases"], manifest)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+        every = b"".join(zf.read(n) for n in names)
+        archived_db = zf.read("db/chat-history.db")
+    check("no member of the backup holds the file's plain text", secret.encode() not in every)
+    check("... nor its base64", att["data"][:40].encode() not in every)
+    check("... nor its name", b"tenancy-notes.pdf" not in every)
+    opened = Path(tempfile.mkdtemp(dir=str(TMP), prefix="archived-history-")) / "chat-history.db"
+    opened.write_bytes(archived_db)
+    archived = CH.ChatLog(opened, opened.with_suffix(".json"), lambda: _K1)
+    got = archived.get("conv-attach01")
+    check("the archived row, decrypted, is the owner's own words",
+          got is not None and [t["text"] for t in got["turns"]][:1] == ["a private word"], got)
+    check("... and holds no part of the file",
+          got is not None and not any(secret in t["text"] for t in got["turns"]), got)
+
+    # The backup boundary's own guard: a settings file holding a body is left
+    # out AND named. It should never fire; if it ever does, the body does not
+    # leave this PC inside a backup.
+    (conf / "leaky-settings.json").write_text(
+        json.dumps({"theme": "dark", "attachment": att}), encoding="utf-8")
+    with _FakeCredentials() as cm:
+        cm.items["Jarvis Backend/chat history key"] = base64.b64encode(_K1).decode()
+        zb2, man2 = B.build_archive()
+    with zipfile.ZipFile(io.BytesIO(zb2)) as zf:
+        names2 = zf.namelist()
+        every2 = b"".join(zf.read(n) for n in names2)
+    check("a settings file holding a file's body is not archived",
+          "settings/leaky-settings.json" not in names2, names2)
+    check("... its body is in no member of the archive", secret.encode() not in every2)
+    check("... and the manifest names it, with the reason",
+          any("leaky-settings.json" in e and B.ATTACHMENT_BODY_REFUSED in e
+              for e in man2.get("excluded_settings", [])), man2.get("excluded_settings"))
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
