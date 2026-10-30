@@ -17166,8 +17166,9 @@ audit: `projects.db` was missing from both.
 
 The owner's decisions (`CLAUDE.md`, 2026-09-28): "Sun and moon behind the
 animals, optional (off by default)" - the real sun and moon for the date and
-time, worked out on the owner's own devices from a town typed once on the
-PC, nothing online - and "Weather in the animals' scene, optional (off by
+time, worked out on the owner's own devices from a town the owner types on
+either app (the PC keeps it; the phone may type it too since 2026-10-29),
+nothing online - and "Weather in the animals' scene, optional (off by
 default)": rain, snow or wind, from the owner's own Home Assistant or from
 Open-Meteo online, whose ON is an approval card.
 
