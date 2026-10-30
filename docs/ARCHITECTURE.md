@@ -884,8 +884,8 @@ the tiers themselves are section 3 above.)
 | **The next message's lane** - the big HUD's ONE Cloud button (the same lane switch the bar always had; `jarvis_hud.html`'s rail) | It routes one message: it approves nothing, sends nothing, stores nothing, and it marks nothing until `/api/status` says the proxy is up. | The server's own rule-1 refusals still apply: a turn touching private material never runs on a cloud lane (`jarvis_agent.local_model_refusal`; `_one_call` refuses it again before any card - section 4). |
 | **Actions that only reduce or refuse** - Stop, Stop everything, Pause, Cancel, Mute, Deny and Undo | "Stopping is never gated" (section 3 above): each makes Jarvis do less or refuses a request, so a card asking permission to stop would be a card that cannot be safely refused. | Stop everything also refuses the remaining tool calls of the answer being written, and works while App lock is on; Deny is always the safe direction; Undo only puts back what ONE card removed, inside 10 minutes; none of them approves, denies, starts or resumes anything (only Resume raises a card). |
 
-**The Jarvis calendar (owner's decision 2026-10-29) is the row above, second
-from the top of this table.** The owner asked for "a full fledged easy to use
+**The Jarvis calendar (owner's decision 2026-10-29) is the third row of that
+table, "One local calendar event".** The owner asked for "a full fledged easy to use
 calendar built into Jarvis ... disabled but on by default", local-only and
 shown beside Google Calendar and iCal, never synced out. It is a **third
 reader**, not a fourth `jarvis_google_calendar.MODES` value (that list means
