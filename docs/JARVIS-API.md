@@ -16245,6 +16245,16 @@ and events.
   slot count and the app's three board receivers are held equal by
   `JarvisWidgetsTest.everySlotHasAReceiver` - they were not before 2026-10-30,
   when the picker offered five and the app shipped three.
+  **Put it on my home screen** (`widget/WidgetPin.kt`, added 2026-10-30): the
+  owner asked to build a widget by chatting and add it to the home screen
+  immediately, so a slot that has a widget offers this button and the phone
+  asks the launcher to place it (`AppWidgetManager.requestPinAppWidget`, API
+  26+), instead of only printing the touch-and-hold route. It says one of
+  three true things: that widget is already on the home screen; the home
+  screen was **asked** (Android reports that the request was sent, not that a
+  widget was placed, so a launcher may still show its own confirm or refuse);
+  or this launcher cannot add widgets on request, with the touch-and-hold
+  route in words. No route, no card, nothing sent to the PC.
 - **Phone home screen, "Jarvis widget" 1-3** (`widget/JarvisBoardWidget.kt`,
   Glance 1.1.1 - no version change was needed): draws the blocks natively, in
   the widget's arrangement (`JarvisWidgets.boardOf`: the large number at 28sp

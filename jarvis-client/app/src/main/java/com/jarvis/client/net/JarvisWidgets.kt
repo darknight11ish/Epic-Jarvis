@@ -53,8 +53,9 @@ object JarvisWidgets {
         "For example: \"my next 3 reminders, my to-do count and a 10-minute timer button\". You can " +
             "also say \"make me a widget showing ...\" to Jarvis, or ask for an arrangement like " +
             "\"put my reminders at the top\" or \"make the count big\". Then give it a home-screen " +
-            "slot below, and add \"Jarvis widget 1\", \"2\" or \"3\" to your home screen (touch and " +
-            "hold the home screen, then Widgets, then Jarvis)."
+            "slot below and tap \"Put it on my home screen\". If your home screen will not add a " +
+            "widget by itself, touch and hold it, choose Widgets, then Jarvis, then " +
+            "\"Jarvis widget 1\", \"2\" or \"3\"."
     const val EMPTY = "No widgets yet."
     const val MISSING = "Your PC's Jarvis cannot make widgets yet - run apply-patches.ps1 on the PC."
     const val PREVIEW_TITLE = "Preview - not added yet"
@@ -75,6 +76,42 @@ object JarvisWidgets {
             "reminders, to-do items or what is playing. With App lock on, its buttons only open " +
             "Jarvis, which asks you to unlock it first - except Stop everything. Nothing but " +
             "Stop everything works while the connection is catching up."
+
+    /**
+     * "Put it on my home screen" (2026-10-30). The owner asked to build a
+     * widget by chatting and add it to the home screen immediately, so the
+     * phone asks the launcher itself to place the slot's widget
+     * (`widget/WidgetPin.kt`, Android's request-pin API, API 26+) instead of
+     * only telling the owner the touch-and-hold route.
+     *
+     * The three texts are what the app can honestly say, and [pinSentence] is
+     * a pure function so the JVM tests run every one. The pin API answers
+     * "the request was sent", NOT "the widget is on the screen" - a launcher
+     * may show its own confirm, or ignore it - so the asked sentence never
+     * claims it was added.
+     */
+    const val PIN_LABEL = "Put it on my home screen"
+
+    /** The three board receivers, in slot order (0-based); the manifest
+     *  declares each one, and `JarvisWidgetsTest` holds the three lists
+     *  (this one, [SLOTS], the manifest) equal. */
+    val PIN_RECEIVERS = listOf(
+        ".widget.JarvisBoardWidgetOneReceiver",
+        ".widget.JarvisBoardWidgetTwoReceiver",
+        ".widget.JarvisBoardWidgetThreeReceiver",
+    )
+
+    fun pinSentence(requested: Boolean, alreadyThere: Boolean, slot: Int): String {
+        val n = slot + 1
+        return when {
+            alreadyThere -> "Jarvis widget $n is already on your home screen."
+            requested ->
+                "Your home screen was asked to add Jarvis widget $n. If it asks you to confirm, say yes."
+            else ->
+                "Your home screen will not add a widget by itself. Touch and hold the home screen, " +
+                    "choose Widgets, then Jarvis, then \"Jarvis widget $n\"."
+        }
+    }
 
     // The home-screen widget's own lines.
     const val W_NOT_STARTED = "Jarvis could not start"

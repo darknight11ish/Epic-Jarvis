@@ -210,11 +210,11 @@ class JarvisWidgetsTest {
      */
     @Test
     fun `every home-screen slot has a receiver`() {
-        val receivers = listOf(
-            "JarvisBoardWidgetOneReceiver",
-            "JarvisBoardWidgetTwoReceiver",
-            "JarvisBoardWidgetThreeReceiver",
-        )
+        // The list the phone pins through is the same list this test counts:
+        // WidgetPin builds a ComponentName from JarvisWidgets.PIN_RECEIVERS, so
+        // a slot added there without a manifest receiver (or the other way
+        // round) is caught here rather than on the owner's home screen.
+        val receivers = JarvisWidgets.PIN_RECEIVERS.map { it.removePrefix(".widget.") }
         assertEquals("the picker offers this many slots", JarvisWidgets.SLOTS, receivers.size)
         val manifest = repoFile("jarvis-client/app/src/main/AndroidManifest.xml").readText()
         val source = repoFile(
@@ -247,6 +247,37 @@ class JarvisWidgetsTest {
             )
             assertFalse("the hint must not quote slot $n", JarvisWidgets.PHONE_HINT.contains("\"$n\""))
         }
+    }
+
+    /**
+     * "Put it on my home screen" (the owner, 2026-10-30): the phone asks the
+     * launcher itself instead of only telling the owner the touch-and-hold
+     * route. Android answers whether the REQUEST was sent, not whether a
+     * widget was placed, so the asked sentence must never read as done - and
+     * the cannot sentence must give the manual route in words.
+     */
+    @Test
+    fun `the pin sentences say only what the launcher answered`() {
+        for (slot in 0 until JarvisWidgets.SLOTS) {
+            val n = slot + 1
+            val asked = JarvisWidgets.pinSentence(requested = true, alreadyThere = false, slot = slot)
+            assertTrue("slot $n must name its widget:\n$asked", asked.contains("Jarvis widget $n"))
+            assertTrue("slot $n must say it was ASKED:\n$asked", asked.contains("was asked"))
+            assertFalse("slot $n must not claim the widget is there:\n$asked", asked.contains("was added"))
+
+            val already = JarvisWidgets.pinSentence(requested = true, alreadyThere = true, slot = slot)
+            assertTrue(already.contains("already"))
+            assertTrue(already.contains("Jarvis widget $n"))
+
+            val cannot = JarvisWidgets.pinSentence(requested = false, alreadyThere = false, slot = slot)
+            assertTrue("slot $n needs the manual route:\n$cannot", cannot.contains("Touch and hold"))
+            assertTrue(cannot.contains("Jarvis widget $n"))
+            assertFalse("slot $n must not pretend it asked:\n$cannot", cannot.contains("was asked"))
+        }
+        assertTrue(
+            "the button's words must name the home screen",
+            JarvisWidgets.PIN_LABEL.contains("home screen"),
+        )
     }
 
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the

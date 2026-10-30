@@ -14,11 +14,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.JarvisWidgets
 import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.widget.WidgetPin
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
@@ -44,6 +46,7 @@ import kotlinx.coroutines.launch
 internal fun WidgetsSection(canAct: Boolean, privateHidden: Boolean) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val tick by JarvisRuntime.widgetsTick.collectAsState()
     val slots by JarvisRuntime.settings.homeWidgets.collectAsState()
     var reads by remember { mutableIntStateOf(0) }
@@ -165,6 +168,15 @@ internal fun WidgetsSection(canAct: Boolean, privateHidden: Boolean) {
                                 },
                                 onPick = { JarvisRuntime.settings.setHomeWidget(slot, it) },
                             )
+                        }
+                        // 2026-10-30: the owner asked to add the widget they
+                        // built "immediately", so the phone asks the launcher
+                        // itself. Only offered once the slot has a widget - an
+                        // empty slot's widget would only say "No widget chosen".
+                        if (slots.getOrNull(slot) != null) {
+                            Quiet(JarvisWidgets.PIN_LABEL, enabled = !busy, onClick = {
+                                said = WidgetPin.request(context, slot)
+                            })
                         }
                     }
                     Text(JarvisWidgets.SLOT_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
