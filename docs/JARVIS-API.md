@@ -27552,7 +27552,7 @@ It seeds a throwaway folder, proves add / list / act / settings / backup-list /
 recurrence / DST (17 checks), prints `PASS` and the counts, and removes its own
 folder.
 
-## 164. What a parking stay costs, minute by minute, from public data (added 2026-10-30)
+## 165. What a parking stay costs, minute by minute, from public data (added 2026-10-30)
 
 The owner's ask, of 2026-10-29: *"find me cheap parking near Pike Place Market
 tomorrow from 4:15 PM to 9:00 PM"*. The answer he had been able to get before
@@ -27589,7 +27589,7 @@ request with **zero model tokens and zero tool slots**, so nothing was added to
 `jarvis_agent.py` at all. A model tool remains a possible later change with its
 own budget line.
 
-### 164.1 What it is, and what it plainly is not
+### 165.1 What it is, and what it plainly is not
 
 * It is a **cost estimate** from public parking data.
 * It is **not** a booking, a reservation, or navigation.
@@ -27603,7 +27603,7 @@ own budget line.
 * The last line of every answer says all of that in one sentence, on both
   devices.
 
-### 164.2 What leaves this PC - coordinates and a radius, and one place name
+### 165.2 What leaves this PC - coordinates and a radius, and one place name
 
 The owner's own instruction, 2026-10-29: *"never send personal data - send
 coordinates/radius only"*. What each request carries:
@@ -27626,7 +27626,7 @@ makes no request the second time. Every network call takes an injected
 `transport=` callable, so `backend/test_parking.py` makes no request at all and
 CI never reaches Seattle, Overpass or Nominatim.
 
-### 164.3 The integrator, and its dataclasses
+### 165.3 The integrator, and its dataclasses
 
 `backend/jarvis_parking.py` exports:
 
@@ -27639,14 +27639,14 @@ CI never reaches Seattle, Overpass or Nominatim.
 | `evaluate_parking_stay(cand, start_dt, end_dt, allow_rpz_permit=None)` | the minute-granularity integrator: rate tiers, the legal tail-end overlap, a stay across midnight, a Sunday or after-hours window, a day cap, a flat day price, a permit zone, a no-parking band |
 | `parse_charge`, `parse_maxstay`, `parse_osm_conditional_window` | the OpenStreetMap tag readers: `"2.00 USD/hour"`, `"2 hours"`, `"no @ (Mo-Fr 18:00-08:00; Sa-Su)"` |
 | `find_parking(place, start_dt, end_dt, ...)` | geocode, both providers, every quote, cheapest legal first; returns a dict, never raises |
-| `reply(result, client_surface="hud"\|"phone")` | the words (see 164.5) |
+| `reply(result, client_surface="hud"\|"phone")` | the words (see 165.5) |
 
 **The max-stay rule is counted over the minutes that MATCH the band**, never
 over the whole stay, and a refusal names the real overlap: *"Exceeds 2h time
 limit (150 min overlap during enforced hours)"*, not a count of the minute the
 limit was noticed.
 
-### 164.4 The two providers, and what each one gives
+### 165.4 The two providers, and what each one gives
 
 | source | what it is used for | the honest limit |
 |---|---|---|
@@ -27669,7 +27669,7 @@ price for each day the stay touches: a short stay is over-quoted and a long one
 never under-quoted, which is the only direction this module is allowed to be
 wrong in.
 
-### 164.5 The quick path, and the two devices' words
+### 165.5 The quick path, and the two devices' words
 
 `backend/jarvis_quick.py` recognises the sentence, so neither answer touches
 the model or a tool slot:
@@ -27715,7 +27715,7 @@ short form; everything else gets the PC's full one. That is the honest shape of
 what is available today, and a header-reading caller can change it without
 touching this module.
 
-### 164.6 The calendar bridge, and the one thing it will not do
+### 165.6 The calendar bridge, and the one thing it will not do
 
 "parking for my next meeting" reads the next upcoming event that has a
 **location**, through `jarvis_google_calendar.list_events` (§161) when that
@@ -27750,7 +27750,7 @@ The reply quotes the calendar's own location line, so the turn counts as having
 read outside text (`read=["calendar_read"]`) - the same conservative rule a
 briefing that quotes event titles follows.
 
-### 164.7 Tests
+### 165.7 Tests
 
 `backend/test_parking.py` - **140 checks, no network** (every socket and every
 `urlopen` is made to fail for the whole run, and every provider call is handed a
