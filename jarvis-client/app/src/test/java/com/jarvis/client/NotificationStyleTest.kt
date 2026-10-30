@@ -310,4 +310,35 @@ class NotificationStyleTest {
         assertTrue("the quiet/late notice is never styled",
             schedule.contains("if (!quiet && !openBriefing && scheduleKind.isNotEmpty())"))
     }
+
+    /**
+     * Field test 2026-10-30: the phone said "No styles yet" while the PC listed
+     * the draft the owner had just made. Cause: the styles plate fetches the
+     * listing itself, but drew the runtime's book, and nothing kept the fetched
+     * answer - so a preview made after the last link change stayed invisible.
+     * This pins the fix at its source: the listing read must store the book.
+     */
+    @Test
+    fun `the listing read keeps the book the styles plate draws`() {
+        val source = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+        ).readText()
+        val at = source.indexOf("suspend fun notificationStyleListing(")
+        assertTrue("notificationStyleListing is gone from JarvisRuntime", at >= 0)
+        val fn = source.substring(at, source.indexOf("\n    }", at))
+        assertTrue(
+            "the listing read no longer stores the book it fetched:\n$fn",
+            fn.contains("NotificationStyle.bookOf") && fn.contains("_notificationStyles.value"),
+        )
+    }
+
+    private fun repoFile(rel: String): java.io.File {
+        var d: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (d != null) {
+            val f = java.io.File(d, rel)
+            if (f.isFile) return f
+            d = d.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
+    }
 }

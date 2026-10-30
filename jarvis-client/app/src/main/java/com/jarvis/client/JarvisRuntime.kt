@@ -6273,8 +6273,19 @@ object JarvisRuntime {
      * The same read, handed back whole - the plate uses it to tell "this PC
      * cannot style notifications" (404) from "the link is down".
      */
-    suspend fun notificationStyleListing(): ApiResult<kotlinx.serialization.json.JsonObject> =
-        api.notificationStyles()
+    suspend fun notificationStyleListing(): ApiResult<kotlinx.serialization.json.JsonObject> {
+        // Store what this read returns: the styles plate draws the [notificationStyles]
+        // book, and before this it fetched a fresh listing without keeping it - so a
+        // preview made after the last link change stayed invisible until the link
+        // dropped and came back (field test, 2026-10-30: "No styles yet" on the phone
+        // while the PC listed the draft).
+        val result = api.notificationStyles()
+        if (result is ApiResult.Ok) {
+            _notificationStyles.value =
+                com.jarvis.client.net.NotificationStyle.bookOf(result.value)
+        }
+        return result
+    }
 
     /**
      * A PREVIEW from the owner's typed words - the PC's model makes a small
