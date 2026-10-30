@@ -27119,6 +27119,21 @@ ON, OFF and damaged are also the three states `GET /api/calendar` reports: the
 feature is **effectively on** only when the switch says on *and* the store can be
 read.
 
+**The same switch by typing, before either Settings page draws it.** The
+registry's `BoolSetting("jarvis_calendar", ...)` answers "turn off the Jarvis
+calendar" / "turn on the Jarvis calendar" through the feature lane
+(`jarvis_quick`'s `CHANGE_BY_ASKING`), calling
+`jarvis_settings_registry.set_jarvis_calendar` -> this module's
+`handle_settings`, the identical function the route calls, so the three doors
+cannot disagree. Its setting aliases are "local calendar", "the local calendar",
+"jarvis local calendar" and "my local calendar". **"calendar" alone is
+deliberately not an alias**: `_SETTING_NOISE` strips "jarvis", so a bare
+"calendar" entry would also catch "turn off Google calendar" - the matcher
+accepts a request containing every word of an alias - and flipping this switch
+on a sentence about Google's calendar is exactly the wrong-switch failure the
+registry's own rule forbids. "turn off Google calendar" still resolves to
+nothing, which is the safe answer.
+
 ### 163.2 The event
 
 One row per event. The response object is:
@@ -27235,8 +27250,11 @@ and no model call.
   route: every read it makes is `GET /api/calendar`, which both apps also call,
   and the one-sided reason goes in `docs/ARCHITECTURE.md` §8 then.
 
-**Tests.** `backend/test_local_calendar.py` (81 checks: the four routes through a
-stand-in Handler - origin and token refused on every one - add/update/delete,
+**Tests.** `backend/test_local_calendar.py` (88 checks: all four routes through a
+stand-in Handler, each one refusing a cross-origin request (403) and a missing
+token (401) before it does any work; the owner's own phrase "turn off the Jarvis
+calendar" driven through the real chat grammar, which answers in this module's
+own words and really flips the switch; add/update/delete,
 title/date/time/end validation, an unknown field refused, the 2,000-event cap,
 no delete-all, OFF hides and keeps and refuses writes, no settings file is ON, a
 damaged settings file is OFF with a `why`, a damaged database is said not
@@ -27250,4 +27268,5 @@ py -3 jarvis_local_calendar.py check
 ```
 
 It seeds a throwaway folder, proves add / list / act / settings / backup-list /
-recurrence / DST, prints `PASS` and the counts, and removes its own folder.
+recurrence / DST (17 checks), prints `PASS` and the counts, and removes its own
+folder.

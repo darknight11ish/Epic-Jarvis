@@ -10,6 +10,14 @@ This folder is the whole of the wiring: `plugin.json` names
 `install()` with the server's origin/token checks. No patch to `jarvis_hud.py`,
 no approval-gate entry, no network door.
 
+**One step turns it on, and nothing else does.** The module is copied by
+`apply-patches.ps1` (it is in `$SHIPPED`), but a drop-in folder only runs once
+it is in the backend's `jarvis_plugins\` folder - so copy this folder there, or
+run `scripts\add-plugin.ps1 -Name jarvis-calendar`, then restart Jarvis. Until
+that step the four routes answer 404 - the module is on disk but nothing calls
+its `install()`, so no screen can show an event. That is the one deploy step
+this feature has.
+
 **Where the data lives.** `calendar.db` in the Jarvis settings folder, beside
 `schedule.db` and `memory.db` - plain SQLite, the same boundary this project
 already accepts for reminders (the Windows account plus BitLocker). The switch
@@ -57,6 +65,14 @@ phone to use later; nothing in this slice rings.
 **Switched off.** The read answers 200 with `"on": false` and an empty list
 (and still counts what it keeps). An add or an act is refused in words. The
 file is never deleted, and turning it back on shows everything again.
+
+**By typing, too.** "Turn off the Jarvis calendar" / "turn on the Jarvis
+calendar" work through the chat grammar from the day the store lands
+(`jarvis_quick`'s `CHANGE_BY_ASKING` -> `set_jarvis_calendar` -> this module's
+`handle_settings`, the same function the route calls). Its setting names are
+"local calendar", "the local calendar", "jarvis local calendar" and "my local
+calendar"; a bare "calendar" is deliberately not one of them, because it would
+also catch "turn off Google calendar" and flip the wrong switch.
 
 **Self-check.** `py -3 jarvis_local_calendar.py check` seeds a throwaway
 folder, proves add / list / act / settings / backup-list / recurrence / DST,
