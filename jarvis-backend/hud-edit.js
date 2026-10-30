@@ -1680,54 +1680,11 @@ export function mountHudEditor(options = {}) {
     }
   }
 
-  /** The styles the strip needs, injected once (the page itself is untouched). */
-  function ensureHomeStyles() {
-    if (byId("hud-home-cards-css")) return;
-    const style = doc.createElement("style");
-    style.id = "hud-home-cards-css";
-    style.textContent = [
-      ".hud-home-cards{display:flex; flex-direction:column; gap:7px; margin:8px 0 0;}",
-      ".hud-home-cards:empty{display:none;}",
-      // Edit HUD in Studio: the strip is a row of its own, below the stage
-      // tabs and above the banner, and it scrolls INSIDE itself. Without this
-      // its full list (24 cards + the editor) made the stage grid shrink the
-      // Stage-top row instead, and the approvals card's drag handle ended up
-      // under the stage tabs (PR #981, hud-edit-geometry.mjs, 2026-10-30).
-      "html[data-hud-shell=\"split-stage\"] body[data-hud-edit=\"on\"] #stage > #hud-home-cards{",
-      " grid-row:5; grid-column:1 / -1; max-height:50vh; overflow-y:auto;}",
-      "body[data-hud-edit=\"on\"] #stage > #hud-home-cards{flex:0 0 auto;}",
-      ".hud-home-cards h2{font-family:var(--f-mono); font-size:9.5px; letter-spacing:.14em;",
-      " text-transform:uppercase; color:var(--dim); margin:0;}",
-      ".hud-home-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));",
-      " gap:7px;}",
-      ".hud-home-card{border:1px solid var(--line); border-radius:5px; padding:8px 9px;",
-      " background:rgb(var(--accent-rgb) / .02); display:flex; flex-direction:column; gap:5px;",
-      " min-width:0;}",
-      ".hud-home-card h3{font-size:11.5px; font-weight:600; margin:0; color:var(--text);}",
-      ".hud-home-card p{margin:0; font-size:11px; line-height:1.35; color:var(--dim);}",
-      ".hud-home-card.is-off,.hud-home-card.is-missing{opacity:.72; border-style:dashed;}",
-      ".hud-home-card .hud-home-open{align-self:flex-start; font:inherit; font-size:10.5px;",
-      " padding:2px 7px; border:1px solid var(--line); border-radius:4px; background:transparent;",
-      " color:var(--text); cursor:pointer;}",
-      ".hud-home-card .hud-home-open:hover{border-color:var(--line-hot);}",
-      ".hud-home-edit{border:1px dashed var(--line); border-radius:5px; padding:8px 9px;",
-      " display:flex; flex-direction:column; gap:6px; background:rgb(var(--accent-rgb) / .03);}",
-      ".hud-home-edit h3,.hud-home-edit h4{font-family:var(--f-mono); font-size:9.5px;",
-      " letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin:0;}",
-      ".hud-home-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}",
-      ".hud-home-row .hud-home-name{font-size:11.5px; color:var(--text); min-width:120px;}",
-      ".hud-home-row .hud-home-note{font-size:10.5px; color:var(--dim); flex:1 1 120px;}",
-      ".hud-home-row button{font:inherit; font-size:10.5px; padding:2px 7px; border-radius:4px;",
-      " border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer;}",
-      ".hud-home-row button:hover{border-color:var(--line-hot);}",
-      ".hud-home-edit-status{font-size:10.5px; color:var(--dim); min-height:1em;}",
-    ].join("\n");
-    (doc.head || doc.documentElement).appendChild(style);
-  }
-
-  /** The strip's container, created once at the top of the stage. */
+  /** The strip's container, created once at the top of the stage. Its rules
+   *  live in the page's own <style> ("THE MAIN SCREEN'S FEATURE-CARD STRIP" in
+   *  jarvis_hud.html): the packaged CSP refuses a stylesheet built at run time,
+   *  so nothing in this module may create one. */
   function ensureHomeStrip() {
-    ensureHomeStyles();
     if (homeStrip && homeStrip.isConnected !== false) return homeStrip;
     const stage = byId("stage");
     if (!stage) return null;
