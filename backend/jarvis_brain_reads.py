@@ -691,11 +691,12 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     its small JSON body with it. Without it that route answers 501 and changes
     nothing - a server with no body reader cannot have asked a person."""
     widgets = _install_widgets(handler_cls, origin_ok, token_ok, read_body)
+    styles = _install_styles(handler_cls, origin_ok, token_ok, read_body)
     if (getattr(handler_cls.do_GET, "_jarvis_brain_reads", False)
             or handler_cls.__dict__.get("_jarvis_brain_reads_on")):
         return ("  brain      Search old chats, fact history, a chat's facts, PC help, "
                 "the file guardian's history, its one gated restore, the "
-                "highlighted text and a person's dossier (already on)" + widgets)
+                "highlighted text and a person's dossier (already on)" + widgets + styles)
     get0 = handler_cls.do_GET
     post0 = getattr(handler_cls, "do_POST", None)
 
@@ -786,7 +787,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     handler_cls._jarvis_brain_reads_on = True
     return ("  brain      Search old chats, fact history, a chat's facts, PC help, "
             "the file guardian's history, its one gated restore and a person's "
-            "dossier: on" + widgets)
+            "dossier: on" + widgets + styles)
 
 
 def _install_widgets(handler_cls, origin_ok, token_ok, read_body) -> str:
@@ -802,3 +803,18 @@ def _install_widgets(handler_cls, origin_ok, token_ok, read_body) -> str:
     except Exception as exc:
         return (f"\n  widgets    NOT ON ({type(exc).__name__}) - Widgets you describe is off "
                 "until jarvis_widgets.py is back: run apply-patches.ps1 again")
+
+
+def _install_styles(handler_cls, origin_ok, token_ok, read_body) -> str:
+    """"Notification styles you describe" (jarvis_notification_styles.py,
+    2026-10-30): its own routes, wrapped round the same Handler, exactly as
+    the widget routes are. Never raises; the banner line says what happened."""
+    if read_body is None:
+        return "\n  notifstyle NOT ON (no request reader) - Notification styles is off"
+    try:
+        import jarvis_notification_styles
+        return "\n" + jarvis_notification_styles.install(handler_cls, origin_ok=origin_ok,
+                                                         token_ok=token_ok, read_body=read_body)
+    except Exception as exc:
+        return (f"\n  notifstyle NOT ON ({type(exc).__name__}) - Notification styles is off "
+                "until jarvis_notification_styles.py is back: run apply-patches.ps1 again")

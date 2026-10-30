@@ -27217,3 +27217,105 @@ page the host's own card list, clicks Save, and asserts the boxes come from
 `card.fields`, the secret box is masked, the NEWEST waiting card is the one drawn,
 the boxes are empty after the save and the values reached the backend as one card
 id plus the declared fields - with no token in the page.
+
+## 163. Notification styles: a closed look for the phone's notifications, described by talking (phone and backend, added 2026-10-30)
+
+The owner asked, 2026-10-30: *"does jarvis android have custom animated notifications? if not can you
+build this feature into it? i want them customizable and buildable by just chatting to jarvis"*.
+
+**The answer Android allows, and the only one this adds.** A notification's own layout may contain
+only the View classes `RemoteViews` lists, and the system inflates it in its own process - a class it
+does not know is refused outright. Two of those classes animate themselves: `ViewFlipper` (frames, an
+`autoStart` layout attribute, a remote flip interval) and an indeterminate `ProgressBar`. So a "custom
+animated notification" here means **a closed look that the system animates**, chosen from a menu, and
+never a layout, a colour value or code sent from the PC. The full evidence, with links, is
+`.dsh-scratch/NOTIFICATION-STYLES-2026-10-30-RESEARCH.md`; the shape is "Widgets you describe"
+(§86) applied to the look of a notification instead of the contents of a widget.
+
+### What a style is
+
+A style is one checked JSON object. Every key is required and no other key is allowed:
+
+| Key | Values | Who decides what it draws |
+|---|---|---|
+| `name` | plain words, 1-40 characters, no web address | the model (a label only) |
+| `theme` | `ice`, `azure`, `indigo`, `ember`, `rose`, `mono` | the PHONE maps the name to two of the app's own palette colours |
+| `figure` | `spark`, `ring`, `dot`, `star`, `arrow`, `none` | the phone (one character, coloured by the theme) |
+| `motion` | `none`, `pulse`, `flip`, `spinner` | the phone (stock SystemUI animations only) |
+| `speed` | `slow`, `normal`, `fast` (1800 / 900 / 450 ms) | the phone |
+| `kinds` | one or two of `approval`, `reminder` | the phone decides which notifier asks |
+
+`pulse` is a ViewFlipper over two frames of the figure (bright, then dim); `flip` is the figure then a
+dot; `spinner` is an indeterminate ProgressBar beside a still figure; `none` is a still figure. **No
+frame is posted by the app**, so a style keeps animating when Jarvis' process has been killed and
+costs no wakeups.
+
+The model's answer is checked by `backend/jarvis_notification_styles.py`'s `validate()`, which refuses
+an unknown key (a colour, a font, a layout, an image, a URL, an `onclick`, code), an unknown value, a
+missing key, a web address in the name, a repeated key, `NaN`, prose around the JSON and a far too
+long answer. The stored file is checked again on every read, so a hand edit smuggles nothing in. The
+**phone** checks the answer a second time (`net/NotificationStyle.kt`) and fails closed: an unknown
+name means the plain notification, never a guess.
+
+### Routes
+
+| Method | Path | What it does |
+|---|---|---|
+| GET | `/api/notification-styles` | the saved styles, the previews, the menu's words, and `active` - the style live for each kind (the newest one that claims it) |
+| POST | `/api/notification-styles/draft` | `{"words": "...", "provenance": "typed"\|"voice"}` -> a preview; nothing is applied |
+| POST | `/api/notification-styles/add` | `{"draft": "d0123456789"}` -> keep ONE preview exactly as shown |
+| POST | `/api/notification-styles/discard` | `{"draft": "..."}` -> drop ONE preview |
+| POST | `/api/notification-styles/delete` | `{"id": "s0123456789"}` -> delete ONE saved style, at once |
+
+The routes are installed by `jarvis_brain_reads.install()` beside the widget routes (no patch of its
+own), behind the server's own origin and token checks, with an 8 KB body cap on the POSTs. Caps: 8
+saved styles, 5 live previews, 300 characters of the owner's words. Preview ids are "d" plus ten hex
+digits; saved ids are "s" plus ten hex digits.
+
+### Asking for it in chat
+
+"make my Jarvis notifications look like a warm orange pulse", "change how notifications look to ...",
+"style my notifications like ...". `jarvis_quick.py`'s `_STYLE` rule fires only on words about how
+they LOOK - it deliberately does not catch "make my notifications quieter" or "turn my notifications
+off", which are the settings grammar's. The reply is a **preview** and a pointer to the phone's Settings -> Notifications, where Add applies it. Refused in a conversation that has read outside text, and
+refused for pasted or shared words: the same taint rule as §86, reused rather than re-invented.
+
+### Why there is no approval card
+
+A style shows nothing new, adds no button, grants no capability and changes nothing about what Jarvis
+may do; nothing is applied until the owner taps Add. The PC's own sentence says so
+(`NO_CARD`). Adding a card would be ceremony without a decision.
+
+### The privacy floor
+
+- The spec has nowhere to put an email, a saved fact, a file, a person or a token.
+- The custom layout receives the SAME title and body the notifier already had, already redacted by
+  that notifier's own rule. It adds no text of its own.
+- While App lock, "Hide memory lists and chat history" or a phone with no secure lock screen is in
+  force, the phone does not use the custom layout at all: `NotificationStyle.plan(...)` returns null
+  and the notification is built exactly as it was before this feature existed.
+- An approval card still offers **Deny only**, still opens the Inbox, and is still never approvable
+  from a notification: styling changes how the words are drawn and nothing else.
+
+### What it does not style
+
+The alarm that keeps ringing, Live, the chatbot line, the hand-off, the watch line, the wake word and
+the link's own ongoing notification keep the plain layout - an animation there is noise. The quiet
+"you missed it" notice is never styled (the owner's 2026-09-26 decision). A sound setting is
+deliberately absent: sound belongs to the notification channel, and the approval routing already
+chooses the channel.
+
+### Tests
+
+`backend/test_notification_styles.py` (160 checks: the menu kept and everything off it refused, no
+room in the spec for private data, drafts only from the owner's own words, a tainted chat refused, the
+store's caps and expiry and re-check on read, which style is live being the newest that claims a kind,
+the routes behind token/origin with the body cap, and the typed grammar) and
+`jarvis-client/app/src/test/java/com/jarvis/client/NotificationStyleTest.kt` (the decision layer:
+locked means no custom layout, a kind not claimed means none, each motion's frames and interval, the
+strict second check, and source pins that the layout files use only RemoteViews-allowed classes and
+that the flipper's `autoStart` stays a layout attribute because `setAutoStart` is not remote-callable).
+
+**Not proven here:** the animation on a screen. There is no emulator and no phone at this desk; what is
+proven is that every View used is on the allow-list, that the animation is one SystemUI performs, that
+the app compiles and the JVM tests pass.
