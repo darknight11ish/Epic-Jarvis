@@ -5,7 +5,7 @@ WHY THIS EXISTS (measured 2026-10-30 on the owner's PC)
 
 `main` is green and the deploy through `tools/reconcile_live_backend.py` moved
 the live backend onto today's SHIPPED modules and HUD deltas with 0 refusals.
-Two pieces still could not arrive, because they are **base-file** content that
+Three pieces still could not arrive, because they are **base-file / patch-carried** content that
 only `scripts/apply-patches.ps1` would carry - and that patcher refuses 37
 patches on this drifted install:
 
@@ -21,8 +21,13 @@ patches on this drifted install:
    `chat-history.patch`). The live HUD's history route tuple ends at
    `/api/history/mark`, so both answer 404; the module `jarvis_chat_log.py`
    already has the handlers (it was synced by the deploy).
+3. **jarvis_gate.py** - the card timer added by `show-card-timer.patch` (the
+   owner's ruling of 2026-10-30: "if there is a card with a limited time of
+   any kind, be sure to put the timer on it"). `pending()` never sends
+   `expires_in` on this install, so no screen can draw a countdown and a
+   routine card can still run out silently - the field test hit exactly that.
 
-Both repairs are exact, anchored, idempotent text insertions. Nothing is
+All three repairs are exact, anchored, idempotent text insertions. Nothing is
 guessed: if an anchor is missing or appears more than once the tool refuses; if
 a repair is already present it says so and writes nothing; every write is
 backed up first and the result must compile or it is rolled back.
@@ -103,7 +108,40 @@ HISTORY_ROUTES = Repair(
     why="pinning and archiving a chat answer 404 without these routes",
 )
 
-REPAIRS = {r.name: r for r in (GATE_ROWS, HISTORY_ROUTES)}
+CARD_TIMER = Repair(
+    name="timer",
+    filename="jarvis_gate.py",
+    probes=('d["expires_in"] = _whole', '_waited = d.pop("waited_until", None)'),
+    anchor="        # Why this is being asked about at all, when the table said otherwise.\n",
+    replace_with=(
+        "        # 2026-10-30 (the owner's ruling: \"if there is a card with a limited\n"
+        "        # time of any kind, be sure to put the timer on it\"): the request\n"
+        "        # that bounds this card is shown to the screens as `expires_in`, in\n"
+        "        # whole seconds, only while that request is still waiting. The card\n"
+        "        # itself still has no deadline, nothing is refused because a clock\n"
+        "        # reached zero, and the 60-second grace is never counted down (no\n"
+        "        # request can act in it). Never 0, never negative; the remainder is\n"
+        "        # rounded UP so a fraction of a second reads \"1s left\". A ceremony\n"
+        "        # card carries no `waited_until` and keeps no timer. `waited_until`\n"
+        "        # itself is dropped: the screens are told how long is left, never the\n"
+        "        # PC's own clock reading. Copied from backend/show-card-timer.patch.\n"
+        "        _waited = d.pop(\"waited_until\", None)\n"
+        "        if _waited is not None:\n"
+        "            try:\n"
+        "                _secs_left = float(_waited) - time.time()\n"
+        "            except (TypeError, ValueError):\n"
+        "                _secs_left = 0.0\n"
+        "            _whole = int(_secs_left)\n"
+        "            if _secs_left > _whole:\n"
+        "                _whole += 1\n"
+        "            if _whole >= 1:\n"
+        '                d["expires_in"] = _whole\n'
+        "        # Why this is being asked about at all, when the table said otherwise.\n"
+    ),
+    why="a card with a limited life cannot show its timer without this",
+)
+
+REPAIRS = {r.name: r for r in (GATE_ROWS, HISTORY_ROUTES, CARD_TIMER)}
 
 
 class Refused(Exception):

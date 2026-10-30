@@ -89,17 +89,11 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_account_secrets.py": 1,
     "backend/test_animal.py": 6,
     # 2026-10-30: the live-repair tool's suite pins the exact anchor lines it
-    # inserts (the two `_RISK` rows and the two history routes). It has to:
-    # the repair writes into the owner's live files, so the test proves the
-    # exact text that lands. Recorded debt, not an approval; the ratchet only
-    # turns DOWN.
-    "backend/test_repair_live_backend_gaps.py": 6,
-    # 2026-10-30: the live-repair tool's suite pins the exact anchor lines it
-    # inserts (the two `_RISK` rows and the two history routes). It has to:
-    # the repair writes into the owner's live files, so the test proves the
-    # exact text that lands. Recorded debt, not an approval; the ratchet only
-    # turns DOWN.
-    "backend/test_repair_live_backend_gaps.py": 6,
+    # inserts (the two `_RISK` rows, the two history routes, and since the
+    # owner's timer ruling the `expires_in` block). It has to: the repair
+    # writes into the owner's live files, so the test proves the exact text
+    # that lands. Recorded debt, not an approval; the ratchet only turns DOWN.
+    "backend/test_repair_live_backend_gaps.py": 7,
     # 2026-10-30: the Android app builder landed with six pins in its new
     # suite (its "bite" harness and the plan/refusal assertions). Recorded
     # debt, not an approval; the ratchet only turns DOWN.

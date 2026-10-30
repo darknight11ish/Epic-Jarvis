@@ -43,7 +43,13 @@ def a_live_folder(gate: str = None, hud: str = None) -> Path:
         gate if gate is not None else
         "_RISK: dict[str, tuple[str, str, str]] = {\n"
         '    "web_research": ("yes", "outbound", "a public query leaves the machine"),\n'
-        "}\n",
+        "}\n"
+        "def pending():\n"
+        "    d = {}\n"
+        "    if d:\n"
+        "        # Why this is being asked about at all, when the table said otherwise.\n"
+        "        pass\n"
+        "    return d\n",
         encoding="utf-8", newline="\n")
     (d / "jarvis_hud.py").write_text(
         hud if hud is not None else
@@ -74,6 +80,8 @@ def t_check_names_both_missing_then_apply_fixes_them():
     hud = (live / "jarvis_hud.py").read_text(encoding="utf-8")
     check("both history routes landed", '"/api/history/pin"' in hud
           and '"/api/history/archive"' in hud)
+    check("the card timer landed in pending()",
+          'd["expires_in"] = _whole' in gate and "_waited = d.pop" in gate)
     check("the anchor line was kept", '"/api/history/mark"' in hud)
     check("a backup of each written file exists",
           any(live.glob("jarvis_gate.py.before-repair-*"))
@@ -142,7 +150,9 @@ def t_already_present_is_a_no_op_even_if_anchor_is_gone():
     live = a_live_folder(
         gate=("RISK = {}\n"
               '"app_build_android": ("no", "x", "y"),\n'
-              '"app_install_android": ("no", "x", "y"),\n'))
+              '"app_install_android": ("no", "x", "y"),\n'
+              '_waited = d.pop("waited_until", None)\n'
+              'd["expires_in"] = _whole\n'))
     check("a file that already has the rows reports 'already'",
           mod.check_one(live, mod.REPAIRS["gate"]) == "already")
 
