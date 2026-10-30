@@ -10952,9 +10952,10 @@ subscribe();
       state.busy = true;
       $("cal-save").disabled = true;
       var editing = state.editId;
-      var call = editing
-        ? invoke("hud_calendar_act", actArgs(editing, "update", changeArgs(v)))
-        : invoke("hud_calendar_add", addArgs(v));
+      var port = shell();
+      var call = !port ? noShell() : editing
+        ? port.invoke("hud_calendar_act", actArgs(editing, "update", changeArgs(v)))
+        : port.invoke("hud_calendar_add", addArgs(v));
       call.then(function (reply) {
         if (reply && reply.ok === false) {
           throw new Error(reply.error || "The PC did not save the event.");
@@ -10992,7 +10993,9 @@ subscribe();
       }
       btn.removeAttribute("data-armed");
       state.busy = true;
-      invoke("hud_calendar_act", actArgs(id, "delete")).then(function (reply) {
+      var port = shell();
+      var call = port ? port.invoke("hud_calendar_act", actArgs(id, "delete")) : noShell();
+      call.then(function (reply) {
         if (reply && reply.ok === false) throw new Error(reply.error || "The PC did not delete it.");
         state.said = txt(reply && reply.said) || "Event deleted.";
         state.saidAt = Date.now();
@@ -11007,12 +11010,18 @@ subscribe();
       });
     }
 
-    function invoke(name, args) {
-      var core = window.__TAURI__ && window.__TAURI__.core;
-      if (!core || typeof core.invoke !== "function") {
-        return Promise.reject(new Error("The calendar needs the Jarvis desktop window."));
-      }
-      return core.invoke(name, args);
+    /** The shell's own invoke, or null in a plain browser. EVERY command name
+     *  is a LITERAL at its call site on purpose: `tools/check_invoke_grants.py`
+     *  reads this page to see which commands it may call, and a name built at
+     *  runtime is a grant nobody can check. So this hands back the door and the
+     *  callers say the name. */
+    function shell() {
+      var tauri = window.__TAURI__ && window.__TAURI__.core;
+      return tauri && typeof tauri.invoke === "function" ? tauri : null;
+    }
+    /** What a page with no shell says instead of pretending a write happened. */
+    function noShell() {
+      return Promise.reject(new Error("The calendar needs the Jarvis desktop window."));
     }
 
     /* ---- navigation ---------------------------------------------------- */
@@ -11107,7 +11116,9 @@ subscribe();
         }
         if (row && id) {
           state.busy = true;
-          invoke("hud_calendar_act", actArgs(id, "delete")).then(function (reply) {
+          var port = shell();
+          var call = port ? port.invoke("hud_calendar_act", actArgs(id, "delete")) : noShell();
+          call.then(function (reply) {
             state.said = txt(reply && reply.said) || "Event deleted.";
             state.saidAt = Date.now();
             return refresh(true);
