@@ -290,6 +290,18 @@ internal fun CalendarScreen(
                             )
                         }
                     }
+                    // A month the PC sent nothing about says so once, at the
+                    // top, rather than leaving 42 ordinary-looking empty days
+                    // to be read as "nothing booked" (Calendar.monthUnread).
+                    val v1 = view
+                    if (v1 != null && v1.on && v1.available && !missing && Calendar.monthUnread(v1, shown)) {
+                        Gap(6)
+                        Text(
+                            Calendar.unreadDay(v1),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid,
+                        )
+                    }
                     Gap(8)
                 }
             }
@@ -303,11 +315,18 @@ internal fun CalendarScreen(
                     is Calendar.Cell.Blank -> Box(Modifier.fillMaxWidth().heightIn(min = 48.dp))
                     is Calendar.Cell.Day -> {
                         val d = cell.date
+                        val v = view
                         val isToday = d == today
                         val isSelected = d == selected
+                        // A day the PC never sent is not an empty day. It draws
+                        // no dot either way, so the only honest difference this
+                        // grid can make is a quieter number - the sentence is
+                        // under the grid, when that day is selected.
+                        val known = v == null || Calendar.knows(v, d)
                         val count = if (d in lit) Calendar.eventsOn(view!!, d).size else 0
                         var label = Calendar.dayA11y(d, count, today)
                         if (privateHidden && count > 0) label += ", hidden"
+                        if (!known) label += ", not read"
                         // A seventh of the grid's width, and the app's own 48dp
                         // touch minimum in the direction it can afford: the
                         // shared `pressable` minimum is not opted out of here,
@@ -339,7 +358,11 @@ internal fun CalendarScreen(
                                 Text(
                                     d.dayOfMonth.toString(),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isSelected || isToday) accent else chrome.textHi,
+                                    color = when {
+                                        isSelected || isToday -> accent
+                                        !known -> chrome.textLo
+                                        else -> chrome.textHi
+                                    },
                                 )
                                 Box(
                                     Modifier
@@ -382,27 +405,40 @@ internal fun CalendarScreen(
                     // three other states were already said in words above.
                     if (v != null && v.on && v.available && !missing) {
                         val events = Calendar.eventsOn(v, selected)
-                        if (events.isEmpty()) {
-                            Gap(4)
-                            Text(
-                                Calendar.EMPTY_DAY,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = chrome.textMid,
-                            )
-                        }
-                        events.forEach { e ->
-                            CalendarEventRow(
-                                event = e,
-                                hidden = privateHidden,
-                                enabled = canAct && !busy,
-                                onEdit = { editing = e },
-                                onDelete = { confirmDelete = e },
-                            )
+                        when {
+                            // A day the PC did not send is not an empty day, and
+                            // saying "Nothing on this day" over one would be
+                            // inventing a fact the PC never stated.
+                            !Calendar.knows(v, selected) -> {
+                                Gap(4)
+                                Text(
+                                    Calendar.unreadDay(v),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.textMid,
+                                )
+                            }
+                            events.isEmpty() -> {
+                                Gap(4)
+                                Text(
+                                    Calendar.EMPTY_DAY,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.textMid,
+                                )
+                            }
+                            else -> events.forEach { e ->
+                                CalendarEventRow(
+                                    event = e,
+                                    hidden = privateHidden,
+                                    enabled = canAct && !busy,
+                                    onEdit = { editing = e },
+                                    onDelete = { confirmDelete = e },
+                                )
+                            }
                         }
                     } else if (v != null && !v.available) {
                         Gap(6)
                         Text(
-                            "Your PC could not read the calendar just now.",
+                            v.why.ifEmpty { "Your PC could not read the calendar just now." },
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid,
                         )
@@ -598,7 +634,10 @@ private fun CalendarEventSheet(
     var wrong by remember { mutableStateOf<String?>(null) }
 
     fun save() {
-        val problem = Calendar.problem(title, date, if (allDay) null else time, allDay, endDate, endTime)
+        val problem = Calendar.problem(
+            title, date, if (allDay) null else time, allDay, endDate, endTime,
+            remind = remind.toIntOrNull(),
+        )
         if (problem != null) {
             wrong = problem
             return
@@ -731,6 +770,10 @@ private fun CalendarEventSheet(
                 onValueChange = { remind = it.filter { c -> c.isDigit() }.take(5) },
                 label = Calendar.FIELD_REMIND,
                 placeholder = "30",
+                // The field is REAL and the ringing is not, in this slice: the
+                // owner's decision D3 stores the number and rings nothing, so
+                // the box says so under itself rather than promising a buzz.
+                supportingText = Calendar.REMIND_NOTE,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Done,

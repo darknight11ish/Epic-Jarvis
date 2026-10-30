@@ -8,7 +8,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
@@ -135,7 +134,14 @@ class CalendarWidget : GlanceAppWidget() {
             live = live,
             read = read,
         )
-        val today = Calendar.todayNow()
+        // WHICH DAY THIS IS: the PC's own, from the window it sent, and the
+        // phone's clock only as a fallback (before the first read, or when the
+        // read failed). The PC owns the clock - it is the one that stores the
+        // dates - and taking its day means the date line and the events under
+        // it can never disagree: just after midnight the launcher has not
+        // ticked yet, and the window still says yesterday, so the whole widget
+        // says yesterday instead of saying today above yesterday's list.
+        val today = view?.startDay ?: Calendar.todayNow()
         val lines = if (state == WidgetStates.Cal.CONTENT && view != null) {
             Calendar.widgetLines(view, today, hidden = false)
         } else {
@@ -144,7 +150,7 @@ class CalendarWidget : GlanceAppWidget() {
         val dateLine = Calendar.datedWords(today, today)
         // The tap: Settings when the feature is off (the one thing to fix), and
         // the calendar itself in every other state.
-        val tap = if (state == WidgetStates.Cal.OFF) openSettings(context) else openCalendar()
+        val tap = if (state == WidgetStates.Cal.OFF) openSettings(context) else openCalendar(context)
 
         provideContent {
             Column(
@@ -204,9 +210,21 @@ class CalendarWidget : GlanceAppWidget() {
         }
     }
 
-    /** A tap in any ordinary state: the app, on the Calendar screen. */
-    private fun openCalendar(): androidx.glance.action.Action =
-        actionStartActivity<MainActivity>()
+    /**
+     * A tap in any ordinary state: the app, on the CALENDAR screen.
+     *
+     * The action, not a bare activity start: `actionStartActivity<MainActivity>()`
+     * launches the app's own launcher intent, which lands on Home - so the
+     * widget would say "Dentist at 14:30" and open a screen that does not
+     * mention it. `MainActivity.readCalendarIntent` is the half that turns this
+     * action into `nav.go(Screen.CALENDAR)`.
+     */
+    private fun openCalendar(context: Context): androidx.glance.action.Action =
+        actionStartActivityIntent(
+            Intent(context, MainActivity::class.java)
+                .setAction(MainActivity.ACTION_OPEN_CALENDAR)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        )
 
     /**
      * A tap while the feature is off: the app, on Settings at the calendar's own
@@ -247,7 +265,6 @@ class CalendarWidgetReceiver : GlanceAppWidgetReceiver() {
  */
 private object CalendarPalette {
     val Background = ColorProvider(Color(0xFF04070C))
-    val Surface1 = ColorProvider(Color(0xFF0E1822))
     val TextHi = ColorProvider(Color(0xFFE6EEF7))
     val TextMuted = ColorProvider(Color(0xFF93A6BA))
     val Accent = ColorProvider(Color(0xFF63F7FF))

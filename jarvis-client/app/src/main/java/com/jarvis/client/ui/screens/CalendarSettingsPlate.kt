@@ -117,14 +117,23 @@ internal fun CalendarSettingsSection(
                         },
                     )
                     Text(
-                        if (v.on) {
-                            when (v.saved) {
-                                0 -> "No events saved yet - the calendar is empty and ready."
-                                1 -> "1 event saved, on your PC."
-                                else -> "${v.saved} events saved, on your PC."
+                        when {
+                            // The PC said its store could not be read. That is not
+                            // "you have no events", and this line must not say so.
+                            !v.available -> v.why.ifEmpty {
+                                "Your PC could not read the calendar's store just now. Nothing was changed."
                             }
-                        } else {
-                            "Off. Nothing was deleted - turning it back on shows everything again."
+                            // OFF: the promise is that nothing was deleted, so say
+                            // how much is still there - a count, never a title.
+                            !v.on -> if (v.saved > 0) {
+                                "Off. Nothing was deleted - all ${v.saved} " +
+                                    (if (v.saved == 1) "event is" else "events are") + " still there."
+                            } else {
+                                "Off. Nothing was deleted - the calendar was empty anyway."
+                            }
+                            0 == v.saved -> "No events saved yet - the calendar is empty and ready."
+                            1 == v.saved -> "1 event saved, on your PC."
+                            else -> "${v.saved} events saved, on your PC."
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = chrome.textLo,

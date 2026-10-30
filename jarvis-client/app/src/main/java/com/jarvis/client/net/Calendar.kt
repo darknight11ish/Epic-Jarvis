@@ -98,10 +98,14 @@ object Calendar {
 
     /**
      * The home screen is public. Under App lock, or with "Hide memory lists and
-     * chat history" on, the widget draws this instead of a title - the board
-     * widget's own rule, in the same words ("Hidden - open Jarvis to see it.").
+     * chat history" on, the widget draws these instead of a title - the board
+     * widget's own rule, in the same words: it is ONE sentence split into a
+     * headline and a sub-line, exactly as the board widget splits its own
+     * ("Hidden - open Jarvis to see it"). The two halves must not repeat each
+     * other, so the headline is the single word and the sub-line carries the
+     * instruction.
      */
-    const val HIDDEN = "Hidden — open Jarvis"
+    const val HIDDEN = "Hidden"
     const val HIDDEN_SUB = "open Jarvis to see it"
 
     /**
@@ -138,16 +142,35 @@ object Calendar {
     const val FIELD_PLACE = "Where (optional)"
     const val FIELD_NOTES = "Notes (optional)"
     const val FIELD_REMIND = "Remind me (minutes before)"
+
+    /**
+     * What the remind box really does in this slice, said under it.
+     *
+     * The owner's decision D3 (2026-10-29) was "store the field, ring nothing in
+     * v1". A box labelled "Remind me" that never rings would be the one thing
+     * this screen must not do - claim something happened that did not - so the
+     * field says what it is for. The PC keeps the number, and a later slice is
+     * what makes it ring.
+     */
+    const val REMIND_NOTE = "Saved with the event. Nothing rings yet."
+
     const val ALL_DAY = "All day"
     const val REPEATS = "Repeats"
 
-    /** The recurrence choices, in the order the sheet offers them. */
+    /**
+     * The recurrence choices, in the order the sheet offers them.
+     *
+     * These are the PC's own four, and no more: `jarvis_local_calendar`'s
+     * `RECURRENCES` is `("none", "daily", "weekly", "monthly")` and it refuses
+     * anything else with a 400, so a fifth word here would be a choice the PC
+     * rejects - a control that looks like it worked and did not. "Yearly" was
+     * in the first draft of this list and was removed for exactly that reason.
+     */
     val REPEAT_CHOICES: List<Pair<String, String>> = listOf(
         "none" to "Does not repeat",
         "daily" to "Every day",
         "weekly" to "Every week",
         "monthly" to "Every month",
-        "yearly" to "Every year",
     )
 
     /** The PC's caps, and the reader's own 300-character title rule. */
@@ -156,8 +179,27 @@ object Calendar {
     const val MAX_NOTES = 2000
     const val MAX_DAYS = 90
 
-    /** `?days=` for the screen's own read: a week, so a month grid has its neighbours. */
-    const val SCREEN_DAYS = 42
+    /**
+     * The PC's own cap on `remind_minutes` (four weeks, `MAX_REMIND_MINUTES` in
+     * `jarvis_local_calendar`), so the sheet can say "that is more than four
+     * weeks" instead of letting the PC refuse it after the tap.
+     */
+    const val MAX_REMIND = 40_320
+
+    /**
+     * `?days=` for the screen's own read: as much as the PC will send in one
+     * answer.
+     *
+     * The route's window always starts TODAY (the PC's today) and runs forward,
+     * so a month grid can only draw days it has actually been told about. 90 is
+     * the PC's own cap (`MAX_DAYS`), and taking all of it means the owner can
+     * page three months ahead and still see their events - a 42-day read looked
+     * right for one month and went blank the moment he pressed "next month",
+     * which reads as "nothing booked" when nothing was ever asked for. Days
+     * before today are not in the window at all, and the screens say so instead
+     * of drawing an empty day (see [knows]).
+     */
+    const val SCREEN_DAYS = MAX_DAYS
 
     // ------------------------------------------------------------- shapes ----
 
@@ -213,6 +255,13 @@ object Calendar {
         val events: List<Event>,
         /** How many events the store holds in total, for the Settings line. Never a title. */
         val saved: Int,
+        /**
+         * The PC's own sentence when it could not read its store (or when its
+         * settings file is damaged). Empty when it said nothing - and a screen
+         * that drew "you have no events" over one of these would be inventing a
+         * fact, because the PC said the opposite.
+         */
+        val why: String = "",
     ) {
         val startDay: LocalDate? get() = runCatching { LocalDate.parse(start) }.getOrNull()
         val endDay: LocalDate? get() = runCatching { LocalDate.parse(end) }.getOrNull()
@@ -244,7 +293,18 @@ object Calendar {
         val events = (body["events"] as? JsonArray)
             ?.mapNotNull { (it as? JsonObject)?.let(::parseEvent) }
             ?: emptyList()
-        val saved = body.num("count")?.toInt() ?: body.num("saved")?.toInt() ?: events.size
+        // The count is the STORE's, not the window's, and the PC puts it where
+        // the contract says: `sources.local.count` is how many events the whole
+        // store holds, while `events` is only the ones in the window. A
+        // top-level `count`/`saved` is read too, so a PC that moves it does not
+        // silently make the Settings line wrong. The last fallback is the
+        // window's own size - known to be true, and said as such by the caller.
+        val sources = body["sources"] as? JsonObject
+        val local = sources?.get("local") as? JsonObject
+        val saved = body.num("count")?.toInt()
+            ?: body.num("saved")?.toInt()
+            ?: local?.num("count")?.toInt()
+            ?: events.size
         return View(
             available = available,
             on = on,
@@ -253,6 +313,7 @@ object Calendar {
             end = end ?: "",
             events = if (on) events else emptyList(),
             saved = saved,
+            why = body.text("why") ?: "",
         )
     }
 
@@ -406,6 +467,70 @@ object Calendar {
 
     /** Whether anything at all is on [day]. */
     fun hasEvents(view: View, day: LocalDate): Boolean = view.events.any { it.covers(day) }
+
+    /**
+     * Whether the PC actually told us about [day] - it only ever sends a window
+     * that STARTS TODAY and runs forward (`?days=N`, 1-90), so a day before
+     * today, or past the end of what was sent, is a day this app knows nothing
+     * about.
+     *
+     * The difference matters: "no dot on the 3rd" over an unread day and over a
+     * genuinely empty day look identical, and only one of them is true. The
+     * screens ask this before saying "Nothing on this day" ([EMPTY_DAY]), and
+     * draw an unread day's number in the quiet colour.
+     *
+     * A view with no window in it (a PC that did not say) answers `true`: the
+     * app then behaves exactly as it did before the window existed, rather than
+     * refusing to draw anything.
+     */
+    fun knows(view: View, day: LocalDate): Boolean {
+        val from = view.startDay ?: return true
+        // The PC's `end` is exclusive - it sends `today + days` and stops there.
+        val to = view.endDay ?: return !day.isBefore(from)
+        return !day.isBefore(from) && day.isBefore(to)
+    }
+
+    /**
+     * The days the PC did send, in words: "3 Nov to 3 Feb". What an unread day
+     * is told, instead of a claim about that day. Empty when the answer carried
+     * no window at all.
+     */
+    fun windowWords(view: View): String {
+        val from = view.startDay
+        val to = view.endDay
+        return when {
+            from != null && to != null -> "${from.format(DAY_MONTH)} to ${to.format(DAY_MONTH)}"
+            from != null -> "from ${from.format(DAY_MONTH)}"
+            else -> ""
+        }
+    }
+
+    /** The one sentence a day the PC did not send is given. */
+    fun unreadDay(view: View): String {
+        val w = windowWords(view)
+        return if (w.isEmpty()) {
+            "Your PC did not say which days it read, so this day is not known."
+        } else {
+            "Not read: your PC sent $w, and nothing outside that is known."
+        }
+    }
+
+    /**
+     * Whether the whole of [month] falls outside the window the PC sent, so the
+     * grid can say why a month is blank instead of letting it look empty.
+     *
+     * The PC's window starts at ITS today and runs `days` forward, so paging
+     * back into last month is paging into days it never sent. A grid that drew
+     * those as ordinary empty days would say "you have nothing on" about a
+     * month nobody asked about.
+     */
+    fun monthUnread(view: View, month: Month): Boolean {
+        val from = view.startDay ?: return false
+        val to = view.endDay ?: return false
+        // No overlap at all: the month ends before the window opens, or starts
+        // at or after the day after its last one.
+        return month.last.isBefore(from) || !month.first.isBefore(to)
+    }
 
     // -------------------------------------------------------------- words ----
 
@@ -573,12 +698,18 @@ object Calendar {
             append(",\"date\":").append(quoted(date))
             append(",\"all_day\":").append(allDay)
             if (start != null) append(",\"time\":").append(quoted(start))
-            if (last != date) append(",\"end_date\":").append(quoted(last))
+            // `end_date` is ALWAYS sent, even when it is the same day. Leaving
+            // it out means "keep whatever was there" to the PC (`_fields`:
+            // "a multi-day span keeps its length"), so an owner who shortens a
+            // five-day event to one day would watch it stay five days long. The
+            // same field is what lengthens it, and sending the first day back is
+            // how it is shortened.
+            append(",\"end_date\":").append(quoted(last))
             if (end != null) append(",\"end_time\":").append(quoted(end))
             quotedOrOmit(place.trim(), MAX_PLACE)?.let { append(",\"place\":").append(it) }
             quotedOrOmit(notes.trim(), MAX_NOTES)?.let { append(",\"notes\":").append(it) }
             if (remindMinutes != null && remindMinutes >= 0) {
-                append(",\"remind_minutes\":").append(remindMinutes.coerceAtMost(10080))
+                append(",\"remind_minutes\":").append(remindMinutes.coerceAtMost(MAX_REMIND))
             }
             if (recurrence.isNotEmpty() && recurrence != "none") {
                 append(",\"recurrence\":").append(quoted(recurrence))
@@ -607,7 +738,16 @@ object Calendar {
      * is fine. The sheet calls this before [addBody] so the owner is told
      * which box, in plain words, instead of a server's own refusal.
      */
-    fun problem(title: String, date: String, time: String?, allDay: Boolean, endDate: String?, endTime: String?): String? {
+    fun problem(
+        title: String,
+        date: String,
+        time: String?,
+        allDay: Boolean,
+        endDate: String?,
+        endTime: String?,
+        /** The "remind me" box, already turned into a number. */
+        remind: Int? = null,
+    ): String? {
         val t = title.trim()
         if (t.isEmpty()) return "Give the event a name first."
         if (t.length > MAX_TITLE) return "That name is longer than $MAX_TITLE characters."
@@ -625,6 +765,11 @@ object Calendar {
         if (!allDay && end != null) {
             val e = tidyTime(end) ?: return "The end time should look like 15:15."
             if ((last ?: date) == date && e <= (tidyTime(time ?: "") ?: "")) return "The end time is before the start."
+        }
+        // The PC's own cap is four weeks (`MAX_REMIND_MINUTES`); saying so here
+        // means the owner is told before the write, not after it.
+        if (remind != null && remind > MAX_REMIND) {
+            return "A reminder can be at most four weeks ($MAX_REMIND minutes) before."
         }
         return null
     }
@@ -650,6 +795,11 @@ object Calendar {
     fun said(reply: Reply): Pair<Boolean, String> {
         val b = reply.body
         val error = b?.text("error")
+        // The PC's 5xx answers carry an exception NAME in `error` and the
+        // sentence a person can read in `message` ("the event could not be
+        // saved"). Showing "OperationalError" to the owner would be technically
+        // true and useless.
+        val message = b?.text("message")
         return when {
             reply.code in 200..299 -> if (b?.flag("ok") == false) {
                 false to (error ?: "Not saved.")
@@ -660,6 +810,9 @@ object Calendar {
             reply.code == 404 || reply.code == 501 -> false to MISSING
             reply.code == 409 -> false to (
                 error ?: "Your calendar is full. Delete something first - nothing was dropped."
+                )
+            reply.code in 500..599 -> false to (
+                message ?: error ?: "Not saved. Your PC answered ${reply.code}."
                 )
             else -> false to (error ?: "Not saved. Your PC answered ${reply.code}.")
         }

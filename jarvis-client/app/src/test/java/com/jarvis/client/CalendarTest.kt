@@ -190,6 +190,75 @@ class CalendarTest {
         assertEquals(listOf("Apple", "Zebra"), Calendar.eventsOn(v, LocalDate.of(2026, 11, 3)).map { it.title })
     }
 
+    // ------------------------------------------------------------ window ----
+
+    @Test
+    fun theSettingsCountIsTheStoresAndNotJustTheWindows() {
+        // `sources.local.count` is how many events the WHOLE store holds, while
+        // `events` is only the ones in the window (jarvis_local_calendar's
+        // list_events). The Settings line says "N events saved", so it must read
+        // the store's number: a window's size would say "2 events saved" to an
+        // owner with 37.
+        val v = Calendar.parse(
+            obj(
+                """{"on":true,"days":7,"window":{"start":"2026-11-01","end":"2026-11-08"},
+                   "events":[{"id":"c0000000001","title":"Dentist","date":"2026-11-03","time":"14:30","all_day":false}],
+                   "sources":{"local":{"state":"on","count":37}}}""",
+            ),
+        )!!
+        assertEquals(37, v.saved)
+        // With no count anywhere, the window's own size is the honest answer and
+        // the caller words it as such.
+        assertEquals(
+            1,
+            Calendar.parse(
+                obj("""{"on":true,"events":[{"id":"c0000000001","title":"x","date":"2026-11-03"}]}"""),
+            )!!.saved,
+        )
+    }
+
+    @Test
+    fun aStoreThatCouldNotBeReadSaysWhyAndIsNeverAnEmptyCalendar() {
+        val bad = Calendar.parse(
+            obj(
+                """{"available":false,"on":false,"events":[],
+                   "why":"The calendar's store could not be read (OperationalError). Nothing was changed."}""",
+            ),
+        )!!
+        assertFalse(bad.available)
+        assertTrue(bad.why.contains("could not be read"))
+        // A PC that says nothing about `why` is still `available: false`, and the
+        // screens fall back to their own sentence rather than to "no events".
+        assertFalse(Calendar.parse(obj("""{"available":false,"on":false,"events":[]}"""))!!.available)
+    }
+
+    @Test
+    fun aDayThePcNeverSentIsNotAnEmptyDay() {
+        // The read is `?days=N` from the PC's own today forward, so a day before
+        // today - or past the end of what it sent - is a day this app knows
+        // nothing about. Drawing it as empty would invent a fact.
+        val v = Calendar.parse(answer)!!
+        assertTrue(Calendar.knows(v, LocalDate.of(2026, 11, 1)))
+        assertTrue(Calendar.knows(v, LocalDate.of(2026, 11, 7)))
+        // The PC's `end` is exclusive: it sends today + days and stops there.
+        assertFalse(Calendar.knows(v, LocalDate.of(2026, 11, 8)))
+        assertFalse(Calendar.knows(v, LocalDate.of(2026, 10, 31)))
+        assertEquals(
+            "Not read: your PC sent 1 November to 8 November, and nothing outside that is known.",
+            Calendar.unreadDay(v),
+        )
+        // A month with no overlap at all says so once, at the top; November
+        // overlaps the window, so it is an ordinary month.
+        assertTrue(Calendar.monthUnread(v, Calendar.Month(2026, 9)))
+        assertFalse(Calendar.monthUnread(v, Calendar.Month(2026, 11)))
+        // A view with no window at all behaves exactly as it did before the
+        // window existed, rather than refusing to draw anything.
+        val bare = Calendar.parse(obj("""{"on":true,"events":[]}"""))!!
+        assertTrue(Calendar.knows(bare, LocalDate.of(1999, 1, 1)))
+        assertFalse(Calendar.monthUnread(bare, Calendar.Month(2026, 11)))
+        assertEquals("", Calendar.windowWords(bare))
+    }
+
     // ------------------------------------------------------------ words ----
 
     @Test
@@ -256,14 +325,17 @@ class CalendarTest {
 
     @Test
     fun aNewEventSendsTheFieldsItWasGivenAndAllDaySendsNoTime() {
+        // `end_date` is sent even when it is the same day: leaving it out means
+        // "keep the span it had" to the PC, so an event shortened to one day
+        // would stay as long as it was.
         assertEquals(
-            """{"title":"Dentist","date":"2026-11-03","all_day":false,"time":"14:30"}""",
+            """{"title":"Dentist","date":"2026-11-03","all_day":false,"time":"14:30","end_date":"2026-11-03"}""",
             Calendar.addBody("Dentist", "2026-11-03", "14:30"),
         )
         // All day: no time at all, because a PC that stored "00:00" would draw
         // it as a timed midnight event.
         assertEquals(
-            """{"title":"Holiday","date":"2026-11-03","all_day":true}""",
+            """{"title":"Holiday","date":"2026-11-03","all_day":true,"end_date":"2026-11-03"}""",
             Calendar.addBody("Holiday", "2026-11-03", allDay = true),
         )
         val full = Calendar.addBody(
@@ -328,6 +400,26 @@ class CalendarTest {
         assertNull(Calendar.problem("Dentist", "2026-11-03", "14:30", false, null, null))
         // An all-day event needs no time, and says nothing about one.
         assertNull(Calendar.problem("Holiday", "2026-11-03", null, true, null, null))
+        // The remind box is checked here rather than being left for the PC to
+        // refuse: four weeks is the PC's own cap (MAX_REMIND_MINUTES).
+        assertEquals(
+            "A reminder can be at most four weeks (40320 minutes) before.",
+            Calendar.problem("Dentist", "2026-11-03", "14:30", false, null, null, remind = 40_321),
+        )
+        assertNull(Calendar.problem("Dentist", "2026-11-03", "14:30", false, null, null, remind = 40_320))
+    }
+
+    @Test
+    fun theRepeatChoicesAreTheFourThePcAccepts() {
+        // jarvis_local_calendar's RECURRENCES is ("none", "daily", "weekly",
+        // "monthly") and anything else is a 400. A fifth word here would be a
+        // choice that looks like it worked and did not - "yearly" was in the
+        // first draft of this list and was removed for exactly that reason.
+        assertEquals(
+            listOf("none", "daily", "weekly", "monthly"),
+            Calendar.REPEAT_CHOICES.map { it.first },
+        )
+        assertEquals(4, Calendar.REPEAT_CHOICES.size)
     }
 
     @Test
@@ -390,6 +482,32 @@ class CalendarTest {
         assertEquals(
             false to "The end time is before the start.",
             Calendar.said(Reply(400, obj("""{"ok":false,"error":"The end time is before the start."}"""))),
+        )
+        // The PC's 5xx answers carry an exception NAME in `error` and the
+        // readable sentence in `message`. "OperationalError" would be true and
+        // useless, so the message is what is shown.
+        assertEquals(
+            false to "the event could not be saved",
+            Calendar.said(
+                Reply(
+                    503,
+                    obj("""{"ok":false,"error":"OperationalError","message":"the event could not be saved"}"""),
+                ),
+            ),
+        )
+        // The switch being off is a 409 with the PC's own sentence: it is an
+        // answer, not a failure to read, so the error is shown as it is.
+        assertEquals(
+            false to "The Jarvis calendar is off. Turn it on in Settings first - nothing was changed.",
+            Calendar.said(
+                Reply(
+                    409,
+                    obj(
+                        """{"ok":false,"reason":"off","error":"The Jarvis calendar is off. """ +
+                            """Turn it on in Settings first - nothing was changed."}""",
+                    ),
+                ),
+            ),
         )
     }
 
