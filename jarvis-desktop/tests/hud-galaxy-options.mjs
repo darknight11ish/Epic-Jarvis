@@ -226,8 +226,19 @@ check("the hide preference is device-local and read before the map runs", () => 
   // One attribute, one CSS home: the picture and its furniture, not the mode.
   assert.match(HUD, /html\[data-galaxy-hidden\] #brain > #galaxy,/,
     "the CSS does not hide the galaxy canvas");
-  assert.match(HUD, /html\[data-galaxy-hidden\] \.galaxy-off\{display:flex !important;\}/,
-    "the place holder does not come back when the galaxy is hidden");
+  // 2026-10-29: the place holder is a SCREEN-READER sentence now, not a
+  // paragraph that fills the stage. The owner's words were that the face model
+  // should take that space "instead of showing the 'The galaxy is hidden...'
+  // description + 'Show the galaxy' button", so the old `display:flex` pin
+  // would now be a pin on the bug. What still has to hold: the sentence is in
+  // the page while the map is hidden, it is not DRAWN, and the way back is the
+  // one small chip in the stage bar (and the panel's own Show).
+  assert.match(HUD, /html\[data-galaxy-hidden\] \.galaxy-off\{display:block !important;\}/,
+    "the place holder's own sentence is not in the page while the galaxy is hidden");
+  assert.match(HUD, /\.galaxy-off\{[\s\S]{0,400}?clip-path:inset\(50%\)/,
+    "the place holder is drawn as a paragraph again - the owner asked for the space, not the words");
+  assert.match(HUD, /html\[data-galaxy-hidden\] \.galaxy-back\{display:inline-flex;\}/,
+    "there is no small way back from a hidden galaxy in the stage bar");
 });
 
 check("the drawing loop treats a hidden galaxy as a reason to stop", () => {
