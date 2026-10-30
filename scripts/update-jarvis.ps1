@@ -602,6 +602,33 @@ function Get-UpdateEndpoint($Repo) {
     return $null
 }
 
+# The release page's reply as TEXT, whichever shape Windows hands back.
+#
+# THE TRAP, measured 2026-10-30 against the real release page. GitHub serves
+# latest.json as a download, not as a web page: the reply's Content-Type is
+# application/octet-stream, so Invoke-WebRequest puts the BYTES in .Content
+# instead of a string. BOTH Windows PowerShell 5.1 and 7 do it (measured:
+# System.Byte[], 4159 bytes). Piping a Byte[] into ConvertFrom-Json does not
+# throw - it unrolls the array into ONE BYTE PER PIPELINE ITEM, each byte is
+# parsed as its own tiny JSON document (123 is '{', 10 is a newline), and the
+# result is an Object[] of 4159 numbers whose .version is empty. The
+# `-not $m.version` guard below then read that as "no release was found", the
+# caller printed "no published desktop installer was found", and the updater
+# quietly built from source - every run, silently, which is the defect.
+#
+# So decode first, as UTF-8, because JSON is UTF-8. A reply that is already
+# text (a text Content-Type, or Invoke-RestMethod) is passed through unchanged,
+# so both shapes are accepted and neither is guessed at.
+function Get-ReleaseReplyText {
+    param($Reply)
+    if ($null -eq $Reply) { return '' }
+    if ($Reply -is [byte[]]) { return [System.Text.Encoding]::UTF8.GetString($Reply) }
+    # A 5.1 reply can also arrive as an Object[] of bytes; the measured shape
+    # above is a Byte[], and this branch is only so an odd one is still read.
+    if ($Reply -is [System.Array]) { return [System.Text.Encoding]::UTF8.GetString([byte[]]$Reply) }
+    return [string]$Reply
+}
+
 # The rolling release's small manifest (latest.json): the newest published
 # desktop version, the installer's address, and its signature. $null when
 # there is no release, or the PC cannot reach GitHub - which is a normal state,
@@ -616,7 +643,8 @@ function Get-DesktopRelease($Endpoint) {
         return $null
     }
     try {
-        $m = $resp.Content | ConvertFrom-Json
+        # Get-ReleaseReplyText, not $resp.Content: the reply is bytes (above).
+        $m = (Get-ReleaseReplyText $resp.Content) | ConvertFrom-Json
     } catch {
         return $null
     }
@@ -659,30 +687,59 @@ function Get-DesktopRelease($Endpoint) {
     }
 }
 
-# Is the code in this folder at least as new as the release?
+# Where this folder sits compared with the published release.
 #
 # The one case where downloading the published installer is WRONG: the folder
-# holds a build made from work that is not in that release (the owner's own
-# branch, or commits main does not have yet). Installing the release over it
-# would replace newer code with older. `git merge-base --is-ancestor` answers
-# it exactly: true means the release's commit is already in this folder's
-# history, so this folder is the same or newer, and building is the right move.
-# A folder with no .git (an unzipped download) cannot answer, and says so.
-function Test-LocalAtLeastAsNew($Repo, $Commit) {
-    if (-not $Commit) { return $false }
-    if (-not (Test-Path -LiteralPath (Join-Path $Repo '.git'))) { return $false }
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return $false }
+# holds a build made from work that is not in that release. Installing the
+# release over it would replace newer code with older. `git merge-base
+# --is-ancestor` answers it exactly - ONE DIRECTION AT A TIME:
+#
+#   'same'          the release was built from this exact commit
+#   'release-ahead' this folder does not have that commit (or has it only on a
+#                   branch that is not this one), so the release is newer
+#   'local-ahead'   the release's commit IS in this folder's history and this
+#                   folder has moved past it: a genuinely newer local build,
+#                   which the release would downgrade
+#   'unknown'       no .git (an unzipped download), no git on PATH, or two
+#                   unrelated histories: the question cannot be answered
+#
+# THE TRAP THIS FIXES, measured 2026-10-30. The old check here was
+# `Test-LocalAtLeastAsNew`, and it asked only
+# `merge-base --is-ancestor <release> HEAD`. That is TRUE for BOTH 'same' and
+# 'local-ahead', because --is-ancestor counts the commit itself as an ancestor.
+# Its caller read TRUE as "build from source", so a folder sitting ON the
+# release's own commit - the state a `git pull` leaves whenever the release is
+# current, and the state right after an update - rebuilt the app from source
+# instead of installing the signed release that IS that code. Equality is
+# therefore asked FIRST, and only a folder that has moved PAST the release
+# keeps its own build.
+#
+# The two directions are two separate commands on purpose: one call can never
+# tell 'same' from 'ahead', which is exactly what the old code could not see.
+function Get-LocalVsRelease($Repo, $Commit) {
+    if (-not $Commit) { return 'unknown' }
+    if (-not (Test-Path -LiteralPath (Join-Path $Repo '.git'))) { return 'unknown' }
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return 'unknown' }
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $null = & git -C $Repo rev-parse --verify --quiet "$Commit^{commit}" 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            # This PC does not have that commit at all, so the release is
-            # ahead of this folder.
-            return $false
+        $rel = @(& git -C $Repo rev-parse --verify --quiet "$Commit^{commit}" 2>&1)
+        if ($LASTEXITCODE -ne 0 -or $rel.Count -eq 0) {
+            # This PC does not have that commit at all, so the release is ahead
+            # of this folder (or comes from a history it does not share).
+            return 'release-ahead'
         }
-        $null = & git -C $Repo merge-base --is-ancestor $Commit HEAD 2>&1
-        return ($LASTEXITCODE -eq 0)
+        $relSha = "$($rel[0])".Trim()
+        $head = @(& git -C $Repo rev-parse --verify --quiet 'HEAD^{commit}' 2>&1)
+        if ($LASTEXITCODE -ne 0 -or $head.Count -eq 0) { return 'unknown' }
+        $headSha = "$($head[0])".Trim()
+        # Equal FIRST: this is the case the old check could not see.
+        if ($headSha -eq $relSha) { return 'same' }
+        $null = & git -C $Repo merge-base --is-ancestor $relSha $headSha 2>&1
+        if ($LASTEXITCODE -eq 0) { return 'local-ahead' }
+        $null = & git -C $Repo merge-base --is-ancestor $headSha $relSha 2>&1
+        if ($LASTEXITCODE -eq 0) { return 'release-ahead' }
+        return 'unknown'
     } finally {
         $ErrorActionPreference = $prev
     }
@@ -1227,19 +1284,31 @@ if ($SkipDesktop) {
                 Info "'The desktop installer, and the update signing key'"
             } else {
                 Ok "published desktop version: $($release.Version)"
-                if ($release.Commit -and (Test-LocalAtLeastAsNew $RepoRoot $release.Commit)) {
-                    Info "this folder already holds $($release.Commit) or newer (your own build), so"
-                    Info "installing that release over it would go backwards - building instead"
-                    $release = $null
-                } elseif ($release.Commit -and -not (Test-Path -LiteralPath (Join-Path $RepoRoot '.git'))) {
-                    # The comparison above needs git history, and an unzipped
-                    # download has none. Saying so is the difference between "this
-                    # release is newer" and "I cannot tell" - the second one is
-                    # what is true here, and a folder holding newer code than the
-                    # release would otherwise be quietly replaced by it.
-                    Warn "this folder is not a git checkout, so I cannot tell whether it is newer"
-                    Info "than published version $($release.Version). Installing the published one;"
-                    Info "add -FromSource to build this folder's own copy instead"
+                # Which route, and why, is decided by ancestry - see
+                # Get-LocalVsRelease. Only a folder that has moved PAST the
+                # release keeps its own build; a folder standing ON the
+                # release's commit installs the signed release, because that
+                # release is exactly this code.
+                if ($release.Commit) {
+                    $where = Get-LocalVsRelease $RepoRoot $release.Commit
+                    if ($where -eq 'local-ahead') {
+                        Info "this folder has moved past $($release.Commit) (your own build of newer"
+                        Info "code), so installing that release over it would go backwards - building instead"
+                        $release = $null
+                    } elseif ($where -eq 'same') {
+                        Info "this folder is at the released commit $($release.Commit), so the signed"
+                        Info "release is exactly this code - using it instead of rebuilding"
+                    } elseif ($where -eq 'unknown') {
+                        # The comparison needs git history. An unzipped download
+                        # has none, and two unrelated histories cannot be
+                        # compared at all. Saying so is the difference between
+                        # "this release is newer" and "I cannot tell" - and a
+                        # folder holding newer code than the release would
+                        # otherwise be quietly replaced by it.
+                        Warn "this folder is not a git checkout, or shares no history with the release, so I"
+                        Info "cannot tell whether it is newer than published version $($release.Version). Installing"
+                        Info "the published one; add -FromSource to build this folder's own copy instead"
+                    }
                 }
             }
         }

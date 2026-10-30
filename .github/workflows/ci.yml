@@ -1624,54 +1624,33 @@ jobs:
           Assert-True ($r.Out -match 'no published desktop installer was found') 'update -Print carried on when that address could not be reached'
           Assert-True ($r.Out -match 'would run|the desktop app cannot be built here') 'update -Print said what it would do about the desktop app'
 
-          # 7. The one decision in the update script that is neither a call nor a
-          #    download: when this folder already holds the release's commit or
-          #    newer, BUILD instead of installing that release - otherwise a
-          #    branch's own newer app would be replaced by an older published
-          #    one. The function is lifted out of the script as it is written and
-          #    run against a real repository with a side branch.
+          # 7. The updater's two decisions, tested by the script that owns them.
+          #    Both were measured wrong on 2026-10-30 and both are now pinned:
           #
-          #    WHAT THIS COVERS, AND WHAT IT DOES NOT. It pins the ANSWER for
-          #    four inputs, including a commit that exists in the repository but
-          #    is NOT in this branch's history - which is the case the decision
-          #    exists for. It does NOT run the caller that acts on the answer
-          #    (that needs a release manifest, and so the network), and it does
-          #    not pin the two guards at the top of the function: a commit that
-          #    does not exist and a folder that is not a git checkout come back
-          #    false whether those guards are there or not, because git itself
-          #    fails. Those two are pinned as the ANSWER the caller relies on,
-          #    not as coverage of the guards.
-          $gitRepo = Join-Path $root 'ancestor'
-          New-Item -ItemType Directory -Force -Path $gitRepo | Out-Null
-          & git -C $gitRepo init -q
-          if ($LASTEXITCODE -ne 0) { throw "git init exited $LASTEXITCODE" }
-          Set-Content -LiteralPath (Join-Path $gitRepo 'a.txt') -Value 'first'
-          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t add -A
-          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t commit -qm first
-          $shaA = (& git -C $gitRepo rev-parse HEAD).Trim()
-          Set-Content -LiteralPath (Join-Path $gitRepo 'b.txt') -Value 'second'
-          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t add -A
-          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t commit -qm second
-          $shaB = (& git -C $gitRepo rev-parse HEAD).Trim()
-          & git -C $gitRepo checkout -q -b side
-          Set-Content -LiteralPath (Join-Path $gitRepo 'c.txt') -Value 'on the side branch'
-          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t add -A
-          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t commit -qm side
-          $shaC = (& git -C $gitRepo rev-parse HEAD).Trim()
-          & git -C $gitRepo checkout -q master 2>$null
-          if ($LASTEXITCODE -ne 0) { & git -C $gitRepo checkout -q main }
-          if ((& git -C $gitRepo rev-parse HEAD).Trim() -ne $shaB) { throw "the test repository did not go back to its second commit" }
-          $src = Get-Content -LiteralPath $update -Raw
-          $found = [regex]::Match($src, '(?s)function Test-LocalAtLeastAsNew.*?\n\}')
-          if (-not $found.Success) { throw "could not find Test-LocalAtLeastAsNew in update-jarvis.ps1" }
-          Invoke-Expression $found.Value
-          $notARepo = Join-Path $root 'not-a-repo'
-          New-Item -ItemType Directory -Force -Path $notARepo | Out-Null
-          Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaA) -eq $true) 'a release commit this folder already contains means: build here, do not download'
-          Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaB) -eq $true) 'a release commit equal to HEAD means the same'
-          Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaC) -eq $false) 'a commit that exists here but is NOT in this branch means: the release is ahead, download it'
-          Assert-True ((Test-LocalAtLeastAsNew $gitRepo '0123456789abcdef0123456789abcdef01234567') -eq $false) 'a commit this folder has never seen means: do not claim the folder is newer'
-          Assert-True ((Test-LocalAtLeastAsNew $notARepo $shaB) -eq $false) 'a folder that is not a git checkout cannot be newer than a release'
+          #    - the release page's reply arrives as BYTES. GitHub serves
+          #      latest.json with Content-Type application/octet-stream, so
+          #      Invoke-WebRequest hands back a Byte[] rather than text - in both
+          #      5.1 and 7. Piping a Byte[] into ConvertFrom-Json unrolls it into
+          #      one pipeline item per byte, so NOTHING parsed, the caller read
+          #      that as "no release was found", and the updater quietly built
+          #      from source instead of downloading the signed release.
+          #    - the ancestry gate read a release commit that IS HEAD as "build
+          #      from source" (merge-base --is-ancestor counts the commit
+          #      itself), so a folder standing on the release's own commit -
+          #      what a pull leaves whenever the release is current - rebuilt
+          #      instead of installing the release that is exactly that code.
+          #
+          #    scripts\test-update-jarvis.ps1 lifts the functions out of the
+          #    script AS IT IS WRITTEN and asserts the reply in both shapes, the
+          #    download route, and the four ancestry answers (same / release-ahead
+          #    / local-ahead / unknown) against a real throwaway repository. It
+          #    runs here in 5.1, like the rest of this job, and it touches no
+          #    network, no app and no backend.
+          $testUpdate = Join-Path $tmp 'scripts\test-update-jarvis.ps1'
+          if (-not (Test-Path -LiteralPath $testUpdate)) { throw "scripts\test-update-jarvis.ps1 is missing" }
+          $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $testUpdate, '-Script', $update)
+          foreach ($line in ($r.Out -split "`n")) { if ($line.Trim()) { $line.TrimEnd() } }
+          if ($r.Code -ne 0) { throw "the updater's own decision tests failed (exit $($r.Code))" }
 
           # 8. The helper that reads a child program's exit code. THIS IS THE
           #    CHECK FOR A BUG A REAL FIRST INSTALL FOUND: it used to be
