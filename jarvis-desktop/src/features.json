@@ -1345,7 +1345,9 @@
     "asks": "Adding, changing or deleting ONE of your own events raises no card: it writes one row on your own PC and has no bulk form. Turning the whole calendar off is instant and keeps every event.",
     "limit": "Local only: no Google sync, no invitations, no sharing, and no reminder ringing yet (the reminder time is stored for later). Editing a repeating event changes the whole series, not one occurrence.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "settings.calendar"
+    ]
   },
   {
     "id": "weather-sky",

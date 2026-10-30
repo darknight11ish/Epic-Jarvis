@@ -9473,6 +9473,19 @@
       "where": "settings",
       "in_desktop_settings": true,
       "in_phone_settings": true
+    },
+    {
+      "id": "calendar",
+      "names": [
+        "the calendar",
+        "jarvis calendar",
+        "my calendar",
+        "appointments"
+      ],
+      "app": "phone",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": true
     }
   ],
   "known_gaps": [

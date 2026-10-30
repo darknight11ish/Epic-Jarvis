@@ -252,15 +252,13 @@ CLASSIFICATION = {
     # (ARCHITECTURE section 8, and the row in its one-sided-on-purpose table).
     # The read-only POST /api/antislop/audit is in BACKEND_ONLY below.
     "/api/antislop": ("ported", "The Anti-Slop filter (2026-10-28; JARVIS-API section 159; backend jarvis_antislop.py, vendoring the MIT-licensed miqdadbadjuber/anti-slop ruleset). GET reads the whole state (enabled, mode, scopes, dials, show_delivery_gate_on_ui_tasks); POST is ONE change at once, with no approval card either way and no model call - it filters the wording of an answer, opens no way out of the PC, reads no folder and takes no action. OFF costs 0 prompt tokens and rewrites nothing. Desktop: Settings, How Jarvis talks, Anti-Slop filter (src-tauri/src/antislop.rs get_antislop/set_antislop, settings window only; the card is src/antislop-settings.js + src/antislop.js). Phone: Settings, How Jarvis talks (net/Antislop.kt, ui/screens/AntislopPlate.kt, JarvisRuntime setAntislop/setAntislopMode), the master switch, the During/After mode and the em-dash box - the three scopes, the Delivery Gate switch and the dials are the desktop card on purpose (ARCHITECTURE section 8). The read-only POST /api/antislop/audit is in BACKEND_ONLY below."),
-    # The Jarvis-owned local calendar, S1 (2026-10-29; JARVIS-API section 164):
-    # the store, the four routes and the typed switch are built; neither app
-    # calls them yet because the HUD card, the phone plate and the widget are
-    # the next slices (the owner's decision, decisions.d/2026-10-29-jarvis-
-    # calendar.md). No gate entry: nothing leaves the PC.
-    "/api/calendar": ("planned", "Jarvis Calendar S1: GET the window (default 7 days, 1-90) or ONE stored event by ?id=, with a sources block saying Google and iCal are not on a screen yet (JARVIS-API section 164). The store is calendar.db on this PC, ON by default, OFF hides and keeps. No app calls it yet: the HUD card and the phone plate are S2/S3 and build against this contract."),
-    "/api/calendar/add": ("planned", "Jarvis Calendar S1: ONE local event, title required, date and times kept as wall clock (never an epoch) with an optional count/until recurrence. Cardless by the owner's 2026-10-29 ruling - one row on this PC, no bulk form, ids-only audit. No app calls it yet (S2/S3)."),
-    "/api/calendar/act": ("planned", "Jarvis Calendar S1: delete or update ONE local event by id; any bulk verb answers 400 'no_bulk'. Cardless by the owner's 2026-10-29 ruling. No app calls it yet (S2/S3)."),
-    "/api/calendar/settings": ("planned", "Jarvis Calendar S1: {on: true|false} - the whole feature's switch, ON with no file, OFF hides every surface and keeps every event. No card either way. No app calls it yet (S2/S3)."),
+    # The Jarvis-owned local calendar's four routes are declared ONCE, at the END
+    # of this table (search `/api/calendar`): `planned`, because the phone calls
+    # all four and the desktop's HUD card is the next slice. #983 declared them
+    # here and #980 declared them there, so the chain merge left the same four
+    # keys in this dict literal twice and the later one silently won - a Python
+    # dict literal keeps the last, so the first note was dead text. Removed here
+    # on 2026-10-29, so the note that is read is the only one there is.
     "/api/thinking": ("ported", "Per-model thinking levels (backend/thinking.patch, jarvis_thinking.py, Section 5.5): off, quick, deep, or auto per running model. GET reads running models and their supported levels; POST is ONE change with no approval card. Both apps hold the change on a stale link. Desktop: Settings, Thinking levels (plain_errors.rs get_thinking/set_thinking, thinking-settings.js). Phone: Settings, Thinking levels (ThinkingPlate.kt, net/Thinking.kt)."),
     "/api/voice/live": ("ported", "Jarvis Live (backend/live.patch, jarvis_live.py; the owner's decision and answers of 2026-09-28; docs/LIVE-DESIGN.md; JARVIS-API section 63): a back-and-forth voice conversation - GET the session (fixed words and numbers, never anything said), POST start (no card; held on a stale link; refused until the owner's voice is trained), stop (never held), extend, resume, mute/unmute. Desktop: the Jarvis bar's Live button and sign, the always-on-top badge and the tray row (live.rs, live-rules.js). Phone: Live screen, the Live microphone service and its notification (LiveScreen.kt, service/LiveService.kt, voice/LiveRules.kt)."),
     "/api/people/dossier": ("ported", "One person's read-only dossier through jarvis_people_crm.build_person_dossier() (Pillar 16/#540; JARVIS-API section 143; LM-4): their own saved facts, kept chat turns, mail headers, open to-dos and next shared event, in the module's own words. Desktop: the people_dossier command (brain/people.rs) and the card in brain.js, opened by clicking a person in People and things - withheld whole under App lock and the hidden lists, BEFORE the PC is asked. Phone: net/PeopleDossier.kt read under EntitiesPlate, inside the plate's own hidden section. Owner-only: the backend refuses another device before the module is imported or the name is read."),
@@ -715,22 +713,23 @@ CLASSIFICATION = {
     "/api/setup": ("ported", "The setup questionnaire's reading (the owner's ask of 2026-10-20: \"a setup questionnaire when someone first starts jarvis (or can be filled out again)\"; backend/jarvis_setup.py, setup.patch; docs/JARVIS-API.md section 147): the fourteen questions and their options in the PC's own words, the current value of every setting they cover, the last accepted answers and when, the last outcomes, and how long one approval card may wait. A read, not held on a stale link. The desktop draws it as Settings -> First-time setup (src-tauri/src/setup_questionnaire.rs, setup-questionnaire.js, setup-settings.js); the phone draws the same questions READ-ONLY on Settings -> First-time setup (net/SetupQuestionnaire.kt, ui/screens/SetupQuestionnairePlate.kt)."),
     "/api/setup/plan": ("ported", "The setup questionnaire's READ-ONLY plan (backend/jarvis_setup.py; docs/JARVIS-API.md section 147): POST the chosen answers and the PC answers what WOULD change, in its own sentences, with one `effect` per change - instant, one of its own approval cards, or blocked on this PC - plus what would not change and why, and the preset RECOMMENDATION (which changes no model). It writes nothing, raises no card, and never carries `confirm`. Both apps ask it: the desktop's Settings card whenever the answers change (setup-settings.js, setup-questionnaire.js), the phone's read-only card on one button (SetupQuestionnaire.kt)."),
     "/api/setup/apply": ("deliberate", "The setup questionnaire's one write (backend/jarvis_setup.py; docs/JARVIS-API.md section 147), and it is the DESKTOP's alone on purpose. With `confirm: true` it calls the EXISTING setters in a fixed safest-first order, ONE at a time, and every loosening change (an asks-first rule, offering a reading tool) raises its OWN existing approval card and waits for it - up to its card patience per card - so an apply can take minutes and needs a person at the PC. Several of those changes are PC-only by the existing rules (jarvis_asks_first refuses a loosening request from another device), so a phone button would either fail halfway or sit behind cards it cannot answer. The phone is read-only: it reads the same questions and may ask for the read-only /api/setup/plan, and says plainly that the changes are made on the PC. Nothing here approves a card, invents a gate action, clears a latch or switches a model. ARCHITECTURE.md section 8."),
-    # The Jarvis-owned local calendar (2026-10-29; the owner's decision that it
-    # is "local only", ON by default and disableable). The store and the four
-    # routes are the backend slice's (backend/jarvis_local_calendar.py,
-    # JARVIS-API section 163); the DESKTOP is wired by this slice - the HUD card,
-    # the month/week/day views and the one Add/Edit form (jarvis_hud.html,
-    # hud_calendar.rs, brain/calendar.rs) - and the PHONE by its own slice
-    # (feat/jarvis-calendar-android-2026-10-29: the Calendar plate and the
-    # home-screen widget). So these are `todo`: portable and wanted, with the
-    # phone half owned by another PR of the same day. The moment that PR lands
-    # the four lines become `ported`, which is what "todo" exists to prompt.
-    # Cardless by the owner's ruling (one row on this PC, no bulk form), and no
-    # route here opens a socket, a folder or a model call.
-    "/api/calendar": ("todo", "Jarvis's own calendar, read: GET the window (?days=1-90, default 7) or ONE stored event (?id=), with a sources block that says honestly what Google and iCal are doing. Desktop: the HUD's Calendar card and its month/week/day sheet (hud_proxy.rs's one allowed read, redacted under App lock by lock/rules.rs + brain/calendar.rs::redact_read). Phone: the Calendar plate and the widget, in the phone slice of the same day - not landed yet."),
-    "/api/calendar/add": ("todo", "Jarvis's own calendar, ONE event added: title required, date and times kept as wall clock (never an epoch), optional place, notes, remind_minutes and a daily/weekly/monthly repeat. Cardless by the owner's 2026-10-29 ruling - one row on this PC, no list form, ids-only audit. Desktop: the HUD's one Add form, through hud_calendar_add (no page POST). Phone: its own plate's add, in the phone slice - not landed yet."),
-    "/api/calendar/act": ("todo", "Jarvis's own calendar, ONE event changed or deleted by id (`do` is `delete` or `update`; any bulk verb is refused). Cardless like the add, and held on a stale link in both apps. Desktop: hud_calendar_act from the HUD's Edit and Delete. Phone: its own plate, in the phone slice - not landed yet."),
-    "/api/calendar/settings": ("todo", "Jarvis's own calendar's switch: {on: true|false}, ON with no file, OFF hides every surface on both apps and keeps every event, no card either way. NOT a HUD write on purpose (the HUD reads the PC's `on` flag and says the feature is off in words; capabilities/hud.json records why the switch is not that window's). Desktop: the typed sentence today, and the Settings card in the settings slice. Phone: its own Settings row, in the phone slice - not landed yet."),
+    # ---- Jarvis's own calendar (2026-10-29; JARVIS-API section 164) --------
+    # `ported`: BOTH halves of this feature landed on 2026-10-29/30. The backend
+    # owns the store and the four routes (backend/jarvis_local_calendar.py,
+    # JARVIS-API section 164); the PHONE calls all four (net/Calendar.kt,
+    # ui/screens/CalendarPlate.kt, CalendarSettingsPlate.kt,
+    # widget/CalendarWidget.kt) AND the DESKTOP calls all four - the HUD's
+    # Calendar card and its month/week/day sheet read /api/calendar through
+    # hud_proxy.rs's ONE allowed calendar read (redacted under App lock by
+    # lock/rules.rs + brain/calendar.rs::redact_read), hud_calendar.rs writes
+    # add and act, and Settings -> Calendar switches it. Both apps therefore
+    # share the one composing read, exactly as Part 3 of the design brief
+    # recommends. Cardless by the owner's ruling (one row on this PC, no bulk
+    # form), and no route here opens a socket, a folder or a model call.
+    "/api/calendar": ("ported", "Jarvis's own calendar: the events kept on the PC in calendar.db beside schedule.db - not the phone's calendar provider (so the app asks for no calendar permission at all) and not a Google account (backend/jarvis_local_calendar.py, JARVIS-API section 164). The one composing read a screen makes: `?days=N` (1-90) answers the local events, the window it covered, whether the feature is on, and a `sources` block naming Google and iCal honestly; `?id=` answers ONE stored event. Desktop: the HUD's Calendar rail card and its month/week/day sheet (src/jarvis_hud.html, hud_proxy.rs's one allowed calendar read; redacted under App lock by lock/rules.rs + brain/calendar.rs::redact_read). Phone: the Calendar screen's month grid and day list (net/Calendar.kt, ui/screens/CalendarPlate.kt), the Brain row beside Coming up, and the home-screen calendar widget (widget/CalendarWidget.kt)."),
+    "/api/calendar/add": ("ported", "One new calendar event, in the owner's own words: title, date, time (or all_day), an optional last day and end time, place, notes, remind_minutes and recurrence. NO approval card, and that is the owner's decision D1 of the 2026-10-29 design brief: it writes one row on the PC he is sitting at and changes nothing outside it, the same reasoning the cardless list already gives for one job on the schedule - with the same guards (there is no bulk form, and every write is ids-only in the audit line). Rule 4 still applies: both apps hold it on a stale link. Desktop: the HUD's one Add form, through hud_calendar_add (no page POST). Phone: the Add sheet on the Calendar screen (JarvisRuntime.calendarAdd)."),
+    "/api/calendar/act": ("ported", "ONE calendar event: delete, or update with the same fields /add takes (`do` is `delete` or `update`; any bulk verb is refused). No card for either - a delete only makes things quieter, and an update is the same one-row write as an add (decision D1) - and no bulk form: there is deliberately no delete-all and no clear-range, the same rule /api/schedule/act has. Both apps ask \"are you sure?\" before a delete because it cannot be undone, and both hold it on a stale link. Desktop: hud_calendar_act from the HUD's Edit and Delete. Phone: JarvisRuntime.calendarUpdate / calendarDelete on its own plate."),
+    "/api/calendar/settings": ("ported", "The PC's own ON/OFF switch for the whole calendar: `{\"on\": bool}`, stored in calendar-settings.json beside the other little settings files - **no file means ON**, which is what \"on by default\" means, and a damaged file reads as off with a reason rather than silently on. No card either way: it is a preference the owner can change back in one press, the same shape as the Anti-Slop filter and the briefing's senders switch. OFF hides the calendar on both apps and stops the widget updating; it NEVER deletes anything. NOT a HUD write on purpose (the HUD reads the PC's `on` flag and says the feature is off in words; capabilities/hud.json records why the switch is not that window's). Desktop: Settings -> Calendar, the same row pattern as every other setting. Phone: its Settings row (CalendarSettingsPlate.kt) and the off state's own \"Turn it on\" (JarvisRuntime.calendarSettings)."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 
@@ -1164,15 +1163,16 @@ RETIRED = {
 #: The PR that wires the first client REMOVES its line and reclassifies the
 #: route; if either app calls a route still listed here, that is an ERROR, so a
 #: stale line cannot hide a wired route.
-PENDING_CLIENTS = {
-    "/api/calendar": (
-        "Jarvis Calendar S1 (2026-10-29; JARVIS-API section 164): the store and "
-        "the four routes are built, and the HUD card / phone plate / widget are "
-        "the next slices (decisions.d/2026-10-29-jarvis-calendar.md)."),
-    "/api/calendar/add": "Jarvis Calendar S1: the add route; the HUD/phone writes are the next slices (JARVIS-API section 164).",
-    "/api/calendar/act": "Jarvis Calendar S1: the one-event delete/update route; the HUD/phone writes are the next slices (JARVIS-API section 164).",
-    "/api/calendar/settings": "Jarvis Calendar S1: the feature switch; neither app draws it yet, by design (JARVIS-API section 164).",
-}
+#:
+#: EMPTY ON 2026-10-29. It held the four `/api/calendar*` routes while the backend
+#: was written first (JARVIS-API section 164). The phone now calls all four
+#: (`net/Calendar.kt`), which is exactly the "an app already calls it" ERROR this
+#: checker raises, so #980 removed the lines - the rule above says the slice that
+#: wires the first client removes its line. They stay `planned`, which this
+#: checker reports as a warning in its own true words ("the phone calls it; the
+#: desktop does not yet"), and they become `ported` when the HUD card lands. The
+#: mechanism stays for the next backend-first route.
+PENDING_CLIENTS = {}
 
 
 def _nothing_calls_it(route: str) -> str:
