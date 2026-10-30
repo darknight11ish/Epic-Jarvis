@@ -643,6 +643,15 @@ not_connected = G.list_events()
 check("disconnected: 'not connected yet', never an empty calendar",
       not_connected["ok"] is False and "not connected" in not_connected["reason"],
       not_connected)
+# B2 (the phone field test of 2026-10-29): the reason used to name "Settings,
+# Accounts" with nothing saying that screen is the PC's, and the phone has no
+# Accounts screen at all. The reason is also what the desktop/phone answer is
+# built from, so it names the PC and says "not connected" once.
+check("disconnected: the reason names the PC, because the phone has no Accounts "
+      "screen - and says it once",
+      "On the PC" in not_connected["reason"]
+      and not_connected["reason"].lower().count("not connected") == 1,
+      not_connected["reason"])
 check("disconnected: no request to Google", t6.calls == [], t6.urls())
 
 data6[G.TARGET_REFRESH] = REFRESH
@@ -974,8 +983,26 @@ check("'connect my google calendar' explains both ways and where they live",
       and "Settings" in said and G.SETUP_DOC in said, said)
 check("the connect answer never invents an ICS export",
       "export" not in said.lower(), said)
+# B2 (the phone field test of 2026-10-29): the phone's typed "what's on my
+# calendar today" read "Not connected yet - Google Calendar is not connected
+# yet - Settings, Accounts, pick the private link or Google sign-in". Three
+# things were wrong with it: "not connected yet" was said twice; it sent the
+# owner to a Settings, Accounts screen the phone does not have without saying
+# so; and it named both ways as if they were picked there. The answer now says
+# it once, names the PC, and gives the two real steps that turn a read on.
+_unconnected = G.answer("what's on my calendar")
 check("'what's on my calendar' when disconnected says so",
-      "Not connected yet" in G.answer("what's on my calendar"))
+      _unconnected is not None and "not connected yet" in _unconnected.lower(),
+      _unconnected)
+check("... it says the way in is on the PC, because the phone has no Accounts screen",
+      _unconnected is not None and "On the PC" in _unconnected
+      and "Settings, Accounts" in _unconnected, _unconnected)
+check("... 'not connected yet' is said once, not twice (the B2 defect)",
+      _unconnected is not None and _unconnected.lower().count("not connected") == 1,
+      _unconnected)
+check("... the old desktop-only route that never said PC is gone",
+      _unconnected is not None and "pick the private link or Google sign-in"
+      not in _unconnected, _unconnected)
 meeting = G.answer("add a meeting Tuesday 3pm",
                    now=datetime(2026, 10, 28, 16, 0).astimezone())
 check("'add a meeting Tuesday 3pm' proposes it and says it needs the sign-in way",
