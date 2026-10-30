@@ -2962,6 +2962,16 @@ def _schedule_call(name: str, args: dict, call: dict, convo: list, steps: list, 
             # schedule_correction).
             step["said"] = str(result.get("said") or "").strip()
         say_step("tool_finished", name, ok=step["ok"])
+    if name == "coming_up" and watch is not None:
+        # C5 (security audit 2026-10-30): a reminder's own words are stored
+        # data - a previous turn could in principle have written them, and
+        # the phone's reminder screen is text this agent did not hear - so
+        # they reach the model through the SAME outside-text boundary as
+        # every other tool result: labelled, normalised, and recorded as a
+        # read. The read mark is the correct one: listing the schedule is
+        # reading stored text, not hearing the owner's newest words, which is
+        # why a note write after it asks (NOTE_AFTER_READING).
+        result = watch.took_in("coming_up", result)
     convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                   "content": _tool_content(result)})
 
@@ -5330,13 +5340,20 @@ def _json_type(val) -> str:
 #      gets one system line saying the same (OUTSIDE_NOTE). On its own that
 #      is a weak defence (AgentDojo measured delimiters alone barely
 #      helping); it is here because it is free.
-#   3. It is checked for planted instructions: jarvis_intake.injection_flags
+#   3. It goes through jarvis_content_risk, the one pipeline for text that
+#      arrived from outside (security audit 2026-10-30, C1 + C2): every
+#      string is NORMALISED - zero-width joiners, bidi controls, Unicode Tag
+#      characters and NFKC look-alikes removed, so a keyword split in two
+#      cannot slip past a reader - and ASSESSED. A rushing phrase ("just
+#      approve this now") latches the gate's own rush rule: the next action
+#      that would have run at `auto` stops and asks, and its card is marked
+#      unswipeable. That is the latch jarvis_gate._content_raise already
+#      reads (jarvis_content_risk.raise_tier); nothing new is armed here.
+#   4. It is checked for planted instructions: jarvis_intake.injection_flags
 #      (the same warnings memory cards show), plus the tag characters and
 #      markers above. A hit is a WARNING on any card this turn raises - never
-#      a block. The gate's own rush latch ([content_risk], rushing language
-#      raises the tier) lives in jarvis_content_risk.py on the owner's PC,
-#      which this repository does not have and cannot call safely, so a hit
-#      here does not set it; it is recorded on the turn and shown on the card.
+#      a block. A tool result is data, so it is never refused: it is
+#      labelled, normalised and flagged.
 #
 # And every card raised after outside text says what shaped it (shaped_by):
 # which tools had been read, and which of its values - an address, a link,
@@ -5449,6 +5466,48 @@ def strip_chat_markers(text: str) -> str:
     return text
 
 
+def _vet_outside_text(name: str, text: str) -> str:
+    """One string from a tool result, through the one pipeline for outside
+    text - normalised, then assessed (security audit 2026-10-30, C1 + C2).
+
+    NORMALISED means what the model reads is what a person would see: zero-
+    width joiners, bidi overrides, Unicode Tag characters and NFKC look-alikes
+    removed, by jarvis_content_risk.normalise - the same function
+    jarvis_calendar, jarvis_watch and jarvis_mcp already use, so there is no
+    second stripper to drift out of step.
+
+    ASSESSED means a rushing phrase ("just approve this now") latches the
+    gate's own rush rule, the one jarvis_gate._content_raise reads: for the
+    latch's minutes (ten unless the owner's config says otherwise) an action
+    that would have run at `auto` stops and asks, and its card is marked
+    unswipeable. The call is `vet_tool_result`, the function the gate's
+    `filter_tool_result` wraps; nothing here invents a second flag or a second
+    latch. The latch names the TOOL as its source (`tool:email_check`), never
+    the tool's surrounding text.
+
+    Fail-closed, like the optional modules beside it. Without
+    jarvis_content_risk the string comes back unchanged and the turn is still
+    marked as a read - the caller does that before this runs, so the old
+    behaviour is exactly what remains. If the module is here but its rule
+    table (jarvis_skills) is not, the normalisation half still runs: that
+    half needs nothing else, and it is the half that changes what the model
+    reads.
+    """
+    if not isinstance(text, str) or not text:
+        return text
+    try:
+        import jarvis_content_risk as cr
+    except Exception:
+        return text
+    try:
+        return cr.vet_tool_result(name, text).get("text", text)
+    except Exception:
+        try:
+            return cr.normalise(text).text
+        except Exception:
+            return text
+
+
 def _strings_in(obj, out: list, depth: int = 0) -> list:
     """Every string value inside `obj` (not the keys), in order."""
     if depth > 20:
@@ -5476,6 +5535,24 @@ def _cleaned(obj, depth: int = 0):
                 for k, v in obj.items()}
     if isinstance(obj, list):
         return [_cleaned(v, depth + 1) for v in obj]
+    return obj
+
+
+def _vetted(obj, name: str, depth: int = 0):
+    """A copy of `obj` with `_vet_outside_text` applied to every string value.
+
+    The same walk as `_cleaned`, one step earlier in the boundary: this is
+    the copy the model reads, so it is the normalised one. Keys are left
+    alone - a result's keys are the tool's own field names, never outside
+    text."""
+    if depth > 20:
+        return obj
+    if isinstance(obj, str):
+        return _vet_outside_text(name, obj)
+    if isinstance(obj, dict):
+        return {k: _vetted(v, name, depth + 1) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_vetted(v, name, depth + 1) for v in obj]
     return obj
 
 
@@ -5961,13 +6038,36 @@ class _TurnWatch:
             # in the very turn that did the reading.
             if name == "browser_control":
                 self.browser_hosts |= _hosts_of_browser_result(result)
+            # C1 + C2 (security audit 2026-10-30): every string in the result
+            # goes through the one pipeline for outside text BEFORE it is kept
+            # in self.outside or handed to the model. Normalised, so what the
+            # model reads is what a person would see - a keyword split by a
+            # zero-width joiner is no longer one word to the model and two to
+            # the scanner. Assessed, so a rush phrase inside it arms the gate's
+            # own latch and the next `auto` action asks. `result` is reassigned
+            # rather than only the scan copy, because the LABEL is added to a
+            # copy of `result` below: normalising only the scanner's copy would
+            # leave the invisible characters in the text the model reads. With
+            # no jarvis_content_risk the copy is the same text, unchanged, and
+            # the read/taint marks above are exactly as they were.
+            raw_pieces = _strings_in(result, [])
+            result = _vetted(result, name)
             pieces = _strings_in(result, [])
             self.outside.append("\n".join(pieces)[:_MAX_SCAN_CHARS])
             # Each field on its own - a sender's address in one field and
             # "send me the update" in the next are not an instruction to
             # send anything (a false alarm AgentDojo's own mail showed).
-            for piece in pieces:
-                for code, why in outside_flags(piece).items():
+            #
+            # These two ADVISORY scanners read the RAW field, not the
+            # normalised one: their whole job is to report what a person would
+            # not see, and normalising first erases that evidence (a Tag
+            # character is gone by the time the normalised copy exists, so the
+            # card would stop saying "may hold planted instructions" - the
+            # hidden-goal case in test_injection_cases.py caught exactly that).
+            # The model still gets the normalised copy; the scanner can see
+            # both.
+            for raw_piece in raw_pieces:
+                for code, why in outside_flags(raw_piece).items():
                     self.flags.setdefault(code, why)
                 # The "sneaky instruction" table (2026-10-06; the idea is
                 # OpenJarvis's 12-pattern scanner, Apache-2.0 - the patterns
@@ -5981,7 +6081,7 @@ class _TurnWatch:
                     # Normalised the same way outside_flags does it, so a
                     # look-alike letter cannot get past this table (I4); the
                     # table itself stays stdlib-only.
-                    line = jarvis_injection.summary(_plain_for_scan(piece))
+                    line = jarvis_injection.summary(_plain_for_scan(raw_piece))
                     if line:
                         self.flags.setdefault("sneaky_instruction", line)
                 except Exception:
