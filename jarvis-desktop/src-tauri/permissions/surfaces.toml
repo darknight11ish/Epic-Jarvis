@@ -1077,9 +1077,13 @@ permissions = [
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).
 # Listing and opening a conversation are reads - and both are held back
 # while "Windows Hello for private answers" hides the Brain's lists. Delete
-# is ONE conversation per call; there is no "delete all" anywhere. The switch
-# is ONE setting per call: ON only raises an approval card (tier `ask`) and
-# is held while the event stream is stale, OFF is immediate.
+# is ONE conversation per call; there is no "delete all" anywhere. Archive is
+# one chat and one direction per call, reversible and card-free (the owner's
+# ask of 2026-10-29), held back like the tag writes because it names a chat;
+# its archived list is the same list read with `archived` (GET
+# /api/history?archived=1). The switch is ONE setting per call: ON only
+# raises an approval card (tier `ask`) and is held while the event stream is
+# stale, OFF is immediate.
 #
 # "Search what was said" (JARVIS-API.md section 71, 2026-09-28) is a read
 # too, held back the same way: the PC opens each kept turn in memory for
@@ -1097,7 +1101,7 @@ permissions = [
 # uses the same private copy as the bar's own Copy (clipboard_privacy.rs).
 [[set]]
 identifier = "brain-history"
-description = "List, read and search the chat history kept on the PC, sort chats under the owner's own tags (and switch on overnight tag suggestions, which only ever raise a card), put a divider above one of their own messages, fork a chat from a message into a new one, delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
+description = "List, read and search the chat history kept on the PC, sort chats under the owner's own tags (and switch on overnight tag suggestions, which only ever raise a card), put a divider above one of their own messages, fork a chat from a message into a new one, archive or bring back one conversation (reversible, card-free, and its archived list), delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
 permissions = [
   "allow-brain-history-list",
   "allow-brain-history-open",
@@ -1109,6 +1113,7 @@ permissions = [
   "allow-brain-history-tag-suggest",
   "allow-brain-history-fork",
   "allow-brain-history-delete",
+  "allow-brain-history-archive",
   "allow-brain-history-settings",
   "allow-brain-continue-chat",
   "allow-write-clipboard-private",
@@ -2089,20 +2094,23 @@ permissions = [
 # taken out in `lock/rules.rs` while App lock or the private lists are hidden.
 #
 # This set is the one write command, `hud_history_act`, and it carries exactly
-# three actions on ONE chat: pin/unpin (`POST /api/history/pin`, section 18.3),
+# four actions on ONE chat: pin/unpin (`POST /api/history/pin`, section 18.3),
 # file under one of the owner's existing tags or unfiled (`POST
-# /api/history/tag`, section 99), and delete (`POST /api/history/delete`, the
-# same one-chat route the Brain uses). Every action is held on a stale link,
-# refused while the lists are hidden, and raises NO approval card - they are
-# the owner's own tidying, the same three things the Brain's History tab does
-# with the same routes, and none of them loosens a rule or takes anything away
-# except the one chat the owner named. There is no delete-all, no clear-list
-# and no route or body this command can be talked into sending: the action, the
-# id and the two optional fields are the whole surface, and `hud_act_body`
-# refuses anything else (including a field the chosen action does not use).
+# /api/history/tag`, section 99), archive or bring back (`POST
+# /api/history/archive`, 2026-10-29: reversible, so it asks no question and
+# takes nothing away - the same builder the Brain's own archive command uses),
+# and delete (`POST /api/history/delete`, the same one-chat route the Brain
+# uses). Every action is held on a stale link, refused while the lists are
+# hidden, and raises NO approval card - they are the owner's own tidying, the
+# same things the Brain's History tab does with the same routes, and none of
+# them loosens a rule or takes anything away except the one chat the owner
+# named. There is no delete-all, no clear-list and no route or body this
+# command can be talked into sending: the action, the id and the three optional
+# fields are the whole surface, and `hud_act_body` refuses anything else
+# (including a field the chosen action does not use).
 [[set]]
 identifier = "hud-history"
-description = "Pin or unpin ONE chat, file ONE chat under one of the owner's tags (or unfiled), or delete ONE chat. No card, no delete-all, held on a stale link."
+description = "Pin or unpin ONE chat, file ONE chat under one of the owner's tags (or unfiled), archive or bring back ONE chat, or delete ONE chat. No card, no delete-all, held on a stale link."
 permissions = [
   "allow-hud-history-act",
 ]
