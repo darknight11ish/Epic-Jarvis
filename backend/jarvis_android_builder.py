@@ -901,11 +901,11 @@ def run_build(plan: CommandPlan, approved: bool = False) -> dict:
     """Runs exactly `plan.argv` in exactly `plan.cwd`. Refuses without a yes,
     and refuses to run anything but the one documented command."""
     if not approved:
-        return {"ok": False, "error": "not approved", "why": "refused"}
+        return {"ok": False, "error": "not approved", "why": "not_approved"}
     if plan.refused:
-        return {"ok": False, "error": plan.refused, "why": "refused"}
+        return {"ok": False, "error": plan.refused, "why": "plan_refused"}
     if plan.argv != build_command(plan.tdir):
-        return {"ok": False, "error": "that is not the build command", "why": "refused"}
+        return {"ok": False, "error": "that is not the build command", "why": "wrong_build"}
     log = plan.tdir / BUILD_LOG_REL
     with _S_ONE:
         code, log = _run(plan.argv, plan.cwd, build_env(), plan.seconds, log)
@@ -916,12 +916,12 @@ def run_build(plan: CommandPlan, approved: bool = False) -> dict:
                 "error": f"the build took longer than {int(plan.seconds / 60)} minutes and "
                          "was stopped"}
     if code == -2:
-        return {"ok": False, "why": "failed", "log": tail,
+        return {"ok": False, "why": "would_not_start", "log": tail,
                 "error": "the build would not start - is gradlew.bat still in the task's "
                          "copy?"}
     if code != 0 or not apk.is_file():
         _audit("android.build", {"ok": False})
-        return {"ok": False, "why": "failed", "log": tail,
+        return {"ok": False, "why": "build_failed", "log": tail,
                 "error": f"the build failed (exit code {code}). The end of what Gradle "
                          "said is on the card."}
     _audit("android.build", {"ok": True})
@@ -994,13 +994,13 @@ def run_install(plan: CommandPlan, approved: bool = False) -> dict:
     """Runs exactly `adb install -r <apk>`. Refuses without a yes, refuses an
     APK that is not inside the task's copy, and refuses any other argument."""
     if not approved:
-        return {"ok": False, "error": "not approved", "why": "refused"}
+        return {"ok": False, "error": "not approved", "why": "not_approved"}
     if plan.refused:
-        return {"ok": False, "error": plan.refused, "why": "refused"}
+        return {"ok": False, "error": plan.refused, "why": "plan_refused"}
     apk = apk_inside(plan.tdir)
     adb = adb_path()
     if apk is None or adb is None or plan.argv != install_command(adb, apk):
-        return {"ok": False, "error": "that is not the install command", "why": "refused"}
+        return {"ok": False, "error": "that is not the install command", "why": "wrong_install"}
     log = plan.tdir / "build" / "jarvis-install.log"
     with _S_ONE:
         code, log = _run(plan.argv, plan.cwd, build_env(), plan.seconds, log)
@@ -1010,7 +1010,7 @@ def run_install(plan: CommandPlan, approved: bool = False) -> dict:
                 "error": "installing took too long and was stopped"}
     if code != 0:
         _audit("android.install", {"ok": False})
-        return {"ok": False, "why": "failed", "log": tail,
+        return {"ok": False, "why": "install_failed", "log": tail,
                 "error": f"the phone did not take the app (exit code {code}). Is it on the "
                          "cable with USB debugging allowed? The end of what adb said is on "
                          "the card."}
