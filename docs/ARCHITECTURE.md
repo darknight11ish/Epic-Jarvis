@@ -964,7 +964,7 @@ PC. The store keeps the wall clock plus the zone, never an epoch, and the switch
 is ON with no settings file. Adding, changing or deleting ONE event is cardless
 by this row; every later surface (the HUD card, the phone plate, the widget)
 still holds its writes on a stale link. The contract the screens build against
-is `docs/JARVIS-API.md` §163; the reasoning, in the owner's words and with the
+is `docs/JARVIS-API.md` §164; the reasoning, in the owner's words and with the
 limits stated, is the `decisions.d/2026-10-29-jarvis-calendar.md` fragment.
 
 **Wave D-1 (PR #722) is proactive, read-only and local-only, and its Rule-1

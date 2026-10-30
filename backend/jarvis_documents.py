@@ -1689,8 +1689,19 @@ try:
     conv = {".pdf": PdfConverter, ".docx": DocxConverter, ".xlsx": XlsxConverter,
             ".pptx": PptxConverter}[ext]
     md.register_converter(conv())
-    with open(path, "rb") as fh:
+    # "-" means the bytes arrive on standard input (jarvis_attached_file.py,
+    # 2026-10-29): a file the owner attached to a chat is read from a STREAM,
+    # never written to disk - not even to a temporary file. Every other caller
+    # still names a path.
+    if path == "-":
+        fh = sys.stdin.buffer
+    else:
+        fh = open(path, "rb")
+    try:
         res = md.convert_stream(fh, stream_info=StreamInfo(extension=ext))
+    finally:
+        if path != "-":
+            fh.close()
     text = res.text_content or ""
     sys.stdout.buffer.write(json.dumps({"ok": True, "text": text[:%d]}).encode("ascii"))
 except Exception as exc:
@@ -1716,8 +1727,15 @@ def _child_env() -> dict:
     return jarvis_child_env.inherited()
 
 
-def _default_convert(path: str, ext: str) -> dict:
-    """MarkItDown in its own program: no secrets, a clock, a size cap."""
+def _default_convert(path: str, ext: str, *, data: Optional[bytes] = None) -> dict:
+    """MarkItDown in its own program: no secrets, a clock, a size cap.
+
+    `data` sends the bytes on the child's standard input instead of opening
+    `path` (which is then `-`). A file the owner attached to a chat goes through
+    this door so that NOTHING IS WRITTEN: not a temporary file, not a copy. The
+    child is the same program, with the same scrubbed environment and the same
+    clock - the design's "one converter, a new stdin mode", not a second one.
+    """
     try:
         env = _child_env()
     except Exception:
@@ -1730,6 +1748,7 @@ def _default_convert(path: str, ext: str) -> dict:
     try:
         r = subprocess.run(args, env=env, capture_output=True, timeout=CONVERT_SECONDS,
                            cwd=os.path.dirname(sys.executable) or None,
+                           input=data if data is not None else b"",
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"it took longer than {int(CONVERT_SECONDS)} seconds to "
@@ -1749,6 +1768,18 @@ def _default_convert(path: str, ext: str) -> dict:
     if doc.get("missing"):
         return {"ok": False, "missing": True, "error": CONVERTER_MISSING}
     return doc
+
+
+def convert_bytes(raw: bytes, ext: str) -> dict:
+    """The text of a document that arrived as BYTES, never as a file.
+
+    jarvis_attached_file.py's one door into the converter (2026-10-29): a file
+    the owner attached to a chat is read from a stream, so "never written to
+    disk" is a property of the code rather than a promise about what gets
+    deleted afterwards. The same child program, the same scrubbed environment,
+    the same 120-second clock, the same stdout cap as `read()` uses.
+    """
+    return _default_convert("-", ext, data=bytes(raw or b""))
 
 
 _READY: dict = {}

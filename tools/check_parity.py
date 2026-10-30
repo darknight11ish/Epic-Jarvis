@@ -252,12 +252,12 @@ CLASSIFICATION = {
     # (ARCHITECTURE section 8, and the row in its one-sided-on-purpose table).
     # The read-only POST /api/antislop/audit is in BACKEND_ONLY below.
     "/api/antislop": ("ported", "The Anti-Slop filter (2026-10-28; JARVIS-API section 159; backend jarvis_antislop.py, vendoring the MIT-licensed miqdadbadjuber/anti-slop ruleset). GET reads the whole state (enabled, mode, scopes, dials, show_delivery_gate_on_ui_tasks); POST is ONE change at once, with no approval card either way and no model call - it filters the wording of an answer, opens no way out of the PC, reads no folder and takes no action. OFF costs 0 prompt tokens and rewrites nothing. Desktop: Settings, How Jarvis talks, Anti-Slop filter (src-tauri/src/antislop.rs get_antislop/set_antislop, settings window only; the card is src/antislop-settings.js + src/antislop.js). Phone: Settings, How Jarvis talks (net/Antislop.kt, ui/screens/AntislopPlate.kt, JarvisRuntime setAntislop/setAntislopMode), the master switch, the During/After mode and the em-dash box - the three scopes, the Delivery Gate switch and the dials are the desktop card on purpose (ARCHITECTURE section 8). The read-only POST /api/antislop/audit is in BACKEND_ONLY below."),
-    # The Jarvis-owned local calendar, S1 (2026-10-29; JARVIS-API section 163):
+    # The Jarvis-owned local calendar, S1 (2026-10-29; JARVIS-API section 164):
     # the store, the four routes and the typed switch are built; neither app
     # calls them yet because the HUD card, the phone plate and the widget are
     # the next slices (the owner's decision, decisions.d/2026-10-29-jarvis-
     # calendar.md). No gate entry: nothing leaves the PC.
-    "/api/calendar": ("planned", "Jarvis Calendar S1: GET the window (default 7 days, 1-90) or ONE stored event by ?id=, with a sources block saying Google and iCal are not on a screen yet (JARVIS-API section 163). The store is calendar.db on this PC, ON by default, OFF hides and keeps. No app calls it yet: the HUD card and the phone plate are S2/S3 and build against this contract."),
+    "/api/calendar": ("planned", "Jarvis Calendar S1: GET the window (default 7 days, 1-90) or ONE stored event by ?id=, with a sources block saying Google and iCal are not on a screen yet (JARVIS-API section 164). The store is calendar.db on this PC, ON by default, OFF hides and keeps. No app calls it yet: the HUD card and the phone plate are S2/S3 and build against this contract."),
     "/api/calendar/add": ("planned", "Jarvis Calendar S1: ONE local event, title required, date and times kept as wall clock (never an epoch) with an optional count/until recurrence. Cardless by the owner's 2026-10-29 ruling - one row on this PC, no bulk form, ids-only audit. No app calls it yet (S2/S3)."),
     "/api/calendar/act": ("planned", "Jarvis Calendar S1: delete or update ONE local event by id; any bulk verb answers 400 'no_bulk'. Cardless by the owner's 2026-10-29 ruling. No app calls it yet (S2/S3)."),
     "/api/calendar/settings": ("planned", "Jarvis Calendar S1: {on: true|false} - the whole feature's switch, ON with no file, OFF hides every surface and keeps every event. No card either way. No app calls it yet (S2/S3)."),
@@ -1150,12 +1150,12 @@ RETIRED = {
 #: stale line cannot hide a wired route.
 PENDING_CLIENTS = {
     "/api/calendar": (
-        "Jarvis Calendar S1 (2026-10-29; JARVIS-API section 163): the store and "
+        "Jarvis Calendar S1 (2026-10-29; JARVIS-API section 164): the store and "
         "the four routes are built, and the HUD card / phone plate / widget are "
         "the next slices (decisions.d/2026-10-29-jarvis-calendar.md)."),
-    "/api/calendar/add": "Jarvis Calendar S1: the add route; the HUD/phone writes are the next slices (JARVIS-API section 163).",
-    "/api/calendar/act": "Jarvis Calendar S1: the one-event delete/update route; the HUD/phone writes are the next slices (JARVIS-API section 163).",
-    "/api/calendar/settings": "Jarvis Calendar S1: the feature switch; neither app draws it yet, by design (JARVIS-API section 163).",
+    "/api/calendar/add": "Jarvis Calendar S1: the add route; the HUD/phone writes are the next slices (JARVIS-API section 164).",
+    "/api/calendar/act": "Jarvis Calendar S1: the one-event delete/update route; the HUD/phone writes are the next slices (JARVIS-API section 164).",
+    "/api/calendar/settings": "Jarvis Calendar S1: the feature switch; neither app draws it yet, by design (JARVIS-API section 164).",
 }
 
 
