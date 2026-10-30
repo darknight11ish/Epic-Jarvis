@@ -251,11 +251,30 @@ const plus = (days) => {
 /** A timed event that has NOT started yet, whatever time this suite runs at -
  *  a fixed "14:30 today" is in the past for anyone running it in the evening,
  *  and the card's whole job is to show what is still to come. */
-const SOON = new Date(NOW.getTime() + 90 * 60000);
+/* "Soon" must be TODAY and still ahead - the card lists today's remaining
+   events. The first version of this fixture was NOW + 90 min, which is the
+   wrong date for anyone running it in the last 90 minutes of the day: CI hit
+   exactly that at 22:00 UTC, the event landed on tomorrow, and the drawn card
+   (correctly) did not list it. Clamp the moment to today, with a minute to
+   spare, and prove the clamp over every hour of a fake day so this cannot come
+   back at one particular hour of the clock. */
+const endOfToday = midnight.getTime() + 24 * 60 * 60000;
+const SOON_MS = Math.min(NOW.getTime() + 90 * 60000, endOfToday - 60000);
+const SOON = new Date(SOON_MS);
 const SOON_DATE = iso(SOON);
 const SOON_TIME = `${pad(SOON.getHours())}:${pad(SOON.getMinutes())}`;
 const SOON_END = `${pad(new Date(SOON.getTime() + 45 * 60000).getHours())}:`
   + `${pad(new Date(SOON.getTime() + 45 * 60000).getMinutes())}`;
+for (let hour = 0; hour < 24; hour += 1) {
+  const fakeNow = new Date(midnight.getTime() + hour * 60 * 60000 + 30 * 60000);
+  const fakeMidnight = new Date(fakeNow.getFullYear(), fakeNow.getMonth(), fakeNow.getDate());
+  const fakeEnd = fakeMidnight.getTime() + 24 * 60 * 60000;
+  const fakeSoon = Math.min(fakeNow.getTime() + 90 * 60000, fakeEnd - 60000);
+  if (iso(new Date(fakeSoon)) !== iso(fakeNow)) {
+    throw new Error(`the "soon" fixture leaves today at ${hour}:30 - the card would `
+      + "not list it, which is what CI hit at 22:00 UTC");
+  }
+}
 
 /* The PC's own answer, in the contract's shape (jarvis_local_calendar.py). */
 const READ_BODY = {
