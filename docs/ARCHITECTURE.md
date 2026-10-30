@@ -778,6 +778,43 @@ places between screens. Presentation only - no approval logic changed.
   `CardWords.TIMED_OUT`; `timed_out_next` is the phone's own second sentence
   (§8 below).
 
+- **A decided card leaves every surface within one 30-second beat (2026-10-29).**
+  The owner's report: *"when a decision/approval card has already been addressed
+  (approved or denied) on either the Android app or the desktop program, make
+  sure the Android widgets (and every other surface that shows a
+  card/notification) update to reflect that - no stale card left showing, no dead
+  Approve/Deny on a resolved card."* The queue itself was already one thing -
+  `GET /api/pending` is the only list a surface draws from, a decided row is
+  gone from the next read, and `jarvis_gate.decide` answers `False` to a second
+  answer so a stale surface cannot record a verdict on a settled row. What was
+  missing was the second half of "one source": a **doorbell that can be missed**.
+  Every surface learned about a decision from the `approval` event, which is
+  `jarvis_events._poll_approvals` diffing ids on the backend's own pump - it
+  publishes only on CHANGE, and it swallows its own exceptions, so one failed
+  database read, one backend restart or a pump that is not running rings
+  nothing. The desktop survived that because its HUD page has carried a
+  30-second safety-net read since long before (`jarvis_hud.html`,
+  `setInterval(() => apprPoll(), 30000)`), and its stream re-reads the queue on
+  every connect and resume. The phone had **no** clock at all: a missed event
+  left the card on the home screen, in the notification drawer and on Home, with
+  a Deny that could only say "no longer waiting", until the app was restarted or
+  the link dropped. So both platforms now ask the same question on the same 30
+  seconds while a card is waiting and the link is live -
+  `QueueBeat.due` in `jarvis-client` (re-reading through `refreshPending`, the
+  one assignment `pending` ever gets, so the widget, the drawer and the in-app
+  list clear together) and `queue_beat_due` in `stream.rs` (re-reading through
+  `refresh_pending`, the one queue read all four desktop surfaces follow). Both
+  read **nothing** when the queue is empty, so this is not a poll of an idle PC,
+  and neither can approve or deny anything. Two things follow from the phone's
+  process rather than from the rule: the approvals widget now carries
+  `updatePeriodMillis="1800000"` (the board widget's period since it was
+  written), because a RemoteViews drawn by a killed process is otherwise held by
+  the launcher for ever, and a cold draw says "Not checked yet" rather than
+  drawing a card it cannot vouch for (`WidgetStates`). And a decision now says
+  who made it: the phone sends `"by": "phone"` on both `/api/approve` and
+  `/api/deny` (`SignedApproval.BY`), where it used to send only `{"id"}` and
+  inherit the route's `"hud"` default - the field evidence that started this.
+
 - **Two MECHANICAL guards against blind, stacked approvals (2026-10-20).**
   The owner's incident: one "approve all" click approved three backup
   restores, two imports and a device-key registration, because repeated

@@ -64,6 +64,13 @@ const RESUME_SAVE_INTERVAL: Duration = Duration::from_secs(5);
 /// Largest line the stream may send before it is treated as broken. The bus
 /// publishes small JSON objects; a megabyte without a newline is a fault.
 const MAX_LINE_BYTES: usize = 1024 * 1024;
+/// The silence timeout above is 70 s; this is how often the queue is re-read
+/// while a card is waiting. 30 s is the same beat the HUD page's own
+/// `apprPoll` safety net has used since before this (`jarvis_hud.html`,
+/// `setInterval(..., 30000)`), and the same number the phone's `QueueBeat`
+/// re-reads on - one answer, on every surface, to "how stale can a card be".
+const QUEUE_BEAT: Duration = Duration::from_secs(30);
+
 /// Store key holding the resume point across restarts.
 const RESUME_KEY: &str = "events.last_id";
 
@@ -477,10 +484,14 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
     // Lines are cut from raw bytes so a multi-byte character split across two
     // network chunks is never decoded half-way.
     let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
+    // When the queue's own safety-net read last ran. It is re-created from the
+    // REMAINING time on every pass, not from a fresh `sleep(QUEUE_BEAT)`, so a
+    // keepalive arriving every 20 s cannot keep pushing the beat out of reach.
+    let mut last_beat = Instant::now();
 
     loop {
         let chunk = tokio::select! {
-            read = tokio::time::timeout(SILENCE_TIMEOUT, response.chunk()) => match read {
+            read = tokio::time::timeout(SILENCE_TIMEOUT, response.chunk()) => Some(match read {
                 Ok(Ok(Some(bytes))) => bytes,
                 Ok(Ok(None)) => {
                     // The server ends the stream after an hour by design.
@@ -501,10 +512,22 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
                         SILENCE_TIMEOUT.as_secs()
                     ))
                 }
-            },
+            }),
             _ = wake().notified() => {
                 return Ok("reconnecting at the client's request".to_string());
             }
+            // The queue's fallback beat. See `queue_beat_due`.
+            _ = tokio::time::sleep(QUEUE_BEAT.saturating_sub(last_beat.elapsed())) => None,
+        };
+
+        // No bytes this pass, so the buffer is untouched; only the beat runs.
+        let Some(chunk) = chunk else {
+            last_beat = Instant::now();
+            let link = app.state::<StreamState>().link();
+            if queue_beat_due(link.connected, link.stale, link.approvals) {
+                refresh_pending(app, base).await;
+            }
+            continue;
         };
 
         buffer.extend_from_slice(&chunk);
@@ -1083,6 +1106,36 @@ fn power_set_by(value: &serde_json::Value) -> Option<String> {
         return Some("schedule".to_string());
     }
     None
+}
+
+/// Whether the queue's fallback re-read should run now.
+///
+/// THE bug this exists for (the owner's report of 2026-10-29): a card answered
+/// on the phone stayed on the Jarvis bar and the widget. Nothing on the desktop
+/// re-reads `/api/pending` on a clock - `refresh_pending` runs on connect, on
+/// resume and on an `approval` event - and that event is a poller diffing ids
+/// (`jarvis_events._poll_approvals`), which catches its own exceptions and
+/// publishes only on CHANGE. So a pump that is not running, that failed its one
+/// database read, or a backend that restarted since, rings nothing: the card
+/// sits there with live-looking Approve/Deny until the stream reconnects on its
+/// own (the server closes it hourly) or the window is reloaded.
+///
+/// The conditions are the same three the phone's `QueueBeat.due` uses, for the
+/// same reasons:
+///
+/// * `approvals > 0` - nothing is drawn from the queue otherwise, so there is
+///   nothing a stale read could hold open, and an idle PC makes no request at
+///   all. This is what keeps it from being a poll of the backend.
+/// * `connected` - a stream that is down has its own recovery (`connect_once`'s
+///   backoff loop). A side-fetch over the same dead line would only fail, and
+///   `mark_queue_unread` would then declare the queue untrustworthy.
+/// * `!stale` - a stale link is one nothing may be answered on, and
+///   `refresh_pending` is exactly what would clear that staleness legitimately;
+///   but while it is stale the surfaces are already refusing (rule 4), so a
+///   re-read adds nothing a person can act on. The `hello` frame and
+///   `OnOpen`/`refresh_pending` own that transition.
+fn queue_beat_due(connected: bool, stale: bool, approvals: usize) -> bool {
+    connected && !stale && approvals > 0
 }
 
 /// Re-reads the approval queue and hands the same list to all three surfaces.
@@ -1925,5 +1978,89 @@ mod hud_raise_tests {
         );
         assert!(!brings_a_new_card(&two, &two));
         assert!(brings_a_new_card(&one, &["b".to_string()]));
+    }
+
+    /// The queue's fallback beat: the whole matrix, so the rule cannot drift
+    /// into a poll of a quiet backend or into silence over a live card.
+    ///
+    /// This is the desktop half of the owner's 2026-10-29 report - a card
+    /// answered on the phone stayed on the bar and the widget because nothing
+    /// re-reads `/api/pending` without an `approval` event to ask. The phone's
+    /// `QueueBeat.due` is the same three conditions; a change to either that
+    /// stops the two agreeing shows up as a difference between this test and
+    /// `QueueBeatTest`.
+    use super::queue_beat_due;
+
+    #[test]
+    fn the_queue_beat_runs_only_for_a_waiting_card_on_a_live_link() {
+        assert!(
+            queue_beat_due(true, false, 1),
+            "a card waiting on a live link is exactly the case the beat is for"
+        );
+        assert!(
+            queue_beat_due(true, false, 3),
+            "a queue re-reads the same way"
+        );
+        assert!(
+            !queue_beat_due(true, false, 0),
+            "with nothing waiting there is nothing a stale read could hold open, \
+             so an idle PC must make no request at all"
+        );
+        assert!(
+            !queue_beat_due(false, false, 2),
+            "a stream that is down has its own recovery; a side-fetch would only fail"
+        );
+        assert!(
+            !queue_beat_due(false, true, 2),
+            "neither condition holds on a link that is both down and stale"
+        );
+        assert!(
+            !queue_beat_due(true, true, 2),
+            "while the link is stale every surface already refuses, so a re-read \
+             adds nothing a person can act on"
+        );
+    }
+
+    /// CONTROL: the beat is really wired into the read loop, and is re-armed
+    /// from the time it LAST ran rather than from a fresh 30 s on every pass.
+    ///
+    /// A plain `sleep(QUEUE_BEAT)` created inside the `select!` would be
+    /// cancelled by every keepalive - the backend sends one every ~20 s - so
+    /// the branch could never fire on a healthy connection, which is the exact
+    /// state the beat exists to correct. The source is the only place that
+    /// distinction lives, so it is what this reads.
+    ///
+    /// Each needle is CONCATENATED from pieces on purpose: written whole it
+    /// would appear in this test's own text, `include_str!` would find it
+    /// there, and the check would pass against a source that had lost the
+    /// line - the same trap `tools/check_invoke_grants.py` fell into and now
+    /// refuses ("a helper hiding that literal failed the audit").
+    #[test]
+    fn the_beat_is_wired_into_the_read_loop_and_counts_from_the_last_one() {
+        let source = include_str!("stream.rs");
+        let arm = [
+            "tokio::time::sleep(QUEUE_BEAT",
+            ".saturating_sub(last_beat.elapsed()))",
+        ]
+        .concat();
+        assert!(
+            source.contains(&arm),
+            "the beat arm must subtract the time since the last beat, or a \
+             keepalive every 20 s keeps it from ever firing"
+        );
+        let ask = [
+            "if queue_beat_due(link.connected, link.stale, ",
+            "link.approvals)",
+        ]
+        .concat();
+        assert!(
+            source.contains(&ask),
+            "the beat must ask the rule before re-reading"
+        );
+        let read = ["refresh_pending(app, ", "base).await;"].concat();
+        assert!(
+            source.contains(&read),
+            "and the re-read must be the one queue read every surface follows"
+        );
     }
 }

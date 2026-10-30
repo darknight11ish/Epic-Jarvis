@@ -286,22 +286,33 @@ The current parser refuses names that mean "already dealt with"
 NAME, for the read-only "Activity" list. Section 41 has the details, and
 what could and could not be confirmed about its rows' exact shape.
 
-### Approve/deny bodies — the clients disagree
+### Approve/deny bodies — settled 2026-10-29: all three surfaces name themselves
 
 ```
-Desktop  →  {"id": "<id>", "by": "desktop_spotlight"}      commands.rs:914-916, 954-958
-Android  →  {"id": "<id>"}                                  JarvisApi.kt:395, 484
+Desktop  →  {"id": "<id>", "by": "desktop_spotlight"}      commands.rs:3064-3067
+HUD page →  {"id": "<id>", "by": "hud"}                    jarvis_hud.html (apprDecide)
+Android  →  {"id": "<id>", "by": "phone"}                  SignedApproval.BY, approveBody/denyBody
 ```
 
-The desktop adds `by` so the server can record which machine the human was
-sitting at. The phone sends no such field, so a decision made from the phone is
-attributed to nothing. Neither client knows whether the server reads `by` at
-all. See §7.
+`jarvis_hud.py`'s route for both methods reads `by` and stores it as the gate's
+`decided_by` column (`jarvis_hud.py` `/api/approve|/api/deny`,
+`jarvis_gate.decide`). The default when the field is **absent or empty** is
+`"hud"`, which is what the phone used to inherit by sending only `{"id"}` — so
+until 2026-10-29 every phone decision was recorded as the browser HUD's, and the
+Activity list on both apps repeated that back as the device that answered. The
+phone now sends `"by": "phone"` on **both** verbs, from one constant, because
+`approveBody` and `denyBody` in `SignedApproval` are built together and
+`SignedApprovalTest` holds them to the same word. A `by` longer than 64
+characters is cut, not refused — it lands in a stored column. `backend/test_decided_by_attribution.py`
+proves the whole path, including that a decided card is gone from the next
+`/api/pending` and that a second answer is refused. See §7.
 
 A **409** from either route means "already decided, expired, or unknown id"
 (`commands.rs:853-855`) — routine when both clients are open, and the Android
 client gives it its own named outcome rather than rendering it as a failure
-(`JarvisApi.kt:501`).
+(`JarvisApi.kt:501`). A 409 is also the server half of "no dead Approve on a
+resolved card": the verdict cannot be recorded twice, and both apps re-read the
+queue when they see one.
 
 ### Approving with a choice
 
@@ -404,13 +415,18 @@ out") because it believed the row. `backend/test_pending_expiry_on_read.py`
 proves an overdue card leaves while a live one stays. The bounded cost: an
 overdue row can still be served for up to that 60-second grace and until the
 next read after it, and a card that expires while a screen is already open sits
-there until that screen next reads the queue. **No client-side "clear expired"
-control exists, and none is needed** — the card is gone from the next read and
-nothing can be approved by a card that is not served. The phone's only added
-half is one line in `MainActivity.onResume` that re-reads this route when the
-app comes to the front (2026-10-28), so opening Jarvis is the whole answer; it is
-a read and decides nothing. The desktop's HUD, widget and bar re-read on the
-events they already receive.
+there until that screen next reads the queue — which since 2026-10-29 is at most
+**30 seconds** on any surface a person is looking at (a card waiting, a live
+link; see below). **No client-side "clear expired" control exists, and none is
+needed** — the card is gone from the next read and nothing can be approved by a
+card that is not served. The phone's own halves are one line in
+`MainActivity.onResume` that re-reads this route when the app comes to the front
+(2026-10-28), and `QueueBeat` — one re-read every 30 s while a card is waiting on
+a CONNECTED link, which is also what clears a card **decided elsewhere**
+(`JarvisRuntime`; the widget, the notification and Home all draw from that one
+`pending`). The desktop's HUD, widget and bar re-read on the events they already
+receive, and `stream.rs` adds the same 30-second re-read beside them
+(`queue_beat_due`) for the case where the `approval` event never arrives.
 
 ### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
 
@@ -1969,10 +1985,17 @@ know which side the backend agrees with.
    phone reads both framings through `net/ChatChunkParser.kt`, as the
    desktop does - `API-DISAGREEMENTS.md` §4.)
 
-2. **Approve/deny attribution.** Desktop sends `"by": "desktop_spotlight"`
-   (`commands.rs:914-916`); Android sends only `{"id": …}` (`JarvisApi.kt:395`).
-   If the server records `by`, phone decisions are attributed to nothing. If it
-   ignores `by`, the desktop is sending a field nobody reads.
+2. **Approve/deny attribution — SETTLED 2026-10-29.** Desktop sends
+   `"by": "desktop_spotlight"` (`commands.rs:3064-3067`), the browser HUD sends
+   `"by": "hud"`, and Android now sends `"by": "phone"` (`SignedApproval.BY`,
+   used by both `approveBody` and `denyBody`). The server **does** read it: the
+   route passes it to `jarvis_gate.decide`, which stores it as `decided_by`, and
+   an absent or empty one defaults to `"hud"` - so the phone's old `{"id"}`-only
+   body was recorded as the HUD's, which is the owner's 2026-10-29 field
+   evidence. `backend/test_decided_by_attribution.py` drives both halves. What
+   remains different between the clients is only the WORD each sends, and that
+   is deliberate: it is how a person reading the Activity list can tell which
+   surface answered.
 
 3. **`/api/appearance` — the clients used to contradict each other about
    whether it exists.** *Resolved on the desktop side:* `appearance.rs` now

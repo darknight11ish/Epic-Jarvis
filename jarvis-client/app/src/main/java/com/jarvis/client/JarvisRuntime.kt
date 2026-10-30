@@ -770,6 +770,17 @@ object JarvisRuntime {
     private var widgetJob: Job? = null
     private var boardJob: Job? = null
 
+    /**
+     * The queue's own safety net - [QueueBeat]'s collector.
+     *
+     * Beside `widgetJob` because it exists for the same reason: every Android
+     * surface reads [_pending], and a missed `approval` event used to leave a
+     * decided card on the home screen, in the notification drawer and on Home
+     * until something else happened to re-read. Held so a restart replaces it
+     * rather than stacking a second one.
+     */
+    private var queueBeat: Job? = null
+
     /** The forced restart in flight, so two taps on Reconnect do not stack. */
     @Volatile private var restartJob: Job? = null
 
@@ -1076,6 +1087,35 @@ object JarvisRuntime {
                     ApprovalWidget().updateAll(app)
                     QuickLinkWidget().updateAll(app)
                 }
+        }
+        // The safety net under that doorbell (the owner's report of
+        // 2026-10-29). `widgetJob` above only redraws when `_pending` CHANGES,
+        // and the only thing that used to change it was the PC's `approval`
+        // event - so one missed event, one pump that is not running, or one
+        // backend restart left a decided card on the home screen with a Deny
+        // that could only say "no longer waiting". One re-read of the queue,
+        // every 30 seconds, and only while a card is actually waiting on a link
+        // that can answer (QueueBeat.due) - which is the desktop's own
+        // safety-net read, not a new poller: it reads nothing when the queue is
+        // empty.
+        //
+        // Every surface follows from it without a line of its own. A shorter
+        // queue emits `_pending`, which is what widgetJob redraws the widgets
+        // from and what EventService's own watcher resyncs the notification
+        // drawer from - so the card leaves the home screen, the drawer and the
+        // in-app list together, in one beat.
+        queueBeat?.cancel()
+        queueBeat = scope.launch {
+            while (true) {
+                delay(QueueBeat.EVERY_MS)
+                if (QueueBeat.due(
+                        waiting = _pending.value.size,
+                        connected = _link.value == LinkState.CONNECTED,
+                    )
+                ) {
+                    refreshPending()
+                }
+            }
         }
         // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
         // so read again from the PC - when the link comes or goes stale, when
