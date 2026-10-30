@@ -906,7 +906,13 @@ def t_the_route_reads_switches_and_deletes():
           # `update-in-chat.patch` is inserted at stack position 138, so every
           # generated position after it moved up by one again and the same block
           # followed (media-index 153 -> 154, `sandbox` 155 -> 156).
-          and manifest["stack_order"] == 154, manifest.get("stack_order"))
+          # Moved up once more on 2026-10-29, with `sandbox` (157 -> 158):
+          # `no-deadline-cards.patch` is inserted at stack position 37, right
+          # after `no-expiry-cards.patch`, so every GENERATED position after it
+          # moved up by one and the same hand-numbered block had to follow, or
+          # media-index and `sandbox` would both have been ordered by folder
+          # name (media-index 154 -> 155).
+          and manifest["stack_order"] == 155, manifest.get("stack_order"))
     check("...and the README says it replaces no patch", "replaces NO patch"
           in (plugin_dir / "README.md").read_text(encoding="utf-8"))
 
