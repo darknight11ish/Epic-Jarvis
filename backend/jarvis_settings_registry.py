@@ -185,6 +185,13 @@ class Section:
     names: tuple                # plain-English things the owner might call it
     app: str = "both"           # "both" | "desktop" | "phone"
     where: str = "settings"     # "settings" (Settings) or "brain" (the Brain/Mind)
+    #: False for a row that is the FEATURE's own switch rather than a place to
+    #: open. The two "open" matchers - jarvis_quick._settings_open and
+    #: jarvis_open._section_for - then leave those words to the feature that
+    #: already owns them instead of answering a Settings jump; `find_section`
+    #: still names the section, because every Section must be nameable
+    #: (test_settings_registry pins that).
+    openable: bool = True
 
 
 #: Desktop: jarvis-desktop/src/settings.html's own `<section class="card"
@@ -518,17 +525,26 @@ SECTIONS: tuple = (
     # is the PC's (`calendar-settings.json` beside the other little settings
     # files, no file = on), so both apps read one value.
     #
-    # "the calendar" is in the names on purpose: "open the calendar" is how the
-    # owner would say it. `tools/check_feature_controls.py` decides whether the
-    # desktop has this section by looking for those words in settings.html, and
-    # it finds them in the account-secrets card's own sentence ("the private
-    # calendar link", "the calendar's CalDAV address") - so this row records
+    # (2026-10-29, the chain integration) NOT A PLACE TO OPEN. "open my
+    # calendar" is the feature's own sentence: `jarvis_open.py` answers it with
+    # `open_app` (docs/JARVIS-API.md section 163 says so - "'Open my calendar'
+    # still opens it"), and this row is the switch that turns the feature back
+    # on rather than the calendar itself. So `openable=False`: the two "open"
+    # matchers leave those words to the feature that already owns them, while
+    # `find_section` still names the row (every Section must be nameable) and
+    # the typed switch ("turn off the Jarvis calendar") still reaches it.
+    #
+    # The names stay, and "the calendar" is in them on purpose for
+    # `tools/check_feature_controls.py`: it decides whether the desktop has this
+    # section by looking for those words in settings.html, and it finds them in
+    # the account-secrets card's own sentence ("the private calendar link",
+    # "the calendar's CalDAV address") - so this row records
     # in_desktop_settings true in contract/feature-controls.json, which means
     # "the words reach the desktop page", not "a calendar card exists there".
     # The card is the HUD half's; the words are the older Google/CalDAV row's.
     Section("calendar", ("the calendar", "jarvis calendar", "my calendar",
                          "appointments"),
-            app="phone"),
+            app="phone", openable=False),
     # "Limits and how often Jarvis does things" (2026-10-08): the limits and
 )
 

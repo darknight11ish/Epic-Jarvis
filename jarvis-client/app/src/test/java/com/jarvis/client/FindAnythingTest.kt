@@ -224,12 +224,20 @@ class FindAnythingTest {
             // real phone menu (SettingsScreen.kt item "learning") and the desktop
             // Learning card opens the same section, so a real place was added.
             //
+            // 125 -> 126 (2026-10-29, the calendar chain integration):
+            // `settings.calendar` is the phone's "Jarvis Calendar" row
+            // (SettingsScreen.kt item "calendar", CalendarSettingsPlate.kt). It
+            // is never hideable - it is the switch that turns the feature back
+            // on - but it is a real menu with a real place in
+            // MenuPlaces.SETTINGS, so the catalogue is one larger because a real
+            // place was added.
+            //
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 125 menus has all of its names searched for.
+            // of the 126 menus has all of its names searched for.
             "the catalogue must still carry the names at all",
-            125,
+            126,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
@@ -311,15 +319,15 @@ class FindAnythingTest {
             "a Settings row with no menu id has appeared: give it a place and say so here",
             // "App control" (2026-10-19): the phone's accessibility service is
             // phone-only, so the desktop's catalogue has no menu id for it.
-            // "Jarvis Calendar" (2026-10-29) is phone-only in this slice for the
-            // same shape of reason - the desktop's Settings card arrives with
-            // the HUD half - and it must NOT be hideable anyway: it is the
-            // switch that turns the feature back ON (MenuVisibilityTest says the
-            // same in its own words).
+            // "Jarvis Calendar" is NOT here any more (2026-10-29, the chain
+            // integration): the settings registry's checker requires every
+            // registry Section to be a menu, so the row has `settings.calendar`
+            // in the catalogue (`hide = false` - it must stay visible, because
+            // it is the switch that turns the feature back ON) and its place is
+            // the row itself in MenuPlaces.SETTINGS.
             listOf(
                 "settings-row.app-control",
                 "settings-row.jarvis-notify",
-                "settings-row.calendar",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )

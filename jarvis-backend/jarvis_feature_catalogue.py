@@ -3,7 +3,7 @@
 The owner's feature list, as data: 143 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 a2ca1bb3f16cc338354d7e51bc83ffbeef992eb68e8b2578c44b293b92549043); the apps' Features pages read their own
+`features/features.json` (sha256 862f1806a919f26e26721c0b971dc97d946fa7f87e8fe2b4741677d5eedbc709); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "a2ca1bb3f16cc338354d7e51bc83ffbeef992eb68e8b2578c44b293b92549043"
+SOURCE_SHA256 = "862f1806a919f26e26721c0b971dc97d946fa7f87e8fe2b4741677d5eedbc709"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -898,7 +898,7 @@ FEATURES = (
         "asks": "Adding, changing or deleting ONE of your own events raises no card: it writes one row on your own PC and has no bulk form. Turning the whole calendar off is instant and keeps every event.",
         "limit": "Local only: no Google sync, no invitations, no sharing, and no reminder ringing yet (the reminder time is stored for later). Editing a repeating event changes the whole series, not one occurrence.",
         "surface": "both",
-        "covers": [],
+        "covers": ["settings.calendar"],
     },
     {
         "id": "weather-sky",
