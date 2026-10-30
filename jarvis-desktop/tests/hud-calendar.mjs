@@ -43,6 +43,12 @@
  *      blanks the titles, places and notes while keeping the days.
  *   7. the page is still ONE page: the three vendored copies are byte
  *      identical, and no raw JSON is ever put on screen.
+ *   8. FAIL CLOSED (2026-10-30): an answer this page does not understand -
+ *      `?id=`'s `{"ok": true, "event": {...}}`, a bare event, an array, an
+ *      empty body, `available` that is not a boolean, `events` that is not an
+ *      array - is refused IN WORDS and draws nothing. It is never read as "an
+ *      available calendar with no events", and a write the PC did not confirm
+ *      with `{"ok": true}` is never reported as saved.
  *
  * NOT here: the real WebView2 window (a rebuild and install after merge), the
  * store itself (backend/test_local_calendar.py), and a real PC's events.
@@ -358,6 +364,79 @@ await check("no raw JSON reaches the screen in any state", () => {
     const text = words(node);
     assert.doesNotMatch(text, /\{"|"\w+":\s/, `${node.id} shows JSON: ${text}`);
   }
+});
+
+/* ── 1b. FAIL CLOSED: a shape nobody understands is never a calendar ─────── */
+
+await check("an answer this page does not understand is refused, never drawn", async () => {
+  // A REAL shape of the PC's that is NOT the list read: `?id=` answers one
+  // event as `{"ok": true, "event": {...}}` (jarvis_local_calendar.get_one).
+  // Before 2026-10-30 the read was `available !== false`, so this became "an
+  // available calendar with no events" - the card drew "Nothing in the next
+  // 7 days" over the owner's own day from an answer nobody had understood.
+  const one = await settle(runCalendar({
+    body: {
+      ok: true,
+      event: { id: "c0123456789", title: "Dentist", date: TODAY,
+        time: "14:30", all_day: false },
+    },
+  }));
+  const cardText = one.card();
+  assert.match(cardText, /shape this window does not understand/, cardText);
+  assert.doesNotMatch(cardText, /Nothing in the next 7 days/, cardText);
+  assert.doesNotMatch(cardText, /Dentist/, cardText);
+  assert.equal(one.nodes.get("rail-calendar").hidden, false,
+    "the card hid itself: a blank card reads as a fault, a sentence does not");
+  // The sheet says the same thing, and no day in it is invented.
+  one.api.open();
+  assert.match(one.panel(), /shape this window does not understand/);
+  assert.doesNotMatch(one.panel(), /Dentist/);
+  assert.equal(one.api.read({ ok: true, event: {} }).unknown, true);
+  // Every other shape this page was not taught: a bare event, an array, an
+  // empty body, no body, a non-array `events`, a non-boolean `available`, and
+  // a list that never says `available` at all. None may become a calendar.
+  for (const body of [
+    { id: "c0123456789", date: TODAY, title: "Hostile" },
+    [{ id: "c0123456789", date: TODAY, title: "Hostile" }],
+    {},
+    null,
+    { available: true, events: { 0: { id: "c0123456789", date: TODAY } } },
+    { available: "true", events: [] },
+    { events: [READ_BODY.events[0]] },
+  ]) {
+    const read = one.api.read(body);
+    assert.equal(read.available, false, `drawn as a calendar: ${JSON.stringify(body)}`);
+    assert.equal(read.unknown, true, `not refused: ${JSON.stringify(body)}`);
+    assert.equal(read.events.length, 0, `an event came out of ${JSON.stringify(body)}`);
+    assert.equal(read.hidden, false, JSON.stringify(body));
+    const painted = await settle(runCalendar({ body }));
+    const text = painted.card();
+    assert.match(text, /does not understand/, text);
+    assert.doesNotMatch(text, /Nothing in the next 7 days/, text);
+  }
+});
+
+await check("a write the PC did not confirm is never called a save", () => {
+  const { api } = live;
+  // The contract's own success, and only that.
+  assert.equal(api.confirmed({ ok: true, event: {}, said: "Added." }), true);
+  for (const reply of [
+    null, undefined, {}, { event: {} }, { said: "Saved." }, { ok: false },
+    { ok: "true" }, { ok: 1 }, [], "ok", 0,
+  ]) {
+    assert.equal(api.confirmed(reply), false, `accepted ${JSON.stringify(reply)}`);
+  }
+  // A refusal's own words are used when they are strings, and never when not.
+  assert.equal(api.replyError({ ok: false, error: "The store is full." }, "fallback"),
+    "The store is full.");
+  assert.equal(api.replyError({ ok: false, reason: "full" }, "fallback"), "full");
+  assert.equal(api.replyError({ ok: false }, "fallback"), "fallback");
+  assert.equal(api.replyError({ error: { nested: "x" } }, "fallback"), "fallback");
+  // Both write handlers go through it, so the old `reply.ok === false` test -
+  // which read an answer with no `ok` at all as a save - cannot come back.
+  assert.doesNotMatch(BLOCK, /reply\.ok === false/,
+    "a write handler still accepts an unknown reply as a save");
+  assert.match(BLOCK, /if \(!confirmed\(reply\)\)/);
 });
 
 /* ── 2. the three views really draw ─────────────────────────────────────── */

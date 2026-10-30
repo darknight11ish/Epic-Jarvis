@@ -10548,6 +10548,13 @@ subscribe();
     var OFF_HINT = "Turn it on in Jarvis Settings, or ask me to turn the Jarvis calendar on.";
     var OFF_BANNER = "The Jarvis Calendar is off, so there is nothing to draw. "
       + "Nothing was deleted - every event is still on this PC. " + OFF_HINT;
+    /** A shape this page does not understand is NEVER drawn as the owner's
+     *  real calendar (2026-10-30, the fail-open fix). It says so, and says
+     *  where the events still are, so an unreadable answer can never look
+     *  like an empty week. */
+    var UNKNOWN_NOTE = "Your PC's Jarvis answered in a shape this window does not "
+      + "understand, so nothing is drawn from it - not an event, not an empty day. "
+      + "Your events are kept on the PC.";
 
     var state = {
       view: "month",
@@ -10658,11 +10665,38 @@ subscribe();
       };
     }
     /** The PC's own answer, in the page's words. `on` absent means on: the
-     *  contract's default is on, and a missing switch file is on by design. */
+     *  contract's default is on, and a missing switch file is on by design.
+     *
+     *  FAIL CLOSED (2026-10-30). Only a shape this page KNOWS may become a
+     *  calendar. The contract's read (`jarvis_local_calendar.list_events`)
+     *  always carries `available` as a real boolean and, when it is true,
+     *  `events` as an array; anything else - the single-event answer
+     *  `{"ok": true, "event": {...}}` that `?id=` returns, a bare event, an
+     *  error body, a truncated read, an array - is refused IN WORDS and drawn
+     *  as nothing. This used to be `available !== false`, which read every
+     *  unknown object as a REAL calendar: an answer nobody understood was
+     *  drawn as "Nothing in the next 7 days", the most reassuring possible
+     *  lie about the owner's own day. */
     function readCalendar(src) {
-      var a = src && typeof src === "object" ? src : {};
-      var available = a.available !== false;
-      var events = available && Array.isArray(a.events) ? a.events.filter(isEvent).map(eventOf) : [];
+      var a = src && typeof src === "object" && !Array.isArray(src) ? src : {};
+      var known = a.available === false
+        || (a.available === true && Array.isArray(a.events));
+      if (!known) {
+        return {
+          available: false,
+          on: a.on !== false,
+          why: UNKNOWN_NOTE,
+          days: READ_DAYS,
+          window: null,
+          events: [],
+          sources: null,
+          hidden: false,
+          hiddenCount: 0,
+          unknown: true
+        };
+      }
+      var available = a.available === true;
+      var events = available ? a.events.filter(isEvent).map(eventOf) : [];
       var win = a.window && typeof a.window === "object"
         ? { start: parseDay(txt(a.window.start)), end: parseDay(txt(a.window.end)) } : null;
       return {
@@ -10674,7 +10708,8 @@ subscribe();
         events: events,
         sources: a.sources && typeof a.sources === "object" ? a.sources : null,
         hidden: available && a.hidden === true,
-        hiddenCount: typeof a.hidden_count === "number" ? a.hidden_count : 0
+        hiddenCount: typeof a.hidden_count === "number" ? a.hidden_count : 0,
+        unknown: false
       };
     }
     function events() { return state.read ? state.read.events : []; }
@@ -11399,6 +11434,26 @@ subscribe();
       $("cal-time-end").closest(".cal-field").style.opacity = allDay ? ".5" : "";
     }
 
+    /** Is this reply the contract's own success? FAIL CLOSED (2026-10-30): the
+     *  PC answers a write `{"ok": true, "event": {...}, "said": "..."}`, and
+     *  ONLY that is a save. This used to test `ok` for a literal false, which
+     *  read an answer with no `ok` at all - a shape this page does not
+     *  understand, an empty body, an older backend - as a SUCCESS: it said
+     *  "Event added." and closed the form over a write that may never have
+     *  happened. */
+    function confirmed(reply) {
+      return Boolean(reply) && typeof reply === "object" && reply.ok === true;
+    }
+    /** The PC's own words for a refusal, or this window's sentence. Only a
+     *  string is ever used: an unreadable shape's `error` is not screen text. */
+    function replyError(reply, fallback) {
+      if (reply && typeof reply === "object") {
+        if (txt(reply.error)) return reply.error;
+        if (txt(reply.reason)) return reply.reason;
+      }
+      return fallback;
+    }
+
     function submit(event) {
       event.preventDefault();
       if (state.busy) return;
@@ -11418,10 +11473,10 @@ subscribe();
         ? port.invoke("hud_calendar_act", actArgs(editing, "update", changeArgs(v)))
         : port.invoke("hud_calendar_add", addArgs(v));
       call.then(function (reply) {
-        if (reply && reply.ok === false) {
-          throw new Error(reply.error || "The PC did not save the event.");
+        if (!confirmed(reply)) {
+          throw new Error(replyError(reply, "The PC did not confirm the event was saved."));
         }
-        state.said = txt(reply && reply.said) || (editing ? "Event changed." : "Event added.");
+        state.said = txt(reply.said) || (editing ? "Event changed." : "Event added.");
         state.saidAt = Date.now();
         state.editId = null;
         $("cal-form").hidden = true;
@@ -11457,8 +11512,10 @@ subscribe();
       var port = shell();
       var call = port ? port.invoke("hud_calendar_act", actArgs(id, "delete")) : noShell();
       call.then(function (reply) {
-        if (reply && reply.ok === false) throw new Error(reply.error || "The PC did not delete it.");
-        state.said = txt(reply && reply.said) || "Event deleted.";
+        if (!confirmed(reply)) {
+          throw new Error(replyError(reply, "The PC did not confirm the event was deleted."));
+        }
+        state.said = txt(reply.said) || "Event deleted.";
         state.saidAt = Date.now();
         state.editId = null;
         $("cal-form").hidden = true;
@@ -11694,8 +11751,12 @@ subscribe();
       paint: paint,
       select: select,
       openForm: openForm,
+      confirmed: confirmed,
+      replyError: replyError,
+      submit: submit,
+      removeEvent: removeEvent,
       words: { off: OFF_NOTE, offHint: OFF_HINT, offBanner: OFF_BANNER,
-               repeat: REPEAT_WORDS }
+               unknown: UNKNOWN_NOTE, repeat: REPEAT_WORDS }
     };
 
     // The first paint says "loading" honestly; the read follows at once.
