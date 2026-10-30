@@ -456,8 +456,14 @@ class MenuVisibilityTest {
         // "setup-questionnaire" (S2, 2026-10-20) is NOT one of these: it has a
         // menu id in the catalogue now ("settings.setup-questionnaire"), never
         // hideable on either app, and its place is in MenuPlaces.SETTINGS.
+        // "calendar" joined on 2026-10-29: "Jarvis Calendar" is the feature's
+        // own ON/OFF switch and the phone has no menu id for it. It MUST NOT be
+        // hideable - hiding the row that turns the feature back on would leave
+        // the owner with a switched-off calendar and no way to switch it on -
+        // so it is always drawn, like Security and Limits, rather than given a
+        // place it could be hidden under.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
-            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control")
+            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control", "calendar")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

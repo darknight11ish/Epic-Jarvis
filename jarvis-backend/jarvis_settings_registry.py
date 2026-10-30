@@ -500,6 +500,29 @@ SECTIONS: tuple = (
     Section("all-features", ("all features and abilities", "all features",
                              "abilities and commands", "the feature directory"),
             app="phone"),
+    # "Jarvis Calendar" (2026-10-29; the owner's ask: a full calendar of
+    # Jarvis's own, ON by default, "disableable in Settings"; JARVIS-API section
+    # 163; backend jarvis_local_calendar.py). PHONE ONLY for this slice: the
+    # phone's row is a real `item(key = "calendar")` on SettingsScreen.kt
+    # (CalendarSettingsPlate.kt), which posts POST /api/calendar/settings and
+    # reads GET /api/calendar. The desktop's own Settings card arrives with the
+    # HUD half of the feature (the card, the two Rust commands and the
+    # calendar-settings.js panel), and this row becomes app="both" when that
+    # lands - the honest state today, not a gap to remember. The switch itself
+    # is the PC's (`calendar-settings.json` beside the other little settings
+    # files, no file = on), so both apps read one value.
+    #
+    # "the calendar" is in the names on purpose: "open the calendar" is how the
+    # owner would say it. `tools/check_feature_controls.py` decides whether the
+    # desktop has this section by looking for those words in settings.html, and
+    # it finds them in the account-secrets card's own sentence ("the private
+    # calendar link", "the calendar's CalDAV address") - so this row records
+    # in_desktop_settings true in contract/feature-controls.json, which means
+    # "the words reach the desktop page", not "a calendar card exists there".
+    # The card is the HUD half's; the words are the older Google/CalDAV row's.
+    Section("calendar", ("the calendar", "jarvis calendar", "my calendar",
+                         "appointments"),
+            app="phone"),
     # "Limits and how often Jarvis does things" (2026-10-08): the limits and
 )
 

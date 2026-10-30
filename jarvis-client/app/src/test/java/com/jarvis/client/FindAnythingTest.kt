@@ -311,9 +311,15 @@ class FindAnythingTest {
             "a Settings row with no menu id has appeared: give it a place and say so here",
             // "App control" (2026-10-19): the phone's accessibility service is
             // phone-only, so the desktop's catalogue has no menu id for it.
+            // "Jarvis Calendar" (2026-10-29) is phone-only in this slice for the
+            // same shape of reason - the desktop's Settings card arrives with
+            // the HUD half - and it must NOT be hideable anyway: it is the
+            // switch that turns the feature back ON (MenuVisibilityTest says the
+            // same in its own words).
             listOf(
                 "settings-row.app-control",
                 "settings-row.jarvis-notify",
+                "settings-row.calendar",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )

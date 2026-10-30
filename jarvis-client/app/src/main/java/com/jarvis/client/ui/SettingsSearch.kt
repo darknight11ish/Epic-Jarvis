@@ -1,5 +1,7 @@
 package com.jarvis.client.ui
 
+import com.jarvis.client.net.Calendar
+
 /**
  * Search inside Settings - the phone's half of the desktop's search box
  * (`jarvis-desktop/src/settings-search.js`; `docs/SETTINGS-UX-DESIGN.md`).
@@ -525,6 +527,30 @@ object SettingsSearch {
             // source list is relative to it, so the folder prefix is not itself
             // an entry.
             source = listOf(PLATES + "FeatureDirectoryPlate.kt"),
+        ),
+        Row(
+            // "Jarvis Calendar" (2026-10-29): the ONE switch that turns the
+            // whole feature on or off for both apps and the home-screen widget.
+            // Its heading and its detail line are the feature's own constants in
+            // net/Calendar.kt, so the quotes are looked for there rather than in
+            // the Settings plate - the plate prints those same two strings.
+            //
+            // One word is deliberately absent from these search words: the name
+            // of a single day, which is also the title of one of Brain's plates.
+            // `tools/check_feature_controls.py` decides whether that plate has
+            // Settings evidence on the phone by looking for its name in these
+            // four phone Settings sources, so writing it here would claim a
+            // Settings row for a plate that has none. "what is on my day" says
+            // the same thing to a reader and collides with nothing.
+            key = "calendar", title = Calendar.TITLE,
+            label = "Jarvis Calendar; the calendar; my calendar; events; appointments; " +
+                "month view; the month grid; what is on my day; turn the calendar off; " +
+                "turn the calendar on; calendar widget; home-screen calendar",
+            quotes = listOf(
+                Calendar.TITLE,
+                "Your own events, kept on your PC - beside the reminders, not in your phone's ",
+            ),
+            source = JUMP + listOf("net/Calendar.kt", PLATES + "CalendarSettingsPlate.kt"),
         ),
         Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
