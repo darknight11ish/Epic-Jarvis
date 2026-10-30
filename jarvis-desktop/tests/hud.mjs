@@ -950,14 +950,15 @@ await check("the reactor is faces.html in display mode, and it draws", async () 
   // Fed by this page, not asking the shell: the HUD window has no app
   // read command, so asking would only be refused (capabilities/hud.json).
   assert.match(url, /[?&]feed=parent(&|$)/, url);
-  // 220, not the page's old 232: the Cockpit layout (the default since
-  // 2026-10-20) gives the idle core 220px. What this check is for is
-  // unchanged - the canvas is rendered at the box's own size (not blurrier),
-  // and the face really draws in it.
-  assert.ok(px.w >= 220, `canvas backing store ${px.w}px - blurrier than the 220px box it fills`);
+  // 275 since 2026-10-29, not the 220 of 2026-10-20: the Cockpit layout (the
+  // default since 2026-10-20) gives the idle core 220px, and the raised Medium
+  // step is 1.25 of it. What this check is for is unchanged - the canvas is
+  // rendered at the box's own size (not blurrier), and the face really draws
+  // in it.
+  assert.ok(px.w >= 275, `canvas backing store ${px.w}px - blurrier than the 275px box it fills`);
   assert.ok(px.lit > 150, `only ${px.lit} of 9216 sampled pixels lit - the face is not drawing`);
-  assert.equal(Math.round(box.width), 220);
-  assert.equal(Math.round(box.height), 220);
+  assert.equal(Math.round(box.width), 275);
+  assert.equal(Math.round(box.height), 275);
   assert.equal(builtin, false, "the desktop shell was drawn with the browser's fallback orb");
   assert.deepEqual(problems, [], "a CSP refusal or a page error in the HUD or its face");
 });
@@ -980,20 +981,28 @@ await check("every rule that sizes the face keeps its base and multiplies the sa
   // Comments out, so the words "#reactor (220px in Cockpit...)" in the style's
   // own prose cannot be mistaken for a rule.
   const css = page.replace(/\/\*[\s\S]*?\*\//g, "");
-  for (const [size, scale] of [["", "1"], ["small", ".75"], ["medium", "1"], ["large", "1.25"]]) {
+  // THE STEPS WERE RAISED ON 2026-10-29 (the owner: "the Jarvis face models are
+  // too small on the HUD"). The three names and the three-step control are
+  // unchanged; Small is what Medium used to draw, Medium is what Large used to
+  // draw, and Large is 1.5x the layout's own base. The page's own default (no
+  // attribute) is Medium's 1.25, so the first frame is already Medium.
+  for (const [size, scale] of [["", "1.25"], ["small", "1"], ["medium", "1.25"], ["large", "1.5"]]) {
     const selector = size ? `html[data-face-size="${size}"]` : "html";
     assert.match(css, new RegExp(`${selector.replace(/[[\]"]/g, "\\$&")}\\{--face-scale:${scale.replace(".", "\\.")};\\}`),
       `${selector || "html"} does not set --face-scale:${scale}`);
   }
+  assert.match(css, /html\{--face-scale:1\.25;\}\nhtml\[data-face-size="small"\]\{--face-scale:1;\}/,
+    "the page's own default is not Medium's 1.25, so a device with no saved size would flash the old size");
   // EVERY rule that sizes #reactor - 232 base, 150 narrow page, Cockpit's
-  // 220/96/150/88, Studio's 48, Ambient's 320/240/190 - keeps its own number
-  // and multiplies it. A new shell rule written as a bare width/height fails
-  // here, which is the point: it would not follow the chosen size.
+  // 220/96/88, Studio's 120 and the 200 it takes when the galaxy is hidden,
+  // Ambient's 320/240/240/190 - keeps its own number and multiplies it. A new
+  // shell rule written as a bare width/height fails here, which is the point:
+  // it would not follow the chosen size.
   const rules = [...css.matchAll(/(?:^|\n)([^\n{}]*#reactor[^{}]*)\{([^}]*)\}/g)]
     .map((m) => ({ selector: (m[1] || "").trim(), body: m[2] }))
     .filter((rule) => /\bwidth\s*:/.test(rule.body) || /\bheight\s*:/.test(rule.body));
-  assert.equal(rules.length, 10,
-    `${rules.length} rule(s) size #reactor, not the ten layouts the page has: `
+  assert.equal(rules.length, 12,
+    `${rules.length} rule(s) size #reactor, not the twelve layouts the page has: `
     + rules.map((r) => r.selector).join(" | "));
   for (const rule of rules) {
     const width = /width:calc\((\d+)px \* var\(--face-scale, 1\)\)/.exec(rule.body);
@@ -1004,8 +1013,16 @@ await check("every rule that sizes the face keeps its base and multiplies the sa
   }
   // The bases the shells rely on are still the same numbers.
   assert.deepEqual(rules.map((rule) => Number(/width:calc\((\d+)px/.exec(rule.body)[1])).sort((a, b) => a - b),
-    [48, 88, 96, 150, 150, 190, 220, 232, 240, 320],
-    "a shell's own face size changed while adding the multiplier");
+    [88, 96, 120, 150, 150, 190, 200, 220, 232, 240, 240, 320],
+    "a shell's own face size changed while the multiplier was raised");
+  // The two sizes the owner's report NAMED: the shell he is in, and the space
+  // the hidden galaxy gives back.
+  assert.match(css,
+    /html\[data-hud-shell="split-stage"\] #reactor\{width:calc\(120px \* var\(--face-scale, 1\)\)/,
+    "Studio still draws the 48px face the owner measured as too small");
+  assert.match(css,
+    /html\[data-hud-shell="split-stage"\]\[data-hud-tab="galaxy"\]\[data-galaxy-hidden\] #reactor\{[\s\S]{0,120}?width:calc\(200px \* var\(--face-scale, 1\)\)/,
+    "the hidden galaxy's freed space is not the face's");
   // The size is read BEFORE first paint: inside the page's first inline
   // <script> in <head>, before the stylesheet that paints the shell.
   const head = page.slice(0, page.indexOf('<link rel="stylesheet" href="theme.css">'));
@@ -1051,8 +1068,8 @@ await check("the panel's Face size is device-local, resizes the face at once, an
     "the size options do not name the three stored values");
   assert.deepEqual(before.options.map((option) => option.pressed), ["false", "true", "false"],
     "Medium is not pressed when this device has no saved size");
-  assert.equal(Math.round(before.width), 220, "Medium is not the Cockpit layout's own 220px face");
-  assert.equal(Math.round(before.height), 220, "the face is not square at Medium");
+  assert.equal(Math.round(before.width), 275, "Medium is not Cockpit's 220px face at the raised 1.25 step");
+  assert.equal(Math.round(before.height), 275, "the face is not square at Medium");
   const directBefore = direct.length;
 
   const clickSize = (size) => page.evaluate((chosen) =>
@@ -1081,7 +1098,7 @@ await check("the panel's Face size is device-local, resizes the face at once, an
   assert.equal(large.stored, "large", "Large did not reach this device's localStorage");
   assert.equal(large.attr, "large", "Large did not reach the page's one face-size attribute");
   assert.deepEqual(large.pressed, ["large"], `the pressed size did not move to Large (${large.pressed})`);
-  assert.ok(large.width >= before.width * 1.2,
+  assert.ok(large.width >= Math.round(before.width * 1.2) - 1,
     `Large is ${large.width}px against Medium's ${before.width}px - not at least 1.2x`);
   assert.equal(Math.round(large.height), Math.round(large.width), "Large is not square");
   assert.match(large.line, /Face size: Large/, "the panel did not say the size changed");
@@ -1089,7 +1106,7 @@ await check("the panel's Face size is device-local, resizes the face at once, an
   await clickSize("small");
   const small = await readFace();
   assert.equal(small.stored, "small", "Small did not reach this device's localStorage");
-  assert.ok(small.width <= before.width * 0.8,
+  assert.ok(small.width <= Math.round(before.width * 0.8) + 1,
     `Small is ${small.width}px against Medium's ${before.width}px - not at most 0.8x`);
   assert.deepEqual(small.pressed, ["small"], "the pressed size did not move to Small");
 
@@ -1122,7 +1139,7 @@ await check("the panel's Face size is device-local, resizes the face at once, an
   }));
   assert.equal(reloaded.stored, "small", "a reload forgot the device's saved size");
   assert.equal(reloaded.attr, "small", "a reload did not apply the saved size");
-  assert.ok(reloaded.width <= before.width * 0.8, `a reload drew the face at ${reloaded.width}px`);
+  assert.ok(reloaded.width <= Math.round(before.width * 0.8) + 1, `a reload drew the face at ${reloaded.width}px`);
   await page.locator("#rail-faces").click();
   const pressedAfterReload = await page.evaluate(() => [...document.querySelectorAll(".hud-faces-size-item")]
     .filter((button) => button.getAttribute("aria-pressed") === "true")
@@ -1168,9 +1185,9 @@ await check("the 48-96px shells stay sane at every face size, and the keyboard c
   };
 
   const studioMedium = await face();
-  assert.equal(Math.round(studioMedium.width), 48,
-    `Studio's own core is ${studioMedium.width}px, not the 48px its layout gives it`);
-  assert.equal(Math.round(studioMedium.height), 48, "Studio's core is not square at Medium");
+  assert.equal(Math.round(studioMedium.width), 150,
+    `Studio's own face is ${studioMedium.width}px, not the 150px its layout gives it at 120px * 1.25`);
+  assert.equal(Math.round(studioMedium.height), 150, "Studio's face is not square at Medium");
 
   // THE KEYBOARD: focus the Large option and press Enter. A native button fires
   // its click, so the size has to move with no mouse anywhere in it.
@@ -1179,8 +1196,8 @@ await check("the 48-96px shells stay sane at every face size, and the keyboard c
   await page.keyboard.press("Enter");
   const studioLarge = await face();
   assert.equal(studioLarge.stored, "large", "Enter on the Large option did not choose it");
-  assert.equal(Math.round(studioLarge.width), 60,
-    `Studio at Large is ${studioLarge.width}px, not 48px * 1.25`);
+  assert.equal(Math.round(studioLarge.width), 180,
+    `Studio at Large is ${studioLarge.width}px, not 120px * 1.5`);
   assert.equal(Math.round(studioLarge.height), Math.round(studioLarge.width),
     "Studio's core stopped being square at Large");
   // The wrap RESERVES the bigger box - which is why this is width/height and not
@@ -1192,8 +1209,8 @@ await check("the 48-96px shells stay sane at every face size, and the keyboard c
 
   await choose("small");
   const studioSmall = await face();
-  assert.equal(Math.round(studioSmall.width), 36,
-    `Studio at Small is ${studioSmall.width}px, not 48px * 0.75`);
+  assert.equal(Math.round(studioSmall.width), 120,
+    `Studio at Small is ${studioSmall.width}px, not 120px * 1`);
 
   // Cockpit's pinned core - the smallest base in the desktop shells after
   // Studio's. `data-core` is the page's own datum: this is the state the page
@@ -1203,8 +1220,8 @@ await check("the 48-96px shells stay sane at every face size, and the keyboard c
   // must not reset it, and it did not.
   await choose("medium");
   const studioAgain = await face();
-  assert.equal(Math.round(studioAgain.width), 48,
-    "choosing Medium did not return Studio's core to its own 48px");
+  assert.equal(Math.round(studioAgain.width), 150,
+    "choosing Medium did not return Studio's face to its own 150px");
   await setHudLook(page, "cockpit");
   // `data-core` is the page's own datum; setting it to the pinned state is the
   // setup for the rule under test, so it is set before each read - a shell
@@ -1214,22 +1231,236 @@ await check("the 48-96px shells stay sane at every face size, and the keyboard c
   const pinnedMedium = await face();
   assert.equal(pinnedMedium.shell, "three-column", "the page did not return to Cockpit");
   assert.equal(pinnedMedium.core, "pinned", "the pinned-core rule is not the one under test");
-  assert.equal(Math.round(pinnedMedium.width), 96,
-    `Cockpit's pinned core is ${pinnedMedium.width}px, not the 96px its layout gives it`);
+  assert.equal(Math.round(pinnedMedium.width), 120,
+    `Cockpit's pinned core is ${pinnedMedium.width}px, not 96px * 1.25`);
   await choose("large");
   await pin();
   const pinnedLarge = await face();
-  assert.equal(Math.round(pinnedLarge.width), 120,
-    `Cockpit's pinned core at Large is ${pinnedLarge.width}px, not 96px * 1.25`);
+  assert.equal(Math.round(pinnedLarge.width), 144,
+    `Cockpit's pinned core at Large is ${pinnedLarge.width}px, not 96px * 1.5`);
   await choose("small");
   await pin();
   const pinnedSmall = await face();
-  assert.equal(Math.round(pinnedSmall.width), 72,
-    `Cockpit's pinned core at Small is ${pinnedSmall.width}px, not 96px * 0.75`);
+  assert.equal(Math.round(pinnedSmall.width), 96,
+    `Cockpit's pinned core at Small is ${pinnedSmall.width}px, not 96px * 1`);
   await page.close();
   assert.deepEqual(problems, [],
     "a CSP refusal or a page error in the small shells when the face size changed");
 });
+
+/* ── The owner's 2026-10-29 HUD report ──────────────────────────────────── *
+ *
+ * Four sentences, measured on his own installed 0.2.356 at 1280x650 in the
+ * Studio shell:
+ *   1. "the Jarvis face models are too small on the HUD" - the face drew at
+ *      48px (60 with Large chosen) beside a 671px conversation column.
+ *   2. "when the Galaxy is hidden, the face model should take up that space
+ *      instead of showing the 'The galaxy is hidden...' description + 'Show the
+ *      galaxy' button".
+ *   3. "the faces panel is clipped on its first open (top 497/height 468 in a
+ *      650px window; Close off-screen; reopens fine)".
+ *   4. "the header chip can read NO AI MODEL right after a quick-path turn
+ *      while the model is up".
+ */
+
+const hudGeometry = (page) => page.evaluate(() => {
+  const rect = (selector) => {
+    const el = document.querySelector(selector);
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width),
+             h: Math.round(b.height), bottom: Math.round(b.bottom), right: Math.round(b.right) };
+  };
+  const overlap = (a, b) => {
+    if (!a || !b) return 0;
+    const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    return w > 0 && h > 0 ? w * h : 0;
+  };
+  const stage = document.getElementById("stage");
+  const off = document.getElementById("galaxy-hidden");
+  const chip = document.getElementById("galaxy-show-placeholder");
+  const face = rect("#reactor");
+  const log = rect("#log");
+  const composer = rect(".composer");
+  return {
+    face, log, composer,
+    galaxyHidden: document.documentElement.hasAttribute("data-galaxy-hidden"),
+    columns: getComputedStyle(stage).gridTemplateColumns.split(" ").filter(Boolean).length,
+    brain: getComputedStyle(document.getElementById("brain")).display,
+    // "drawn" is what the owner saw: the paragraph laid out over the map.
+    placeholderDrawn: off ? off.getBoundingClientRect().width > 4 : false,
+    placeholderText: off ? off.textContent.replace(/\s+/g, " ").trim() : "",
+    chipVisible: !!chip && getComputedStyle(chip).display !== "none",
+    chip: rect("#galaxy-show-placeholder"),
+    chipInsideWindow: !!chip && chip.getBoundingClientRect().top >= 0
+      && chip.getBoundingClientRect().bottom <= innerHeight
+      && chip.getBoundingClientRect().right <= innerWidth,
+    overlapLog: overlap(face, log),
+    overlapComposer: overlap(face, composer),
+    viewport: { w: innerWidth, h: innerHeight },
+    scroll: { doc: document.documentElement.scrollHeight, body: document.body.scrollHeight },
+  };
+});
+
+await check("a hidden galaxy gives its space to the face, and no paragraph fills the stage", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.setViewportSize({ width: 1280, height: 650 });   // the owner's window
+  await setHudLook(page, "studio");
+  await page.waitForFunction(
+    () => document.body.dataset.hudTab === "galaxy", null, { timeout: 5000 });
+  const shown = await hudGeometry(page);
+  assert.equal(shown.galaxyHidden, false, "the galaxy starts hidden");
+  assert.equal(shown.placeholderDrawn, false, "the hidden-galaxy paragraph is drawn before anything is hidden");
+  assert.equal(Math.round(shown.face.w), 150,
+    `Studio's face is ${shown.face.w}px at Medium, not the 150px its layout gives it`);
+  assert.equal(shown.columns, 2, "Studio is not the two-column stage (conversation + Inspector)");
+
+  // The owner's own road: Galaxy options -> Hide the galaxy.
+  await openGalaxyOptions(page);
+  await page.locator("#galaxy-hide").check();
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.getElementById("galaxy-options-close").click());
+  await page.waitForTimeout(150);
+  const hidden = await hudGeometry(page);
+
+  assert.equal(hidden.galaxyHidden, true, "the checkbox did not hide the galaxy");
+  assert.equal(hidden.brain, "none", "the empty Inspector column is still on the stage");
+  assert.equal(hidden.columns, 1, "the freed column was not given back to the stage");
+  assert.equal(hidden.placeholderDrawn, false,
+    "the paragraph is still drawn over the stage - the owner asked for the face's space, not the words");
+  assert.match(hidden.placeholderText, /The galaxy is hidden/,
+    "the sentence left the page entirely, so a screen reader finds nothing on the empty map");
+  // THE ASK: the face uses the space the picture gave back, and it is big.
+  assert.ok(hidden.face.w >= Math.round(shown.face.w * 1.4),
+    `the face is ${hidden.face.w}px hidden against ${shown.face.w}px shown - it did not grow into the freed space`);
+  assert.equal(Math.round(hidden.face.h), Math.round(hidden.face.w), "the grown face is not square");
+  assert.equal(hidden.overlapLog, 0, "the grown face covers the conversation");
+  assert.equal(hidden.overlapComposer, 0, "the grown face covers the composer");
+  assert.ok(hidden.log.h >= 40, `only ${hidden.log.h}px of conversation is left under the face`);
+  assert.ok(hidden.composer.bottom <= hidden.viewport.h,
+    `the composer was pushed off the window (${hidden.composer.bottom} > ${hidden.viewport.h})`);
+  // ...and the way back is ONE small chip, in the bar, inside the window.
+  assert.equal(hidden.chipVisible, true, "nothing on screen says how to bring the galaxy back");
+  assert.equal(hidden.chipInsideWindow, true,
+    `the way back is outside the window (${JSON.stringify(hidden.chip)})`);
+  // AND THE FACE IS REALLY THERE. `reactor.show()` unloads the face iframe
+  // whenever the page's own view is not Talk, and in this shell the view is the
+  // Galaxy one - so without `faceOnScreen` this stage would be a blank disc
+  // (about:blank) at exactly the size the owner asked for. Studio's own saved
+  // layout decides whether that happens, so it is proved by the served page.
+  await page.waitForFunction(
+    () => /faces\.html/.test(document.getElementById("reactor").getAttribute("src") || ""),
+    null, { timeout: 8000 })
+    .catch(() => { throw new Error("the hidden-galaxy face never loaded: "
+      + "the iframe is still about:blank, so the stage shows a blank disc"); });
+
+  await page.locator("#galaxy-show-placeholder").click();
+  await page.waitForTimeout(150);
+  const back = await hudGeometry(page);
+  assert.equal(back.galaxyHidden, false, "Show the galaxy did not bring the map back");
+  assert.equal(back.placeholderDrawn, false, "the paragraph came back with the map");
+  assert.equal(back.chipVisible, false, "the way back is still on screen with the map showing");
+  assert.equal(Math.round(back.face.w), Math.round(shown.face.w),
+    "the face did not go back to the two-column size");
+  assert.equal(back.columns, 2, "the Inspector column did not come back");
+  await page.close();
+  assert.deepEqual(problems, [], "a CSP refusal or a page error while the galaxy was hidden");
+});
+
+await check("the faces panel's first open is wholly inside the window, Close included", async () => {
+  const panelFacts = (page) => page.evaluate(() => {
+    const panel = document.getElementById("hud-faces-menu");
+    if (!panel || panel.hidden) return null;
+    const b = panel.getBoundingClientRect();
+    const close = panel.querySelector(".hud-presets-close");
+    const c = close ? close.getBoundingClientRect() : null;
+    return {
+      top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height),
+      width: Math.round(b.width),
+      rows: panel.querySelectorAll(".hud-faces-item").length,
+      inside: b.top >= 0 && b.left >= 0 && b.right <= innerWidth && b.bottom <= innerHeight,
+      close: c ? { top: Math.round(c.top), bottom: Math.round(c.bottom),
+                   visible: c.top >= 0 && c.bottom <= innerHeight } : null,
+      viewport: { w: innerWidth, h: innerHeight },
+    };
+  });
+  for (const [height, why] of [[650, "the owner's own window"], [1000, "a tall window"]]) {
+    const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+    await page.setViewportSize({ width: 1280, height });
+    // THE FIRST OPEN after a load - not a reload, not a second open. The panel
+    // is placed when `open()` runs, and the 25 face rows land afterwards, which
+    // is what used to grow it past the bottom of the window.
+    await page.evaluate(() => window.__jarvisFacePicker.open());
+    await page.waitForTimeout(60);
+    const early = await panelFacts(page);
+    await page.waitForTimeout(900);   // the face list has been read and drawn
+    const settled = await panelFacts(page);
+    assert.ok(settled, `the panel never opened (${why})`);
+    assert.ok(early, `the panel was not open right after the first click (${why})`);
+    assert.equal(settled.rows >= 20, true,
+      `the panel only drew ${settled.rows} face rows, so the growth this bug needs was never exercised`);
+    for (const [when, facts] of [["right after it opened", early], ["once the face list landed", settled]]) {
+      assert.equal(facts.inside, true,
+        `${when} (${why}) the panel is outside the window: top ${facts.top}, height ${facts.h}, `
+        + `bottom ${facts.bottom} of ${facts.viewport.h}`);
+      assert.equal(facts.close.visible, true,
+        `${when} (${why}) the panel's Close is off-screen at ${facts.close.top}-${facts.close.bottom} of ${facts.viewport.h}`);
+    }
+    // A re-open, the path that was already right, is still right.
+    await page.evaluate(() => window.__jarvisFacePicker.close());
+    await page.evaluate(() => window.__jarvisFacePicker.open());
+    await page.waitForTimeout(120);
+    const reopened = await panelFacts(page);
+    assert.equal(reopened.inside, true, `a re-open (${why}) is no longer inside the window`);
+    await page.close();
+    assert.deepEqual(problems, [], `a CSP refusal or a page error opening the faces panel (${why})`);
+  }
+});
+
+await check("a quick-path turn leaves the header chip saying the real model", async () => {
+  // What the PC really puts in X-Jarvis-Route for an answer made with no model
+  // at all: backend/jarvis_quick.py's `route_fields` - `lane` is the literal
+  // words "no AI model", there is no `gate` unless the answer read the owner's
+  // list, and `where` is "local".
+  const { page, problems } = await openHud(browser, {
+    jarvis: false, ollama: true, proxy: false,
+    route: { quick: "timer_set", where: "local", lane: "no AI model",
+             inject_memory: false, injected_facts: 0, injected_ids: [],
+             injected_sensitive: 0 },
+  });
+  const beforeChip = await page.locator("#chip-model").textContent();
+  assert.notEqual(beforeChip.trim(), "", "the chip is empty before the turn");
+  await send(page, "set a timer for 10 minutes");
+  const after = await page.evaluate(() => ({
+    chip: document.getElementById("chip-model").textContent,
+    complexity: document.getElementById("r-complexity").textContent,
+    hot: document.getElementById("chip-model").classList.contains("hot"),
+  }));
+  assert.equal(after.chip, beforeChip,
+    `a quick-path turn repainted the model chip from "${beforeChip}" to "${after.chip}"`);
+  assert.doesNotMatch(after.chip, /no\s+ai\s+model/i,
+    "the header chip says the PC has no model, and it is answering");
+  // The route WAS read and the rail WAS painted from it - otherwise this fix
+  // would be a deleted reader rather than a corrected one. `complexity` is not
+  // in a quick route at all, so 0.00 is the page's own arithmetic on it.
+  assert.equal(after.complexity, "0.00",
+    "the turn's X-Jarvis-Route was never read, so the rail kept its old reading");
+  assert.equal(after.hot, false, "a quick answer was painted as a cloud answer");
+  await page.close();
+
+  // And an ordinary turn still moves the chip to the model that answered.
+  const plain = await openHud(browser, {
+    jarvis: false, ollama: true, proxy: false, route: { lane: "qwen3:8b", where: "local" },
+  });
+  await send(plain.page, "how are you?");
+  const ordinary = await plain.page.locator("#chip-model").textContent();
+  assert.equal(ordinary, "qwen3:8b", "an ordinary turn no longer moves the chip to its own lane");
+  await plain.page.close();
+  assert.deepEqual(problems, [], "a CSP refusal or a page error on the quick-path turn");
+  assert.deepEqual(plain.problems, [], "a CSP refusal or a page error on the ordinary turn");
+});
+
 
 await check("the three vendored HUD copies carry the face size byte for byte", () => {
   const digest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -1377,7 +1608,7 @@ await check("the face follows the owner's appearance pushed by the shell", async
   assert.deepEqual(problems, []);
 });
 
-await check("the face stops while Galaxy is up, and the narrow layout keeps 150px", async () => {
+await check("the face stops while Galaxy is up, and the narrow layout keeps its own 150px base", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
     { viewport: { width: 640, height: 820 } });
   await faceFrame(page);
@@ -1388,7 +1619,8 @@ await check("the face stops while Galaxy is up, and the narrow layout keeps 150p
   await page.evaluate(() => setView("talk"));
   await faceFrame(page);
   await page.close();
-  assert.equal(Math.round(narrow.width), 150);
+  // The narrow page's own 150px base x the raised Medium step (1.25).
+  assert.equal(Math.round(narrow.width), 188);
   assert.equal(away, "about:blank", "the face kept animating behind the Galaxy view");
   assert.deepEqual(problems, []);
 });
@@ -3473,7 +3705,7 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
   assert.equal(shape.leftRailOffScreen, true, "Ambient draws the navigation rail over the core");
   assert.equal(shape.leftToggleShown, true, "Ambient has no [Navigation] toggle for its left rail");
   assert.equal(shape.rightRailOffScreen, true, "Ambient draws the telemetry rail over the core");
-  assert.equal(shape.coreWidth, 320, "the Ambient core is not 320px");
+  assert.equal(shape.coreWidth, 400, "the Ambient core is not its 320px base at the raised Medium step");
   assert.equal(shape.stageStartsAtLeft, true, "Ambient leaves an empty left column beside the stage");
   assert.ok(shape.stageWidth >= shape.shellWidth - 2,
     `Ambient's stage is narrower than the shell (${shape.stageWidth} vs ${shape.shellWidth})`);
