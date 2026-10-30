@@ -77,7 +77,7 @@ it is one `apply-patches.ps1` copies in.
 | 158 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
 | 159 | `antislop` | the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings. |
 | 160 | `google-calendar` | Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card. |
-| 160 | `jarvis-calendar` | Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch turns every surface off while keeping every event. |
+| 161 | `jarvis-calendar` | Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch turns every surface off while keeping every event. |
 
 ## What stays in the core
 
