@@ -93,6 +93,16 @@ except Exception:                               # a backend without it: refuse, 
 #: number with a margin, and the refusal names it and the alternative.
 MAX_BYTES = 2_500_000
 
+#: The DECLARED uncompressed total one .docx/.xlsx/.pptx attachment may hold.
+#: A file under MAX_BYTES can still decompress to gigabytes - the zip-bomb path
+#: in the design's risk 6. The ceiling is the attachment's OWN 25 MB, not the
+#: 100 MB `jarvis_documents` allows for a folder the owner lets Jarvis look in:
+#: this is one file in one chat turn, so the smaller number is the right one
+#: (Gemini review R6 / trap W1, 2026-10-30). 25 * 1024 * 1024 keeps the shared
+#: guard's own sentence - "it unpacks to more than 25 MB" - true; the guard is
+#: still the one existing `zip_bomb_problem`, never a second copy.
+ZIP_UNCOMPRESSED_MAX = 25 * 1024 * 1024
+
 #: The ONE permission row a file's read is decided under: `read_files_readonly`
 #: - the same row `file_read` and "Folders Jarvis may look in" use, the one the
 #: owner sees as "Ask me first" in Settings ("reading your own files"). It is
@@ -322,15 +332,17 @@ def _bytes_of(data) -> tuple:
 def _bomb_or_path_problem(raw: bytes, ext: str) -> str:
     """'' when this OOXML archive may be handed to a parser, else why not.
 
-    Reuses jarvis_documents' own guard - DOC_UNCOMPRESSED_MAX and the path check
-    the 2026-10-20 parser audit added - rather than a second copy of either. The
-    design's risk 6: a .docx is a ZIP and 50 MB of it can unpack to gigabytes.
+    Reuses jarvis_documents' own guard and path check - the 2026-10-20 parser
+    audit added both - rather than a second copy of either. The design's risk 6:
+    a .docx is a ZIP and 50 MB of it can unpack to gigabytes. The uncompressed
+    ceiling is this module's ZIP_UNCOMPRESSED_MAX (25 MB), NOT the folder
+    reader's 100 MB, because this is one file in one chat turn (R6 / trap W1).
     """
     if DOCS is None:
         return WHY_NOT_INSTALLED
     try:
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-            why = DOCS.zip_bomb_problem(zf, DOCS.DOC_UNCOMPRESSED_MAX)
+            why = DOCS.zip_bomb_problem(zf, ZIP_UNCOMPRESSED_MAX)
             if why:
                 return why
             why = DOCS.zip_path_problem(zf)

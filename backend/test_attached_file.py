@@ -315,8 +315,39 @@ def t_a_zip_bomb_is_refused_before_any_parser():
     got = A.read(attach("bomb.docx", raw), convert=convert_stand_in(seen))
     check_refused(got, "a zip bomb: refused", "zip-bomb guard", str(got.get("why")))
     check("... before the converter ever saw it", seen == [], seen)
-    check("... by the EXISTING guard, not a second one",
-          "100 MB" in got["why"], got["why"])
+    check("... by the attachment's own ceiling, not the folder reader's",
+          "25 MB" in got["why"]
+          and A.ZIP_UNCOMPRESSED_MAX == 25 * 1024 * 1024 < DOCS.DOC_UNCOMPRESSED_MAX,
+          got["why"])
+
+
+def t_an_archive_over_the_attachment_ceiling_is_refused():
+    """25 MB is the attachment's ceiling, not the folder reader's 100 MB.
+
+    A file under a quarter of the byte cap can still declare 40 MB uncompressed;
+    the folder reader would wave it through, this turn must not. Both sides of
+    the line are driven, so a future edit that went back to the 100 MB number
+    (or deleted the ceiling) fails here.
+    """
+    def ooxml_of(declared: int) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("word/document.xml", b"\x00" * declared)
+        return buf.getvalue()
+
+    under = ooxml_of(A.ZIP_UNCOMPRESSED_MAX - 10_000)
+    check("an archive under 25 MB uncompressed is not refused as a bomb",
+          A._bomb_or_path_problem(under, "docx") == "",
+          A._bomb_or_path_problem(under, "docx"))
+    over = ooxml_of(A.ZIP_UNCOMPRESSED_MAX + 1)
+    why = A._bomb_or_path_problem(over, "docx")
+    check("an archive just over 25 MB uncompressed is refused as a bomb",
+          "zip-bomb guard" in why and "25 MB" in why, why)
+    seen = []
+    got = A.read(attach("over.docx", over), convert=convert_stand_in(seen))
+    check_refused(got, "and a real read refuses it before any parser",
+                  "zip-bomb guard", str(got.get("why")))
+    check("... the converter never ran", seen == [], seen)
 
 
 def t_the_words_and_the_names():
@@ -1009,7 +1040,8 @@ def main() -> int:
                t_the_size_cap_and_its_sentence,
                t_the_kinds_and_the_magic_bytes,
                t_the_never_read_names,
-               t_a_zip_bomb_is_refused_before_any_parser,
+t_a_zip_bomb_is_refused_before_any_parser,
+t_an_archive_over_the_attachment_ceiling_is_refused,
                t_the_words_and_the_names,
                t_the_chat_markers_are_stripped,
                t_nothing_is_written_to_disk,

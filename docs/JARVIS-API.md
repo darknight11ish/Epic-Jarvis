@@ -27095,8 +27095,12 @@ never multipart, never a temporary store:
    `word/`, `xl/` or `ppt/` member inside; UTF-8 with no NUL bytes for text).
    An encrypted PDF (`/Encrypt` in its trailer) is refused in words.
 4. **Zip bombs** are refused before conversion by
-   `jarvis_documents.zip_bomb_problem` (100 MB declared uncompressed) and its
-   path check - the existing guard, not another one.
+   `jarvis_documents.zip_bomb_problem` (the existing guard, not another one)
+   with this turn's own **25 MB declared-uncompressed ceiling**
+   (`jarvis_attached_file.ZIP_UNCOMPRESSED_MAX`, 25 × 1024 × 1024 bytes), not
+   the 100 MB a folder the owner lets Jarvis look in allows; its path check
+   runs too. One file in one chat turn is the smaller number's justification
+   (review R6 / trap W1, 2026-10-30).
 5. **The text comes out of the one converter, over a stream.**
    `jarvis_documents.convert_bytes` calls `_default_convert("-", ext)` - the
    converter's new **stdin mode** - so the file is never written to disk, not
