@@ -61,7 +61,9 @@ import kotlinx.serialization.json.JsonObject
  * It draws blocks natively from the PC's filled-in answer, through
  * [JarvisWidgets.viewOf] - the rule the desktop and the PC share - so only
  * the five block kinds and the five tile buttons can ever appear, whatever
- * the PC sends.
+ * the PC sends. The ARRANGEMENT (one of four, [JarvisWidgets.LAYOUTS]) comes
+ * from [JarvisWidgets.boardOf], also shared: it decides which block is drawn
+ * large and in what order, never what a block may show.
  *
  * THE HOME SCREEN IS PUBLIC. Anyone holding the phone sees it without
  * unlocking Jarvis, so while App lock or "Hide memory lists and chat
@@ -157,63 +159,24 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
 
     @Composable
     private fun Board(context: Context, view: JarvisWidgets.View, appLock: Boolean?) {
-        val buttons = view.blocks.filterIsInstance<JarvisWidgets.Block.Button>()
+        // One arrangement rule, shared with the desktop (JarvisWidgets.boardOf,
+        // tools/gen_widget_cases.py): the block drawn large, then the rest in
+        // order, then the buttons two to a row. Nothing here decides WHAT goes
+        // where - that is the pure rule the JVM tests prove.
+        val board = JarvisWidgets.boardOf(view)
         Column(modifier = GlanceModifier.fillMaxSize()) {
             Column(
                 modifier = GlanceModifier.defaultWeight().fillMaxWidth()
                     .clickable(actionStartActivity<MainActivity>()),
             ) {
-                for (b in view.blocks) {
-                    when (b) {
-                        is JarvisWidgets.Block.Title -> Text(
-                            b.text, maxLines = 1,
-                            style = TextStyle(color = BoardPalette.TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold),
-                        )
-                        is JarvisWidgets.Block.Count -> {
-                            Row(modifier = GlanceModifier.fillMaxWidth()) {
-                                Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
-                                Spacer(GlanceModifier.defaultWeight())
-                                if (b.value.isNotEmpty()) {
-                                    Text(b.value, style = TextStyle(color = BoardPalette.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold))
-                                }
-                            }
-                            if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
-                        }
-                        is JarvisWidgets.Block.Items -> {
-                            Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
-                            for ((words, whenWords) in b.items) {
-                                Text(
-                                    if (whenWords.isEmpty()) words else "$whenWords  $words",
-                                    maxLines = 1, style = small(BoardPalette.TextHi),
-                                )
-                            }
-                            if (b.more > 0) Text("+${b.more} more", style = small(BoardPalette.Accent))
-                            if (b.items.isEmpty() && b.note.isEmpty() && b.empty.isNotEmpty()) {
-                                Text(b.empty, maxLines = 1, style = small(BoardPalette.TextMuted))
-                            }
-                            if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
-                        }
-                        is JarvisWidgets.Block.Progress -> {
-                            Row(modifier = GlanceModifier.fillMaxWidth()) {
-                                Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
-                                Spacer(GlanceModifier.defaultWeight())
-                                if (b.value.isNotEmpty()) Text(b.value, maxLines = 1, style = small(BoardPalette.TextHi))
-                            }
-                            LinearProgressIndicator(
-                                progress = b.fraction.toFloat(),
-                                modifier = GlanceModifier.fillMaxWidth().height(4.dp),
-                                color = BoardPalette.Accent,
-                                backgroundColor = BoardPalette.Surface1,
-                            )
-                            if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
-                        }
-                        is JarvisWidgets.Block.Button -> Unit
-                    }
+                board.big?.let { BigCount(it) }
+                for (b in board.blocks) {
+                    Part(b)
                     Spacer(GlanceModifier.height(3.dp))
                 }
             }
             // Two to a row, so four still fit a 4x2 widget.
-            for (pair in buttons.chunked(2)) {
+            for (pair in board.buttons.chunked(2)) {
                 Spacer(GlanceModifier.height(4.dp))
                 Row(modifier = GlanceModifier.fillMaxWidth()) {
                     pair.forEachIndexed { i, b ->
@@ -222,6 +185,72 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
                     }
                 }
             }
+        }
+    }
+
+    /** "big": the number at 28sp - more than double a block's 13sp value - so
+     *  a count is what the eye lands on. Its label and note stay small. */
+    @Composable
+    private fun BigCount(b: JarvisWidgets.Block.Count) {
+        Column(modifier = GlanceModifier.fillMaxWidth()) {
+            Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
+            if (b.value.isNotEmpty()) {
+                Text(
+                    b.value, maxLines = 1,
+                    style = TextStyle(color = BoardPalette.Accent, fontSize = 28.sp, fontWeight = FontWeight.Bold),
+                )
+            }
+            if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
+        }
+    }
+
+    /** One block, drawn the one way it is always drawn - whatever the layout. */
+    @Composable
+    private fun Part(b: JarvisWidgets.Block) {
+        when (b) {
+            is JarvisWidgets.Block.Title -> Text(
+                b.text, maxLines = 1,
+                style = TextStyle(color = BoardPalette.TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+            )
+            is JarvisWidgets.Block.Count -> {
+                Row(modifier = GlanceModifier.fillMaxWidth()) {
+                    Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
+                    Spacer(GlanceModifier.defaultWeight())
+                    if (b.value.isNotEmpty()) {
+                        Text(b.value, style = TextStyle(color = BoardPalette.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold))
+                    }
+                }
+                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
+            }
+            is JarvisWidgets.Block.Items -> {
+                Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
+                for ((words, whenWords) in b.items) {
+                    Text(
+                        if (whenWords.isEmpty()) words else "$whenWords  $words",
+                        maxLines = 1, style = small(BoardPalette.TextHi),
+                    )
+                }
+                if (b.more > 0) Text("+${b.more} more", style = small(BoardPalette.Accent))
+                if (b.items.isEmpty() && b.note.isEmpty() && b.empty.isNotEmpty()) {
+                    Text(b.empty, maxLines = 1, style = small(BoardPalette.TextMuted))
+                }
+                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
+            }
+            is JarvisWidgets.Block.Progress -> {
+                Row(modifier = GlanceModifier.fillMaxWidth()) {
+                    Text(b.label, maxLines = 1, style = small(BoardPalette.TextMuted))
+                    Spacer(GlanceModifier.defaultWeight())
+                    if (b.value.isNotEmpty()) Text(b.value, maxLines = 1, style = small(BoardPalette.TextHi))
+                }
+                LinearProgressIndicator(
+                    progress = b.fraction.toFloat(),
+                    modifier = GlanceModifier.fillMaxWidth().height(4.dp),
+                    color = BoardPalette.Accent,
+                    backgroundColor = BoardPalette.Surface1,
+                )
+                if (b.note.isNotEmpty()) Text(b.note, maxLines = 1, style = small(BoardPalette.TextMuted))
+            }
+            is JarvisWidgets.Block.Button -> Unit
         }
     }
 

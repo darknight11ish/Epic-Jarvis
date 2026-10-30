@@ -12,6 +12,8 @@ WHAT IS IN THEM
 - `actions`: the five safe buttons, their wire names and fixed words - the
   PC's (jarvis_widgets.ACTIONS). Both apps' own lists must equal it (the
   phone's is TileAction, the Quick Settings tiles' list).
+- `layouts`: the four arrangements a widget can be drawn in - the PC's
+  (jarvis_widgets.LAYOUTS), a closed list. Both apps' own lists must equal it.
 - `private_sources`: the sources whose words are hidden under App lock and
   "Hide memory lists and chat history".
 - `cases`: what GET /api/widgets/show answers - real answers made by
@@ -22,6 +24,10 @@ WHAT IS IN THEM
   private words are hidden. `app_view()` and `hide()` below are the rule,
   written once here; the desktop's widget-board.js and the phone's
   net/JarvisWidgets.kt must give exactly these.
+- `cases[*].boards`: that view arranged in each of the four layouts - the
+  `arrange()` rule, also written once here. Both apps' `boardOf()` must give
+  exactly these, so "big"/"list"/"compact" cannot mean two different things
+  on the phone and on the PC.
 
 WHY THE APPS CHECK AGAIN: the PC already sends only checked blocks. The apps
 still draw nothing that is not on their own menu - an unknown block type or
@@ -84,6 +90,15 @@ def _int(v) -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0
 
 
+def layout_of(ans) -> str:
+    """The arrangement an app draws from one show answer: a value on the
+    closed list, else "stack". A newer PC's word this app does not know must
+    leave the widget drawable, exactly as an unknown source is treated as
+    private rather than dropped."""
+    got = ans.get("layout") if isinstance(ans, dict) else None
+    return got if isinstance(got, str) and got in W.LAYOUTS else W.DEFAULT_LAYOUT
+
+
 def app_view(ans):
     """The blocks an app draws from one show answer, or None."""
     if not isinstance(ans, dict) or ans.get("ok") is not True:
@@ -122,7 +137,7 @@ def app_view(ans):
                 v["fraction"] = min(1.0, max(0.0, f))
                 v["value"] = text(b.get("value"), 60)
             out.append(v)
-    return {"name": text(ans.get("name"), W.MAX_NAME), "blocks": out}
+    return {"name": text(ans.get("name"), W.MAX_NAME), "layout": layout_of(ans), "blocks": out}
 
 
 def hide(view):
@@ -143,7 +158,60 @@ def hide(view):
             elif b["type"] == "progress":
                 b["fraction"], b["value"] = 0.0, ""
         out.append(b)
-    return {"name": view["name"], "blocks": out}
+    return {"name": view["name"], "layout": view["layout"], "blocks": out}
+
+
+def arrange(view, layout):
+    """The arrangement both apps draw, written once. Returns
+    {"big": block|null, "blocks": [block], "buttons": [button]}.
+
+    The renderers only place these: a `big` block is drawn LARGE above the
+    rest, `blocks` in order below it, `buttons` as rows of two at the bottom.
+    No colour, font, image or position is chosen here - there is nothing to
+    choose them with.
+
+    - `stack`: every non-button block in the order given (today's shape).
+    - `big`: the FIRST number block, drawn large; it leaves `blocks` so it is
+      not drawn twice. With no number it is `stack`.
+    - `list`: heading first, then lists, then numbers, then bars; stable
+      inside a group. So a list leads whatever order the model emitted.
+    - `compact`: one heading (its own, else the widget's name) and ONE block -
+      the first non-title, non-button one. A list keeps its first item and
+      counts the rest into `more`, so "+N more" is still the truth.
+    """
+    if view is None:
+        return None
+    blocks = view["blocks"]
+    buttons = [b for b in blocks if b["type"] == "button"]
+    body = [b for b in blocks if b["type"] != "button"]
+    if layout == "big":
+        big = next((b for b in body if b["type"] == "number"), None)
+        if big is not None:
+            return {"big": big, "blocks": [b for b in body if b is not big],
+                    "buttons": buttons}
+    elif layout == "list":
+        order = {"title": 0, "list": 1, "number": 2, "progress": 3}
+        return {"big": None, "blocks": sorted(body, key=lambda b: order[b["type"]]),
+                "buttons": buttons}
+    elif layout == "compact":
+        title = next((b for b in body if b["type"] == "title"), None)
+        head = None
+        if title is not None:
+            head = dict(title)
+        elif view["name"]:
+            head = {"type": "title", "text": view["name"]}
+        out = [head] if head is not None else []
+        rest = [b for b in body if b is not title]
+        if rest:
+            one = dict(rest[0])
+            if one["type"] == "list":
+                items = one["items"]
+                one["more"] = one["more"] + max(0, len(items) - 1)
+                one["items"] = items[:1]
+            out.append(one)
+        return {"big": None, "blocks": out, "buttons": buttons}
+    # "stack", and anything else - the same fallback the apps make.
+    return {"big": None, "blocks": body, "buttons": buttons}
 
 
 # --------------------------------------------------------------------------
@@ -187,20 +255,22 @@ def _readers():
 def _real(spec) -> dict:
     w = W.validate(spec)
     w = {"id": "w0123456789", **w}
-    return {"ok": True, "id": w["id"], "name": w["name"], "at": NOW,
+    return {"ok": True, "id": w["id"], "name": w["name"], "layout": w["layout"], "at": NOW,
             "blocks": [W.fill(b, _readers()) for b in w["blocks"]]}
 
 
 def cases() -> dict:
     out = {}
-    out["morning"] = _real({"name": "Morning", "blocks": [
+    # One real case per arrangement, so both apps' drawing of each is held to
+    # real content and not only to hand-written shapes.
+    out["morning"] = _real({"name": "Morning", "layout": "big", "blocks": [
         {"type": "title", "text": "Good morning"},
         {"type": "list", "source": "reminders", "max": 3, "label": "Next up"},
         {"type": "number", "source": "email_count"},
         {"type": "progress", "source": "disk_free"},
         {"type": "button", "action": "timer"},
         {"type": "button", "action": "stop_everything"}]})
-    out["focus_and_music"] = _real({"name": "Desk", "blocks": [
+    out["focus_and_music"] = _real({"name": "Desk", "layout": "list", "blocks": [
         {"type": "progress", "source": "focus"},
         {"type": "list", "source": "now_playing", "max": 1},
         {"type": "list", "source": "todo", "max": 1},
@@ -209,8 +279,9 @@ def cases() -> dict:
         {"type": "button", "action": "pc_play_pause"},
         {"type": "button", "action": "brief_me"}]})
     # The three sources A11-A13 are about, in one case so BOTH apps' lists are
-    # compared against what the PC's own menu can fill.
-    out["quick_access"] = _real({"name": "Quick access", "blocks": [
+    # compared against what the PC's own menu can fill. No title, so "compact"
+    # has to use the widget's own name as its heading.
+    out["quick_access"] = _real({"name": "Quick access", "layout": "compact", "blocks": [
         {"type": "number", "source": "approvals_count"},
         {"type": "number", "source": "tokens_per_second"},
         {"type": "progress", "source": "gpu_memory"}]})
@@ -241,8 +312,16 @@ def cases() -> dict:
         {"type": "list", "source": "todo", "items": "not a list", "more": True}]}
     out["missing_private_flag"] = {"ok": True, "name": "M", "blocks": [
         {"type": "progress", "source": "focus", "fraction": 0.5, "value": "5:00 left"}]}
-    return {name: {"answer": ans, "view": app_view(ans), "hidden": hide(app_view(ans))}
-            for name, ans in out.items()}
+    out["newer_pc_layout"] = {"ok": True, "id": "w0123456789", "name": "From the future",
+                              "layout": "grid", "at": NOW, "blocks": [
+        {"type": "title", "text": "Ahead"},
+        {"type": "number", "source": "todo_count", "value": "2"}]}
+    cases = {}
+    for name, ans in out.items():
+        view = app_view(ans)
+        cases[name] = {"answer": ans, "view": view, "hidden": hide(view),
+                       "boards": {layout: arrange(view, layout) for layout in W.LAYOUTS}}
+    return cases
 
 
 def render() -> str:
@@ -250,6 +329,7 @@ def render() -> str:
         "comment": "Made by tools/gen_widget_cases.py - do not edit by hand. "
                    "docs/JARVIS-API.md section 86.",
         "actions": [{"id": k, "label": v} for k, v in W.ACTIONS.items()],
+        "layouts": list(W.LAYOUTS),
         "private_sources": PRIVATE,
         "hidden_words": HIDDEN,
         "limits": {"blocks": MAX_BLOCKS, "items": MAX_ITEMS, "name": W.MAX_NAME,

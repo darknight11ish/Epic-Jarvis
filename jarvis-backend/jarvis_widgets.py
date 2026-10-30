@@ -7,7 +7,7 @@ my next 3 reminders and a 10-minute timer button" - and Jarvis turns those
 words into a SMALL DESCRIPTION, never into code. The description is JSON
 from a fixed menu:
 
-    {"name": "Morning",
+    {"name": "Morning", "layout": "big",
      "blocks": [{"type": "title",    "text": "Morning"},
                 {"type": "number",   "source": "todo_count", "label": "To do"},
                 {"type": "list",     "source": "reminders", "max": 3},
@@ -38,6 +38,13 @@ exactly a thing on the menu:
     (control and invisible characters and < > { } ` \\ removed) and a text
     with a web address in it is refused; there are no colour, size or style
     keys to set;
+  - the ARRANGEMENT is a closed list too (`LAYOUTS`, added 2026-10-30): one of
+    "stack" (the default), "big", "list" or "compact", and nothing else. There
+    is no layout language here, and there cannot be: Android fixes a widget's
+    layout when the app is built, so the APK can only draw arrangements that
+    were compiled into it. A look the model invented would be undrawable, not
+    merely untrusted - which is why "make it look however I describe" is not a
+    thing this module can offer;
   - sizes are capped: at most MAX_BLOCKS blocks, MAX_BUTTONS buttons, a list
     of at most MAX_LIST items, short texts, and the model's whole answer at
     most MAX_RAW characters.
@@ -78,8 +85,32 @@ screen is as public as a lock screen). Counts, the disk and the focus
 countdown are not private. Nothing here reaches the AI model: `show` is a
 read for the apps only, and no tool offers it.
 
-ROUTES (wrapped round the server's Handler by widgets.patch, behind the
-token and origin checks like every route):
+THE FOUR ARRANGEMENTS (2026-10-30)
+Same blocks, same sources, same buttons - only where they sit. The one rule
+both apps draw is `tools/gen_widget_cases.py`'s `arrange()`, kept equal to
+`jarvis-desktop/src/widget-board.js` and the phone's
+`net/JarvisWidgets.kt` by the generated `widget-cases.json`:
+
+    "stack"    everything in the order given (the default, and what every
+               widget made before 2026-10-30 gets - nothing changes for them)
+    "big"      the FIRST number is drawn large at the top, then the rest;
+               with no number it is "stack"
+    "list"     the heading first, then the lists, then the numbers, then the
+               bars - so "put my reminders at the top" is an arrangement, not
+               a hope about the order the model happened to emit
+    "compact"  the heading (its own, or the widget's name), ONE thing, and
+               the buttons; a list is cut to its first item and the rest
+               becomes "+N more", so the count it shows is still the truth
+
+No key here sets a colour, a size, a font, an image, a grid or a position:
+those are not arrangement, and Android's RemoteViews/Glance vocabulary cannot
+be extended from a server either. `docs/JARVIS-API.md` section 86.1.1.
+
+ROUTES (wrapped round the server's Handler by this module's own `install()`,
+which jarvis_brain_reads.install() calls - the whole module ships by being
+copied into the backend folder, because it is on `_where.py`'s SHIPPED list,
+and it has NO patch of its own; behind the token and origin checks like every
+route):
 
     GET  /api/widgets                 the saved widgets, the drafts, the menu
     GET  /api/widgets/show?id=w...    one widget, its blocks filled in now
@@ -145,7 +176,33 @@ REQUIRED = {
     "progress": ("source",),
     "button": ("action",),
 }
-TOP_KEYS = ("name", "blocks")
+#: The four arrangements a widget can be drawn in (2026-10-30), in the order
+#: the previews and the prompt offer them. A CLOSED list: the apps can only
+#: draw arrangements compiled into them (Android fixes a widget's layout when
+#: the APK is built), so a value off this list is refused, never passed on.
+LAYOUTS = ("stack", "big", "list", "compact")
+DEFAULT_LAYOUT = "stack"
+
+#: What each arrangement adds to the preview sentence, and its own preview
+#: line, in LAYOUTS' order. The default (`stack`) adds no words to the
+#: sentence: a widget described before 2026-10-30 reads exactly as it did.
+#: (Built from LAYOUTS by position rather than by a literal key, so the order
+#: cannot disagree with the menu; a length mismatch is caught by
+#: test_widgets.py, which checks the key sets are equal.)
+LAYOUT_WORDS = dict(zip(LAYOUTS, (
+    "",
+    ", with the first number drawn large",
+    ", with your lists first",
+    ", with one heading, one thing and the buttons",
+)))
+LAYOUT_PARTS = dict(zip(LAYOUTS, (
+    "Arranged: everything stacked, in the order given",
+    "Arranged: the first number drawn large at the top",
+    "Arranged: your lists first, then the numbers, then the bars",
+    "Arranged: one heading, one thing and the buttons",
+)))
+
+TOP_KEYS = ("name", "layout", "blocks")
 #: Every key any block may have. A key outside this is refused outright.
 ALL_KEYS = tuple(sorted({k for keys in BLOCK_KEYS.values() for k in keys}))
 
@@ -357,6 +414,12 @@ def validate(obj) -> dict:
         raise Refused(f"the widget has something a widget cannot have ({', '.join(map(str, extra))[:60]})")
     if "blocks" not in obj or "name" not in obj:
         raise Refused("the widget needs a name and its parts")
+    # The arrangement, when the description carries one. Absent means "stack",
+    # which is what every widget saved before 2026-10-30 gets; PRESENT and off
+    # the list is a refusal, never a quiet fall back to something else.
+    layout = obj.get("layout", DEFAULT_LAYOUT)
+    if not isinstance(layout, str) or layout not in LAYOUTS:
+        raise Refused("the widget is not one of the arrangements a widget can have")
     name = clean_text(obj["name"], MAX_NAME, "the name")
     blocks = obj["blocks"]
     if not isinstance(blocks, list) or not blocks:
@@ -376,7 +439,7 @@ def validate(obj) -> dict:
     if not name:
         first = next((b for b in out if b["type"] == "title"), None)
         name = first["text"][:MAX_NAME] if first else "My widget"
-    return {"name": name, "blocks": out}
+    return {"name": name, "layout": layout, "blocks": out}
 
 
 def parse_model(raw) -> dict:
@@ -399,15 +462,22 @@ def describe(widget: dict) -> str:
         else:
             parts.append(SOURCES[b["source"]].describe)
     if not parts:
-        return f"A widget called “{widget.get('name', '')}”."
+        return f"A widget called “{widget.get('name', '')}”{_layout_words(widget)}."
     body = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
-    return f"A widget called “{widget.get('name', '')}” showing {body}."
+    return f"A widget called “{widget.get('name', '')}” showing {body}{_layout_words(widget)}."
+
+
+def _layout_words(widget: dict) -> str:
+    """The arrangement's own words for the preview sentence, or "" for the
+    default - so a widget made before 2026-10-30 reads exactly as it did."""
+    return LAYOUT_WORDS.get(widget.get("layout") or DEFAULT_LAYOUT, "")
 
 
 def parts(widget: dict) -> list:
     """One plain line per part, in order - the preview both apps show under
-    the sentence, before Add."""
-    out = []
+    the sentence, before Add. The arrangement comes FIRST: both apps show at
+    most MAX_BLOCKS lines, so a line added at the end could be the one cut."""
+    out = [LAYOUT_PARTS.get(widget.get("layout") or DEFAULT_LAYOUT, LAYOUT_PARTS[DEFAULT_LAYOUT])]
     for b in widget.get("blocks") or []:
         t = b.get("type")
         if t == "title":
@@ -437,6 +507,10 @@ SCHEMA = {
     "type": "object",
     "properties": {
         "name": {"type": "string", "maxLength": MAX_NAME},
+        # Required here, so the model chooses an arrangement deliberately;
+        # `validate` still defaulting it is only for widgets saved before
+        # 2026-10-30, which have no key and must keep drawing as they did.
+        "layout": {"type": "string", "enum": list(LAYOUTS)},
         "blocks": {
             "type": "array", "minItems": 1, "maxItems": MAX_BLOCKS,
             "items": {
@@ -454,7 +528,7 @@ SCHEMA = {
             },
         },
     },
-    "required": ["name", "blocks"],
+    "required": ["name", "layout", "blocks"],
     "additionalProperties": False,
 }
 
@@ -462,6 +536,7 @@ SCHEMA = {
 def prompt(words: str) -> str:
     menu = "\n".join(f'  - "{k}" ({s.block}): {s.describe}' for k, s in SOURCES.items())
     buttons = "\n".join(f'  - "{k}": {v}' for k, v in ACTIONS.items())
+    layouts = "\n".join(f'  - "{k}": {v}' for k, v in LAYOUT_PARTS.items())
     return (
         "Turn the owner's request into a small widget description in JSON. Use ONLY these "
         "parts.\n"
@@ -473,9 +548,11 @@ def prompt(words: str) -> str:
         '  - {"type": "button", "action": ...}\n'
         f"Sources (each only as the block type shown):\n{menu}\n"
         f"Buttons (nothing else can be a button):\n{buttons}\n"
+        f"Arrangements (pick exactly one; \"stack\" unless the request asks for another):\n"
+        f"{layouts}\n"
         f"At most {MAX_BLOCKS} blocks and {MAX_BUTTONS} buttons. Give the widget a short "
         "name. If the request asks for something not on these lists, leave it out.\n"
-        'Answer only JSON: {"name": "...", "blocks": [...]}.\n\n'
+        'Answer only JSON: {"name": "...", "layout": "...", "blocks": [...]}.\n\n'
         f"The owner's request: {words}"
     )
 
@@ -595,7 +672,14 @@ class Store:
                     or not _ID.fullmatch(row["id"]):
                 continue
             try:
-                w = validate({"name": row.get("name"), "blocks": row.get("blocks")})
+                # `layout` is passed through only when the row HAS one: a file
+                # written before 2026-10-30 has no key and draws as "stack",
+                # while a hand-edited row with a value off the list is refused
+                # like any other off-menu value.
+                raw = {"name": row.get("name"), "blocks": row.get("blocks")}
+                if "layout" in row:
+                    raw["layout"] = row["layout"]
+                w = validate(raw)
             except Refused:
                 continue        # checked again on every read: a hand edit smuggles nothing
             created = row.get("created")
@@ -674,7 +758,8 @@ class Store:
             rows = self._read()
             if len(rows) >= MAX_WIDGETS:
                 return None, TOO_MANY
-            w = {"id": "w" + secrets.token_hex(5), "name": d["name"], "blocks": d["blocks"],
+            w = {"id": "w" + secrets.token_hex(5), "name": d["name"],
+                 "layout": d.get("layout") or DEFAULT_LAYOUT, "blocks": d["blocks"],
                  "created": self.clock()}
             self._write(rows + [w])
             del self._drafts[did]
@@ -1032,7 +1117,8 @@ def show(wid, *, readers: Optional[Readers] = None, st: Optional[Store] = None) 
     if w is None:
         return 404, {"ok": False, "error": NO_SUCH}
     r = readers or Readers()
-    return 200, {"ok": True, "id": w["id"], "name": w["name"], "at": r.now(),
+    return 200, {"ok": True, "id": w["id"], "name": w["name"],
+                 "layout": w.get("layout") or DEFAULT_LAYOUT, "at": r.now(),
                  "blocks": [fill(b, r) for b in w["blocks"]]}
 
 

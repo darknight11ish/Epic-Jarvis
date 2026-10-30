@@ -396,10 +396,10 @@
     "id": "widgets",
     "group": "Talking",
     "title": "Widgets you describe",
-    "what": "Small tiles you asked for, drawn on the desktop widget.",
-    "where": "Brain, Work, Widgets. The widget itself shows with Alt+Shift+W.",
+    "what": "Small tiles you asked for, drawn on your desktop widget or your phone's home screen, in one of four arrangements.",
+    "where": "Brain, Work, Widgets (desktop); Brain, Widgets and a home-screen slot (phone). The desktop widget itself shows with Alt+Shift+W.",
     "asks": "No card.",
-    "limit": "A widget's tile actions are a fixed set, and nothing a widget shows is ever turned into an instruction.",
+    "limit": "A widget's tile actions are a fixed set, its arrangement is one of four fixed ones, and nothing a widget shows is ever turned into an instruction.",
     "surface": "both",
     "covers": [
       "brain.work.widgets",

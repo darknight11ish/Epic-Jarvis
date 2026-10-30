@@ -15966,7 +15966,7 @@ a live one is:
 of all four kinds.
 ---
 
-## 86. Widgets you describe (added 2026-09-28)
+## 86. Widgets you describe (added 2026-09-28; the four arrangements added 2026-10-30)
 
 The owner's choice of 2026-09-28, **the SAFE version**. The owner says what a
 small widget should show - "make me a widget showing my next 3 reminders and
@@ -15975,6 +15975,12 @@ a 10-minute timer button" - and Jarvis makes a **preview**. The owner taps
 (at once). The phone shows one on the home screen ("Jarvis widget 1", "2" or
 "3"); the PC shows one in the existing desktop widget window, in place of the
 face.
+
+Since **2026-10-30** a widget also has an **arrangement**: one of four, and
+the model picks it from the owner's words ("put my reminders at the top", "make
+the count big"). Same blocks, same sources, same buttons - only where they sit.
+It is a **closed list**, and §86.1.1 says plainly why it can never be anything
+else.
 
 One new shipped module, `backend/jarvis_widgets.py`, **no patch**: its routes
 are switched on by `jarvis_brain_reads.install()`, which brain-reads.patch
@@ -15985,7 +15991,7 @@ already calls.
 The AI model's ONLY output is a small JSON description from a fixed menu:
 
 ```
-{"name": "Morning",
+{"name": "Morning", "layout": "big",
  "blocks": [{"type": "title",    "text": "Good morning"},
             {"type": "number",   "source": "todo_count", "label": "To do"},
             {"type": "list",     "source": "reminders", "max": 3},
@@ -16029,23 +16035,61 @@ once, or a free-form action.
 
 **The check is plain code** (`jarvis_widgets.validate`, `parse_model`), and
 refuses the whole description - nothing is made - for: a key that no block
-has (`style`, `html`, `url`, `onclick` ...), an unknown block type, source
-or button, a source shown as the wrong block, a list over 5 or under 1, more
-than 8 blocks or 4 different buttons, a repeated key, NaN or Infinity, an
-answer over 6,000 characters, nesting too deep to read, words around the
-JSON, and a text with a web address in it (`https://`, `www.`, `javascript:`,
-`host.tld/path`). Text is cleaned: control, invisible and direction-changing
-characters and `< > { } `` ` `` \` are removed, spaces collapsed, and each
-text capped. A key from the menu that belongs to another block type (a
-`label` on a button) is dropped, never used. The same button twice is kept
-once. A widget read back from `widgets.json` is checked again, so a hand
-edit smuggles nothing in.
+has (`style`, `html`, `url`, `onclick` ...), an unknown block type, source,
+button or **arrangement**, a source shown as the wrong block, a list over 5
+or under 1, more than 8 blocks or 4 different buttons, a repeated key, NaN or
+Infinity, an answer over 6,000 characters, nesting too deep to read, words
+around the JSON, and a text with a web address in it (`https://`, `www.`,
+`javascript:`, `host.tld/path`). Text is cleaned: control, invisible and
+direction-changing characters and `< > { } `` ` `` \` are removed, spaces
+collapsed, and each text capped. A key from the menu that belongs to another
+block type (a `label` on a button) is dropped, never used. The same button
+twice is kept once. A widget read back from `widgets.json` is checked again,
+so a hand edit smuggles nothing in.
 
 **The model** is this PC's own (`jarvis_sensitive.learner_model()`, refused
 unless it is on this PC and not a cloud model, `check_local_model`), asked
 through Ollama's structured output with a schema whose every choice is a
-fixed list. It is given the owner's words and the menu - nothing else: no
-memory, no email, no earlier chat.
+fixed list (`layout` among them, and required). It is given the owner's words
+and the menu - nothing else: no memory, no email, no earlier chat.
+
+### 86.1.1 The arrangement is a closed list too (added 2026-10-30)
+
+`layout` is the one new top-level key: a word from a fixed list, or nothing
+(which means `"stack"`, so every widget saved before 2026-10-30 draws exactly
+as it did). The model chooses it; the PC checks it; both apps draw it by the
+one rule in `tools/gen_widget_cases.py` (`arrange()`), held to the desktop's
+`boardOf` and the phone's `JarvisWidgets.boardOf` case for case by the shared
+`widget-cases.json`.
+
+| `layout` | What it draws |
+|---|---|
+| `stack` (default) | every block in the order given - today's shape |
+| `big` | the FIRST number drawn large at the top, then the rest; with no number it is `stack` |
+| `list` | the heading, then the lists, then the numbers, then the bars - so "reminders at the top" does not depend on the order the model happened to emit |
+| `compact` | one heading (its own, or the widget's name), ONE thing, then the buttons; a list keeps its first item and counts the rest into "+N more" |
+
+A value off that list is **refused** by the PC like any other off-menu value
+(`Refused`, nothing is made), and a widget in `widgets.json` with a
+hand-edited `layout` is not read. The apps are the other direction: an
+arrangement they do not know (a newer PC's word) is drawn as `stack`, because
+a widget that cannot be arranged must still draw.
+
+**What is impossible here, and why the list can never grow by itself**: an
+Android widget's *layout* is fixed when the APK is built. The widget is a
+`RemoteViews` description the **launcher** inflates from **this app's**
+resources, and the provider itself is declared in `AndroidManifest.xml` with
+its size and update period in `<appwidget-provider>` XML. Nothing a server
+sends can add a layout, a view class, a font or an image: the app can only
+compose the arrangements compiled into it. So "Jarvis, make me a widget that
+looks exactly like I describe" is not a thing this feature will grow into -
+it is a thing Android does not allow. What CAN be added is another entry in
+this closed list, which is a new app build.
+
+Nothing here sets a colour, a size, a font, an image, a grid or a position:
+those are not arrangement, and the vocabulary cannot be extended from a
+server either. The palette stays the one fixed dark set each widget already
+had (§86.5).
 
 ### 86.2 Only the owner's own words; no approval card
 
@@ -16075,8 +16119,8 @@ tool: the model cannot call any of them, and nothing they return reaches it.
 
 | Route | Body | Answers |
 |---|---|---|
-| `GET /api/widgets` | - | 200 `{"ok", "widgets": [row], "drafts": [row + "expires"], "no_card", "private_hidden", "sources", "actions", "limits"}`; a row is `{"id": "w…"/"d…", "name", "blocks", "created"?, "said", "parts": ["Heading: …", "List: …", "Button: …"]}` |
-| `GET /api/widgets/show?id=w…` | - | 200 `{"ok": true, "id", "name", "at", "blocks": [...]}` - each block filled in NOW: a list adds `items: [{"text", "when"}]`, `more`, `empty`; a number `value`; a bar `fraction`, `value`; a button its fixed `label`; data blocks carry `private`, and `note` when a source could not be read ("No briefing yet today."). 404 unknown id |
+| `GET /api/widgets` | - | 200 `{"ok", "widgets": [row], "drafts": [row + "expires"], "no_card", "private_hidden", "sources", "actions", "limits"}`; a row is `{"id": "w…"/"d…", "name", "layout", "blocks", "created"?, "said", "parts": ["Arranged: …", "Heading: …", "List: …", "Button: …"]}` |
+| `GET /api/widgets/show?id=w…` | - | 200 `{"ok": true, "id", "name", "layout", "at", "blocks": [...]}` - each block filled in NOW: a list adds `items: [{"text", "when"}]`, `more`, `empty`; a number `value`; a bar `fraction`, `value`; a button its fixed `label`; data blocks carry `private`, and `note` when a source could not be read ("No briefing yet today."). 404 unknown id |
 | `POST /api/widgets/draft` | `{"words", "provenance"}` | 200 `{"ok": true, "draft", "said", "card": false, "no_card"}`; 400 not own words / no words / over 300 characters; 409 tainted (chat only); 422 `{"error", "why"}` off the menu; 503 no model |
 | `POST /api/widgets/add` | `{"draft": "d…"}` | 200 `{"ok", "widget", "said"}` - the draft EXACTLY as previewed; 404 expired or used; 409 twelve widgets already |
 | `POST /api/widgets/discard` | `{"draft"}` | 200 |
@@ -16111,12 +16155,20 @@ and events.
   again in Rust before anything is sent. Stop everything still works.
   While App lock is on or the lists are hidden, Rust takes every private
   block's words out. Read when the window opens, on a schedule or focus
-  event, and once a minute while shown.
+  event, and once a minute while shown. Since 2026-10-30 it draws the
+  widget's own **arrangement** too: `boardOf` in `src/widget-board.js` places
+  the large number, the order and the buttons, and `.board-big` in
+  `widget.css` is the only size that changes.
 - **Phone, Brain -> Widgets** (`WidgetsPlate.kt`, `net/JarvisWidgets.kt`):
   the same list, previews and box, and **On your home screen**: which saved
-  widget each of the three slots shows (kept on the phone, ids only).
+  widget each of the three slots shows (kept on the phone, ids only). The
+  slot count and the app's three board receivers are held equal by
+  `JarvisWidgetsTest.everySlotHasAReceiver` - they were not before 2026-10-30,
+  when the picker offered five and the app shipped three.
 - **Phone home screen, "Jarvis widget" 1-3** (`widget/JarvisBoardWidget.kt`,
-  Glance 1.1.1 - no version change was needed): draws the blocks natively;
+  Glance 1.1.1 - no version change was needed): draws the blocks natively, in
+  the widget's arrangement (`JarvisWidgets.boardOf`: the large number at 28sp
+  first, then the blocks in order, then the buttons two to a row);
   read from the PC only on a live link, otherwise "Not up to date - tap to
   open Jarvis and connect", like the approvals widget. **The home screen is
   public**: while App lock or "Hide memory lists and chat history" is on,
@@ -16135,7 +16187,10 @@ Both apps draw a filled-in widget by one rule, held with the PC's by
 phone's byte-identical `contract/widget-cases.json`, with hostile answers):
 an unknown block or button is left out, a source the app does not know is
 private, and sizes are capped - so even a wrong PC answer cannot put a
-button on screen that the app does not already know is safe.
+button on screen that the app does not already know is safe. The fixture now
+also carries each case's `boards` (every layout, arranged) and the closed
+`layouts` list, so the two apps' arrangement rule is held to the PC's case for
+case as well.
 
 ### 86.5 Not done, and why
 
@@ -16144,6 +16199,17 @@ button on screen that the app does not already know is safe.
   program would run with a window's powers; outside text in a turn could
   steer it; and no check can prove arbitrary code safe. The SAFE version's
   menu is the whole point.
+- **A layout the owner describes, or the model invents** (images, custom
+  fonts, free colours, grids, a clock face): **not possible**, and not a
+  backlog item. Android fixes a widget's layout when the APK is built - the
+  provider is manifest XML and the drawing is `RemoteViews` over this app's
+  own resources - so a server cannot add one (§86.1.1). The four arrangements
+  are the whole menu; a fifth is a new app build, not a setting.
+- **Per-widget accent, transparency and high contrast**: still open, and
+  deliberately NOT part of the 2026-10-30 arrangements. Those are the queued
+  owner decision recorded in `docs/DECISIONS.md` ("per-widget transparency,
+  accent, high contrast and a live preview"), they are a different feature,
+  and half-building them here would have made the queue's own line untrue.
 - **The Windows 11 widget board**: needs a packaged (MSIX) app with a widget
   provider; this app is not packaged that way, so it cannot be done now.
 - **A dashboard server** (homepage, glance and the like): another program in
@@ -16154,9 +16220,10 @@ button on screen that the app does not already know is safe.
   after a change they make, and on schedule and focus events.
 
 **Not checked:** no real model has made a widget yet (the tests use a
-stand-in); the phone half is not compiled here; the desktop's Rust tests
-compile but run only on Windows; the home-screen widget has not been seen
-on a real launcher.
+stand-in); the desktop's Rust tests compile but run only on Windows; and the
+home-screen widget has not been seen on a real launcher **or an emulator** -
+so the four arrangements are proved as rules, not as pixels (the phone's
+Kotlin compiles and its JVM tests run, 2026-10-30).
 
 
 ## 87. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, routes, both apps' screens, and Gemini plus eight more website adapters built 2026-09-28)
