@@ -235,26 +235,33 @@ object HistoryView {
     // ------------------------------------------------------------- menu ---
 
     /** One row of the overflow menu, in drawing order. */
-    enum class Action { OPEN, PIN, MOVE, DELETE }
+    enum class Action { OPEN, PIN, MOVE, ARCHIVE, DELETE }
 
     /**
      * A row's overflow actions: Open, Pin/Unpin, Move to (only when the PC has
-     * tags) and Delete. Empty while a "file it under" banner is up: there a tap
-     * on the row files it, and an extra menu would be two meanings for one row.
+     * tags), Archive/Unarchive (the owner's request of 2026-10-29) and Delete.
+     * Empty while a "file it under" banner is up: there a tap on the row files
+     * it, and an extra menu would be two meanings for one row.
+     *
+     * The actions are the same list in both views; only the Archive row's word
+     * changes (Unarchive on an archived chat - [actionLabel]). Delete stays
+     * last: it is the only one that cannot be undone, and it keeps its confirm.
      */
     fun menu(tags: List<ChatTags.Tag>, filing: Boolean): List<Action> {
         if (filing) return emptyList()
         val out = mutableListOf(Action.OPEN, Action.PIN)
         if (tags.isNotEmpty()) out += Action.MOVE
+        out += Action.ARCHIVE
         out += Action.DELETE
         return out
     }
 
-    /** The word on a menu row: Pin reads "Unpin" already pinned. */
-    fun actionLabel(action: Action, pinned: Boolean): String = when (action) {
+    /** The word on a menu row: Pin reads "Unpin" already pinned, Archive reads "Unarchive" archived. */
+    fun actionLabel(action: Action, pinned: Boolean, archived: Boolean = false): String = when (action) {
         Action.OPEN -> OPEN
         Action.PIN -> if (pinned) UNPIN else PIN
         Action.MOVE -> ChatTags.MOVE_TO
+        Action.ARCHIVE -> if (archived) ChatLog.UNARCHIVE else ChatLog.ARCHIVE
         Action.DELETE -> DELETE
     }
 
@@ -291,6 +298,18 @@ object HistoryView {
             }
         },
     )
+
+    // ------------------------------------------ archive, in the loaded list ---
+
+    /**
+     * [rows] with one row's archived state changed - only the PC's answer ever
+     * calls this (the owner's request of 2026-10-29). The screen then keeps the
+     * rows of the view it is showing ([ChatLog.inView]), so a chat that was
+     * archived leaves the live list and one that was unarchived leaves the
+     * archived view - and a refusal changes nothing at all.
+     */
+    fun withArchive(rows: List<ChatLog.Summary>, id: String, archived: Boolean): List<ChatLog.Summary> =
+        rows.map { if (it.id == id) it.copy(archived = archived) else it }
 
     /** A row's age from the list's own timestamp; a Live session's end, else its start. */
     fun rowAge(row: ChatLog.Summary, nowSeconds: Long): String =

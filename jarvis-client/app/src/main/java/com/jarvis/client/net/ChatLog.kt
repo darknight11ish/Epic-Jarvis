@@ -34,6 +34,8 @@ import java.util.Locale
  * - `GET /api/history/conversation?id=` - one conversation, read-only.
  * - `POST /api/history/delete {"id"}` - one conversation. There is no
  *   "delete all" route, on purpose.
+ * - `POST /api/history/archive {"id", "archived"}` - one conversation out of
+ *   the live list and back (reversible, no confirm, no card).
  * - `POST /api/history/settings` - `{"enabled"}` or `{"keep_days"}`.
  *
  * Pure Kotlin, no Android types, so `ChatLogTest` runs it on a plain JVM.
@@ -43,6 +45,21 @@ object ChatLog {
     const val CONVERSATION_PATH = "/api/history/conversation"
     const val DELETE_PATH = "/api/history/delete"
     const val SETTINGS_PATH = "/api/history/settings"
+
+    /**
+     * `POST /api/history/archive` `{"id": "<conversation id>", "archived":
+     * true|false}` (the archive half of the owner's request of 2026-10-29:
+     * "make sure i can archive and delete chats (with a confirm step)").
+     * Archiving moves a chat out of the live list and into the Archived view;
+     * unarchiving brings it back. It is REVERSIBLE, so there is no confirm and
+     * no approval card - unlike Delete, whose confirm stays exactly as it was.
+     *
+     * Only the chat's id and the wanted state go over the wire, never a word of
+     * the chat. A row of the list carries `"archived": true|false`; the list
+     * itself takes `?archived=1` to ask for the archived ones only (the live
+     * list, the default, never includes them).
+     */
+    const val ARCHIVE_PATH = "/api/history/archive"
 
     /**
      * `POST /api/history/pin` `{"id": "<conversation id>", "pinned": true|false}`
@@ -116,13 +133,23 @@ object ChatLog {
      * One page, newest first. [before] is the `updated` time of the oldest row
      * already shown; [kind], one of [KINDS] ("Live only" and the other
      * filters, the chat audit 2026-09-28) - anything else is not sent.
+     * [archived] true asks for the archived chats ONLY (`&archived=1`, the
+     * archive half of the owner's request of 2026-10-29); false is the live
+     * list, and it never includes them.
      */
-    fun listPath(before: Long? = null, limit: Int = PAGE, kind: String? = null, tag: String? = null): String =
+    fun listPath(
+        before: Long? = null,
+        limit: Int = PAGE,
+        kind: String? = null,
+        tag: String? = null,
+        archived: Boolean = false,
+    ): String =
         "$LIST_PATH?limit=${limit.coerceIn(1, 100)}" + (before?.let { "&before=$it" } ?: "") +
             (kind?.takeIf { it in KINDS }?.let { "&kind=$it" } ?: "") +
             // `tag=<id>` or `tag=none` (section 10); anything else is not sent.
             (tag?.takeIf { it == "none" || (it.isNotEmpty() && it.length <= 9 && it.all { c -> c in '0'..'9' } && it.toInt() > 0) }
-                ?.let { "&tag=$it" } ?: "")
+                ?.let { "&tag=$it" } ?: "") +
+            (if (archived) "&archived=1" else "")
 
     fun conversationPath(id: String): String = "$CONVERSATION_PATH?id=${URLEncoder.encode(id, "UTF-8")}"
 
@@ -189,6 +216,14 @@ object ChatLog {
          * group is ordered by this, newest pin first - [HistoryView]'s job.
          */
         val pinnedAt: Long? = null,
+        /**
+         * Whether it is archived (the archive half of the owner's request of
+         * 2026-10-29): out of the live list, in the Archived view, and back
+         * again with Unarchive. False from an older PC that sends no
+         * `archived` - nothing is guessed, and [inView] then keeps such a row
+         * out of the archived view rather than showing a live chat in it.
+         */
+        val archived: Boolean = false,
     )
 
     /** One page: the settings, its rows, and whether there may be older ones. */
@@ -300,6 +335,9 @@ object ChatLog {
                 tagId = o.whole("tag_id")?.toInt(),
                 pinned = o.flag("pinned") == true,
                 pinnedAt = o.whole("pinned_at"),
+                // The archive half of the owner's request of 2026-10-29: a
+                // missing field is not archived (an older PC).
+                archived = o.flag("archived") == true,
             )
         }
         val raw = (body["conversations"] as? JsonArray)?.size ?: 0
@@ -436,6 +474,7 @@ object ChatLog {
                     tagId = o.whole("tag_id")?.toInt(),
                     pinned = o.flag("pinned") == true,
                     pinnedAt = o.whole("pinned_at"),
+                    archived = o.flag("archived") == true,
                 ),
                 hits = o.whole("hits")?.toInt() ?: 0,
                 snippet = Snippet(
@@ -604,6 +643,98 @@ object ChatLog {
             else -> Pin(false, said = PIN_REFUSED)
         }
     }
+
+    // -------------------------------------------------------- archive ---
+    //
+    // The archive half of the owner's request of 2026-10-29 ("make sure i can
+    // archive and delete chats"). A chat moved out of the live list and back
+    // again: REVERSIBLE, so no confirm and no approval card - only Delete,
+    // which cannot be undone, keeps its confirm. The contract is
+    // POST /api/history/archive {"id", "archived"} -> 200
+    // {"ok": true, "id", "archived"}, 404 for a chat the PC does not know, 400
+    // for a body it cannot read. The row stays exactly where it is until the
+    // PC answers yes (see HistoryScreen's archiveChat).
+
+    /** The menu word on a live row, and the one on an archived row. */
+    const val ARCHIVE = "Archive"
+    const val UNARCHIVE = "Unarchive"
+
+    /** The view chip's word: one tap shows what has been archived. */
+    const val ARCHIVED = "Archived"
+
+    /** The chip's name for TalkBack. */
+    const val ARCHIVE_FILTER_TITLE = "Show archived chats"
+
+    /** The archived view's own empty lines, so "no chats" never reads as "no chats at all". */
+    const val ARCHIVED_EMPTY = "No archived conversations."
+    const val ARCHIVED_NONE_FILTER = "No archived conversations match that filter."
+
+    /** The PC does not have that chat any more (contract 404). */
+    const val ARCHIVE_GONE = "That chat is gone - it may have been deleted."
+
+    /**
+     * A bodyless 404: an older PC whose Jarvis has no archive route (the same
+     * reading the pin route gets), or a chat it does not know. Says what to do.
+     */
+    const val ARCHIVE_OLD_PC =
+        "This PC's Jarvis cannot archive chats yet. Update it by running apply-patches.ps1 on the PC."
+
+    /** A refusal the PC gave no plain sentence for (contract 400, or anything else). */
+    const val ARCHIVE_REFUSED = "The archive change was not made. Your PC did not accept it."
+
+    /** What is said after the PC says yes. */
+    const val ARCHIVED_SAID = "Archived. It is out of the main list."
+    const val UNARCHIVED_SAID = "Unarchived. It is back in the list."
+
+    fun archiveSaid(archived: Boolean): String = if (archived) ARCHIVED_SAID else UNARCHIVED_SAID
+
+    /** What an archive request came to: [ok] is the only thing that may move a row. */
+    data class Archive(
+        val ok: Boolean,
+        val archived: Boolean? = null,
+        val said: String? = null,
+    )
+
+    /** The contract's body, exactly `{"id": "...", "archived": true|false}`. */
+    fun archiveBody(id: String, archived: Boolean): String = buildJsonObject {
+        put("id", id)
+        put("archived", archived)
+    }.toString()
+
+    /**
+     * A `POST /api/history/archive` answer. Only a 2xx whose body does not say
+     * `ok: false` is a yes; [Archive.archived] is the PC's own value when it
+     * sends one, else null for the caller's request to stand in. A 404 is
+     * [ARCHIVE_GONE]; on any other refusal the PC's own `message` wins, else
+     * [ARCHIVE_REFUSED].
+     */
+    fun archiveAnswer(code: Int, body: JsonObject?): Archive {
+        val message = body?.str("message")
+        if (code in 200..299 && body?.flag("ok") != false) {
+            return Archive(true, body?.flag("archived"))
+        }
+        val error = body?.str("error")
+        return when {
+            code == 404 || error == "not_found" || error == "unknown_id" ->
+                Archive(false, said = ARCHIVE_GONE)
+            message != null ->
+                Archive(false, said = "The archive change was not made. " + DesktopWrite.asSentence(message))
+            else -> Archive(false, said = ARCHIVE_REFUSED)
+        }
+    }
+
+    /**
+     * Whether [row] belongs in the list being shown: the live list, or the
+     * archived one (the owner's request of 2026-10-29). The PC already sends
+     * only the rows the view asked for; this is the client half, so an older
+     * PC that ignores `archived=1` can never show a live chat in the archived
+     * view (it shows [ARCHIVED_EMPTY] instead).
+     */
+    fun inView(row: Summary, archivedView: Boolean): Boolean = row.archived == archivedView
+
+    /** [rows] narrowed to the view being shown - see [inView]. */
+    fun inView(rows: List<Summary>, archivedView: Boolean): List<Summary> =
+        rows.filter { inView(it, archivedView) }
 
     // --------------------------------------------------------- delete ---
 
