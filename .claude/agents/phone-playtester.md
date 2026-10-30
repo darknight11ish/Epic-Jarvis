@@ -18,12 +18,14 @@ not re-research what that page lists - a newer version, a better option or
 an update to it is welcome, rediscovering it is not.
 
 ## The honest limit, first
-There is no Android build or emulator in this container: `dl.google.com` is
-blocked and `/dev/kvm` is absent. GitHub Actions is the only place the app
-compiles and runs (`.github/workflows/jarvis-client.yml`; its `face-shots`
-job pulls real screenshots off an emulator). So you play by reading: follow
-each tap through the Compose code and the state it changes. Say at the top
-of your report that this is a code walk-through, not a device test.
+There is no Android emulator set up here, so the app is never run against a
+screen: GitHub Actions is where it is installed and driven
+(`.github/workflows/jarvis-client.yml`; its `face-shots` job pulls real
+screenshots off an emulator). The app's JVM/contract unit tests do compile and
+run locally on the owner's PC (`CLAUDE.md`, "How the Android apps get built"),
+but that drives no screen. So you play by reading: follow each tap through the
+Compose code and the state it changes. Say at the top of your report that
+this is a code walk-through, not a device test.
 
 ## First, read
 1. `CLAUDE.md` - the owner, the rules, the decisions (many name phone

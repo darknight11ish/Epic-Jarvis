@@ -1,5 +1,5 @@
 //! Jarvis's own calendar's ONE switch, for Settings (2026-10-30; JARVIS-API
-//! section 166; `backend/jarvis_local_calendar.py`'s `POST /api/calendar/settings`).
+//! section 168; `backend/jarvis_local_calendar.py`'s `POST /api/calendar/settings`).
 //!
 //! WHY THIS EXISTS. The PHONE has drawn this switch since its own slice
 //! (`CalendarSettingsPlate.kt`, `JarvisRuntime.calendarSettings`), and the
