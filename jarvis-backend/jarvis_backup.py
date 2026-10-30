@@ -716,11 +716,13 @@ NOT_BACKED_UP = {
     "telemetry.db": "machine measurements, not the owner's data; writer off",
     "documents-index.db": "derived word index; rebuilt from the folders on the next search",
     "media-index.db": "kept readable speech; excluded so Delete cannot be undone from an older backup",
-    # The parking lookup's 24-hour cache (2026-10-30, JARVIS-API section 164):
-    # public parking prices for an area, re-fetched on the next lookup, holding
-    # nothing the owner said and nothing about him. A restore would only put
-    # yesterday's prices back in front of today's question.
-    "parking-cache.db": "public parking prices kept a day; re-fetched on the next lookup, nothing of the owner's",
+    # The parking lookup's 24-hour cache (2026-10-30, JARVIS-API section 165):
+    # public parking prices for an area, re-fetched on the next lookup. It is a
+    # local file only (no lane reads it), but its geocode keys DO hold the place
+    # names the owner looked up, so "nothing of the owner's" would be too
+    # strong: the honest reason is that a restore would only put yesterday's
+    # prices back in front of today's question.
+    "parking-cache.db": "public parking prices and the place names looked up, kept a day; re-fetched on the next lookup",
 }
 
 #: Non-SQLite stores under the settings folder that are deliberately NOT

@@ -52,13 +52,21 @@ WHAT LEAVES THIS PC, EXACTLY (CLAUDE.md rule 1; the owner's own instruction of
 
 * To Overpass and to Seattle's ArcGIS service: a latitude, a longitude and a
   radius. Nothing else - no name, no address, no chat text, no calendar entry.
-* To Nominatim: the place NAME the owner himself typed or said (or, for the
-  calendar bridge, the calendar event's own LOCATION line - and only ever after
-  he asked about that event). Never a chat message, never an event TITLE, never
-  a note, never a person's name out of memory.
+* To Nominatim: the place NAME the owner himself typed or said - never the
+  calendar's own location line (the calendar bridge quotes the venue back
+  locally and offers the sentence to say instead). Never a chat message, never
+  an event TITLE, never a note, never a person's name out of memory.
 * No API key, no token, no cookie, no account is involved anywhere.
+* A redirect is refused, never followed: the three hosts are fixed in code, and
+  refusing a redirect is the second lock that keeps the place name on the host
+  the owner chose (the same rule every other public lane in §4 keeps).
+* While Lockdown is on, `jarvis_quick._run_parking` answers in one plain
+  sentence and does not call this file, so no request is made at all.
 * Every answer is cached in a local SQLite file (`parking-cache.db`, beside
-  this module, 24 hours) so a repeated question makes no request at all.
+  this module, 24 hours) so a repeated question makes no request at all. It is
+  a plain local file, deliberately not backed up (`jarvis_backup.NOT_BACKED_UP`):
+  the geocode keys hold the place names the owner looked up, and restoring
+  yesterday's prices would only put an old answer in front of today's question.
 
 THE NETWORK IS INJECTABLE, AND THE TESTS ALWAYS INJECT IT
 
@@ -799,6 +807,25 @@ def _place_key(place: str) -> str:
 #   The one way out: an injectable transport, so no test ever calls the net
 # --------------------------------------------------------------------------
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse a redirect instead of following it.
+
+    The three public hosts above are fixed in code, but a host can answer with
+    a redirect - and following one would carry the place name to a host nobody
+    chose. Every other public lane in `docs/ARCHITECTURE.md` §4 refuses one for
+    the same reason. Returning None makes urllib raise instead of following.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+#: The one opener the transport uses. System proxies still apply; a redirect
+#: does not.
+_NO_REDIRECT = _NoRedirect()
+_OPENER = urllib.request.build_opener(_NO_REDIRECT)
+
+
 def default_transport(method: str, url: str, *, body: Optional[bytes] = None,
                       headers: Optional[dict] = None,
                       timeout: float = 8.0) -> Tuple[int, bytes]:
@@ -808,6 +835,10 @@ def default_transport(method: str, url: str, *, body: Optional[bytes] = None,
     a `transport=` that defaults to this one, and the suites always pass their
     own, so a test run makes no request at all.
 
+    A REDIRECT IS REFUSED, never followed (`_NoRedirect`): each address below
+    is fixed in code, and a redirect is the one way a fixed host could send the
+    place name somewhere nobody chose.
+
     EIGHT SECONDS, because this runs inside a chat turn and Overpass's own
     query carries `[timeout:8]`: a parking answer may be slow, but it may not
     leave the owner waiting on a service that has stopped answering.
@@ -816,7 +847,7 @@ def default_transport(method: str, url: str, *, body: Optional[bytes] = None,
     request.add_header("User-Agent", USER_AGENT)
     for name, value in (headers or {}).items():
         request.add_header(str(name), str(value))
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with _OPENER.open(request, timeout=timeout) as response:
         return int(getattr(response, "status", 200) or 200), response.read()
 
 

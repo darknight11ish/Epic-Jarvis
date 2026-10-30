@@ -38,6 +38,9 @@ WHAT IS PROVEN, and with no network at all:
     and a radius - and the ONLY request that carries words is the geocode of
     what the owner himself typed. A calendar event's TITLE never appears in any
     request, and a coordinate pair makes no request at all;
+  * Lockdown: while it is on (or cannot be read), the lane answers in one plain
+    sentence and looks nothing up; and a redirect from a fixed public host is
+    refused rather than followed to a host nobody chose;
   * the local SQLite cache: the second lookup inside 24 hours asks nothing, and
     a stale entry is asked again;
   * the calendar bridge, with an injected reader: the next event that HAS a
@@ -893,6 +896,79 @@ def t_the_two_intents_are_read_only():
     """Neither answer can take away what "cancel that" would undo."""
     for name in ("parking_lookup", "parking_calendar"):
         check(f"read-only: {name} is in READ_ONLY_INTENTS", name in Q.READ_ONLY_INTENTS)
+
+
+def t_lockdown_stops_the_lane_before_anything_leaves():
+    """Rule 4: one tap makes the parking lane stop - no request at all.
+
+    The privacy audit of 2026-10-30 found this lane did not ask Lockdown
+    (jarvis_asks_first) before it sent a place name and a point to three public
+    services. This drives `_run_parking` itself, with a fake Lockdown module,
+    so the check is the behaviour rather than a sentence in the source.
+    """
+    import types
+    saved = sys.modules.get("jarvis_asks_first")
+    seen = {}
+    real_find = P.find_parking
+
+    def never(*args, **kwargs):
+        seen["looked_up"] = True
+        return {"ok": False, "reason": "stub: this must not be reached"}
+
+    P.find_parking = never
+    fake = types.ModuleType("jarvis_asks_first")
+    fake.lockdown_on = lambda: True
+    sys.modules["jarvis_asks_first"] = fake
+    try:
+        res = Q._run_parking(Q.Intent("parking_lookup",
+                                      {"place": "pike place market"}))
+    finally:
+        sys.modules.pop("jarvis_asks_first", None)
+        if saved is not None:
+            sys.modules["jarvis_asks_first"] = saved
+        P.find_parking = real_find
+    check("lockdown: the lane answers in one sentence instead of looking",
+          "Lockdown is on" in (res.reply or ""), res.reply)
+    check("lockdown: nothing was looked up", not seen.get("looked_up"), seen)
+
+
+def t_a_lockdown_that_cannot_be_read_also_stops_the_lane():
+    """Fail closed: a Lockdown state that cannot be read does not look."""
+    import types
+    saved = sys.modules.get("jarvis_asks_first")
+    fake = types.ModuleType("jarvis_asks_first")
+
+    def unreadable():
+        raise RuntimeError("the Lockdown state could not be read")
+
+    fake.lockdown_on = unreadable
+    sys.modules["jarvis_asks_first"] = fake
+    try:
+        res = Q._run_parking(Q.Intent("parking_lookup",
+                                      {"place": "pike place market"}))
+    finally:
+        sys.modules.pop("jarvis_asks_first", None)
+        if saved is not None:
+            sys.modules["jarvis_asks_first"] = saved
+    check("lockdown: an unreadable state does not look either",
+          "Lockdown is on" in (res.reply or ""), res.reply)
+
+
+def t_a_redirect_is_never_followed():
+    """A fixed public host that redirects is refused, like every other lane.
+
+    urllib asks its redirect handler to build the follow-up request; returning
+    None makes urllib raise instead, so the place name cannot be carried to a
+    host nobody chose. No socket is opened: this only drives the handler.
+    """
+    handler = getattr(P, "_NO_REDIRECT", None)
+    check("redirect: the module has its own refusing handler", handler is not None)
+    if handler is None:
+        return
+    got = handler.redirect_request(
+        urllib.request.Request(P.NOMINATIM_URL), None, 302, "Found", {},
+        "https://elsewhere.example/search")
+    check("redirect: the new host is handed back, not asked", got is None, got)
 
 
 # --------------------------------------------------------------------------
