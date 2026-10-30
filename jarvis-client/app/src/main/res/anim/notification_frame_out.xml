@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The frame leaving a ViewFlipper (2026-10-30). -->
+<alpha xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="220"
+    android:fromAlpha="1.0"
+    android:toAlpha="0.0" />

@@ -70,4 +70,8 @@ internal fun NotificationsFromJarvisSection(onOpen: () -> Unit) {
             )
         }
     }
+    // The owner's own look for those notifications (2026-10-30), just below
+    // the switch that says whether Android shows them at all: the two halves
+    // of "what my Jarvis notifications are" read together.
+    NotificationStylesSection()
 }
