@@ -27,7 +27,10 @@ below are written against BEHAVIOUR, not against the list alone:
     (`id`, `title`, `description`, `builtin`) - a cross-app contract, checked
     where the answer is made;
   * the `manner` event rings ONCE for a real change, with the new personality
-    in the frame, and NOT for a refused body or a damaged settings file;
+    in the frame, and NOT for a refused body or a damaged settings file (a real
+    change also writes the one PC-wide voice, so its own `voices` event may sit
+    beside it - `test_voice_one_state.py` owns that half, and this suite counts
+    only its own doorbell);
   * the generated fixture both apps render from (`fixtures/work_presets.json`,
     `tools/gen_work_presets.py`) carries exactly the preset rows the live
     module would send - the fixture's `hardware` block is host-specific and is
@@ -224,9 +227,18 @@ def t_the_manner_event_rings_once_for_a_real_change():
     rec, previous = _with_bus()
     try:
         code, _body = M.handle_set({"personality": "dry_wit"})
+        # 2026-10-30: a personality switch also gives the one PC-wide voice that
+        # preset's voice (`jarvis_manner._apply_personality_voice`, the owner's
+        # 2026-10-28 report), and that write publishes ONE `voices` event - by
+        # design, the same event the Voices screen makes (see
+        # test_voice_one_state.py, which owns that half). What this test is
+        # about is the `manner` doorbell, so it counts THAT kind and lets the
+        # voice event through. Asserting the whole event list here failed on
+        # main after that change and proved nothing about this screen.
+        manner = [data for kind, data in rec.frames if kind == "manner"]
         check("a personality switch rings `manner` once",
-              code == 200 and rec.kinds() == ["manner"], json.dumps(rec.kinds()))
-        frame = rec.frames[-1][1] if rec.frames else {}
+              code == 200 and len(manner) == 1, json.dumps(rec.kinds()))
+        frame = manner[0] if manner else {}
         check("the frame carries the new preset and the one manner word",
               isinstance(frame, dict)
               and frame.get("personality") == "dry_wit"
@@ -240,7 +252,7 @@ def t_the_manner_event_rings_once_for_a_real_change():
         rec.frames.clear()
         M.handle_set({"humor": True})
         check("humour rings it too - one doorbell for this whole screen",
-              rec.kinds() == ["manner"], json.dumps(rec.kinds()))
+              rec.kinds().count("manner") == 1, json.dumps(rec.kinds()))
     finally:
         _restore_bus(previous)
 
