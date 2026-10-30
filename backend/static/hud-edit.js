@@ -17,6 +17,14 @@
  * present and visible, orders are canonical, and save-then-load cannot rewrite
  * the result.
  *
+ * SINCE 2026-10-29 IT ALSO OWNS THE MAIN SCREEN'S FEATURE CARDS. That is a
+ * DIFFERENT question from the layout: `hud-layout.js` arranges the HUD's own
+ * panels, while the catalogue in section 0 chooses which JARVIS FEATURES are
+ * drawn on the main screen and in what order (the owner's requirement of that
+ * day). It lives here, not in its own served file, because the page's closed
+ * whitelist would need five lists in five files before a browser could fetch
+ * one; see section 0's banner for the whole reason.
+ *
  * WHAT H2 EDITS (honest scope, said in the page's own words too). The cards
  * whose DOM is a self-contained section - the six Bento inspector cards, the
  * three left-rail panels, the approvals queue and (when the shell creates it)
@@ -1770,7 +1778,7 @@ export function mountHudEditor(options = {}) {
     }
   }
 
-  function homeRow(card, entry, editing_) {
+  function homeRow(card, entry) {
     const row = doc.createElement("div");
     row.className = "hud-home-row";
     const name = doc.createElement("span");
@@ -1827,7 +1835,7 @@ export function mountHudEditor(options = {}) {
     }
     for (const entry of clean.cards) {
       const card = homeCard(entry.key);
-      if (card) box.appendChild(homeRow(card, entry, true));
+      if (card) box.appendChild(homeRow(card, entry));
     }
     const rest = missingHomeCards(homeDoc, "desktop");
     const off = doc.createElement("h4");
@@ -1838,7 +1846,7 @@ export function mountHudEditor(options = {}) {
       line.textContent = "Every card is on the main screen already.";
       box.appendChild(line);
     }
-    for (const card of rest) box.appendChild(homeRow(card, null, true));
+    for (const card of rest) box.appendChild(homeRow(card, null));
     const foot = doc.createElement("div");
     foot.className = "hud-home-row";
     const reset = doc.createElement("button");
