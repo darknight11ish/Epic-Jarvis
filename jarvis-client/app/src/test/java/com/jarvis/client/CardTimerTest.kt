@@ -77,14 +77,22 @@ class CardTimerTest {
         val first = read(row("a1", "send_email", expiresIn = 900.0)).items.single()
         val second = read(row("a1", "send_email", expiresIn = 880.0), at = nowMs + 20_000L)
             .items.single()
+        // The moment it points at is the SAME one either way: it is the
+        // REQUEST's end, not a number re-started by each read.
+        assertEquals(first.expiresAtMs, second.expiresAtMs)
+        // ...which is what makes the number on the card go down: 20 seconds
+        // passed, so 20 fewer seconds are left even though the deadline is
+        // unchanged. (The first version of this assertion compared the two
+        // DEADLINES and asked for a 20 s difference - impossible by
+        // construction, and phone-unit-tests caught it in CI.)
+        val firstLeft = first.expiresAtMs!! - nowMs
+        val secondLeft = second.expiresAtMs!! - (nowMs + 20_000L)
         assertEquals(
             "a later read with fewer seconds left did not count down",
             20_000L,
-            first.expiresAtMs!! - second.expiresAtMs!!,
+            firstLeft - secondLeft,
         )
-        // ...and the moment it points at is the same one either way: it is the
-        // REQUEST's end, not a number re-started by each read.
-        assertEquals(first.expiresAtMs, second.expiresAtMs)
+        assertEquals("EXPIRES IN", countdownReadout(firstLeft / 1000L).label)
         // A card raised late (a short wait) gets a genuinely shorter timer.
         val short = read(row("a2", "send_email", expiresIn = 42.0)).items.single()
         assertEquals(nowMs + 42_000L, short.expiresAtMs)
