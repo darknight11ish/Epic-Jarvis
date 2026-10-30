@@ -72,10 +72,16 @@ import kotlinx.serialization.json.JsonObject
  * see it." instead of its words ([JarvisWidgets.hide]). Counts, the disk and
  * the focus countdown stay.
  *
- * READ ONLY ON A LIVE LINK. Like [ApprovalWidget], a process the launcher
- * woke only to draw this has no link: then it says "Not up to date" and
- * opens the app, rather than draw something it has not checked. Nothing is
- * kept on the phone between draws - not the widget, not its words.
+ * READ ONLY, ON A CONNECTED LINK. Like [ApprovalWidget], a process the
+ * launcher woke only to draw this has no link: then it says "Not up to date"
+ * and opens the app, rather than draw something it has not checked. A link
+ * that is CONNECTED but still catching up DOES read: rule 4 holds ACTING on a
+ * stale link, and every button holds itself where it is tapped
+ * ([BoardButtonCallback] -> [QuickTiles.decide]); a `!stale` gate here drew
+ * "Not up to date" over a working link and switched off the read that clears
+ * staleness (docs/ARCHITECTURE.md, "stale is deliberately not a condition on
+ * either side"). Nothing is kept on the phone between draws - not the widget,
+ * not its words.
  *
  * BUTTONS follow the tiles exactly: [QuickTiles.decide] decides, and
  * [QuickTileService.perform] does it - held on a stale link (rule 4) except
@@ -97,17 +103,19 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
         // PC" - not an empty widget and not a wait.
         val ready = WidgetRuntime.start(context) && JarvisRuntime.isInitialized
         val paired = ready && JarvisRuntime.isPaired()
-        val live = ready && !JarvisRuntime.stale.value && JarvisRuntime.link.value == LinkState.CONNECTED
+        // CONNECTED, not "live" (see this class's own comment): a link that is
+        // merely catching up still reads, and reading is what clears it.
+        val connected = ready && JarvisRuntime.link.value == LinkState.CONNECTED
         val chosen = if (ready) JarvisRuntime.settings.homeWidgets.value.getOrNull(slot) else null
         val security = if (ready) JarvisRuntime.settings.security.value else null
         // Fails closed: settings that cannot be read count as hidden.
         val hideWords = security == null || security.appLock || security.privateLists
 
         var view: JarvisWidgets.View? = null
-        val state = if (!ready || !paired || chosen == null || !live) {
+        val state = if (!ready || !paired || chosen == null || !connected) {
             // Nothing is asked of the PC until all four of those hold; each of
             // them has its own words, so none is ever shown as "empty".
-            WidgetStates.board(ready, paired, chosen != null, live, WidgetStates.Read.CONTENT)
+            WidgetStates.board(ready, paired, chosen != null, connected, WidgetStates.Read.CONTENT)
         } else {
             val answer = WidgetRuntime.readWidget(chosen)
             view = (answer as? ApiResult.Ok<JsonObject>)?.let { JarvisWidgets.viewOf(it.value) }
@@ -120,7 +128,7 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
                 view == null -> WidgetStates.Read.FAILED
                 else -> WidgetStates.Read.CONTENT
             }
-            WidgetStates.board(ready, paired, true, live, read)
+            WidgetStates.board(ready, paired, true, connected, read)
         }
 
         provideContent {

@@ -16323,8 +16323,11 @@ and events.
   Glance 1.1.1 - no version change was needed): draws the blocks natively, in
   the widget's arrangement (`JarvisWidgets.boardOf`: the large number at 28sp
   first, then the blocks in order, then the buttons two to a row);
-  read from the PC only on a live link, otherwise "Not up to date - tap to
-  open Jarvis and connect", like the approvals widget. **The home screen is
+  read from the PC on any CONNECTED link - catching up included, because a
+  stale link holds ACTING and never READING, and that read is one of the things
+  that clears it - otherwise "Not up to date - tap to open Jarvis and connect"
+  (a link that is not up has nothing to ask), like the approvals widget.
+  **The home screen is
   public**: while App lock or "Hide memory lists and chat history" is on,
   every private block shows its label and "Hidden - open Jarvis to see it."
   Buttons follow the tiles exactly (`QuickTiles.decide`,

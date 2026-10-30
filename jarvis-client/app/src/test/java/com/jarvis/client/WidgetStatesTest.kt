@@ -150,13 +150,51 @@ class WidgetStatesTest {
     @Test
     fun `the board never asks the PC before it can use the answer`() {
         // The pre-read order the old `when` had: not started, not paired, no
-        // widget chosen, then not live. Each is its own words, so a widget
-        // that cannot read the PC never claims to be empty.
+        // widget chosen, then the link is not up. Each is its own words, so a
+        // widget that cannot read the PC never claims to be empty.
         assertEquals(Board.NOT_STARTED, WidgetStates.board(false, true, true, true, Read.CONTENT))
         assertEquals(Board.NOT_PAIRED, WidgetStates.board(true, false, true, true, Read.CONTENT))
         assertEquals(Board.NO_WIDGET, WidgetStates.board(true, true, false, true, Read.CONTENT))
         assertEquals(Board.STALE, WidgetStates.board(true, true, true, false, Read.CONTENT))
         assertEquals(Board.CONTENT, WidgetStates.board(true, true, true, true, Read.CONTENT))
+    }
+
+    @Test
+    fun `a board reads on a connected link even while the link is catching up`() {
+        // Rule 4 holds ACTING on a stale stream, never READING: every board
+        // button holds itself where it is tapped (QuickTiles.decide), and a
+        // read is one of the things that clears staleness again. A `!stale`
+        // gate in the DRAW is what painted "Not up to date" over a working link
+        // (owner's report, 2026-10-30; docs/ARCHITECTURE.md, "`stale` is
+        // deliberately not a condition on either side").
+        assertEquals(
+            Board.CONTENT,
+            WidgetStates.board(ready = true, paired = true, chosen = true, linkUp = true, read = Read.CONTENT),
+        )
+        // A link that is not up has nothing to ask, and says so.
+        assertEquals(
+            Board.STALE,
+            WidgetStates.board(ready = true, paired = true, chosen = true, linkUp = false, read = Read.CONTENT),
+        )
+    }
+
+    @Test
+    fun `the home-screen board asks the PC on any connected link, stale or not`() {
+        // A JVM test cannot run Glance, so the wiring half is pinned in the
+        // source it would have to change: the draw asks for CONNECTED, and must
+        // not refuse on staleness again. This is the same shape as
+        // JarvisWidgetsTest's manifest/receiver pins.
+        val source = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/widget/JarvisBoardWidget.kt",
+        ).readText()
+        assertTrue(
+            "the draw asks the PC on any connected link",
+            source.contains("JarvisRuntime.link.value == LinkState.CONNECTED"),
+        )
+        assertFalse(
+            "a `!stale` gate in the draw is the 2026-10-30 defect",
+            source.contains("!JarvisRuntime.stale.value"),
+        )
     }
 
     @Test
