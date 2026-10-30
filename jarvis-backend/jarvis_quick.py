@@ -1155,6 +1155,18 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "what voice are you using?" / "how do I pair my phone?" -------------
+    # (2026-10-29, the HUD field test). Both are questions about this PC that
+    # the PC can answer from its own state, and the model answered both with an
+    # invention. They run EARLY because each is a whole short question that no
+    # other grammar owns, and both read only - no card, no change.
+    got = _voice_ask(s)
+    if got is not None:
+        return got
+    got = _pair_phone(s)
+    if got is not None:
+        return got
+
     # --- bulk is refused outright: one at a time ----------------------------
     if re.fullmatch(r"(?:cancel|delete|remove|clear|stop)\s+(?:all|every|both)\s+(?:(?:of\s+)?"
                     r"(?:my|the)\s+)?(timers|alarms|reminders|todos?|todo\s+list|todo\s+items)"
@@ -4052,6 +4064,13 @@ def _settings_choice(s: str) -> Optional[Intent]:
         import jarvis_settings_registry as R
     except Exception:
         return None
+    # A voice MADE FOR JARVIS that this PC does not offer (2026-10-29, the HUD
+    # field test): "change your voice to Ashby" used to reach the raw list of
+    # built-in voice ids below. Only an unoffered blend comes here - a made one
+    # falls through to the same setter it always used.
+    blend = _voice_blend(s)
+    if blend is not None:
+        return blend
 
     def one(key: str, name_words: str, value_words: str) -> Optional[Intent]:
         setting = next((c for c in R.CHOICE_SETTINGS if c.key == key), None)
@@ -4235,6 +4254,14 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     # because that sentence is exactly what this replaces for these services -
     # the card types them on the PC, the same act Settings performs. See
     # `_connect` for why nothing else changes hands.
+    #
+    # A sentence that names GOOGLE or EMAIL is answered one step earlier
+    # (2026-10-29, the HUD field test): it names two different things with two
+    # different real paths, and one card cannot be the answer to both. Nothing
+    # else moves - "connect my calendar" still raises the iCal card.
+    got = _accounts_connect(s)
+    if got is not None:
+        return got
     got = _connect(s)
     if got is not None:
         return got
@@ -6303,6 +6330,394 @@ CONNECT_MISSING = ("I cannot raise the connect card on this PC: jarvis_connect_a
                    "Settings, Accounts.")
 
 
+# --- "can you connect my calendar and email?", "what about connecting to a
+# gmail account or google calendar?" (2026-10-29, the HUD field test) ---------
+#
+# WHAT WENT WRONG. The field test of 2026-10-29 asked whether Jarvis could
+# connect the owner's calendar and email, and "what about connecting to a gmail
+# account or google calendar?". The first got the private-iCal card with the
+# email half silently dropped; the second matched nothing at all and reached the
+# 8B model, which answered that connecting Google Calendar "requires a refresh
+# token ... tokens are managed in your browser's signed-in account; I cannot
+# retrieve them from here ... generate an OAuth token, then share the resulting
+# code with me". Every part of that is wrong about this PC, and the last part is
+# dangerous: it invites a secret into a chat transcript. The two-way Google
+# setup already exists - a one-time Google Cloud setup, then three commands on
+# this PC (`jarvis_google_calendar.py`), with the sign-in coming back to a
+# loopback listener on this PC, so no token or code is ever pasted anywhere.
+# That is documented in `docs/GOOGLE-CALENDAR-SETUP.md`.
+#
+# SO THESE SENTENCES ARE ANSWERED HERE, from fixed copy and this PC's own
+# modules, and the model is never the one answering. The four real paths below
+# are the whole honest inventory (2026-10-29):
+#   (a) calendar, read/write - the Google two-way setup: the CLI steps in
+#       `docs/GOOGLE-CALENDAR-SETUP.md`, run on this PC, never in chat;
+#   (b) calendar, read-only - the private iCal link, typed on the secure
+#       connect card this PC raises ("connect my calendar");
+#   (c) GitHub - the same kind of secure card ("connect GitHub");
+#   (d) email - NOT built: no connect card, and its IMAP details are typed in
+#       Settings, Accounts on this PC.
+#
+# NOTHING HERE TYPES A VALUE, raises a card or changes anything: the answer is
+# read-only (READ_ONLY_INTENTS) and only navigates Settings, Accounts.
+
+#: The three commands the Google two-way setup really is, exactly as
+#: `jarvis_google_calendar.connect_sentence()` and docs/GOOGLE-CALENDAR-SETUP.md
+#: print them. `test_hud_fieldtest_answers.py` holds all three against that doc,
+#: so a reworded command in one place cannot leave a wrong answer here.
+GOOGLE_SETUP_COMMANDS = (
+    "py -3 jarvis_google_calendar.py client <client-id>",
+    "py -3 jarvis_google_calendar.py mode google",
+    "py -3 jarvis_google_calendar.py connect",
+)
+
+#: The doc those steps live in. Read from `jarvis_google_calendar` when it is
+#: there (its own SETUP_DOC), else this literal - the same file either way.
+GOOGLE_SETUP_DOC_FALLBACK = "docs/GOOGLE-CALENDAR-SETUP.md"
+
+#: The four real paths, in the owner's own order. `{cmds}`, `{doc}` and
+#: `{lead}` are filled by `_run_accounts_connect`; every other word is fixed.
+ACCOUNTS_PATHS_WORDS = (
+    "{lead}Nothing on this PC asks you to paste a token, an auth code or a password into "
+    "this chat, and I cannot read your browser's own Google session. The four real paths:\n"
+    "1. Google Calendar, read and write - a one-time setup in your own Google account, then "
+    "three lines in the backend folder on this PC: {cmds}. The sign-in comes back to this "
+    "PC's own loopback address, so no code is pasted anywhere. Steps: {doc}.\n"
+    "2. Google Calendar, quick read-only - the private iCal link. Say \"connect my calendar\" "
+    "and one secure card appears on this PC for it.\n"
+    "3. GitHub - the same kind of secure card: say \"connect GitHub\".\n"
+    "4. Email - not built yet: there is no connect card for it, and its IMAP details (mail "
+    "server, username, password) are typed in Settings, Accounts on this PC."
+)
+
+#: The first sentence, from the calendar's own chosen way - so an owner who
+#: already set it up is told so, and one who has not is not told he has.
+ACCOUNTS_LEAD_ON = "Your calendar is already connected the Google read/write way on this PC.\n"
+ACCOUNTS_LEAD_ICAL = "Your calendar is already connected read-only (the private iCal link).\n"
+ACCOUNTS_LEAD_OFF = "Your calendar is not connected on this PC yet.\n"
+
+#: "connect ..." / "set up ...", with the same ask lead-ins `_CONNECT_START`
+#: accepts, plus the "what about connecting ..." shape the owner actually used.
+_ACCOUNTS_VERB = (r"(?:connect|set\s*up|setup|link|hook\s+up|integrate|configure|add"
+                  r"|sign\s+in\s+to|log\s+in\s+to)")
+_ACCOUNTS_ASK = re.compile(
+    r"^(?:(?:so|ok|okay|and|but|also)\s+)?"
+    r"(?:(?:what|how)\s+about\s+(?:connecting|adding|linking|setting\s+up|hooking\s+up"
+    r"|integrating)\b"
+    r"|(?:can|could|would|will|do|does|should)\s+(?:i|you|we|jarvis)\s+(?:please\s+)?"
+    + _ACCOUNTS_VERB + r"\b"
+    r"|(?:how|where)\s+(?:do|can|could|would|should)\s+(?:i|you|we)\s+(?:please\s+)?"
+    + _ACCOUNTS_VERB + r"\b"
+    r"|(?:i\s+(?:want|need|would\s+like)\s+(?:you\s+)?to\s+(?:please\s+)?)?"
+    + _ACCOUNTS_VERB + r"\b)")
+
+#: The bare follow-ups: "what about gmail?", "how about my email", "and google
+#: calendar?". Short and whole-sentence only, so no longer sentence is claimed.
+_ACCOUNTS_BARE = re.compile(
+    r"^(?:and|what|how)\s+about\s+(?:my\s+|your\s+|a\s+|the\s+)?"
+    r"(?:gmail|google(?:\s+(?:calendar|account|mail))?|e-?mail)"
+    r"(?:\s+(?:account|calendar|too|as\s+well|then|though))?$"
+    r"|^(?:do|can|could)\s+(?:you|jarvis)\s+(?:do|handle|support|connect\s+to)\s+"
+    r"(?:my\s+|a\s+|the\s+)?(?:gmail|google(?:\s+(?:calendar|account|mail))?|e-?mail)"
+    r"(?:\s+(?:account|calendar|too|as\s+well))?$")
+
+#: What makes a sentence one of THESE: it has to name a Google CALENDAR/account
+#: or email. A bare "google" in "external calendars like google or outlook" is
+#: not enough - that sentence keeps the iCal connect card it has had since
+#: 2026-10-28, and "connect my calendar" keeps it too. This is the narrowest
+#: topic that still covers every sentence the field test caught.
+_ACCOUNTS_TOPIC = re.compile(
+    r"\b(?:e-?mail|gmail|gcal"
+    r"|google\s+(?:calendar|calendars|account|accounts|mail|gmail))\b")
+
+
+def _accounts_topic(s: str) -> bool:
+    """Does this sentence name Google or email (or both with the calendar)?"""
+    return bool(_ACCOUNTS_TOPIC.search(s))
+
+
+def _accounts_connect(s: str) -> Optional[Intent]:
+    """"can you connect my calendar and email", "what about connecting to a gmail
+    account or google calendar?", "connect my google calendar", "connect my
+    email" (the HUD field test, 2026-10-29).
+
+    Deliberately narrow: a connecting sentence (or the bare "what about gmail?"
+    follow-up) that names Google or email. It never claims a state question
+    ("is my calendar connected?" keeps the connect card's own status answer), a
+    reminder, or a sentence about a thing ON the calendar."""
+    said = s.strip()
+    if not said or len(said.split()) > 24:
+        return None
+    if not _accounts_topic(said):
+        return None
+    # A reminder or a timer is still that, and an event sentence is the Google
+    # answer's (it proposes the event and says one card is needed).
+    if re.search(r"\b(?:remind|reminder|reminders|alarm|alarms|timer|timers|watch|"
+                 r"watching|notify|notification|todo|to-do)\b", said):
+        return None
+    if _CONNECT_EVENT.search(said):
+        return None
+    # "is my google calendar connected?" keeps `_connect`'s own status answer.
+    if _CONNECT_STATUS.match(said):
+        return None
+    if _ACCOUNTS_ASK.match(said) or _ACCOUNTS_BARE.match(said):
+        return Intent("accounts_connect")
+    return None
+
+
+def _run_accounts_connect() -> Result:
+    """The four real paths, from this PC's own modules and one fixed sentence
+    each. Read-only: no card, no connection, no model, and nothing a value could
+    be typed into."""
+    doc = GOOGLE_SETUP_DOC_FALLBACK
+    lead = ACCOUNTS_LEAD_OFF
+    try:
+        import jarvis_google_calendar as G
+        doc = str(getattr(G, "SETUP_DOC", "") or doc)
+        chosen = G.mode()
+        if chosen == "google":
+            lead = ACCOUNTS_LEAD_ON
+        elif chosen == "ical":
+            lead = ACCOUNTS_LEAD_ICAL
+    except Exception:                       # noqa: BLE001 - module absent
+        pass
+    cmds = ", then ".join(GOOGLE_SETUP_COMMANDS)
+    words = ACCOUNTS_PATHS_WORDS.format(lead=lead, cmds=cmds, doc=doc)
+    # The Settings jump is the same cardless navigation `_run_calendar_setup`
+    # makes: the email details in the answer are typed there, on this PC.
+    return Result(words, "accounts_connect", open_settings="account-secrets")
+
+
+# --- "change your voice to Ashby" (2026-10-29, the HUD field test) -----------
+#
+# WHAT WENT WRONG. On 2026-10-29 the owner said "change your voice to Ashby" and
+# got a raw dump of every built-in voice id ("Say one of: af, af bella, ..."),
+# which answers nothing: Ashby is one of the two voices MADE FOR JARVIS, and the
+# reason he is not in that list is that the optional pack is not made on this PC
+# yet. The Voices screen already says so in words (`jarvis_kokoro.BLENDS_TO_MAKE`,
+# shown as `speaker_view()["note"]`, with the one PowerShell line beside it as
+# `make_line`). So the sentence is answered from those same words, and it says
+# how to make them, instead of listing ids the owner never asked about.
+#
+# IT CHANGES NOTHING: a made and offered blend still goes through the existing
+# grammar to `set_voice_speaker` (the real setter, no card), exactly as before.
+# Only a blend this PC does not OFFER reaches the answer below, and it is
+# read-only.
+
+VOICE_MISSING = ("I cannot read the voice settings on this PC: jarvis_voices.py is not in "
+                 "the backend folder. Run apply-patches.ps1 again, or use Settings, "
+                 "Jarvis's voice.")
+
+#: The first sentence, fixed. `{name}` is the blend's own name from MIX.
+VOICE_BLEND_WORDS = (
+    "{name} is one of the two voices made for Jarvis - Ashby and Clara, each a blend of "
+    "two Kokoro voices - and this PC does not offer it right now. Settings, Jarvis's voice "
+    "(the \"Jarvis's built-in voice\" list) shows the same note: {why}{make}"
+)
+
+#: The one line that makes them, and that it is the README's own line. Appended
+#: only while the PC says it is what to run (`speaker_view()["make_line"]`).
+VOICE_BLEND_MAKE = " The one line to run in PowerShell: {line} Then restart Jarvis."
+
+
+def _named_blend(words: str) -> str:
+    """The blend id a sentence names ("Ashby" -> "mix_ashby"), or "".
+
+    Read from `jarvis_kokoro.MIX` by each blend's own `name`, never typed again,
+    so a blend added there answers here by itself."""
+    try:
+        import jarvis_kokoro as K
+    except Exception:                       # noqa: BLE001 - module absent
+        return ""
+    text = " ".join(str(words or "").lower().split())
+    if not text:
+        return ""
+    for pid in K.MIX_IDS:
+        name = str((K.MIX.get(pid) or {}).get("name") or "").strip()
+        if name and re.search(r"\b" + re.escape(name.lower()) + r"\b", text):
+            return pid
+    return ""
+
+
+def _blend_offered(pid: str) -> bool:
+    """Is that blend in the built-in voice list this PC really offers? The same
+    read the Voices screen makes, so "offered" means exactly that."""
+    try:
+        import jarvis_voices as JV
+        view = JV.speaker_view()
+    except Exception:                       # noqa: BLE001 - module absent
+        return False
+    return any(str(r.get("id") or "") == pid
+               for r in (view.get("choices") or ()) if isinstance(r, dict))
+
+
+def _voice_blend(s: str) -> Optional[Intent]:
+    """"change your voice to Ashby", "use the Ashby voice" (2026-10-29).
+
+    Only when the sentence names a real blend AND this PC does not offer it: a
+    made blend keeps the existing grammar and changes the voice."""
+    if "voice" not in s:
+        return None
+    pid = _named_blend(s)
+    if not pid or _blend_offered(pid):
+        return None
+    return Intent("voice_blend_help", {"name": pid})
+
+
+def _run_voice_blend_help(f: dict) -> Result:
+    """"change your voice to Ashby": why it is not selectable, and the line that
+    makes it. Read-only - no voice is changed and no card is raised."""
+    try:
+        import jarvis_kokoro as K
+        import jarvis_voices as JV
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(VOICE_MISSING, "voice_blend_help")
+    pid = str(f.get("name") or "")
+    row = K.MIX.get(pid) or {}
+    name = str(row.get("name") or "Ashby")
+    view = {}
+    try:
+        view = JV.speaker_view() or {}
+    except Exception:                       # noqa: BLE001 - read the pack only
+        view = {}
+    why = str(view.get("note") or "").strip()
+    if not why:
+        # The screen's note is missing (an older PC, or a pack it cannot read):
+        # the pack's own fixed sentence still says it, in the same words - and
+        # the OLD pack gets the upgrade sentence, never the make line, because
+        # no line can make them from a pack that does not hold them.
+        try:
+            kind = JV.pack_kind()
+        except Exception:                   # noqa: BLE001 - module absent
+            kind = ""
+        if kind == K.V019:
+            why = K.BLENDS_NEED_V1
+            up = str(K.upgrade_note() or "").strip()
+            if up:
+                why = why + " " + up
+        else:
+            why = K.BLENDS_TO_MAKE
+    make = ""
+    line = str(view.get("make_line") or "").strip()
+    if line:
+        make = VOICE_BLEND_MAKE.format(line=line)
+    return Result(VOICE_BLEND_WORDS.format(name=name, why=why, make=make),
+                  "voice_blend_help")
+
+
+# --- "what voice are you using?" (2026-10-29, the HUD field test) -----------
+#
+# WHAT WENT WRONG. The owner asked which voice Jarvis was using and the 8B model
+# answered - there was no fast path for it at all, so the answer was a guess.
+# The PC knows: `jarvis_voices.speaker_view()` is the exact read the Voices
+# screen makes (the chosen voice, the one really speaking after any fallback,
+# and the screen's own note about it). This answer says that, and nothing else.
+
+_VOICE_ASK = re.compile(
+    r"(?:what|which)\s+voice\s+(?:are\s+you|do\s+you|is\s+jarvis|is\s+it)"
+    r"(?:\s+(?:using|use|have|speaking(?:\s+(?:in|with))?|talking(?:\s+in|with)?|"
+    r"running|on|now))*"
+    r"|(?:what|which)\s+voice\s+(?:is\s+)?(?:that|this|it|speaking|being\s+used)"
+    r"|(?:what's|what\s+is|whats)\s+your\s+voice(?:\s+(?:called|now|today))?"
+    r"|(?:tell\s+me\s+)?(?:what|which)\s+voice\s+you(?:'re|\s+are)\s+using")
+
+#: The fixed answer. `{voice}` is the built-in voice's own label from
+#: `jarvis_kokoro.label_of` ("American (female) - Heart"); `{note}` is the
+#: screen's own note ("" when it has none).
+VOICE_ASK_WORDS = ("Right now I speak with {voice}, the built-in Kokoro voice on this PC."
+                   "{note} It is set in Settings, Jarvis's voice (the \"Jarvis's built-in "
+                   "voice\" list), or you can just ask me to change it.")
+
+
+def _voice_ask(s: str) -> Optional[Intent]:
+    """"what voice are you using", "which voice is that" (2026-10-29)."""
+    if _VOICE_ASK.fullmatch(s):
+        return Intent("voice_ask")
+    return None
+
+
+def _run_voice_ask() -> Result:
+    """Which voice speaks, read from the same view the Voices screen draws."""
+    try:
+        import jarvis_kokoro as K
+        import jarvis_voices as JV
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(VOICE_MISSING, "voice_ask")
+    view = {}
+    try:
+        view = JV.speaker_view() or {}
+    except Exception:                       # noqa: BLE001 - read the pack only
+        view = {}
+    choice = str(view.get("choice") or "")
+    name = choice if choice and choice != "custom" else ""
+    if not name:
+        try:
+            name = JV.speaker_name()
+        except Exception:                   # noqa: BLE001 - module absent
+            name = ""
+    voice = K.label_of(name) if name else ""
+    if not voice:
+        voice = "a voice set by hand on this PC"
+    note = str(view.get("note") or "").strip()
+    return Result(VOICE_ASK_WORDS.format(voice=voice,
+                                         note=(" " + note) if note else ""),
+                  "voice_ask")
+
+
+# --- "how do I pair my phone?" (2026-10-29, the HUD field test) -------------
+#
+# WHAT WENT WRONG. Asked how to pair a phone, the model invented a procedure.
+# Both apps really have it: this PC's Settings, Devices card has a "Pair a
+# phone" button that shows a QR code (and a code that can be typed), and the
+# phone's Settings, Devices card has "Pair with your PC". The PC's own card
+# approves the device. Both sentences below are those buttons' own words
+# (`jarvis-desktop/src/settings.html`, `jarvis-client`'s DevicesSection), and
+# the Tailscale / NordVPN Meshnet rule is the card's own.
+
+PAIR_PHONE_WORDS = (
+    "Two screens, one on each device. On this PC: Settings, Devices, then press "
+    "\"Pair a phone\" - it shows a QR code, and a code you can type instead. On the phone: "
+    "open Jarvis, Settings, Devices, then \"Pair with your PC\", and scan the code or type "
+    "it. A card then appears on this PC to approve that phone. The two devices have to "
+    "reach each other over Tailscale or NordVPN Meshnet - there is no public tunnel."
+)
+
+#: What the owner calls the thing being paired, in one place for both shapes.
+_PAIR_THING = r"(?:phone|android(?:\s+phone)?|mobile(?:\s+phone)?|device)"
+_PAIR_PHONE = re.compile(
+    r"(?:how|where)\s+(?:do|can|could|should)\s+(?:i|you)\s+(?:please\s+)?"
+    r"(?:pair|connect|link|set\s*up|setup|add)\s+(?:my\s+|a\s+|the\s+|this\s+)?(?:new\s+)?"
+    + _PAIR_THING +
+    # The polite tail, "with" on its own included: `normalise` strips a trailing
+    # "jarvis", so "how do I pair my phone with Jarvis" arrives as "... with".
+    r"(?:\s+(?:to|with)(?:\s+(?:my\s+|the\s+|this\s+)?(?:pc|computer|jarvis|desktop))?)?"
+    r"|(?:pair|link|connect)\s+(?:my\s+|a\s+|the\s+|this\s+)?(?:new\s+)?"
+    + _PAIR_THING +
+    r"(?:\s+(?:to|with)(?:\s+(?:my\s+|the\s+|this\s+)?(?:pc|computer|jarvis|desktop))?)?"
+    r"|(?:how|where)\s+(?:do|can)\s+i\s+(?:get|connect)\s+(?:my\s+|a\s+|the\s+)?"
+    r"(?:phone|android)\s+(?:set\s+up|connected|paired|working)")
+
+
+def _pair_phone(s: str) -> Optional[Intent]:
+    """"how do I pair my phone", "pair my phone" (2026-10-29)."""
+    if _PAIR_PHONE.fullmatch(s):
+        return Intent("pair_phone")
+    return None
+
+
+def _run_pair_phone() -> Result:
+    """The two real screens, in their own words; the PC's Devices card opens as
+    a cardless Settings jump (the same navigation `_run_calendar_setup` makes).
+    Nothing is paired, changed or typed by saying this."""
+    jump = None
+    try:
+        import jarvis_settings_registry as R
+        jump = "devices" if R.section_by_id("devices") is not None else None
+    except Exception:                       # noqa: BLE001 - module absent
+        jump = None
+    return Result(PAIR_PHONE_WORDS, "pair_phone", open_settings=jump)
+
+
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     the owner's request of 2026-10-10).
@@ -7750,6 +8165,17 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # that already exists and already has its own permission model.
     if n == "voice_speed":
         return _run_voice_speed(intent)
+    # The HUD field test's four answers (2026-10-29): Google/Gmail paths, an
+    # unoffered Ashby/Clara, which voice speaks, and how a phone is paired.
+    # Every one is read-only: no card, no connection, no voice change.
+    if n == "accounts_connect":
+        return _run_accounts_connect()
+    if n == "voice_blend_help":
+        return _run_voice_blend_help(f)
+    if n == "voice_ask":
+        return _run_voice_ask()
+    if n == "pair_phone":
+        return _run_pair_phone()
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
@@ -8294,6 +8720,11 @@ READ_ONLY_INTENTS = frozenset({
     # fixed answer that reads this PC's own settings and connects nothing, so it
     # must not take away what "cancel that" would undo.
     "calendar_setup",
+    # The HUD field test's four answers (2026-10-29): the Google/Gmail paths,
+    # an Ashby/Clara this PC does not offer, which voice is speaking, and how a
+    # phone is paired. Each one only reads and explains - no card is raised, no
+    # value is typed, no voice changes - so none may clear "cancel that".
+    "accounts_connect", "voice_blend_help", "voice_ask", "pair_phone",
     "face_ask", "feature_change", "feature_change_ask", "feature_change_refused",
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",

@@ -904,13 +904,20 @@ def t_the_quick_path_answers_the_owners_sentences():
             ("connect my caldav calendar", ("card", "calendar_caldav")),
             ("is my calendar connected?", ("status", "calendar_ics")),
             ("is github set up?", ("status", "github")),
-            ("connect my email", ("later", "")),
         ):
             got = Q.match(said)
             check(f"{said!r} reaches the connect path",
                   got is not None and got.name == "connect_account" and
                   (got.f.get("ask"), got.f.get("service", "")) == want,
                   f"{None if got is None else (got.name, got.f)}")
+        # "connect my email" MOVED on 2026-10-29 (the HUD field test): the
+        # account answer named only the calendar and GitHub, which silently
+        # dropped the email half of "can you connect my calendar and email" -
+        # and a Google/email question that names no account this card can test
+        # is the four-paths answer's, not this card's.
+        email = Q.match("connect my email")
+        check("a Google/email sentence is the four-paths answer, not this card",
+              email is not None and email.name == "accounts_connect", email)
         for said in ("open my calendar", "can you read my calendar?",
                      "set a reminder for my calendar", "connect the printer",
                      "watch my github ci",
@@ -924,8 +931,8 @@ def t_the_quick_path_answers_the_owners_sentences():
                   (Q.match(said) is None or Q.match(said).name != "connect_account"),
                   f"{Q.match(said)}")
         check("the 'not connectable yet' answer does not speak for the phone",
-              "phone" not in Q.answer("connect my email").reply.lower(),
-              Q.answer("connect my email").reply)
+              "phone" not in Q.answer("connect my notion").reply.lower(),
+              Q.answer("connect my notion").reply)
         answer = Q.answer("connect my calendar")
         check("the answer says the card is waiting on this PC",
               "One card is waiting" in answer.reply, answer.reply)
@@ -933,10 +940,12 @@ def t_the_quick_path_answers_the_owners_sentences():
               "never typed into the chat" in answer.reply, answer.reply)
         check("... and carries no stored value",
               not any(v in answer.reply for v in ENVS), answer.reply)
-        later = Q.answer("connect my email")
-        check("email is answered with what CAN be connected, and no card claim",
-              "I can connect two things" in later.reply and
-              "One card is waiting" not in later.reply, later.reply)
+        # The honest "this one still needs Settings" answer is still the one an
+        # account this card cannot test gets (Notion, here).
+        later = Q.answer("connect my notion")
+        check("an untestable account is answered with what CAN be connected, and no card claim",
+              later is not None and "I can connect two things" in later.reply and
+              "One card is waiting" not in later.reply, later and later.reply)
         check("the same intent names are not in READ_ONLY_INTENTS",
               "connect_account" not in Q.READ_ONLY_INTENTS)
 

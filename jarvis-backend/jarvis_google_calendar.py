@@ -1197,8 +1197,13 @@ def list_events(days_ahead: int = 7, *, now: Optional[datetime] = None,
     chosen = mode()
     if chosen == "off":
         return {"ok": False, "connected": False, "events": [],
-                "reason": "Google Calendar is not connected yet - Settings, "
-                          "Accounts, pick the private link or Google sign-in"}
+                # NAMES ONLY PLACES THAT EXIST (2026-10-29, the HUD field test):
+                # this said "Settings, Accounts, pick the private link or Google
+                # sign-in", and there is no Google sign-in row in Settings -
+                # the read/write way is the one-time command setup in SETUP_DOC.
+                "reason": "Google Calendar is not connected yet - in Settings, Accounts, "
+                          "paste the private iCal link (read-only), or run the one-time "
+                          "Google sign-in commands in " + SETUP_DOC + "."}
     if chosen == "ical":
         return _list_ical(days_ahead, now=now)
     try:
@@ -1908,8 +1913,15 @@ def answer(text: str, *, now: Optional[datetime] = None) -> Optional[str]:
     if _WHATSON.search(said):
         got = list_events(7, now=now)
         if not got.get("ok"):
-            why = str(got.get("reason") or "pick a way in Settings, Accounts.")
+            why = str(got.get("reason") or
+                      "paste the private iCal link in Settings, Accounts (read-only), or "
+                      "run the Google setup in " + SETUP_DOC + ".")
             if got.get("connected"):
+                return why
+            # A reason that already says "not connected" is a complete
+            # sentence; prefixing it again read "Not connected yet - Google
+            # Calendar is not connected yet - ..." (2026-10-29).
+            if "not connected" in why.lower():
                 return why
             return "Not connected yet - " + why
         rows = got.get("events") or []

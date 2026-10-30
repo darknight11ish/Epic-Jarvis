@@ -975,7 +975,7 @@ check("'connect my google calendar' explains both ways and where they live",
 check("the connect answer never invents an ICS export",
       "export" not in said.lower(), said)
 check("'what's on my calendar' when disconnected says so",
-      "Not connected yet" in G.answer("what's on my calendar"))
+      "not connected yet" in G.answer("what's on my calendar").lower())
 meeting = G.answer("add a meeting Tuesday 3pm",
                    now=datetime(2026, 10, 28, 16, 0).astimezone())
 check("'add a meeting Tuesday 3pm' proposes it and says it needs the sign-in way",
