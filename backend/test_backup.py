@@ -661,11 +661,20 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     # Both numbers are asserted rather than derived, on purpose - the point is
     # that adding a database is a decision somebody has to make here as well as
     # in the module, and this is the line that asks.
+    #
+    # 18 + 8 since 2026-10-30: `parking-cache.db` (jarvis_parking.py, the
+    # parking cost estimator) joined the EXCLUSIONS, and it is the one entry
+    # here that is not in the owner's settings folder at all - it sits beside
+    # the module and holds 24 hours of PUBLIC parking prices for an area, so a
+    # restore would put yesterday's prices in front of today's question and
+    # would otherwise read as the owner's data. It is named here rather than
+    # left out of the scan, because "a module names a .db nobody wrote down" is
+    # exactly the silent gap this pair of checks exists to close.
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases of the owner's install, split 18 + 7, are all accounted for",
-          len(B.SOURCE_DBS) == 18 and len(B.NOT_BACKED_UP) == 7,
+    check("the databases this program names, split 18 + 8, are all accounted for",
+          len(B.SOURCE_DBS) == 18 and len(B.NOT_BACKED_UP) == 8,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 

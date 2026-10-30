@@ -27174,10 +27174,14 @@ limit was noticed.
 
 The city publishes Saturday and Sunday tiers separately. **A tier it does not
 publish is not a charge** (Seattle's own documented convention, and what makes
-a Sunday stay free); a time-limited block's Saturday window is used **only when
-the layer publishes one**, and is not invented otherwise. A blockface the city
-marks "No Parking Allowed", and an OSM element with `access=private` (or `no`,
-`customers`, `employees`), are dropped in the adapter and never offered.
+a Sunday stay free). A **time-limited** block is the one place the reading goes
+the safe way instead: its limit applies Monday to Saturday, using the layer's
+own Saturday window when it publishes one and the weekday's hours when it does
+not (the ordinary "2 hour parking ... except Sunday" sign). Being wrong that way
+refuses a stay that might have been legal; being wrong the other way hands the
+owner a ticket, and this module is never allowed to do that. A blockface the
+city marks "No Parking Allowed", and an OSM element with `access=private` (or
+`no`, `customers`, `employees`), are dropped in the adapter and never offered.
 
 A lot that publishes **only** a day price (`12.00 USD/day`) is charged that
 price for each day the stay touches: a short stay is over-quoted and a long one

@@ -424,9 +424,14 @@ def t_seattle_adapter_reads_a_time_limited_block():
           and all(b.rate_per_hour == 0.0 for b in candidate.rate_bands))
     check("sdot: the limit rides on the weekday band", candidate is not None
           and candidate.rate_bands and candidate.rate_bands[0].max_stay_min == 120)
-    check("sdot: Saturday is NOT claimed when the layer publishes no Saturday window",
+    check("sdot: Saturday keeps the limit when the layer publishes no Saturday window",
           candidate is not None
-          and not any(5 in b.days_of_week for b in candidate.rate_bands))
+          and any(5 in b.days_of_week and b.max_stay_min == 120
+                  for b in candidate.rate_bands),
+          candidate and [(b.days_of_week, b.max_stay_min) for b in candidate.rate_bands])
+    check("sdot: Sunday is NOT claimed as limited (the ordinary sign excepts it)",
+          candidate is not None
+          and not any(6 in b.days_of_week for b in candidate.rate_bands))
     quote = P.evaluate_parking_stay(candidate, THU_FROM, THU_TO)
     check("sdot: the tail-end overlap works on this blockface too",
           quote.legal is True and quote.total_cost_usd == 0.0,
@@ -438,7 +443,10 @@ def t_seattle_adapter_reads_a_time_limited_block():
                           START_TIME_SAT=9 * 60, END_TIME_SAT=17 * 60)
     with_sat = P._seattle_candidate(saturday, 47.6094, -122.3425)
     check("sdot: a published Saturday window is carried",
-          with_sat is not None and any(5 in b.days_of_week for b in with_sat.rate_bands))
+          with_sat is not None and any(5 in b.days_of_week and b.start_min == 9 * 60
+                                       for b in with_sat.rate_bands),
+          with_sat and [(b.days_of_week, b.start_min, b.end_min)
+                        for b in with_sat.rate_bands])
 
 
 def t_osm_tags_are_read_not_guessed():

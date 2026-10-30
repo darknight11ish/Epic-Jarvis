@@ -343,6 +343,13 @@ def _money(value: float) -> str:
     return f"${value:.2f}"
 
 
+def _price_label(quote: "StayQuote", *, total: bool = False) -> str:
+    """"FREE" or "$3.50", with "total" when the answer is the whole stay."""
+    if quote.total_cost_usd == 0.0:
+        return "FREE"
+    return _money(quote.total_cost_usd) + (" total" if total else "")
+
+
 # --------------------------------------------------------------------------
 #   THE INTEGRATOR: what a stay costs, minute by minute
 # --------------------------------------------------------------------------
@@ -824,15 +831,15 @@ def _payload(status: int, raw, *, what: str) -> dict:
     treating that as "something unexpected" made every place name unfindable.
     """
     if status != 200:
-        return {"ok": False, "reason": f"{what} answered HTTP {status}"}
+        return {"ok": False, "reason": f"{what} did not answer"}
     try:
         if isinstance(raw, bytes):
             raw = raw.decode("utf-8", "replace")
         got = json.loads(raw or "null")
     except Exception:
-        return {"ok": False, "reason": f"{what} answered something that is not JSON"}
+        return {"ok": False, "reason": f"{what} did not answer in a form I can read"}
     if not isinstance(got, (dict, list)):
-        return {"ok": False, "reason": f"{what} answered something unexpected"}
+        return {"ok": False, "reason": f"{what} did not answer in a form I can read"}
     return {"ok": True, "body": got}
 
 
@@ -991,12 +998,18 @@ def _seattle_candidate(feature: dict, lat: float, lon: float) -> Optional[Parkin
         kind = "street_free"
     elif "time limited" in category:
         kind = "street_limited"
-        # A time-limited block is FREE and the limit is the whole story. It is
-        # enforced on the weekdays the city published, and on Saturday only when
-        # the layer publishes a Saturday window at all.
+        # A time-limited block is FREE and the limit is the whole story. Its
+        # hours are the city's own window when it publishes one.
+        #
+        # THE SATURDAY READING IS THE SAFE ONE, on purpose: when the layer
+        # publishes a Saturday window, that window is used; when it publishes
+        # none, the limit still applies on Saturday with the weekday's hours
+        # (the ordinary "2 hour parking ... except Sunday" sign) rather than
+        # being called free. Being wrong in that direction refuses a stay that
+        # might have been legal; being wrong the other way hands the owner a
+        # ticket, and this file is never allowed to do that.
         if limit:
-            days = (0, 1, 2, 3, 4)
-            bands.append(RateBand(days_of_week=days,
+            bands.append(RateBand(days_of_week=(0, 1, 2, 3, 4),
                                   start_min=weekday_window or 8 * 60,
                                   end_min=weekday_end or 18 * 60,
                                   rate_per_hour=0.0, max_stay_min=limit))
@@ -1004,6 +1017,11 @@ def _seattle_candidate(feature: dict, lat: float, lon: float) -> Optional[Parkin
                 bands.append(RateBand(days_of_week=(5,),
                                       start_min=saturday_window,
                                       end_min=saturday_end,
+                                      rate_per_hour=0.0, max_stay_min=limit))
+            else:
+                bands.append(RateBand(days_of_week=(5,),
+                                      start_min=weekday_window or 8 * 60,
+                                      end_min=weekday_end or 18 * 60,
                                       rate_per_hour=0.0, max_stay_min=limit))
     elif "paid" in category or "car share" in category:
         bands.extend(_rate_bands_from_tiers(attributes, "WKD", (0, 1, 2, 3, 4)))
@@ -1648,13 +1666,13 @@ def hud_words(result: dict) -> str:
                      "window at a price I can read.")
         rejected = result.get("rejected") or []
         if rejected:
-            lines.append("The closest place says: "
+            lines.append("The nearest place cannot be used: "
                          + rejected[0].rejection_reason + ".")
     else:
         for index, quote in enumerate(results, start=1):
             note = _segment_words(quote)
             lines.append(
-                f"{index}. {quote.candidate.name} - {_money(quote.total_cost_usd)} total"
+                f"{index}. {quote.candidate.name} - {_price_label(quote, total=True)}"
                 + (f" ({note})" if note else "")
                 + f" - {int(round(quote.candidate.distance_m))} m walk "
                   f"(~{quote.walk_minutes} min)")
@@ -1682,7 +1700,7 @@ def phone_words(result: dict) -> str:
                      "window at a price I can read.")
         rejected = result.get("rejected") or []
         if rejected:
-            lines.append("The closest place says: "
+            lines.append("The nearest place cannot be used: "
                          + rejected[0].rejection_reason + ".")
     else:
         for index, quote in enumerate(results, start=1):
