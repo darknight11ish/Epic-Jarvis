@@ -262,15 +262,25 @@ def _check_phone_declines_the_pc_only_cards():
     """A section this file says the phone has must really be on the phone.
 
     Settings-coverage audit, 2026-10-09: `notifications` was declared
-    `app="both"` for months while the phone has no notifications screen at
-    all - its controls are Android's own, per channel. Nothing failed,
-    because the phone half of the two checks above is satisfied by an id
-    that is a desktop card (`s.id not in phone_keys and s.id not in
-    desktop_ids`), so one id could be "both" for a reason that only ever
-    held on the PC. `jarvis-client`'s own `ui/OpenPlace.kt` had the right
-    answer all along ("notifications" is in its PC_ONLY set, so the phone
-    answers "only in Jarvis on your PC"); this reads that same file as text
-    and holds the registry to it, the way OpenPlaceTest reads this file."""
+    `app="both"` for months while the phone appeared to have no notifications
+    screen at all - its controls looked like Android's own, per channel.
+    Nothing failed, because the phone half of the two checks above is satisfied
+    by an id that is a desktop card (`s.id not in phone_keys and s.id not in
+    desktop_ids`), so one id could be "both" for a reason that only ever held
+    on the PC. `jarvis-client`'s own `ui/OpenPlace.kt` had the right answer all
+    along ("notifications" is in its PC_ONLY set, so the phone answers "only in
+    Jarvis on your PC"); this reads that same file as text and holds the
+    registry to it, the way OpenPlaceTest reads this file.
+
+    2026-10-29 (the settings wrong-app audit's finding 7): the 2026-10-09
+    reading was itself incomplete. The phone DOES change the PC's own seven
+    kinds - SettingsScreen.kt's `PcNotifySection`, drawn inside the phone's
+    "Notifications from Jarvis" row, every line saying "(on your PC)" - and the
+    desktop's card says so out loud ("Your phone can change them too"). So the
+    section is `app="both"` again, and "notifications" left OpenPlace.PC_ONLY
+    for a real phone place (the `jarvis-notify` row). Both halves are pinned
+    together below.
+    """
     kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client"
           / "ui" / "OpenPlace.kt").read_text(encoding="utf-8")
     block = re.search(r"val PC_ONLY: Set<String> = setOf\((.*?)\n    \)", kt, re.S)
@@ -280,10 +290,11 @@ def _check_phone_declines_the_pc_only_cards():
                    if s.app in ("both", "phone") and s.id in pc_only)
     check("no section claims the phone has it while the phone says 'only on your PC'",
           not lying, f"{lying} - set app=\"desktop\" on each, or take it out of OpenPlace.PC_ONLY")
-    check("'notifications' is desktop only, as the phone's own OpenPlace says",
-          R.section_by_id("notifications").app == "desktop"
-          and "notifications" in pc_only
-          and all(s.id != "notifications" for s in R.sections_for("phone")))
+    check("'notifications' is on both apps, and the phone opens its own row for it",
+          R.section_by_id("notifications").app == "both"
+          and "notifications" not in pc_only
+          and R.section_by_id("notifications") in R.sections_for("phone"))
+
 
 
 def t_jump_list_matches_the_page():

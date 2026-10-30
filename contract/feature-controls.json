@@ -910,7 +910,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Talk-to-type",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: Settings, Shortcuts; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -4163,7 +4163,7 @@
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
         "example_phrase": "stop asking before my calendar",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: Settings, Accounts; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
@@ -4757,8 +4757,8 @@
       "id": "phone-floating",
       "name": "Floating Jarvis",
       "group": "Phone",
-      "surface": "phone",
-      "where": "Settings, Floating Jarvis.",
+      "surface": "both",
+      "where": "Settings, Floating Jarvis on the phone; Settings, Appearance, Floating face on the PC.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -4769,7 +4769,7 @@
       },
       "desktop": {
         "section": "floating-avatar",
-        "location": "Settings > floating jarvis",
+        "location": "Settings > appearance, floating face",
         "search": [
           "floating jarvis",
           "Floating Jarvis"
@@ -4791,7 +4791,7 @@
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
         "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop Settings: floating-avatar; phone: that app's own Settings"
+        "screen_path": "desktop Settings: Appearance, Floating face; phone: that app's own Settings"
       },
       "command": {
         "status": "open-only",
@@ -5761,8 +5761,8 @@
       "id": "notifications",
       "name": "Notifications",
       "group": "The PC itself",
-      "surface": "desktop",
-      "where": "Settings, Notifications.",
+      "surface": "both",
+      "where": "Settings, Notifications. On the phone, Settings, Notifications from Jarvis.",
       "control": {
         "type": "section_switch",
         "setting_keys": [
@@ -5788,12 +5788,12 @@
       },
       "phone": {
         "section": "notifications",
-        "location": "Settings > notifications",
+        "location": "Settings > notifications from jarvis",
         "search": [
           "notifications",
           "notifications"
         ],
-        "found": false
+        "found": true
       },
       "status": "planned",
       "owner": "voiceprint-wiring",
@@ -5801,7 +5801,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on alarm sounds",
-        "screen_path": "desktop Settings: notifications; phone: All features and abilities"
+        "screen_path": "desktop Settings: notifications; phone: Notifications from Jarvis (the PC's kinds)"
       },
       "command": {
         "status": "switch",
@@ -9375,10 +9375,10 @@
         "notification settings",
         "desktop notifications"
       ],
-      "app": "desktop",
+      "app": "both",
       "where": "settings",
       "in_desktop_settings": true,
-      "in_phone_settings": false
+      "in_phone_settings": true
     },
     {
       "id": "all-features",
