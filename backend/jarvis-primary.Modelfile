@@ -2,9 +2,11 @@
 #
 #   ollama create jarvis-primary -f jarvis-primary.Modelfile
 #
-# Target: RTX 2080 Super, 8 GB GDDR6, Turing sm75 (compute capability 7.5),
-# Windows 11. Usable ceiling ~6.90 GiB once DWM and the Tauri shell have taken
-# their ~1.1 GiB.
+# Target: the everyday lane on this PC, which Ollama places on the RTX 2060
+# 12 GB (GPU 0, no monitor) - where this model was measured loaded at 16,384,
+# 100% on the card, on 2026-10-30. The file was first written for the RTX 2080
+# Super 8 GB (GPU 1, the monitor), before the second card went in, and the
+# budget below is that card's arithmetic.
 #
 # WHY THIS FILE EXISTS AT ALL
 # A local chat turn posts to OLLAMA_URL/v1/chat/completions, Ollama's
@@ -31,10 +33,13 @@
 #         }
 #     }
 #
-# An 8B Q4 at 32768 with an f16 cache needs about 9.8 GiB, so it does not fit,
-# so the ladder drops to 4096 - and stops. **The deployed context today is
-# 4096 tokens.** A 6,000-token prompt does not fit in it. Every context number
-# anyone has planned around on this machine has been hypothetical.
+# An 8B Q4 at 32768 with an f16 cache needs about 9.8 GiB, so on a card where
+# it does not fit the ladder drops to 4096 - and stops. **The deployed context
+# on this PC is 16,384 tokens, measured 2026-10-30** (the owner's
+# OLLAMA_CONTEXT_LENGTH=16384; docs/MEASURED-2026-10-30-CONTEXT.md). Without
+# that variable a fresh install still gets 4,096, and a 6,000-token prompt does
+# not fit in it: measured, a ~5,019-token prompt reached the runner as 2,050
+# tokens and lost its start.
 #
 # THE BUDGET, arithmetic rather than assertion
 #   weights  Q4_K_M   8.190B params x 4.90 bpw / 8          = 4.67 GiB
@@ -66,7 +71,9 @@
 #   * llama.cpp now decides what fits, and keeps about 1 GiB of the card free
 #     on purpose. Counted that way, 16384 here is about 0.6 GiB over on the
 #     2080 Super, which would put roughly 4 of the 37 layers on the
-#     processor - calculated, NOT measured.
+#     processor - calculated, NOT measured. **Measured 2026-10-30 on the 12 GB
+#     card: it is not over.** The model loaded at 16,384 with 37/37 layers
+#     offloaded and 100% on the card (docs/MEASURED-2026-10-30-CONTEXT.md).
 #   * Ollama passes `--flash-attn auto` unless OLLAMA_FLASH_ATTENTION is set
 #     (llm/llama_server.go, appendFlashAttentionArgs - read 2026-09-28). So
 #     the log says `auto`, not `on`, and that is fine; llama.cpp turns flash

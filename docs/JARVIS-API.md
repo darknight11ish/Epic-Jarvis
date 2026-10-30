@@ -597,8 +597,10 @@ Same numbers on both clients: `net/ChatHistory.kt` and
 `jarvis-desktop/tests/chat-history.mjs`.
 
 **These caps are an upper bound, not the fit.** The model actually loaded may
-have far less than 16,384 (4,096 unless `jarvis-primary` is loaded - a model
-switched to from the phone, say), and tool results were in nobody's budget.
+have less than 16,384 - on this PC the environment sets 16,384 for every model
+(measured 2026-10-30, `MEASURED-2026-10-30-CONTEXT.md`), while a PC where
+nothing sets it still gives 4,096 to a model whose own Modelfile names no
+`num_ctx` - and tool results were in nobody's budget.
 Since `chat-stream.patch`, the PC asks Ollama what the loaded model has
 (`/api/ps`, then `/api/show`) and drops the oldest earlier turns to fit,
 leaving room for the answer - never the recalled facts or the new question
