@@ -173,17 +173,25 @@ def t_find_place_offline():
         check("only 0.1 degree is kept", got["place"]["lat"] == round(got["place"]["lat"], 1))
 
 
-def t_place_pc_only_and_forget():
+def t_place_from_either_app_and_forget():
+    """The owner's decision of 2026-10-29: the phone may type the town too."""
     fresh()
     code, out = SK.handle_post({"place": "Denver"}, here=False)
-    check("the town cannot be set from the phone", code == 403 and SK.load()["place"] is None)
-    code, out = SK.handle_post({"place": "Denver"}, here=True)
-    check("the town is set from the PC", code == 200 and SK.load()["place"]["lat"] == 39.7,
+    check("the town is set from the phone", code == 200 and SK.load()["place"]["lat"] == 39.7,
           repr(out))
-    check("the phone's view says the town is typed on the PC",
-          SK.view(here=False)["place_detail"] == SK.PLACE_PHONE)
+    check("the phone's own view invites typing it there",
+          SK.view(here=False)["place_detail"] == SK.PLACE_PHONE
+          and "this phone" in SK.PLACE_PHONE)
+    check("the view says a place can be set on either app",
+          SK.view(here=True)["can_set_place"] is True
+          and SK.view(here=False)["can_set_place"] is True)
     check("the town never reaches the audit log",
           not any("Denver" in d or "39.7" in d or "-105" in d for _, d in AUDIT))
+    code, _ = SK.handle_post({"place": "  "}, here=False)
+    check("an empty town is still refused from the phone", code == 400)
+    code, _ = SK.handle_post({"place": "Qwertyuiopville"}, here=False)
+    check("an unknown town is still refused from the phone", code == 400)
+    check("a refused town changed nothing", SK.load()["place"]["name"].startswith("Denver"))
     code, out = SK.handle_post({"forget_place": True}, here=False)
     check("forgetting is at once, from either app", code == 200 and SK.load()["place"] is None)
     code, out = SK.handle_post({"show": True}, here=False)
@@ -193,6 +201,20 @@ def t_place_pc_only_and_forget():
     check("show must be true or false", code == 400)
     code, _ = SK.handle_post({"show": True, "place": "x"}, here=True)
     check("one change at a time", code == 400)
+    fresh()
+
+
+def t_a_phone_change_moves_the_open_meteo_approval_off():
+    """A town changed from the phone is still a MOVE: the Open-Meteo card was
+    approved for the old position, so it switches off, exactly as on the PC."""
+    fresh()
+    SK.handle_post({"place": "Denver"}, here=True)
+    code, _ = SK.request_weather("open_meteo", gate=APPROVE, tier_of=ASK, spawn=run_now)
+    check("Open-Meteo is on for Denver", code == 202 and SK.load()["weather"] == "open_meteo")
+    code, out = SK.handle_post({"place": "Boston"}, here=False)
+    check("a phone change switches Open-Meteo off", code == 200
+          and SK.load()["weather"] == "off", repr(out))
+    check("and says why, in the PC's words", "switched off" in out.get("said", ""), out)
     fresh()
 
 
@@ -484,7 +506,7 @@ def t_install_wraps_the_route():
         h3.path = "/api/sky"
         h3._body = json.dumps({"place": "Denver"}).encode()
         h3.do_POST()
-        check("POST a town from another device: 403", h3.sent[0] == 403)
+        check("POST a town from another device: 200", h3.sent[0] == 200)
         h4 = H()
         h4.path = "/api/sky"
         h4._body = json.dumps({"place": "Denver"}).encode()
@@ -548,7 +570,8 @@ def t_the_patch():
 
 
 if __name__ == "__main__":
-    for fn in (t_off_by_default, t_find_place_offline, t_place_pc_only_and_forget,
+    for fn in (t_off_by_default, t_find_place_offline, t_place_from_either_app_and_forget,
+               t_a_phone_change_moves_the_open_meteo_approval_off,
                t_weather_source_cards, t_open_meteo_reads, t_home_assistant_reads,
                t_lockdown_stops_the_weather, t_get_reads_only_when_asked, t_install_wraps_the_route, t_the_patch):
         print(f"\n--- {fn.__name__} ---")
