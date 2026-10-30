@@ -15,7 +15,9 @@ import kotlinx.serialization.json.intOrNull
  * `sky.patch`). Both off by default.
  *
  * The PC keeps the settings: whether the sun and moon show, the owner's town
- * (typed on the PC only - this phone never sends one), and the weather
+ * (typed in either app - on this phone or on the PC, the owner's decision of
+ * 2026-10-29 - and found by the PC in its own town list, so nothing goes
+ * online for it), and the weather
  * source (off, the owner's own Home Assistant, or Open-Meteo online - whose
  * ON is ONE approval card, since it sends the rough position to the
  * internet). `GET /api/sky` hands them over with the PC's own words, which
@@ -43,8 +45,22 @@ object SkySettings {
             "waxing, waning) - worked out on your own devices. Nothing goes online for it. For the " +
             "animal and robot faces; the others are not changed."
     const val PLACE_LABEL = "Your town"
-    const val PLACE_PHONE = "Your town is typed on the PC, in Settings, Animal options."
-    const val PLACE_NONE = "No town yet, so there is no sun or moon to show. Type your town on the PC."
+
+    /** The PC's words for the phone, used only when an older PC's answer lacks them. */
+    const val PLACE_PHONE =
+        "Your town is typed in Settings, Animal options - here on this phone, or on the " +
+            "PC. Nothing is sent anywhere by typing it."
+    const val PLACE_NONE =
+        "No town yet, so there is no sun or moon to show. Type your town here, or on the " +
+            "PC, in Settings, Animal options."
+
+    /**
+     * The longest town this phone will send. The PC gives its own reason for
+     * anything it does not know; this only keeps an accidental paste from
+     * becoming a request, and no real "Springfield, Illinois, United States"
+     * comes close.
+     */
+    const val MAX_TOWN_CHARS = 120
     const val FORGET_LABEL = "Forget my town"
     const val WEATHER_LABEL = "Weather behind the face"
     const val WEATHER_DETAIL = "Rain, snow or wind behind the face. Off by default."
@@ -80,6 +96,8 @@ object SkySettings {
         val placeLabel: String,
         val placeDetail: String,
         val placeNone: String,
+        /** Whether this PC lets the town be typed here (the owner's decision of 2026-10-29). */
+        val canSetPlace: Boolean,
         val forgetLabel: String,
         val source: String,
         val choices: List<Choice>,
@@ -141,6 +159,7 @@ object SkySettings {
             placeLabel = body.text("place_label") ?: PLACE_LABEL,
             placeDetail = body.text("place_detail") ?: PLACE_PHONE,
             placeNone = body.text("place_none") ?: PLACE_NONE,
+            canSetPlace = body.flag("can_set_place") ?: false,
             forgetLabel = body.text("forget_label") ?: FORGET_LABEL,
             source = weather.text("source")?.takeIf { it in SOURCES } ?: "off",
             choices = choices,
@@ -159,10 +178,24 @@ object SkySettings {
         error == ApiError.NotFound || error == ApiError.NotAvailable ||
             (error is ApiError.Server && error.code == 501)
 
-    // ---- The changes this phone may send (never a town) -----------------------
+    // ---- The changes this phone may send (one change per POST) -----------------
 
     fun showBody(on: Boolean): String = JsonObject(mapOf("show" to JsonPrimitive(on))).toString()
     fun forgetBody(): String = JsonObject(mapOf("forget_place" to JsonPrimitive(true))).toString()
+
+    /**
+     * A town typed on this phone, as the one change a POST makes (the owner's
+     * decision of 2026-10-29: the town may be typed in either app). The words
+     * go only to this PC over the pairing link; the PC finds them in the town
+     * list it already carries and keeps a rough position, never an online
+     * lookup. Null for blank text and for a paste longer than [MAX_TOWN_CHARS];
+     * anything else is the PC's to accept or refuse, in its own words.
+     */
+    fun townBody(town: String): String? {
+        val name = town.trim()
+        if (name.isEmpty() || name.length > MAX_TOWN_CHARS) return null
+        return JsonObject(mapOf("place" to JsonPrimitive(name))).toString()
+    }
 
     /** Null for anything but the three choices. */
     fun weatherBody(source: String): String? =

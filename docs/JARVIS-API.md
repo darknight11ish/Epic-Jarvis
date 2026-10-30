@@ -17186,21 +17186,27 @@ formulas and the look.
 | Route | Body | Answers |
 |---|---|---|
 | `GET /api/sky` | - | **200** the view below. Also starts ONE weather read in the background when the source is not off and the last read is older than 20 minutes (a failed one: 30 minutes) - there is no timer of its own, so the weather is read only while an app is asking. |
-| `POST /api/sky` | ONE change: `{"show": true \| false}`, `{"place": "<town, or a position like 39.7, -105.0>"}`, `{"forget_place": true}` or `{"weather": "off" \| "home_assistant" \| "open_meteo"}` | **200** `{"ok": true, "said", "view"}`; **202** `{"ok": true, "waiting": true, "said", "view"}` - Open-Meteo's ONE card is raised; **400** `{"ok": false, "error"}` in words (two changes at once, a town not in the list, a position off the Earth); **403** a town sent from any device but this PC; **409** Open-Meteo without a town; **503** the card's tier is not `ask` |
+| `POST /api/sky` | ONE change: `{"show": true \| false}`, `{"place": "<town, or a position like 39.7, -105.0>"}`, `{"forget_place": true}` or `{"weather": "off" \| "home_assistant" \| "open_meteo"}` | **200** `{"ok": true, "said", "view"}`; **202** `{"ok": true, "waiting": true, "said", "view"}` - Open-Meteo's ONE card is raised; **400** `{"ok": false, "error"}` in words (two changes at once, a town not in the list, a position off the Earth); **409** Open-Meteo without a town; **503** the card's tier is not `ask` |
 
-Behind the token and the origin check, like every route. The town is set
-from **this PC only** (`jarvis_owner_check.from_this_pc`, the rule "Folders
-Jarvis may look in" uses): the phone shows it and can forget it, never set it
-(`docs/ARCHITECTURE.md` §8). Showing, hiding and forgetting need no card
-either way; each app holds a change that ADDS something (showing, a weather
-source) on a stale link and never one that takes something away.
+Behind the token and the origin check, like every route. The town may be
+typed in **either app** (the owner's decision of 2026-10-29: the phone must
+not be told to go to the PC for a personal setting, and the town was the
+first case). It is looked up in the PC's own town list from either app, so
+typing it sends those words only to the PC over the pairing link - never
+online, and the PC never asks a geocoding service. The phone shows the town it
+holds, may set it, and may forget it; the view's `place_detail`/`place_none`
+words invite the same thing on both apps (`can_set_place` is true on both
+since that decision). Showing, hiding, forgetting and typing a town need no
+card either way; each app holds a change that ADDS something (showing, a
+weather source, a town) on a stale link and never one that takes something
+away.
 
 ```
 {"available": true, "title": "Sun, moon and weather",
  "show": bool, "show_label", "show_detail",
  "place": null | {"name": "Denver, Colorado, United States", "lat": 39.7, "lon": -105.0},
- "place_label", "place_detail" (this PC: how to type it; another device: "typed on the PC"),
- "place_none", "forget_label", "can_set_place": bool (true on this PC only),
+ "place_label", "place_detail" (words for the app asking; the phone's invite it to type one too),
+ "place_none", "forget_label", "can_set_place": bool (true on both apps since 2026-10-29),
  "weather": {"source": "off" | "home_assistant" | "open_meteo",
              "choices": [{"id", "label", "why"}, ...three],
              "now": null | {"rain", "snow", "wind", "cloud", "fog": 0..1, "dir": 1 | -1, "at": seconds},
