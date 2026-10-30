@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One frame of a flipping figure (2026-10-30): a single character, coloured
+     per style. A TextView is one of the classes RemoteViews allows; the
+     character is only ever one of the closed list in NotificationStyle.Figure. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/style_glyph"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:includeFontPadding="false"
+    android:textSize="17sp" />

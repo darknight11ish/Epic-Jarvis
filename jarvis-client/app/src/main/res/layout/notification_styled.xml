@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The COLLAPSED body of a styled Jarvis notification (2026-10-30).
+
+  Only classes RemoteViews allows may appear here - LinearLayout,
+  FrameLayout, ViewFlipper, TextView, ProgressBar - because SystemUI inflates
+  this file in its own process and refuses any other View class outright
+  (RemoteViews' own allow-list). That is also why there is no Lottie view, no
+  GIF and no Compose here: none of them can exist in a notification.
+
+  Height: the collapsed area can be as little as 48dp on some Android
+  versions, so this is one 30dp chip plus one line of title and one line of
+  body. The full body is in notification_styled_expanded.xml.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
+    <FrameLayout
+        android:id="@+id/style_chip"
+        android:layout_width="30dp"
+        android:layout_height="30dp">
+
+        <!-- autoStart is a LAYOUT attribute on purpose: setAutoStart() is not
+             a remote-callable method, so it cannot be set from code. The flip
+             interval IS remote-callable and is set per style. -->
+        <ViewFlipper
+            android:id="@+id/style_frames"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:autoStart="true"
+            android:flipInterval="900"
+            android:inAnimation="@anim/notification_frame_in"
+            android:outAnimation="@anim/notification_frame_out" />
+
+        <TextView
+            android:id="@+id/style_still"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:textSize="17sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingStart="10dp"
+        android:paddingEnd="6dp">
+
+        <TextView
+            android:id="@+id/style_title"
+            style="@style/TextAppearance.Compat.Notification.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/style_body"
+            style="@style/TextAppearance.Compat.Notification.Line2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/style_spinner"
+        style="?android:attr/progressBarStyleSmall"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="4dp"
+        android:indeterminate="true"
+        android:visibility="gone" />
+</LinearLayout>

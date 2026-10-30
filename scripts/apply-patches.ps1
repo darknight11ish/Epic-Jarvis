@@ -2077,6 +2077,8 @@ $SHIPPED = @(
     'jarvis_history_import.py'   # history-import.patch: the Brain's button runs import_history.run() in the background; every fact waits for a yes
     # --- "Widgets you describe" (2026-09-28, no patch of its own) ---
     'jarvis_widgets.py'          # a widget as a small checked description (never code): the model's JSON from a fixed menu; /api/widgets routes, switched on by jarvis_brain_reads.py
+    # --- "Notification styles you describe" (2026-10-30, no patch of its own) ---
+    'jarvis_notification_styles.py'  # a CLOSED look for the phone's notifications (never a layout or a colour value): the model's JSON from a fixed menu; /api/notification-styles routes, switched on by jarvis_brain_reads.py
     # --- talking to an AI chatbot for the owner (2026-09-28): the core and the Gemini adapter; routes in chatbot-routes.patch, the gate's _RISK line in chatbot.patch ---
     'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation
     # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---

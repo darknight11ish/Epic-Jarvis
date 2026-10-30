@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
+import com.jarvis.client.net.NotificationStyle
 import com.jarvis.client.net.PendingItem
 
 /**
@@ -332,6 +333,18 @@ object ApprovalNotifier {
                         denyIntent(context, item, notificationId),
                     )
                 }
+            }
+            // The owner's own notification style (2026-10-30). A no-op when no
+            // style is live for approval cards, or while [locked] is true - so
+            // a locked phone gets exactly the notification it got before this
+            // feature existed, and the redacted path never meets the custom
+            // layout. It changes only HOW the words are drawn: Deny stays the
+            // only action, Approve is still offered nowhere, and the approval
+            // id, the group and the tap-through are untouched.
+            .apply {
+                StyledNotification.apply(
+                    this, context, NotificationStyle.Kind.APPROVAL, title, body, locked,
+                )
             }
             .build()
     }

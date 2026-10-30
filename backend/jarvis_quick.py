@@ -1221,6 +1221,14 @@ def _match(text, now: float) -> Optional[Intent]:
     if _WIDGET.fullmatch(s):
         return Intent("widget_make", {"words": str(text)})
 
+    # --- "make my notifications look like ..." (2026-10-30) -------------------
+    # A CLOSED style spec (jarvis_notification_styles.py), never a layout and
+    # never a colour value: the model picks from a menu, the phone draws it.
+    # AFTER the widget rule, and tight enough to leave "turn notifications
+    # off"/"quieter" to the settings grammar: only words about how they LOOK.
+    if _STYLE.match(s):
+        return Intent("notify_style", {"words": str(text)})
+
     # --- focus sessions (jarvis_focus.py) --------------------------------------
     got = _focus(s)
     if got is not None:
@@ -2396,6 +2404,35 @@ def _run_widget(f: dict, conversation, messages) -> Result:
         return Result(WIDGETS_MISSING, "widget_make")
     return Result(W.from_chat(str(f.get("words") or ""), conversation=conversation,
                               messages=messages), "widget_make")
+
+
+#: "Notification styles you describe" (jarvis_notification_styles.py,
+#: 2026-10-30): the sentence must be about how the notifications LOOK - a
+#: "make/change/set/style/update ... notifications ... look/like" shape, or
+#: "change how ... notifications look". Deliberately NOT "make my
+#: notifications quieter" or "turn my notifications off": those belong to the
+#: settings grammar, and a style never changes whether a notification makes a
+#: sound (the channel owns that, and the approval routing owns the channel).
+_STYLE = re.compile(
+    r"(?:make|change|set|style|update)\s+(?:(?:my|the)\s+)?(?:jarvis\s+)?"
+    r"(?:notifications?|alerts?)\s+(?:look|like|style)(?:\s+(?:like|to\s+look\s+like))?\b.*"
+    r"|(?:change|set)\s+how\s+(?:(?:my|the)\s+)?(?:jarvis\s+)?(?:notifications?|alerts?)\s+look\b.*")
+
+STYLES_MISSING = ("Your PC's Jarvis cannot style notifications yet - run apply-patches.ps1 "
+                  "on the PC.")
+
+
+def _run_style(f: dict, conversation, messages) -> Result:
+    """A style PREVIEW from the owner's own words, never a style that is on:
+    the owner sees it in Brain, Notifications and taps Add. Refused in a
+    conversation that has read outside text (jarvis_widgets.chat_tainted,
+    reused by jarvis_notification_styles.chat_tainted)."""
+    try:
+        import jarvis_notification_styles as N
+    except Exception:
+        return Result(STYLES_MISSING, "notify_style")
+    return Result(N.from_chat(str(f.get("words") or ""), conversation=conversation,
+                              messages=messages), "notify_style")
 
 
 #: "Ring my phone" (jarvis_find_phone.py, 2026-09-28). A phone the owner
@@ -8447,6 +8484,9 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "widget_make":
         # `messages`: the request's, as they arrived - for the taint check.
         return _run_widget(f, conversation, messages)
+    if n == "notify_style":
+        # The same taint rule, because the owner's words make this too.
+        return _run_style(f, conversation, messages)
     # Voice reflex (2026-10-21, Live/Voice audit V4): a router into an action
     # that already exists and already has its own permission model.
     if n == "voice_speed":

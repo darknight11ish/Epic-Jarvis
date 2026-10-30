@@ -1053,6 +1053,37 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    /** `GET /api/notification-styles` - the saved styles, the previews and what is live. A read. */
+    suspend fun notificationStyles(): ApiResult<JsonObject> = probe(NotificationStyle.LIST_PATH)
+
+    /**
+     * One of the notification-style POSTs ([NotificationStyle.POST_PATHS]) -
+     * anything else is refused here, before anything is sent. The answer's
+     * status and body come back together, so the PC's own sentence is shown
+     * for a refusal.
+     */
+    suspend fun notificationStylePost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (path !in NotificationStyle.POST_PATHS) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a notification-style route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            val caller = if (path == NotificationStyle.DRAFT_PATH) widgetDraftCall else shortCall
+            runCatching {
+                caller.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(resp.code to obj)
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /** "Brief me now" can wait for a slow calendar or mail server: the PC gives them 25 seconds. */
     private val briefingCall: OkHttpClient by lazy {
         client.newBuilder()

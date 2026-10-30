@@ -1158,6 +1158,14 @@ object JarvisRuntime {
                 .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.CalendarWidget().updateAll(app) }
         }
+
+        // Notification styles (2026-10-30): read from the PC when the link
+        // comes or goes and after any change made here. The notifiers apply
+        // them from [notificationStyles] at post time, so the book has to be
+        // the PC's current one rather than whatever the last screen saw.
+        scope.launch {
+            combine(_link, _stylesTick) { _, _ -> }.collect { refreshNotificationStyles() }
+        }
         // "Reading phone notifications": turning it off is immediate, so
         // whenever the switch reads as off - pressed here, or learned from
         // the PC - nothing captured stays on this phone (audit A3). Also
@@ -6225,6 +6233,103 @@ object JarvisRuntime {
         when (val r = api.widgetPost(path, body)) {
             is ApiResult.Ok -> com.jarvis.client.net.JarvisWidgets.said(r.value.first, r.value.second).also {
                 _widgetsTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to (failed + describe(r.error))
+        }
+
+    // --------------------------------------- Notification styles ----
+    // "Notification styles you describe" (the owner's ask of 2026-10-30;
+    // docs/JARVIS-API.md section 160) - see
+    // [com.jarvis.client.net.NotificationStyle], service/StyledNotification.kt
+    // and ui/screens/NotificationStylesPlate.kt. The PC keeps the styles and
+    // checks them; the notifiers read [notificationStyles] SYNCHRONOUSLY when
+    // they post, and draw the plain notification when it says nothing.
+
+    private val _notificationStyles =
+        MutableStateFlow(com.jarvis.client.net.NotificationStyle.Book.EMPTY)
+
+    /** What the PC says is live. Read by [com.jarvis.client.service.StyledNotification]. */
+    val notificationStyles: StateFlow<com.jarvis.client.net.NotificationStyle.Book> =
+        _notificationStyles.asStateFlow()
+
+    private val _stylesTick = MutableStateFlow(0)
+
+    /** Goes up when a style changes, so the plate reads the list again. */
+    val stylesTick: StateFlow<Int> = _stylesTick.asStateFlow()
+
+    /**
+     * `GET /api/notification-styles`. A read, so not held on a stale link.
+     * Silent on failure: the last book stays, and a notification posted in the
+     * meantime uses it or the plain layout.
+     */
+    suspend fun refreshNotificationStyles() {
+        when (val r = api.notificationStyles()) {
+            is ApiResult.Ok -> _notificationStyles.value =
+                com.jarvis.client.net.NotificationStyle.bookOf(r.value)
+            is ApiResult.Failed -> Unit
+        }
+    }
+
+    /**
+     * The same read, handed back whole - the plate uses it to tell "this PC
+     * cannot style notifications" (404) from "the link is down".
+     */
+    suspend fun notificationStyleListing(): ApiResult<kotlinx.serialization.json.JsonObject> =
+        api.notificationStyles()
+
+    /**
+     * A PREVIEW from the owner's typed words - the PC's model makes a small
+     * checked style; nothing is applied. Not held on a stale link (it adds
+     * nothing), like "Photo to reminder". @return whether a preview was made,
+     * and the sentence to show.
+     */
+    suspend fun notificationStyleDraft(words: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.NotificationStyle.draftBody(words)
+            ?: return false to com.jarvis.client.net.NotificationStyle.NO_WORDS
+        return stylePost(com.jarvis.client.net.NotificationStyle.DRAFT_PATH, body, "Not made. ")
+    }
+
+    /** Keep ONE preview, exactly as shown. No card. Held on a stale link. */
+    suspend fun notificationStyleAdd(draft: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.NotificationStyle.validDraft(draft)) {
+            return false to "That preview has expired."
+        }
+        return stylePost(
+            com.jarvis.client.net.NotificationStyle.ADD_PATH,
+            com.jarvis.client.net.NotificationStyle.idBody("draft", draft), "Not added. ",
+        )
+    }
+
+    /** Drop ONE preview. Not held: it only drops. */
+    suspend fun notificationStyleDiscard(draft: String): Pair<Boolean, String> {
+        if (!com.jarvis.client.net.NotificationStyle.validDraft(draft)) return true to "Discarded."
+        return stylePost(
+            com.jarvis.client.net.NotificationStyle.DISCARD_PATH,
+            com.jarvis.client.net.NotificationStyle.idBody("draft", draft), "Not discarded. ",
+        )
+    }
+
+    /** Delete ONE style, at once. Held on a stale link, like a widget's Delete. */
+    suspend fun notificationStyleDelete(id: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.NotificationStyle.validId(id)) {
+            return false to "That style is not there any more."
+        }
+        return stylePost(
+            com.jarvis.client.net.NotificationStyle.DELETE_PATH,
+            com.jarvis.client.net.NotificationStyle.idBody("id", id), "Not deleted. ",
+        )
+    }
+
+    private suspend fun stylePost(path: String, body: String, failed: String): Pair<Boolean, String> =
+        when (val r = api.notificationStylePost(path, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.NotificationStyle.said(r.value.first, r.value.second).also {
+                // A change here is a change to what the notifiers draw: read the
+                // PC's answer back so the next notification uses it, not the
+                // book this screen happened to load.
+                refreshNotificationStyles()
+                _stylesTick.update { n -> n + 1 }
             }
             is ApiResult.Failed -> false to (failed + describe(r.error))
         }

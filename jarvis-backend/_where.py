@@ -587,6 +587,12 @@ SHIPPED = (
     # code) of what a home-screen / desktop widget shows; switched on by
     # jarvis_brain_reads.install(), no patch of its own
     "jarvis_widgets.py",
+    # "Notification styles you describe" (2026-10-30): a CLOSED style spec -
+    # colour, figure, animation, speed, which notification kinds - that the
+    # owner describes in their own words, checked by plain code, and drawn by
+    # the phone's own notification layout; switched on by
+    # jarvis_brain_reads.install(), no patch of its own
+    "jarvis_notification_styles.py",
     # A conversation with an AI chatbot for the owner: the driver, the last
     # check, one card per conversation
     "jarvis_chatbot.py",

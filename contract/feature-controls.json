@@ -1295,7 +1295,7 @@
       "name": "Widgets you describe",
       "group": "Talking",
       "surface": "both",
-      "where": "Brain, Work, Widgets. The widget itself shows with Alt+Shift+W.",
+      "where": "Brain, Work, Widgets (desktop); Brain, Widgets and a home-screen slot (phone). The desktop widget itself shows with Alt+Shift+W.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1314,7 +1314,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Brain, Work, Widgets.",
+        "location": "Brain, Widgets and a home-screen slot.",
         "search": [
           "widgets you describe"
         ],
