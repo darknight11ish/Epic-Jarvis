@@ -1377,6 +1377,14 @@ SHIPPED = (
     # relay belt. No route of its own, no new switch, no new permission.
     # The same entry is at the end of the script's $SHIPPED.
     "jarvis_attached_file.py",
+    # What a parking stay costs, minute by minute (2026-10-30, the parking
+    # blueprint of 2026-10-29): the piecewise time-window integrator that gets
+    # the legal tail-end overlap right, the two public-data adapters (Seattle's
+    # Blockface layer and OpenStreetMap's Overpass), a local SQLite cache, and
+    # the per-device words. It answers through jarvis_quick.py's own sentence
+    # grammar - no model tool, no route, no card, and no requirement beyond the
+    # standard library, so requirements.lock does not move.
+    "jarvis_parking.py",
 )
 
 

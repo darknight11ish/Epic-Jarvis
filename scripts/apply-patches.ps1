@@ -2544,6 +2544,11 @@ $SHIPPED = @(
     # new permission on either app. The same entry is at the end of
     # backend/_where.py's SHIPPED list.
     'jarvis_attached_file.py'
+    # What a parking stay costs, minute by minute (2026-10-30, the parking
+    # blueprint of 2026-10-29). Its sentences are answered by jarvis_quick.py
+    # (already shipped above), so this adds no patch, no route, no gate list
+    # and no tool. Standard library only, so requirements.lock does not move.
+    'jarvis_parking.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
