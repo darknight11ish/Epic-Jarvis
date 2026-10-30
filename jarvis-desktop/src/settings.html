@@ -89,7 +89,8 @@
 
            `#settings-search-count` is the live region and is written only
            when the ANSWER changes - a count re-announced on every keystroke
-           would talk over the owner's typing. -->
+           would talk over the owner's typing. It is emptied when the box is
+           empty or nothing matches, so it cannot announce a stale number. -->
       <section class="settings-search" id="settings-search" aria-labelledby="settings-search-title">
         <h2 class="settings-search-title" id="settings-search-title">Search settings</h2>
         <div class="settings-search-row">

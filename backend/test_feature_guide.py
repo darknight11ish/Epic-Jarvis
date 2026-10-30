@@ -1459,9 +1459,14 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
     phone-screen-rate answered "It is changed at ... on this PC" for controls
     the PC does not have. The surface now wins in the WORDS, and the
     owner-approved label counts are untouched.
+
+    Four of those rows, not five, since 2026-10-29: the settings wrong-app audit
+    (finding 6) found the PC really does have a floating face - the "Floating
+    face" toggle inside Appearance - so phone-floating is `surface: "both"` and
+    is answered by the both-apps branch instead.
     """
     phone = [row for row in SOURCE if row["surface"] == "phone"]
-    check("there are phone-only rows to check", len(phone) >= 5, len(phone))
+    check("there are phone-only rows to check", len(phone) >= 4, len(phone))
     bad = []
     for row in phone:
         words = FG.change_words(row)
@@ -1473,8 +1478,8 @@ def t_a_phone_only_row_is_never_changed_on_this_pc():
     check("no phone-only row is ever said to change 'on this PC'", not bad, bad[:8])
     settings_rows = [row for row in phone if FG.label_for(row) in
                      (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
-    check("...the five phone controls are the PC-Only-labelled ones",
-          len(settings_rows) == 5, [r["id"] for r in settings_rows])
+    check("...the four phone controls are the PC-Only-labelled ones",
+          len(settings_rows) == 4, [r["id"] for r in settings_rows])
     # Each names its OWN path and says what is true of the PC, in both the change
     # sentence and the whole answer. The PC's side is read from the row's own
     # `surface_reason`: three of the five really have no PC control, and the other
@@ -1559,10 +1564,24 @@ BOTH_PC_ONLY_SENTENCES = {
 #: is NOT dropped - BOTH_TYPED_SENTENCES below pins that its answer still says
 #: both apps, still names the phone's Appearance place, and never says the phone
 #: cannot change it.
+#:
+#: `phone-floating` joined on 2026-10-29 (the settings wrong-app audit's finding
+#: 6): the PC really does have a floating face - the toggle inside Appearance -
+#: so the row is `surface: both`, and the phone's own card turns its own bubble
+#: on. Each app keeps its own, so its sentence says that rather than claiming a
+#: shared document.
 BOTH_PHONE_WRITE_SENTENCES = {
     "appearance": ("Its setting is in Settings, Appearance. On the phone, "
                    "Appearance changes the same face and state colours and sends "
                    "them to the PC; the theme itself stays on each device."),
+    # phone-floating joined on 2026-10-29 (the settings wrong-app audit's finding
+    # 6): its row is `surface: both` now, its PC half is the "Floating face"
+    # toggle inside Appearance, and the phone's own card turns its own bubble on.
+    # Each app keeps its own, so the shared-document sentence above would be
+    # wrong for it.
+    "phone-floating": ("Its setting is in Settings, Floating Jarvis. On the phone, "
+                       "Settings, Floating Jarvis turns that phone's own bubble on "
+                       "or off; the PC keeps its own floating face, in Appearance."),
 }
 #: The both-apps row that is TYPED on the PC since this branch, and the exact
 #: sentence it now answers "how do I change it?" with - the phrase the contract's
@@ -1570,21 +1589,24 @@ BOTH_PHONE_WRITE_SENTENCES = {
 BOTH_TYPED_SENTENCES = {
     "faces": 'To change it, say "set the face to arc".',
 }
-#: Every both-apps row that is still PC-Only-labelled, exactly (2026-10-26): the
-#: two PC-Only sentences above, plus the one phone-write row that keeps that
-#: label. `faces` left this set when the contract gave it a typed control.
-BOTH_PC_ONLY_IDS = ("appearance", "chat-thread", "connection")
+#: Every both-apps row that is still PC-Only-labelled, exactly: the two PC-Only
+#: sentences above, plus the rows whose phone half really does change its own
+#: thing (`appearance`, `phone-floating`). `faces` left this set when the
+#: contract gave it a typed control; `phone-floating` joined it on 2026-10-29
+#: (the settings wrong-app audit's finding 6) when its row became `surface: both`.
+BOTH_PC_ONLY_IDS = ("appearance", "chat-thread", "connection", "phone-floating")
 #: The garble shape itself: a Settings path swallowed by " on this PC" in the same
 #: clause. It is what `settings_path_words()` produced when a prose `where` was
 #: split at its first comma and glued together.
 _GARBLED_PATH = re.compile(r"Settings,[^.;]*\s+on this PC")
 
-#: The two phone-only rows whose PC has its own, DIFFERENT control (2026-10-26,
-#: part B). Pinned word for word: the row's own surface_reason says the PC has one,
-#: so "The PC does not have that control" contradicted the same answer.
+#: The phone-only row whose PC has its own, DIFFERENT control (2026-10-26, part
+#: B). Pinned word for word: the row's own surface_reason says the PC has one, so
+#: "The PC does not have that control" contradicted the same answer.
+#: phone-floating was the other until 2026-10-29 - the settings wrong-app audit
+#: (finding 6) found its PC half is the "Floating face" toggle inside Appearance,
+#: so the row is `surface: "both"` now and no longer takes this sentence.
 FLAT_ROW_SENTENCES = {
-    "phone-floating": ("It is changed in the phone's own Settings, Floating Jarvis. "
-                       "The PC's floating face is a different control."),
     "phone-screen-rate": ('It is changed in the phone\'s own Settings, Screen refresh '
                           'rate. "Check again" re-reads what the screen settled on. '
                           "The PC's frame-rate setting is the animal's, a different "
@@ -1637,7 +1659,7 @@ def t_the_four_both_rows_name_the_pcs_setting_without_losing_the_phone():
     """
     both_pc = [row for row in SOURCE if row["surface"] == "both"
                and FG.label_for(row) == FG.LABEL_PC_ONLY]
-    check("exactly the three pinned rows are both-apps PC-Only settings",
+    check("exactly the four pinned rows are both-apps PC-Only settings",
           sorted(r["id"] for r in both_pc) == list(BOTH_PC_ONLY_IDS),
           [r["id"] for r in both_pc])
     for fid, want in BOTH_PC_ONLY_SENTENCES.items():
@@ -1748,21 +1770,21 @@ def t_a_phone_only_status_line_agrees_with_its_surface():
     check("every row's Status line agrees with its surface", not bad, bad[:8])
     check("...and exactly one non-phone row has a display reword",
           list(FG.ALWAYS_ON_DISPLAY) == ["app-lock"], list(FG.ALWAYS_ON_DISPLAY))
-    five = [row for row in phone
+    four = [row for row in phone
             if FG.label_for(row) in (FG.LABEL_PC_ONLY, FG.LABEL_SETTINGS_ONLY)]
-    check("...the five phone controls are the ones this rewording covers",
-          len(five) == 5, [r["id"] for r in five])
+    check("...the four phone controls are the ones this rewording covers",
+          len(four) == 4, [r["id"] for r in four])
     check("...and each says Phone-Only, with the phone's Settings named",
-          all(FG.status_label(r) == FG.PHONE_ONLY_DISPLAY_LABEL for r in five),
-          [FG.status_label(r) for r in five])
+          all(FG.status_label(r) == FG.PHONE_ONLY_DISPLAY_LABEL for r in four),
+          [FG.status_label(r) for r in four])
     # The reword is display-only: the contract label, the directory data both
     # apps render and the counts tools/check_feature_controls.py pins are all
     # exactly as approved.
     directory = {r["id"]: r for r in FG.abilities_directory()}
     check("...and the directory's own label and counts are untouched",
-          all(directory[r["id"]]["label"] == FG.LABEL_PC_ONLY for r in five)
-          and all(FG.label_for(r) == FG.LABEL_PC_ONLY for r in five),
-          [(r["id"], directory[r["id"]]["label"]) for r in five])
+          all(directory[r["id"]]["label"] == FG.LABEL_PC_ONLY for r in four)
+          and all(FG.label_for(r) == FG.LABEL_PC_ONLY for r in four),
+          [(r["id"], directory[r["id"]]["label"]) for r in four])
     # "can I change it?" says the same thing as "tell me about it".
     out = FG.change("phone notifications")
     check("...and 'can I change it?' carries the same Status line",

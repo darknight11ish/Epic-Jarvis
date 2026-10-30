@@ -406,6 +406,13 @@ SECTIONS: tuple = (
     # a place neither app could find. The new check in
     # test_settings_registry.py keeps the next one from going missing the same
     # way.
+    #
+    # The section stays the PHONE's (2026-10-29, the settings wrong-app audit's
+    # finding 6): the PC has the same feature as the "Floating face" toggle
+    # inside Appearance (settings.html's `floating-enabled`), but it has no
+    # section of its own - the PC's control is a row of Appearance, which has
+    # its own section and id. `app` here says which app draws this SECTION, so
+    # "both" would claim a desktop card that does not exist.
     Section("floating-avatar", ("floating jarvis", "the floating face",
                                 "the floating avatar", "the bubble"),
             app="phone"),
@@ -471,24 +478,23 @@ SECTIONS: tuple = (
     # PC"); the summaries themselves are on both.
     Section("spending", ("spending", "spending settings", "my spending", "bank files"),
             app="both"),
-    # Notifications (2026-10-01): a card on the desktop ONLY, and it said
-    # "both" until 2026-10-09 (settings-coverage audit) - which was untrue.
-    # The PC's card is per kind: alarms, reminders, the briefing and the
-    # captcha hand-off each on or off, plus quiet hours and a Test button
-    # (notifications-settings.js; the toasts themselves are raised in Rust,
-    # src-tauri/src/notifications.rs, which is why the choices are pushed to
-    # it). The phone has no such screen and cannot have this one: its
-    # notification controls are Android's own, per channel (strings.xml
-    # "channel_alarm", "channel_schedule", "channel_approval",
+    # Notifications (2026-10-01): the PC's card, per kind - alarms, reminders,
+    # the briefing and the captcha hand-off each on or off, plus quiet hours and
+    # a Test button (notifications-settings.js; the toasts themselves are raised
+    # in Rust, src-tauri/src/notifications.rs, which is why the choices are
+    # pushed to it). The phone's own Android per-channel screen is separate
+    # (strings.xml "channel_alarm", "channel_schedule", "channel_approval",
     # "channel_handoff" - one per kind, which is what the owner asked for on
-    # 2026-09-30: "per kind: on/off, style, Test button, quiet hours"). The
-    # phone already said so in its own words: jarvis-client ui/OpenPlace.kt
-    # lists "notifications" in PC_ONLY, so "open notifications" there answers
-    # "only in Jarvis on your PC" - while this table told the same phone the
-    # section was on both apps. Corrected here rather than left for the next
-    # reader to find; test_settings_registry.py holds the two together now.
+    # 2026-09-30: "per kind: on/off, style, Test button, quiet hours").
+    #
+    # BOTH since 2026-10-29 (the settings wrong-app audit's finding 7), which is
+    # not the "both" the 2026-10-09 settings-coverage audit cleared: the phone's
+    # "Notifications from Jarvis" row draws SettingsScreen.kt's PcNotifySection -
+    # the SAME seven kinds, read and written through the one limits route, every
+    # row saying "(on your PC)". Its OpenPlace.PC_ONLY entry stays, because that
+    # answers where the CARD is, not what the phone can change.
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
-            app="desktop"),
+            app="both"),
     # "All features and abilities" (2026-10-22, #749): the phone's directory of the
     # 140 features. PHONE ONLY, and the reason is the same one the desktop page
     # gives: the desktop's own directory card has NO `<section class="card" id>`
