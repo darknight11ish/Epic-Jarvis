@@ -1051,6 +1051,28 @@ SANDBOX_FILES_ACTION = "sandbox_file_run"
 SANDBOX_MAX_FILES = 8
 _SANDBOX_CODE_SHOWN = 2000
 
+#: Gap 2 (Gemini's S-2, 2026-10-30): a data-sandbox run in a turn outside
+#: text shaped. The sandbox's own tier decides a PURE calculation (the
+#: calculator's "auto", shipped), so a page that talks the model into
+#: "work this out in Python" ran a script with nobody asked - and the switch
+#: being ON (`sandbox_exec_enabled`, the owner's own opt-in) was read as if it
+#: were a standing permission for a page-shaped run too. It is not: it says
+#: the owner lets Jarvis run scripts in general, not that a page may.
+#:
+#: The rule is the note writes' rule, one tool over: when outside text shaped
+#: this turn, a `run_data_script` call is put to the gate under
+#: SANDBOX_FILES_ACTION ("sandbox_file_run", tier "ask" as shipped - the
+#: sandbox's ONE ask action, and the one the owner already sees when a run
+#: names files), the card says why, and it runs only on a person's yes
+#: (_a_person_said_yes), whatever the calculator's tier says. The sandbox
+#: itself is read-only and offline, so this is not a "stop a dangerous
+#: script" rule: it is the page-cannot-drive-a-run rule. Nothing writes and
+#: nothing is sent either way, and the card says so.
+SANDBOX_OUTSIDE = ("Jarvis read outside text in this conversation (an email, a file, a note, a "
+                   "web page or another tool's answer), so it asks before running a script, "
+                   "even though the data sandbox is switched on. The script can only work "
+                   "things out: it writes nothing and sends nothing.")
+
 
 def _sandbox_allowed_file(path):
     """The real path when `path` is a file the owner lets Jarvis read, else None."""
@@ -1087,6 +1109,29 @@ def _sandbox_action_for(name: str, action_name: str, args: dict) -> str:
     if name == SANDBOX_TOOL and isinstance(args, dict) and args.get("files"):
         return SANDBOX_FILES_ACTION
     return action_name
+
+
+def _turn_shaped_by_outside(watch, *, ignoring=()) -> bool:
+    """Did outside text shape this turn - a reading tool OTHER than `ignoring`
+    ran in it, or the conversation is tainted? (Gap 2, Gemini's S-2.)
+
+    A tool's own earlier call never counts as outside text for itself, the
+    same exemption `_form_review_refusal` ("the form page Jarvis itself opened
+    is not outside text for this rule") and `note_needs_a_person` already
+    make: without it, one `run_data_script` call would make the next one in a
+    clean turn look page-shaped.
+    """
+    if watch is None:
+        return False
+    if getattr(watch, "tainted", False):
+        return True
+    return any(n not in ignoring for n in (getattr(watch, "read", {}) or {}))
+
+
+def _sandbox_after_outside_why(watch) -> str:
+    """"" or the card's line when a data-sandbox run has to ask because
+    outside text shaped this turn (Gap 2; see SANDBOX_OUTSIDE)."""
+    return SANDBOX_OUTSIDE if _turn_shaped_by_outside(watch, ignoring=(SANDBOX_TOOL,)) else ""
 
 
 def _prepare_run_data_script(args: dict):
@@ -3133,6 +3178,20 @@ NOBODY_ASKED_SEARCH_WORDS = (
     "this search asks you first ({card}), and this time nobody was asked, so nothing "
     "was sent. Your settings file is letting it through without asking: open "
     "jarvis-framework.toml, put {action} back to \"ask\", then try again from Jarvis on the PC.")
+#: Gap 1 (Gemini's S-2): a page fetch, in a turn outside text shaped, at an
+#: address the owner did not give - allowed without a person's yes.
+NOBODY_ASKED_URL_WORDS = (
+    "{name} would contact a web address you did not give it, and this turn had read "
+    "something from outside, so it only runs after you say yes on a card - and this time "
+    "nobody was asked, so nothing was fetched. Your settings file is letting it through "
+    "without asking: open jarvis-framework.toml, put {action} back to \"ask\", then try "
+    "again from Jarvis on the PC.")
+#: Gap 2 (Gemini's S-2): a data-sandbox run, in a turn outside text shaped.
+NOBODY_ASKED_SANDBOX_WORDS = (
+    "{name} runs a script, and this turn had read something from outside, so it only runs "
+    "after you say yes on a card - and this time nobody was asked, so no script ran. Your "
+    "settings file is letting it through without asking: open jarvis-framework.toml, put "
+    "{action} back to \"ask\", then try again from Jarvis on the PC.")
 #: The technical half of those refusals, for a bug report: the tier the gate
 #: answered at, and the setting and section to change. Kept in the record's
 #: `gate`; never in a sentence a person reads.
@@ -3416,6 +3475,36 @@ NOTE_WRITES = frozenset({"append_logseq_journal", "append_obsidian_daily",
                          # matter more, not less.
                          "create_logseq_page"})
 
+#: The local calendar's own writes (Gap 3, Gemini's S-2, 2026-10-30):
+#: `jarvis_local_calendar.py`'s POST /api/calendar/add and /api/calendar/act
+#: (ONE event: add, change or delete), plus the gate action names the shipped
+#: `[autonomy.tiers]` already gives the same writes and the Google Calendar
+#: write the owner's 2026-10-28 decision covers (`google_calendar_write`).
+#:
+#: THERE IS NO CHAT TOOL FOR A CALENDAR WRITE YET. The apps call those routes
+#: directly, and the owner's ruling of 2026-10-29 keeps those writes cardless
+#: THERE (one item, no bulk, no delete-all). That ruling is about an app's own
+#: button, not about a model tool: a chat turn that has just read an email or
+#: a page must not be able to put "move Thursday's appointment" on the
+#: calendar with nobody asked. This guard therefore exists BEFORE the tool,
+#: which is the point of a pre-emptive guard - the day a `calendar_write` tool
+#: is added, the rule is already in force, and `test_tainted_tool_gates.py`
+#: fails if that tool is added without being covered here.
+CALENDAR_WRITE_TOOLS = frozenset({
+    # The names a chat calendar-write tool is likely to have (the routes it
+    # would sit on: add/create/write, edit/update, delete/remove, act).
+    "calendar_add", "calendar_create", "calendar_write", "calendar_act",
+    "calendar_edit", "calendar_update", "calendar_delete", "calendar_remove",
+    # The gate's own action names for the same writes (jarvis-framework.toml's
+    # [autonomy.tiers]); a tool may be looked up under one of these.
+    "edit_calendar_event", "delete_calendar_event", "google_calendar_write"})
+
+#: Everything that waits for a person in a turn outside text shaped. The note
+#: writers above, plus the calendar writes (Gap 3) - one set, so a calendar
+#: write goes through exactly the same rule (`note_needs_a_person`, the
+#: NOTE_AFTER_OUTSIDE_ACTION swap, the nobody-asked refusal) as a note does.
+NOTE_WRITES = NOTE_WRITES | CALENDAR_WRITE_TOOLS
+
 #: The gate action a note write is asked under after outside text. Read out
 #: by the approval notice as "Jarvis wants to write notes after outside text".
 NOTE_AFTER_OUTSIDE_ACTION = "write_notes_after_outside_text"
@@ -3593,6 +3682,131 @@ def _lockdown_on() -> bool:
         return bool(jarvis_asks_first.lockdown_on())
     except Exception:
         return True
+
+
+#: Gap 1 (Gemini's S-2, 2026-10-30): fetching a URL, in a turn shaped by
+#: outside text, that the OWNER did not name.
+#:
+#: `web_search` already has this rule (`web_search_card_lines`, WEB_SEARCH_READ
+#: above): when this turn read outside text - or the conversation is tainted,
+#: or saved memories were recalled - the search is put to a card that says so,
+#: because the words sent out could have come from a page rather than from the
+#: owner. The page fetchers had no equivalent: `read_web_page` and the headless
+#: browser always ask a card (both are in NEEDS_A_PERSON), but the card did not
+#: say WHY when the address was the model's own choice - a page that says
+#: "now read https://..." produced exactly the same card as an address the
+#: owner typed, and a person approving it cannot see the difference. A page
+#: choosing which URL this PC contacts is a real capability: the request goes
+#: out from this PC's own address, cannot be taken back, and tells that site
+#: the PC is here.
+#:
+#: The rule, in web_search's own terms: if this turn read outside text (a
+#: reading tool ran, or the conversation is tainted), or saved memories were
+#: recalled, and the address is NOT literally in the owner's own words, the
+#: fetch asks on a card FIRST and the card says why. `read_web_page` is asked
+#: under URL_FETCH_AFTER_OUTSIDE_ACTION when its own tier would not ask (so a
+#: loosened `read_web_page` tier cannot skip the card); the browser keeps
+#: `control_browser`, which is already "ask".
+#:
+#: WHAT IS NOT CHANGED, deliberately: a turn nothing outside shaped, and an
+#: address the owner typed themselves, are exactly as before - the tool's own
+#: tier, its own card, no extra line. That is the same line web_search draws
+#: (a search that comes straight from the owner's own question still needs no
+#: card unless a saved fact is sensitive or repeated).
+URL_FETCH_READ = ("Jarvis read outside text in this conversation (an email, a file, a note, a "
+                  "web page or another tool's answer), and this address is not one you gave "
+                  "it, so it asks before fetching a page it chose itself.")
+URL_FETCH_MEMORY = ("Jarvis recalled saved memories for this question and this address is "
+                    "not one you gave it, so it asks before fetching a page it chose itself "
+                    "- something private could be in the address.")
+URL_FETCH_NOT_TYPED = ("Your newest message {how}, and this address is not one you typed, so "
+                       "Jarvis asks before fetching a page it chose itself.")
+URL_FETCH_APP = ("The app sent extra text with your message (for example the clipboard), and "
+                 "this address is not one you typed, so Jarvis asks before fetching a page "
+                 "it chose itself.")
+URL_FETCH_LOCKDOWN = ("Lockdown is on, so Jarvis asks before fetching any web page until you "
+                      "turn it off.")
+
+#: The gate action a page fetch is asked under when its own tier would let it
+#: run without a card and the turn was shaped by outside text (Gap 1). The
+#: same action `read_web_page` already uses every other time - one card per
+#: address, the address in full - so nothing about the card changes except
+#: WHEN it is raised and what it says shaped it.
+URL_FETCH_AFTER_OUTSIDE_ACTION = "read_web_page"
+
+
+def _urls_in_words(url) -> str:
+    """The one address form to compare with the owner's words: lower case, no
+    scheme, no "www.", no trailing slash. A person types "example.com/a" and a
+    model writes "https://example.com/a" for the same page, and that must not
+    be the difference between "you asked for this" and "it chose this"."""
+    text = str(url or "").strip().lower()
+    text = re.sub(r"^https?://", "", text)
+    text = re.sub(r"^www\.", "", text)
+    return text.rstrip("/")
+
+
+def _url_in_owner_words(watch, url) -> bool:
+    """Is this address literally in the owner's own typed or said words?"""
+    key = _urls_in_words(url)
+    if not key:
+        return False
+    words = getattr(watch, "owner_words", "") or ""
+    return bool(words) and key in words
+
+
+def url_fetch_card_lines(watch, urls) -> list:
+    """The reasons a page fetch asks first, in `web_search_card_lines`' own
+    shape; [] when it goes by its ordinary tier (Gap 1, see URL_FETCH_*).
+
+    `urls`: every address this call would contact - for `read_web_page` the
+    one address on its plan; for the browser, the pages its steps navigate to
+    and were planned against. ANY address that is not in the owner's own words
+    counts: a plan that starts on the page you named and then follows a link
+    is how a page chooses the next URL.
+    """
+    novel = []
+    for url in urls or []:
+        if isinstance(url, str) and url.strip() and not _url_in_owner_words(watch, url):
+            if url.strip() not in novel:
+                novel.append(url.strip())
+    if not novel:
+        return []
+    lines = []
+    if watch.read or watch.tainted:
+        lines.append(URL_FETCH_READ)
+    if watch.memory:
+        lines.append(URL_FETCH_MEMORY)
+    if watch.provenance:
+        lines.append(URL_FETCH_NOT_TYPED.format(how=_NOT_OWN_WORDS[watch.provenance]))
+    if watch.app_context:
+        lines.append(URL_FETCH_APP)
+    if _lockdown_on():
+        lines.append(URL_FETCH_LOCKDOWN)
+    return lines
+
+
+def fetched_urls(name: str, state) -> list:
+    """Every address one page-fetch call would contact, from its prepared plan
+    (`state`) - never from the model's raw arguments, so the check sees the
+    same address the card does. [] for any other tool."""
+    if name == "read_web_page":
+        url = getattr(state, "url", "")
+        return [url] if isinstance(url, str) and url.strip() else []
+    if name != "browser_control":
+        return []
+    out = []
+    for st in getattr(state, "steps", []) or []:
+        # A navigate step's destination is `value` (see browser_card_lines);
+        # every other step runs on the page it was planned against (`url`).
+        if getattr(st, "action", "") == "navigate":
+            value = getattr(st, "value", None)
+            if isinstance(value, str) and value.strip() and value.strip() not in out:
+                out.append(value.strip())
+        page = getattr(st, "url", "")
+        if isinstance(page, str) and page.strip() and page.strip() not in out:
+            out.append(page.strip())
+    return out
 
 
 #: The chat route's quoted block of recalled facts (auto-learn.patch,
@@ -5466,6 +5680,51 @@ def strip_chat_markers(text: str) -> str:
     return text
 
 
+def _scan_limit() -> int:
+    """How much of ONE string the scanners actually look at: jarvis_injection's
+    own documented `SCAN_LIMIT` (200,000), or that number when the module is
+    not here. Read from the module rather than copied, so the two cannot drift
+    (the mistake `jarvis_browser_control._TRAP_SCAN_LIMIT` mirrors by hand)."""
+    try:
+        import jarvis_injection
+        return int(getattr(jarvis_injection, "SCAN_LIMIT", 200_000) or 200_000)
+    except Exception:
+        return 200_000
+
+
+def _model_slices(text: str) -> list:
+    """The parts of ONE tool-result string the model can be SENT, as slices.
+
+    Gap 4 (Gemini's S-2, 2026-10-30). `_tool_content` does not send a long
+    result's raw prefix: for every string longer than 2*keep+40 characters it
+    sends the FIRST `keep` characters and the LAST `keep` (`_KEEP_EACH_END`,
+    the head/tail shape from "Smarter answers"), with a plain marker between.
+    A command's output is cut the other way round - `_run_shell_exec` keeps
+    only its last 8,000 characters - and a page, a document part or a picture's
+    text each have their own cap. So "the start of the result" is not the same
+    thing as "what the model reads", and both scanners here are bounded by
+    `_MAX_SCAN_CHARS` (250,000) / `jarvis_injection.SCAN_LIMIT` (200,000),
+    which are themselves different numbers.
+
+    Hence TWO slices, each one the model can be handed: the start, and - only
+    when the string is longer than the scanner's own limit, so the tail cannot
+    already be inside the head - the end. The tail slice is the scanner's own
+    limit long, which is a superset of the `keep` characters (`<= 1500`) the
+    model actually reads at the end, and it stays bounded so this cannot become
+    unbounded work on a huge result.
+
+    Duplicate slices are dropped: a short string is scanned once, exactly as
+    before.
+    """
+    if not isinstance(text, str) or not text:
+        return []
+    head = text[:_MAX_SCAN_CHARS]
+    if len(text) <= _scan_limit():
+        return [head]
+    tail = text[-_scan_limit():]
+    return [head] if tail == head else [head, tail]
+
+
 def _vet_outside_text(name: str, text: str) -> str:
     """One string from a tool result, through the one pipeline for outside
     text - normalised, then assessed (security audit 2026-10-30, C1 + C2).
@@ -5485,6 +5744,17 @@ def _vet_outside_text(name: str, text: str) -> str:
     latch. The latch names the TOOL as its source (`tool:email_check`), never
     the tool's surrounding text.
 
+    THE TAIL IS ASSESSED TOO (Gap 4, Gemini's S-2). A result longer than the
+    scanner's own limit is not sent to the model as its first N characters -
+    `_tool_content` sends its start AND its end (see `_model_slices`) - so a
+    phrase planted past that limit is read by the model while nothing had
+    looked at it. When the string is longer than the limit and the first pass
+    found no rush, the END slice goes through the same pipeline: the rush
+    latch, the findings and the pin are exactly the same rules, on the text
+    the model can actually be handed. It is skipped when the first pass
+    already latched a rush, so one result is never counted as two ("2nd time
+    today") by having been scanned twice.
+
     Fail-closed, like the optional modules beside it. Without
     jarvis_content_risk the string comes back unchanged and the turn is still
     marked as a read - the caller does that before this runs, so the old
@@ -5499,13 +5769,25 @@ def _vet_outside_text(name: str, text: str) -> str:
         import jarvis_content_risk as cr
     except Exception:
         return text
+    rushed = False
     try:
-        return cr.vet_tool_result(name, text).get("text", text)
+        vetted = cr.vet_tool_result(name, text)
+        out = vetted.get("text", text)
+        rushed = bool(vetted.get("rushed"))
     except Exception:
         try:
-            return cr.normalise(text).text
+            out = cr.normalise(text).text
         except Exception:
             return text
+    # Gap 4: the END of a long result is a slice the model reads (see
+    # _model_slices). Assess it with the same pipeline, and drop the text it
+    # returns: the whole string was normalised above already.
+    try:
+        if isinstance(out, str) and len(out) > _scan_limit() and not rushed:
+            cr.vet_tool_result(name, out[-_scan_limit():])
+    except Exception:
+        pass
+    return out
 
 
 def _strings_in(obj, out: list, depth: int = 0) -> list:
@@ -6066,26 +6348,38 @@ class _TurnWatch:
             # hidden-goal case in test_injection_cases.py caught exactly that).
             # The model still gets the normalised copy; the scanner can see
             # both.
+            #
+            # Gap 4 (Gemini's S-2, 2026-10-30): BOTH slices the model can be
+            # sent, not only the start. `_model_slices` returns the start, and
+            # the end too when the string is longer than the scanner's own
+            # limit - and `jarvis_injection.scan` looks at a PREFIX only (its
+            # own docstring says so: "a planted instruction 300 KB into a file
+            # is not seen by this module at all"), while `_tool_content` sends
+            # the model a long text's first AND last characters. Without this,
+            # an instruction at the end of a huge result was read by the model
+            # and flagged by neither advisory scanner. The start is scanned
+            # exactly as before, so a short result costs the same as before.
             for raw_piece in raw_pieces:
-                for code, why in outside_flags(raw_piece).items():
-                    self.flags.setdefault(code, why)
-                # The "sneaky instruction" table (2026-10-06; the idea is
-                # OpenJarvis's 12-pattern scanner, Apache-2.0 - the patterns
-                # are ours, in jarvis_injection.py). ADVISORY ONLY: it adds a
-                # flag the card can show and nothing else - it never removes
-                # or replaces an approval card, never changes a gate tier and
-                # never blocks on its own. Off a try, like the checks beside
-                # it: a missing or older table must never break a turn.
-                try:
-                    import jarvis_injection
-                    # Normalised the same way outside_flags does it, so a
-                    # look-alike letter cannot get past this table (I4); the
-                    # table itself stays stdlib-only.
-                    line = jarvis_injection.summary(_plain_for_scan(raw_piece))
-                    if line:
-                        self.flags.setdefault("sneaky_instruction", line)
-                except Exception:
-                    pass
+                for wanted in _model_slices(raw_piece):
+                    for code, why in outside_flags(wanted).items():
+                        self.flags.setdefault(code, why)
+                    # The "sneaky instruction" table (2026-10-06; the idea is
+                    # OpenJarvis's 12-pattern scanner, Apache-2.0 - the patterns
+                    # are ours, in jarvis_injection.py). ADVISORY ONLY: it adds a
+                    # flag the card can show and nothing else - it never removes
+                    # or replaces an approval card, never changes a gate tier and
+                    # never blocks on its own. Off a try, like the checks beside
+                    # it: a missing or older table must never break a turn.
+                    try:
+                        import jarvis_injection
+                        # Normalised the same way outside_flags does it, so a
+                        # look-alike letter cannot get past this table (I4); the
+                        # table itself stays stdlib-only.
+                        line = jarvis_injection.summary(_plain_for_scan(wanted))
+                        if line:
+                            self.flags.setdefault("sneaky_instruction", line)
+                    except Exception:
+                        pass
             self._note_secrets(pieces)
             # "Where this came from" (I42): from `result` itself, before it
             # is cleaned - see jarvis_sources.py. Off a try, like the secret
@@ -11680,9 +11974,33 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     # A note write after outside text waits for a person (NOTE_WRITES): put
     # to the gate as NOTE_AFTER_OUTSIDE_ACTION when its own tier would not
     # ask. "never" stays "never", and "ask" asks anyway.
+    #
+    # `name in NOTE_WRITES` is the calendar writes too since Gap 3: a
+    # `calendar_write` tool, the day one exists, is treated exactly like a
+    # note write in a shaped turn (it is in the set, so this line and
+    # note_needs_a_person see it with no second rule).
     note_why = watch.note_needs_a_person() if name in NOTE_WRITES else ""
     if note_why and _tier_of(action_name) in ("auto", "notify"):
         action_name = NOTE_AFTER_OUTSIDE_ACTION
+    # Gap 2 (Gemini's S-2, 2026-10-30): a data-sandbox run in a turn outside
+    # text shaped asks, whatever the sandbox switch says. A pure calculation
+    # would otherwise run at the calculator's own "auto" with nobody asked.
+    #
+    # Asked under the sandbox's OWN ask action (SANDBOX_FILES_ACTION) - NOT
+    # "only when the current tier is auto": the gate knows some tiers the
+    # agent's `_tier_of` cannot see (jarvis_gate's `_SYNTH_TIERS` holds
+    # "calculator" -> "auto"), so asking about the CURRENT action's tier would
+    # read "ask" here while the gate answered "auto", and the run would be
+    # refused by the belt instead of put to a card. The swap is therefore
+    # unconditional in a shaped turn; a "never" on `sandbox_file_run` still
+    # means "never" (the gate refuses it, as for any action), and if that
+    # action is itself loosened to auto the belt below refuses the run.
+    sandbox_why = _sandbox_after_outside_why(watch) if name == SANDBOX_TOOL else ""
+    if sandbox_why:
+        action_name = SANDBOX_FILES_ACTION
+    # Gap 1 (Gemini's S-2, 2026-10-30): filled in once the plan is prepared,
+    # because the address checked is the one the CARD shows. "" until then.
+    url_why = ""
     # prepare() inside a try, like execute() below: a prepare-time raise - a
     # tool validating its own arguments, e.g. {"days_ahead": "seven"} - comes
     # back as a tool RESULT the model can read and retry from.
@@ -11767,6 +12085,26 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         top = browser_card_lines(state, watch)
         if top:
             plan_text = "\n".join(top) + "\n\n" + plan_text
+    if name == "read_web_page" or name == "browser_control":
+        # Gap 1 (Gemini's S-2, 2026-10-30): the same rule web_search already
+        # has, for a URL this PC is about to CONTACT. When outside text shaped
+        # this turn (or the conversation is tainted, or saved memories were
+        # recalled) and the address is not one the owner typed or said, the
+        # card says why, at the top, before anything is fetched. Both tools
+        # are in NEEDS_A_PERSON, so a card was always going to be raised -
+        # what was missing is that the card could not tell the owner the
+        # address was the MODEL's choice rather than theirs.
+        url_why = "\n".join(url_fetch_card_lines(watch, fetched_urls(name, state)))
+        if url_why:
+            plan_text = f"{url_why}\n\n{plan_text}"
+            # No action swap here, and that is deliberate: `read_web_page`'s
+            # own action IS the page's one card action (the constant below
+            # exists so that name is written once), and the browser's is
+            # `control_browser`, which must stay its own. The belt against a
+            # loosened tier is the refusal further down (NOBODY_ASKED_URL_WORDS)
+            # - both fetchers are in NEEDS_A_PERSON, which already stops a
+            # looser tier running them without a person, and that refusal is
+            # the second line for the day either leaves that set.
     if name == "tidy_inbox":
         # A plan that says why nothing could be done (nothing matches, too
         # many, not set up, the module missing): nothing to ask about, so no
@@ -11796,6 +12134,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     shaped = watch.shaped_by(args)
     if note_why:
         plan_text = f"{plan_text}\n\n{note_why}"
+    if sandbox_why:
+        plan_text = f"{plan_text}\n\n{sandbox_why}"
     if shaped:
         plan_text = f"{plan_text}\n\nWhat shaped this request:\n{shaped}"
     if _card_would_be_cut(name, action_name, plan_text):
@@ -11884,6 +12224,31 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         vaction = getattr(verdict, "action", None) or action_name
         result = {"ok": False,
                   "error": "refused: " + NOBODY_ASKED_NOTE_WORDS.format(
+                      name=name, action=vaction),
+                  "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
+    elif url_why and not _a_person_said_yes(verdict):
+        # Allowed, but nobody was asked - a page this PC would contact, in a
+        # turn outside text shaped, at an address the owner did not give
+        # (Gap 1). Both fetchers are in NEEDS_A_PERSON, so this is a BELT:
+        # if either ever leaves that set, a loosened tier still cannot fetch a
+        # page the model chose with nobody asked.
+        say_step("tool_refused", name)
+        vtier = getattr(verdict, "tier", None) or "unknown"
+        vaction = getattr(verdict, "action", None) or action_name
+        result = {"ok": False,
+                  "error": "refused: " + NOBODY_ASKED_URL_WORDS.format(
+                      name=name, action=vaction),
+                  "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
+    elif sandbox_why and not _a_person_said_yes(verdict):
+        # Allowed, but nobody was asked - a script in a turn outside text
+        # shaped (Gap 2). Also a BELT: the action was swapped to the sandbox's
+        # ask action above, and this catches the case where a config (or a
+        # future action row) let it through at a looser tier anyway.
+        say_step("tool_refused", name)
+        vtier = getattr(verdict, "tier", None) or "unknown"
+        vaction = getattr(verdict, "action", None) or action_name
+        result = {"ok": False,
+                  "error": "refused: " + NOBODY_ASKED_SANDBOX_WORDS.format(
                       name=name, action=vaction),
                   "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
     elif out.gone:
