@@ -2534,6 +2534,20 @@ $SHIPPED = @(
     # SHIPPED list.
     'jarvis_connect_account.py'
     'jarvis_connect_account_wiring.py'
+    # The app builder's last two steps (2026-10-30, the owner's question "can
+    # jarvis build android apps? that i can sideload into my phone?"): a fixed
+    # Android project written into one task's copy, then a Gradle build and an
+    # adb install, each behind its own risky card. Its routes come from its own
+    # install(), called by the drop-in folder plugins/ready/android-builder, so
+    # it adds no patch. The two files after it are Gradle's OWN wrapper script
+    # and wrapper jar, copied BYTE FOR BYTE from jarvis-client/ (Apache-2.0,
+    # credited in THIRD-PARTY-NOTICES.txt): they are what makes a build
+    # possible on a PC with no Gradle installed, which this one is (measured
+    # 2026-10-30). Every one of the three is at the end of backend/_where.py's
+    # SHIPPED list too, and in tools/gen_base_from_backend.py's BESIDE tables.
+    'jarvis_android_builder.py'
+    'jarvis-android-gradlew.bat'
+    'jarvis-android-wrapper.jar'
     # A file the owner ATTACHED to a chat (2026-10-29, the owner chose "both
     # apps at once"; the design is .dsh-scratch/FILE-UPLOAD-FEASIBILITY-2026-10-29/
     # REPORT.md): validation by kind, magic bytes and size, the never-read
@@ -2551,20 +2565,6 @@ $SHIPPED = @(
     # (already shipped above), so this adds no patch, no route, no gate list
     # and no tool. Standard library only, so requirements.lock does not move.
     'jarvis_parking.py'
-    # The app builder's last two steps (2026-10-30, the owner's question "can
-    # jarvis build android apps? that i can sideload into my phone?"): a fixed
-    # Android project written into one task's copy, then a Gradle build and an
-    # adb install, each behind its own risky card. Its routes come from its own
-    # install(), called by the drop-in folder plugins/ready/android-builder, so
-    # it adds no patch. The two files after it are Gradle's OWN wrapper script
-    # and wrapper jar, copied BYTE FOR BYTE from jarvis-client/ (Apache-2.0,
-    # credited in THIRD-PARTY-NOTICES.txt): they are what makes a build
-    # possible on a PC with no Gradle installed, which this one is (measured
-    # 2026-10-30). Every one of the three is at the end of backend/_where.py's
-    # SHIPPED list too, and in tools/gen_base_from_backend.py's BESIDE tables.
-    'jarvis_android_builder.py'
-    'jarvis-android-gradlew.bat'
-    'jarvis-android-wrapper.jar'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

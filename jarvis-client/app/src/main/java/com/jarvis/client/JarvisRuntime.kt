@@ -1138,6 +1138,13 @@ object JarvisRuntime {
                 .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
         }
+        // Notification styles (2026-10-30): read from the PC when the link
+        // comes or goes and after any change made here. The notifiers apply
+        // them from [notificationStyles] at post time, so the book has to be
+        // the PC's current one rather than whatever the last screen saw.
+        scope.launch {
+            combine(_link, _stylesTick) { _, _ -> }.collect { refreshNotificationStyles() }
+        }
         // The calendar widget (2026-10-29): the sixth, and the only one that
         // shows today's plan. Redrawn when the link comes or goes stale, when
         // the calendar changes here or on the PC ([calendarTick]), and when App
@@ -1157,14 +1164,6 @@ object JarvisRuntime {
             combine(_link, _stale, _calendarTick) { _, _, _ -> }
                 .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.CalendarWidget().updateAll(app) }
-        }
-
-        // Notification styles (2026-10-30): read from the PC when the link
-        // comes or goes and after any change made here. The notifiers apply
-        // them from [notificationStyles] at post time, so the book has to be
-        // the PC's current one rather than whatever the last screen saw.
-        scope.launch {
-            combine(_link, _stylesTick) { _, _ -> }.collect { refreshNotificationStyles() }
         }
         // "Reading phone notifications": turning it off is immediate, so
         // whenever the switch reads as off - pressed here, or learned from

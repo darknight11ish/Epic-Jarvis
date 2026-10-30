@@ -27941,183 +27941,196 @@ That was **not** run in this checkout (no live call is made by any test or by
 CI), so "the real services answer" is NOT-TESTABLE here and is the owner's
 field check.
 
-## 166. Calendar in the HUD: the card, three views, one form, its place in Edit HUD and its Settings switch (desktop, added 2026-10-30)
+## 166. Building an Android app from chat, and putting it on your phone (added 2026-10-30)
 
-**What this is, in the owner's words.** "a full fledged easy to use calendar
-built into Jarvis", local only, drawn in the HUD, **disableable in Settings**,
-and - the standing rule of 2026-10-22 - *addable to the main screen from Edit
-HUD*. §164 is the store and the four routes; §164's own phone half draws the
-phone's plate and widget. **This section is the DESKTOP half**: the HUD's
-Calendar card, its month/week/day sheet, its one Add/Edit form, its row in the
-Edit HUD editor, and the Settings switch that turns the whole thing off. No
-route is added by any of it - every read and write here is one of §164.3's
-five.
+**Why this section number.** The last section on `main` when this was written
+was 162, and four in-flight branches had already claimed 163-167 (the numbers
+are named in this branch's brief as off-limits). **166 is the next free
+number**, and this section is appended at the very END of the file so a
+conflict here is two appends and both sides are kept (`CLAUDE.md`, "Appending
+to a shared file").
 
-**This section number.** §164 is the backend slice's contract and §165 the
-parking answer; the calendar's own desktop slice was written while 166 was
-free, and it sits here in numeric order rather than at the end of the file.
-Nothing else was renumbered.
+**The owner's question (2026-10-30):** *"can jarvis build android apps? that
+i can sideload into my phone? if not add them"*. The answer before this
+section was **no**: milestones C (run a command), F (native Android projects)
+and G (install the debug APK) of `docs/APP-BUILDER-DESIGN.md` were unbuilt,
+and nothing in the backend had ever started a program that was not git.
 
-### 166.1 What the owner sees
+**What is built.** The narrowest full path from a chat description to an app
+on the phone, in three steps, of which TWO COST A CARD:
 
-One **rail card** (`#rail-calendar`, directly above the Reminders card) and one
-**full sheet** (`#calendar-panel`, over the stage, dismissed by Escape, its
-Close button, or a click outside - the same shape as `#galaxy-options`). Both
-draw from the SAME `GET /api/calendar?days=90` read, so the card and the sheet
-can never disagree about the owner's day.
+The four routes, exactly as they are answered:
 
-- The card says what is next: today's clock and zone, then up to four events
-  that have not already ended, each with its time (or "All day"), its title, a
-  "Now" marker for the one happening, and a "+N more in the next 7 days" line.
-  Its window is seven days **on purpose** - the sentence it shows is "in the
-  next 7 days", so the count is of that same window, never of everything.
-- The sheet has three views, switched by a `role="tab"` strip and stored in
-  `html[data-cal-view]`: **Month** (always six full weeks, Sunday first, so the
-  height never jumps; a multi-day event is ONE bar clipped to the week, with
-  lanes so two never overlap), **Week** (the seven columns around the chosen
-  day, the same bars), and **Day** (an hour-free list in time order - no hour
-  grid is faked). Arrow keys move the chosen day; every view names an empty day
-  in words rather than showing a blank.
-- **One form**, used for both Add and Edit: title, date, all-day, start and end
-  time, last day, place, notes, reminder minutes and the repeat choice. Delete
-  is in the same form, asks "press again to delete" first because a delete
-  cannot be undone, and is hidden until an event is being edited.
-- **Every state is a sentence**, never a blank: OFF, an empty window, a day
-  with nothing on it, a read that failed (with the PC's own reason where it
-  gave one), and the App-lock read ("titles, places and notes are hidden; the
-  dates, times and counts are still right"). A card that vanishes reads as a
-  fault, so the OFF card keeps its place and says so.
+``text
+GET  /api/projects/<id>/app/tasks/<task>/android
+POST /api/projects/<id>/app/tasks/<task>/android/template
+POST /api/projects/<id>/app/tasks/<task>/android/build
+POST /api/projects/<id>/app/tasks/<task>/android/install
+``
 
-### 166.2 The page itself, and what the twins are
+| Step | Route | Card | Tier |
+|---|---|---|---|
+| Write the fixed project | `POST /api/projects/<id>/app/tasks/<task>/android/template` | **none** | - |
+| Build it | `POST …/android/build` | **one** (`app_build_android`) | `ask` |
+| Put it on the phone | `POST …/android/install` | **one** (`app_install_android`) | `ask` |
+| See where it stands | `GET …/android` | none | - |
 
-The calendar's script is one block INSIDE `jarvis-desktop/src/jarvis_hud.html`
-(the heading `/* ── the calendar (2026-10-29) ──`), not a module: the page is
-vendored to the backend and must stay byte-identical in its three copies
-(`backend/jarvis_hud.html` and `jarvis-backend/jarvis_hud.html`), which
-`tests/hud-calendar.mjs` proves. Its test hook is `window.__hudCalendar`, and
-`tests/hud-calendar.mjs` takes that block out of the real page and runs it
-against a tiny fake document - the real logic, with no browser.
+All three POSTs are **PC only** (`403 pc_only`, `pc_only: true`): the Android
+SDK and the phone's cable are on this machine. The CARDS are not PC-only -
+either device may approve one, so the owner can say yes from the sofa while
+the PC does the work - and both are **risky** (`jarvis_gate._RISK`: reversible
+"no"), so they ask for Windows Hello on the PC and the screen lock on the
+phone, and a denial never becomes a standing rule
+(`jarvis_gate._NO_RULE_FROM_DENIAL`).
 
-### 166.3 The read, and the lock
+### 166.1 The template: what Jarvis writes, and what it will not take from a model
 
-`GET /api/calendar?days=N` is the ONE read, on `hud_proxy.rs`'s fixed
-`HUD_GET_PATHS` list. It is also the only path on that list that carries a
-query, so `allowed_get` accepts exactly `days=` 1-90 with no sign, no padding
-zero, no second parameter, and rebuilds the path from the number it checked -
-what reaches the PC is never the page's own string. `/api/calendar/add`,
-`/api/calendar/act` and `/api/calendar/settings` are **refused** here: the
-writes are the two commands below.
+The project is FIXED. It is strings inside `backend/jarvis_android_builder.py`,
+and the only pieces that vary are **validated values**:
 
-While App lock or "Hide memory lists" is on, `lock/rules.rs` runs the answer
-through `brain::calendar::redact_read`: every event keeps its id, date, times,
-all-day flag, reminder minutes, recurrence, zone and source, while the title,
-place and notes become `""`, and `hidden`/`hidden_count` say how many titles
-were blanked - so the card can still say "3 events - hidden" and the sheet can
-still draw the shape of the week. A body that is not JSON becomes
-`{available:false, hidden:true}` rather than the unreadable original.
+| Varies | Validation |
+|---|---|
+| The app's package | derived from the app folder's name, `^[a-z][a-z0-9_]{0,39}$`, always under `com.jarvis.made.` |
+| The app's name (the label on the phone) | `^[A-Za-z0-9 .,!?():+-]{1,40}$` - no quotes, because an Android string resource treats `'` as a delimiter and a stray one is a BUILD error |
+| Two colours | `#rrggbb` |
+| `assets/index.html`, `assets/app.js`, `assets/app.css` | a CLOSED list of three names; text; at most 96 KB each |
 
-### 166.4 The two writes
+Everything else is written by Jarvis: `settings.gradle.kts`,
+`build.gradle.kts`, `gradle.properties`,
+`gradle/wrapper/gradle-wrapper.properties`, `app/build.gradle.kts`,
+`AndroidManifest.xml`, `MainActivity.kt`, `strings.xml`, `colors.xml`,
+`themes.xml`, and the two Gradle wrapper files (Gradle's own: the jar is byte for byte `jarvis-client`'s, and the batch file is the same file with the CRLF endings cmd.exe needs put back on the way, because this repository stores text as LF). A request
+that names any other file - or hides a path in an asset's name - is refused
+with a sentence, never resolved.
 
-`hud_calendar_add` and `hud_calendar_act` (`src-tauri/src/hud_calendar.rs`) are
-the page's only way to write: the HUD holds no token, so the page cannot POST.
-Both are **held on a stale link** (`brain::require_link_live`), and both build
-their body in `brain/calendar.rs`, which is the one place the shape is decided:
+**The template's properties, all measured on 2026-10-30** (a real build of
+exactly this project; `docs/APP-BUILDER-DESIGN.md` and the scratch note
+`.dsh-scratch/ANDROID-APP-BUILDER-2026-10-30.md` carry the numbers):
 
-- `add_body`: one event, title required and capped at 300 characters, a real
-  `YYYY-MM-DD` day, `HH:MM` times, an end that cannot be before the start, an
-  all-day tick that drops the times, place ≤300, notes ≤2,000, a reminder
-  0-10,080 minutes, and a repeat word from the store's own three plus "none".
-  An empty optional box is simply not sent.
-- `act_body`: exactly two verbs, `delete` or `update` (with the same fields),
-  one id of the store's own shape (`c` + 10 lowercase hex). There is no list
-  form, no delete-all and no clear-range - the same narrowness
-  `/api/schedule/act` has - and a delete that carries fields is refused.
+* Gradle **9.6.0**, with `distributionSha256Sum` set, so a tampered download
+  is refused rather than run; Android Gradle plugin **9.4.0**; `compileSdk`
+  36, `minSdk` 33, `targetSdk` 36 - the same toolchain `jarvis-client` builds
+  with, so the PC has ONE set of numbers to trust.
+* **No dependencies at all** - no AndroidX, no Compose - so a first build
+  fetches a toolchain and not a dependency graph.
+* **No permissions at all.** The manifest declares no `<uses-permission>`, not
+  even `INTERNET`, and `MainActivity` sets `allowFileAccess = false`,
+  `allowContentAccess = false` and refuses EVERY navigation. The app cannot
+  reach the internet, cannot read the phone's files and cannot call Jarvis's
+  own routes - proved from the built APK with `aapt2 dump badging`, which
+  shows no permission line.
+* Debug only. No release signing, no shrinking, never the Play Store (rule 5).
 
-**No approval card, for either** - the owner's 2026-10-29 ruling (decision D1 of
-the design brief): one row on this PC, no bulk form, ids-only in the audit line.
-The other direction of the same ruling: **the switch is not a HUD write**. The
-page only READS the PC's `on` flag and says the feature is off in words;
-`capabilities/hud.json` records why the switch is not that window's.
+### 166.2 `POST /api/projects/<id>/app/tasks/<task>/android/template`
 
-### 166.5 Its place in Edit HUD, and the Settings row
+Body: `{"title"?: str, "background"?: "#rrggbb", "accent"?: "#rrggbb",
+"assets"?: {"index.html"?: str, "app.js"?: str, "app.css"?: str}}`. Every
+field is optional: with none, the app is called its own project title, uses
+two defaults, and gets a **working** page, which is what makes a first build
+possible without a single model call.
 
-- **Edit HUD.** The calendar is a real registry card: `CARD_REGISTRY`'s
-  `"calendar"` row (label "Calendar", `right_rail`, `col_span` 12, ordered above
-  the waiting cards, not protected), `MOVABLE_IDS`, and `CARD_DOM.calendar ->
-  ["#rail-calendar"]`. Every built-in preset in `src/hud-layout.js` carries it,
-  and `contract/hud-presets.json` mirrors them. The half that makes it true for
-  the OWNER rather than only for a fresh install is `withRegistryCards` in
-  `src/hud-edit.js`: a saved layout is a CLOSED list, so a card a later release
-  adds is both invisible and unaddable unless it is put back - that function
-  re-adds any movable card the document does not name, at its registry
-  defaults, **in memory** (opening the HUD is not an edit; the first real change
-  saves the document that by then carries it), and it never un-hides a card the
-  owner hid himself.
-- **Settings.** `settings.html`'s "Jarvis Calendar" card
-  (`src/calendar-settings.js`) draws the ONE switch: `{"on": true|false}` on
-  `POST /api/calendar/settings`, the same route and the same value the phone's
-  `CalendarSettingsPlate.kt` row and the typed sentence "turn off the Jarvis
-  calendar" reach. On the desktop it goes through the `calendar_settings`
-  command (`src-tauri/src/calendar_settings.rs`), which reads the switch from
-  `GET /api/calendar?days=1`'s `on` (there is no GET settings route) and
-  **drops every event, title, place and count in Rust** - the Settings window
-  draws one row and cannot read the owner's day. No card either way, immediate,
-  never held on a stale link (the same class as the Anti-Slop filter), and
-  **OFF never deletes an event**.
-- The row it used to have in `jarvis_feature_guide.SETTINGS_GAPS` (a typed
-  switch with no page to draw it) is **closed and removed**: both Settings
-  halves exist now, and `contract/feature-controls.json`'s `jarvis-calendar` row
-  moved from `planned` to `enforced` with a real desktop and phone location.
+* **200** `{"ok": true, "template": {"ok", "files", "package", "title"},
+  "status": {…168.4…}}`
+* **400** a plain sentence: not an Android project, a title with a quote in
+  it, a colour that is not `#rrggbb`, a fourth web file, one larger than
+  96 KB, one that is not text, or a task that already has a project (a second
+  write is refused, never a silent overwrite).
+* **403** `pc_only` from the phone.
+* **404** no such project, not an app project, no such task.
 
-Both apps have every one of these surfaces, so `tools/check_parity.py`
-classifies the four calendar routes `ported` and there is **nothing one-sided
-to record in `docs/ARCHITECTURE.md` §8** for this feature. The one difference
-that stays is a shape, not a missing half: the desktop draws a month/week/day
-sheet in its own window and the phone draws its own plate and home-screen
-widget, from the same read.
+No card: the files land only in that task's own copy, and nothing runs them
+(`docs/APP-BUILDER-DESIGN.md`, "Write files in a task's copy: no card").
 
-### 166.6 Failing closed
+### 166.3 `POST /api/projects/<id>/app/tasks/<task>/android/build`
 
-A shape neither app understands must never be drawn as a real calendar, and
-this bit was wrong before it shipped (2026-10-30):
+Raises **ONE** card, `app_build_android`, and answers `202`:
+`{"ok": true, "waiting": true, "card": "app_build_android", "command":
+"<task copy>\gradlew.bat assembleDebug", "message": …}`.
 
-- The page's `readCalendar` used to treat every object as a calendar unless it
-  said `available: false`. So `?id=`'s answer `{"ok":true,"event":{...}}`, a
-  bare event, and an empty body all became **"an available calendar with no
-  events"** - drawn as *"Nothing in the next 7 days"*, the most reassuring
-  possible lie about the owner's own day. It now requires a real boolean
-  `available` AND, when true, an `events` array; anything else is refused in
-  words ("answered in a shape this window does not understand ... your events
-  are kept on the PC") and draws nothing.
-- The two write handlers used to test `reply.ok === false`, so an answer with no
-  `ok` at all - an empty body, an older backend - was reported as **"Event
-  added."** over a write that may never have happened. They now require
-  `ok: true` positively.
-- The Settings command applies the same rule in Rust: an answer that does not
-  carry `on` as a real boolean is an error, never "off" and never "on".
+The card's own words carry: the exact command, the exact folder, the SDK and
+JDK paths it found, that **the FIRST build downloads the Gradle distribution
+(~130 MB) and the Android Gradle plugin** from `services.gradle.org`,
+`dl.google.com` and `repo.maven.apache.org` with **nothing of the owner's
+sent**, and the APK path it will produce.
 
-### 166.7 What is proven, and what is not
+A yes runs **exactly** `[<task copy>\gradlew.bat, "assembleDebug"]` with
+`cwd` = the task's copy:
 
-- `jarvis-desktop/tests/hud-calendar.mjs`: **33 checks, browser-free** (it runs
-  the page's own block against a fake document). Every state in words; the
-  three views; the bars and their lanes; the form's exact argument objects for
-  both commands; the one allowed read and its bounded query; the redaction arm;
-  the registry card, `MOVABLE_IDS`, `CARD_DOM`, every preset and the contract;
-  a saved layout getting the card back; the three copies byte-identical; and
-  the two fail-closed checks above.
-- Rust, beside the code: `brain/calendar.rs` (10 tests - the exact bodies, the
-  caps, the refusals, the redaction, and no network of its own),
-  `hud_calendar.rs` (2 - the form is the contract, one change is one event and
-  two verbs) and `calendar_settings.rs` (5 - one field per request, the read is
-  the switch and never an event, an answer without `on` is an error).
-  `lock/rules.rs`'s own test names `/api/calendar` in the redaction arm.
-- `backend/test_local_calendar.py` is §164's 88 checks; `tools/check_parity.py`
-  must print "No undecided drift." with the four rows `ported`.
-- **NOT proven here:** the real WebView2 window. This desk has no Playwright
-  (the page-level `tests/hud.mjs` and `tests/shots.mjs` cannot run), so a
-  rebuilt and installed desktop is the field check, and the geometry of the
-  sheet in the real window is the owner's eye rather than a test.
+* the environment is `jarvis_child_env.inherited()` - the same allowlist every
+  child program gets, never a token, key or password - plus `ANDROID_HOME`,
+  `ANDROID_SDK_ROOT`, `JAVA_HOME`, and `GRADLE_OPTS=-Dorg.gradle.daemon=false`
+  so no Gradle process outlives the card;
+* the time limit is 25 minutes, and the output goes to a FILE
+  (`build/jarvis-build.log`, gitignored) with only its END kept, because a cap
+  applied after reading megabytes into memory is not a cap;
+* success requires `exit 0` **and** that the APK exists. Exit 0 without an
+  APK is a failure.
 
+Refusals: **400** (no project yet, no Android project), **409** a card for
+this task is already waiting, **503** the settings file has the action at a
+tier other than `ask` (naming the line), or the PC is missing the SDK, the
+JDK or the wrapper files (the sentence names what to install).
+
+### 166.4 `POST /api/projects/<id>/app/tasks/<task>/android/install`
+
+Raises **ONE** card, `app_install_android`, answering `202` with the command
+in the body. The card names the exact `adb install -r <apk>`, the file, its
+size, that it is a **SIDELOAD** and never the Play Store, and that Jarvis has
+no uninstall - so what it installs stays until the owner removes it.
+
+A yes runs **exactly** `[<sdk>\platform-tools\adb.exe, "install", "-r",
+<the apk>]`:
+
+* adb is called by **full path** (it is not on PATH on this PC, measured);
+* the APK must be a real file **inside the task's own copy**, at the one path
+  the build writes, ending `.apk`, and not empty - anything else is refused;
+* there is **no** `shell`, `uninstall`, `push`, `pull`, `exec-out` or `-s
+  <serial>` anywhere in the module: a source scan in
+  `backend/test_android_builder.py` fails the suite if one is added;
+* the time limit is 3 minutes.
+
+### 166.5 `GET /api/projects/<id>/app/tasks/<task>/android`
+
+`{"ok", "app", "task", "template": bool, "toolchain": {"sdk", "java", "adb",
+"missing"}, "build": {"ready", "refused", "command"}, "install": {"ready",
+"refused", "command"}, "apk": {"path", "bytes"}, "waiting": "build"|"install"|
+null, "last": {"kind", "outcome", "message", "at"}}`. No secrets and no file
+contents; the two `command` strings are what a card WOULD run, so the owner
+can see the plan before any card exists.
+
+### 166.6 What this deliberately does not do
+
+No `npm`, no Capacitor, no release signing, no keystore of the owner's, no
+Play Store, no `adb shell`, no device management, no arbitrary command - the
+Gradle task name and both commands are module constants - and no model call.
+Nothing is installed before a build has made the file. The card state is in
+memory: a backend restart drops a waiting card and the task simply stays, so
+it can be built again.
+
+**The two apps.** Neither has a screen for this: the routes are PC only, the
+cards arrive in the card list BOTH apps already draw, and `ARCHITECTURE.md`
+section 8 says why the phone has no build button (the SDK and the cable are
+not on it).
+
+**Wiring.** No patch: the routes come from `jarvis_android_builder.install()`,
+called by the drop-in folder `plugins/ready/android-builder`. The gate rows
+are in `jarvis-backend/jarvis_gate.py`, the tier lines in
+`backend/rebuilt/jarvis-framework.toml`, and the two Gradle wrapper files are
+carried as beside-files (`backend/jarvis-android-gradlew.bat`,
+`backend/jarvis-android-wrapper.jar`, Apache-2.0, credited in
+`THIRD-PARTY-NOTICES.txt`).
+
+**Tests.** `backend/test_android_builder.py`: the template writes every file
+with no placeholder left, the wrapper files are jarvis-client's own (the jar byte for byte, the batch file line endings aside, and the GENERATED batch file CRLF); the manifest declares no permission; every bad name,
+colour, title, asset and path is refused; the build command is exactly
+`<task copy>/gradlew.bat assembleDebug` in exactly the task copy and a
+tampered argv runs nothing; no yes means no run, and a stale-stream gate
+answer runs nothing; the environment holds no token, key or password; the
+install accepts only the APK inside the copy and no other adb form exists; the
+gate rows, tier lines and drop-in folder are all in place, and that the module's own install() wraps a Handler, answers its own routes and lets every other request through untouched. **No test runs a
+real Gradle build or a real adb install** - a CI runner has no Android SDK and
+no phone. The build in section 166.1 was a manual measurement on the owner's
+PC, reported as such.
 ## 167. Notification styles: a closed look for the phone's notifications, described by talking (phone and backend, added 2026-10-30)
 
 The owner asked, 2026-10-30: *"does jarvis android have custom animated notifications? if not can you
@@ -28220,193 +28233,181 @@ that the flipper's `autoStart` stays a layout attribute because `setAutoStart` i
 proven is that every View used is on the allow-list, that the animation is one SystemUI performs, that
 the app compiles and the JVM tests pass.
 
-## 168. Building an Android app from chat, and putting it on your phone (added 2026-10-30)
 
-**Why this section number.** The last section on `main` when this was written
-was 162, and four in-flight branches had already claimed 163-167 (the numbers
-are named in this branch's brief as off-limits). **168 is the next free
-number**, and this section is appended at the very END of the file so a
-conflict here is two appends and both sides are kept (`CLAUDE.md`, "Appending
-to a shared file").
+## 168. Calendar in the HUD: the card, three views, one form, its place in Edit HUD and its Settings switch (desktop, added 2026-10-30)
 
-**The owner's question (2026-10-30):** *"can jarvis build android apps? that
-i can sideload into my phone? if not add them"*. The answer before this
-section was **no**: milestones C (run a command), F (native Android projects)
-and G (install the debug APK) of `docs/APP-BUILDER-DESIGN.md` were unbuilt,
-and nothing in the backend had ever started a program that was not git.
+**What this is, in the owner's words.** "a full fledged easy to use calendar
+built into Jarvis", local only, drawn in the HUD, **disableable in Settings**,
+and - the standing rule of 2026-10-22 - *addable to the main screen from Edit
+HUD*. §164 is the store and the four routes; §164's own phone half draws the
+phone's plate and widget. **This section is the DESKTOP half**: the HUD's
+Calendar card, its month/week/day sheet, its one Add/Edit form, its row in the
+Edit HUD editor, and the Settings switch that turns the whole thing off. No
+route is added by any of it - every read and write here is one of §164.3's
+five.
 
-**What is built.** The narrowest full path from a chat description to an app
-on the phone, in three steps, of which TWO COST A CARD:
+**This section number.** §164 is the backend slice's contract and §165 the
+parking answer; the calendar's own desktop slice was written while 166 was
+free, and it sits here in numeric order rather than at the end of the file.
+Nothing else was renumbered.
 
-The four routes, exactly as they are answered:
+### 168.1 What the owner sees
 
-``text
-GET  /api/projects/<id>/app/tasks/<task>/android
-POST /api/projects/<id>/app/tasks/<task>/android/template
-POST /api/projects/<id>/app/tasks/<task>/android/build
-POST /api/projects/<id>/app/tasks/<task>/android/install
-``
+One **rail card** (`#rail-calendar`, directly above the Reminders card) and one
+**full sheet** (`#calendar-panel`, over the stage, dismissed by Escape, its
+Close button, or a click outside - the same shape as `#galaxy-options`). Both
+draw from the SAME `GET /api/calendar?days=90` read, so the card and the sheet
+can never disagree about the owner's day.
 
-| Step | Route | Card | Tier |
-|---|---|---|---|
-| Write the fixed project | `POST /api/projects/<id>/app/tasks/<task>/android/template` | **none** | - |
-| Build it | `POST …/android/build` | **one** (`app_build_android`) | `ask` |
-| Put it on the phone | `POST …/android/install` | **one** (`app_install_android`) | `ask` |
-| See where it stands | `GET …/android` | none | - |
+- The card says what is next: today's clock and zone, then up to four events
+  that have not already ended, each with its time (or "All day"), its title, a
+  "Now" marker for the one happening, and a "+N more in the next 7 days" line.
+  Its window is seven days **on purpose** - the sentence it shows is "in the
+  next 7 days", so the count is of that same window, never of everything.
+- The sheet has three views, switched by a `role="tab"` strip and stored in
+  `html[data-cal-view]`: **Month** (always six full weeks, Sunday first, so the
+  height never jumps; a multi-day event is ONE bar clipped to the week, with
+  lanes so two never overlap), **Week** (the seven columns around the chosen
+  day, the same bars), and **Day** (an hour-free list in time order - no hour
+  grid is faked). Arrow keys move the chosen day; every view names an empty day
+  in words rather than showing a blank.
+- **One form**, used for both Add and Edit: title, date, all-day, start and end
+  time, last day, place, notes, reminder minutes and the repeat choice. Delete
+  is in the same form, asks "press again to delete" first because a delete
+  cannot be undone, and is hidden until an event is being edited.
+- **Every state is a sentence**, never a blank: OFF, an empty window, a day
+  with nothing on it, a read that failed (with the PC's own reason where it
+  gave one), and the App-lock read ("titles, places and notes are hidden; the
+  dates, times and counts are still right"). A card that vanishes reads as a
+  fault, so the OFF card keeps its place and says so.
 
-All three POSTs are **PC only** (`403 pc_only`, `pc_only: true`): the Android
-SDK and the phone's cable are on this machine. The CARDS are not PC-only -
-either device may approve one, so the owner can say yes from the sofa while
-the PC does the work - and both are **risky** (`jarvis_gate._RISK`: reversible
-"no"), so they ask for Windows Hello on the PC and the screen lock on the
-phone, and a denial never becomes a standing rule
-(`jarvis_gate._NO_RULE_FROM_DENIAL`).
+### 168.2 The page itself, and what the twins are
 
-### 168.1 The template: what Jarvis writes, and what it will not take from a model
+The calendar's script is one block INSIDE `jarvis-desktop/src/jarvis_hud.html`
+(the heading `/* ── the calendar (2026-10-29) ──`), not a module: the page is
+vendored to the backend and must stay byte-identical in its three copies
+(`backend/jarvis_hud.html` and `jarvis-backend/jarvis_hud.html`), which
+`tests/hud-calendar.mjs` proves. Its test hook is `window.__hudCalendar`, and
+`tests/hud-calendar.mjs` takes that block out of the real page and runs it
+against a tiny fake document - the real logic, with no browser.
 
-The project is FIXED. It is strings inside `backend/jarvis_android_builder.py`,
-and the only pieces that vary are **validated values**:
+### 168.3 The read, and the lock
 
-| Varies | Validation |
-|---|---|
-| The app's package | derived from the app folder's name, `^[a-z][a-z0-9_]{0,39}$`, always under `com.jarvis.made.` |
-| The app's name (the label on the phone) | `^[A-Za-z0-9 .,!?():+-]{1,40}$` - no quotes, because an Android string resource treats `'` as a delimiter and a stray one is a BUILD error |
-| Two colours | `#rrggbb` |
-| `assets/index.html`, `assets/app.js`, `assets/app.css` | a CLOSED list of three names; text; at most 96 KB each |
+`GET /api/calendar?days=N` is the ONE read, on `hud_proxy.rs`'s fixed
+`HUD_GET_PATHS` list. It is also the only path on that list that carries a
+query, so `allowed_get` accepts exactly `days=` 1-90 with no sign, no padding
+zero, no second parameter, and rebuilds the path from the number it checked -
+what reaches the PC is never the page's own string. `/api/calendar/add`,
+`/api/calendar/act` and `/api/calendar/settings` are **refused** here: the
+writes are the two commands below.
 
-Everything else is written by Jarvis: `settings.gradle.kts`,
-`build.gradle.kts`, `gradle.properties`,
-`gradle/wrapper/gradle-wrapper.properties`, `app/build.gradle.kts`,
-`AndroidManifest.xml`, `MainActivity.kt`, `strings.xml`, `colors.xml`,
-`themes.xml`, and the two Gradle wrapper files (Gradle's own: the jar is byte for byte `jarvis-client`'s, and the batch file is the same file with the CRLF endings cmd.exe needs put back on the way, because this repository stores text as LF). A request
-that names any other file - or hides a path in an asset's name - is refused
-with a sentence, never resolved.
+While App lock or "Hide memory lists" is on, `lock/rules.rs` runs the answer
+through `brain::calendar::redact_read`: every event keeps its id, date, times,
+all-day flag, reminder minutes, recurrence, zone and source, while the title,
+place and notes become `""`, and `hidden`/`hidden_count` say how many titles
+were blanked - so the card can still say "3 events - hidden" and the sheet can
+still draw the shape of the week. A body that is not JSON becomes
+`{available:false, hidden:true}` rather than the unreadable original.
 
-**The template's properties, all measured on 2026-10-30** (a real build of
-exactly this project; `docs/APP-BUILDER-DESIGN.md` and the scratch note
-`.dsh-scratch/ANDROID-APP-BUILDER-2026-10-30.md` carry the numbers):
+### 168.4 The two writes
 
-* Gradle **9.6.0**, with `distributionSha256Sum` set, so a tampered download
-  is refused rather than run; Android Gradle plugin **9.4.0**; `compileSdk`
-  36, `minSdk` 33, `targetSdk` 36 - the same toolchain `jarvis-client` builds
-  with, so the PC has ONE set of numbers to trust.
-* **No dependencies at all** - no AndroidX, no Compose - so a first build
-  fetches a toolchain and not a dependency graph.
-* **No permissions at all.** The manifest declares no `<uses-permission>`, not
-  even `INTERNET`, and `MainActivity` sets `allowFileAccess = false`,
-  `allowContentAccess = false` and refuses EVERY navigation. The app cannot
-  reach the internet, cannot read the phone's files and cannot call Jarvis's
-  own routes - proved from the built APK with `aapt2 dump badging`, which
-  shows no permission line.
-* Debug only. No release signing, no shrinking, never the Play Store (rule 5).
+`hud_calendar_add` and `hud_calendar_act` (`src-tauri/src/hud_calendar.rs`) are
+the page's only way to write: the HUD holds no token, so the page cannot POST.
+Both are **held on a stale link** (`brain::require_link_live`), and both build
+their body in `brain/calendar.rs`, which is the one place the shape is decided:
 
-### 168.2 `POST /api/projects/<id>/app/tasks/<task>/android/template`
+- `add_body`: one event, title required and capped at 300 characters, a real
+  `YYYY-MM-DD` day, `HH:MM` times, an end that cannot be before the start, an
+  all-day tick that drops the times, place ≤300, notes ≤2,000, a reminder
+  0-10,080 minutes, and a repeat word from the store's own three plus "none".
+  An empty optional box is simply not sent.
+- `act_body`: exactly two verbs, `delete` or `update` (with the same fields),
+  one id of the store's own shape (`c` + 10 lowercase hex). There is no list
+  form, no delete-all and no clear-range - the same narrowness
+  `/api/schedule/act` has - and a delete that carries fields is refused.
 
-Body: `{"title"?: str, "background"?: "#rrggbb", "accent"?: "#rrggbb",
-"assets"?: {"index.html"?: str, "app.js"?: str, "app.css"?: str}}`. Every
-field is optional: with none, the app is called its own project title, uses
-two defaults, and gets a **working** page, which is what makes a first build
-possible without a single model call.
+**No approval card, for either** - the owner's 2026-10-29 ruling (decision D1 of
+the design brief): one row on this PC, no bulk form, ids-only in the audit line.
+The other direction of the same ruling: **the switch is not a HUD write**. The
+page only READS the PC's `on` flag and says the feature is off in words;
+`capabilities/hud.json` records why the switch is not that window's.
 
-* **200** `{"ok": true, "template": {"ok", "files", "package", "title"},
-  "status": {…168.4…}}`
-* **400** a plain sentence: not an Android project, a title with a quote in
-  it, a colour that is not `#rrggbb`, a fourth web file, one larger than
-  96 KB, one that is not text, or a task that already has a project (a second
-  write is refused, never a silent overwrite).
-* **403** `pc_only` from the phone.
-* **404** no such project, not an app project, no such task.
+### 168.5 Its place in Edit HUD, and the Settings row
 
-No card: the files land only in that task's own copy, and nothing runs them
-(`docs/APP-BUILDER-DESIGN.md`, "Write files in a task's copy: no card").
+- **Edit HUD.** The calendar is a real registry card: `CARD_REGISTRY`'s
+  `"calendar"` row (label "Calendar", `right_rail`, `col_span` 12, ordered above
+  the waiting cards, not protected), `MOVABLE_IDS`, and `CARD_DOM.calendar ->
+  ["#rail-calendar"]`. Every built-in preset in `src/hud-layout.js` carries it,
+  and `contract/hud-presets.json` mirrors them. The half that makes it true for
+  the OWNER rather than only for a fresh install is `withRegistryCards` in
+  `src/hud-edit.js`: a saved layout is a CLOSED list, so a card a later release
+  adds is both invisible and unaddable unless it is put back - that function
+  re-adds any movable card the document does not name, at its registry
+  defaults, **in memory** (opening the HUD is not an edit; the first real change
+  saves the document that by then carries it), and it never un-hides a card the
+  owner hid himself.
+- **Settings.** `settings.html`'s "Jarvis Calendar" card
+  (`src/calendar-settings.js`) draws the ONE switch: `{"on": true|false}` on
+  `POST /api/calendar/settings`, the same route and the same value the phone's
+  `CalendarSettingsPlate.kt` row and the typed sentence "turn off the Jarvis
+  calendar" reach. On the desktop it goes through the `calendar_settings`
+  command (`src-tauri/src/calendar_settings.rs`), which reads the switch from
+  `GET /api/calendar?days=1`'s `on` (there is no GET settings route) and
+  **drops every event, title, place and count in Rust** - the Settings window
+  draws one row and cannot read the owner's day. No card either way, immediate,
+  never held on a stale link (the same class as the Anti-Slop filter), and
+  **OFF never deletes an event**.
+- The row it used to have in `jarvis_feature_guide.SETTINGS_GAPS` (a typed
+  switch with no page to draw it) is **closed and removed**: both Settings
+  halves exist now, and `contract/feature-controls.json`'s `jarvis-calendar` row
+  moved from `planned` to `enforced` with a real desktop and phone location.
 
-### 168.3 `POST /api/projects/<id>/app/tasks/<task>/android/build`
+Both apps have every one of these surfaces, so `tools/check_parity.py`
+classifies the four calendar routes `ported` and there is **nothing one-sided
+to record in `docs/ARCHITECTURE.md` §8** for this feature. The one difference
+that stays is a shape, not a missing half: the desktop draws a month/week/day
+sheet in its own window and the phone draws its own plate and home-screen
+widget, from the same read.
 
-Raises **ONE** card, `app_build_android`, and answers `202`:
-`{"ok": true, "waiting": true, "card": "app_build_android", "command":
-"<task copy>\gradlew.bat assembleDebug", "message": …}`.
+### 168.6 Failing closed
 
-The card's own words carry: the exact command, the exact folder, the SDK and
-JDK paths it found, that **the FIRST build downloads the Gradle distribution
-(~130 MB) and the Android Gradle plugin** from `services.gradle.org`,
-`dl.google.com` and `repo.maven.apache.org` with **nothing of the owner's
-sent**, and the APK path it will produce.
+A shape neither app understands must never be drawn as a real calendar, and
+this bit was wrong before it shipped (2026-10-30):
 
-A yes runs **exactly** `[<task copy>\gradlew.bat, "assembleDebug"]` with
-`cwd` = the task's copy:
+- The page's `readCalendar` used to treat every object as a calendar unless it
+  said `available: false`. So `?id=`'s answer `{"ok":true,"event":{...}}`, a
+  bare event, and an empty body all became **"an available calendar with no
+  events"** - drawn as *"Nothing in the next 7 days"*, the most reassuring
+  possible lie about the owner's own day. It now requires a real boolean
+  `available` AND, when true, an `events` array; anything else is refused in
+  words ("answered in a shape this window does not understand ... your events
+  are kept on the PC") and draws nothing.
+- The two write handlers used to test `reply.ok === false`, so an answer with no
+  `ok` at all - an empty body, an older backend - was reported as **"Event
+  added."** over a write that may never have happened. They now require
+  `ok: true` positively.
+- The Settings command applies the same rule in Rust: an answer that does not
+  carry `on` as a real boolean is an error, never "off" and never "on".
 
-* the environment is `jarvis_child_env.inherited()` - the same allowlist every
-  child program gets, never a token, key or password - plus `ANDROID_HOME`,
-  `ANDROID_SDK_ROOT`, `JAVA_HOME`, and `GRADLE_OPTS=-Dorg.gradle.daemon=false`
-  so no Gradle process outlives the card;
-* the time limit is 25 minutes, and the output goes to a FILE
-  (`build/jarvis-build.log`, gitignored) with only its END kept, because a cap
-  applied after reading megabytes into memory is not a cap;
-* success requires `exit 0` **and** that the APK exists. Exit 0 without an
-  APK is a failure.
+### 168.7 What is proven, and what is not
 
-Refusals: **400** (no project yet, no Android project), **409** a card for
-this task is already waiting, **503** the settings file has the action at a
-tier other than `ask` (naming the line), or the PC is missing the SDK, the
-JDK or the wrapper files (the sentence names what to install).
+- `jarvis-desktop/tests/hud-calendar.mjs`: **33 checks, browser-free** (it runs
+  the page's own block against a fake document). Every state in words; the
+  three views; the bars and their lanes; the form's exact argument objects for
+  both commands; the one allowed read and its bounded query; the redaction arm;
+  the registry card, `MOVABLE_IDS`, `CARD_DOM`, every preset and the contract;
+  a saved layout getting the card back; the three copies byte-identical; and
+  the two fail-closed checks above.
+- Rust, beside the code: `brain/calendar.rs` (10 tests - the exact bodies, the
+  caps, the refusals, the redaction, and no network of its own),
+  `hud_calendar.rs` (2 - the form is the contract, one change is one event and
+  two verbs) and `calendar_settings.rs` (5 - one field per request, the read is
+  the switch and never an event, an answer without `on` is an error).
+  `lock/rules.rs`'s own test names `/api/calendar` in the redaction arm.
+- `backend/test_local_calendar.py` is §164's 88 checks; `tools/check_parity.py`
+  must print "No undecided drift." with the four rows `ported`.
+- **NOT proven here:** the real WebView2 window. This desk has no Playwright
+  (the page-level `tests/hud.mjs` and `tests/shots.mjs` cannot run), so a
+  rebuilt and installed desktop is the field check, and the geometry of the
+  sheet in the real window is the owner's eye rather than a test.
 
-### 168.4 `POST /api/projects/<id>/app/tasks/<task>/android/install`
-
-Raises **ONE** card, `app_install_android`, answering `202` with the command
-in the body. The card names the exact `adb install -r <apk>`, the file, its
-size, that it is a **SIDELOAD** and never the Play Store, and that Jarvis has
-no uninstall - so what it installs stays until the owner removes it.
-
-A yes runs **exactly** `[<sdk>\platform-tools\adb.exe, "install", "-r",
-<the apk>]`:
-
-* adb is called by **full path** (it is not on PATH on this PC, measured);
-* the APK must be a real file **inside the task's own copy**, at the one path
-  the build writes, ending `.apk`, and not empty - anything else is refused;
-* there is **no** `shell`, `uninstall`, `push`, `pull`, `exec-out` or `-s
-  <serial>` anywhere in the module: a source scan in
-  `backend/test_android_builder.py` fails the suite if one is added;
-* the time limit is 3 minutes.
-
-### 168.5 `GET /api/projects/<id>/app/tasks/<task>/android`
-
-`{"ok", "app", "task", "template": bool, "toolchain": {"sdk", "java", "adb",
-"missing"}, "build": {"ready", "refused", "command"}, "install": {"ready",
-"refused", "command"}, "apk": {"path", "bytes"}, "waiting": "build"|"install"|
-null, "last": {"kind", "outcome", "message", "at"}}`. No secrets and no file
-contents; the two `command` strings are what a card WOULD run, so the owner
-can see the plan before any card exists.
-
-### 168.6 What this deliberately does not do
-
-No `npm`, no Capacitor, no release signing, no keystore of the owner's, no
-Play Store, no `adb shell`, no device management, no arbitrary command - the
-Gradle task name and both commands are module constants - and no model call.
-Nothing is installed before a build has made the file. The card state is in
-memory: a backend restart drops a waiting card and the task simply stays, so
-it can be built again.
-
-**The two apps.** Neither has a screen for this: the routes are PC only, the
-cards arrive in the card list BOTH apps already draw, and `ARCHITECTURE.md`
-section 8 says why the phone has no build button (the SDK and the cable are
-not on it).
-
-**Wiring.** No patch: the routes come from `jarvis_android_builder.install()`,
-called by the drop-in folder `plugins/ready/android-builder`. The gate rows
-are in `jarvis-backend/jarvis_gate.py`, the tier lines in
-`backend/rebuilt/jarvis-framework.toml`, and the two Gradle wrapper files are
-carried as beside-files (`backend/jarvis-android-gradlew.bat`,
-`backend/jarvis-android-wrapper.jar`, Apache-2.0, credited in
-`THIRD-PARTY-NOTICES.txt`).
-
-**Tests.** `backend/test_android_builder.py`: the template writes every file
-with no placeholder left, the wrapper files are jarvis-client's own (the jar byte for byte, the batch file line endings aside, and the GENERATED batch file CRLF); the manifest declares no permission; every bad name,
-colour, title, asset and path is refused; the build command is exactly
-`<task copy>/gradlew.bat assembleDebug` in exactly the task copy and a
-tampered argv runs nothing; no yes means no run, and a stale-stream gate
-answer runs nothing; the environment holds no token, key or password; the
-install accepts only the APK inside the copy and no other adb form exists; the
-gate rows, tier lines and drop-in folder are all in place, and that the module's own install() wraps a Handler, answers its own routes and lets every other request through untouched. **No test runs a
-real Gradle build or a real adb install** - a CI runner has no Android SDK and
-no phone. The build in section 168.1 was a manual measurement on the owner's
-PC, reported as such.

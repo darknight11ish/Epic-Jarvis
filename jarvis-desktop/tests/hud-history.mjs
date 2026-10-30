@@ -29,7 +29,7 @@
  *     is the same read with `archived=1`);
  *   - an archived chat is put away, not deleted: one Archived section, no
  *     confirm, never opened from the live list, and Unarchive brings it back;
- *   - the page's main strip carries ONE always-visible History door in every
+ *   - the page's main strip carries ONE History door in every shell whose left
  *     layout shell, and it calls the SAME open routine as the rail icon (one
  *     panel, one list - the owner's ask of 2026-10-29: "i want the chat
  *     history accesible directly from the jarvis hud on desktop");
@@ -524,12 +524,24 @@ check("ONE always-visible History door in the main strip calls the SAME open rou
     "the page has more than one History door");
   assert.match(PAGE, /<button class="ghost history-open" id="hud-history-open"/,
     "the History door is not a page button");
-  // Drawn in every shell: the bar is shown by the base rule and no shell rule
-  // hides it. Ambient's transcript toggle stays the only thing that hides.
-  assert.match(PAGE, /\.history-bar\{\s*display:flex/,
-    "the history strip is not shown in every shell");
-  assert.doesNotMatch(PAGE, /\[data-hud-shell="[^"]+"\][^{]*\.history-bar\{[^}]*display:none/,
-    "a layout shell hides the history strip");
+  // Drawn where the LEFT RAIL IS A DRAWER - center-core, two-column-right,
+  // single-stage-bento - because there the rail's own clock icon is behind
+  // [Controls]. The shells whose left rail is on screen keep that icon and no
+  // strip: measured 2026-10-30, the strip took the hidden-galaxy layout from
+  // 30px of conversation to 24px at 1280x650 (hud.mjs). Ambient's transcript
+  // toggle stays Ambient-only.
+  const DRAWER_SHELLS = ["center-core", "two-column-right", "single-stage-bento"];
+  const SCREENED_SHELLS = ["split-stage", "three-column", "two-column-left"];
+  assert.match(PAGE, /\.history-bar\{display:none;\}/,
+    "the history strip is shown by the base rule, in every shell");
+  for (const shell of DRAWER_SHELLS) {
+    assert.match(PAGE, new RegExp(`html\\[data-hud-shell="${shell}"\\] \\.history-bar`),
+      `${shell}: its left rail is a drawer, so its History door is two clicks deep`);
+  }
+  for (const shell of SCREENED_SHELLS) {
+    assert.doesNotMatch(PAGE, new RegExp(`html\\[data-hud-shell="${shell}"\\] \\.history-bar`),
+      `${shell}: the strip is drawn although its left rail is on screen`);
+  }
   assert.match(PAGE, /\.history-toggle\{display:none;\}/,
     "the Ambient transcript toggle is no longer Ambient-only");
   assert.match(PAGE, /html\[data-hud-shell="center-core"\] \.history-toggle\{display:inline-flex;\}/,
