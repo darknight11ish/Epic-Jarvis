@@ -11,16 +11,24 @@
  * toggle) and cannot approve anything; the card transitions once, so a deny for
  * a card that is still pending is the answer that was wanted; a late one is
  * refused by the server's own expired / duplicate / no-longer-pending arm (a
- * 409, which both pages already show as "already handled"), never silently
- * dropped; and denying never writes a standing rule.
+ * 409), never silently dropped; and denying never writes a standing rule.
+ *
+ * What a 409 SAYS changed on 2026-10-28, when cards stopped expiring: it used
+ * to mean only "answered elsewhere" and both pages said "Already handled
+ * somewhere else". A card can now also outlive the request that raised it, and
+ * nothing has been handled in that case - so both pages say the PC's own
+ * sentence, "That card is not waiting any more - it was answered, or the
+ * request that asked has finished." This suite pins that sentence, and that the
+ * old claim is gone, because "already handled" was the untrue half.
  *
  * So this suite holds, per surface:
  *   - STALE: Deny is offered and pressing it sends `approved: false`;
  *   - STALE: Approve is held, and the words say what is waiting (and that Deny
  *     still works - the old line said "nothing can be answered", now false);
  *   - LIVE: both answers work exactly as before (the control);
- *   - LATE: a deny the server refuses with its 409 arm is said out loud, and
- *     the card is not silently closed as if it had been denied.
+ *   - LATE: a deny the server refuses with its 409 arm is said out loud, in the
+ *     sentence both pages really ship, and the card is not silently closed as
+ *     if it had been denied.
  *
  *   node tests/deny-on-stale.mjs      (needs Playwright, like the others)
  */
@@ -113,8 +121,11 @@ await check("bar, LATE: a deny the server refuses is said, and the card is not s
   await press(page, "#approval-deny");
   await page.waitForTimeout(400);
   const hint = await says(page, "#approval-hint");
-  assert.match(hint, /already handled/i,
+  assert.match(hint, /not waiting any more/i,
                `the server's existing 409 arm must be shown, not swallowed: "${hint}"`);
+  assert.doesNotMatch(hint, /already handled/i,
+               `and it must not claim something was handled when the request may have `
+               + `simply finished waiting: "${hint}"`);
   assert.equal(await page.locator("#approval").isVisible(), true,
                "the card vanished without being answered");
   await page.close();
@@ -159,7 +170,11 @@ await check("widget, LATE: a refused deny says so instead of vanishing", async (
   await page.waitForTimeout(700);
   await press(page, "#btn-appr-no");
   await page.waitForTimeout(400);
-  assert.match(await says(page, "#widget-flash"), /already handled/i);
+  const flash = await says(page, "#widget-flash");
+  assert.match(flash, /not waiting any more/i,
+               `the widget must say the 409, not drop it: "${flash}"`);
+  assert.doesNotMatch(flash, /already handled/i,
+               `and not claim something was handled: "${flash}"`);
   await page.close();
 });
 
