@@ -55,6 +55,35 @@ export const CARD_TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it 
  */
 export const CARD_TIMED_OUT_NEXT = "Ask the desktop to raise this again.";
 
+/**
+ * How long a card has left, in plain words: "14m 59s left", then "42s left"
+ * with the warning once it is under a minute.
+ *
+ * THE OWNER'S RULING OF 2026-10-30: **"if there is a card with a limited time of
+ * any kind, be sure to put the timer on it."** His app-builder card ran out
+ * twice while he was reading it and no screen had counted it down. What the
+ * number counts is the REQUEST's wait - the moment the thread that raised the
+ * card stops waiting, which the backend sends as `expires_in` (seconds left)
+ * while it is still true. The CARD still has no deadline of its own: 2026-10-28's
+ * ruling holds, and nothing is refused because this clock reached zero.
+ *
+ * The SAME words on every desktop surface, and the same again in the HUD page's
+ * `apprClockWords` (it cannot import this file; `tests/expiry-parity.mjs` holds
+ * the two together). `""` means "no timer", never "0": a card with no
+ * `expires_in` (a pairing, a key registration, a restore) draws no clock at all.
+ *
+ * Rounding is UP, so a part-second left reads "1s left" rather than showing
+ * "0s left" while the request is still there - and "0s" is the one reading both
+ * apps treat as "expired now".
+ */
+export function countdownWords(secondsLeft) {
+  const s = Math.ceil(Number(secondsLeft));
+  if (!Number.isFinite(s) || s <= 0) return "";
+  const minutes = Math.floor(s / 60);
+  const words = minutes > 0 ? `${minutes}m ${s % 60}s left` : `${s}s left`;
+  return s < 60 ? `${words} \u2014 under a minute to decide.` : words;
+}
+
 
 /**
  * What Jarvis says during a SPOKEN question that waits on a card, and

@@ -97,7 +97,7 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all NINETEEN - those thirteen, plus `private-chat.patch` at position 152, added
+all TWENTY - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -121,7 +121,11 @@ card has a deadline: EIGHT of its sixteen hunks read the owner's `jarvis_gate.py
 late-answer block after the wait, `pending()`'s opening, `decide()`'s body, the
 insertion point of `still_waiting()` and `withdraw()`'s docstring - and no
 earlier patch writes any of them; its other eight hunks edit
-`no-expiry-cards.patch`'s own output and cost nothing) - with their positions,
+`no-expiry-cards.patch`'s own output and cost nothing) - plus, on 2026-10-30,
+`show-card-timer.patch` at position 38 (one of its three hunks: `pending()`'s
+own SELECT line, which the timer has to add `waited_until` to - no earlier patch
+writes it, for exactly the reason `no-expiry-cards.patch`'s `pending()` hunk is
+pinned) - with their positions,
 instead of pretending they are not there. The position-29 rule is kept as a
 REPORTED fact, not a gate.
 
@@ -353,6 +357,26 @@ PIN = {
     # applies this patch to `jarvis-backend/jarvis_hud.py` with `git apply`
     # (no fuzz), compiles the result and reverses it byte for byte.
     "cloud-honesty.patch":                     (1, 7),     # position 155
+
+    # 2026-10-30, show-card-timer.patch (the owner's ruling: "if there is a card
+    # with a limited time of any kind, be sure to put the timer on it"). ONE of
+    # its three hunks reads text only the owner's PC holds, and it is honest
+    # rather than drift - no patch in this walk writes it:
+    #   * `pending()`'s own SELECT line, which the owner's gate already had.
+    #     `approval-notice.patch`, `approval-expiry.patch`,
+    #     `no-expiry-cards.patch` and `no-deadline-cards.patch` all add lines
+    #     AFTER that SELECT (the notice, the field, the sweep's call) and none
+    #     of them rewrites it - the same reason no-expiry-cards.patch is pinned
+    #     at 9/69 for `pending()`'s opening. The hunk adds `waited_until` to
+    #     that column list, so the SELECT and the three lines either side are
+    #     the owner's own text (7 lines).
+    # Its other two hunks rewrite docstrings `no-deadline-cards.patch` writes
+    # and cost nothing. Checked the other way by
+    # backend/test_gate_card_timer.py, which applies the WHOLE three-patch stack
+    # to the published base with `git apply` (no fuzz), imports the result and
+    # drives the field and its three absences - and whose `built()` fails if
+    # `git apply` refuses any of them.
+    "show-card-timer.patch":                   (1, 7),     # position 38
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

@@ -905,6 +905,42 @@ private fun ExpiryBar(expiryMs: Long, secondsLeft: State<Long>) {
 }
 
 /**
+ * The readout's three facts as data: the label, the digits, and whether the
+ * last minute has started.
+ *
+ * WHY A FUNCTION AND NOT THREE LOCALS IN THE COMPOSABLE. This is the part of
+ * the timer a JVM test can hold: [ExpiryCountdown] needs Compose to run and
+ * this project has no Compose UI test (the same limit `ExpiredCardShowsNoButtonsTest`
+ * names for itself). So the rule - the last minute says "EXPIRING SOON" - and
+ * the clock's own wording live here, where `CardTimerTest` drives every
+ * boundary with no device, and the composable below only reads them. What is
+ * drawn and what is tested cannot drift apart.
+ *
+ * WHAT IT COUNTS (the owner's ruling of 2026-10-30: "if there is a card with a
+ * limited time of any kind, be sure to put the timer on it"). `expires_at_ms`
+ * is `normalisePendingRow`'s reading of the backend's `expires_in`: the
+ * REQUEST's remaining wait, computed against this phone's clock at the moment
+ * the queue was read. The card still has no deadline of its own - nothing is
+ * refused here because the clock reached zero - so a row with no `expires_in`
+ * (a pairing, a key registration, a restore) draws no timer at all.
+ */
+internal data class CountdownReadout(
+    val label: String,
+    val digits: String,
+    val soon: Boolean,
+)
+
+internal fun countdownReadout(sec: Long): CountdownReadout {
+    val left = sec.coerceAtLeast(0L)
+    val soon = left in 1L..60L
+    return CountdownReadout(
+        label = if (soon) "EXPIRING SOON" else "EXPIRES IN",
+        digits = clockCountdown(left),
+        soon = soon,
+    )
+}
+
+/**
  * The deadline readout: "EXPIRES IN 00:43", the number in the machine face.
  *
  * Its own composable purely so the per-second tick invalidates this row and
@@ -913,7 +949,9 @@ private fun ExpiryBar(expiryMs: Long, secondsLeft: State<Long>) {
  *
  * "00:43" rather than the old "Expires in 0m 43s": a clock reads at a glance,
  * and the fixed-width digits do not shuffle the line sideways every second.
- * Past ten minutes the seconds are noise, so it says "12 MIN".
+ * Past ten minutes the seconds are noise, so it says "12 MIN". Under a minute
+ * the label becomes "EXPIRING SOON" and both halves turn warning-coloured
+ * (2026-10-30: the owner's timer, and a visible warning in the last minute).
  *
  * A screen reader hears the sentence, not the digits - "zero zero colon forty
  * three" is not an answer. There is deliberately no live region here: it
@@ -923,21 +961,21 @@ private fun ExpiryBar(expiryMs: Long, secondsLeft: State<Long>) {
 private fun ExpiryCountdown(secondsLeft: State<Long>) {
     val chrome = LocalChrome.current
     val left = secondsLeft.value
-    val expiringSoon = left in 1..60
+    val readout = countdownReadout(left)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.clearAndSetSemantics { contentDescription = spokenCountdown(left) },
     ) {
         Text(
-            if (expiringSoon) "EXPIRING SOON" else "EXPIRES IN",
+            readout.label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (expiringSoon) chrome.warnInk else chrome.textMid,
+            color = if (readout.soon) chrome.warnInk else chrome.textMid,
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            clockCountdown(left),
+            readout.digits,
             style = JarvisType.machine,
-            color = if (expiringSoon) chrome.warnInk else chrome.textHi,
+            color = if (readout.soon) chrome.warnInk else chrome.textHi,
         )
     }
 }

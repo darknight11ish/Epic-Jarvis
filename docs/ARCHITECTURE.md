@@ -242,12 +242,21 @@ immediate to turn off, and neither raises a card that something else answers:
 No approval card is ever answered for the owner, and no control approves
 more than one card.
 
-**No card shows a time limit, and a card whose request has finished leaves the
-queue** (the owner's ruling of 2026-10-28: "if there doesn't need to be a time
-limit don't have one"; `backend/no-deadline-cards.patch`, applied after
+**No card shows a time limit of its own, and a card whose request has finished
+leaves the queue** (the owner's ruling of 2026-10-28: "if there doesn't need to
+be a time limit don't have one"; `backend/no-deadline-cards.patch`, applied after
 `no-expiry-cards.patch`). While its request is genuinely waiting, the card stays
-on every screen with Approve and Deny and NO countdown: `pending()` sends no
-`expires_in` for any card. **Waiting is still not approving:** nothing runs until
+on every screen with Approve and Deny. **The card has no deadline; the REQUEST
+does, and since 2026-10-30 every screen counts that down** (the owner's ruling:
+"if there is a card with a limited time of any kind, be sure to put the timer on
+it"; `backend/show-card-timer.patch`, applied after `no-deadline-cards.patch`):
+`pending()` sends `expires_in` - whole seconds left until the row's own
+`waited_until`, never 0 and never negative - for a routine card whose request is
+still waiting, and sends nothing at all for the four ceremonies below (their rows
+carry no `waited_until`) or for a request that has already ended. It is display
+only: the sweep, the refusal of a late yes and the 409 are unchanged, and the
+60-second grace is not counted down because no request can act on the card in it.
+**Waiting is still not approving:** nothing runs until
 a person answers, a denial is still a denial, and a card whose work is gone (a
 cancelled or replaced pairing) is withdrawn. **The request's own patience is
 what is bounded**, because the thread that waits is the thread that runs the
@@ -783,9 +792,11 @@ places between screens. Presentation only - no approval logic changed.
   all three desktop surfaces and `expired` in `ApprovalCard.kt` on the phone -
   and **hiding the buttons is only the drawing**: `decideApproval`, the
   widget's `decide` and the page's `apprDecide` refuse an expired card too,
-  because a hidden button is not a refusal. Nothing about the gate changed: it
-  still stops waiting at the deadline and refuses the card by itself
-  (`approval-expiry.patch`, `no-expiry-cards.patch`), and a card with **no**
+  because a hidden button is not a refusal. The gate half has moved under it
+  since: 2026-10-28 stopped refusing a routine card at a deadline (its REQUEST
+  stops waiting and `pending()`'s read-time sweep records the lapse), and
+  2026-10-30 gave a still-waiting request its countdown back (`expires_in`).
+  A card with **no**
   deadline (pairing, a key registration, a restore -
   `jarvis_gate.APPROVAL_NEVER_EXPIRES`) shows no countdown and no expiry on
   either app. The words are one sentence from `jarvis_card_words.TIMED_OUT`,
@@ -859,8 +870,9 @@ places between screens. Presentation only - no approval logic changed.
      transaction (`jarvis_gate.check()`, `backend/gate-touches.patch` - the
      file is patch-carried, not shipped whole).
      **A card whose request has stopped waiting is not reused, and leaves on
-     the next read (2026-10-28).** The card draws no countdown, but its row
-     records the request's last moment (`waited_until`); `pending()` runs
+     the next read (2026-10-28).** Its row records the request's last moment
+     (`waited_until`), and since 2026-10-30 the screens count that moment down
+     (`expires_in`, `backend/show-card-timer.patch`); `pending()` runs
      #965's read-time sweep before it builds the list, so a routine row past
      that moment plus the same 60-second grace is marked `expired` and not
      served. That is what stops a live Approve that could only answer 409.

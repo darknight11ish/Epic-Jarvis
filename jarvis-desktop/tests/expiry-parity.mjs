@@ -27,7 +27,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CARD_TIMED_OUT } from "../src/card-words.js";
+import { CARD_TIMED_OUT, countdownWords } from "../src/card-words.js";
 import { cardHasExpired, expiryWords } from "../src/jarvis-link.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -61,11 +61,45 @@ check("a card with NO deadline never expires (pairing, key, restore)", () => {
 });
 
 check("the countdown is words, and the deadline is the shared sentence", () => {
-  assert.equal(expiryWords(NOW + 133_000, NOW),
-               "2:13 left to decide, then Jarvis refuses it by itself.");
+  assert.equal(expiryWords(NOW + 133_000, NOW), "2m 13s left");
   assert.equal(expiryWords(NOW, NOW), CARD_TIMED_OUT);
   assert.equal(expiryWords(NOW - 60_000, NOW), CARD_TIMED_OUT);
   assert.match(CARD_TIMED_OUT, /^Timed out/);
+});
+
+check("the owner's 2026-10-30 timer: plain words, and a warning under a minute", () => {
+  // "if there is a card with a limited time of any kind, be sure to put the
+  // timer on it" - and in plain words, so the number is read at a glance.
+  assert.equal(countdownWords(900), "15m 0s left");
+  assert.equal(countdownWords(899), "14m 59s left");
+  assert.equal(countdownWords(60), "1m 0s left");
+  assert.equal(countdownWords(59), "59s left \u2014 under a minute to decide.");
+  assert.equal(countdownWords(1), "1s left \u2014 under a minute to decide.");
+  // No timer, never a zero: an absent field, a ceremony card, a request that
+  // has already ended, and anything unreadable all draw nothing at all.
+  for (const nothing of [null, undefined, 0, -5, NaN, "soon", ""]) {
+    assert.equal(countdownWords(nothing), "", String(nothing));
+    assert.equal(expiryWords(null, NOW), "", String(nothing));
+  }
+  // A part-second left reads "1s", never "0s" - 0 is what both apps read as
+  // "expired now", and the request is still there.
+  assert.equal(expiryWords(NOW + 100, NOW), "1s left \u2014 under a minute to decide.");
+});
+
+check("the HUD page words the countdown the same as the module", () => {
+  // The page cannot import card-words.js, so it carries its own copy of the
+  // same rule; a second answer to one question is how two surfaces start
+  // disagreeing (the apprExpired lesson above).
+  const m = HUD.match(/function apprClockWords\([^)]*\)\{[\s\S]*?\n\}\n/);
+  assert.ok(m, "jarvis_hud.html has no function apprClockWords");
+  const apprClockWords = new Function(`${m[0]}; return apprClockWords;`)();
+  for (const seconds of [null, undefined, 0, -5, NaN, 1, 42, 59, 60, 61, 899, 900, 3600]) {
+    assert.equal(apprClockWords(seconds), countdownWords(seconds), String(seconds));
+  }
+  // ...and the page paints exactly that line, with the warning class under a
+  // minute and NOT above it.
+  assert.match(HUD, /line\.textContent = left <= 0 \? APPR_TIMED_OUT : apprClockWords\(left\);/);
+  assert.match(HUD, /line\.classList\.toggle\("soon", left > 0 && left < 60\);/);
 });
 
 check("the HUD page's own copy of the rule answers the same as the shared one", () => {

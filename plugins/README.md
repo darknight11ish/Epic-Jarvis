@@ -14,7 +14,7 @@ you drop in and take out.
   - **28** replace a patch, and are generated from it;
   - **14** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **135 core patches**, which still go on through
+- **136 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -25,34 +25,34 @@ the catalogue cannot account for is refused, never silently left out.
 
 | # | Drop-in module | What it does | Replaces |
 |---|---|---|---|
-| 69 | `documents` | "Folders Jarvis may look in": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part at a time, and bringing in a Notion export. | `documents.patch` |
-| 77 | `media` | "pause", "next song", "what's playing": play, pause, next, previous and now-playing for whatever is playing on this PC (Spotify, a browser tab, or any other app that reports to Windows' own media cont | `media.patch` |
-| 78 | `news` | news headlines in the morning briefing, from RSS/Atom feed addresses the owner names. | `news.patch` |
-| 81 | `tool-updates` | "Check for tool updates", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newest version, or is a newer one out. | `tool-updates.patch` |
-| 86 | `goals` | "Goals with one card per step". | `goals.patch` |
-| 89 | `brain-reads` | the Brain's read-only routes (the Brain upgrades, and a chat's facts). | `brain-reads.patch` |
-| 91 | `photo-reminder` | "Photo to reminder": a picture in, a PROPOSED reminder out. Nothing is set up here. | `photo-reminder.patch` |
-| 92 | `history-import` | "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek". | `history-import.patch` |
-| 93 | `projects` | Projects, steps 1 and 2. | `projects.patch` |
-| 95 | `chatbot-routes` | the routes both apps use to have Jarvis talk to an AI chatbot for the owner. | `chatbot-routes.patch` |
-| 96 | `live` | Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no "hey Jarvis" between turns. | `live.patch` |
-| 98 | `sky` | the sun, the moon and the weather behind the animal faces and the robot (which counts as an animal face for every option). | `sky.patch` |
-| 109 | `quiz` | "Quiz me on a text". | `quiz.patch` |
-| 110 | `decks` | review decks. | `decks.patch` |
-| 111 | `spending` | "How much did I spend on food last month?", added up from a bank export the owner dropped into a folder Jarvis may look in. | `spending.patch` |
-| 112 | `retirement` | the retirement what-if calculator. | `retirement.patch` |
-| 113 | `progress` | the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-DESIGN.md part C and its "Progress contract (frozen)" | `progress.patch` |
-| 119 | `chatbot-limits-hud` | the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app. | `chatbot-limits-hud.patch` |
-| 121 | `tutorials` | Tutorials and the FAQ, for both apps, with the owner's progress. | `tutorials.patch` |
-| 131 | `docker` | the containers on Jarvis's OWN list, and start/stop for them. | `docker.patch` |
-| 132 | `screen-attach` | "look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it. | `screen-attach.patch` |
-| 141 | `card-prefs` | how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it. | `card-prefs.patch` |
-| 142 | `picture-card` | "which card draws the pictures, and what the chat does about it". | `picture-card.patch` |
-| 144 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
-| 145 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
-| 152 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
-| 154 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
-| 156 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
+| 70 | `documents` | "Folders Jarvis may look in": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part at a time, and bringing in a Notion export. | `documents.patch` |
+| 78 | `media` | "pause", "next song", "what's playing": play, pause, next, previous and now-playing for whatever is playing on this PC (Spotify, a browser tab, or any other app that reports to Windows' own media cont | `media.patch` |
+| 79 | `news` | news headlines in the morning briefing, from RSS/Atom feed addresses the owner names. | `news.patch` |
+| 82 | `tool-updates` | "Check for tool updates", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newest version, or is a newer one out. | `tool-updates.patch` |
+| 87 | `goals` | "Goals with one card per step". | `goals.patch` |
+| 90 | `brain-reads` | the Brain's read-only routes (the Brain upgrades, and a chat's facts). | `brain-reads.patch` |
+| 92 | `photo-reminder` | "Photo to reminder": a picture in, a PROPOSED reminder out. Nothing is set up here. | `photo-reminder.patch` |
+| 93 | `history-import` | "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek". | `history-import.patch` |
+| 94 | `projects` | Projects, steps 1 and 2. | `projects.patch` |
+| 96 | `chatbot-routes` | the routes both apps use to have Jarvis talk to an AI chatbot for the owner. | `chatbot-routes.patch` |
+| 97 | `live` | Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no "hey Jarvis" between turns. | `live.patch` |
+| 99 | `sky` | the sun, the moon and the weather behind the animal faces and the robot (which counts as an animal face for every option). | `sky.patch` |
+| 110 | `quiz` | "Quiz me on a text". | `quiz.patch` |
+| 111 | `decks` | review decks. | `decks.patch` |
+| 112 | `spending` | "How much did I spend on food last month?", added up from a bank export the owner dropped into a folder Jarvis may look in. | `spending.patch` |
+| 113 | `retirement` | the retirement what-if calculator. | `retirement.patch` |
+| 114 | `progress` | the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-DESIGN.md part C and its "Progress contract (frozen)" | `progress.patch` |
+| 120 | `chatbot-limits-hud` | the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app. | `chatbot-limits-hud.patch` |
+| 122 | `tutorials` | Tutorials and the FAQ, for both apps, with the owner's progress. | `tutorials.patch` |
+| 132 | `docker` | the containers on Jarvis's OWN list, and start/stop for them. | `docker.patch` |
+| 133 | `screen-attach` | "look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it. | `screen-attach.patch` |
+| 142 | `card-prefs` | how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it. | `card-prefs.patch` |
+| 143 | `picture-card` | "which card draws the pictures, and what the chat does about it". | `picture-card.patch` |
+| 145 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
+| 146 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
+| 153 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
+| 155 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
+| 157 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
 
 ## Drop-in modules with no patch of their own
 
@@ -126,6 +126,7 @@ stack's order and cannot be moved into a folder.
 | `approval-expiry.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `no-expiry-cards.patch` | edits lines the core already has; it cannot be applied out of order |
 | `no-deadline-cards.patch` | edits lines the core already has; it cannot be applied out of order |
+| `show-card-timer.patch` | edits lines the core already has; it cannot be applied out of order |
 | `bind-wildcard.patch` | edits lines the core already has; it cannot be applied out of order |
 | `chat-stream.patch` | edits lines the core already has; it cannot be applied out of order |
 | `voice-turn.patch` | adds lines to the core (routes, gate tables or a function) but removes none |

@@ -496,7 +496,23 @@ RATCHET = {
     #: docstring. The walk reads 49 and names it at 8 in `by_patch`; measured
     #: exactly with `materialised("jarvis_gate.py", patches)`. Honest for the
     #: same reason as the nine above. A ratchet: it may still only go down.
-    "jarvis_gate.py": 49,
+    #: RAISED 2026-10-30, 49 -> 50, for `show-card-timer.patch` (the owner's
+    #: ruling: "if there is a card with a limited time of any kind, be sure to
+    #: put the timer on it"). Its ONE extra hunk reads `pending()`'s own SELECT
+    #: line - the column list the owner's gate already had - because the timer
+    #: needs `waited_until` read off the row. No earlier patch in this walk
+    #: writes that line: `approval-notice`, `approval-expiry`,
+    #: `no-expiry-cards` and `no-deadline-cards` all add lines AFTER it (the
+    #: notice, the field, the sweep's call) and none rewrites it, which is why
+    #: `no-expiry-cards.patch` is pinned at 9 hunks for the same region. Its
+    #: other two hunks rewrite docstrings `no-deadline-cards.patch` writes and
+    #: cost nothing. Honest rather than drift, measured with
+    #: `materialised("jarvis_gate.py", patches)` - the walk reads 50 and names
+    #: it at 1 in `by_patch` - and checked the other way by
+    #: backend/test_gate_card_timer.py, which applies the whole three-patch
+    #: stack to the published base with `git apply` (no fuzz) and imports the
+    #: result. A ratchet: it may still only go down.
+    "jarvis_gate.py": 50,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s
