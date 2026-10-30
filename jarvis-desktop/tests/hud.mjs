@@ -3722,6 +3722,73 @@ await check("Ambient: no sidebars, a 320px core, the latest exchange and a centr
   assert.deepEqual(problems, []);
 });
 
+// The owner's ask of 2026-10-29: "i want the chat history accesible directly
+// from the jarvis hud on desktop". The rail's clock icon (2026-10-27) lives in
+// the LEFT RAIL, and three of the six shells slide that rail off-canvas behind
+// [Controls] - in those the panel was two clicks deep and nothing said
+// "History". So the main strip (between the log and the composer, which every
+// shell draws) carries ONE always-visible door, wired to the SAME panel by the
+// SAME open routine. This drives the real page, in all six shells.
+await check("one always-visible History door in the main strip, in every shell, opening the ONE panel", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const shells = ["three-column", "split-stage", "center-core",
+    "two-column-left", "two-column-right", "single-stage-bento"];
+  const facts = {};
+  for (const shell of shells) {
+    await setHudLook(page, shell);
+    facts[shell] = await page.evaluate(() => {
+      const door = document.getElementById("hud-history-open");
+      const bar = document.querySelector(".history-bar");
+      const box = door ? door.getBoundingClientRect() : null;
+      return {
+        doors: document.querySelectorAll("#hud-history-open").length,
+        inBar: Boolean(door && bar && bar.contains(door)),
+        shown: Boolean(box && box.width > 0 && box.height > 0
+          && getComputedStyle(door).display !== "none"),
+        panels: document.querySelectorAll("#history-sidebar").length,
+      };
+    });
+    assert.equal(facts[shell].doors, 1, `${shell}: not exactly one History door`);
+    assert.equal(facts[shell].inBar, true, `${shell}: the History door is outside the main strip`);
+    assert.equal(facts[shell].shown, true, `${shell}: the History door is not on screen`);
+    assert.equal(facts[shell].panels, 1, `${shell}: the page does not draw exactly one History panel`);
+  }
+  // In the shell whose left rail is a drawer, one click on the strip's door
+  // opens the panel and puts the keyboard in it.
+  await setHudLook(page, "center-core");
+  await page.waitForTimeout(500); // the drawer slides: let it settle
+  const railClosed = await page.evaluate(() => {
+    const rail = document.querySelector(".rail.left").getBoundingClientRect();
+    return rail.right <= 1;
+  });
+  assert.equal(railClosed, true, "center-core's left rail is not the drawer this check is about");
+  await page.click("#hud-history-open");
+  await page.waitForTimeout(400);
+  const opened = await page.evaluate(() => ({
+    panels: document.querySelectorAll("#history-sidebar.hh-on").length,
+    expanded: document.getElementById("hud-history-open").getAttribute("aria-expanded"),
+    inPanel: Boolean(document.activeElement && document.activeElement.closest("#history-sidebar")),
+    moduleSaysOpen: window.hudHistory.isOpen(),
+  }));
+  // ... and the rail icon opens that SAME panel, not a second one.
+  await page.evaluate(() => document.getElementById("hh-close").click());
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.getElementById("rail-history").click());
+  await page.waitForTimeout(400);
+  const byRail = await page.evaluate(() => ({
+    panels: document.querySelectorAll("#history-sidebar").length,
+    open: document.querySelectorAll("#history-sidebar.hh-on").length,
+  }));
+  await page.close();
+  assert.deepEqual(problems, [], "a CSP refusal or a page error in the HUD's History door");
+  assert.equal(opened.panels, 1, "one click on the strip's History door did not open the panel");
+  assert.equal(opened.expanded, "true", "the History door does not say the panel is open");
+  assert.equal(opened.inPanel, true, "the keyboard did not land in the History panel");
+  assert.equal(opened.moduleSaysOpen, true);
+  assert.equal(byRail.panels, 1, "the rail icon opens a second panel");
+  assert.equal(byRail.open, 1, "the rail icon no longer opens the same panel");
+});
+
 await check("one open-the-bar control is drawn; the duplicate pill and dock icon stay dormant", async () => {
   const shelled = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   const withShell = await shelled.page.evaluate(() => {

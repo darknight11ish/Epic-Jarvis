@@ -1162,6 +1162,12 @@ pub fn run() {
             brain::fact_history::brain_fact_history,
             brain::conversation_facts::brain_conversation_facts,
             brain::history::brain_history_delete,
+            // Puts ONE chat away, or brings it back (the owner's ask of
+            // 2026-10-29: "make sure i can archive and delete chats"). It is
+            // reversible, raises no card and asks no question; the archived
+            // list is a read (`brain_history_list` with `archived`), and the
+            // HUD's own History write reaches the same body builder.
+            brain::history::brain_history_archive,
             brain::history::brain_history_settings,
             brain::projects::projects_read,
             brain::projects::projects_write,
