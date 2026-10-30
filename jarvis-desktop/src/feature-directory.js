@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "ac5ad2bd8bf2d180d6d9b56a5de8a0bdb2d820f75fab8a40b65d61ea048988a7",
+  "source_sha256": "383b3b779800e2d7354455803a68e17743ccbf6100fedf2fb5a0aca7ee35903f",
   "feature_count": 142,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -273,8 +273,8 @@ export const FEATURE_DIRECTORY = {
       "label_note": "",
       "example": "turn on Talk-to-type",
       "example_ok": true,
-      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
-      "where_desktop": "All features and abilities",
+      "where": "desktop Settings: Settings, Shortcuts; phone: All features and abilities",
+      "where_desktop": "Settings, Shortcuts",
       "where_phone": "All features and abilities",
       "note": "",
       "not_a_control": true
@@ -1249,8 +1249,8 @@ export const FEATURE_DIRECTORY = {
       "label_note": "",
       "example": "stop asking before my calendar",
       "example_ok": true,
-      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
-      "where_desktop": "All features and abilities",
+      "where": "desktop Settings: Settings, Accounts; phone: All features and abilities",
+      "where_desktop": "Settings, Accounts",
       "where_phone": "All features and abilities",
       "note": "",
       "not_a_control": true

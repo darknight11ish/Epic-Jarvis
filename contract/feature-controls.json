@@ -910,7 +910,7 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Talk-to-type",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: Settings, Shortcuts; phone: All features and abilities"
       },
       "command": {
         "status": "not-a-setting",
@@ -4163,7 +4163,7 @@
       "label": "PC-Only Setting (Honest Refusal on Phone)",
       "label_evidence": {
         "example_phrase": "stop asking before my calendar",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: Settings, Accounts; phone: All features and abilities"
       },
       "command": {
         "status": "adjust",
