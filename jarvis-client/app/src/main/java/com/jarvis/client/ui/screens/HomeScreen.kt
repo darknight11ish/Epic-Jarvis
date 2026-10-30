@@ -1857,142 +1857,32 @@ private fun StatusLine(
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // The status is itself the way to the checks. You tap the thing that
-        // is wrong to find out why, and it is present whether or not the
-        // link is up.
-        Row(
-            Modifier
-                .weight(1f)
-                .clip(LocalRadii.current.insetShape)
-                .pressable(onClick = actions.onOpenChecks)
-                .heightIn(min = HANDLE_HEIGHT)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Dot(dot)
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(
-                    buildAnnotatedString {
-                        append(label)
-                        if (extras.isNotEmpty()) {
-                            withStyle(SpanStyle(color = chrome.textMid)) {
-                                append(" · ")
-                                append(extras)
-                            }
-                        }
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = tone,
-                    // Two lines, not one: an offline reason from the runtime
-                    // is a sentence, and it is the one thing on this line
-                    // that says what to do.
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                // The progress line, AUTONOMY-PROPOSALS §3c: the backend's
-                // own per-step sentence, under the state it belongs to. One
-                // line, clipped - it is a status, not a log. Only on a live
-                // link, because "Step 2/3" under "Stale" would be a claim
-                // about work the phone cannot see.
-                // Why the link is most likely down, when Android says no
-                // VPN is up at all (phone walk-through N1, 2026-09-27): the
-                // phone reaches the PC only through Tailscale or Meshnet.
-                val vpnLine = state.vpnLine
-                if (vpnLine != null && !linked) {
-                    Text(
-                        vpnLine,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = chrome.warnInk,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                val detail = state.activityDetail
-                if (detail != null && linked && !state.stale) {
-                    Text(
-                        detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = chrome.textMid,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                // The one action beside "Model not running" (the owner's
-                // decision of 2026-10-13). ONE button, offered only while the
-                // PC says a press would really start something - so a lane that
-                // is up, a PC with no such task, and "the PC did not say" all
-                // draw nothing. The words come from the shared rule
-                // (ModelLane), so this screen cannot invent its own.
-                if (modelDown) {
-                    val words = com.jarvis.client.net.ModelLane
-                        .buttonWords(state.modelLane)
-                    val canPress = com.jarvis.client.net.ModelLane
-                        .canPress(state.modelLane, state.laneStarting)
-                    // The PC's own line while it is starting (how long it has
-                    // been), and its own sentence when a start did not come up.
-                    val laneNote = state.laneFailure
-                        ?: com.jarvis.client.net.ModelLane.detail(state.modelLane)
-                    if (words.isNotEmpty()) {
-                        Quiet(
-                            text = words,
-                            enabled = canPress,
-                            color = chrome.warnInk,
-                            onClick = actions.onStartModelLane,
-                        )
-                    }
-                    if (laneNote.isNotEmpty()) {
-                        Text(
-                            laneNote,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (state.laneFailure != null) chrome.warnInk else chrome.textMid,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                // And what JARVIS did about it by itself (the owner's decision
-                // of 2026-10-14: "Also restart the lane automatically when it
-                // dies"). NOT gated on `modelDown`, which is the whole point:
-                // the PC sends this sentence while the lane is UP as well - "it
-                // went down and Jarvis started it again" is news about a lane
-                // that is working, and it is the one place the owner can turn
-                // the automatic restart off, or back on - because a dead process
-                // cannot say whether it crashed or was stopped on purpose.
-                //
-                // The sentence is the PC's own, drawn verbatim: this screen
-                // composes nothing, so the phone, the Jarvis bar and the widget
-                // cannot come to three ways of saying one fact.
-                val autoWords = state.laneAutoFailure
-                    ?: com.jarvis.client.net.ModelLane.notice(state.modelLane)
-                if (autoWords.isNotEmpty()) {
-                    Text(
-                        autoWords,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (state.laneAutoFailure != null) {
-                            chrome.warnInk
-                        } else {
-                            chrome.textMid
-                        },
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                val autoSwitch = com.jarvis.client.net.ModelLane
-                    .switchWords(state.modelLane)
-                if (autoSwitch.isNotEmpty()) {
-                    Quiet(
-                        text = autoSwitch,
-                        enabled = !state.laneAutoBusy && state.laneAutoFailure == null,
-                        color = chrome.textMid,
-                        onClick = {
-                            com.jarvis.client.net.ModelLane
-                                .switchAsks(state.modelLane)
-                                ?.let(actions.onSetLaneAuto)
-                        },
-                    )
-                }
-            }
+        // The status words are the way to the checks - and only the words.
+        // They used to share one `pressable` with the model lane's own lines
+        // and controls underneath them, so the plate was a single button and
+        // a tap meant for "Connected" could land on "Don't restart it for me":
+        // the owner turned automatic restarting off twice that way (REPORT B8,
+        // field test 2026-10-29). The lane's lines are now a SIBLING below this
+        // row, inside a plain Column that answers no tap of its own.
+        Column(Modifier.weight(1f)) {
+            StatusWordsRow(
+                dot = dot,
+                label = label,
+                extras = extras,
+                tone = tone,
+                // The same two states the old code gated its lines on: the VPN
+                // line only under an offline link, the progress line only on a
+                // live and fresh one. Both are decided here, so the row itself
+                // draws exactly what it is handed.
+                vpnLine = state.vpnLine.takeIf { !linked },
+                detail = state.activityDetail.takeIf { linked && !state.stale },
+                onOpenChecks = actions.onOpenChecks,
+            )
+            ModelLaneLines(
+                state = state,
+                actions = actions,
+                modelDown = modelDown,
+            )
         }
 
         // Shown only while there is something to retry: offline, and also
@@ -2008,6 +1898,182 @@ private fun StatusLine(
 
         if (onNavToggle != null) {
             NavToggle(shown = navShown, onToggle = onNavToggle)
+        }
+    }
+}
+
+/**
+ * The status words themselves - the way to Checks, and ONLY the words.
+ *
+ * Pulled out of [StatusLine] for the 2026-10-29 phone field test (REPORT.md
+ * B8): this row used to share one `pressable` with the model lane's lines and
+ * controls underneath it, so Home's whole plate was one button and a tap aimed
+ * at "Connected" could land on "Don't restart it for me". The owner turned
+ * automatic model restarting off twice that way. The lane's own lines are now
+ * [ModelLaneLines], a SIBLING below this row that answers no tap of its own.
+ *
+ * Only the words are handed in, so a control can never be drawn inside the
+ * tap target again: this composable has no `content` slot.
+ */
+@Composable
+private fun StatusWordsRow(
+    dot: androidx.compose.ui.graphics.Color,
+    label: String,
+    extras: String,
+    tone: androidx.compose.ui.graphics.Color,
+    vpnLine: String?,
+    detail: String?,
+    onOpenChecks: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(LocalRadii.current.insetShape)
+            .pressable(onClick = onOpenChecks)
+            .heightIn(min = HANDLE_HEIGHT)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Dot(dot)
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(
+                buildAnnotatedString {
+                    append(label)
+                    if (extras.isNotEmpty()) {
+                        withStyle(SpanStyle(color = chrome.textMid)) {
+                            append(" · ")
+                            append(extras)
+                        }
+                    }
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = tone,
+                // Two lines, not one: an offline reason from the runtime
+                // is a sentence, and it is the one thing on this line
+                // that says what to do.
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Why the link is most likely down, when Android says no
+            // VPN is up at all (phone walk-through N1, 2026-09-27).
+            if (vpnLine != null) {
+                Text(
+                    vpnLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.warnInk,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // The progress line, AUTONOMY-PROPOSALS §3c: the backend's own
+            // per-step sentence, under the state it belongs to.
+            if (detail != null) {
+                Text(
+                    detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The model lane's own lines and controls, under the status words and NOT
+ * inside their tap target (REPORT.md B8).
+ *
+ * Every sentence here is the PC's, drawn verbatim - this screen composes
+ * nothing - and every control is its own button with its own label, so a tap
+ * can only ever do the one thing it is written on.
+ */
+@Composable
+private fun ModelLaneLines(
+    state: HomeState,
+    actions: HomeActions,
+    modelDown: Boolean,
+) {
+    val chrome = LocalChrome.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 2.dp)
+            .padding(bottom = 4.dp),
+    ) {
+        // The one action beside "Model not running" (the owner's decision of
+        // 2026-10-13). ONE button, offered only while the PC says a press
+        // would really start something - so a lane that is up, a PC with no
+        // such task, and "the PC did not say" all draw nothing.
+        if (modelDown) {
+            val words = com.jarvis.client.net.ModelLane
+                .buttonWords(state.modelLane)
+            val canPress = com.jarvis.client.net.ModelLane
+                .canPress(state.modelLane, state.laneStarting)
+            // The PC's own line while it is starting (how long it has been),
+            // and its own sentence when a start did not come up.
+            val laneNote = state.laneFailure
+                ?: com.jarvis.client.net.ModelLane.detail(state.modelLane)
+            if (words.isNotEmpty()) {
+                Quiet(
+                    text = words,
+                    enabled = canPress,
+                    color = chrome.warnInk,
+                    onClick = actions.onStartModelLane,
+                )
+            }
+            if (laneNote.isNotEmpty()) {
+                Text(
+                    laneNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state.laneFailure != null) chrome.warnInk else chrome.textMid,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        // And what JARVIS did about it by itself (the owner's decision of
+        // 2026-10-14: "Also restart the lane automatically when it dies").
+        // NOT gated on `modelDown`, which is the whole point: the PC sends
+        // this sentence while the lane is UP as well - "it went down and
+        // Jarvis started it again" is news about a lane that is working, and
+        // it is the one place the owner can turn the automatic restart off, or
+        // back on - because a dead process cannot say whether it crashed or
+        // was stopped on purpose.
+        //
+        // The sentence is the PC's own, drawn verbatim: this screen composes
+        // nothing, so the phone, the Jarvis bar and the widget cannot come to
+        // three ways of saying one fact.
+        val autoWords = state.laneAutoFailure
+            ?: com.jarvis.client.net.ModelLane.notice(state.modelLane)
+        if (autoWords.isNotEmpty()) {
+            Text(
+                autoWords,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (state.laneAutoFailure != null) {
+                    chrome.warnInk
+                } else {
+                    chrome.textMid
+                },
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        val autoSwitch = com.jarvis.client.net.ModelLane
+            .switchWords(state.modelLane)
+        if (autoSwitch.isNotEmpty()) {
+            Quiet(
+                text = autoSwitch,
+                enabled = !state.laneAutoBusy && state.laneAutoFailure == null,
+                color = chrome.textMid,
+                onClick = {
+                    com.jarvis.client.net.ModelLane
+                        .switchAsks(state.modelLane)
+                        ?.let(actions.onSetLaneAuto)
+                },
+            )
         }
     }
 }

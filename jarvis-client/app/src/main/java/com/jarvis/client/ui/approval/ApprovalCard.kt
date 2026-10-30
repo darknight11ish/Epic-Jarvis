@@ -514,7 +514,15 @@ fun ApprovalCard(
 
         // The card's own first sentence, when the PC sent no short words (an
         // older backend). Outside the fold: it IS the short summary then.
-        if (shown.summary == null && shown.body.isEmpty() && foldedLine.isNotBlank()) {
+        //
+        // Never when it would only repeat the title drawn directly above it.
+        // That is now the one case that gets here: a card whose only text was
+        // machine JSON is folded by [CardSummary.shown] with its title as the
+        // readable line (field test 2026-10-29, B7), and drawing the fallback
+        // under the title would say the same sentence twice.
+        if (shown.summary == null && shown.body.isEmpty() &&
+            foldedLine.isNotBlank() && foldedLine != item.title
+        ) {
             Spacer(Modifier.height(8.dp))
             Text(
                 foldedLine,
