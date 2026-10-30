@@ -1795,6 +1795,57 @@ def t_keep_days_sweeps_before_it_saves_the_window():
         w.done()
 
 
+def t_an_attached_files_body_is_never_stored():
+    """An attached file is never written down (2026-10-30 review finding 1).
+
+    docs/JARVIS-API.md section 163 says a file attached to a chat is read on
+    this PC and kept nowhere. That is enforced in THIS module - record_turn
+    takes the `attachment` field off a copy of the request before anything
+    reads a message (strip_attachment_fields) - so it holds whatever a caller
+    passes, not only for the HUD's current body. This proves it on the row that
+    is really written and on the bytes that are really on disk.
+    """
+    secret = "The access code for the shed is 4417-QUARTZ"
+    raw = b"%PDF-1.4\n" + secret.encode("utf-8") + b"\n%%EOF\n"
+    att = {"name": "tenancy-notes.pdf", "mime": "application/pdf", "size": len(raw),
+           "data": base64.b64encode(raw).decode("ascii")}
+    w = World()
+    try:
+        body = req("what does this say?", cid="conv-attach01")
+        body["messages"][-1]["attachment"] = att
+        body["has_file"] = True
+        out = w.log.record_turn(body, lane="qwen3:8b",
+                                turn=local("It is the tenancy agreement."))
+        check("the turn is recorded, so the checks below mean something",
+              out.get("recorded"), out)
+        conv = w.log.get("conv-attach01")
+        texts = [t["text"] for t in conv["turns"]]
+        check("the stored row is the owner's own words",
+              texts == ["what does this say?", "It is the tenancy agreement."], texts)
+        check("... and holds no part of the file's body", not any(secret in t for t in texts))
+        check("... nor the file's name", not any("tenancy-notes.pdf" in t for t in texts))
+        rawdb = w.raw()
+        check("nothing on disk holds the file's words", secret.encode() not in rawdb)
+        check("... nor its base64", att["data"].encode() not in rawdb)
+        check("... nor its name", b"tenancy-notes.pdf" not in rawdb)
+        check("... and the caller's request was not edited in place",
+              "attachment" in body["messages"][-1], list(body["messages"][-1]))
+        check("the helper's own contract: the field is gone from a COPY",
+              "attachment" not in H.strip_attachment_fields([dict(body["messages"][-1])])[0])
+        # A re-sent EARLIER turn carrying one is stripped before the taint /
+        # live-registry walks see it, and never becomes a row of its own.
+        body2 = req("and the second page?", cid="conv-attach01",
+                    history=[{"role": "user", "content": "old question", "attachment": att},
+                             {"role": "assistant", "content": "old answer"}])
+        out2 = w.log.record_turn(body2, lane="qwen3:8b")
+        check("a later turn in the same chat is recorded as usual", out2.get("recorded"), out2)
+        texts2 = [t["text"] for t in w.log.get("conv-attach01")["turns"]]
+        check("... and no row anywhere holds the file's body",
+              not any(secret in t for t in texts2), texts2)
+    finally:
+        w.done()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

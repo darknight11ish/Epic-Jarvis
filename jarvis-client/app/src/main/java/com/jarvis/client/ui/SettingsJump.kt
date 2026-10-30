@@ -120,5 +120,11 @@ object SettingsJump {
         // `#setup-questionnaire`).
         Entry("First-time setup", "setup-questionnaire"),
         Entry("All features and abilities", "all-features"),
+        // "Jarvis Calendar" (2026-10-29): the feature's own ON/OFF switch, ON by
+        // default. It is the last row on the screen, so it is the last entry
+        // here too. Phone-only in this slice - the desktop's Settings card
+        // arrives with the HUD half - so the words are this section's own title
+        // rather than a desktop jump entry's.
+        Entry("Jarvis Calendar", "calendar"),
     )
 }

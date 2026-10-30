@@ -10,8 +10,10 @@ THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28)
   * "Sun and moon behind the animals, optional (off by default): the real
     sun and moon for the date and time - sunrise and sunset, the moon's
     phase (full, waxing, waning) and its rising and setting - worked out on
-    the owner's own devices from a town the owner types once on the PC (the
-    phone gets it from the PC). Nothing goes online for it."
+    the owner's own devices from a town the owner types on either app (the
+    PC keeps it; each app reads it over the pairing link). Nothing goes
+    online for it." (The owner's decision of 2026-10-29 widened this: he
+    asked to type his town from the phone as well.)
   * "Weather in the animals' scene, optional (off by default): rain, snow or
     wind. Two sources to choose from in settings: the owner's own Home
     Assistant (stays on the home network), or Open-Meteo online (free, no
@@ -38,8 +40,10 @@ LOCATION IS PRIVATE (rule 1)
   * It goes to the owner's own apps over the pairing link (GET /api/sky,
     behind the token like every other read) and, ONLY if the owner approved
     the Open-Meteo card for that very position, to api.open-meteo.com.
-  * The town is set on the PC only (`from_this_pc`), as the owner decided;
-    forgetting it is at once, from either app.
+  * The town may be typed on either app (the owner's decision of 2026-10-29:
+    he asked to type his town from the phone); typing it sends the words only
+    to this PC over the pairing link, never anywhere else. Forgetting it is
+    at once, from either app.
 
 THE WEATHER'S TWO SOURCES
   * "home_assistant": the owner's own Home Assistant weather device - the same
@@ -124,11 +128,13 @@ SHOW_DETAIL = ("The real sun and moon for your town - sunrise and sunset, and th
                "(full, waxing, waning) - worked out on your own devices. Nothing goes online "
                "for it. For the animal and robot faces; the others are not changed.")
 PLACE_LABEL = "Your town"
-PLACE_DETAIL = ("Type it once on the PC. Jarvis finds it in a list of towns it carries and keeps "
-                "only a rough position (about 11 km). Not found? Type the position instead, "
-                "like 39.7, -105.0.")
-PLACE_PHONE = "Your town is typed on the PC, in Settings, Animal options."
-PLACE_NONE = "No town yet, so there is no sun or moon to show. Type your town on the PC."
+PLACE_DETAIL = ("Type it here, or on the PC. Jarvis finds it in a list of towns it carries and "
+                "keeps only a rough position (about 11 km). Not found? Type the position "
+                "instead, like 39.7, -105.0.")
+PLACE_PHONE = ("Your town is typed in Settings, Animal options - here on this phone, or on the "
+               "PC. Nothing is sent anywhere by typing it.")
+PLACE_NONE = ("No town yet, so there is no sun or moon to show. Type your town here, or on the "
+              "PC, in Settings, Animal options.")
 FORGET_LABEL = "Forget my town"
 WEATHER_LABEL = "Weather behind the face"
 WEATHER_DETAIL = "Rain, snow or wind behind the face. Off by default."
@@ -673,7 +679,7 @@ HA_ASKS = ("your settings ask for a yes, or a notice, each time Jarvis reads Hom
 #: scene reads it by itself, and Lockdown stops what runs by itself.
 LOCKDOWN_WHY = ("Lockdown is on, so Jarvis does not read the weather until you turn Lockdown "
                 "off (on the PC, Settings, What asks first)")
-_SETTING_REASONS = (HA_NOT_SET_UP, HA_ASKS, "Open-Meteo needs your town - type it on the PC first",
+_SETTING_REASONS = (HA_NOT_SET_UP, HA_ASKS, "Open-Meteo needs your town - type it in Settings first",
                     LOCKDOWN_WHY)
 
 
@@ -707,7 +713,7 @@ def read_home(place: Optional[dict], deps: Deps) -> tuple:
 
 def read_open_meteo(place: Optional[dict], s: dict, deps: Deps) -> tuple:
     if not place:
-        return None, "Open-Meteo needs your town - type it on the PC first"
+        return None, "Open-Meteo needs your town - type it in Settings first"
     # The approval is for THIS position (load() drops the source otherwise;
     # checked again here, immediately before anything is sent).
     if s.get("open_meteo_for") != position_key(place):
@@ -826,14 +832,14 @@ def view(*, here: bool = True) -> dict:
         "place_label": PLACE_LABEL,
         "place_detail": PLACE_DETAIL if here else PLACE_PHONE,
         "place_none": PLACE_NONE, "forget_label": FORGET_LABEL,
-        "can_set_place": bool(here),
+        "can_set_place": True,
         "weather": weather_view(s),
         "why": s.get("why", ""),
     }
 
 
 # --------------------------------------------------------------------------
-#   Changes: show at once; the town on the PC only; the weather source -
+#   Changes: show at once; the town from either app; the weather source -
 #   off and Home Assistant at once, Open-Meteo ONE card
 # --------------------------------------------------------------------------
 
@@ -950,7 +956,7 @@ def request_weather(src, *, gate: Optional[Callable] = None,
         return 200, {"ok": True, "said": "Open-Meteo is already on.", "view": view(here=here)}
     if not s["place"]:
         return 409, {"ok": False, "error": "Open-Meteo needs your town first - type it in "
-                                           "Settings on the PC."}
+                                           "Settings, Animal options."}
     t = tier_of(CARD_ACTION)
     if t != "ask":
         return 503, {"ok": False, "error": (
@@ -976,9 +982,11 @@ def request_weather(src, *, gate: Optional[Callable] = None,
 
 
 def request_place(text, *, here: bool) -> tuple:
-    if not here:
-        return 403, {"ok": False, "error": "Your town is typed on the PC, in Settings, "
-                                           "Animal options - never sent from the phone."}
+    """Set the town. The owner's decision of 2026-10-29: it may be typed from
+    either app, so `here` no longer refuses a caller - it stays in the
+    signature because the route passes it and the words may one day differ.
+    Typing a town sends those words only to this PC over the pairing link; the
+    PC turns them into a rough position from its own list, never online."""
     got = find_place(text)
     if not got["ok"]:
         return 400, {"ok": False, "error": got["error"]}
@@ -1029,7 +1037,7 @@ def forget_place(*, here: bool) -> tuple:
 def handle_post(body, *, here: bool, deps: Optional[Deps] = None) -> tuple:
     """POST /api/sky with ONE change:
          {"show": true|false}               at once, either app
-         {"place": "Denver"}                the PC only
+         {"place": "Denver"}                either app
          {"forget_place": true}             at once, either app
          {"weather": "off"|"home_assistant"|"open_meteo"}
     Every change that lands (and a card that is raised) rings the `sky`

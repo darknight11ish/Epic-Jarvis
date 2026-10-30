@@ -53,6 +53,12 @@ model exactly as typed; only the copy on disk is different.
 Not kept: anything from a TEMPORARY chat (`"temporary": true` on the
 request, 2026-09-25) - only the registry's hash of its live message, under
 the provenance "temporary", so automatic learning never saves from it.
+Also not kept: the bytes of a FILE the owner attached to a chat. The
+`attachment` field is taken off every message by `strip_attachment_fields`
+before anything below reads one, so only the owner's own typed words are
+recorded - never the file's text, its base64, or even its name (2026-10-30;
+docs/JARVIS-API.md section 163.5). A name is metadata the feature does not
+need to keep, and keeping less is the safer direction.
 Also not kept: tool output, system or context messages, deep questions, wiki
 jobs, notes (#obs, #log), approval cards - none of them come through here.
 
@@ -565,6 +571,39 @@ def _int_cfg(key: str, default: int, lo: int, hi: int) -> int:
 
 
 # ----------------------------------------------------------- reading a turn
+
+#: The field a file the owner ATTACHED rides in (docs/JARVIS-API.md section
+#: 163.1: a sibling of `content`, on the newest user message, whose `data` is
+#: the file's bytes in base64). It is named here, in the module that keeps
+#: history, because THIS is where the promise "an attached file's words are
+#: never written down" has to be true rather than assumed: no matter what a
+#: caller passes to record_turn, the field is gone before this module reads a
+#: message. jarvis_backup.py asks for the same names (its backup boundary).
+ATTACHMENT_FIELDS = ("attachment",)
+
+
+def strip_attachment_fields(messages):
+    """`messages` with every attachment field taken off every message.
+
+    A COPY, never the caller's list or dicts, and `data` is never read, decoded
+    or copied: this function looks only at which keys are present. An
+    attachment's `content` sibling (the owner's own typed words) is untouched,
+    so the turn is still recorded exactly as it was said - what is left out is
+    only the file, which the feature keeps nowhere (docs/JARVIS-API.md section
+    163.5).
+
+    Non-list input and non-dict entries come back as they were: this is a
+    removal of one known field, not a validator.
+    """
+    if not isinstance(messages, list):
+        return messages
+    out = []
+    for m in messages:
+        if isinstance(m, dict) and any(k in m for k in ATTACHMENT_FIELDS):
+            m = {k: v for k, v in m.items() if k not in ATTACHMENT_FIELDS}
+        out.append(m)
+    return out
+
 
 def _text_of(content):
     """(words, has_picture) of one message's content."""
@@ -1858,6 +1897,17 @@ class ChatLog:
         body; returns {"recorded": bool, "why": ...}."""
         if not isinstance(body, dict):
             return {"recorded": False, "why": "not a chat request"}
+        # A file the owner ATTACHED is never kept, and that is enforced HERE
+        # rather than trusted from the caller (2026-10-30). The attachment is a
+        # sibling field of the newest user message; it is taken off a COPY of
+        # the request before ANY reading path below sees a message, so no
+        # history row, title, live-turn hash or learner input can hold the
+        # file's bytes - whatever a caller hands over. jarvis_agent strips the
+        # same field before a model sees it, and jarvis_backup refuses to carry
+        # a body either; this is the one place history is written, so it is the
+        # one that has to be unconditional.
+        body = dict(body)
+        body["messages"] = strip_attachment_fields(body.get("messages"))
         self._housekeeping()
         live = _live_user_messages(body.get("messages"))
         if not live:

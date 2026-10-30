@@ -125,6 +125,13 @@ def t_the_rule_is_the_readme_s_rule():
                      # three.js r128, carried now and served when the approved
                      # "exact Gemini cosmos" port adds its page and whitelist key
                      "three.min.js",
+                     # ... and the app builder's Gradle wrapper (2026-10-30,
+                     # backend/jarvis_android_builder.py): Gradle's OWN
+                     # `gradlew.bat` and `gradle-wrapper.jar`, byte for byte
+                     # from jarvis-client/, because the owner's PC has no
+                     # Gradle installed and a generated app cannot be built
+                     # without them
+                     "jarvis-android-gradlew.bat", "jarvis-android-wrapper.jar",
                      # ... and the seven woff2 faces and the three icons, which are BYTES
                      "chakra-petch-400.woff2", "chakra-petch-500.woff2",
                      "chakra-petch-600.woff2", "chakra-petch-700.woff2",
@@ -141,13 +148,15 @@ def t_the_rule_is_the_readme_s_rule():
           srcs["jarvis-visual-spec.json"].startswith("{source}"),
           srcs["jarvis-visual-spec.json"])
     binary = [n for n, _w, _y in G.BESIDE_BINARY]
-    check("... and the seven woff2 faces and three PWA icons are the BYTE half of the rule (copied, never decoded)",
-          binary == ["chakra-petch-400.woff2", "chakra-petch-500.woff2",
+    check("... and the seven woff2 faces, the three PWA icons and the app builder's two "
+          "Gradle wrapper files are the BYTE half of the rule (copied, never decoded)",
+          binary == ["jarvis-android-gradlew.bat", "jarvis-android-wrapper.jar",
+                     "chakra-petch-400.woff2", "chakra-petch-500.woff2",
                      "chakra-petch-600.woff2", "chakra-petch-700.woff2",
                      "ibm-plex-mono-400.woff2", "ibm-plex-mono-500.woff2",
                      "ibm-plex-sans-400.woff2",
                      "jarvis-180.png", "jarvis-192.png", "jarvis-512.png"]
-          and all(w.startswith("{repo}/backend/static/")
+          and all(w.startswith("{repo}/backend/")
                   for _n, w, _y in G.BESIDE_BINARY)
           and not ({n for n, _w, _y in G.BESIDE} & set(binary)),
           str(binary))

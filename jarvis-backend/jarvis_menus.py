@@ -188,6 +188,22 @@ MENUS: tuple = (
        why="Never hideable: it is the phone's map of where every feature and setting lives, so hiding it would strand the way to find the rest.",
        names=("all features and abilities", "all features", "abilities and commands",
               "the feature directory")),
+    # "Jarvis Calendar" (2026-10-29, the owner's ask: a full calendar of
+    # Jarvis's own, ON by default and "disableable in Settings"). PHONE ONLY for
+    # this slice, like the row above: the phone's Settings row
+    # (SettingsScreen.kt, item "calendar"; CalendarSettingsPlate.kt) holds the
+    # feature's own ON/OFF switch, and `jarvis_settings_registry.SECTIONS` names
+    # the same phone-only Section `calendar`. Every registry Section must be a
+    # menu (test_menu_visibility) and this one MUST NOT be hideable - hiding the
+    # row that turns the feature back on would leave a switched-off calendar
+    # with no way to switch it on, which the phone's own MenuVisibilityTest
+    # writes down in the same words - so it is always drawn, like Security and
+    # Limits, with `kind="row"` and no fold (a row is not a card body).
+    _m("settings.calendar", "Jarvis Calendar",
+       "Your own events, kept on your PC: the month view, the day list and the home-screen widget.",
+       (PHONE,), kind="row", collapse=False, hide=False,
+       why="Never hideable: it is the feature's own ON/OFF switch, and hiding the row that turns the feature back on would leave a switched-off calendar with no way to switch it on.",
+       names=("jarvis calendar", "the jarvis calendar")),
     _m("settings.devices", "Devices", "Every paired device with its own key.",
        hide=False, kind="card", names=("devices", "paired devices"),
        why="Removing a lost phone must stay reachable."),

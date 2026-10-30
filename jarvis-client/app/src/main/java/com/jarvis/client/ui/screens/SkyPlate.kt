@@ -1,6 +1,8 @@
 package com.jarvis.client.ui.screens
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -15,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
 import com.jarvis.client.face.Sky
@@ -24,6 +27,7 @@ import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.launch
@@ -36,11 +40,14 @@ import java.util.Date
  * weather", in the same words (the PC's own).
  *
  * "Show the sun and moon behind the face": one switch, at once either way
- * (showing waits for a live link). The town is typed on the PC only - this
- * shows which one, today's rise and set times worked out on this phone, and
- * "Forget my town" (at once). The weather: three choices; "Open-Meteo
- * (online)" raises ONE approval card on the PC (it sends the rough position
- * to the internet); off and "My Home Assistant" are at once.
+ * (showing waits for a live link). The town may be typed here too - the
+ * owner's decision of 2026-10-29, so this phone is not told to go to the PC -
+ * and the PC finds it in the town list it already carries (nothing goes
+ * online for it). This shows which town the PC holds, today's rise and set
+ * times worked out on this phone, "Save town" and "Forget my town" (the
+ * forget at once). The weather: three choices; "Open-Meteo (online)" raises
+ * ONE approval card on the PC (it sends the rough position to the internet);
+ * off and "My Home Assistant" are at once.
  */
 @Composable
 internal fun SkySection() {
@@ -55,6 +62,9 @@ internal fun SkySection() {
     var readError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    // What has been typed into "Your town" and not sent yet. Kept across a
+    // re-read (the field the owner is typing in must not vanish under them).
+    var town by remember { mutableStateOf("") }
 
     LaunchedEffect(reads) {
         if (!JarvisRuntime.isInitialized) {
@@ -93,6 +103,13 @@ internal fun SkySection() {
         }
     }
 
+    fun saveTown() {
+        // Blank text never becomes a request (the button is disabled for it
+        // anyway); anything else is the PC's to accept or refuse, in its words.
+        val body = SkySettings.townBody(town) ?: return
+        send(body)
+    }
+
     val v = view
     Section(v?.title ?: SkySettings.TITLE, trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
         Plate {
@@ -123,6 +140,34 @@ internal fun SkySection() {
                         style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
                     )
                     Text(v.placeDetail, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                    if (v.canSetPlace) {
+                        // The owner's decision of 2026-10-29: the town is typed here,
+                        // not only on the PC. It waits for a live link (it adds
+                        // something, rule 4); the PC finds it locally and answers in
+                        // its own words - "Set to Denver.", or why it could not.
+                        Gap(8)
+                        TextInput(
+                            value = town,
+                            onValueChange = { town = it },
+                            placeholder = "Type a town, e.g. Denver",
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { saveTown() }),
+                        )
+                        Gap(6)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Found by your PC, in the list of towns it carries - nothing is " +
+                                    "sent anywhere by typing it.",
+                                style = MaterialTheme.typography.labelSmall, color = chrome.textLo,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Quiet(
+                                "Save town",
+                                enabled = !busy && canAct && SkySettings.townBody(town) != null,
+                                onClick = { saveTown() },
+                            )
+                        }
+                    }
                     if (place != null) {
                         val fmt = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
                         val line = remember(place, reads) {

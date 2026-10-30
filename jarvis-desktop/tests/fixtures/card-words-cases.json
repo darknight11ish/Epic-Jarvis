@@ -23,6 +23,14 @@
       "title": "Jarvis wants to start a helper task"
     },
     {
+      "action": "app_build_android",
+      "title": "Jarvis wants to build its Android app with Gradle"
+    },
+    {
+      "action": "app_install_android",
+      "title": "Jarvis wants to put that app on your phone"
+    },
+    {
       "action": "app_merge_change",
       "title": "Jarvis wants to add its change to one of your apps"
     },
@@ -477,6 +485,30 @@
       "notice": {
         "title": "Jarvis wants to start a helper task",
         "summary": "Jarvis wants to start a helper task.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "app_build_android",
+      "notice": {
+        "title": "Jarvis wants to build its Android app with Gradle",
+        "summary": "Jarvis wants to build its Android app.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "app_install_android",
+      "notice": {
+        "title": "Jarvis wants to put that app on your phone",
+        "summary": "Jarvis wants to put it on your phone.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

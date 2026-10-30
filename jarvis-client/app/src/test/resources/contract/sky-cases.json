@@ -2,16 +2,16 @@
  "cases": {
   "home_assistant_not_set_up": {
    "available": true,
-   "can_set_place": false,
+   "can_set_place": true,
    "forget_label": "Forget my town",
    "place": {
     "lat": 39.7,
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Your town is typed on the PC, in Settings, Animal options.",
+   "place_detail": "Your town is typed in Settings, Animal options - here on this phone, or on the PC. Nothing is sent anywhere by typing it.",
    "place_label": "Your town",
-   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town here, or on the PC, in Settings, Animal options.",
    "show": true,
    "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
    "show_label": "Show the sun and moon behind the face",
@@ -49,9 +49,9 @@
    "can_set_place": true,
    "forget_label": "Forget my town",
    "place": null,
-   "place_detail": "Type it once on the PC. Jarvis finds it in a list of towns it carries and keeps only a rough position (about 11 km). Not found? Type the position instead, like 39.7, -105.0.",
+   "place_detail": "Type it here, or on the PC. Jarvis finds it in a list of towns it carries and keeps only a rough position (about 11 km). Not found? Type the position instead, like 39.7, -105.0.",
    "place_label": "Your town",
-   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town here, or on the PC, in Settings, Animal options.",
    "show": false,
    "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
    "show_label": "Show the sun and moon behind the face",
@@ -86,16 +86,16 @@
   },
   "open_meteo_rain": {
    "available": true,
-   "can_set_place": false,
+   "can_set_place": true,
    "forget_label": "Forget my town",
    "place": {
     "lat": 39.7,
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Your town is typed on the PC, in Settings, Animal options.",
+   "place_detail": "Your town is typed in Settings, Animal options - here on this phone, or on the PC. Nothing is sent anywhere by typing it.",
    "place_label": "Your town",
-   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town here, or on the PC, in Settings, Animal options.",
    "show": true,
    "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
    "show_label": "Show the sun and moon behind the face",
@@ -143,16 +143,16 @@
   },
   "open_meteo_waiting": {
    "available": true,
-   "can_set_place": false,
+   "can_set_place": true,
    "forget_label": "Forget my town",
    "place": {
     "lat": 39.7,
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Your town is typed on the PC, in Settings, Animal options.",
+   "place_detail": "Your town is typed in Settings, Animal options - here on this phone, or on the PC. Nothing is sent anywhere by typing it.",
    "place_label": "Your town",
-   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town here, or on the PC, in Settings, Animal options.",
    "show": true,
    "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
    "show_label": "Show the sun and moon behind the face",
@@ -194,9 +194,9 @@
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Type it once on the PC. Jarvis finds it in a list of towns it carries and keeps only a rough position (about 11 km). Not found? Type the position instead, like 39.7, -105.0.",
+   "place_detail": "Type it here, or on the PC. Jarvis finds it in a list of towns it carries and keeps only a rough position (about 11 km). Not found? Type the position instead, like 39.7, -105.0.",
    "place_label": "Your town",
-   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town here, or on the PC, in Settings, Animal options.",
    "show": true,
    "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
    "show_label": "Show the sun and moon behind the face",
@@ -231,16 +231,16 @@
   },
   "town_on_the_phone": {
    "available": true,
-   "can_set_place": false,
+   "can_set_place": true,
    "forget_label": "Forget my town",
    "place": {
     "lat": 39.7,
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Your town is typed on the PC, in Settings, Animal options.",
+   "place_detail": "Your town is typed in Settings, Animal options - here on this phone, or on the PC. Nothing is sent anywhere by typing it.",
    "place_label": "Your town",
-   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town here, or on the PC, in Settings, Animal options.",
    "show": true,
    "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
    "show_label": "Show the sun and moon behind the face",

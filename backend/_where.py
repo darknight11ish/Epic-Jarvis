@@ -426,6 +426,14 @@ SHIPPED = (
     # install(), called by plugins/ready/antislop - no patch of its own. A
     # cardless preference either way, like the prompt coach.
     "jarvis_antislop.py",
+    # The Jarvis-owned local calendar (2026-10-29): the owner's own events in
+    # `calendar.db`, ON when no settings file says otherwise, OFF keeps every
+    # row. GET /api/calendar and the three writes come from its own install(),
+    # called by plugins/ready/jarvis-calendar - no patch of its own. The three
+    # writes are cardless by the owner's 2026-10-29 ruling (one event, no bulk,
+    # ids-only audit), recorded in decisions.d/ and ARCHITECTURE's cardless
+    # table.
+    "jarvis_local_calendar.py",
     "jarvis_card_words.py",
     # The approval card's short summary and the "Start short" / "Always show
     # everything" choice (the owner's request of 2026-10-09, card-prefs.patch):
@@ -1364,6 +1372,41 @@ SHIPPED = (
     # nowhere else. The same two entries are at the end of the script's $SHIPPED.
     "jarvis_connect_account.py",
     "jarvis_connect_account_wiring.py",
+    # The app builder's last two steps (2026-10-30, the owner's question "can
+    # jarvis build android apps? that i can sideload into my phone?"): a FIXED
+    # Android project written into one task's copy, then `gradlew.bat
+    # assembleDebug` and `adb install -r <apk>`, each behind its own risky card.
+    # Routes come from its own install(), called by the drop-in folder
+    # plugins/ready/android-builder, so it adds no patch. The same three entries
+    # are at the end of the script's $SHIPPED; this list and that one are one
+    # list, in the same order (test_shipped_modules.py).
+    "jarvis_android_builder.py",
+    # Not modules, and listed here for the same reason: Gradle's OWN wrapper
+    # script and wrapper jar, copied BYTE FOR BYTE from jarvis-client/ and
+    # carried the same way, because the owner's PC has no Gradle installed and
+    # a generated app cannot be built without them (Apache-2.0, credited in
+    # THIRD-PARTY-NOTICES.txt; backend/test_android_builder.py pins both).
+    "jarvis-android-gradlew.bat",
+    "jarvis-android-wrapper.jar",
+    # A file the owner ATTACHED to a chat (2026-10-29; the owner chose "both
+    # apps at once" and the design's recommended defaults). Validation by kind,
+    # magic bytes and size, the never-read names, the zip-bomb refusal, the
+    # converter over a STREAM (jarvis_documents' new stdin mode - nothing is
+    # written to disk), the 12,000-character cap, the chat-marker strip and the
+    # outside-text sentence. jarvis_agent.with_file_text calls it,
+    # jarvis_router.choose(has_file=...) answers gate "file", and
+    # attached-file.patch adds the ONE line to the HUD's router call plus the
+    # relay belt. No route of its own, no new switch, no new permission.
+    # The same entry is at the end of the script's $SHIPPED.
+    "jarvis_attached_file.py",
+    # What a parking stay costs, minute by minute (2026-10-30, the parking
+    # blueprint of 2026-10-29): the piecewise time-window integrator that gets
+    # the legal tail-end overlap right, the two public-data adapters (Seattle's
+    # Blockface layer and OpenStreetMap's Overpass), a local SQLite cache, and
+    # the per-device words. It answers through jarvis_quick.py's own sentence
+    # grammar - no model tool, no route, no card, and no requirement beyond the
+    # standard library, so requirements.lock does not move.
+    "jarvis_parking.py",
 )
 
 
