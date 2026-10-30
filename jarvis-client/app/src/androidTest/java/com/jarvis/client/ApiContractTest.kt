@@ -8,13 +8,19 @@ import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Briefing
+import com.jarvis.client.net.Calendar
 import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.Hardware
 import com.jarvis.client.net.JarvisApi
+import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.SaidAloud
 import com.jarvis.client.net.Schedule
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -201,21 +207,31 @@ class ApiContractTest {
         assertEquals(ApiError.NotAvailable, (out as ApiResult.Failed).error)
     }
 
-    /** A decision posts the id and nothing else — no verdict duplicated in the body. */
+    /**
+     * A decision posts the id and the surface that made it — no verdict
+     * duplicated in the body.
+     *
+     * The `by` field was added on 2026-10-29: the server stores it as
+     * `decided_by` and defaults an absent one to `"hud"`, so a phone body of
+     * `{"id":"a1"}` was recorded as the browser HUD's. This test kept expecting
+     * the old body and failed the `smoke` job on the PR's own head; it is the
+     * instrumentation half of `SignedApprovalTest`, which holds both verbs to
+     * the same constant.
+     */
     @Test
-    fun approvePostsTheIdAlone() = runBlocking {
+    fun approvePostsTheIdAndTheSurface() = runBlocking {
         routes["/api/approve"] = ok("{}")
         api.approve("a1")
         val req = server.takeRequest(10, TimeUnit.SECONDS)!!
         assertEquals("POST", req.method)
         assertEquals("/api/approve", req.path)
-        assertEquals("""{"id":"a1"}""", req.body.readUtf8())
+        assertEquals("""{"id":"a1","by":"phone"}""", req.body.readUtf8())
     }
 
     /**
      * CLAUDE.md's 2026-09-20 amendment: install joins switch as tier `ask`,
-     * so the request shape is the same one `approvePostsTheIdAlone` proves
-     * above for a different route - the same `{"ref": ...}` body
+     * so the request shape is the same one `approvePostsTheIdAndTheSurface`
+     * proves above for a different route - the same `{"ref": ...}` body
      * `switchModel` already sends, on `/install` instead of `/switch`.
      *
      * The 202 is the point, not an afterthought: `docs/JARVIS-API.md` says
@@ -283,6 +299,113 @@ class ApiContractTest {
         val out = api.markAnswer("not-an-id", AnswerMark.WRONG)
         assertTrue(out is ApiResult.Failed)
         assertEquals(0, server.requestCount)
+    }
+
+    /**
+     * Jarvis's own calendar (2026-10-29; JARVIS-API section 163;
+     * net/Calendar.kt). The four routes in the shapes the backend contract says
+     * they have:
+     *
+     *  - the read is `GET /api/calendar?days=N`, with N clamped to 1..90, so a
+     *    screen can never ask for a ten-year window;
+     *  - one add posts ONE event and only the fields it was given - and an
+     *    all-day event posts no time at all, because a PC that stored "00:00"
+     *    would draw it as a timed midnight event;
+     *  - one delete posts the id and "delete", and nothing bulk;
+     *  - the switch posts one boolean.
+     *
+     * All three writes go through one call that refuses a path which is not one
+     * of the calendar's own, BEFORE a request is built - so a typo cannot become
+     * a POST to some other route.
+     */
+    @Test
+    fun theCalendarRoutesAreTheOnesInTheContract() = runBlocking {
+        routes["/api/calendar"] = ok(
+            """{"available":true,"on":true,"days":7,
+               "window":{"start":"2026-11-01","end":"2026-11-08"},
+               "events":[{"id":"c0000000001","title":"Dentist","date":"2026-11-03","time":"14:30",
+                          "all_day":false,"place":"","notes":"","recurrence":"","tz":"Europe/London"}],
+               "sources":{"local":{"state":"on","count":1}}}""",
+        )
+        val read = api.calendar(7)
+        val get = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("GET", get.method)
+        assertEquals("/api/calendar?days=7", get.path)
+        val view = Calendar.parse((read as ApiResult.Ok).value)!!
+        assertEquals(listOf("Dentist"), view.events.map { it.title })
+        // The client clamps what a caller may ask for, at both ends.
+        api.calendar(0)
+        assertEquals("/api/calendar?days=1", server.takeRequest(10, TimeUnit.SECONDS)!!.path)
+        api.calendar(5_000)
+        assertEquals("/api/calendar?days=90", server.takeRequest(10, TimeUnit.SECONDS)!!.path)
+
+        routes["/api/calendar/add"] = ok("""{"ok":true,"event":{"id":"c0000000002"},"said":"Saved."}""")
+        val addBody = Calendar.addBody(
+            title = "Dentist",
+            date = "2026-11-03",
+            time = "14:30",
+            place = "Bridge Street",
+            notes = "bring the form",
+            remindMinutes = 30,
+        )!!
+        assertTrue(api.calendarWrite(Calendar.ADD_PATH, addBody) is ApiResult.Ok)
+        val add = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("POST", add.method)
+        assertEquals("/api/calendar/add", add.path)
+        // The body is a REAL JSON object with the field names the contract
+        // names - not a hand-built string that could miss a quote.
+        val sent = JarvisJson.parseToJsonElement(add.body.readUtf8()) as JsonObject
+        assertEquals("Dentist", sent["title"]?.jsonPrimitive?.content)
+        assertEquals("2026-11-03", sent["date"]?.jsonPrimitive?.content)
+        assertEquals("14:30", sent["time"]?.jsonPrimitive?.content)
+        assertEquals("Bridge Street", sent["place"]?.jsonPrimitive?.content)
+        assertEquals(30, sent["remind_minutes"]?.jsonPrimitive?.int)
+        assertEquals(false, sent["all_day"]?.jsonPrimitive?.boolean)
+
+        // An all-day event carries no `time` at all.
+        val allDay = Calendar.addBody("Holiday", "2026-11-04", allDay = true)!!
+        assertTrue(api.calendarWrite(Calendar.ADD_PATH, allDay) is ApiResult.Ok)
+        val all = JarvisJson.parseToJsonElement(
+            server.takeRequest(10, TimeUnit.SECONDS)!!.body.readUtf8(),
+        ) as JsonObject
+        assertFalse(all.containsKey("time"))
+
+        routes["/api/calendar/act"] = ok("""{"ok":true,"id":"c0000000001","said":"Deleted."}""")
+        assertTrue(api.calendarWrite(Calendar.ACT_PATH, Calendar.deleteBody("c0000000001")!!) is ApiResult.Ok)
+        val act = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("/api/calendar/act", act.path)
+        assertEquals("""{"id":"c0000000001","do":"delete"}""", act.body.readUtf8())
+
+        routes["/api/calendar/settings"] = ok("""{"ok":true,"on":false}""")
+        assertTrue(api.calendarWrite(Calendar.SETTINGS_PATH, Calendar.settingsBody(false)) is ApiResult.Ok)
+        val off = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("/api/calendar/settings", off.path)
+        assertEquals("""{"on":false}""", off.body.readUtf8())
+
+        // The same authenticated discipline as every other route: the token
+        // header on all of them, and the client header the project requires.
+        listOf(get, add, act, off).forEach {
+            assertNotNull(it.getHeader(JarvisApi.TOKEN_HEADER))
+            assertEquals(JarvisApi.CLIENT_VALUE, it.getHeader(JarvisApi.CLIENT_HEADER))
+        }
+
+        // A path that is not one of the calendar's three writes never leaves.
+        val before = server.requestCount
+        assertTrue(api.calendarWrite("/api/approve", """{"id":"a1"}""") is ApiResult.Failed)
+        assertEquals(before, server.requestCount)
+    }
+
+    /**
+     * A PC without the calendar answers 404, and the phone must say "run
+     * apply-patches.ps1", never "you have no events": the two are different
+     * sentences and only one is true.
+     */
+    @Test
+    fun aPcWithoutTheCalendarIsNotAnEmptyCalendar() = runBlocking {
+        routes["/api/calendar"] = MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
+        val out = api.calendar(7)
+        assertEquals(ApiError.NotFound, (out as ApiResult.Failed).error)
+        assertTrue(Calendar.missing(out.error))
     }
 
     /** `memory-intake.patch`: "Both are true" posts ONE proposal id, like decide. */
@@ -451,6 +574,44 @@ class ApiContractTest {
         routes["/api/chat"] = answer("Hello.")
         chat.send("hi")
         assertEquals(listOf("user:hi"), roles(server.takeRequest(10, TimeUnit.SECONDS)!!))
+    }
+
+    /**
+     * A document attached to a question (2026-10-29), read off the wire from
+     * the real ChatSession: one `attachment` object on the newest user message
+     * (`name`, `mime`, `size`, raw base64 `data`), `has_file: true` at the top
+     * level beside `has_image`, and NOTHING carried on the next question - the
+     * bytes are sent once and never kept.
+     */
+    @Test
+    fun anAttachedFileRidesInTheNewestMessageAndIsNotKept() = runBlocking {
+        fun answer(text: String) = MockResponse().setResponseCode(200)
+            .setHeader("Content-Type", "text/plain").setBody(text)
+        val file = com.jarvis.client.net.AttachFile.picked(
+            "hello".toByteArray(), "taxes.pdf",
+        ) as com.jarvis.client.net.AttachFile.Picked.Ok
+        val chat = ChatSession(api)
+
+        routes["/api/chat"] = answer("It is a tax form.")
+        chat.send("what does this say?", attachment = file.file)
+        val first = org.json.JSONObject(server.takeRequest(10, TimeUnit.SECONDS)!!.body.readUtf8())
+        assertEquals(true, first.getBoolean("has_file"))
+        assertEquals(false, first.getBoolean("has_image"))
+        val msgs = first.getJSONArray("messages")
+        val last = msgs.getJSONObject(msgs.length() - 1)
+        assertEquals("user", last.getString("role"))
+        assertEquals("what does this say?", last.getString("content"))
+        val att = last.getJSONObject("attachment")
+        assertEquals("taxes.pdf", att.getString("name"))
+        assertEquals("application/pdf", att.getString("mime"))
+        assertEquals(5, att.getInt("size"))
+        assertEquals("aGVsbG8=", att.getString("data"))
+
+        routes["/api/chat"] = answer("Fine.")
+        chat.send("and the second page?")
+        val second = org.json.JSONObject(server.takeRequest(10, TimeUnit.SECONDS)!!.body.readUtf8())
+        assertFalse("has_file must be absent on a question with no file", second.has("has_file"))
+        assertFalse("the file must not survive in the conversation", second.toString().contains("aGVsbG8="))
     }
 
     /**

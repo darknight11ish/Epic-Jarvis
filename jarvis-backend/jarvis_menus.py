@@ -188,6 +188,22 @@ MENUS: tuple = (
        why="Never hideable: it is the phone's map of where every feature and setting lives, so hiding it would strand the way to find the rest.",
        names=("all features and abilities", "all features", "abilities and commands",
               "the feature directory")),
+    # "Jarvis Calendar" (2026-10-29, the owner's ask: a full calendar of
+    # Jarvis's own, ON by default and "disableable in Settings"). PHONE ONLY for
+    # this slice, like the row above: the phone's Settings row
+    # (SettingsScreen.kt, item "calendar"; CalendarSettingsPlate.kt) holds the
+    # feature's own ON/OFF switch, and `jarvis_settings_registry.SECTIONS` names
+    # the same phone-only Section `calendar`. Every registry Section must be a
+    # menu (test_menu_visibility) and this one MUST NOT be hideable - hiding the
+    # row that turns the feature back on would leave a switched-off calendar
+    # with no way to switch it on, which the phone's own MenuVisibilityTest
+    # writes down in the same words - so it is always drawn, like Security and
+    # Limits, with `kind="row"` and no fold (a row is not a card body).
+    _m("settings.calendar", "Jarvis Calendar",
+       "Your own events, kept on your PC: the month view, the day list and the home-screen widget.",
+       (PHONE,), kind="row", collapse=False, hide=False,
+       why="Never hideable: it is the feature's own ON/OFF switch, and hiding the row that turns the feature back on would leave a switched-off calendar with no way to switch it on.",
+       names=("jarvis calendar", "the jarvis calendar")),
     _m("settings.devices", "Devices", "Every paired device with its own key.",
        hide=False, kind="card", names=("devices", "paired devices"),
        why="Removing a lost phone must stay reachable."),
@@ -480,17 +496,23 @@ MENUS: tuple = (
     # "Notifications" (the parity audit of 2026-10-10, and the card six real
     # desktop controls were missing from the phone behind). The card was in NO
     # registry that tools/check_feature_list.py reads, so nothing failed when
-    # it changed and nothing noticed it had no phone form at all. It is here
-    # now, desktop-only and with the reason written down, so the absence is a
-    # recorded decision rather than silence. See the phone's own words:
-    # `jarvis-client` OpenPlace.kt lists "notifications" in PC_ONLY and
-    # SettingsScreen.kt's "jarvis-notify" row opens Android's own per-app
-    # notification screen instead - which is the phone's per-kind control.
+    # it changed and nothing noticed it had no phone form at all.
+    #
+    # BOTH, not desktop-only (2026-10-29, the settings wrong-app audit's
+    # finding 7): the phone really does change the SAME seven kinds. Its
+    # "Notifications from Jarvis" row draws SettingsScreen.kt's PcNotifySection
+    # under the PC's own words, every line saying "(on your PC)" - and the
+    # desktop's card already promises it ("Your phone can change them too, in
+    # its own Settings"). Android's own per-channel screen sits beside them, so
+    # an earlier reading counted the phone's controls as Android's alone. It is
+    # still not hideable on either app (`hide` False), because the PC's card is
+    # the PC's and the phone's row is a way in, not a menu.
     _m("settings.notifications", "Notifications",
        "Which notifications Jarvis shows on this PC, quiet hours, and a test.",
-       (DESKTOP,), hide=False, collapse=False,
-       why="Desktop only: the phone's notification controls are Android's own, per channel "
-           "(OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen).",
+       BOTH, hide=False, collapse=False,
+       why="Both apps change the same seven kinds: on the phone they are drawn under "
+           "\"Notifications from Jarvis\", each row saying it is the PC's; neither app has a "
+           "hide row for them, so `hide` is False on both.",
        names=("notifications", "notification settings", "desktop notifications")),
     _m("settings.backend-supports", "What this backend supports",
        "The capability list the app branches on.",
@@ -501,6 +523,19 @@ MENUS: tuple = (
     _m("settings.phone-notify", "Phone notifications",
        "Reading phone notifications, and the apps allowed.", (PHONE,),
        names=("phone notifications",)),
+    # Both apps really have a floating face (2026-10-29, the settings wrong-app
+    # audit's finding 6): `features/features.json` and the contract now say
+    # `surface: both`, because the PC's half is the "Floating face" toggle
+    # inside Appearance.
+    #
+    # This row stays PHONE, and not out of stubbornness: `apps` here is read by
+    # the desktop's own hide list (menu-visibility-settings.js filters
+    # `has(m, "desktop") && m.hide`), so a desktop entry would offer to hide a
+    # card settings.html does not draw - which `test_menu_visibility.py` refuses
+    # ("every settings.* id with desktop in apps is a real Settings card"). The
+    # PC's place is already recorded, honestly, as settings.appearance-card. One
+    # feature, two shapes, two menu rows - the same shape as
+    # settings.animal-options, which is the phone's row inside Appearance.
     _m("settings.floating-avatar", "Floating Jarvis", "The floating face or bubble.", (PHONE,),
        names=("floating jarvis", "floating face", "the bubble")),
     _m("settings.quick-tiles", "Quick Settings tiles", "The tiles in the phone's quick panel.",

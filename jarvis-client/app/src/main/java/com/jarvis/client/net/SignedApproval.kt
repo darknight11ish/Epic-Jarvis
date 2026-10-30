@@ -80,9 +80,34 @@ object SignedApproval {
     /** What `POST /api/approve` carries besides the id. */
     data class Signature(val device: String, val nonce: String, val sig: String)
 
-    /** The body of `POST /api/approve`: `{"id"}` as ever, plus `"signature"` when there is one. */
+    /**
+     * The `by` every decision from this phone carries - and the one answer to
+     * "who decided this?" that the PC was not being told.
+     *
+     * `POST /api/approve` and `POST /api/deny` read `by` and store it as
+     * `decided_by` (`jarvis_hud.py`'s route, `jarvis_gate.decide`). The desktop
+     * has always sent one (`"desktop_spotlight"`, `commands.rs`) and the
+     * browser HUD sends `"hud"`. The phone sent ONLY `{"id"}` - so the route's
+     * own `or "hud"` default recorded every phone decision as a HUD one, and
+     * the Activity list on both apps said a card was answered at the PC's HUD
+     * when the owner had answered it from his phone (the owner's field evidence
+     * of 2026-10-29: a phone deny stored as `decided_by:"hud"`).
+     *
+     * `docs/JARVIS-API.md` §7 carried this as an OPEN disagreement between the
+     * two clients ("neither client knows whether the server reads `by` at all");
+     * the server does, so this closes it rather than joining it.
+     */
+    const val BY = "phone"
+
+    /**
+     * The body of `POST /api/approve`: `{"id", "by"}`, plus `"signature"` when
+     * there is one.
+     */
     fun approveBody(id: String, signature: Signature?): String {
-        val fields = mutableMapOf<String, JsonElement>("id" to JsonPrimitive(id))
+        val fields = mutableMapOf<String, JsonElement>(
+            "id" to JsonPrimitive(id),
+            "by" to JsonPrimitive(BY),
+        )
         if (signature != null) {
             fields["signature"] = JsonObject(
                 mapOf(
@@ -94,6 +119,17 @@ object SignedApproval {
         }
         return JsonObject(fields).toString()
     }
+
+    /**
+     * The body of `POST /api/deny`: the same two fields [approveBody] sends,
+     * without a signature - a denial is never signed (`_NO_RULE_FROM_DENIAL`).
+     *
+     * Here rather than at the call site so approve and deny cannot drift about
+     * who they say answered: `SignedApprovalTest` checks both bodies carry the
+     * same `by`.
+     */
+    fun denyBody(id: String): String =
+        JsonObject(mapOf("id" to JsonPrimitive(id), "by" to JsonPrimitive(BY))).toString()
 
     /** The body of `POST /api/approve/challenge`. */
     fun challengeBody(id: String): String = JsonObject(mapOf("id" to JsonPrimitive(id))).toString()

@@ -1337,6 +1337,19 @@
     ]
   },
   {
+    "id": "jarvis-calendar",
+    "group": "Home",
+    "title": "Jarvis Calendar",
+    "what": "Your own calendar, kept by Jarvis on this PC: the events you add are shown beside Google Calendar and iCal, never sent to either, and never synced out.",
+    "where": "Ask \"turn off the Jarvis calendar\". The Calendar screen in each app is the next slice; the store and its routes are built now.",
+    "asks": "Adding, changing or deleting ONE of your own events raises no card: it writes one row on your own PC and has no bulk form. Turning the whole calendar off is instant and keeps every event.",
+    "limit": "Local only: no Google sync, no invitations, no sharing, and no reminder ringing yet (the reminder time is stored for later). Editing a repeating event changes the whole series, not one occurrence.",
+    "surface": "both",
+    "covers": [
+      "settings.calendar"
+    ]
+  },
+  {
     "id": "weather-sky",
     "group": "Home",
     "title": "Weather and the sky behind the animals",
@@ -1512,11 +1525,10 @@
     "group": "Phone",
     "title": "Floating Jarvis",
     "what": "A small floating face, or a bubble, over your other apps.",
-    "where": "Settings, Floating Jarvis.",
+    "where": "Settings, Floating Jarvis on the phone; Settings, Appearance, Floating face on the PC.",
     "asks": "No card.",
     "limit": "Bubble mode may need more than this setting before Android shows it at all - try it on the real phone.",
-    "surface": "phone",
-    "surface_reason": "The phone's Floating Jarvis is the app's own icon with a status dot (AvatarOverlayService.kt), not the animal - the desktop's floating face draws the real animal, so there is no animal on the phone to sleep, keep still or take a serious pose (docs/ARCHITECTURE.md section 8).",
+    "surface": "both",
     "aliases": [
       "floating jarvis",
       "floating face"
@@ -1855,11 +1867,10 @@
     "group": "The PC itself",
     "title": "Notifications",
     "what": "Which of Jarvis's notifications this PC shows - alarms and urgent alerts, reminders and to-dos, the morning briefing, and \"website needs you\" - plus quiet hours and a test button.",
-    "where": "Settings, Notifications.",
+    "where": "Settings, Notifications. On the phone, Settings, Notifications from Jarvis.",
     "asks": "No card - it only chooses which of the PC's own notifications appear.",
-    "limit": "Desktop only. On the phone these are Android's own per-channel notification controls, reached from the \"Notifications from Jarvis\" row on Settings.",
-    "surface": "desktop",
-    "surface_reason": "On the phone these are Android's own per-channel notification controls, reached from the \"Notifications from Jarvis\" row on Settings (the row's own limit).",
+    "limit": "The phone changes the same seven kinds in its own Settings, under \"Notifications from Jarvis\", where every row says it is the PC's; Android's own per-channel controls sit beside them.",
+    "surface": "both",
     "covers": [
       "settings.notifications",
       "phone-notifications"

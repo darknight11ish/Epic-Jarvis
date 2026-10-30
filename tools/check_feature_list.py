@@ -272,6 +272,10 @@ INTERNAL = {
 #: claim a lesson that does not exist.
 LESSON_EXEMPT = {
     "typing": "the box you type in; the app's own prompt field is the lesson",
+    # The Jarvis calendar's store and routes land before either screen, so
+    # there is nothing to teach yet: the Calendar screens (HUD card, phone
+    # plate, widget) are the next slice, and their lesson lands with them.
+    "jarvis-calendar": "the store and routes come first; the screens and their lesson are the next slice",
     "interrupt": "the talk button stops the answer; there is nothing to learn",
     "temporary-chat": "one switch in the chat head; its own label is the lesson",
     "private-chat": "one chip in the chat head, and its own strip line says what it does: no memory, nothing kept, no tools, no changes",

@@ -185,6 +185,13 @@ class Section:
     names: tuple                # plain-English things the owner might call it
     app: str = "both"           # "both" | "desktop" | "phone"
     where: str = "settings"     # "settings" (Settings) or "brain" (the Brain/Mind)
+    #: False for a row that is the FEATURE's own switch rather than a place to
+    #: open. The two "open" matchers - jarvis_quick._settings_open and
+    #: jarvis_open._section_for - then leave those words to the feature that
+    #: already owns them instead of answering a Settings jump; `find_section`
+    #: still names the section, because every Section must be nameable
+    #: (test_settings_registry pins that).
+    openable: bool = True
 
 
 #: Desktop: jarvis-desktop/src/settings.html's own `<section class="card"
@@ -406,6 +413,13 @@ SECTIONS: tuple = (
     # a place neither app could find. The new check in
     # test_settings_registry.py keeps the next one from going missing the same
     # way.
+    #
+    # The section stays the PHONE's (2026-10-29, the settings wrong-app audit's
+    # finding 6): the PC has the same feature as the "Floating face" toggle
+    # inside Appearance (settings.html's `floating-enabled`), but it has no
+    # section of its own - the PC's control is a row of Appearance, which has
+    # its own section and id. `app` here says which app draws this SECTION, so
+    # "both" would claim a desktop card that does not exist.
     Section("floating-avatar", ("floating jarvis", "the floating face",
                                 "the floating avatar", "the bubble"),
             app="phone"),
@@ -471,24 +485,23 @@ SECTIONS: tuple = (
     # PC"); the summaries themselves are on both.
     Section("spending", ("spending", "spending settings", "my spending", "bank files"),
             app="both"),
-    # Notifications (2026-10-01): a card on the desktop ONLY, and it said
-    # "both" until 2026-10-09 (settings-coverage audit) - which was untrue.
-    # The PC's card is per kind: alarms, reminders, the briefing and the
-    # captcha hand-off each on or off, plus quiet hours and a Test button
-    # (notifications-settings.js; the toasts themselves are raised in Rust,
-    # src-tauri/src/notifications.rs, which is why the choices are pushed to
-    # it). The phone has no such screen and cannot have this one: its
-    # notification controls are Android's own, per channel (strings.xml
-    # "channel_alarm", "channel_schedule", "channel_approval",
+    # Notifications (2026-10-01): the PC's card, per kind - alarms, reminders,
+    # the briefing and the captcha hand-off each on or off, plus quiet hours and
+    # a Test button (notifications-settings.js; the toasts themselves are raised
+    # in Rust, src-tauri/src/notifications.rs, which is why the choices are
+    # pushed to it). The phone's own Android per-channel screen is separate
+    # (strings.xml "channel_alarm", "channel_schedule", "channel_approval",
     # "channel_handoff" - one per kind, which is what the owner asked for on
-    # 2026-09-30: "per kind: on/off, style, Test button, quiet hours"). The
-    # phone already said so in its own words: jarvis-client ui/OpenPlace.kt
-    # lists "notifications" in PC_ONLY, so "open notifications" there answers
-    # "only in Jarvis on your PC" - while this table told the same phone the
-    # section was on both apps. Corrected here rather than left for the next
-    # reader to find; test_settings_registry.py holds the two together now.
+    # 2026-09-30: "per kind: on/off, style, Test button, quiet hours").
+    #
+    # BOTH since 2026-10-29 (the settings wrong-app audit's finding 7), which is
+    # not the "both" the 2026-10-09 settings-coverage audit cleared: the phone's
+    # "Notifications from Jarvis" row draws SettingsScreen.kt's PcNotifySection -
+    # the SAME seven kinds, read and written through the one limits route, every
+    # row saying "(on your PC)". Its OpenPlace.PC_ONLY entry stays, because that
+    # answers where the CARD is, not what the phone can change.
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
-            app="desktop"),
+            app="both"),
     # "All features and abilities" (2026-10-22, #749): the phone's directory of the
     # 140 features. PHONE ONLY, and the reason is the same one the desktop page
     # gives: the desktop's own directory card has NO `<section class="card" id>`
@@ -500,6 +513,38 @@ SECTIONS: tuple = (
     Section("all-features", ("all features and abilities", "all features",
                              "abilities and commands", "the feature directory"),
             app="phone"),
+    # "Jarvis Calendar" (2026-10-29; the owner's ask: a full calendar of
+    # Jarvis's own, ON by default, "disableable in Settings"; JARVIS-API section
+    # 163; backend jarvis_local_calendar.py). PHONE ONLY for this slice: the
+    # phone's row is a real `item(key = "calendar")` on SettingsScreen.kt
+    # (CalendarSettingsPlate.kt), which posts POST /api/calendar/settings and
+    # reads GET /api/calendar. The desktop's own Settings card arrives with the
+    # HUD half of the feature (the card, the two Rust commands and the
+    # calendar-settings.js panel), and this row becomes app="both" when that
+    # lands - the honest state today, not a gap to remember. The switch itself
+    # is the PC's (`calendar-settings.json` beside the other little settings
+    # files, no file = on), so both apps read one value.
+    #
+    # (2026-10-29, the chain integration) NOT A PLACE TO OPEN. "open my
+    # calendar" is the feature's own sentence: `jarvis_open.py` answers it with
+    # `open_app` (docs/JARVIS-API.md section 163 says so - "'Open my calendar'
+    # still opens it"), and this row is the switch that turns the feature back
+    # on rather than the calendar itself. So `openable=False`: the two "open"
+    # matchers leave those words to the feature that already owns them, while
+    # `find_section` still names the row (every Section must be nameable) and
+    # the typed switch ("turn off the Jarvis calendar") still reaches it.
+    #
+    # The names stay, and "the calendar" is in them on purpose for
+    # `tools/check_feature_controls.py`: it decides whether the desktop has this
+    # section by looking for those words in settings.html, and it finds them in
+    # the account-secrets card's own sentence ("the private calendar link",
+    # "the calendar's CalDAV address") - so this row records
+    # in_desktop_settings true in contract/feature-controls.json, which means
+    # "the words reach the desktop page", not "a calendar card exists there".
+    # The card is the HUD half's; the words are the older Google/CalDAV row's.
+    Section("calendar", ("the calendar", "jarvis calendar", "my calendar",
+                         "appointments"),
+            app="phone", openable=False),
     # "Limits and how often Jarvis does things" (2026-10-08): the limits and
 )
 
@@ -675,6 +720,28 @@ def antislop_words() -> str:
     except Exception as exc:                # noqa: BLE001 - said, never swallowed
         return (f"I could not read the Anti-Slop filter's setting "
                 f"({type(exc).__name__}), so I will not guess whether it is on.")
+
+
+# --- the Jarvis-owned local calendar (jarvis_local_calendar.py, 2026-10-29) --
+#
+# A PREFERENCE, CARDLESS EITHER WAY, the same class as the prompt coach and the
+# Anti-Slop filter: OFF only hides the calendar and KEEPS every event, ON shows
+# the same ones again, and it opens no network door, reads no folder and takes
+# no action. The typed sentence and the HUD/phone switch call the SAME module
+# function, so they cannot disagree about the state.
+
+def set_jarvis_calendar(on: bool, *, peer=None, local=None) -> Outcome:
+    """Turn the owner's own calendar on or off. No card either way."""
+    try:
+        import jarvis_local_calendar as LC
+    except Exception:
+        return _missing("the Jarvis calendar")
+    try:
+        code, out = LC.handle_settings({"on": bool(on)})
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Outcome(False, "The Jarvis calendar's setting could not be saved "
+                              f"({type(exc).__name__}).")
+    return _say(code, out or {})
 
 
 # --- background learning (jarvis_auto_learn.py) ---------------------------
@@ -2037,6 +2104,17 @@ BOOL_SETTINGS: tuple = (
     BoolSetting("antislop",
                ("anti-slop", "anti slop", "slop filter"),
                None, set_antislop),
+    # The Jarvis-owned local calendar (2026-10-29): ON when no settings file
+    # says otherwise, OFF hides every surface and keeps every event. Its
+    # `section` is None because the Settings card that will draw this switch
+    # is the next slice - a SettingRow here would have to be spliced into
+    # settings.html and driven by a Tauri command, and a page row with nothing
+    # behind it is a dead control. The typed switch is real now, and the
+    # contract records the desktop/phone halves as planned, honestly.
+    BoolSetting("jarvis_calendar",
+               ("local calendar", "the local calendar", "jarvis local calendar",
+                "my local calendar"),
+               None, set_jarvis_calendar),
     BoolSetting("ask_before_every_search",
                ("asking before every web search", "ask before every search",
                 "asking before every search"),

@@ -135,6 +135,26 @@
       ]
     },
     {
+      "id": "settings.calendar",
+      "title": "Jarvis Calendar",
+      "about": "Your own events, kept on your PC: the month view, the day list and the home-screen widget.",
+      "apps": [
+        "phone"
+      ],
+      "area": "settings",
+      "view": "",
+      "kind": "row",
+      "group": null,
+      "parent": null,
+      "hide": false,
+      "collapse": false,
+      "why": "Never hideable: it is the feature's own ON/OFF switch, and hiding the row that turns the feature back on would leave a switched-off calendar with no way to switch it on.",
+      "names": [
+        "jarvis calendar",
+        "the jarvis calendar"
+      ]
+    },
+    {
       "id": "settings.devices",
       "title": "Devices",
       "about": "Every paired device with its own key.",
@@ -1095,7 +1115,8 @@
       "title": "Notifications",
       "about": "Which notifications Jarvis shows on this PC, quiet hours, and a test.",
       "apps": [
-        "desktop"
+        "desktop",
+        "phone"
       ],
       "area": "settings",
       "view": "",
@@ -1104,7 +1125,7 @@
       "parent": null,
       "hide": false,
       "collapse": false,
-      "why": "Desktop only: the phone's notification controls are Android's own, per channel (OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen).",
+      "why": "Both apps change the same seven kinds: on the phone they are drawn under \"Notifications from Jarvis\", each row saying it is the PC's; neither app has a hide row for them, so `hide` is False on both.",
       "names": [
         "notifications",
         "notification settings",
@@ -2785,6 +2806,10 @@
       "why": "Never hideable: it is the phone's map of where every feature and setting lives, so hiding it would strand the way to find the rest."
     },
     {
+      "id": "settings.calendar",
+      "why": "Never hideable: it is the feature's own ON/OFF switch, and hiding the row that turns the feature back on would leave a switched-off calendar with no way to switch it on."
+    },
+    {
       "id": "settings.devices",
       "why": "Removing a lost phone must stay reachable."
     },
@@ -2826,7 +2851,7 @@
     },
     {
       "id": "settings.notifications",
-      "why": "Desktop only: the phone's notification controls are Android's own, per channel (OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen)."
+      "why": "Both apps change the same seven kinds: on the phone they are drawn under \"Notifications from Jarvis\", each row saying it is the PC's; neither app has a hide row for them, so `hide` is False on both."
     },
     {
       "id": "settings.menu-visibility",
@@ -3043,6 +3068,7 @@
     "idle timeout": "settings.idle-new",
     "inbox": "safety.approvals",
     "inside jokes": "brain.memory.between-us",
+    "jarvis calendar": "settings.calendar",
     "jarvis's voice": "settings.voices",
     "jarvis's voices": "settings.voices",
     "keyboard shortcuts": "settings.shortcuts",
@@ -3479,6 +3505,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -3514,6 +3541,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -3679,6 +3707,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -3714,6 +3743,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -3875,6 +3905,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -3910,6 +3941,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -5348,6 +5380,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -5383,6 +5416,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -6171,6 +6205,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -6206,6 +6241,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -6366,6 +6402,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -6401,6 +6438,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -6763,6 +6801,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -6798,6 +6837,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -6958,6 +6998,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -6993,6 +7034,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -7159,6 +7201,7 @@
         "settings.connection": false,
         "settings.setup-questionnaire": false,
         "settings.all-features": false,
+        "settings.calendar": false,
         "settings.devices": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
@@ -7194,6 +7237,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,

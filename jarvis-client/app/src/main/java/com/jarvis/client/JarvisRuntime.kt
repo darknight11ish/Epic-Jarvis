@@ -27,6 +27,7 @@ import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.net.PendingRead
 import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.Hardware
 import com.jarvis.client.net.InboxTidy
@@ -548,6 +549,12 @@ object JarvisRuntime {
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
     /**
+     * Orders overlapping `/api/pending` reads, so a beat's older answer cannot
+     * put back a card a decision has just cleared. See [PendingRefreshOrder].
+     */
+    private val pendingReadOrder = PendingRefreshOrder()
+
+    /**
      * How much of an approval card is shown at first (the owner's request of
      * 2026-10-09; [com.jarvis.client.net.CardSummary], backend
      * `jarvis_card_summary.py`).
@@ -769,6 +776,18 @@ object JarvisRuntime {
     @Volatile private var faceJob: Job? = null
     private var widgetJob: Job? = null
     private var boardJob: Job? = null
+    private var calendarWidgetJob: Job? = null
+
+    /**
+     * The queue's own safety net - [QueueBeat]'s collector.
+     *
+     * Beside `widgetJob` because it exists for the same reason: every Android
+     * surface reads [_pending], and a missed `approval` event used to leave a
+     * decided card on the home screen, in the notification drawer and on Home
+     * until something else happened to re-read. Held so a restart replaces it
+     * rather than stacking a second one.
+     */
+    private var queueBeat: Job? = null
 
     /** The forced restart in flight, so two taps on Reconnect do not stack. */
     @Volatile private var restartJob: Job? = null
@@ -1077,6 +1096,35 @@ object JarvisRuntime {
                     QuickLinkWidget().updateAll(app)
                 }
         }
+        // The safety net under that doorbell (the owner's report of
+        // 2026-10-29). `widgetJob` above only redraws when `_pending` CHANGES,
+        // and the only thing that used to change it was the PC's `approval`
+        // event - so one missed event, one pump that is not running, or one
+        // backend restart left a decided card on the home screen with a Deny
+        // that could only say "no longer waiting". One re-read of the queue,
+        // every 30 seconds, and only while a card is actually waiting on a link
+        // that can answer (QueueBeat.due) - which is the desktop's own
+        // safety-net read, not a new poller: it reads nothing when the queue is
+        // empty.
+        //
+        // Every surface follows from it without a line of its own. A shorter
+        // queue emits `_pending`, which is what widgetJob redraws the widgets
+        // from and what EventService's own watcher resyncs the notification
+        // drawer from - so the card leaves the home screen, the drawer and the
+        // in-app list together, in one beat.
+        queueBeat?.cancel()
+        queueBeat = scope.launch {
+            while (true) {
+                delay(QueueBeat.EVERY_MS)
+                if (QueueBeat.due(
+                        waiting = _pending.value.size,
+                        connected = _link.value == LinkState.CONNECTED,
+                    )
+                ) {
+                    refreshPending()
+                }
+            }
+        }
         // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
         // so read again from the PC - when the link comes or goes stale, when
         // a timer or reminder changes, when the saved widgets change here,
@@ -1089,6 +1137,26 @@ object JarvisRuntime {
             combine(_link, _stale, _scheduleTick, _widgetsTick, settings.homeWidgets) { _, _, _, _, _ -> }
                 .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
+        }
+        // The calendar widget (2026-10-29): the sixth, and the only one that
+        // shows today's plan. Redrawn when the link comes or goes stale, when
+        // the calendar changes here or on the PC ([calendarTick]), and when App
+        // lock or "Hide memory lists" changes - the home screen is public, so a
+        // title already drawn there has to go the moment either switch goes on,
+        // not up to 30 minutes later. `_stale` is in the combine for the reason
+        // ApprovalWidget's is: a stale transition that reaches no collector
+        // changes what the widget WOULD draw without redrawing it.
+        //
+        // With the app closed, only the launcher's half-hourly tick redraws it
+        // (widget_calendar_info.xml's updatePeriodMillis), so just after
+        // midnight it can still say yesterday for up to half an hour. Fixing
+        // that needs an AlarmManager wake-up, which is not in this slice; the
+        // widget's own comment says so rather than letting it be discovered.
+        calendarWidgetJob?.cancel()
+        calendarWidgetJob = scope.launch {
+            combine(_link, _stale, _calendarTick) { _, _, _ -> }
+                .combine(settings.security) { _, _ -> }
+                .collect { com.jarvis.client.widget.CalendarWidget().updateAll(app) }
         }
         // "Reading phone notifications": turning it off is immediate, so
         // whenever the switch reads as off - pressed here, or learned from
@@ -1736,6 +1804,11 @@ object JarvisRuntime {
             // words). The list on Mind reads itself again; a job that went
             // off is read by id and shown as a notification.
             com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data, event.id)
+            // An event was added, changed or deleted on the PC, or the
+            // calendar's own switch was flipped there (`{"id", "state"}` only
+            // - a doorbell, never a title). The calendar screen, the Brain row
+            // and the home-screen widget read themselves again.
+            com.jarvis.client.net.Calendar.EVENT -> _calendarTick.update { it + 1 }
             // "Ring my phone" (2026-09-28): `{"id", "state", "at", "until",
             // "seconds"}` and no words. Rings on the alarm channel, never for
             // a stale or replayed event (net/FindPhone.kt).
@@ -3994,79 +4067,111 @@ object JarvisRuntime {
     }
 
     suspend fun refreshPending() {
+        // One number per read, taken BEFORE the request goes out. A beat's GET
+        // can still be in flight when a decision's own refresh starts and
+        // lands; without this the older, pre-decision answer arrived last and
+        // put the answered card - and its drawer notification - back for up to
+        // 30 s, which is exactly the stale card this whole change removes.
+        // Only the newest read that has STARTED may write; a superseded
+        // response is dropped whole, success or failure (see
+        // PendingRefreshOrder for why dropping the failure is safe too).
+        val generation = pendingReadOrder.begin()
         when (val read = api.pendingRead()) {
             is ApiResult.Ok -> {
-                val items = read.value.items
-                _pending.value = items
-                // A "Forget a time frame" card of this phone's may have been
-                // decided (here, or on the PC): the PC's own status says how,
-                // and Home leaves a chat that went (the chat audit, 2026-09-28).
-                if (forgetRangeChats.isNotEmpty()) {
-                    scope.launch { forgetRangeRead(com.jarvis.client.net.ForgetRange.PATH) }
+                if (!pendingReadOrder.applyIfLatest(generation) { applyQueueRead(read.value) }) {
+                    return
                 }
-                // A row this phone could not read is still a decision waiting
-                // on the desktop. Say so, rather than show a shorter list as
-                // if it were the whole queue. The rows it COULD read stay
-                // decidable: one odd row used to fail the whole read, which
-                // left every card stuck behind "Could not re-read what is
-                // waiting" (see decodePendingRows).
-                val skipped = read.value.skipped
-                if (skipped > 0) {
-                    Log.w(TAG, "$skipped approval row(s) could not be read")
-                    _notice.value = if (skipped == 1) {
-                        "1 waiting approval could not be read on this phone. Open Jarvis on the desktop to see it."
-                    } else {
-                        "$skipped waiting approvals could not be read on this phone. Open Jarvis on the desktop to see them."
-                    }
-                }
-                // A model request whose card has been answered - approved,
-                // denied or expired - is no longer waiting, so the Mind
-                // screen stops saying it is. One whose card could not be
-                // identified is dropped by the next refreshBrain instead.
-                val waitingOn = _brain.value.modelRequest?.cardId
-                if (waitingOn != null && items.none { it.id == waitingOn }) {
-                    _brain.update { b ->
-                        if (b.modelRequest?.cardId == waitingOn) b.copy(modelRequest = null) else b
-                    }
-                }
-                _absent.value = _absent.value - "approvals"
-                // The PC's own card setting (the owner's request of
-                // 2026-10-09): read again only while a card is actually
-                // waiting, so an idle phone makes no extra request for a
-                // preference nothing is drawn with - and a change made on the
-                // PC lands with the next refresh of the queue, without a
-                // restart.
-                if (items.isNotEmpty()) refreshCardPrefs()
-                // What is on screen is now what the desktop holds. This is the
-                // only thing that earns the gate the right to open.
-                refreshedSinceOpen = true
+                // The success path's one suspending follow-up. It runs after
+                // the guarded write, and only for a read that was applied.
+                if (read.value.items.isNotEmpty()) refreshCardPrefs()
             }
             is ApiResult.Failed -> {
-                // Gating switched off on the desktop. An empty approvals list
-                // would say "nothing is waiting for you", which is true and
-                // deeply misleading: nothing CAN wait, because nothing is
-                // asking.
-                if (read.error == ApiError.NotAvailable) {
-                    _pending.value = emptyList()
-                    _absent.value = _absent.value + "approvals"
-                    // Answered, just with "there is no queue here". Nothing is
-                    // being hidden, so this does not hold the gate shut.
-                    refreshedSinceOpen = true
-                } else {
-                    // Every other failure used to be swallowed whole: no log, no
-                    // notice, `_pending` silently keeping its old contents while
-                    // `_stale` stayed false — so the owner could approve from an
-                    // arbitrarily old list, and one malformed item turned the
-                    // whole refresh into a silent no-op. A queue that could not
-                    // be re-read is precisely what stale means, so say so and let
-                    // the gate that already reads it do the refusing.
-                    Log.w(TAG, "could not re-read the approval queue: ${read.error}")
-                    refreshedSinceOpen = false
-                    _stale.value = true
-                    _linkDetail.value = "Could not re-read what is waiting"
-                    _notice.value = describe(read.error)
+                pendingReadOrder.applyIfLatest(generation) {
+                    applyQueueReadFailure(read.error)
                 }
             }
+        }
+    }
+
+    /**
+     * Everything a successful queue read writes when it is the newest one.
+     *
+     * Non-suspending on purpose: `PendingRefreshOrder.applyIfLatest` calls this
+     * while holding the order lock, so the "still newest" check and the writes
+     * it guards are one atomic step. `refreshPending` runs the one suspending
+     * follow-up (`refreshCardPrefs`) after that step returns true.
+     */
+    private fun applyQueueRead(read: PendingRead) {
+        val items = read.items
+        _pending.value = items
+        // A "Forget a time frame" card of this phone's may have been
+        // decided (here, or on the PC): the PC's own status says how,
+        // and Home leaves a chat that went (the chat audit, 2026-09-28).
+        if (forgetRangeChats.isNotEmpty()) {
+            scope.launch { forgetRangeRead(com.jarvis.client.net.ForgetRange.PATH) }
+        }
+        // A row this phone could not read is still a decision waiting
+        // on the desktop. Say so, rather than show a shorter list as
+        // if it were the whole queue. The rows it COULD read stay
+        // decidable: one odd row used to fail the whole read, which
+        // left every card stuck behind "Could not re-read what is
+        // waiting" (see decodePendingRows).
+        val skipped = read.skipped
+        if (skipped > 0) {
+            Log.w(TAG, "$skipped approval row(s) could not be read")
+            _notice.value = if (skipped == 1) {
+                "1 waiting approval could not be read on this phone. Open Jarvis on the desktop to see it."
+            } else {
+                "$skipped waiting approvals could not be read on this phone. Open Jarvis on the desktop to see them."
+            }
+        }
+        // A model request whose card has been answered - approved,
+        // denied or expired - is no longer waiting, so the Mind
+        // screen stops saying it is. One whose card could not be
+        // identified is dropped by the next refreshBrain instead.
+        val waitingOn = _brain.value.modelRequest?.cardId
+        if (waitingOn != null && items.none { it.id == waitingOn }) {
+            _brain.update { b ->
+                if (b.modelRequest?.cardId == waitingOn) b.copy(modelRequest = null) else b
+            }
+        }
+        _absent.value = _absent.value - "approvals"
+        // What is on screen is now what the desktop holds. This is the
+        // only thing that earns the gate the right to open.
+        refreshedSinceOpen = true
+    }
+
+    /**
+     * Everything a failed queue read writes when it is the newest one.
+     *
+     * Non-suspending for the same reason as [applyQueueRead]: it runs inside
+     * the order lock, so a superseded failure can never mark a newer success
+     * stale.
+     */
+    private fun applyQueueReadFailure(error: ApiError) {
+        // Gating switched off on the desktop. An empty approvals list
+        // would say "nothing is waiting for you", which is true and
+        // deeply misleading: nothing CAN wait, because nothing is
+        // asking.
+        if (error == ApiError.NotAvailable) {
+            _pending.value = emptyList()
+            _absent.value = _absent.value + "approvals"
+            // Answered, just with "there is no queue here". Nothing is
+            // being hidden, so this does not hold the gate shut.
+            refreshedSinceOpen = true
+        } else {
+            // Every other failure used to be swallowed whole: no log, no
+            // notice, `_pending` silently keeping its old contents while
+            // `_stale` stayed false — so the owner could approve from an
+            // arbitrarily old list, and one malformed item turned the
+            // whole refresh into a silent no-op. A queue that could not
+            // be re-read is precisely what stale means, so say so and let
+            // the gate that already reads it do the refusing.
+            Log.w(TAG, "could not re-read the approval queue: $error")
+            refreshedSinceOpen = false
+            _stale.value = true
+            _linkDetail.value = "Could not re-read what is waiting"
+            _notice.value = describe(error)
         }
     }
 
@@ -4692,8 +4797,13 @@ object JarvisRuntime {
                 }
                 is ApiResult.Failed -> {
                     if (result.error == ApiError.AlreadyHandled) {
-                        // Routine when the desktop and the phone are both open.
-                        _notice.value = "Already handled on the desktop."
+                        // Routine when the desktop and the phone are both open -
+                        // and since cards stopped expiring (2026-10-28) also
+                        // what a 409 means when the request that raised the card
+                        // has finished waiting. "Already handled" was untrue for
+                        // the second: nothing had been handled, and nothing ran.
+                        _notice.value = "That card is not waiting any more — it was answered, " +
+                            "or the request that asked has finished. Nothing ran from this tap."
                         refreshPending()
                     } else {
                         // A signature refusal the PC explained is its own
@@ -6325,6 +6435,128 @@ object JarvisRuntime {
         }
     }
 
+    // ----------------------------------------------------- Jarvis Calendar ----
+    // Jarvis's OWN calendar (2026-10-29; net/Calendar.kt, ui/screens/
+    // CalendarPlate.kt, widget/CalendarWidget.kt; docs/JARVIS-API.md section
+    // 163). Events are kept on the PC beside `schedule.db` - not in Android's
+    // own calendar provider, so the app asks for no calendar permission, and
+    // not in a Google account. Both apps and the home-screen widget read the
+    // one list.
+
+    private val _calendarTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one after every change made from this phone, so the calendar
+     * screen, the Brain row and the widget read themselves again. A `calendar`
+     * event from the PC does the same, so a change made on the PC reaches this
+     * phone without a second timer.
+     */
+    val calendarTick: StateFlow<Int> = _calendarTick.asStateFlow()
+
+    /**
+     * `GET /api/calendar?days=N`. A read: never held on a stale link, and a
+     * failure leaves whatever the screens showed alone.
+     */
+    suspend fun calendar(days: Int = com.jarvis.client.net.Calendar.SCREEN_DAYS): ApiResult<JsonObject> =
+        api.calendar(days)
+
+    /**
+     * One new event - no approval card (it writes one row on the owner's own
+     * PC and changes nothing outside it; decision D1 of the 2026-10-29 design),
+     * but HELD on a stale link like every other change (rule 4).
+     *
+     * @return whether the PC took it, and the sentence to show.
+     */
+    suspend fun calendarAdd(fields: com.jarvis.client.ui.screens.CalendarFields): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val cal = com.jarvis.client.net.Calendar
+        val problem = cal.problem(fields.title, fields.date, fields.time, fields.allDay, fields.endDate, fields.endTime)
+        if (problem != null) return false to problem
+        val body = cal.addBody(
+            title = fields.title,
+            date = fields.date,
+            time = fields.time,
+            allDay = fields.allDay,
+            endDate = fields.endDate,
+            endTime = fields.endTime,
+            place = fields.place,
+            notes = fields.notes,
+            remindMinutes = fields.remind.toIntOrNull(),
+            recurrence = fields.recurrence,
+        ) ?: return false to "That is not an event yet - check the date and time."
+        return when (val r = api.calendarWrite(cal.ADD_PATH, body)) {
+            is ApiResult.Ok -> cal.said(r.value).also { (changed, _) ->
+                if (changed) _calendarTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not saved. " + describe(r.error))
+        }
+    }
+
+    /** ONE event changed: its id, and the same fields. Held on a stale link. */
+    suspend fun calendarUpdate(
+        id: String,
+        fields: com.jarvis.client.ui.screens.CalendarFields,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val cal = com.jarvis.client.net.Calendar
+        val problem = cal.problem(fields.title, fields.date, fields.time, fields.allDay, fields.endDate, fields.endTime)
+        if (problem != null) return false to problem
+        val inner = cal.addBody(
+            title = fields.title,
+            date = fields.date,
+            time = fields.time,
+            allDay = fields.allDay,
+            endDate = fields.endDate,
+            endTime = fields.endTime,
+            place = fields.place,
+            notes = fields.notes,
+            remindMinutes = fields.remind.toIntOrNull(),
+            recurrence = fields.recurrence,
+        ) ?: return false to "That is not an event yet - check the date and time."
+        val body = cal.updateBody(id, inner) ?: return false to "That is not one of your events."
+        return when (val r = api.calendarWrite(cal.ACT_PATH, body)) {
+            is ApiResult.Ok -> cal.said(r.value).also { (changed, _) ->
+                if (changed) _calendarTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not saved. " + describe(r.error))
+        }
+    }
+
+    /**
+     * ONE event deleted. Held on a stale link, like every change. Deleting only
+     * makes things quieter, so it asks no card - the same argument
+     * `/api/schedule/act`'s delete has - but the screen asks "are you sure?"
+     * first, because it cannot be undone.
+     */
+    suspend fun calendarDelete(id: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val cal = com.jarvis.client.net.Calendar
+        val body = cal.deleteBody(id) ?: return false to "That is not one of your events."
+        return when (val r = api.calendarWrite(cal.ACT_PATH, body)) {
+            is ApiResult.Ok -> cal.said(r.value).also { (changed, _) ->
+                if (changed) _calendarTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not deleted. " + describe(r.error))
+        }
+    }
+
+    /**
+     * The PC's own ON/OFF switch for the whole calendar. No card either way: it
+     * is a preference the owner can change back in one press, the same shape as
+     * the Anti-Slop filter and the briefing's senders switch. Held on a stale
+     * link like every other change.
+     */
+    suspend fun calendarSettings(on: Boolean): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val cal = com.jarvis.client.net.Calendar
+        return when (val r = api.calendarWrite(cal.SETTINGS_PATH, cal.settingsBody(on))) {
+            is ApiResult.Ok -> cal.said(r.value).also { (changed, _) ->
+                if (changed) _calendarTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+    }
+
     suspend fun addStandbySchedule(start: String, end: String): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         val body = com.jarvis.client.net.Schedule.standbyBody(start, end)
@@ -7887,12 +8119,17 @@ object JarvisRuntime {
      * runs belonged to THIS answer - the facts the voice path gets from its
      * own utterance reply. The watch is read before the send and after it
      * returns, so a tool run between them fails the gate closed.
+     *
+     * [attachment] is the one document attached to this question
+     * ([com.jarvis.client.net.AttachFile]): read on the PC within this turn,
+     * never kept. The bytes are held by the caller only until this returns.
      */
     suspend fun sendTypedChat(
         message: String,
         picture: String? = null,
         provenance: String = com.jarvis.client.net.Provenance.TYPED,
         shared: String? = null,
+        attachment: com.jarvis.client.net.AttachFile.Ready? = null,
     ): String? {
         // A new question owns the one speaker from here (the review's F2,
         // 2026-10-27). Clearing the offer alone stopped NOTHING: the OLD answer
@@ -7911,6 +8148,7 @@ object JarvisRuntime {
             provenance = provenance,
             shared = shared,
             onRoute = { route -> header = route },
+            attachment = attachment,
         )
         val now = readAloudWatch()
         // routeOrNull, NOT route: null is "the PC did not say", and the gate must

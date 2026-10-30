@@ -953,6 +953,17 @@ class JarvisApi(
     }
 
     /**
+     * `GET /api/calendar?days=N`: Jarvis's OWN calendar - the events kept on
+     * the PC beside `schedule.db`, not the phone's calendar provider and not a
+     * Google account ([Calendar.parse]). A 404 or 501 is a PC without it
+     * ([Calendar.missing]). A read, so it is never held on a stale link.
+     */
+    suspend fun calendar(days: Int): ApiResult<JsonObject> {
+        val n = days.coerceIn(1, Calendar.MAX_DAYS)
+        return probe(Calendar.PATH + "?days=" + n)
+    }
+
+    /**
      * `GET /api/briefing`: the latest morning briefing, the briefing jobs and
      * what a briefing includes ([Briefing.parse]). A 404 or 501 is a PC
      * without it ([Briefing.missing]). A read.
@@ -1102,6 +1113,39 @@ class JarvisApi(
                         ApiResult.Failed(ApiError.BadToken)
                     } else {
                         ApiResult.Ok(Schedule.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `POST /api/calendar/add`, `/act` or `/settings`: ONE event at a time, or
+     * the PC's own ON/OFF switch. The status and body come back whole
+     * ([Calendar.Reply]), like [scheduleWrite], because a 404 that says
+     * "no such event" and a 404 from a PC without the route must read
+     * differently, and because a 409 (a full store) has its own sentence.
+     */
+    suspend fun calendarWrite(path: String, json: String): ApiResult<Calendar.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Calendar.ADD_PATH && path != Calendar.ACT_PATH &&
+                path != Calendar.SETTINGS_PATH
+            ) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a calendar route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Calendar.Reply(resp.code, obj))
                     }
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
@@ -3207,15 +3251,19 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
-    suspend fun deny(id: String): ApiResult<Unit> = decide("/api/deny", id)
+    /**
+     * `POST /api/deny`. The body carries `"by"` as well as the id, so a denial
+     * from this phone is recorded as this phone's - see [SignedApproval.BY],
+     * and `SignedApproval.denyBody` for why the two bodies live together.
+     */
+    suspend fun deny(id: String): ApiResult<Unit> =
+        postJson("/api/deny", SignedApproval.denyBody(id))
 
     /**
      * The one state-changing thing a phone may drive, because it only ever
      * moves toward a state the owner already had.
      */
     suspend fun revert(id: String): ApiResult<Unit> = postId("/api/undo/revert", id)
-
-    private suspend fun decide(path: String, id: String): ApiResult<Unit> = postId(path, id)
 
     /**
      * Keeps or discards ONE proposed fact from `/api/memory/pending` (the
@@ -3883,12 +3931,20 @@ class JarvisApi(
          * no other; see [ChatHistory.requestBody]'s own doc on the field.
          */
         think: Boolean = false,
+        /**
+         * A document the owner attached to THIS question ([AttachFile]): it
+         * rides inside the newest user message as one `attachment` object and
+         * `has_file: true` beside `has_image`. No new route, no upload, no
+         * permission - the bytes travel in this body and the PC reads them
+         * within this turn only.
+         */
+        file: AttachFile.Ready? = null,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
             interrupted = interrupted, temporary = temporary, cloudYes = cloudYes, live = live,
-            screen = screen, think = think,
+            screen = screen, think = think, file = file,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()

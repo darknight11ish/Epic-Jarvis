@@ -277,12 +277,14 @@ class BrainListTest {
         }
         // The heading that lied on the phone: "6 inside" over five plates. Its
         // declared list is still measured - the screen's items are unchanged
-        // except for the chatbot money limits plate, added 2026-10-12 - but the
-        // number drawn comes from what is emitted, so it cannot be seven again
-        // while a pair of plates draws one of itself.
+        // except for the chatbot money limits plate, added 2026-10-12, and the
+        // calendar plate added 2026-10-29 (which sits beside Coming up and under
+        // the same menu guard) - but the number drawn comes from what is
+        // emitted, so it cannot be seven again while a pair of plates draws one
+        // of itself.
         assertEquals(
             "Money and time's plates changed; the count must still be measured, not declared",
-            7, BrainSections.platesOf("money-time").size,
+            8, BrainSections.platesOf("money-time").size,
         )
         // The count is worked out whether the heading is OPEN or SHUT, and this
         // is the second half of the rule - it was added because the PHONE caught

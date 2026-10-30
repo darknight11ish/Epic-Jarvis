@@ -528,6 +528,11 @@ class ChatSession(
      * [shared] is text another app handed over through the Share sheet: it
      * goes as its own message, tagged "shared", right before [message] - and
      * alone when [message] is blank. Both join [history] with their tags.
+     *
+     * [attachment] is one document the owner attached ([AttachFile]): it rides
+     * inside this one question, is read on the PC, and is not kept - only the
+     * words join [history], so a later question never carries the file again.
+     * Nothing about it is written to disk, logged, or kept in a Bundle.
      */
     suspend fun send(
         message: String,
@@ -556,6 +561,8 @@ class ChatSession(
          * Jarvis)" and not kept in the conversation.
          */
         live: Boolean = false,
+        /** The document attached to this one question ([AttachFile]), or null. */
+        attachment: AttachFile.Ready? = null,
     ): String? {
         cancel()
         // A new conversation after the owner's own wait (Settings ->
@@ -636,7 +643,8 @@ class ChatSession(
         val screen = look?.let { ScreenLook.attach(it) }
             ?.let { if (picture != null) it.copy(pictureIsScreen = false) else it }
         val sentPicture = picture ?: look?.picture
-        val asking = ChatHistory.asking(message, provenance, shared, picture = sentPicture != null)
+        val asking = ChatHistory.asking(message, provenance, shared, picture = sentPicture != null,
+            file = attachment != null)
         // The owner cut the last spoken answer off (VoiceSession): where,
         // for this question only - the PC tells its model, and takes the
         // field off before any model or the relay sees the conversation.
@@ -652,7 +660,7 @@ class ChatSession(
         val c = api.chatCall(
             asking, earlier, sentPicture, conversationId,
             interrupted = interrupted, temporary = asTemporary, cloudYes = cloudYes, live = live,
-            screen = screen, think = asThought,
+            screen = screen, think = asThought, file = attachment,
         )
         if (c == null) {
             // No address to send to: none saved, or a saved one off the

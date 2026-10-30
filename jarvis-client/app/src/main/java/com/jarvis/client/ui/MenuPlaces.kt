@@ -116,6 +116,17 @@ object MenuPlaces {
         // the screen's rows, and a row here is what makes it findable in
         // FindAnything (which lists every phone menu that has a place).
         "all-features" to "settings.all-features",
+        // "Jarvis Calendar" (2026-10-29): the phone's own calendar row
+        // (SettingsScreen.kt, `item(key = "calendar")`, CalendarSettingsPlate.kt)
+        // and the registry's phone-only Section `calendar`, which
+        // test_menu_visibility now requires to be a menu as well
+        // (`settings.calendar`, backend/jarvis_menus.py). It is NEVER hideable -
+        // it is the switch that turns the feature back on - and it is still a
+        // real row with a real menu id, so it needs its PLACE here for the same
+        // reason "all-features" above does: MenuVisibilityTest holds this map to
+        // the screen's rows, and a line here is what makes it findable in
+        // FindAnything (which lists every phone menu that has a place).
+        "calendar" to "settings.calendar",
     )
 
     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */
@@ -239,6 +250,15 @@ object MenuPlaces {
         "settings.second-card.chat-card" to "SecondCardPlate: the Everyday chat runs on row",
         "brain.work.quiz.youtube" to "QuizPlate: the YouTube link block",
         "settings.focus-presets" to "HardwarePlate: the Focus presets section inside the Hardware plate",
+        // `settings.notifications` (2026-10-29, the settings wrong-app audit's
+        // finding 7): the phone DOES change the PC's own seven kinds, inside its
+        // Notifications from Jarvis row (SettingsScreen.kt, item jarvis-notify,
+        // which is why that row stays a `settings-row.*` in FindAnything rather
+        // than becoming this menu's place). It is never hideable (`hide` False in
+        // backend/jarvis_menus.py), so no screen reads `menus.shows(...)` for it;
+        // it is here because FindAnything lists every phone menu that has a
+        // place, and the phone draws this one inside that row.
+        "settings.notifications" to "SettingsScreen: the PC's own seven notification kinds, inside the Notifications from Jarvis row",
     )
 
     /**

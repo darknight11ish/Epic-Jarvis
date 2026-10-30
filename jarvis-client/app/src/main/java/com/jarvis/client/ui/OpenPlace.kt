@@ -67,6 +67,14 @@ object OpenPlace {
         "backup" to Where.Go(Screen.SETTINGS, "backup"),
         "watch-notify" to Where.Go(Screen.SETTINGS, "watch-notify"),
         "phone-notify" to Where.Go(Screen.SETTINGS, "phone-notify"),
+        // "Notifications" (2026-10-29, the settings wrong-app audit's finding 7):
+        // the registry now says this section is on BOTH apps, because the phone
+        // changes the PC's own seven notification kinds in its "Notifications
+        // from Jarvis" row (SettingsScreen.kt's PcNotifySection, every line saying
+        // "(on your PC)"). So "open notifications" lands on that row rather than
+        // answering "only in Jarvis on your PC" - which is what it used to do
+        // while `notifications` sat in PC_ONLY.
+        "notifications" to Where.Go(Screen.SETTINGS, "jarvis-notify"),
         // "Look at this and Watch with me": picture mode's switch (2026-09-29).
         "screen-look" to Where.Go(Screen.SETTINGS, "screen-look"),
         // The headless browser (Obscura): its switch, default and install line (2026-09-29).
@@ -141,6 +149,14 @@ object OpenPlace {
         // read-only index, not a settings section), so there is no desktop row
         // for this id to name. It changes nothing - the screen only lists.
         "all-features" to Where.Go(Screen.SETTINGS, "all-features"),
+        // "Jarvis Calendar" (2026-10-29; the owner's ask: a full calendar of
+        // Jarvis's own, ON by default and disableable): its one Settings row is
+        // the feature's own ON/OFF switch (SettingsScreen.kt, item "calendar",
+        // always drawn; CalendarSettingsPlate.kt), so "open the calendar" - and
+        // the calendar widget's off-state tap - land on it rather than at the
+        // top of Settings. A PHONE-ONLY registry Section in this slice: the
+        // desktop's own Settings card arrives with the HUD half of the feature.
+        "calendar" to Where.Go(Screen.SETTINGS, "calendar"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).
@@ -220,7 +236,12 @@ object OpenPlace {
         "more-options",
         "crash-notes",
         "start-jarvis",
-        "notifications",
+        // Notifications was here until 2026-10-29 (the settings wrong-app audit's
+        // finding 7): the phone does have the PC's seven kinds, in its
+        // "Notifications from Jarvis" row, so it has a place in PLACES now
+        // rather than an honest-sounding refusal. (No quoted id is written in
+        // this comment on purpose - the registry's own checker scans this block
+        // as text, and a quoted id here would read as a member of the set.)
         "first-run",
         "hud-window",
         // "Searchable recordings and videos" (F5 S2, 2026-10-19; S3 added the

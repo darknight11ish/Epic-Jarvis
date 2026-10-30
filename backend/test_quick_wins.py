@@ -1166,6 +1166,46 @@ def t_the_feature_guide_answers_without_the_model():
           got is not None and got.name == "feature_unknown", got)
 
 
+def t_parking_is_answered_here_and_needs_no_model():
+    """"find cheap parking near ..." is the fast path's, not the model's.
+
+    THE POINT OF PUTTING IT HERE (2026-10-30): the parking blueprint of
+    2026-10-29 wanted a `find_parking` TOOL, which would have taken one of the
+    six tool slots the Live budget has on the 8 GB card. It is a sentence
+    instead - zero model tokens, zero tool slots - and this check holds that
+    property: `Q.answer` returns a parking answer, and the pricing module is
+    never allowed to reach a socket here.
+    """
+    import jarvis_parking as P
+    seen = {}
+    real = P.find_parking
+
+    def fake(place=None, start_dt=None, end_dt=None, **kwargs):
+        seen["place"] = place
+        seen["minutes"] = int((end_dt - start_dt).total_seconds() // 60)
+        return {"ok": False, "reason": "stub: no map here"}
+
+    P.find_parking = fake
+    try:
+        with NoSockets() as ns:
+            res = Q.answer("find cheap parking near pike place market tomorrow "
+                           "from 4:15 pm to 9 pm", now=local(2026, 10, 29, 13, 0),
+                           client_surface="phone")
+    finally:
+        P.find_parking = real
+    check("parking: the sentence is answered without the model",
+          res is not None and res.intent == "parking_lookup", res)
+    check("parking: the place and the 285-minute window reached the module",
+          seen.get("place") == "pike place market" and seen.get("minutes") == 285, seen)
+    check("parking: nothing opened a socket on the way", ns.tried == [], ns.tried)
+    check("parking: a failure is one plain sentence, never a price",
+          res is not None and "could not look up parking" in res.reply
+          and "$" not in res.reply, res and res.reply)
+    for said in ("how do parking meters work", "what is a parking minimum"):
+        check(f"parking: {said!r} still goes to the model", Q.match(said) is None,
+              Q.match(said))
+
+
 def main():
     orig_tz = os.environ.get("TZ")
     try:

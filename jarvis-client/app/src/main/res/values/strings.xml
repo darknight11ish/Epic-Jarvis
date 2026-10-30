@@ -109,6 +109,15 @@
     <string name="widget_board_desc">A widget you described to Jarvis - choose which under Brain,
         Widgets. Its buttons are the small Quick Settings tile actions only.</string>
 
+    <!-- "Jarvis Calendar" (widget/CalendarWidget.kt; JARVIS-API.md section 163): the
+         sixth widget, and the only one that shows the plan for the day. Under App
+         lock, or with "Hide memory lists and chat history" on, it draws one
+         sentence and no title at all - the home screen is public. -->
+    <string name="widget_calendar_name">Jarvis Calendar</string>
+    <string name="widget_calendar_desc">Today\'s date and your next three events, from Jarvis\'s own
+        calendar on your PC. Hidden while App lock or \"Hide memory lists\" is on. Tap to open the
+        calendar.</string>
+
     <!-- "Floating Jarvis": Overlay (data/FloatingAvatar.kt, service/AvatarOverlayService.kt). -->
     <string name="fgs_avatar_overlay_reason">Draws the small "Floating Jarvis" avatar
         the owner turned on, over other apps, so it stays reachable by voice

@@ -211,26 +211,51 @@ def t_the_proposal_is_marked_as_a_guess_for_the_owner():
 def t_a_timeout_still_proposes_nothing():
     """(c) a timeout is the absence of an answer, so it proposes nothing.
 
-    The DENIED branches are the only callers; the expired branch at the end of
-    `check()` returns `timed_out` without calling this function. Read out of the
-    patch stack's own text rather than restated, so a new call site is caught.
+    Every call site is inside a DENIED branch and nowhere else: guarded by
+    `state == "denied"` a few lines above, returning a `denied` verdict a few
+    lines below, and above the `timed_out` return that ends that same wait -
+    never in, or after, the expired path. Read out of the patch stack's own
+    text rather than restated, so a new call site is caught.
+
+    The count is deliberately NOT pinned. It was exactly two until 2026-10-28,
+    when `no-deadline-cards.patch` gave `check()` a second DENIED branch: the
+    answer that arrives after the request stopped waiting is still a human
+    "no", and it still proposes. Pinning "two" would then have to be loosened
+    to "three" by whoever adds the next one, which teaches nothing; what this
+    holds instead is the INVARIANT, and it catches a fourth branch call that
+    is not one (which is the failure the count was standing in for): one call
+    per denied verdict, no denied verdict without one, and no call on the
+    expired path.
     """
     text = _gate()
     lines = text.splitlines()
     denied = [i for i, l in enumerate(lines)
               if l.strip() == "_propose_constraint_from_denial(action, detail)"]
-    check("the only call sites are the two DENIED branches", len(denied) == 2,
-          f"found {len(denied)}")
-    expiry = next((i for i, l in enumerate(lines) if 'outcome="timed_out"' in l), None)
-    check("outcome=\"timed_out\" is in the stand-in (test setup)", expiry is not None)
-    if expiry is None:
+    verdicts = [i for i, l in enumerate(lines) if 'outcome="denied"' in l]
+    expiries = [i for i, l in enumerate(lines) if 'outcome="timed_out"' in l]
+    check("every denied verdict has exactly one proposal call, and none has two",
+          bool(denied) and len(denied) == len(verdicts),
+          f"{len(denied)} call(s) for {len(verdicts)} denied verdict(s)")
+    check("outcome=\"timed_out\" is in the stand-in (test setup)", bool(expiries),
+          f"found {len(expiries)}")
+    if not denied or not expiries:
         return
     for i in denied:
         guard = any('row["state"] == "denied"' in l for l in lines[max(0, i - 4):i])
         check(f"the call at line {i + 1} is guarded by state == \"denied\"", guard,
               "\n".join(lines[max(0, i - 4):i + 1]))
-        check(f"and it is not the expired path (line {i + 1} is above {expiry + 1})",
-              i < expiry)
+        below = [j for j in verdicts if j > i]
+        denied_return = below[0] if below else None
+        check(f"and it returns a denied verdict in the same branch (line {i + 1})",
+              denied_return is not None and denied_return - i <= 3,
+              "\n".join(lines[i:min(len(lines), i + 4)]))
+        after = [j for j in expiries if j > i]
+        check(f"and it is not the expired path (line {i + 1} is above the "
+              f"timed_out return at "
+              f"{after[0] + 1 if after else 'no following one'})",
+              bool(after) and denied_return is not None and denied_return < after[0],
+              "\n".join(lines[max(0, i - 2):min(len(lines), (after[0] + 1)
+                                                if after else i + 4)]))
     ns = _lifted(text)
     check("CONTROL: an ordinary denial still proposes one",
           len(_proposals(ns, "delete_file")) == 1)

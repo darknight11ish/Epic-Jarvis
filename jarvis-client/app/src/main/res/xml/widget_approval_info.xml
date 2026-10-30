@@ -11,7 +11,22 @@
      app/proguard-rules.pro), so all five widgets were that spinner for ever.
      res/layout/widget_initial.xml is a sentence instead, so even a widget that
      can never be drawn tells the reader to open Jarvis. previewLayout is the
-     same file, so the widget picker stops showing a spinner too. -->
+     same file, so the widget picker stops showing a spinner too.
+
+     updatePeriodMillis="1800000" (30 minutes, the shortest Android allows) is
+     not decoration, and it is the one thing that still works when this app's
+     process is not running (the owner's report of 2026-10-29: a card decided on
+     the desktop stayed on the home screen). A RemoteViews is drawn by this
+     process and then held by the launcher; with 0 the launcher never asks
+     again, so the last card drawn outlived every decision made afterwards -
+     including the app being killed overnight. With a period, the launcher wakes
+     this receiver, Glance re-runs provideGlance, and a cold process draws "Not
+     checked yet" (WidgetStates never draws a card it cannot vouch for) instead
+     of the resolved one. While the app IS running nothing waits for this:
+     JarvisRuntime's widgetJob redraws on the change, and QueueBeat re-reads the
+     queue every 30 s while a card is waiting. The board widget has carried
+     exactly this period since it was written (widget_board_info.xml), for the
+     same reason. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_initial"
     android:previewLayout="@layout/widget_initial"
@@ -23,5 +38,5 @@
     android:maxResizeWidth="500dp"
     android:maxResizeHeight="300dp"
     android:resizeMode="horizontal|vertical"
-    android:updatePeriodMillis="0"
+    android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen" />

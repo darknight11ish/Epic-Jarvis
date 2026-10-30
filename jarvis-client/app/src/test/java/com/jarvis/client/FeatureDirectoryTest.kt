@@ -111,6 +111,25 @@ class FeatureDirectoryTest {
     }
 
     @Test
+    fun `a row the PC alone has names whose place it is`() {
+        // The settings wrong-app audit (2026-10-29, findings 1 and 2): 17 rows
+        // whose words are the PC's place - "Settings, Accounts", "Settings,
+        // Shortcuts", "Brain, Memory" - reached the phone with no qualifier and
+        // dead-ended, because the phone has none of those sections. The
+        // generator now puts "On your PC: " in front of a `desktop`-surface
+        // row's words unless the contract's own sentence already says the PC.
+        val desktopOnly = rows.filter { it.surface == "desktop" }
+        assertTrue("no desktop-only rows were found at all", desktopOnly.size >= 15)
+        for (row in desktopOnly) {
+            assertTrue(
+                "a desktop-only row does not say whose place it names: ${row.id} (${row.why})",
+                row.why.startsWith("On your PC: ") ||
+                    row.why.startsWith("PC:") || row.why.contains("on the PC")
+            )
+        }
+    }
+
+    @Test
     fun `no row reaches the phone as a fake control`() {
         // A PC-Only row is shown with its honest refusal, never as a switch.
         val pcOnly = rows.filter { it.label.startsWith("PC-Only Setting") }

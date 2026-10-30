@@ -267,6 +267,26 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.calendar",
+    "title": "Jarvis Calendar",
+    "about": "Your own events, kept on your PC: the month view, the day list and the home-screen widget.",
+    "apps": [
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "row",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "Never hideable: it is the feature's own ON/OFF switch, and hiding the row that turns the feature back on would leave a switched-off calendar with no way to switch it on.",
+    "names": [
+      "jarvis calendar",
+      "the jarvis calendar"
+    ]
+  },
+  {
     "id": "settings.devices",
     "title": "Devices",
     "about": "Every paired device with its own key.",
@@ -1227,7 +1247,8 @@ export const MENUS = [
     "title": "Notifications",
     "about": "Which notifications Jarvis shows on this PC, quiet hours, and a test.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "settings",
     "view": "",
@@ -1236,7 +1257,7 @@ export const MENUS = [
     "parent": null,
     "hide": false,
     "collapse": false,
-    "why": "Desktop only: the phone's notification controls are Android's own, per channel (OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen).",
+    "why": "Both apps change the same seven kinds: on the phone they are drawn under \"Notifications from Jarvis\", each row saying it is the PC's; neither app has a hide row for them, so `hide` is False on both.",
     "names": [
       "notifications",
       "notification settings",
@@ -2767,6 +2788,7 @@ export const NEVER_HIDE = [
   "settings.first-run",
   "settings.setup-questionnaire",
   "settings.all-features",
+  "settings.calendar",
   "settings.devices",
   "settings.animal-options",
   "settings.security",
@@ -2930,6 +2952,7 @@ export const ALIASES = {
   "idle timeout": "settings.idle-new",
   "inbox": "safety.approvals",
   "inside jokes": "brain.memory.between-us",
+  "jarvis calendar": "settings.calendar",
   "jarvis's voice": "settings.voices",
   "jarvis's voices": "settings.voices",
   "keyboard shortcuts": "settings.shortcuts",

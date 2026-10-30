@@ -554,6 +554,10 @@ def t_the_hunk_comes_before_every_token_ok():
           "patches that leave its lines alone come after it",
           after_it is not None
           and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch", "screen.patch",
+                                # attached-file.patch (2026-10-29) appends ONE
+                                # hunk to jarvis_hud.py (the chat attach line) and
+                                # leaves devices.patch's gate lines alone.
+                                "attached-file.patch",
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",
