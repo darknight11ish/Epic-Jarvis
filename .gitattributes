@@ -32,6 +32,7 @@
 *.wav  binary
 *.mp3  binary
 *.onnx binary
+*.jar  binary
 # Video: the launch videos are release assets, not files in the tree (owner's
 # decision, 2026-10-07). Ten .mp4s were 184 MB, and ideos/ was 199 MB of a
 # 296 MB repository - 67% of it - in files no code, test or script ever reads.

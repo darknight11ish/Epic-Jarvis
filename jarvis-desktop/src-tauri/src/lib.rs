@@ -44,6 +44,7 @@ pub mod frame_feed;
 pub mod handoff;
 pub mod hardware;
 pub mod hotkeys;
+pub mod hud_calendar;
 pub mod hud_layout;
 pub mod hud_proxy;
 pub mod hud_schedule;
@@ -62,6 +63,13 @@ pub mod look;
 pub mod big_coder;
 pub mod history_settings;
 pub mod media_index;
+// Jarvis's own calendar's ONE switch, for Settings (calendar_settings.rs;
+// 2026-10-30; JARVIS-API section 166): the phone has drawn this switch since
+// its own slice, and the desktop's calendar lives in the HUD, which has no
+// Settings page - so this is the Settings window's narrow path to it. It reads
+// the switch and writes the switch; no event, title or count is returned, and
+// OFF never deletes anything.
+pub mod calendar_settings;
 // The setup questionnaire (setup_questionnaire.rs; S2, the owner's ask of
 // 2026-10-20; JARVIS-API section 147): the fourteen questions, the READ-ONLY
 // plan and the one confirmed apply through the existing setters. Settings
@@ -971,6 +979,12 @@ pub fn run() {
             // routes the Brain uses, held on a stale link. HUD window only.
             hud_schedule::hud_schedule_add,
             hud_schedule::hud_schedule_act,
+            // The HUD calendar's writes (2026-10-29, the owner's desktop HUD
+            // request): add ONE local event, or change/delete ONE event, on the
+            // backend contract's own two routes, held on a stale link. There is
+            // no delete-all and no list form. HUD window only.
+            hud_calendar::hud_calendar_add,
+            hud_calendar::hud_calendar_act,
             // The HUD History sidebar's one write (2026-10-27, the owner's
             // request: "pinnable chats, project organization by chat"):
             // pin/unpin ONE chat, file ONE chat under a tag, or delete ONE
@@ -1472,6 +1486,12 @@ pub fn run() {
             media_index::media_index,
             big_coder::big_coder,
             history_settings::history_settings,
+            // The Jarvis Calendar's ONE switch (calendar_settings.rs;
+            // 2026-10-30; JARVIS-API section 166): {"on": bool}, immediate in
+            // both directions, no approval card either way and never held on a
+            // stale link. It returns the switch and the PC's own `why` and no
+            // event, title or count; OFF never deletes anything. Settings only.
+            calendar_settings::calendar_settings,
             // The setup questionnaire (setup_questionnaire.rs; S2, 2026-10-20;
             // JARVIS-API section 147): read the questions and the PC's current
             // values, ask for the READ-ONLY plan, and apply the owner's

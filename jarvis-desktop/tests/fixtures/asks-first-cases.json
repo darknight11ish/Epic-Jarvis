@@ -750,6 +750,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN"
+      },
+      {
+       "action": "app_build_android",
+       "fixed": false,
+       "id": "app_build_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Build its Android app with Gradle"
+      },
+      {
+       "action": "app_install_android",
+       "fixed": false,
+       "id": "app_install_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put that app on your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -2042,6 +2060,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN"
+      },
+      {
+       "action": "app_build_android",
+       "fixed": false,
+       "id": "app_build_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Build its Android app with Gradle"
+      },
+      {
+       "action": "app_install_android",
+       "fixed": false,
+       "id": "app_install_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put that app on your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -3330,6 +3366,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN"
+      },
+      {
+       "action": "app_build_android",
+       "fixed": false,
+       "id": "app_build_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Build its Android app with Gradle"
+      },
+      {
+       "action": "app_install_android",
+       "fixed": false,
+       "id": "app_install_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put that app on your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -4612,6 +4666,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN"
+      },
+      {
+       "action": "app_build_android",
+       "fixed": false,
+       "id": "app_build_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Build its Android app with Gradle"
+      },
+      {
+       "action": "app_install_android",
+       "fixed": false,
+       "id": "app_install_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put that app on your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -5894,6 +5966,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN"
+      },
+      {
+       "action": "app_build_android",
+       "fixed": false,
+       "id": "app_build_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Build its Android app with Gradle"
+      },
+      {
+       "action": "app_install_android",
+       "fixed": false,
+       "id": "app_install_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put that app on your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -7189,6 +7279,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN"
+      },
+      {
+       "action": "app_build_android",
+       "fixed": false,
+       "id": "app_build_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Build its Android app with Gradle"
+      },
+      {
+       "action": "app_install_android",
+       "fixed": false,
+       "id": "app_install_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put that app on your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -8477,6 +8585,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let a phone approve risky actions with its fingerprint or PIN"
+      },
+      {
+       "action": "app_build_android",
+       "fixed": false,
+       "id": "app_build_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Build its Android app with Gradle"
+      },
+      {
+       "action": "app_install_android",
+       "fixed": false,
+       "id": "app_install_android",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put that app on your phone"
       }
      ],
      "title": "This PC and your phone"

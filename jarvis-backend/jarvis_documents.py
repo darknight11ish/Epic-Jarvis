@@ -1672,7 +1672,7 @@ def _index_results(words: str, want: list, ranked: dict, idx: "TextIndex",
 # --------------------------------------------------------------------------
 
 _CHILD = r"""
-import json, sys
+import io, json, sys
 path, ext = sys.argv[1], sys.argv[2]
 extra = sys.argv[3] if len(sys.argv) > 3 else ""
 if extra:
@@ -1694,7 +1694,12 @@ try:
     # never written to disk - not even to a temporary file. Every other caller
     # still names a path.
     if path == "-":
-        fh = sys.stdin.buffer
+        # A Windows pipe reports seekable() and then silently ignores seek():
+        # the type-sniff below reads 16 KiB and cannot put it back, so the
+        # parser was handed the file from byte 16,384 on (2026-10-30: every
+        # PDF and Office attachment damaged). Read the pipe into memory first -
+        # still never written to disk, and now genuinely rewindable.
+        fh = io.BytesIO(sys.stdin.buffer.read())
     else:
         fh = open(path, "rb")
     try:

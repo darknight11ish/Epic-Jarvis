@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
+import com.jarvis.client.net.NotificationStyle
 
 /**
  * A timer, an alarm or a reminder that went off on the PC, shown on the phone
@@ -204,6 +205,15 @@ object ScheduleNotifier {
                 context, key, jobId, kind, title, text, lockScreen, openBriefing, timeoutMs, scheduleKind,
             )
         }
+        // The owner's notification style (2026-10-30) is used for a reminder,
+        // timer or alarm that has just gone off - never for a briefing, and
+        // never for the quiet "you missed it" notice, which deliberately has no
+        // action and no fuss. While [locked] the plain layout is used, so the
+        // hidden/most-private case looks exactly as it did before.
+        val locked = com.jarvis.client.data.SecurityRules.notificationsLocked(
+            JarvisRuntime.settings.security.value,
+            com.jarvis.client.platform.DeviceSecure.isSecure(context),
+        )
         val n = NotificationCompat.Builder(context, SCHEDULE_CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
             // notifications on a compatible watch" (Brain, off by default) -
@@ -250,6 +260,17 @@ object ScheduleNotifier {
                 // action - that is the owner's decision of 2026-09-26.
                 if (!quiet && !openBriefing) {
                     addAction(0, STOP, stopIntent(context, key))
+                }
+            }
+            // A reminder/timer that went off may be drawn in the owner's own
+            // style (2026-10-30). A no-op unless one is live for reminders and
+            // the phone is not hiding content; it changes only how the words
+            // are drawn, never the Snooze/Stop actions or the tap-through.
+            .apply {
+                if (!quiet && !openBriefing && scheduleKind.isNotEmpty()) {
+                    StyledNotification.apply(
+                        this, context, NotificationStyle.Kind.REMINDER, title, text, locked,
+                    )
                 }
             }
             .build()

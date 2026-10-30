@@ -16110,7 +16110,7 @@ a live one is:
 of all four kinds.
 ---
 
-## 86. Widgets you describe (added 2026-09-28)
+## 86. Widgets you describe (added 2026-09-28; the four arrangements added 2026-10-30)
 
 The owner's choice of 2026-09-28, **the SAFE version**. The owner says what a
 small widget should show - "make me a widget showing my next 3 reminders and
@@ -16119,6 +16119,12 @@ a 10-minute timer button" - and Jarvis makes a **preview**. The owner taps
 (at once). The phone shows one on the home screen ("Jarvis widget 1", "2" or
 "3"); the PC shows one in the existing desktop widget window, in place of the
 face.
+
+Since **2026-10-30** a widget also has an **arrangement**: one of four, and
+the model picks it from the owner's words ("put my reminders at the top", "make
+the count big"). Same blocks, same sources, same buttons - only where they sit.
+It is a **closed list**, and §86.1.1 says plainly why it can never be anything
+else.
 
 One new shipped module, `backend/jarvis_widgets.py`, **no patch**: its routes
 are switched on by `jarvis_brain_reads.install()`, which brain-reads.patch
@@ -16129,7 +16135,7 @@ already calls.
 The AI model's ONLY output is a small JSON description from a fixed menu:
 
 ```
-{"name": "Morning",
+{"name": "Morning", "layout": "big",
  "blocks": [{"type": "title",    "text": "Good morning"},
             {"type": "number",   "source": "todo_count", "label": "To do"},
             {"type": "list",     "source": "reminders", "max": 3},
@@ -16173,23 +16179,61 @@ once, or a free-form action.
 
 **The check is plain code** (`jarvis_widgets.validate`, `parse_model`), and
 refuses the whole description - nothing is made - for: a key that no block
-has (`style`, `html`, `url`, `onclick` ...), an unknown block type, source
-or button, a source shown as the wrong block, a list over 5 or under 1, more
-than 8 blocks or 4 different buttons, a repeated key, NaN or Infinity, an
-answer over 6,000 characters, nesting too deep to read, words around the
-JSON, and a text with a web address in it (`https://`, `www.`, `javascript:`,
-`host.tld/path`). Text is cleaned: control, invisible and direction-changing
-characters and `< > { } `` ` `` \` are removed, spaces collapsed, and each
-text capped. A key from the menu that belongs to another block type (a
-`label` on a button) is dropped, never used. The same button twice is kept
-once. A widget read back from `widgets.json` is checked again, so a hand
-edit smuggles nothing in.
+has (`style`, `html`, `url`, `onclick` ...), an unknown block type, source,
+button or **arrangement**, a source shown as the wrong block, a list over 5
+or under 1, more than 8 blocks or 4 different buttons, a repeated key, NaN or
+Infinity, an answer over 6,000 characters, nesting too deep to read, words
+around the JSON, and a text with a web address in it (`https://`, `www.`,
+`javascript:`, `host.tld/path`). Text is cleaned: control, invisible and
+direction-changing characters and `< > { } `` ` `` \` are removed, spaces
+collapsed, and each text capped. A key from the menu that belongs to another
+block type (a `label` on a button) is dropped, never used. The same button
+twice is kept once. A widget read back from `widgets.json` is checked again,
+so a hand edit smuggles nothing in.
 
 **The model** is this PC's own (`jarvis_sensitive.learner_model()`, refused
 unless it is on this PC and not a cloud model, `check_local_model`), asked
 through Ollama's structured output with a schema whose every choice is a
-fixed list. It is given the owner's words and the menu - nothing else: no
-memory, no email, no earlier chat.
+fixed list (`layout` among them, and required). It is given the owner's words
+and the menu - nothing else: no memory, no email, no earlier chat.
+
+### 86.1.1 The arrangement is a closed list too (added 2026-10-30)
+
+`layout` is the one new top-level key: a word from a fixed list, or nothing
+(which means `"stack"`, so every widget saved before 2026-10-30 draws exactly
+as it did). The model chooses it; the PC checks it; both apps draw it by the
+one rule in `tools/gen_widget_cases.py` (`arrange()`), held to the desktop's
+`boardOf` and the phone's `JarvisWidgets.boardOf` case for case by the shared
+`widget-cases.json`.
+
+| `layout` | What it draws |
+|---|---|
+| `stack` (default) | every block in the order given - today's shape |
+| `big` | the FIRST number drawn large at the top, then the rest; with no number it is `stack` |
+| `list` | the heading, then the lists, then the numbers, then the bars - so "reminders at the top" does not depend on the order the model happened to emit |
+| `compact` | one heading (its own, or the widget's name), ONE thing, then the buttons; a list keeps its first item and counts the rest into "+N more" |
+
+A value off that list is **refused** by the PC like any other off-menu value
+(`Refused`, nothing is made), and a widget in `widgets.json` with a
+hand-edited `layout` is not read. The apps are the other direction: an
+arrangement they do not know (a newer PC's word) is drawn as `stack`, because
+a widget that cannot be arranged must still draw.
+
+**What is impossible here, and why the list can never grow by itself**: an
+Android widget's *layout* is fixed when the APK is built. The widget is a
+`RemoteViews` description the **launcher** inflates from **this app's**
+resources, and the provider itself is declared in `AndroidManifest.xml` with
+its size and update period in `<appwidget-provider>` XML. Nothing a server
+sends can add a layout, a view class, a font or an image: the app can only
+compose the arrangements compiled into it. So "Jarvis, make me a widget that
+looks exactly like I describe" is not a thing this feature will grow into -
+it is a thing Android does not allow. What CAN be added is another entry in
+this closed list, which is a new app build.
+
+Nothing here sets a colour, a size, a font, an image, a grid or a position:
+those are not arrangement, and the vocabulary cannot be extended from a
+server either. The palette stays the one fixed dark set each widget already
+had (§86.5).
 
 ### 86.2 Only the owner's own words; no approval card
 
@@ -16219,8 +16263,8 @@ tool: the model cannot call any of them, and nothing they return reaches it.
 
 | Route | Body | Answers |
 |---|---|---|
-| `GET /api/widgets` | - | 200 `{"ok", "widgets": [row], "drafts": [row + "expires"], "no_card", "private_hidden", "sources", "actions", "limits"}`; a row is `{"id": "w…"/"d…", "name", "blocks", "created"?, "said", "parts": ["Heading: …", "List: …", "Button: …"]}` |
-| `GET /api/widgets/show?id=w…` | - | 200 `{"ok": true, "id", "name", "at", "blocks": [...]}` - each block filled in NOW: a list adds `items: [{"text", "when"}]`, `more`, `empty`; a number `value`; a bar `fraction`, `value`; a button its fixed `label`; data blocks carry `private`, and `note` when a source could not be read ("No briefing yet today."). 404 unknown id |
+| `GET /api/widgets` | - | 200 `{"ok", "widgets": [row], "drafts": [row + "expires"], "no_card", "private_hidden", "sources", "actions", "limits"}`; a row is `{"id": "w…"/"d…", "name", "layout", "blocks", "created"?, "said", "parts": ["Arranged: …", "Heading: …", "List: …", "Button: …"]}` |
+| `GET /api/widgets/show?id=w…` | - | 200 `{"ok": true, "id", "name", "layout", "at", "blocks": [...]}` - each block filled in NOW: a list adds `items: [{"text", "when"}]`, `more`, `empty`; a number `value`; a bar `fraction`, `value`; a button its fixed `label`; data blocks carry `private`, and `note` when a source could not be read ("No briefing yet today."). 404 unknown id |
 | `POST /api/widgets/draft` | `{"words", "provenance"}` | 200 `{"ok": true, "draft", "said", "card": false, "no_card"}`; 400 not own words / no words / over 300 characters; 409 tainted (chat only); 422 `{"error", "why"}` off the menu; 503 no model |
 | `POST /api/widgets/add` | `{"draft": "d…"}` | 200 `{"ok", "widget", "said"}` - the draft EXACTLY as previewed; 404 expired or used; 409 twelve widgets already |
 | `POST /api/widgets/discard` | `{"draft"}` | 200 |
@@ -16255,14 +16299,35 @@ and events.
   again in Rust before anything is sent. Stop everything still works.
   While App lock is on or the lists are hidden, Rust takes every private
   block's words out. Read when the window opens, on a schedule or focus
-  event, and once a minute while shown.
+  event, and once a minute while shown. Since 2026-10-30 it draws the
+  widget's own **arrangement** too: `boardOf` in `src/widget-board.js` places
+  the large number, the order and the buttons, and `.board-big` in
+  `widget.css` is the only size that changes.
 - **Phone, Brain -> Widgets** (`WidgetsPlate.kt`, `net/JarvisWidgets.kt`):
   the same list, previews and box, and **On your home screen**: which saved
-  widget each of the three slots shows (kept on the phone, ids only).
+  widget each of the three slots shows (kept on the phone, ids only). The
+  slot count and the app's three board receivers are held equal by
+  `JarvisWidgetsTest.everySlotHasAReceiver` - they were not before 2026-10-30,
+  when the picker offered five and the app shipped three.
+  **Put it on my home screen** (`widget/WidgetPin.kt`, added 2026-10-30): the
+  owner asked to build a widget by chatting and add it to the home screen
+  immediately, so a slot that has a widget offers this button and the phone
+  asks the launcher to place it (`AppWidgetManager.requestPinAppWidget`, API
+  26+), instead of only printing the touch-and-hold route. It says one of
+  three true things: that widget is already on the home screen; the home
+  screen was **asked** (Android reports that the request was sent, not that a
+  widget was placed, so a launcher may still show its own confirm or refuse);
+  or this launcher cannot add widgets on request, with the touch-and-hold
+  route in words. No route, no card, nothing sent to the PC.
 - **Phone home screen, "Jarvis widget" 1-3** (`widget/JarvisBoardWidget.kt`,
-  Glance 1.1.1 - no version change was needed): draws the blocks natively;
-  read from the PC only on a live link, otherwise "Not up to date - tap to
-  open Jarvis and connect", like the approvals widget. **The home screen is
+  Glance 1.1.1 - no version change was needed): draws the blocks natively, in
+  the widget's arrangement (`JarvisWidgets.boardOf`: the large number at 28sp
+  first, then the blocks in order, then the buttons two to a row);
+  read from the PC on any CONNECTED link - catching up included, because a
+  stale link holds ACTING and never READING, and that read is one of the things
+  that clears it - otherwise "Not up to date - tap to open Jarvis and connect"
+  (a link that is not up has nothing to ask), like the approvals widget.
+  **The home screen is
   public**: while App lock or "Hide memory lists and chat history" is on,
   every private block shows its label and "Hidden - open Jarvis to see it."
   Buttons follow the tiles exactly (`QuickTiles.decide`,
@@ -16279,7 +16344,10 @@ Both apps draw a filled-in widget by one rule, held with the PC's by
 phone's byte-identical `contract/widget-cases.json`, with hostile answers):
 an unknown block or button is left out, a source the app does not know is
 private, and sizes are capped - so even a wrong PC answer cannot put a
-button on screen that the app does not already know is safe.
+button on screen that the app does not already know is safe. The fixture now
+also carries each case's `boards` (every layout, arranged) and the closed
+`layouts` list, so the two apps' arrangement rule is held to the PC's case for
+case as well.
 
 ### 86.5 Not done, and why
 
@@ -16288,6 +16356,17 @@ button on screen that the app does not already know is safe.
   program would run with a window's powers; outside text in a turn could
   steer it; and no check can prove arbitrary code safe. The SAFE version's
   menu is the whole point.
+- **A layout the owner describes, or the model invents** (images, custom
+  fonts, free colours, grids, a clock face): **not possible**, and not a
+  backlog item. Android fixes a widget's layout when the APK is built - the
+  provider is manifest XML and the drawing is `RemoteViews` over this app's
+  own resources - so a server cannot add one (§86.1.1). The four arrangements
+  are the whole menu; a fifth is a new app build, not a setting.
+- **Per-widget accent, transparency and high contrast**: still open, and
+  deliberately NOT part of the 2026-10-30 arrangements. Those are the queued
+  owner decision recorded in `docs/DECISIONS.md` ("per-widget transparency,
+  accent, high contrast and a live preview"), they are a different feature,
+  and half-building them here would have made the queue's own line untrue.
 - **The Windows 11 widget board**: needs a packaged (MSIX) app with a widget
   provider; this app is not packaged that way, so it cannot be done now.
 - **A dashboard server** (homepage, glance and the like): another program in
@@ -16298,9 +16377,10 @@ button on screen that the app does not already know is safe.
   after a change they make, and on schedule and focus events.
 
 **Not checked:** no real model has made a widget yet (the tests use a
-stand-in); the phone half is not compiled here; the desktop's Rust tests
-compile but run only on Windows; the home-screen widget has not been seen
-on a real launcher.
+stand-in); the desktop's Rust tests compile but run only on Windows; and the
+home-screen widget has not been seen on a real launcher **or an emulator** -
+so the four arrangements are proved as rules, not as pixels (the phone's
+Kotlin compiles and its JVM tests run, 2026-10-30).
 
 
 ## 87. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, routes, both apps' screens, and Gemini plus eight more website adapters built 2026-09-28)
@@ -17310,8 +17390,9 @@ audit: `projects.db` was missing from both.
 
 The owner's decisions (`CLAUDE.md`, 2026-09-28): "Sun and moon behind the
 animals, optional (off by default)" - the real sun and moon for the date and
-time, worked out on the owner's own devices from a town typed once on the
-PC, nothing online - and "Weather in the animals' scene, optional (off by
+time, worked out on the owner's own devices from a town the owner types on
+either app (the PC keeps it; the phone may type it too since 2026-10-29),
+nothing online - and "Weather in the animals' scene, optional (off by
 default)": rain, snow or wind, from the owner's own Home Assistant or from
 Open-Meteo online, whose ON is an approval card.
 
@@ -17329,21 +17410,27 @@ formulas and the look.
 | Route | Body | Answers |
 |---|---|---|
 | `GET /api/sky` | - | **200** the view below. Also starts ONE weather read in the background when the source is not off and the last read is older than 20 minutes (a failed one: 30 minutes) - there is no timer of its own, so the weather is read only while an app is asking. |
-| `POST /api/sky` | ONE change: `{"show": true \| false}`, `{"place": "<town, or a position like 39.7, -105.0>"}`, `{"forget_place": true}` or `{"weather": "off" \| "home_assistant" \| "open_meteo"}` | **200** `{"ok": true, "said", "view"}`; **202** `{"ok": true, "waiting": true, "said", "view"}` - Open-Meteo's ONE card is raised; **400** `{"ok": false, "error"}` in words (two changes at once, a town not in the list, a position off the Earth); **403** a town sent from any device but this PC; **409** Open-Meteo without a town; **503** the card's tier is not `ask` |
+| `POST /api/sky` | ONE change: `{"show": true \| false}`, `{"place": "<town, or a position like 39.7, -105.0>"}`, `{"forget_place": true}` or `{"weather": "off" \| "home_assistant" \| "open_meteo"}` | **200** `{"ok": true, "said", "view"}`; **202** `{"ok": true, "waiting": true, "said", "view"}` - Open-Meteo's ONE card is raised; **400** `{"ok": false, "error"}` in words (two changes at once, a town not in the list, a position off the Earth); **409** Open-Meteo without a town; **503** the card's tier is not `ask` |
 
-Behind the token and the origin check, like every route. The town is set
-from **this PC only** (`jarvis_owner_check.from_this_pc`, the rule "Folders
-Jarvis may look in" uses): the phone shows it and can forget it, never set it
-(`docs/ARCHITECTURE.md` §8). Showing, hiding and forgetting need no card
-either way; each app holds a change that ADDS something (showing, a weather
-source) on a stale link and never one that takes something away.
+Behind the token and the origin check, like every route. The town may be
+typed in **either app** (the owner's decision of 2026-10-29: the phone must
+not be told to go to the PC for a personal setting, and the town was the
+first case). It is looked up in the PC's own town list from either app, so
+typing it sends those words only to the PC over the pairing link - never
+online, and the PC never asks a geocoding service. The phone shows the town it
+holds, may set it, and may forget it; the view's `place_detail`/`place_none`
+words invite the same thing on both apps (`can_set_place` is true on both
+since that decision). Showing, hiding, forgetting and typing a town need no
+card either way; each app holds a change that ADDS something (showing, a
+weather source, a town) on a stale link and never one that takes something
+away.
 
 ```
 {"available": true, "title": "Sun, moon and weather",
  "show": bool, "show_label", "show_detail",
  "place": null | {"name": "Denver, Colorado, United States", "lat": 39.7, "lon": -105.0},
- "place_label", "place_detail" (this PC: how to type it; another device: "typed on the PC"),
- "place_none", "forget_label", "can_set_place": bool (true on this PC only),
+ "place_label", "place_detail" (words for the app asking; the phone's invite it to type one too),
+ "place_none", "forget_label", "can_set_place": bool (true on both apps since 2026-10-29),
  "weather": {"source": "off" | "home_assistant" | "open_meteo",
              "choices": [{"id", "label", "why"}, ...three],
              "now": null | {"rain", "snow", "wind", "cloud", "fog": 0..1, "dir": 1 | -1, "at": seconds},
@@ -27434,10 +27521,11 @@ token_ok, read_body)`, called by `plugins/ready/jarvis-calendar/plugin.json`, so
 it needs **no patch** and no change to `jarvis_hud.py`. There is no gate entry:
 nothing leaves the PC, so there is no egress to approve.
 
-**This section is S1's contract.** The HUD card, the phone plate and the
-home-screen widget are the next slices and build against exactly these answer
-shapes. No app calls them yet (`tools/check_parity.py` classifies the four as
-`planned`), and this section says so rather than implying a screen exists.
+**This section is the backend's contract.** The phone's plate and home-screen
+widget, and the desktop's HUD card, are the slices that build on exactly these
+answer shapes; both landed (the phone's in its own slice, the desktop's in
+§166), so all four routes are now `ported` in `tools/check_parity.py` rather
+than `planned`.
 
 ### 164.1 Where the data lives, and the switch
 
@@ -27530,9 +27618,10 @@ newest event.
 
 All four are behind the server's own origin check and `X-Jarvis-Token`, the same
 rules as every other host route; there is **no new permission model**. Reads are
-safe. The three writes are **host-only writes** for now - the HUD commands that
-will call them are the next slice - and each answers in words, never with a
-silent no-op.
+safe. The three writes are host-only writes: the desktop's two go through the
+HUD's own commands (`hud_calendar_add` / `hud_calendar_act`, §166.4) and its
+switch through `calendar_settings` (§166.5), and each answers in words, never
+with a silent no-op.
 
 ```
 GET  /api/calendar?days=7
@@ -27577,12 +27666,12 @@ are the `decisions.d/2026-10-29-jarvis-calendar.md` fragment. A write still need
 the server's origin and token; the feature adds no gate entry, no key, no socket
 and no model call.
 
-### 164.5 Honest limits, and what the next slices own
+### 164.5 Honest limits, and what the later slices own
 
-- **No screen yet** in either app: the HUD card, the phone plate and the Android
-  widget are S2-S4 and build against 164.2-164.3. Until then the feature's entry
-  in Settings > "All features and abilities" says the typed switch works and the
-  screens are the next slice.
+- **Both apps draw it now.** The desktop's HUD card, month/week/day sheet, one
+  form and Settings switch are §166; the phone's plate, day list and
+  home-screen widget are this section's phone half. Settings' entry for the
+  feature names the switch in both apps, and the feature row says `enforced`.
 - **Google and iCal are not on this route.** `sources` says
   `"not_on_a_screen"` for both and the local read never touches either module.
   When their read is wired to a screen, its events slot into the same list with
@@ -27591,9 +27680,9 @@ and no model call.
   invitations or attendees, no sharing, no `.ics`/CalDAV publishing, no
   per-occurrence edit, no colours or drag-to-move, and no natural-language add**
   through the model - "add a meeting Tuesday 3pm" stays §161's sentence.
-- **The phone's widget is Android-only by nature.** When it lands it adds no
-  route: every read it makes is `GET /api/calendar`, which both apps also call,
-  and the one-sided reason goes in `docs/ARCHITECTURE.md` §8 then.
+- **The phone's widget is Android-only by nature.** It adds no route: every read
+  it makes is `GET /api/calendar`, which both apps also call. The one-sided
+  reason for the widget itself is in `docs/ARCHITECTURE.md` §8.
 
 **Tests.** `backend/test_local_calendar.py` (88 checks: all four routes through a
 stand-in Handler, each one refusing a cross-origin request (403) and a missing
@@ -27854,3 +27943,474 @@ py -3 -c "import jarvis_parking as P; print(P.find_parking('Pike Place Market', 
 That was **not** run in this checkout (no live call is made by any test or by
 CI), so "the real services answer" is NOT-TESTABLE here and is the owner's
 field check.
+
+## 166. Building an Android app from chat, and putting it on your phone (added 2026-10-30)
+
+**Why this section number.** The last section on `main` when this was written
+was 162, and four in-flight branches had already claimed 163-167 (the numbers
+are named in this branch's brief as off-limits). **166 is the next free
+number**, and this section is appended at the very END of the file so a
+conflict here is two appends and both sides are kept (`CLAUDE.md`, "Appending
+to a shared file").
+
+**The owner's question (2026-10-30):** *"can jarvis build android apps? that
+i can sideload into my phone? if not add them"*. The answer before this
+section was **no**: milestones C (run a command), F (native Android projects)
+and G (install the debug APK) of `docs/APP-BUILDER-DESIGN.md` were unbuilt,
+and nothing in the backend had ever started a program that was not git.
+
+**What is built.** The narrowest full path from a chat description to an app
+on the phone, in three steps, of which TWO COST A CARD:
+
+The four routes, exactly as they are answered:
+
+``text
+GET  /api/projects/<id>/app/tasks/<task>/android
+POST /api/projects/<id>/app/tasks/<task>/android/template
+POST /api/projects/<id>/app/tasks/<task>/android/build
+POST /api/projects/<id>/app/tasks/<task>/android/install
+``
+
+| Step | Route | Card | Tier |
+|---|---|---|---|
+| Write the fixed project | `POST /api/projects/<id>/app/tasks/<task>/android/template` | **none** | - |
+| Build it | `POST …/android/build` | **one** (`app_build_android`) | `ask` |
+| Put it on the phone | `POST …/android/install` | **one** (`app_install_android`) | `ask` |
+| See where it stands | `GET …/android` | none | - |
+
+All three POSTs are **PC only** (`403 pc_only`, `pc_only: true`): the Android
+SDK and the phone's cable are on this machine. The CARDS are not PC-only -
+either device may approve one, so the owner can say yes from the sofa while
+the PC does the work - and both are **risky** (`jarvis_gate._RISK`: reversible
+"no"), so they ask for Windows Hello on the PC and the screen lock on the
+phone, and a denial never becomes a standing rule
+(`jarvis_gate._NO_RULE_FROM_DENIAL`).
+
+### 166.1 The template: what Jarvis writes, and what it will not take from a model
+
+The project is FIXED. It is strings inside `backend/jarvis_android_builder.py`,
+and the only pieces that vary are **validated values**:
+
+| Varies | Validation |
+|---|---|
+| The app's package | derived from the app folder's name, `^[a-z][a-z0-9_]{0,39}$`, always under `com.jarvis.made.` |
+| The app's name (the label on the phone) | `^[A-Za-z0-9 .,!?():+-]{1,40}$` - no quotes, because an Android string resource treats `'` as a delimiter and a stray one is a BUILD error |
+| Two colours | `#rrggbb` |
+| `assets/index.html`, `assets/app.js`, `assets/app.css` | a CLOSED list of three names; text; at most 96 KB each |
+
+Everything else is written by Jarvis: `settings.gradle.kts`,
+`build.gradle.kts`, `gradle.properties`,
+`gradle/wrapper/gradle-wrapper.properties`, `app/build.gradle.kts`,
+`AndroidManifest.xml`, `MainActivity.kt`, `strings.xml`, `colors.xml`,
+`themes.xml`, and the two Gradle wrapper files (Gradle's own: the jar is byte for byte `jarvis-client`'s, and the batch file is the same file with the CRLF endings cmd.exe needs put back on the way, because this repository stores text as LF). A request
+that names any other file - or hides a path in an asset's name - is refused
+with a sentence, never resolved.
+
+**The template's properties, all measured on 2026-10-30** (a real build of
+exactly this project; `docs/APP-BUILDER-DESIGN.md` and the scratch note
+`.dsh-scratch/ANDROID-APP-BUILDER-2026-10-30.md` carry the numbers):
+
+* Gradle **9.6.0**, with `distributionSha256Sum` set, so a tampered download
+  is refused rather than run; Android Gradle plugin **9.4.0**; `compileSdk`
+  36, `minSdk` 33, `targetSdk` 36 - the same toolchain `jarvis-client` builds
+  with, so the PC has ONE set of numbers to trust.
+* **No dependencies at all** - no AndroidX, no Compose - so a first build
+  fetches a toolchain and not a dependency graph.
+* **No permissions at all.** The manifest declares no `<uses-permission>`, not
+  even `INTERNET`, and `MainActivity` sets `allowFileAccess = false`,
+  `allowContentAccess = false` and refuses EVERY navigation. The app cannot
+  reach the internet, cannot read the phone's files and cannot call Jarvis's
+  own routes - proved from the built APK with `aapt2 dump badging`, which
+  shows no permission line.
+* Debug only. No release signing, no shrinking, never the Play Store (rule 5).
+
+### 166.2 `POST /api/projects/<id>/app/tasks/<task>/android/template`
+
+Body: `{"title"?: str, "background"?: "#rrggbb", "accent"?: "#rrggbb",
+"assets"?: {"index.html"?: str, "app.js"?: str, "app.css"?: str}}`. Every
+field is optional: with none, the app is called its own project title, uses
+two defaults, and gets a **working** page, which is what makes a first build
+possible without a single model call.
+
+* **200** `{"ok": true, "template": {"ok", "files", "package", "title"},
+  "status": {…168.4…}}`
+* **400** a plain sentence: not an Android project, a title with a quote in
+  it, a colour that is not `#rrggbb`, a fourth web file, one larger than
+  96 KB, one that is not text, or a task that already has a project (a second
+  write is refused, never a silent overwrite).
+* **403** `pc_only` from the phone.
+* **404** no such project, not an app project, no such task.
+
+No card: the files land only in that task's own copy, and nothing runs them
+(`docs/APP-BUILDER-DESIGN.md`, "Write files in a task's copy: no card").
+
+### 166.3 `POST /api/projects/<id>/app/tasks/<task>/android/build`
+
+Raises **ONE** card, `app_build_android`, and answers `202`:
+`{"ok": true, "waiting": true, "card": "app_build_android", "command":
+"<task copy>\gradlew.bat assembleDebug", "message": …}`.
+
+The card's own words carry: the exact command, the exact folder, the SDK and
+JDK paths it found, that **the FIRST build downloads the Gradle distribution
+(~130 MB) and the Android Gradle plugin** from `services.gradle.org`,
+`dl.google.com` and `repo.maven.apache.org` with **nothing of the owner's
+sent**, and the APK path it will produce.
+
+A yes runs **exactly** `[<task copy>\gradlew.bat, "assembleDebug"]` with
+`cwd` = the task's copy:
+
+* the environment is `jarvis_child_env.inherited()` - the same allowlist every
+  child program gets, never a token, key or password - plus `ANDROID_HOME`,
+  `ANDROID_SDK_ROOT`, `JAVA_HOME`, and `GRADLE_OPTS=-Dorg.gradle.daemon=false`
+  so no Gradle process outlives the card;
+* the time limit is 25 minutes, and the output goes to a FILE
+  (`build/jarvis-build.log`, gitignored) with only its END kept, because a cap
+  applied after reading megabytes into memory is not a cap;
+* success requires `exit 0` **and** that the APK exists. Exit 0 without an
+  APK is a failure.
+
+Refusals: **400** (no project yet, no Android project), **409** a card for
+this task is already waiting, **503** the settings file has the action at a
+tier other than `ask` (naming the line), or the PC is missing the SDK, the
+JDK or the wrapper files (the sentence names what to install).
+
+### 166.4 `POST /api/projects/<id>/app/tasks/<task>/android/install`
+
+Raises **ONE** card, `app_install_android`, answering `202` with the command
+in the body. The card names the exact `adb install -r <apk>`, the file, its
+size, that it is a **SIDELOAD** and never the Play Store, and that Jarvis has
+no uninstall - so what it installs stays until the owner removes it.
+
+A yes runs **exactly** `[<sdk>\platform-tools\adb.exe, "install", "-r",
+<the apk>]`:
+
+* adb is called by **full path** (it is not on PATH on this PC, measured);
+* the APK must be a real file **inside the task's own copy**, at the one path
+  the build writes, ending `.apk`, and not empty - anything else is refused;
+* there is **no** `shell`, `uninstall`, `push`, `pull`, `exec-out` or `-s
+  <serial>` anywhere in the module: a source scan in
+  `backend/test_android_builder.py` fails the suite if one is added;
+* the time limit is 3 minutes.
+
+### 166.5 `GET /api/projects/<id>/app/tasks/<task>/android`
+
+`{"ok", "app", "task", "template": bool, "toolchain": {"sdk", "java", "adb",
+"missing"}, "build": {"ready", "refused", "command"}, "install": {"ready",
+"refused", "command"}, "apk": {"path", "bytes"}, "waiting": "build"|"install"|
+null, "last": {"kind", "outcome", "message", "at"}}`. No secrets and no file
+contents; the two `command` strings are what a card WOULD run, so the owner
+can see the plan before any card exists.
+
+### 166.6 What this deliberately does not do
+
+No `npm`, no Capacitor, no release signing, no keystore of the owner's, no
+Play Store, no `adb shell`, no device management, no arbitrary command - the
+Gradle task name and both commands are module constants - and no model call.
+Nothing is installed before a build has made the file. The card state is in
+memory: a backend restart drops a waiting card and the task simply stays, so
+it can be built again.
+
+**The two apps.** Neither has a screen for this: the routes are PC only, the
+cards arrive in the card list BOTH apps already draw, and `ARCHITECTURE.md`
+section 8 says why the phone has no build button (the SDK and the cable are
+not on it).
+
+**Wiring.** No patch: the routes come from `jarvis_android_builder.install()`,
+called by the drop-in folder `plugins/ready/android-builder`. The gate rows
+are in `jarvis-backend/jarvis_gate.py`, the tier lines in
+`backend/rebuilt/jarvis-framework.toml`, and the two Gradle wrapper files are
+carried as beside-files (`backend/jarvis-android-gradlew.bat`,
+`backend/jarvis-android-wrapper.jar`, Apache-2.0, credited in
+`THIRD-PARTY-NOTICES.txt`).
+
+**Tests.** `backend/test_android_builder.py`: the template writes every file
+with no placeholder left, the wrapper files are jarvis-client's own (the jar byte for byte, the batch file line endings aside, and the GENERATED batch file CRLF); the manifest declares no permission; every bad name,
+colour, title, asset and path is refused; the build command is exactly
+`<task copy>/gradlew.bat assembleDebug` in exactly the task copy and a
+tampered argv runs nothing; no yes means no run, and a stale-stream gate
+answer runs nothing; the environment holds no token, key or password; the
+install accepts only the APK inside the copy and no other adb form exists; the
+gate rows, tier lines and drop-in folder are all in place, and that the module's own install() wraps a Handler, answers its own routes and lets every other request through untouched. **No test runs a
+real Gradle build or a real adb install** - a CI runner has no Android SDK and
+no phone. The build in section 166.1 was a manual measurement on the owner's
+PC, reported as such.
+## 167. Notification styles: a closed look for the phone's notifications, described by talking (phone and backend, added 2026-10-30)
+
+The owner asked, 2026-10-30: *"does jarvis android have custom animated notifications? if not can you
+build this feature into it? i want them customizable and buildable by just chatting to jarvis"*.
+
+**The answer Android allows, and the only one this adds.** A notification's own layout may contain
+only the View classes `RemoteViews` lists, and the system inflates it in its own process - a class it
+does not know is refused outright. Two of those classes animate themselves: `ViewFlipper` (frames, an
+`autoStart` layout attribute, a remote flip interval) and an indeterminate `ProgressBar`. So a "custom
+animated notification" here means **a closed look that the system animates**, chosen from a menu, and
+never a layout, a colour value or code sent from the PC. The full evidence, with links, is
+`.dsh-scratch/NOTIFICATION-STYLES-2026-10-30-RESEARCH.md`; the shape is "Widgets you describe"
+(§86) applied to the look of a notification instead of the contents of a widget.
+
+### What a style is
+
+A style is one checked JSON object. Every key is required and no other key is allowed:
+
+| Key | Values | Who decides what it draws |
+|---|---|---|
+| `name` | plain words, 1-40 characters, no web address | the model (a label only) |
+| `theme` | `ice`, `azure`, `indigo`, `ember`, `rose`, `mono` | the PHONE maps the name to two of the app's own palette colours |
+| `figure` | `spark`, `ring`, `dot`, `star`, `arrow`, `none` | the phone (one character, coloured by the theme) |
+| `motion` | `none`, `pulse`, `flip`, `spinner` | the phone (stock SystemUI animations only) |
+| `speed` | `slow`, `normal`, `fast` (1800 / 900 / 450 ms) | the phone |
+| `kinds` | one or two of `approval`, `reminder` | the phone decides which notifier asks |
+
+`pulse` is a ViewFlipper over two frames of the figure (bright, then dim); `flip` is the figure then a
+dot; `spinner` is an indeterminate ProgressBar beside a still figure; `none` is a still figure. **No
+frame is posted by the app**, so a style keeps animating when Jarvis' process has been killed and
+costs no wakeups.
+
+The model's answer is checked by `backend/jarvis_notification_styles.py`'s `validate()`, which refuses
+an unknown key (a colour, a font, a layout, an image, a URL, an `onclick`, code), an unknown value, a
+missing key, a web address in the name, a repeated key, `NaN`, prose around the JSON and a far too
+long answer. The stored file is checked again on every read, so a hand edit smuggles nothing in. The
+**phone** checks the answer a second time (`net/NotificationStyle.kt`) and fails closed: an unknown
+name means the plain notification, never a guess.
+
+### Routes
+
+| Method | Path | What it does |
+|---|---|---|
+| GET | `/api/notification-styles` | the saved styles, the previews, the menu's words, and `active` - the style live for each kind (the newest one that claims it) |
+| POST | `/api/notification-styles/draft` | `{"words": "...", "provenance": "typed"\|"voice"}` -> a preview; nothing is applied |
+| POST | `/api/notification-styles/add` | `{"draft": "d0123456789"}` -> keep ONE preview exactly as shown |
+| POST | `/api/notification-styles/discard` | `{"draft": "..."}` -> drop ONE preview |
+| POST | `/api/notification-styles/delete` | `{"id": "s0123456789"}` -> delete ONE saved style, at once |
+
+The routes are installed by `jarvis_brain_reads.install()` beside the widget routes (no patch of its
+own), behind the server's own origin and token checks, with an 8 KB body cap on the POSTs. Caps: 8
+saved styles, 5 live previews, 300 characters of the owner's words. Preview ids are "d" plus ten hex
+digits; saved ids are "s" plus ten hex digits.
+
+### Asking for it in chat
+
+"make my Jarvis notifications look like a warm orange pulse", "change how notifications look to ...",
+"style my notifications like ...". `jarvis_quick.py`'s `_STYLE` rule fires only on words about how
+they LOOK - it deliberately does not catch "make my notifications quieter" or "turn my notifications
+off", which are the settings grammar's. The reply is a **preview** and a pointer to the phone's Settings -> Notifications, where Add applies it. Refused in a conversation that has read outside text, and
+refused for pasted or shared words: the same taint rule as §86, reused rather than re-invented.
+
+### Why there is no approval card
+
+A style shows nothing new, adds no button, grants no capability and changes nothing about what Jarvis
+may do; nothing is applied until the owner taps Add. The PC's own sentence says so
+(`NO_CARD`). Adding a card would be ceremony without a decision.
+
+### The privacy floor
+
+- The spec has nowhere to put an email, a saved fact, a file, a person or a token.
+- The custom layout receives the SAME title and body the notifier already had, already redacted by
+  that notifier's own rule. It adds no text of its own.
+- While App lock, "Hide memory lists and chat history" or a phone with no secure lock screen is in
+  force, the phone does not use the custom layout at all: `NotificationStyle.plan(...)` returns null
+  and the notification is built exactly as it was before this feature existed.
+- An approval card still offers **Deny only**, still opens the Inbox, and is still never approvable
+  from a notification: styling changes how the words are drawn and nothing else.
+
+### What it does not style
+
+The alarm that keeps ringing, Live, the chatbot line, the hand-off, the watch line, the wake word and
+the link's own ongoing notification keep the plain layout - an animation there is noise. The quiet
+"you missed it" notice is never styled (the owner's 2026-09-26 decision). A sound setting is
+deliberately absent: sound belongs to the notification channel, and the approval routing already
+chooses the channel.
+
+### Tests
+
+`backend/test_notification_styles.py` (160 checks: the menu kept and everything off it refused, no
+room in the spec for private data, drafts only from the owner's own words, a tainted chat refused, the
+store's caps and expiry and re-check on read, which style is live being the newest that claims a kind,
+the routes behind token/origin with the body cap, and the typed grammar) and
+`jarvis-client/app/src/test/java/com/jarvis/client/NotificationStyleTest.kt` (the decision layer:
+locked means no custom layout, a kind not claimed means none, each motion's frames and interval, the
+strict second check, and source pins that the layout files use only RemoteViews-allowed classes and
+that the flipper's `autoStart` stays a layout attribute because `setAutoStart` is not remote-callable).
+
+**Not proven here:** the animation on a screen. There is no emulator and no phone at this desk; what is
+proven is that every View used is on the allow-list, that the animation is one SystemUI performs, that
+the app compiles and the JVM tests pass.
+
+
+## 168. Calendar in the HUD: the card, three views, one form, its place in Edit HUD and its Settings switch (desktop, added 2026-10-30)
+
+**What this is, in the owner's words.** "a full fledged easy to use calendar
+built into Jarvis", local only, drawn in the HUD, **disableable in Settings**,
+and - the standing rule of 2026-10-22 - *addable to the main screen from Edit
+HUD*. §164 is the store and the four routes; §164's own phone half draws the
+phone's plate and widget. **This section is the DESKTOP half**: the HUD's
+Calendar card, its month/week/day sheet, its one Add/Edit form, its row in the
+Edit HUD editor, and the Settings switch that turns the whole thing off. No
+route is added by any of it - every read and write here is one of §164.3's
+five.
+
+**This section number.** §164 is the backend slice's contract and §165 the
+parking answer; the calendar's own desktop slice was written while 166 was
+free, and it sits here in numeric order rather than at the end of the file.
+Nothing else was renumbered.
+
+### 168.1 What the owner sees
+
+One **rail card** (`#rail-calendar`, directly above the Reminders card) and one
+**full sheet** (`#calendar-panel`, over the stage, dismissed by Escape, its
+Close button, or a click outside - the same shape as `#galaxy-options`). Both
+draw from the SAME `GET /api/calendar?days=90` read, so the card and the sheet
+can never disagree about the owner's day.
+
+- The card says what is next: today's clock and zone, then up to four events
+  that have not already ended, each with its time (or "All day"), its title, a
+  "Now" marker for the one happening, and a "+N more in the next 7 days" line.
+  Its window is seven days **on purpose** - the sentence it shows is "in the
+  next 7 days", so the count is of that same window, never of everything.
+- The sheet has three views, switched by a `role="tab"` strip and stored in
+  `html[data-cal-view]`: **Month** (always six full weeks, Sunday first, so the
+  height never jumps; a multi-day event is ONE bar clipped to the week, with
+  lanes so two never overlap), **Week** (the seven columns around the chosen
+  day, the same bars), and **Day** (an hour-free list in time order - no hour
+  grid is faked). Arrow keys move the chosen day; every view names an empty day
+  in words rather than showing a blank.
+- **One form**, used for both Add and Edit: title, date, all-day, start and end
+  time, last day, place, notes, reminder minutes and the repeat choice. Delete
+  is in the same form, asks "press again to delete" first because a delete
+  cannot be undone, and is hidden until an event is being edited.
+- **Every state is a sentence**, never a blank: OFF, an empty window, a day
+  with nothing on it, a read that failed (with the PC's own reason where it
+  gave one), and the App-lock read ("titles, places and notes are hidden; the
+  dates, times and counts are still right"). A card that vanishes reads as a
+  fault, so the OFF card keeps its place and says so.
+
+### 168.2 The page itself, and what the twins are
+
+The calendar's script is one block INSIDE `jarvis-desktop/src/jarvis_hud.html`
+(the heading `/* ── the calendar (2026-10-29) ──`), not a module: the page is
+vendored to the backend and must stay byte-identical in its three copies
+(`backend/jarvis_hud.html` and `jarvis-backend/jarvis_hud.html`), which
+`tests/hud-calendar.mjs` proves. Its test hook is `window.__hudCalendar`, and
+`tests/hud-calendar.mjs` takes that block out of the real page and runs it
+against a tiny fake document - the real logic, with no browser.
+
+### 168.3 The read, and the lock
+
+`GET /api/calendar?days=N` is the ONE read, on `hud_proxy.rs`'s fixed
+`HUD_GET_PATHS` list. It is also the only path on that list that carries a
+query, so `allowed_get` accepts exactly `days=` 1-90 with no sign, no padding
+zero, no second parameter, and rebuilds the path from the number it checked -
+what reaches the PC is never the page's own string. `/api/calendar/add`,
+`/api/calendar/act` and `/api/calendar/settings` are **refused** here: the
+writes are the two commands below.
+
+While App lock or "Hide memory lists" is on, `lock/rules.rs` runs the answer
+through `brain::calendar::redact_read`: every event keeps its id, date, times,
+all-day flag, reminder minutes, recurrence, zone and source, while the title,
+place and notes become `""`, and `hidden`/`hidden_count` say how many titles
+were blanked - so the card can still say "3 events - hidden" and the sheet can
+still draw the shape of the week. A body that is not JSON becomes
+`{available:false, hidden:true}` rather than the unreadable original.
+
+### 168.4 The two writes
+
+`hud_calendar_add` and `hud_calendar_act` (`src-tauri/src/hud_calendar.rs`) are
+the page's only way to write: the HUD holds no token, so the page cannot POST.
+Both are **held on a stale link** (`brain::require_link_live`), and both build
+their body in `brain/calendar.rs`, which is the one place the shape is decided:
+
+- `add_body`: one event, title required and capped at 300 characters, a real
+  `YYYY-MM-DD` day, `HH:MM` times, an end that cannot be before the start, an
+  all-day tick that drops the times, place ≤300, notes ≤2,000, a reminder
+  0-10,080 minutes, and a repeat word from the store's own three plus "none".
+  An empty optional box is simply not sent.
+- `act_body`: exactly two verbs, `delete` or `update` (with the same fields),
+  one id of the store's own shape (`c` + 10 lowercase hex). There is no list
+  form, no delete-all and no clear-range - the same narrowness
+  `/api/schedule/act` has - and a delete that carries fields is refused.
+
+**No approval card, for either** - the owner's 2026-10-29 ruling (decision D1 of
+the design brief): one row on this PC, no bulk form, ids-only in the audit line.
+The other direction of the same ruling: **the switch is not a HUD write**. The
+page only READS the PC's `on` flag and says the feature is off in words;
+`capabilities/hud.json` records why the switch is not that window's.
+
+### 168.5 Its place in Edit HUD, and the Settings row
+
+- **Edit HUD.** The calendar is a real registry card: `CARD_REGISTRY`'s
+  `"calendar"` row (label "Calendar", `right_rail`, `col_span` 12, ordered above
+  the waiting cards, not protected), `MOVABLE_IDS`, and `CARD_DOM.calendar ->
+  ["#rail-calendar"]`. Every built-in preset in `src/hud-layout.js` carries it,
+  and `contract/hud-presets.json` mirrors them. The half that makes it true for
+  the OWNER rather than only for a fresh install is `withRegistryCards` in
+  `src/hud-edit.js`: a saved layout is a CLOSED list, so a card a later release
+  adds is both invisible and unaddable unless it is put back - that function
+  re-adds any movable card the document does not name, at its registry
+  defaults, **in memory** (opening the HUD is not an edit; the first real change
+  saves the document that by then carries it), and it never un-hides a card the
+  owner hid himself.
+- **Settings.** `settings.html`'s "Jarvis Calendar" card
+  (`src/calendar-settings.js`) draws the ONE switch: `{"on": true|false}` on
+  `POST /api/calendar/settings`, the same route and the same value the phone's
+  `CalendarSettingsPlate.kt` row and the typed sentence "turn off the Jarvis
+  calendar" reach. On the desktop it goes through the `calendar_settings`
+  command (`src-tauri/src/calendar_settings.rs`), which reads the switch from
+  `GET /api/calendar?days=1`'s `on` (there is no GET settings route) and
+  **drops every event, title, place and count in Rust** - the Settings window
+  draws one row and cannot read the owner's day. No card either way, immediate,
+  never held on a stale link (the same class as the Anti-Slop filter), and
+  **OFF never deletes an event**.
+- The row it used to have in `jarvis_feature_guide.SETTINGS_GAPS` (a typed
+  switch with no page to draw it) is **closed and removed**: both Settings
+  halves exist now, and `contract/feature-controls.json`'s `jarvis-calendar` row
+  moved from `planned` to `enforced` with a real desktop and phone location.
+
+Both apps have every one of these surfaces, so `tools/check_parity.py`
+classifies the four calendar routes `ported` and there is **nothing one-sided
+to record in `docs/ARCHITECTURE.md` §8** for this feature. The one difference
+that stays is a shape, not a missing half: the desktop draws a month/week/day
+sheet in its own window and the phone draws its own plate and home-screen
+widget, from the same read.
+
+### 168.6 Failing closed
+
+A shape neither app understands must never be drawn as a real calendar, and
+this bit was wrong before it shipped (2026-10-30):
+
+- The page's `readCalendar` used to treat every object as a calendar unless it
+  said `available: false`. So `?id=`'s answer `{"ok":true,"event":{...}}`, a
+  bare event, and an empty body all became **"an available calendar with no
+  events"** - drawn as *"Nothing in the next 7 days"*, the most reassuring
+  possible lie about the owner's own day. It now requires a real boolean
+  `available` AND, when true, an `events` array; anything else is refused in
+  words ("answered in a shape this window does not understand ... your events
+  are kept on the PC") and draws nothing.
+- The two write handlers used to test `reply.ok === false`, so an answer with no
+  `ok` at all - an empty body, an older backend - was reported as **"Event
+  added."** over a write that may never have happened. They now require
+  `ok: true` positively.
+- The Settings command applies the same rule in Rust: an answer that does not
+  carry `on` as a real boolean is an error, never "off" and never "on".
+
+### 168.7 What is proven, and what is not
+
+- `jarvis-desktop/tests/hud-calendar.mjs`: **33 checks, browser-free** (it runs
+  the page's own block against a fake document). Every state in words; the
+  three views; the bars and their lanes; the form's exact argument objects for
+  both commands; the one allowed read and its bounded query; the redaction arm;
+  the registry card, `MOVABLE_IDS`, `CARD_DOM`, every preset and the contract;
+  a saved layout getting the card back; the three copies byte-identical; and
+  the two fail-closed checks above.
+- Rust, beside the code: `brain/calendar.rs` (10 tests - the exact bodies, the
+  caps, the refusals, the redaction, and no network of its own),
+  `hud_calendar.rs` (2 - the form is the contract, one change is one event and
+  two verbs) and `calendar_settings.rs` (5 - one field per request, the read is
+  the switch and never an event, an answer without `on` is an error).
+  `lock/rules.rs`'s own test names `/api/calendar` in the redaction arm.
+- `backend/test_local_calendar.py` is §164's 88 checks; `tools/check_parity.py`
+  must print "No undecided drift." with the four rows `ported`.
+- **NOT proven here:** the real WebView2 window. This desk has no Playwright
+  (the page-level `tests/hud.mjs` and `tests/shots.mjs` cannot run), so a
+  rebuilt and installed desktop is the field check, and the geometry of the
+  sheet in the real window is the owner's eye rather than a test.
+

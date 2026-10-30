@@ -81,6 +81,10 @@ GLOBS = ("backend/test_*.py", "tools/check_*.py", "tools/test_*.py")
 #: that happens to share a source-read name; over-counting keeps the ceiling
 #: honest and the next pin cannot hide behind it.
 POSITION_PIN_CEILING: dict[str, int] = {
+    # 2026-10-30: the Android app builder landed with four position pins in
+    # its new suite (the plan/refusal assertions). Recorded debt, not an
+    # approval; the ratchet only turns DOWN.
+    "backend/test_android_builder.py": 4,
     "backend/test_big_model.py": 2,
     "backend/test_browser_engine.py": 1,
     "backend/test_chatbot.py": 2,

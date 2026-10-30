@@ -28,6 +28,12 @@ import kotlinx.serialization.json.put
  * is safe. The buttons ARE the Quick Settings tile actions ([TileAction]).
  *
  * Pure Kotlin, no Android types, so the JVM tests run every rule here.
+ *
+ * THE ARRANGEMENT (2026-10-30): a widget also carries one of four layouts
+ * ([LAYOUTS]), and [boardOf] turns a view into what is drawn - which block is
+ * drawn LARGE, in what order the rest go, and the buttons last. It is a closed
+ * list because Android decides a widget's layout when the app is built: the
+ * APK can only draw arrangements compiled into it.
  */
 object JarvisWidgets {
     const val LIST_PATH = "/api/widgets"
@@ -45,9 +51,11 @@ object JarvisWidgets {
             "until you tap Add. Delete removes one at once."
     const val PHONE_HINT =
         "For example: \"my next 3 reminders, my to-do count and a 10-minute timer button\". You can " +
-            "also say \"make me a widget showing ...\" to Jarvis. Then give it a home-screen slot below, " +
-            "and add \"Jarvis widget 1\", \"2\" or \"3\" to your home screen (touch and hold the home " +
-            "screen, then Widgets, then Jarvis)."
+            "also say \"make me a widget showing ...\" to Jarvis, or ask for an arrangement like " +
+            "\"put my reminders at the top\" or \"make the count big\". Then give it a home-screen " +
+            "slot below and tap \"Put it on my home screen\". If your home screen will not add a " +
+            "widget by itself, touch and hold it, choose Widgets, then Jarvis, then " +
+            "\"Jarvis widget 1\", \"2\" or \"3\"."
     const val EMPTY = "No widgets yet."
     const val MISSING = "Your PC's Jarvis cannot make widgets yet - run apply-patches.ps1 on the PC."
     const val PREVIEW_TITLE = "Preview - not added yet"
@@ -69,6 +77,42 @@ object JarvisWidgets {
             "Jarvis, which asks you to unlock it first - except Stop everything. Nothing but " +
             "Stop everything works while the connection is catching up."
 
+    /**
+     * "Put it on my home screen" (2026-10-30). The owner asked to build a
+     * widget by chatting and add it to the home screen immediately, so the
+     * phone asks the launcher itself to place the slot's widget
+     * (`widget/WidgetPin.kt`, Android's request-pin API, API 26+) instead of
+     * only telling the owner the touch-and-hold route.
+     *
+     * The three texts are what the app can honestly say, and [pinSentence] is
+     * a pure function so the JVM tests run every one. The pin API answers
+     * "the request was sent", NOT "the widget is on the screen" - a launcher
+     * may show its own confirm, or ignore it - so the asked sentence never
+     * claims it was added.
+     */
+    const val PIN_LABEL = "Put it on my home screen"
+
+    /** The three board receivers, in slot order (0-based); the manifest
+     *  declares each one, and `JarvisWidgetsTest` holds the three lists
+     *  (this one, [SLOTS], the manifest) equal. */
+    val PIN_RECEIVERS = listOf(
+        ".widget.JarvisBoardWidgetOneReceiver",
+        ".widget.JarvisBoardWidgetTwoReceiver",
+        ".widget.JarvisBoardWidgetThreeReceiver",
+    )
+
+    fun pinSentence(requested: Boolean, alreadyThere: Boolean, slot: Int): String {
+        val n = slot + 1
+        return when {
+            alreadyThere -> "Jarvis widget $n is already on your home screen."
+            requested ->
+                "Your home screen was asked to add Jarvis widget $n. If it asks you to confirm, say yes."
+            else ->
+                "Your home screen will not add a widget by itself. Touch and hold the home screen, " +
+                    "choose Widgets, then Jarvis, then \"Jarvis widget $n\"."
+        }
+    }
+
     // The home-screen widget's own lines.
     const val W_NOT_STARTED = "Jarvis could not start"
     const val W_NOT_STARTED_SUB = "Tap to open and see why"
@@ -86,7 +130,29 @@ object JarvisWidgets {
     const val MAX_NAME = 40
     const val MAX_TEXT = 60
     const val MAX_LABEL = 40
-    const val SLOTS = 5
+
+    /**
+     * How many "Jarvis widget" slots the app ships: THREE, because Android
+     * cannot add a widget type while the app runs, so a slot is a widget class
+     * and a `<receiver>` declared in the manifest. This number is the slot
+     * picker's list, so it must equal the receivers declared there -
+     * `JarvisWidgetsTest.everySlotHasAReceiver` counts them, and it was 5
+     * until 2026-10-30, which offered the owner two slots that could never
+     * draw anything.
+     */
+    const val SLOTS = 3
+
+    /**
+     * The four arrangements a widget can be drawn in (2026-10-30): a CLOSED
+     * list. Android fixes a widget's layout when the APK is built (a
+     * `RemoteViews` layout is a resource, and `<appwidget-provider>` is XML),
+     * so these four are the only looks that can ever be drawn - "whatever
+     * layout the model invents" is not a thing Android can do. Held to the
+     * PC's (`jarvis_widgets.LAYOUTS`) and the desktop's by
+     * contract/widget-cases.json.
+     */
+    val LAYOUTS = listOf("stack", "big", "list", "compact")
+    const val LAYOUT_STACK = "stack"
 
     /** Sources whose words are the owner's own (or another program's). */
     val PRIVATE_SOURCES = listOf("current_task", "now_playing", "reminders", "timers", "today", "todo")
@@ -113,7 +179,73 @@ object JarvisWidgets {
         ) : Block
     }
 
-    data class View(val name: String, val blocks: List<Block>)
+    data class View(val name: String, val layout: String, val blocks: List<Block>)
+
+    /**
+     * One widget arranged for drawing: [big] is drawn large at the top (or
+     * null), [blocks] in order below it, [buttons] as rows of two at the
+     * bottom. The ONE arrangement rule both apps follow
+     * (tools/gen_widget_cases.py `arrange()`), so "big", "list" and
+     * "compact" cannot mean two different things on the phone and the PC.
+     */
+    data class Board(
+        val big: Block.Count?,
+        val blocks: List<Block>,
+        val buttons: List<Block.Button>,
+    )
+
+    /**
+     * The widget arranged in its own [View.layout]:
+     *
+     * - `stack`: every non-button block in the order given (what every widget
+     *   made before 2026-10-30 has, so nothing changes for them);
+     * - `big`: the FIRST number drawn large above the rest; with no number it
+     *   is `stack`;
+     * - `list`: heading, then lists, then numbers, then bars;
+     * - `compact`: one heading (its own, else the widget's name) and ONE
+     *   block, a list cut to its first item with the rest counted into `more`.
+     *
+     * Anything else falls back to `stack`, the same fallback [viewOf] makes:
+     * a newer PC's word this app does not know must leave the widget
+     * drawable.
+     */
+    fun boardOf(view: View): Board {
+        val buttons = view.blocks.filterIsInstance<Block.Button>()
+        val body = view.blocks.filterNot { it is Block.Button }
+        when (view.layout) {
+            "big" -> {
+                val big = body.filterIsInstance<Block.Count>().firstOrNull()
+                if (big != null) return Board(big, body.filterNot { it === big }, buttons)
+            }
+            "list" -> return Board(null, body.sortedBy { listOrder(it) }, buttons)
+            "compact" -> {
+                val title = body.filterIsInstance<Block.Title>().firstOrNull()
+                val head = title
+                    ?: view.name.takeIf { it.isNotEmpty() }?.let { Block.Title(it) }
+                val rest = body.filterNot { it === title }
+                val out = mutableListOf<Block>()
+                if (head != null) out += head
+                when (val one = rest.firstOrNull()) {
+                    is Block.Items -> out += one.copy(
+                        items = one.items.take(1),
+                        more = one.more + maxOf(0, one.items.size - 1),
+                    )
+                    null -> Unit
+                    else -> out += one
+                }
+                return Board(null, out, buttons)
+            }
+        }
+        return Board(null, body, buttons)
+    }
+
+    /** `list`'s order: a heading, then the lists, then counts, then bars. */
+    private fun listOrder(b: Block): Int = when (b) {
+        is Block.Title -> 0
+        is Block.Items -> 1
+        is Block.Count -> 2
+        else -> 3
+    }
 
     private val WS = Regex("[ \\t\\n\\r\\u000B\\u000C]+")
 
@@ -190,7 +322,15 @@ object JarvisWidgets {
                 else -> Unit
             }
         }
-        return View(text(ans["name"], MAX_NAME), out)
+        return View(
+            name = text(ans["name"], MAX_NAME),
+            // An arrangement this app does not know is drawn as "stack", the
+            // same way an unknown source is drawn as private: the widget must
+            // still draw. (The PC is the other direction: it REFUSES a value
+            // off its list, so nothing off-menu is ever stored.)
+            layout = str(ans["layout"])?.takeIf { it in LAYOUTS } ?: LAYOUT_STACK,
+            blocks = out,
+        )
     }
 
     /** The same view while private words are hidden: a private block keeps its label only. */

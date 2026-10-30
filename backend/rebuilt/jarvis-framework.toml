@@ -625,6 +625,28 @@ register_approval_key     = "ask"
 # refuses to raise the card at all, so no change is added.
 app_merge_change          = "ask"
 
+# The app builder's last two steps (jarvis_android_builder.py, 2026-10-30; the
+# owner's question "can jarvis build android apps? that i can sideload into my
+# phone?"; docs/APP-BUILDER-DESIGN.md milestones C, F and G; JARVIS-API
+# section 168). TWO actions, because they are two different risks and the
+# owner may say yes to one and no to the other.
+#
+# app_build_android runs `gradlew.bat assembleDebug`, exactly, inside ONE
+# task's own copy. A worktree is not a sandbox for a program (ARCHITECTURE.md
+# section 11): the build runs other people's build code with the owner's own
+# Windows permissions, and its FIRST run downloads the Gradle distribution and
+# the Android Gradle plugin from the internet. Nothing of the owner's is sent.
+# app_install_android runs `adb install -r <the apk that build made>`, exactly,
+# on the phone on this PC's cable, and Jarvis offers no uninstall.
+#
+# Both must stay "ask": either module refuses any other tier rather than raise
+# a card (503, no card), so a looser line here enables nothing - it only
+# removes the words the owner reads. Both are RISKY (jarvis_gate._RISK:
+# reversible "no"), so both ask for Windows Hello on the PC and the screen lock
+# on the phone, and neither denial becomes a standing rule.
+app_build_android         = "ask"
+app_install_android       = "ask"
+
 
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES

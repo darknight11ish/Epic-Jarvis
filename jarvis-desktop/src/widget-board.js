@@ -11,6 +11,11 @@
  * `textContent` only: nothing the PC or the model wrote is ever parsed as
  * HTML, and there is no style, colour, link or script to set.
  *
+ * The widget also carries one of four ARRANGEMENTS (`LAYOUTS`, 2026-10-30),
+ * and `boardOf` is the one rule that turns a view into what is drawn: which
+ * block is drawn large, in what order the rest go, and the buttons last. The
+ * phone carries the same rule, held to it case for case by the same fixture.
+ *
  * The apps check again what the PC already checked: a block type or button
  * this file does not know is left out, and a source it does not know is
  * treated as private.
@@ -38,6 +43,14 @@ export const PICK_LABEL = "Your widget";
 export const FACE_OPTION = "Jarvis's face";
 export const HIDDEN_WORDS = "Hidden - open Jarvis to see it.";
 export const MAX_WORDS = 300;
+
+/** The four arrangements a widget can be drawn in (2026-10-30): a CLOSED
+ *  list. The PC's is jarvis_widgets.LAYOUTS and the phone's is
+ *  net/JarvisWidgets.LAYOUTS; all three are held equal by
+ *  tests/fixtures/widget-cases.json. A widget's look cannot be invented,
+ *  because a RemoteViews layout is a resource compiled into the app. */
+export const LAYOUTS = ["stack", "big", "list", "compact"];
+export const LAYOUT_STACK = "stack";
 
 /** The five buttons - the phone's Quick Settings tile actions, same words. */
 export const ACTIONS = {
@@ -78,6 +91,14 @@ export function text(v, cap) {
 
 const int = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
 
+/** The arrangement an app draws from one show answer: a value on the closed
+ *  list, else "stack". A newer PC's word this app does not know must leave the
+ *  widget drawable - exactly as an unknown source is treated as private. */
+export function layoutOf(ans) {
+  const got = ans && typeof ans === "object" ? ans.layout : undefined;
+  return typeof got === "string" && LAYOUTS.includes(got) ? got : LAYOUT_STACK;
+}
+
 /** The blocks this app draws from one GET /api/widgets/show answer, or null. */
 export function viewOf(ans) {
   if (!ans || typeof ans !== "object" || Array.isArray(ans) || ans.ok !== true) return null;
@@ -115,7 +136,7 @@ export function viewOf(ans) {
       out.push(v);
     }
   }
-  return { name: text(ans.name, LIMITS.name), blocks: out };
+  return { name: text(ans.name, LIMITS.name), layout: layoutOf(ans), blocks: out };
 }
 
 /** The same view while private words are hidden (App lock, or "Hide
@@ -124,6 +145,7 @@ export function hideView(view) {
   if (!view) return null;
   return {
     name: view.name,
+    layout: view.layout,
     blocks: view.blocks.map((b) => {
       if (!b.private) return { ...b };
       const h = { ...b, hidden: true, note: HIDDEN_WORDS };
@@ -159,9 +181,53 @@ export function draftArgs(words, pasted) {
 }
 
 /**
- * Draws a view into `box` with DOM calls only. `canPress(action)` says
- * whether a button may be pressed now (a stale link greys all but Stop
- * everything and Brief me); `onPress(action)` presses it.
+ * The widget arranged in its own `view.layout`: the block drawn LARGE
+ * (`big`, or null), the blocks in draw order, and the buttons, always last.
+ * The ONE rule both apps follow (tools/gen_widget_cases.py `arrange()`), so
+ * "big", "list" and "compact" cannot mean two different things on the PC and
+ * the phone.
+ *
+ * - `stack`: every non-button block, in the order given (today's shape);
+ * - `big`: the FIRST number drawn large above the rest; with no number it is
+ *   `stack`;
+ * - `list`: heading, then lists, then numbers, then bars;
+ * - `compact`: one heading (its own, else the widget's name) and ONE block, a
+ *   list cut to its first item with the rest counted into `more`.
+ *
+ * Anything else is `stack`, the same fallback `layoutOf` makes.
+ */
+export function boardOf(view) {
+  if (!view) return null;
+  const buttons = view.blocks.filter((b) => b.type === "button");
+  const body = view.blocks.filter((b) => b.type !== "button");
+  if (view.layout === "big") {
+    const big = body.find((b) => b.type === "number") || null;
+    if (big) return { big, blocks: body.filter((b) => b !== big), buttons };
+  } else if (view.layout === "list") {
+    const order = { title: 0, list: 1, number: 2, progress: 3 };
+    return { big: null, blocks: [...body].sort((a, b) => order[a.type] - order[b.type]), buttons };
+  } else if (view.layout === "compact") {
+    const title = body.find((b) => b.type === "title") || null;
+    const head = title || (view.name ? { type: "title", text: view.name } : null);
+    const rest = body.filter((b) => b !== title);
+    const blocks = head ? [head] : [];
+    const one = rest[0];
+    if (one && one.type === "list") {
+      blocks.push({ ...one, items: one.items.slice(0, 1),
+        more: one.more + Math.max(0, one.items.length - 1) });
+    } else if (one) {
+      blocks.push({ ...one });
+    }
+    return { big: null, blocks, buttons };
+  }
+  return { big: null, blocks: body, buttons };
+}
+
+/**
+ * Draws a view into `box` with DOM calls only, in the arrangement
+ * `boardOf` chose. `canPress(action)` says whether a button may be pressed
+ * now (a stale link greys all but Stop everything and Brief me);
+ * `onPress(action)` presses it.
  */
 export function paint(box, view, { canPress = () => true, onPress = () => {} } = {}) {
   const doc = box.ownerDocument;
@@ -176,50 +242,51 @@ export function paint(box, view, { canPress = () => true, onPress = () => {} } =
     box.replaceChildren();
     return;
   }
-  const buttons = el("div", "board-buttons");
-  for (const b of view.blocks) {
-    if (b.type === "title") {
-      nodes.push(el("p", "board-title", b.text));
-    } else if (b.type === "button") {
-      const btn = el("button", "btn btn-quiet board-button", b.label);
-      btn.type = "button";
-      btn.dataset.action = b.action;
-      btn.disabled = !canPress(b.action);
-      btn.addEventListener("click", () => onPress(b.action, btn));
-      buttons.append(btn);
-    } else {
-      const part = el("div", `board-part board-${b.type}`);
-      if (b.hidden) part.dataset.hidden = "true";
-      const head = el("div", "board-head");
-      head.append(el("span", "board-label", b.label));
-      if (b.type === "number" && b.value) head.append(el("span", "board-value mono", b.value));
-      if (b.type === "progress" && b.value) head.append(el("span", "board-value", b.value));
-      part.append(head);
-      if (b.type === "progress") {
-        const track = el("div", "meter-track");
-        const bar = el("i");
-        bar.style.transform = `scaleX(${b.fraction})`;
-        track.append(bar);
-        part.append(track);
-      }
-      if (b.type === "list") {
-        if (b.items.length) {
-          const ul = el("ul", "board-items");
-          for (const i of b.items) {
-            const li = el("li");
-            li.append(el("span", "board-item", i.text));
-            if (i.when) li.append(el("span", "board-when mono", i.when));
-            ul.append(li);
-          }
-          part.append(ul);
-          if (b.more) part.append(el("p", "board-note", `+${b.more} more`));
-        } else if (!b.note && b.empty) {
-          part.append(el("p", "board-note", b.empty));
-        }
-      }
-      if (b.note) part.append(el("p", "board-note", b.note));
-      nodes.push(part);
+  const part = (b, big) => {
+    if (b.type === "title") return el("p", "board-title", b.text);
+    const node = el("div", `board-part board-${b.type}${big ? " board-big" : ""}`);
+    if (b.hidden) node.dataset.hidden = "true";
+    const head = el("div", "board-head");
+    head.append(el("span", "board-label", b.label));
+    if (b.type === "number" && b.value) head.append(el("span", "board-value mono", b.value));
+    if (b.type === "progress" && b.value) head.append(el("span", "board-value", b.value));
+    node.append(head);
+    if (b.type === "progress") {
+      const track = el("div", "meter-track");
+      const bar = el("i");
+      bar.style.transform = `scaleX(${b.fraction})`;
+      track.append(bar);
+      node.append(track);
     }
+    if (b.type === "list") {
+      if (b.items.length) {
+        const ul = el("ul", "board-items");
+        for (const i of b.items) {
+          const li = el("li");
+          li.append(el("span", "board-item", i.text));
+          if (i.when) li.append(el("span", "board-when mono", i.when));
+          ul.append(li);
+        }
+        node.append(ul);
+        if (b.more) node.append(el("p", "board-note", `+${b.more} more`));
+      } else if (!b.note && b.empty) {
+        node.append(el("p", "board-note", b.empty));
+      }
+    }
+    if (b.note) node.append(el("p", "board-note", b.note));
+    return node;
+  };
+  const board = boardOf(view);
+  if (board.big) nodes.push(part(board.big, true));
+  for (const b of board.blocks) nodes.push(part(b, false));
+  const buttons = el("div", "board-buttons");
+  for (const b of board.buttons) {
+    const btn = el("button", "btn btn-quiet board-button", b.label);
+    btn.type = "button";
+    btn.dataset.action = b.action;
+    btn.disabled = !canPress(b.action);
+    btn.addEventListener("click", () => onPress(b.action, btn));
+    buttons.append(btn);
   }
   if (buttons.childElementCount) nodes.push(buttons);
   box.replaceChildren(...nodes);

@@ -359,6 +359,30 @@ _RISK: dict[str, tuple[str, str, str]] = {
     # heavy (a widget's Approve opens the full card). Not PC-only: the owner
     # reads the whole change first, on either device.
     "app_merge_change": ("no", "local", "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet"),
+    # jarvis_android_builder.py (2026-10-30, the owner's question "can jarvis
+    # build android apps? that i can sideload into my phone?"; docs/
+    # APP-BUILDER-DESIGN.md milestones C, F and G; JARVIS-API section 166).
+    # TWO actions, because they are two different risks and the owner is
+    # entitled to say yes to one and no to the other:
+    #   * app_build_android runs Gradle in one task's copy. A worktree is NOT a
+    #     sandbox for programs (ARCHITECTURE.md section 11): the build runs
+    #     other people's build code with the owner's own Windows permissions,
+    #     and its FIRST run downloads the Gradle distribution and the Android
+    #     Gradle plugin from the internet. So "no" - what a build script does is
+    #     not something Jarvis can promise to take back - and "outbound", which
+    #     is what a download is. Nothing of the owner's is uploaded: it is a GET
+    #     with no body, and the card says exactly which hosts it reaches.
+    #   * app_install_android changes what is on the owner's phone, through adb,
+    #     and this module offers no uninstall. "no", and "local": the phone is
+    #     the owner's own device on their own cable, so nothing reaches anyone
+    #     else - but what it installs stays installed until they remove it.
+    # Both are "ask" in the settings file and both refuse any other tier, so
+    # this is a risky approval every time (Windows Hello on the PC, the screen
+    # lock on the phone). Neither is PC-only as a CARD - the owner may approve
+    # on the phone - but the ROUTES that raise them are: the SDK and the cable
+    # are on this machine (jarvis_android_builder.handle_post, 403 pc_only).
+    "app_build_android": ("no", "outbound", "runs Gradle on this PC in one task's own copy, and a first build downloads the Gradle distribution and the Android Gradle plugin from services.gradle.org, dl.google.com and repo.maven.apache.org - nothing of yours is sent, but build scripts are other people's code running with your own Windows permissions, and what they do cannot be taken back from here"),
+    "app_install_android": ("no", "local", "installs the .apk this build made onto your phone over its cable, replacing the copy already there; nothing reaches anyone else, but Jarvis has no uninstall button, so it stays on the phone until you remove it yourself"),
     # note-capture.patch (jarvis_note_capture.py). All three stay on this PC:
     # the Logseq journal and the Obsidian daily note are files here, and
     # Joplin's service must be at 127.0.0.1 or the plan refuses. All only ADD
@@ -1281,6 +1305,8 @@ _NO_RULE_FROM_DENIAL = frozenset({
     "support_chat",  # jarvis_support.py acts only on tier "ask": ONE card per support chat, listing every detail it may give (support-chat.patch)
     "support_offer",  # jarvis_support.py acts only on tier "ask": ONE card per offer; nothing is accepted without it (support-chat.patch)
     "app_merge_change",  # jarvis_apps.py acts only on tier "ask": ONE card per change added to an app (apps-in-projects.patch)
+    "app_build_android",  # jarvis_android_builder.py acts only on tier "ask": ONE card per Gradle build, naming the exact command (2026-10-30)
+    "app_install_android",  # jarvis_android_builder.py acts only on tier "ask": ONE card per install, naming the exact adb command (2026-10-30)
     "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
     "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)

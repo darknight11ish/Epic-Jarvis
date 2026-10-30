@@ -8,7 +8,8 @@ Runs anywhere; no model, no network (the model is a stand-in). What it proves:
 1. A description on the menu is kept, cleaned; ANYTHING off the menu - an
    unknown key, block, source or button, a script or a web address in a
    text, a huge list, a repeated key, NaN, a far too long answer, deep
-   nesting - is refused, with a reason, and nothing is made.
+   nesting, or an arrangement that is not one of the four - is refused, with
+   a reason, and nothing is made.
 2. The buttons are only the five Quick Settings tile actions, with fixed
    words: never Approve, Deny, "approve all" or anything free-form, and the
    model cannot label a button.
@@ -219,6 +220,76 @@ def t_raw_json_is_strict():
     check("good JSON is kept", not refused_raw(json.dumps(GOOD)))
 
 
+# ================================================== 2b. the arrangement (2026-10-30)
+
+def t_the_arrangement_is_a_closed_list():
+    """The four layouts: a closed list, default "stack", refused off the list,
+    and shown to the owner in the preview. The one arrangement rule itself is
+    proved by tools/gen_widget_cases.py and by both apps' own tests against
+    its `boards`; this proves the PC's half - that a layout it hands out is
+    one the apps can draw, and that it never invents one."""
+    check("exactly the four arrangements",
+          list(W.LAYOUTS) == ["stack", "big", "list", "compact"], list(W.LAYOUTS))
+    check("the default is stack",
+          W.validate({"name": "x", "blocks": [{"type": "title", "text": "a"}]})["layout"] == "stack")
+    for layout in W.LAYOUTS:
+        w = W.validate({"name": "x", "layout": layout,
+                        "blocks": [{"type": "title", "text": "a"}]})
+        check(f"kept: the {layout!r} arrangement", w["layout"] == layout)
+    for bad in ("BIG", "Grid", "grid", "", " stack", "stack ", "tiles", "<script>",
+                "stack\n", None, True, False, 0, 3, ["stack"], {"kind": "big"}):
+        why = refused({"name": "x", "layout": bad,
+                       "blocks": [{"type": "title", "text": "a"}]})
+        check(f"refused: the arrangement {bad!r}", bool(why), json.dumps(bad, default=str))
+    # An arrangement is not a place to put styling or code.
+    for key in ("colour", "color", "style", "columns", "grid", "accent", "font"):
+        why = refused({"name": "x", key: "x", "blocks": [{"type": "title", "text": "a"}]})
+        check(f"refused: a {key!r} key", bool(why))
+    # The preview shows what was asked for, and "stack" adds no new words.
+    plain = W.validate({"name": "x", "blocks": [{"type": "title", "text": "A"}]})
+    big = W.validate({"name": "x", "layout": "big", "blocks": [
+        {"type": "number", "source": "todo_count"}, {"type": "title", "text": "A"}]})
+    check("the default sentence is unchanged",
+          W.describe(plain) == "A widget called “x” showing the heading “A”.", W.describe(plain))
+    check("a chosen arrangement is said in the sentence", "drawn large" in W.describe(big),
+          W.describe(big))
+    check("the preview's first line is the arrangement",
+          W.parts(big)[0].startswith("Arranged:") and "large" in W.parts(big)[0], W.parts(big))
+    check("every arrangement has preview words", set(W.LAYOUT_PARTS) == set(W.LAYOUTS))
+    check("every arrangement has sentence words", set(W.LAYOUT_WORDS) == set(W.LAYOUTS))
+    check("only the default adds nothing to the sentence",
+          W.LAYOUT_WORDS[W.DEFAULT_LAYOUT] == ""
+          and all(w for k, w in W.LAYOUT_WORDS.items() if k != W.DEFAULT_LAYOUT))
+    # The model is told the list, and asked to choose from it.
+    check("the schema offers exactly the four arrangements",
+          W.SCHEMA["properties"]["layout"]["enum"] == list(W.LAYOUTS))
+    check("the schema requires an arrangement", "layout" in W.SCHEMA["required"])
+    check("the prompt offers each arrangement", all(k in W.prompt("x") for k in W.LAYOUTS))
+    check("the prompt's answer shape carries a layout", '"layout": "..."' in W.prompt("x"))
+    # It survives Add and a re-read of the file, and show() answers it.
+    st = fresh_store()
+    d = st.add_draft(W.validate({"name": "Desk", "layout": "list", "blocks": [
+        {"type": "title", "text": "Hi"}]}))
+    w, _ = st.keep(d["id"])
+    check("a saved widget keeps its arrangement", w is not None and w["layout"] == "list", w)
+    code, out = W.show(w["id"], st=st, readers=readers())
+    check("show answers the arrangement", code == 200 and out["layout"] == "list",
+          out.get("layout"))
+    # A file written before 2026-10-30 has no key and must still read.
+    old = json.loads(st.path.read_text("utf-8"))
+    for row in old["widgets"]:
+        row.pop("layout", None)
+    st.path.write_text(json.dumps(old), "utf-8")
+    check("a widget saved before 2026-10-30 reads as stack",
+          [x["layout"] for x in st.widgets()] == ["stack"] * len(old["widgets"]))
+    # A hand-edited one is checked again on read, like every other value.
+    bad = json.loads(st.path.read_text("utf-8"))
+    bad["widgets"][0]["layout"] = "grid"
+    st.path.write_text(json.dumps(bad), "utf-8")
+    check("a hand-edited arrangement off the list is not read",
+          st.get(bad["widgets"][0]["id"]) is None)
+
+
 # ================================================== 3. drafts, from the owner's words only
 
 class Asker:
@@ -263,13 +334,14 @@ def t_drafts_from_own_words_only():
     check("the prompt holds the menu, nothing of memory, email or the web",
           all(k in p for k in W.SOURCES) and "fact" not in p.lower() and "http" not in p)
     check("the preview's parts, one line each",
-          out["draft"]["parts"] == ["Heading: Good morning",
+          out["draft"]["parts"] == ["Arranged: everything stacked, in the order given",
+                                    "Heading: Good morning",
                                     "List: Next up - your next reminders and alarms, up to 3",
                                     "Number: To do - how many things are on your to-do list",
                                     "Bar: Disk free - the free space on your PC's main drive",
                                     "Button: 10-min timer"], out["draft"]["parts"])
     check("the draft keeps no words, only the checked widget",
-          set(st.drafts()[0]) == {"id", "name", "blocks", "expires"})
+          set(st.drafts()[0]) == {"id", "name", "layout", "blocks", "expires"})
 
 
 def t_the_model_is_asked_only_on_this_pc():
@@ -568,7 +640,8 @@ def t_the_apps_cases_are_up_to_date():
 
 if __name__ == "__main__":
     for fn in (t_the_apps_cases_are_up_to_date, t_on_the_menu_is_kept, t_off_the_menu_is_refused, t_the_buttons_are_the_tile_actions,
-               t_text_is_cleaned, t_raw_json_is_strict, t_drafts_from_own_words_only,
+               t_text_is_cleaned, t_raw_json_is_strict, t_the_arrangement_is_a_closed_list,
+               t_drafts_from_own_words_only,
                t_the_model_is_asked_only_on_this_pc, t_the_store, t_filling_in, t_chat, t_routes):
         print(f"\n--- {fn.__name__} ---")
         try:

@@ -1295,7 +1295,7 @@
       "name": "Widgets you describe",
       "group": "Talking",
       "surface": "both",
-      "where": "Brain, Work, Widgets. The widget itself shows with Alt+Shift+W.",
+      "where": "Brain, Work, Widgets (desktop); Brain, Widgets and a home-screen slot (phone). The desktop widget itself shows with Alt+Shift+W.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -1314,7 +1314,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Brain, Work, Widgets.",
+        "location": "Brain, Widgets and a home-screen slot.",
         "search": [
           "widgets you describe"
         ],
@@ -4189,7 +4189,7 @@
       "name": "Jarvis Calendar",
       "group": "Home",
       "surface": "both",
-      "where": "Ask \"turn off the Jarvis calendar\". The Calendar screen in each app is the next slice; the store and its routes are built now.",
+      "where": "Settings, Jarvis Calendar - the one switch. The calendar itself is the Calendar card in the HUD (month, week and day views), and the phone's Calendar screen. Adding, changing or deleting an event is that card, not Settings.",
       "control": {
         "type": "title",
         "setting_keys": [
@@ -4201,42 +4201,37 @@
         "intent": "settings_bool"
       },
       "desktop": {
-        "section": null,
-        "location": "Ask \"turn off the Jarvis calendar\" (the Settings card is the next slice).",
+        "section": "calendar",
+        "location": "Settings > Jarvis Calendar",
         "search": [
+          "jarvis calendar",
           "Jarvis Calendar"
         ],
-        "found": false
+        "found": true
       },
       "phone": {
-        "section": null,
-        "location": "Ask \"turn off the Jarvis calendar\" (the Calendar screen is the next slice).",
+        "section": "calendar",
+        "location": "Settings > Jarvis Calendar",
         "search": [
+          "jarvis calendar",
           "Jarvis Calendar"
         ],
-        "found": false
+        "found": true
       },
-      "status": "planned",
+      "status": "enforced",
       "owner": "setup-ui",
-      "reason": "The store and the four routes are built and the typed switch works; no desktop SETTINGS_ROWS row or phone Settings row draws it yet - the UI slice owns those.",
+      "reason": "Both Settings halves and the typed switch reach one value: the phone's row since 2026-10-29, the desktop's \"Jarvis Calendar\" card since 2026-10-30, and \"turn off the Jarvis calendar\" through settings_bool. The calendar itself is the HUD's card and the phone's screen.",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn off Jarvis Calendar",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: Jarvis Calendar; phone: Jarvis Calendar"
       },
       "command": {
         "status": "switch",
         "reason_code": "command",
         "owner": "voiceprint-wiring",
         "reason": "",
-        "settings_gap": {
-          "controls": [
-            "jarvis_calendar"
-          ],
-          "desktop": "setup-ui",
-          "phone": "setup-ui",
-          "reason": "The typed switch and the four routes are real now; both Settings halves are the calendar UI slice's, so no page draws them yet."
-        },
+        "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
       "own_keys": [
@@ -4246,7 +4241,7 @@
         "settings_bool"
       ],
       "own_actions": {},
-      "label_note": "The typed switch works today; the Calendar Settings card and the phone row are the next slice."
+      "label_note": "The switch is in Settings on both apps now. The events themselves are added, changed and deleted in the HUD's Calendar card and on the phone's Calendar screen."
     },
     {
       "id": "weather-sky",
@@ -9482,7 +9477,7 @@
         "my calendar",
         "appointments"
       ],
-      "app": "phone",
+      "app": "both",
       "where": "settings",
       "in_desktop_settings": true,
       "in_phone_settings": true

@@ -540,4 +540,40 @@ class CalendarTest {
             Calendar.todayNow(instant, java.time.ZoneId.of("UTC")),
         )
     }
+
+    /**
+     * Field test 2026-10-30, the owner's phone: "New event" opened, the Save
+     * row was BELOW the screen and the sheet did not scroll - no event could
+     * be saved from the phone at all. A bottom sheet cannot be laid out in a
+     * JVM test, so this pins the source: the sheet body scrolls.
+     */
+    @Test
+    fun `the new-event sheet scrolls so its save row can be reached`() {
+        val source = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/CalendarPlate.kt",
+        ).readText()
+        val at = source.indexOf("private fun CalendarEventSheet(")
+        assertTrue("CalendarEventSheet is gone from CalendarPlate.kt", at >= 0)
+        val body = source.substring(at)
+        assertTrue(
+            "the New event sheet body has no verticalScroll, so its Save row " +
+                "can sit below the screen again (field test 2026-10-30)",
+            body.contains("verticalScroll(rememberScrollState())"),
+        )
+        assertTrue(
+            "CalendarPlate.kt needs the foundation scroll imports",
+            source.contains("import androidx.compose.foundation.verticalScroll") &&
+                source.contains("import androidx.compose.foundation.rememberScrollState"),
+        )
+    }
+
+    private fun repoFile(rel: String): java.io.File {
+        var d: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (d != null) {
+            val f = java.io.File(d, rel)
+            if (f.isFile) return f
+            d = d.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
+    }
 }

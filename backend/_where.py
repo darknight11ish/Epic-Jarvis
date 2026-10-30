@@ -587,6 +587,12 @@ SHIPPED = (
     # code) of what a home-screen / desktop widget shows; switched on by
     # jarvis_brain_reads.install(), no patch of its own
     "jarvis_widgets.py",
+    # "Notification styles you describe" (2026-10-30): a CLOSED style spec -
+    # colour, figure, animation, speed, which notification kinds - that the
+    # owner describes in their own words, checked by plain code, and drawn by
+    # the phone's own notification layout; switched on by
+    # jarvis_brain_reads.install(), no patch of its own
+    "jarvis_notification_styles.py",
     # A conversation with an AI chatbot for the owner: the driver, the last
     # check, one card per conversation
     "jarvis_chatbot.py",
@@ -1366,6 +1372,22 @@ SHIPPED = (
     # nowhere else. The same two entries are at the end of the script's $SHIPPED.
     "jarvis_connect_account.py",
     "jarvis_connect_account_wiring.py",
+    # The app builder's last two steps (2026-10-30, the owner's question "can
+    # jarvis build android apps? that i can sideload into my phone?"): a FIXED
+    # Android project written into one task's copy, then `gradlew.bat
+    # assembleDebug` and `adb install -r <apk>`, each behind its own risky card.
+    # Routes come from its own install(), called by the drop-in folder
+    # plugins/ready/android-builder, so it adds no patch. The same three entries
+    # are at the end of the script's $SHIPPED; this list and that one are one
+    # list, in the same order (test_shipped_modules.py).
+    "jarvis_android_builder.py",
+    # Not modules, and listed here for the same reason: Gradle's OWN wrapper
+    # script and wrapper jar, copied BYTE FOR BYTE from jarvis-client/ and
+    # carried the same way, because the owner's PC has no Gradle installed and
+    # a generated app cannot be built without them (Apache-2.0, credited in
+    # THIRD-PARTY-NOTICES.txt; backend/test_android_builder.py pins both).
+    "jarvis-android-gradlew.bat",
+    "jarvis-android-wrapper.jar",
     # A file the owner ATTACHED to a chat (2026-10-29; the owner chose "both
     # apps at once" and the design's recommended defaults). Validation by kind,
     # magic bytes and size, the never-read names, the zip-bomb refusal, the

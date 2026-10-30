@@ -131,11 +131,17 @@ await check("the face models icon is the left rail's own toolbar button", () => 
   assert.match(group, /id="rail-presets"/, "the Presets button left the toolbar");
   assert.match(group, /id="rail-live"/, "the Live button left the toolbar");
   assert.match(group, /id="rail-faces"/, "the toolbar has no #rail-faces button");
-  // Exactly three buttons, in the page's own order: Presets, Live, Faces.
+  // Four buttons now, in the page's own order: Presets, Live, Faces, and the
+  // Calendar door (2026-10-29). The calendar's own card lives in the right
+  // rail, which the Studio shell hides, so he can reach his calendar from this
+  // toolbar - the same reason the Presets and Faces doors are here. It opens
+  // the ONE #calendar-panel; it is not a stage tab and not a second calendar,
+  // and tests/hud-calendar.mjs holds its own half.
+  assert.match(group, /id="rail-calendar-open"/, "the toolbar has no #rail-calendar-open button");
   assert.deepEqual(
     [...group.matchAll(/<button[^>]*id="([^"]+)"/g)].map((m) => m[1]),
-    ["rail-presets", "rail-live", "rail-faces"],
-    "the toolbar's buttons are not the three this page draws");
+    ["rail-presets", "rail-live", "rail-faces", "rail-calendar-open"],
+    "the toolbar's buttons are not the four this page draws");
 });
 
 await check("the icon is a plain button with the rail's own classes and an accessible name", () => {

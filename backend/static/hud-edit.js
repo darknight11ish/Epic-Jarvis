@@ -804,6 +804,7 @@ export const MOVABLE_IDS = Object.freeze([
   "systems",
   "bar_launcher",
   "approvals",
+  "calendar",
   "waiting",
   "telemetry",
   "tools",
@@ -819,6 +820,7 @@ export const CARD_DOM = Object.freeze({
   systems: ["#rail-systems"],
   bar_launcher: ["#hud-open-bar"],
   approvals: ["#approvals", "#initiative"],
+  calendar: ["#rail-calendar"],
   waiting: ["#rail-waiting"],
   telemetry: ["#rail-telemetry"],
   tools: ["#rail-tools"],
@@ -844,6 +846,33 @@ const MOVABLE_SET = new Set(MOVABLE_IDS);
 const PROTECTED_SET = new Set(
   CARD_REGISTRY.filter((card) => card.protected).map((card) => card.id),
 );
+
+/**
+ * A CARD ADDED TO THE HUD AFTER THE OWNER SAVED A LAYOUT (2026-10-29).
+ *
+ * The owner's rule: every easily-accessible feature must be addable to the main
+ * screen from Edit HUD. A saved layout document is a CLOSED list - a card it
+ * does not name gets no shell, is drawn nowhere and is listed nowhere - so a
+ * card added in a later release would be both invisible AND unaddable for
+ * anyone who had ever saved a layout, which is the owner. Adding a registry row
+ * alone therefore is not enough; this is the other half.
+ *
+ * A movable card the registry knows and the document does not carry is put back
+ * at its registry defaults, IN MEMORY. Nothing is written: opening the HUD is
+ * not an edit, and the first real change the owner makes saves the document
+ * that by then already carries the card. `normalizeLayout` is what re-sorts
+ * everything, so the restored card lands in its own region and order.
+ */
+export function withRegistryCards(doc) {
+  const layout = normalizeLayout(doc);
+  const have = new Set(layout.cards.map((card) => card.id));
+  const missing = MOVABLE_IDS.filter((id) => !have.has(id));
+  if (!missing.length) return layout;
+  return normalizeLayout({
+    ...layout,
+    cards: layout.cards.concat(missing.map((id) => cardRow(id, {}))),
+  });
+}
 const CARD_BY_ID = new Map(CARD_REGISTRY.map((card) => [card.id, card]));
 
 /* =========================================================================
@@ -1956,9 +1985,10 @@ export function mountHudEditor(options = {}) {
     // F1 (2026-10-22): the bootstrap's saved document is the only source;
     // this page no longer reads the retired localStorage layout key. Until it
     // arrives, Cockpit is the honest preview, exactly as the page paints.
-    layout = globalThis.__jarvisHudLayout
-      ? normalizeLayout(globalThis.__jarvisHudLayout)
-      : presetLayout("cockpit");
+    // 2026-10-29: `withRegistryCards` puts back any card the registry has
+    // gained since that document was saved, so a new card (the Calendar) is
+    // reachable in Edit HUD for an owner who already saved a layout.
+    layout = withRegistryCards(globalThis.__jarvisHudLayout || presetLayout("cockpit"));
     // PWA slice 2: a browser has no bootstrap to push a saved document, so
     // the editor reads THIS browser's own layout (hud-layout-store.js's
     // browser branch: localStorage, never the host PC's store). The desktop
@@ -1966,7 +1996,7 @@ export function mountHudEditor(options = {}) {
     if (!shellPresent && globalThis.__JARVIS_WEB_MODE) {
       try {
         const answer = await store.loadLayout();
-        if (answer && answer.layout) layout = normalizeLayout(answer.layout);
+        if (answer && answer.layout) layout = withRegistryCards(answer.layout);
       } catch { /* the page keeps the Cockpit preview */ }
     }
     homeDoc = readHomeDoc();
@@ -1981,7 +2011,7 @@ export function mountHudEditor(options = {}) {
     get editing() { return editing; },
     get homeCards() { return normalizeHomeCards(homeDoc); },
     homeAction(action) { return homeAction(action); },
-    setLayout(next) { layout = normalizeLayout(next); render(); },
+    setLayout(next) { layout = withRegistryCards(next); render(); },
     enter() { setEditing(true); },
     exit() { setEditing(false); },
     apply(action) { return doAction(action); },

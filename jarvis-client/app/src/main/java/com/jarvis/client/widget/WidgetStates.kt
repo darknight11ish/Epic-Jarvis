@@ -159,8 +159,17 @@ object WidgetStates {
 
     /**
      * The board widget's outcome. The pre-read checks are the old `when`,
-     * unchanged: not started, not paired, no widget chosen, then not live.
-     * Only a live, paired, chosen widget asks the PC, and [read] says how that
+     * unchanged in order: not started, not paired, no widget chosen, then the
+     * link is not up.
+     *
+     * [linkUp] is CONNECTED, not "live": rule 4 holds ACTING on a stale link
+     * and never READING - every board button holds itself where it is tapped
+     * (QuickTiles.decide) - and the read is one of the things that clears
+     * staleness again. A `!stale` gate here is what drew "Not up to date" over
+     * a working link on the owner's phone (2026-10-30); see docs/ARCHITECTURE.md,
+     * "`stale` is deliberately not a condition on either side".
+     *
+     * Only an up, paired, chosen widget asks the PC, and [read] says how that
      * went. [Board.GONE] is a 404 ("this widget was deleted on the PC"), which
      * needs different words from a failure that might work on the next tap.
      */
@@ -168,13 +177,13 @@ object WidgetStates {
         ready: Boolean,
         paired: Boolean,
         chosen: Boolean,
-        live: Boolean,
+        linkUp: Boolean,
         read: Read,
     ): Board = when {
         !ready -> Board.NOT_STARTED
         !paired -> Board.NOT_PAIRED
         !chosen -> Board.NO_WIDGET
-        !live -> Board.STALE
+        !linkUp -> Board.STALE
         read == Read.CONTENT -> Board.CONTENT
         read == Read.GONE -> Board.GONE
         read == Read.TIMED_OUT -> Board.TIMED_OUT

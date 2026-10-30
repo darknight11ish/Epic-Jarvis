@@ -37,11 +37,12 @@
  *    f. reloads again and asserts the layout is back to the document captured
  *       in (a).
  *
- * WHAT "EVERYTHING" MEANS HERE, HONESTLY. The card registry has 15 cards in
- * Cockpit; 11 are movable in H2 and 2 of those are protected (`approvals`,
- * `bar_launcher`: they may be resized and folded, never moved or hidden). So
- * "everything" is: 9 cards moved to another region, 11 cards reordered /
- * resized / folded, 9 cards hidden. The main stage, the composer, the Galaxy
+ * WHAT "EVERYTHING" MEANS HERE, HONESTLY. The card registry has 16 cards in
+ * Cockpit; 12 are movable in H2 (the twelfth is the owner's Calendar, added
+ * 2026-10-29) and 2 of those are protected (`approvals`, `bar_launcher`: they
+ * may be resized and folded, never moved or hidden). So "everything" is: 10
+ * cards moved to another region, 12 cards reordered / resized / folded, 10
+ * cards hidden. The main stage, the composer, the Galaxy
  * view and the header stay put by design (`FIXED_IDS` in hud-edit.js) and this
  * suite does not pretend to move them.
  *
@@ -563,11 +564,11 @@ async function fieldTest(label, original, revert) {
     summary = await changeEverything(page, await adopted(page));
     const { changed, movables, hideable, sizesUsed } = summary;
 
-    assert.equal(movables.length, 11,
-      `expected the 11 movable cards Cockpit carries, found ${movables.length}`);
-    assert.equal(hideable.length, 9, `expected 9 hideable cards, found ${hideable.length}`);
+    assert.equal(movables.length, 12,
+      `expected the 12 movable cards Cockpit carries, found ${movables.length}`);
+    assert.equal(hideable.length, 10, `expected 10 hideable cards, found ${hideable.length}`);
     assert.equal(await page.evaluate(
-      () => document.querySelectorAll("[data-hud-card]").length), 11,
+      () => document.querySelectorAll("[data-hud-card]").length), 12,
       "not every movable card got an edit shell");
 
     for (const card of hideable) {
@@ -634,7 +635,7 @@ async function fieldTest(label, original, revert) {
 
   await check(`${label} (d): the rendered HUD shows every saved change`, async () => {
     const rows = await rendered(page);
-    assert.equal(rows.length, 11, `the reloaded page drew ${rows.length} editable cards`);
+    assert.equal(rows.length, 12, `the reloaded page drew ${rows.length} editable cards`);
     for (const card of summary.changed.cards.filter((entry) => MOVABLE.has(entry.id))) {
       const row = rows.find((entry) => entry.id === card.id);
       assert.ok(row, `${card.id} has no card on the page at all`);
