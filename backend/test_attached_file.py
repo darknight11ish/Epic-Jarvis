@@ -999,10 +999,17 @@ def t_the_module_is_shipped_and_the_twin_matches():
     block = block[:block.index("\n)")]
     check("... and in apply-patches.ps1's $SHIPPED too",
           "'jarvis_attached_file.py'" in block)
-    check("... at the END of both lists, in the same order",
-          _where.SHIPPED[-1] == "jarvis_attached_file.py"
-          and [l for l in block.splitlines() if l.strip().startswith("'")][-1].strip()
-          == "'jarvis_attached_file.py'")
+    # "At the end" was true when this module was the newest; the calendar, the
+    # parking module and the app builder append after it now, so the rule this
+    # check is about is that the module is in BOTH lists and at the SAME
+    # position in each (test_shipped_modules holds the two lists identical).
+    script_entries = [l.strip().strip("'").strip('"')
+                      for l in block.splitlines() if l.strip().startswith("'")]
+    check("... in both lists, at the same position in each",
+          "jarvis_attached_file.py" in _where.SHIPPED
+          and "jarvis_attached_file.py" in script_entries
+          and _where.SHIPPED.index("jarvis_attached_file.py")
+          == script_entries.index("jarvis_attached_file.py"))
     twin = REPO / "jarvis-backend" / "jarvis_attached_file.py"
     check("the published base has its own copy", twin.is_file())
     if twin.is_file():
