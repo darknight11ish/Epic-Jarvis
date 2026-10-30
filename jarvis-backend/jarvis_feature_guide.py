@@ -1513,20 +1513,14 @@ EXTRA_CONTROLS = {
 #: backend/test_feature_guide.py) so the next real gap is recorded in the one
 #: place the matrix reads, rather than being noticed by nobody.
 #:
-#: 2026-10-29: the Jarvis calendar's typed switch is real and its four routes
-#: are built, but neither Settings page draws the switch yet - the Calendar
-#: Settings card and the phone row are the UI slice's. Recorded here rather
-#: than as a fake `covers` section the pages do not have.
-SETTINGS_GAPS = {
-    "jarvis-calendar": {
-        "controls": ["jarvis_calendar"],
-        "desktop": "setup-ui",
-        "phone": "setup-ui",
-        "reason": ("The typed switch and the four routes are real now; both "
-                   "Settings halves are the calendar UI slice's, so no page "
-                   "draws them yet."),
-    },
-}
+#: 2026-10-30: the Jarvis calendar's gap is CLOSED, not forgotten. Its typed
+#: switch, its four routes and now BOTH Settings halves are real: the phone's
+#: row since 2026-10-29 (CalendarSettingsPlate.kt) and the desktop's "Jarvis
+#: Calendar" card since 2026-10-30 (settings.html + src/calendar-settings.js,
+#: through src-tauri/src/calendar_settings.rs). So the entry that used to sit
+#: here was removed rather than left to look like a gap nobody owns - the same
+#: way `memory-learning` and `history` left this dict.
+SETTINGS_GAPS = {}
 
 #: Feature ids whose ADJUST phrase does not sit behind a `settings.<id>` cover
 #: (the catalogue names a Brain page), with the Settings place that proves it.

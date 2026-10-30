@@ -141,6 +141,7 @@
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Schedules</span>
             <a href="#briefing-settings">Morning briefing</a>
+            <a href="#calendar">Jarvis Calendar</a>
             <a href="#notifications">Notifications</a>
           </div>
           <div class="settings-jump-place">
@@ -1344,6 +1345,40 @@
           <span class="status" id="br-senders-status" role="status"></span>
           <p class="note" id="br-spoken"></p>
           <p class="note">The notification says only "Jarvis: your morning briefing is ready." The briefing itself is in the Brain, on the Work tab.</p>
+        </div>
+      </section>
+
+      <!-- ── The Jarvis Calendar (2026-10-30; JARVIS-API section 166) ────────
+           The phone has drawn this switch since its own slice
+           (`CalendarSettingsPlate.kt`); the desktop's calendar is the HUD's own
+           card, and the HUD is a different window with no Settings page - so
+           this is the owner's 2026-10-22 rule ("every switch findable AND
+           adjustable in Settings too") met for the one feature that was still
+           only reachable by asking.
+           calendar-settings.js draws it from the PC's own answer through the
+           ONE route the phone's row and the typed sentence use
+           (POST /api/calendar/settings, one field per request) via the
+           `calendar_settings` command. NO approval card either way: OFF only
+           narrows what Jarvis draws and is one press away from coming back, the
+           same shape as the Anti-Slop filter. **OFF never deletes an event** -
+           every row stays on this PC - so the sentence under the switch says
+           that rather than letting it be discovered. The command drops the
+           calendar's events, titles, places and counts in Rust, so this page
+           draws one switch and can never read the owner's day. -->
+      <section class="card" id="calendar">
+        <h2>Jarvis Calendar</h2>
+        <p class="note">
+          Jarvis's own calendar, kept on this PC: the events you add in the HUD are never
+          sent to Google or iCal, and asking "what is on today?" reads them. Turning it off
+          hides it in both apps and keeps every event.
+        </p>
+        <p class="state" id="cal-set-state" role="status">Asking Jarvis…</p>
+        <div id="cal-set-body" hidden>
+          <button class="btn" id="cal-set-switch" type="button" role="switch" aria-checked="false">Turn the Jarvis Calendar off</button>
+          <p class="note" id="cal-set-on">On. The Calendar card is drawn in the HUD, and the phone's Calendar screen works.</p>
+          <p class="note" id="cal-set-off" hidden>Off. Nothing was deleted - every event is still on this PC - and no app draws it until you turn it back on.</p>
+          <p class="note" id="cal-set-line"></p>
+          <span class="status" id="cal-set-status" role="status"></span>
         </div>
       </section>
 
@@ -3569,6 +3604,7 @@
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
     <script type="module" src="antislop-settings.js"></script>
+    <script type="module" src="calendar-settings.js"></script>
     <script type="module" src="voiceprint-settings.js"></script>
     <script type="module" src="idle-new-settings.js"></script>
     <script type="module" src="prompt-coach-settings.js"></script>

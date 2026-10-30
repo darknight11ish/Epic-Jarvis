@@ -3,7 +3,7 @@
 The owner's feature list, as data: 143 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 fbee5792f51cb7bde17279a6af06a16e307f6b706493acebe751b3953646a9b5); the apps' Features pages read their own
+`features/features.json` (sha256 afa5f0c1206b7c941ed36cc0a47273ecc90a3d5e5e803b96bf74b3344af9765c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "fbee5792f51cb7bde17279a6af06a16e307f6b706493acebe751b3953646a9b5"
+SOURCE_SHA256 = "afa5f0c1206b7c941ed36cc0a47273ecc90a3d5e5e803b96bf74b3344af9765c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -894,7 +894,7 @@ FEATURES = (
         "group": "Home",
         "title": "Jarvis Calendar",
         "what": "Your own calendar, kept by Jarvis on this PC: the events you add are shown beside Google Calendar and iCal, never sent to either, and never synced out.",
-        "where": "Ask \"turn off the Jarvis calendar\". The Calendar screen in each app is the next slice; the store and its routes are built now.",
+        "where": "Settings, Jarvis Calendar - the one switch. The calendar itself is the Calendar card in the HUD (month, week and day views), and the phone's Calendar screen. Adding, changing or deleting an event is that card, not Settings.",
         "asks": "Adding, changing or deleting ONE of your own events raises no card: it writes one row on your own PC and has no bulk form. Turning the whole calendar off is instant and keeps every event.",
         "limit": "Local only: no Google sync, no invitations, no sharing, and no reminder ringing yet (the reminder time is stored for later). Editing a repeating event changes the whole series, not one occurrence.",
         "surface": "both",

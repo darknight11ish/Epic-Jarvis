@@ -1693,6 +1693,25 @@ permissions = [
 ]
 
 # ---------------------------------------------------------------------------
+# The Jarvis Calendar's switch for Settings (2026-10-30; JARVIS-API section 166;
+# `calendar_settings.rs`, `backend/jarvis_local_calendar.py`'s
+# POST /api/calendar/settings). The phone has drawn this switch since its own
+# slice; the desktop's calendar lives in the HUD, which has no Settings page, so
+# this is the Settings window's narrow path to the same one value. It reads the
+# switch (GET /api/calendar?days=1's `on`, plus the PC's own `why`) and sets it
+# ({"on": bool}) - it never returns an event, a title, a place or a count, and it
+# has no add, change or delete at all. No approval card either way, and not held
+# on a stale link: a preference on this PC that opens no way out of it. OFF
+# NEVER DELETES AN EVENT.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "calendar-settings"
+description = "Read the Jarvis Calendar's one switch and turn it on or off. Settings only; returns no event, title or count, and turning it off never deletes one."
+permissions = [
+  "allow-calendar-settings",
+]
+
+# ---------------------------------------------------------------------------
 # The two learning switches for Settings (2026-10-28, the settings audit's G1;
 # `brain/auto_learn.rs` and `brain.rs`, the routes the Brain already uses -
 # GET /api/memory/learning, POST /api/memory/learning and

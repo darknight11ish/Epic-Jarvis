@@ -1044,6 +1044,11 @@ fn main() {
             "media_index",
             "big_coder",
             "history_settings",
+            // The Jarvis Calendar's switch (calendar_settings.rs; 2026-10-30;
+            // JARVIS-API section 166): read the switch and set it, one field
+            // per request, no card either way. Settings only, and it never
+            // returns an event.
+            "calendar_settings",
             // The setup questionnaire (setup_questionnaire.rs; S2, 2026-10-20;
             // JARVIS-API section 147): read the fourteen questions and the
             // PC's current values, ask for the READ-ONLY plan, and apply the

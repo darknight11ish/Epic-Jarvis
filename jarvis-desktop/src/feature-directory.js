@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "65fa3f2bc6917de02e796422087fb12081d1093f9fc0f2b97b0375fa949a29f1",
+  "source_sha256": "7adea5186a5e15369e915a7fd46e40b6653be20370db276db0d1c57f0f770b41",
   "feature_count": 143,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -1261,13 +1261,13 @@ export const FEATURE_DIRECTORY = {
       "group": "Home",
       "surface": "both",
       "label": "Switchable / Adjustable (Typed & Settings)",
-      "status": "planned",
-      "label_note": "The typed switch works today; the Calendar Settings card and the phone row are the next slice.",
+      "status": "enforced",
+      "label_note": "The switch is in Settings on both apps now. The events themselves are added, changed and deleted in the HUD's Calendar card and on the phone's Calendar screen.",
       "example": "turn off Jarvis Calendar",
       "example_ok": true,
-      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
-      "where_desktop": "All features and abilities",
-      "where_phone": "All features and abilities",
+      "where": "desktop Settings: Jarvis Calendar; phone: Jarvis Calendar",
+      "where_desktop": "Jarvis Calendar",
+      "where_phone": "Jarvis Calendar",
       "note": "Still being wired (owner: setup-ui): typed switch and four routes built; desktop and phone Settings rows are the calendar UI slice's",
       "not_a_control": true
     },
