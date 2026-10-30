@@ -27271,7 +27271,7 @@ briefing that quotes event titles follows.
 
 ### 164.7 Tests
 
-`backend/test_parking.py` - **137 checks, no network** (every socket and every
+`backend/test_parking.py` - **138 checks, no network** (every socket and every
 `urlopen` is made to fail for the whole run, and every provider call is handed a
 recording fixture). It proves, among the rest:
 
