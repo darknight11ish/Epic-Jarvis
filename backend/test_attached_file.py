@@ -54,8 +54,9 @@ its section 9 S1 row, point by point:
   place, and jarvis_attached_file.py is shipped (both lists). The HUD half is
   jarvis-desktop/tests/attach.mjs.
 
-Runs anywhere: no model, no network, no MarkItDown (a stand-in is injected), no
-Windows. Every file and every "secret" is made up.
+Runs anywhere: no model, no network, no Windows. Every document path injects a
+stand-in converter; the one check that drives the REAL MarkItDown through the
+child program skips, in words, when it is not installed for this Python.
 """
 from __future__ import annotations
 
@@ -64,6 +65,7 @@ import contextlib
 import io
 import json
 import os
+import random
 import sys
 import tempfile
 import textwrap
@@ -139,6 +141,95 @@ def a_docx(words: str = "The deposit is 1200 pounds") -> bytes:
 
 def a_pdf(words: str = "Pets are allowed") -> bytes:
     return b"%PDF-1.4\n" + words.encode("ascii") + b"\n%%EOF\n"
+
+
+#: The words every BIG fixture carries in its first bytes. On 2026-10-30 every
+#: attachment that came in on the stdin door lost its first 16,384 bytes (a
+#: Windows pipe says seekable() and then ignores seek(), so MarkItDown's 16 KiB
+#: type-sniff could not be rewound). A phrase at the START is therefore what
+#: proves the head of the file arrived; a phrase in the padding would prove
+#: nothing.
+BIG_WORDS = "Pets are allowed in the garden"
+
+
+def a_big_pdf(text: str = BIG_WORDS, size: int = 20_000) -> bytes:
+    """A REAL PDF, larger than the 16 KiB a Windows pipe silently loses.
+
+    `reportlab` is not installed here, so it is assembled by hand - the minimal
+    shape pdfminer and pdfplumber both accept (the same builder as hard_fail.py
+    in .dsh-scratch/PDF-CONVERSION-2026-10-30): correct xref offsets, one page,
+    one Helvetica font, and a content stream with real words. The padding
+    comment sits AFTER the page and its words, so a parser handed the file from
+    byte 16,384 on finds neither the words nor the catalog.
+    """
+    stream = ("BT /F1 18 Tf 72 720 Td (%s) Tj ET" % text).encode("latin-1")
+    out = bytearray(b"%PDF-1.4\n")
+    objs = [
+        b"1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n",
+        b"2 0 obj\n<</Type/Pages/Kids[3 0 R]/Count 1>>\nendobj\n",
+        b"3 0 obj\n<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R"
+        b"/Resources<</Font<</F1 5 0 R>>>>>>\nendobj\n",
+        b"4 0 obj\n<</Length %d>>\nstream\n" % len(stream) + stream + b"\nendstream\nendobj\n",
+        b"5 0 obj\n<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>\nendobj\n",
+    ]
+    offsets = []
+    for o in objs:
+        offsets.append(len(out))
+        out += o
+    pad = b"% padding: this file is larger than the 16,384 bytes a pipe loses\n"
+    while len(out) < size:
+        out += pad
+    xref_at = len(out)
+    out += b"xref\n0 6\n0000000000 65535 f \n"
+    for off in offsets:
+        out += b"%010d 00000 n \n" % off
+    out += b"trailer\n<</Size 6/Root 1 0 R>>\nstartxref\n%d\n%%%%EOF\n" % xref_at
+    return bytes(out)
+
+
+def a_big_docx(text: str = BIG_WORDS, paragraphs: int = 900) -> bytes:
+    """A REAL .docx, larger than 16 KiB: the OOXML parts mammoth needs.
+
+    `a_docx()` above is the small shape the other tests use. This one is a
+    package a real Word reader opens - `[Content_Types].xml`, `_rels/.rels` and
+    `word/document.xml` - with the words in its FIRST paragraph and enough
+    varied paragraphs after them that the zip stays over 16 KiB (deflate would
+    otherwise squeeze a template of repeated sentences down to a few KB). A ZIP
+    keeps its central directory at the END, so cutting the first 16 KiB off
+    broke every Word, Excel and PowerPoint attachment, whatever its size.
+    """
+    rnd = random.Random(20261030)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml",
+                   '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/'
+                   'package/2006/content-types"><Default Extension="xml" ContentType='
+                   '"application/xml"/><Override PartName="/word/document.xml" '
+                   'ContentType="application/vnd.openxmlformats-officedocument.'
+                   'wordprocessingml.document.main+xml"/></Types>')
+        z.writestr("_rels/.rels",
+                   '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.'
+                   'org/package/2006/relationships"><Relationship Id="rId1" Type="http://'
+                   'schemas.openxmlformats.org/officeDocument/2006/relationships/'
+                   'officeDocument" Target="word/document.xml"/></Relationships>')
+        body = ["<w:p><w:r><w:t>%s</w:t></w:r></w:p>" % text]
+        for i in range(paragraphs):
+            words = " ".join(rnd.choice(BIG_WORD_POOL) for _ in range(14))
+            body.append("<w:p><w:r><w:t>%d. %s.</w:t></w:r></w:p>" % (i, words))
+        z.writestr("word/document.xml",
+                   '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.'
+                   'org/wordprocessingml/2006/main"><w:body>' + "".join(body)
+                   + '</w:body></w:document>')
+    return buf.getvalue()
+
+
+#: Plain words for the big Word fixture above; only their VARIETY matters, so
+#: that deflate cannot shrink the zip back under the 16 KiB the bug ate.
+BIG_WORD_POOL = (
+    "garden tenant deposit ledger roses window kitchen hallway carpet clock study "
+    "letter morning evening quiet careful yellow wooden narrow bright silver "
+    "letterbox pavement corner curtain cupboard drawer kettle saucer blanket "
+    "shelf ladder bucket handle mirror candle ribbon parcel basket").split()
 
 
 def convert_stand_in(seen: list):
@@ -405,14 +496,71 @@ def t_nothing_is_written_to_disk():
     check("the converter was handed BYTES for a document, not a path",
           seen and all(isinstance(n, int) and n > 0 for n, _e in seen), seen)
 
-    # ... and the real door the module uses: the converter's stdin mode.
-    got = DOCS.convert_bytes(a_pdf(), ".pdf")
-    check("jarvis_documents.convert_bytes really runs the child program",
-          isinstance(got, dict) and ("ok" in got), str(got)[:200])
-    check("... and writes no file either",
-          sorted(p.name for p in folder.iterdir()) == before)
+    # ... and the real door the module uses: the converter's stdin mode. THIS is
+    # the check the 2026-10-30 field failure slipped past: it read a 32-byte
+    # fixture and asked only whether the result dict HAD an "ok" key, so it
+    # passed while the read had failed. The fixture is now a real PDF larger
+    # than the 16 KiB the pipe lost, and the assertion is the VALUE.
+    big = a_big_pdf()
+    check("the real-door fixture is a PDF bigger than the 16 KiB a pipe loses",
+          len(big) > 16_384, len(big))
+    if DOCS.converter_ready():
+        got = DOCS.convert_bytes(big, ".pdf")
+        check("jarvis_documents.convert_bytes really reads a >16 KiB PDF",
+              got.get("ok") is True, str(got)[:300])
+        check("... and the words that were in its first bytes are in the text",
+              BIG_WORDS in (got.get("text") or ""), repr((got.get("text") or "")[:160]))
+        check("... and writes no file either",
+              sorted(p.name for p in folder.iterdir()) == before)
+    else:
+        skip("MarkItDown is not installed for this Python, so no real conversion can be "
+             "read here; the source pins below still prove the pipe is copied into memory")
     check("the stdin mode is in the converter's own child program",
           'if path == "-":' in DOCS._CHILD and "sys.stdin.buffer" in DOCS._CHILD)
+    check("... and the pipe is copied into MEMORY before anything can sniff it",
+          "io.BytesIO(sys.stdin.buffer.read())" in DOCS._CHILD, DOCS._CHILD[:400])
+
+
+def t_the_same_big_file_reads_the_same_through_either_door():
+    """The two directions the 2026-10-30 failure damaged: PDF and Word.
+
+    A conversion that only ever goes through the stdin door cannot tell "the
+    parser is broken" from "the bytes arriving are broken". So each fixture is
+    read by the folder door (a path) as well, and the Word file - a ZIP, whose
+    central directory is at its END - is read by both doors and must produce
+    the same text. This is the regression test for the field failure: >16 KiB,
+    the assertion is the VALUE, and the words live at the front of the file.
+    """
+    pdf = a_big_pdf()
+    docx = a_big_docx()
+    check("the regression .docx is a real package bigger than 16 KiB",
+          len(docx) > 16_384 and zipfile.is_zipfile(io.BytesIO(docx)), len(docx))
+    if not DOCS.converter_ready():
+        skip("MarkItDown is not installed for this Python, so neither door can be driven "
+             "here; the child's source pin in the previous test still proves the fix")
+        return
+
+    folder = Path(tempfile.mkdtemp(prefix="jarvis-attach-big-"))
+    by_path = folder / "big.pdf"
+    by_path.write_bytes(pdf)
+    got = DOCS._default_convert(str(by_path), ".pdf")
+    check("the big PDF is genuinely parseable (the folder door reads it)",
+          got.get("ok") is True and BIG_WORDS in (got.get("text") or ""),
+          str(got)[:300])
+
+    by_path = folder / "big.docx"
+    by_path.write_bytes(docx)
+    want = DOCS._default_convert(str(by_path), ".docx")
+    check("the big Word file is genuinely parseable (the folder door reads it)",
+          want.get("ok") is True and BIG_WORDS in (want.get("text") or ""),
+          str(want)[:300])
+    got = DOCS.convert_bytes(docx, ".docx")
+    check("... and the stdin door reads it too, words and all",
+          got.get("ok") is True and BIG_WORDS in (got.get("text") or ""),
+          str(got)[:300])
+    check("... the two doors now say the same thing for the Word file",
+          (want.get("text") or "") == (got.get("text") or ""),
+          (len(want.get("text") or ""), len(got.get("text") or "")))
 
 
 # ============================================ 2. the turn: the field and the part
@@ -1052,6 +1200,7 @@ t_an_archive_over_the_attachment_ceiling_is_refused,
                t_the_words_and_the_names,
                t_the_chat_markers_are_stripped,
                t_nothing_is_written_to_disk,
+               t_the_same_big_file_reads_the_same_through_either_door,
                t_the_turn_replaces_the_field_with_an_outside_text_part,
                t_every_path_strips_the_field_even_when_nothing_can_be_read,
                t_the_refusal_is_a_sentence_code_says,
