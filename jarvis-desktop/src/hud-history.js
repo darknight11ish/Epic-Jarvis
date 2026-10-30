@@ -11,6 +11,7 @@
  *
  *   History                                  [sort] [+]
  *   [ Search chats                                    ]
+ *   [ Your chats ] [ Archived ]
  *   v  Pinned                              3
  *        ~ What is the capital of France?       7d
  *        ~ Fix the patio light wiring          11d
@@ -27,18 +28,37 @@
  * chats it holds; a long one shows its first five and a "Show N more
  * sessions" row. A click on a row opens that chat in this window's chat
  * view; a right-click (or the row's "...") offers Open, Pin/Unpin, Move to
- * project and Delete chat. The current chat is marked.
+ * project, Archive and Delete chat. The current chat is marked.
+ *
+ * ONE CLICK FROM THE MAIN STRIP (the owner, 2026-10-29: "i want the chat
+ * history accesible directly from the jarvis hud on desktop"). The rail icon
+ * above lives in the LEFT RAIL, and three of the HUD's six layout shells
+ * (Ambient, Quiet, Bento) slide that rail off-canvas behind [Controls] - so
+ * in them the panel was two clicks deep and nothing on screen said History.
+ * The page's main strip (`jarvis_hud.html`'s `.history-bar`, between the log
+ * and the composer) is drawn in every shell, so it carries ONE always-visible
+ * [History] button. It calls the SAME `setOpen(true)` this file's rail icon
+ * calls - there is no second panel, no second routine and no second list.
+ *
+ * ARCHIVING (2026-10-29): "make sure i can archive and delete chats (with a
+ * confirm step)". A row's menu offers Archive (no question - it is
+ * reversible) and, from the "Archived" filter, Unarchive. The archived list
+ * is the SAME read with `archived=1` (JARVIS-API section 18). An archived
+ * chat is never opened or carried on by accident: a click on one says
+ * `ARCHIVED_NOT_CONTINUED`, and archiving the chat this window is in starts
+ * a fresh conversation rather than keep writing into a chat the live list no
+ * longer shows. Deleting keeps its confirm, word for word.
  *
  * WHAT IT MAY DO, AND WHAT IT MAY NOT
  * The page holds NO pairing token (apps security audit M2), so in the
  * desktop shell every read goes through `hud_proxy.rs::hud_get` (three
- * History reads on its fixed list) and the three writes go through ONE Rust
- * command, `hud_history_act` (brain/history.rs): pin, file under a tag, or
- * delete ONE chat. In a plain browser the page talks to the backend
- * directly, exactly as the rest of this page already does. Nothing here
- * approves anything, raises a card, deletes in bulk, or sends a chat's words
- * anywhere: the search box filters the list this window already loaded, and
- * its text is never sent to the PC.
+ * History reads on its fixed list) and the writes go through ONE Rust
+ * command, `hud_history_act` (brain/history.rs): pin, file under a tag,
+ * archive/unarchive, or delete ONE chat. In a plain browser the page talks
+ * to the backend directly, exactly as the rest of this page already does.
+ * Nothing here approves anything, raises a card, deletes in bulk, or sends a
+ * chat's words anywhere: the search box filters the list this window already
+ * loaded, and its text is never sent to the PC.
  *
  * PINNING is the PC's own record: a `pinned` column in the same encrypted
  * history file, set by `POST /api/history/pin` (JARVIS-API section 18.3), so
@@ -46,7 +66,7 @@
  * window keeps no list of its own.
  *
  * The pure half (ages, grouping, search, sort, the "show more" count and the
- * three write bodies) is exported on `window.hudHistory` so
+ * write bodies) is exported on `window.hudHistory` so
  * tests/hud-history.mjs can hold it without a browser; the DOM half is
  * `mount(host)`, where `host` is the page's own three functions:
  *
@@ -60,15 +80,23 @@
  *
  * AN ES MODULE, so it can read `history-actions.js` - the row-action table and
  * the words both windows use (Gemini ruling, 2026-10-27: share them with
- * brain.js like the Reminders `hud-actions.js`, so pin/file/delete cannot
- * drift). It is loaded with `<script type="module">`: still ONE external file,
- * so the page's inline-script count and every CSP hash are untouched.
+ * brain.js like the Reminders `hud-actions.js`, so pin/file/archive/delete
+ * cannot drift). It is loaded with `<script type="module">`: still ONE
+ * external file, so the page's inline-script count and every CSP hash are
+ * untouched - which is also why the [History] button's click is wired HERE,
+ * from this module, and never from a page script.
  */
 import {
   ACTION_LABELS,
+  ARCHIVED,
+  ARCHIVED_NOT_CONTINUED,
+  ARCHIVE_CURRENT_DONE,
+  ARCHIVE_DONE,
   DELETE_KEEPS_FACTS,
   DELETE_QUESTION,
   DELETE_REMOVES,
+  ROW_ACTIONS,
+  UNARCHIVE_DONE,
   actArgs,
   actBody,
   labelFor,
@@ -189,6 +217,10 @@ import {
       kind: ICON_KINDS.indexOf(kind) >= 0 ? kind : "chat",
       tag_id: num(c.tag_id, 0) > 0 ? num(c.tag_id) : null,
       pinned: c.pinned === true,
+      // Put away from the live list (the owner's ask of 2026-10-29). Only the
+      // PC's own `true` says so; an older PC sends nothing and its chats are
+      // all live.
+      archived: c.archived === true,
       // WHEN it was pinned (unix seconds, the PC's own record). The Pinned
       // group is ordered by this and not by the chat's time, or a chat
       // pinned last week would jump above one pinned this morning as soon as
@@ -258,6 +290,10 @@ import {
    *   sort      "recent" (default) or "name"
    *   expanded  {sectionKey: true} for a section the owner opened again
    *   cap       rows per section before "Show N more sessions"
+   *   archived  true while the owner is looking at the Archived list: then
+   *             every chat is shown in ONE section, whatever its pin or tag -
+   *             the archived list is a place, not a filing system, and a
+   *             pinned chat there must not read as a live pinned chat.
    *
    * Sections, in order: Pinned, one per tag (the tag registry's own order),
    * then Untagged. A section with no chats is left out; while searching,
@@ -271,6 +307,7 @@ import {
     var query = norm(opts.query);
     var expanded = opts.expanded && typeof opts.expanded === "object" ? opts.expanded : {};
     var current = text(opts.current);
+    var onlyArchived = opts.archived === true;
 
     var rows = [];
     (Array.isArray(list) ? list : []).forEach(function (c) {
@@ -279,6 +316,40 @@ import {
       if (!matches(row, query)) return;
       rows.push(row);
     });
+
+    if (onlyArchived) {
+      // ONE section: the archived list is a place chats are put, and it does
+      // not repeat the live list's pin/tag grouping (an archived chat is not
+      // "pinned" anywhere the owner can see it from the live list). The PC's
+      // `archived=1` already lists only archived chats; the flag is checked
+      // again so a stale or mixed answer cannot show a live chat here.
+      rows = rows.filter(function (row) {
+        return row.archived === true;
+      });
+      if (!rows.length) return [];
+      var sortedArchived = sortRows(rows, sort);
+      var openArchived = query ? true : expanded.archived !== false;
+      var uncappedArchived = query || expanded["!archived"] === true;
+      var shownArchived = openArchived
+        ? (uncappedArchived ? sortedArchived : sortedArchived.slice(0, cap))
+        : [];
+      return [
+        {
+          key: "archived",
+          title: ARCHIVED,
+          icon: "archive",
+          kind: "archived",
+          colour: 0,
+          tag_id: null,
+          count: rows.length,
+          open: openArchived,
+          rows: shownArchived,
+          more: openArchived && !uncappedArchived
+            ? Math.max(0, sortedArchived.length - shownArchived.length)
+            : 0,
+        },
+      ];
+    }
 
     var registry = [];
     var known = {};
@@ -378,6 +449,9 @@ import {
     leaf: "M5 19c0-8 6-13 14-13 0 8-5 14-13 14M5 19c2-4 5-6 9-7",
     music: "M9 18V6l10-2v12M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3zM19 16a3 3 0 1 1-3-3 3 3 0 0 1 3 3z",
     pin: "M14 3l7 7-4 1-1 4-6-6 1-1-1-4zM9 15l-6 6",
+    // Putting a chat away, and bringing it back (2026-10-29): a box with its
+    // own lid and handle, on the page's 24-unit grid.
+    archive: "M4 8h16v12H4zM3 4h18v4H3zM9 12h6",
     inbox: "M4 6h16v12H4zM4 13h4l1 2h6l1-2h4",
     clock: "M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 7v5l3 2",
     chat: "M4 5h16v11H9l-5 4z",
@@ -465,6 +539,15 @@ import {
       sort: lsGet(LS_SORT) === "name" ? "name" : "recent",
       query: "",
       expanded: lsJson(LS_COLLAPSED),
+      // Which list is on screen: false = the live chats (the PC's default),
+      // true = the archived ones (`/api/history?archived=1`, 2026-10-29).
+      archived: false,
+      // Every load increments this; a read that comes back after the owner
+      // switched lists is dropped rather than drawn under the wrong chip.
+      loadSeq: 0,
+      // Set when a refresh is asked for while one is running: it runs again
+      // when the first finishes, so a filter click is never swallowed.
+      reload: false,
       list: [],
       tags: [],
       meta: null,
@@ -475,6 +558,9 @@ import {
       // The `...` button that opened the row menu: focus goes back to it when
       // the menu is closed with Escape.
       menuAnchor: null,
+      // The control that opened the panel (the rail icon or the main strip's
+      // door): Escape gives the keyboard back to it.
+      opener: null,
     };
 
     /* The column icon, beside Presets and Live. */
@@ -488,6 +574,14 @@ import {
     railBtn.appendChild(icon("clock"));
     railBtn.appendChild(el("span", "rt-label", "History"));
     bar.insertBefore(railBtn, bar.firstChild);
+
+    // The page's main strip (jarvis_hud.html `.history-bar`), drawn in every
+    // layout shell. The rail icon above is the other door to the same panel;
+    // in three shells the rail is an off-canvas drawer, which is why the owner
+    // could not find History there ("i want the chat history accesible
+    // directly from the jarvis hud on desktop", 2026-10-29). ONE panel, ONE
+    // open routine (`setOpen`), two buttons that call it.
+    var stripBtn = doc.getElementById("hud-history-open");
 
     var backdrop = el("div");
     backdrop.id = "hh-backdrop";
@@ -540,6 +634,24 @@ import {
 
     var body = el("div");
     body.id = "hh-body";
+
+    // The two lists, as two chips (2026-10-29): "Your chats" is the live list
+    // the panel has always shown; "Archived" is the PC's archived list. One
+    // pressed at a time, so "get back to the live list" is the same one click
+    // that got here.
+    var filters = el("div");
+    filters.id = "hh-filters";
+    filters.setAttribute("role", "group");
+    filters.setAttribute("aria-label", "Which chats");
+    var chipAll = el("button", "hh-filt", "Your chats");
+    chipAll.type = "button";
+    chipAll.id = "hh-filter-live";
+    var chipArchived = el("button", "hh-filt", ARCHIVED);
+    chipArchived.type = "button";
+    chipArchived.id = "hh-filter-archived";
+    filters.appendChild(chipAll);
+    filters.appendChild(chipArchived);
+
     var foot = el("div");
     foot.id = "hh-foot";
     var say = el("p");
@@ -556,6 +668,7 @@ import {
 
     panel.appendChild(head);
     panel.appendChild(search);
+    panel.appendChild(filters);
     panel.appendChild(body);
     panel.appendChild(foot);
     (doc.body || doc.documentElement).appendChild(backdrop);
@@ -579,21 +692,45 @@ import {
       sortBtn.setAttribute("aria-label", sortBtn.title);
     }
 
+    function paintFilters() {
+      chipAll.setAttribute("aria-pressed", state.archived ? "false" : "true");
+      chipArchived.setAttribute("aria-pressed", state.archived ? "true" : "false");
+      chipAll.title = state.archived ? "Back to your live chats" : "The chats you are still using";
+      chipArchived.title = state.archived
+        ? "The archived chats (already on screen)"
+        : "Chats put away, kept on this PC";
+    }
+
+    /** The one control that switches list (2026-10-29): reads the other list,
+     *  and paints the chips from what the panel is really showing. */
+    function setArchived(on) {
+      var want = !!on;
+      if (state.archived === want) return;
+      state.archived = want;
+      paintFilters();
+      refresh();
+      if (box.focus) box.focus();
+    }
+
     function setOpen(on) {
       state.open = !!on;
       panel.classList.toggle("hh-on", state.open);
       backdrop.classList.toggle("hh-on", state.open);
       doc.documentElement.classList.toggle("hh-open", state.open);
       railBtn.setAttribute("aria-expanded", state.open ? "true" : "false");
+      if (stripBtn) stripBtn.setAttribute("aria-expanded", state.open ? "true" : "false");
       if (!state.open) {
         closeMenu(false);
-        // Closing leaves the keyboard on the rail icon that opened the panel:
-        // Escape from anywhere in it comes back here, not to the top of the
-        // page (the Gemini ruling of 2026-10-27).
+        // Closing leaves the keyboard on the control that opened the panel:
+        // the rail icon, or the main strip's door in the shells where the rail
+        // is a drawer. Escape from anywhere in it comes back here, not to the
+        // top of the page (the Gemini ruling of 2026-10-27).
+        var back = state.opener || railBtn;
         var active = doc.activeElement;
         if (!active || active === doc.body || active === doc.documentElement ||
             panel.contains(active)) {
-          railBtn.focus();
+          if (back === railBtn) railBtn.focus();
+          else if (back && back.focus) back.focus();
         }
         return;
       }
@@ -621,15 +758,22 @@ import {
 
     function load() {
       state.error = "";
-      announce("Reading your chats…");
+      announce(state.archived ? "Reading your archived chats…" : "Reading your chats…");
+      // Which list this read is for. The owner can switch chips while it runs;
+      // the answer then belongs to the list that is no longer on screen, so it
+      // is dropped (2026-10-29).
+      var seq = ++state.loadSeq;
+      var archived = state.archived;
+      var path = "/api/history?limit=" + MAX_ROWS + (archived ? "&archived=1" : "");
       return Promise.all([
-        readJson("/api/history?limit=" + MAX_ROWS),
+        readJson(path),
         readJson("/api/history/tags").catch(function () {
           // Tags are a newer route than History (2026-09-30): a PC that
           // cannot answer it still lists chats, just with no sections.
           return { tags: [] };
         }),
       ]).then(function (answers) {
+        if (seq !== state.loadSeq) return;
         var list = answers[0] && typeof answers[0] === "object" ? answers[0] : {};
         var tags = answers[1] && typeof answers[1] === "object" ? answers[1] : {};
         state.list = Array.isArray(list.conversations) ? list.conversations : [];
@@ -637,6 +781,7 @@ import {
         state.tags = Array.isArray(tags.tags) ? tags.tags : [];
         paint();
       }, function (error) {
+        if (seq !== state.loadSeq) return;
         state.list = [];
         state.tags = [];
         state.error = String((error && error.message) || error);
@@ -645,12 +790,25 @@ import {
     }
 
     function refresh() {
-      if (state.busy) return Promise.resolve();
+      if (state.busy) {
+        // A filter click, a write or another open while a read is running: run
+        // once more when it finishes rather than swallow the request.
+        state.reload = true;
+        return Promise.resolve();
+      }
       state.busy = true;
       return load().then(function () {
         state.busy = false;
+        if (state.reload) {
+          state.reload = false;
+          return refresh();
+        }
       }, function () {
         state.busy = false;
+        if (state.reload) {
+          state.reload = false;
+          return refresh();
+        }
       });
     }
 
@@ -664,6 +822,7 @@ import {
         sort: state.sort,
         expanded: state.expanded,
         cap: CAP,
+        archived: state.archived,
       });
     }
 
@@ -694,6 +853,7 @@ import {
       button.setAttribute("data-id", row.id);
       var label = row.title + (row.ageLong ? ", " + row.ageLong : "");
       if (row.pinned) label += ", pinned";
+      if (row.archived) label += ", archived";
       button.setAttribute("aria-label", label);
       button.appendChild(icon(ICON_KINDS.indexOf(row.kind) >= 0 ? row.kind : "chat"));
       button.appendChild(el("span", "hh-t", row.title));
@@ -733,12 +893,21 @@ import {
 
     function paint() {
       paintSort();
+      paintFilters();
       body.textContent = "";
       var groups = sections();
       var total = countRows(groups);
+      // The archived list says why its rows do not open: archiving is a
+      // reversible putting-away, and carrying one on is a deliberate Unarchive
+      // (the same sentence the Brain's History tab says).
+      if (state.archived) {
+        body.appendChild(el("div", "hh-note-block", ARCHIVED_NOT_CONTINUED));
+      }
 
       if (state.error) {
-        announce("Your chats could not be read: " + state.error);
+        announce(
+          (state.archived ? "Your archived chats" : "Your chats") + " could not be read: " + state.error
+        );
       } else if (state.meta && state.meta.hidden === true) {
         // The PC's own redaction: Windows Hello has not been given, so there
         // is nothing here to show and the panel says so rather than a blank.
@@ -753,7 +922,16 @@ import {
               "listed here."
         );
       } else if (!groups.length) {
-        announce(state.query ? "No chat has that in its name." : "No chats are kept on this PC yet.");
+        announce(
+          state.archived
+            ? (state.query ? "No archived chat has that in its name." : "No chats are archived on this PC.")
+            : state.query ? "No chat has that in its name." : "No chats are kept on this PC yet."
+        );
+      } else if (state.archived) {
+        announce(
+          total + (total === 1 ? " archived chat." : " archived chats.") +
+            " Archived chats are not carried on from here."
+        );
       } else {
         announce(total + (total === 1 ? " chat" : " chats") + " on this PC.");
       }
@@ -865,10 +1043,13 @@ import {
       var paths = {
         pin: "/api/history/pin",
         tag: "/api/history/tag",
+        archive: "/api/history/archive",
         delete: "/api/history/delete",
       };
       var body = actBody(args.action, args.id,
-        args.action === "pin" ? args.pinned : args.action === "tag" ? args.tag : null);
+        args.action === "pin" ? args.pinned
+          : args.action === "archive" ? args.archived
+            : args.action === "tag" ? args.tag : null);
       if (!body || !paths[args.action]) {
         return Promise.reject(new Error("That was not a change this window can send."));
       }
@@ -891,8 +1072,27 @@ import {
       }
       announce("Saving…");
       return invoke("hud_history_act", args).then(function () {
-        announce(action === "pin" ? (value ? "Pinned." : "Unpinned.") : "Saved.");
+        var said = action === "pin" ? (value ? "Pinned." : "Unpinned.")
+          : action === "archive" ? (value ? ARCHIVE_DONE : UNARCHIVE_DONE)
+            : "Saved.";
+        // Archiving the chat this window is IN must not leave the next message
+        // filed into a chat the live list no longer shows: start a fresh
+        // conversation, as the delete path already does. Unarchiving one is
+        // the owner putting it back, so it is said and nothing else happens.
+        var resetCurrent = action === "archive" && value === true && state.current === id;
         return refresh().then(function () {
+          if (resetCurrent && typeof talk.newChat === "function") {
+            // The chat this window was in has just been put away. Start a fresh
+            // conversation rather than keep filing new messages into a chat the
+            // live list no longer shows (the delete path does the same); the
+            // archived chat itself is untouched and waits under Archived.
+            talk.newChat();
+            state.current = typeof talk.current === "function" ? talk.current() : "";
+            paint();
+            announce(ARCHIVE_CURRENT_DONE);
+            return true;
+          }
+          announce(said);
           return true;
         });
       }, function (error) {
@@ -902,6 +1102,13 @@ import {
     }
 
     function openChat(row) {
+      // An archived chat is not opened or carried on by accident (2026-10-29):
+      // it was put away on purpose, and the way back is Unarchive. Reading it
+      // here would make the next message continue an archived conversation.
+      if (row && row.archived === true) {
+        announce(ARCHIVED_NOT_CONTINUED);
+        return;
+      }
       if (typeof talk.open !== "function") {
         announce("This window cannot open a chat on its own - open the Brain's History tab.");
         return;
@@ -913,6 +1120,15 @@ import {
           announce(
             "Your chat history is hidden. Press Show on the Brain's History tab first."
           );
+          return;
+        }
+        // The list row said live; the PC's own conversation answer says it has
+        // been put away since (archived on the phone, or in the Brain). That is
+        // still not an accidental continuation: the chat is left alone, the
+        // list is read again, and Unarchive is named as the way on.
+        if (conv.archived === true) {
+          announce(ARCHIVED_NOT_CONTINUED);
+          refresh();
           return;
         }
         state.current = text(conv.id) || row.id;
@@ -979,6 +1195,40 @@ import {
       // own, and the first one's button forgets it was expanded.
       if (state.menuAnchor) state.menuAnchor.setAttribute("aria-expanded", "false");
       menu.textContent = "";
+
+      // The archived list's own menu (2026-10-29): the way on is Unarchive,
+      // then Delete, which still asks its question. No Open - an archived chat
+      // is not opened or carried on from here - and no pin/move, which belong
+      // to the live list this chat is not in.
+      if (row.archived === true) {
+        var un = menuItem(labelFor("archive", row.pinned, true), "archive");
+        un.addEventListener("click", function () {
+          closeMenu(false);
+          act("archive", row.id, false);
+        });
+        var sepArch = el("div", "hh-sep");
+        var delArch = menuItem(ACTION_LABELS.delete, "close", true);
+        delArch.addEventListener("click", function () {
+          askDelete(row, anchor);
+        });
+        var addArch = menuItem(ACTION_LABELS.newChat, "plus");
+        addArch.addEventListener("click", function () {
+          closeMenu(false);
+          newChat();
+        });
+        menu.appendChild(un);
+        menu.appendChild(sepArch);
+        menu.appendChild(delArch);
+        menu.appendChild(addArch);
+        place(menu, anchor);
+        state.menu = row.id;
+        state.menuAnchor = anchor;
+        if (anchor && anchor.setAttribute) anchor.setAttribute("aria-expanded", "true");
+        var firstArch = menu.querySelector("button");
+        if (firstArch) firstArch.focus();
+        return;
+      }
+
       var open = menuItem(ACTION_LABELS.open, "chat");
       open.addEventListener("click", function () {
         closeMenu(false);
@@ -1027,6 +1277,13 @@ import {
         sub.hidden = !sub.hidden;
         move.setAttribute("aria-expanded", sub.hidden ? "false" : "true");
       });
+      // Archive: reversible, so no question and no confirm box - it moves the
+      // chat to the Archived list and the row disappears from the live one.
+      var archive = menuItem(labelFor("archive", row.pinned, row.archived), "archive");
+      archive.addEventListener("click", function () {
+        closeMenu(false);
+        act("archive", row.id, true);
+      });
       var del = menuItem(ACTION_LABELS.delete, "close", true);
       del.addEventListener("click", function () {
         askDelete(row, anchor);
@@ -1042,6 +1299,7 @@ import {
       menu.appendChild(pin);
       menu.appendChild(move);
       menu.appendChild(sub);
+      menu.appendChild(archive);
       menu.appendChild(sep);
       menu.appendChild(del);
       menu.appendChild(add);
@@ -1096,7 +1354,35 @@ import {
     /* ---- wiring ---- */
 
     railBtn.addEventListener("click", function () {
+      state.opener = railBtn;
       setOpen(!state.open);
+    });
+    if (stripBtn) {
+      // The main strip's door (2026-10-29): ONE always-visible History control
+      // in every layout shell. It opens the SAME panel through the SAME
+      // `setOpen` the rail icon calls - there is no second panel and no second
+      // list. The button's markup lives in the page (`#hud-history-open`); its
+      // click is wired here, from this external module, so the page's inline
+      // script and every CSP hash stay exactly as they were.
+      stripBtn.setAttribute("aria-haspopup", "dialog");
+      stripBtn.setAttribute("aria-controls", panel.id);
+      stripBtn.setAttribute("aria-expanded", "false");
+      stripBtn.addEventListener("click", function () {
+        if (state.open) {
+          // Already on screen: put the keyboard where the panel starts rather
+          // than close what one click just opened.
+          box.focus();
+          return;
+        }
+        state.opener = stripBtn;
+        setOpen(true);
+      });
+    }
+    chipAll.addEventListener("click", function () {
+      setArchived(false);
+    });
+    chipArchived.addEventListener("click", function () {
+      setArchived(true);
     });
     closeBtn.addEventListener("click", function () {
       setOpen(false);
@@ -1144,7 +1430,11 @@ import {
 
     mounted = {
       el: panel,
+      /** The ONE way the panel is opened - the rail icon, the main strip's
+       *  always-visible [History] door and `window.hudHistory.open()` all call
+       *  this. A second open routine would be a second panel in disguise. */
       open: function () {
+        state.opener = stripBtn || railBtn;
         setOpen(true);
       },
       close: function () {
@@ -1156,12 +1446,17 @@ import {
       /** Re-read the PC's list. Called when the window opens and after a
        *  write; also on the page's own beat if it asks. */
       refresh: refresh,
+      /** Which list is on screen: false for the live chats, true for Archived. */
+      archived: function () {
+        return state.archived;
+      },
       /** What the panel thinks this window is in, for a test. */
       current: function () {
         return state.current;
       },
     };
     paintSort();
+    paintFilters();
     return mounted;
   }
 
@@ -1178,6 +1473,11 @@ import {
     // passed through so a test - and the page's own push-to-talk guard - can
     // read one table instead of two.
     ACTION_LABELS: ACTION_LABELS,
+    ROW_ACTIONS: ROW_ACTIONS,
+    ARCHIVED: ARCHIVED,
+    ARCHIVE_DONE: ARCHIVE_DONE,
+    UNARCHIVE_DONE: UNARCHIVE_DONE,
+    ARCHIVED_NOT_CONTINUED: ARCHIVED_NOT_CONTINUED,
     DELETE_QUESTION: DELETE_QUESTION,
     DELETE_REMOVES: DELETE_REMOVES,
     DELETE_KEEPS_FACTS: DELETE_KEEPS_FACTS,
@@ -1196,6 +1496,14 @@ import {
     glyphPath: glyphPath,
     tagDots: tagDots,
     mount: mount,
+    /** Open the ONE panel through the ONE open routine - what the main strip's
+     *  always-visible [History] door calls, and what a test can call instead of
+     *  reaching for the DOM. False when the panel is not mounted (no rail). */
+    open: function () {
+      if (!mounted || typeof mounted.open !== "function") return false;
+      mounted.open();
+      return true;
+    },
     /** Is the sidebar on screen? The page's Space push-to-talk asks this: while
      *  it is open, Space belongs to the panel and must never start the mic. */
     isOpen: function () {

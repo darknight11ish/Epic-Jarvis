@@ -32,6 +32,7 @@ briefing.patch	briefing/a0305da.patch	a0305dabd58fb35767fc11f2cbc914701eaf2057	2
 briefing.patch	briefing/5350f7f.patch	5350f7f719f299875b3529c2304821dbf9176bce	2026-09-25T04:20:17Z	Morning briefing and the back-off for offers (backend)
 browser-engine.patch	browser-engine/39b759a.patch	39b759a47a0282cb2738f525f153fad88403f734	2026-09-29T18:47:05Z	Obscura review fixes: backend (switch, fence, limits, hidden text, rule 1)
 browser-engine.patch	browser-engine/cc915b7.patch	cc915b7886c815291cd20daca463d9965203c3d3	2026-09-29T17:43:09Z	Add the headless browser, Obscura, as a second browser Jarvis may choose
+chat-history.patch	chat-history/10a5d87.patch	10a5d8779ac7cd556761026b0b8851570d888ced	2026-10-27T16:51:39-07:00	feat(hud): a History column icon opens a DeepSeek-style conversation panel, with pinnable chats and tag sections
 chat-history.patch	chat-history/041fe41.patch	041fe41726dd559e344c8c03efaea431a992374b	2026-09-30T09:10:52Z	WIP: Money-Off, sayable topics, model_free; overnight tags backend in progress
 chat-history.patch	chat-history/878d28e.patch	878d28eab5982580248ceff2b7226d298be3d2de	2026-09-30T06:17:52Z	Fork from here: backend built (JARVIS-API 110), apps next
 chat-history.patch	chat-history/d42ede8.patch	d42ede85239584fdb8f7e68db54924ced2ce475d	2026-09-30T05:32:01Z	Design: quiz decks and Spanish practice; record owner answers and second-card list verdicts

@@ -446,8 +446,20 @@ import {
 } from "./history-view.js";
 // The row words the HUD's History sidebar also says, in ONE place (Gemini
 // ruling, 2026-10-27): the two windows edit the same chats through the same
-// routes, so they read the same table.
-import { ACTION_LABELS } from "./history-actions.js";
+// routes, so they read the same table. Archiving joined it on 2026-10-29
+// (the owner: "make sure i can archive and delete chats (with a confirm
+// step)"): the labels, the row-action list and the archived sentences.
+import {
+  ACTION_LABELS,
+  ARCHIVED,
+  ARCHIVED_NOT_CONTINUED,
+  ARCHIVE_DONE,
+  UNARCHIVE_DONE,
+  // `labelFor` is already the Galaxy constellation's own (imported above), so
+  // the History row-action label comes in under a name that says which table
+  // it reads: the shared History one, the same the HUD's sidebar uses.
+  labelFor as historyLabelFor,
+} from "./history-actions.js";
 import {
   ADD_TAG,
   ALL as TAG_ALL,
@@ -4934,6 +4946,11 @@ const chats = {
   /** "Show": one kind of conversation, or "" for every kind (the chat
    *  audit, 2026-09-28 - "History can be filtered to Live sessions only"). */
   kind: "",
+  /** The archived list instead of the live one (the owner's ask of
+   *  2026-10-29): the SAME read with `archived=1`, never a second list. */
+  archived: false,
+  /** One archive/unarchive request in flight: `{ id, archived }`. */
+  archiving: null,
   /** Chat tags (docs/CHAT-TAGS-DESIGN.md): the tag chip chosen ("" is All,
    *  "none" is Untagged, else a tag id as digits), the PC's tags
    *  (readTags), which sections are open on this device, the Tags editor,
@@ -5007,16 +5024,20 @@ async function loadHistory({ background = false } = {}) {
   try {
     const kind = chats.kind;
     const tag = chats.tag;
+    const archived = chats.archived;
     // The chats and the tags are two reads; an older PC (or app build) with
     // no tags leaves the list flat, exactly as before.
     const [listRead, tagsRead] = await Promise.allSettled([
       invoke("brain_history_list",
-        { before: null, limit: HISTORY_PAGE, kind: kind || null, tag: tag || null }),
+        { before: null, limit: HISTORY_PAGE, kind: kind || null, tag: tag || null,
+          archived }),
       invoke("brain_history_tags"),
     ]);
     if (listRead.status === "rejected") throw listRead.reason;
     const v = readHistory(listRead.value);
-    if (kind !== chats.kind || tag !== chats.tag) return;   // the filter changed while this read ran
+    // The filter or the list changed while this read ran: its answer is for a
+    // list that is no longer on screen (2026-10-29, the Archived filter).
+    if (kind !== chats.kind || tag !== chats.tag || archived !== chats.archived) return;
     chats.tags = readTags(tagsRead.status === "fulfilled" ? tagsRead.value : { available: false });
     if (chats.tag && chats.tag !== "none" && chats.tags.available && !chats.tags.hidden
         && !tagById(chats.tags, Number(chats.tag))) {
@@ -5075,7 +5096,8 @@ async function loadOlderHistory() {
   chats.older = true;
   try {
     const v = readHistory(await invoke("brain_history_list",
-      { before, limit: HISTORY_PAGE, kind: chats.kind || null, tag: chats.tag || null }));
+      { before, limit: HISTORY_PAGE, kind: chats.kind || null, tag: chats.tag || null,
+        archived: chats.archived }));
     chats.rows = addPage(chats.rows, v.conversations);
     chats.more = v.conversations.length >= HISTORY_PAGE;
   } catch (error) {
@@ -5272,6 +5294,56 @@ async function finishDelete(c, factIds) {
     toast(errorText(error), "bad");
   }
   paintHistory();
+}
+
+/**
+ * Puts ONE conversation away, or brings it back (the owner's ask of
+ * 2026-10-29: "make sure i can archive and delete chats (with a confirm
+ * step)"). Archiving is REVERSIBLE, so this asks NO question and raises no
+ * card; deleting still asks its own. `c.archived` is the row's own flag, and
+ * the direction sent is the opposite of it.
+ *
+ * An archived chat is not carried on from here: it is put away on purpose, and
+ * Unarchive is the one way back. So a transcript open below the row is closed
+ * when its chat is archived, and an archived search result says the same.
+ */
+async function archiveConversation(c) {
+  if (chats.archiving || !IS_TAURI) return;
+  const want = c.archived !== true;
+  chats.archiving = { id: c.id, archived: want };
+  chats.focus = { keys: [`archive:${c.id}`, `open:${c.id}`], at: Date.now() };
+  paintHistory();
+  try {
+    const out = await invoke("brain_history_archive", { id: c.id, archived: want });
+    if (out && out.ok === false) {
+      toast(String(out.message || out.error || "Refused."), "bad");
+    } else {
+      toast(want ? ARCHIVE_DONE : UNARCHIVE_DONE, "ok");
+      if (want && chats.openId === c.id) {
+        chats.openId = null;
+        chats.open = null;
+        chats.openFacts = null;
+      }
+      chats.at = 0;
+      await loadHistory();
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.archiving = null;
+  paintHistory();
+}
+
+/** Is this chat put away? The row says so; the opened conversation also
+ *  carries the PC's own flag. Both are read, so one missing old field cannot
+ *  let an archived chat be carried on by accident. */
+function isArchivedChat(c) {
+  if (!c || typeof c !== "object") return false;
+  if (c.archived === true) return true;
+  const id = c.id;
+  if (!id) return false;
+  return chats.rows.some((r) => r.id === id && r.archived === true)
+    || (chats.search.view?.conversations || []).some((r) => r.id === id && r.archived === true);
 }
 
 async function setHistoryEnabled(on) {
@@ -5478,6 +5550,13 @@ function transcriptNode() {
  */
 function continueNode(conv) {
   const box = el("div", "row-actions history-continue");
+  // An archived chat is not carried on until it is brought back (2026-10-29):
+  // reading it is fine, continuing it is not. The way on is Unarchive, in the
+  // same words the HUD's sidebar uses.
+  if (isArchivedChat(conv)) {
+    box.append(el("p", "hint history-continue-why", ARCHIVED_NOT_CONTINUED));
+    return box;
+  }
   if (!conv.continuable) {
     box.append(el("p", "hint history-continue-why", conv.continueWhy));
     return box;
@@ -5536,7 +5615,7 @@ async function forkFrom(id, idx) {
   // The new chat must be visible whatever was narrowing the list: the kind
   // ("Live only"), the tag chip and the search words are cleared, and its row
   // is put in from the answer (the list read that follows replaces it).
-  const clearing = !!(chats.kind || chats.tag || chats.search.query);
+  const clearing = !!(chats.kind || chats.tag || chats.search.query || chats.archived);
   const sourceRow = chats.rows.find((c) => c.id === id) || null;
   const row = forkedRow(made, sourceRow, Date.now() / 1000);
   clearHistoryNarrowing();
@@ -5592,8 +5671,9 @@ async function markSection(id, idx, on) {
   paintHistory();
 }
 
-/** Back to every chat: no kind, no tag chip, no search words (a fork's new
- *  chat is shown whatever the owner had narrowed the list to). */
+/** Back to every chat: no kind, no tag chip, no search words and no Archived
+ *  list (a fork's new chat is shown whatever the owner had narrowed the list
+ *  to; a fork of an archived chat is a NEW live chat, never archived). */
 function clearHistoryNarrowing() {
   const s = chats.search;
   clearTimeout(s.timer);
@@ -5604,6 +5684,7 @@ function clearHistoryNarrowing() {
   s.seq += 1;
   chats.kind = "";
   chats.tag = "";
+  chats.archived = false;
   chats.more = false;
   const box = $("history-filter");
   if (box) box.value = "";
@@ -5633,6 +5714,7 @@ async function copyOldAnswer(text, btn) {
 function conversationRow(c, { needle = "", snippet = null } = {}) {
   const open = chats.openId === c.id;
   const device = deviceTag(c.device);
+  const archived = c.archived === true;
   const item = row({
     tag: device.tag,
     title: c.title || NO_TITLE,
@@ -5640,6 +5722,14 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     actions: [
       button(open ? "Close" : "Open", () => toggleConversation(c.id, needle),
         { title: open ? "Close the conversation." : "Read the conversation. Nothing changes." }),
+      // Archive / Unarchive (the owner's ask of 2026-10-29: "make sure i can
+      // archive and delete chats (with a confirm step)"). Reversible, so NO
+      // question: the label comes from the shared table by what the row is,
+      // and the archive command names the direction.
+      button(historyLabelFor("archive", c.pinned === true, archived), () => archiveConversation(c),
+        { title: archived
+          ? "Put this chat back in your chats."
+          : "Put this chat away. Nothing is deleted, and you can bring it back from Archived." }),
       button(ACTION_LABELS.delete, () => deleteConversation(c),
         { danger: true, live: true, title: "Delete this conversation from this PC. There is no undo." }),
     ],
@@ -5661,8 +5751,12 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     buttons[0].dataset.fkey = `open:${c.id}`;
   }
   if (buttons[1]) {
-    buttons[1].setAttribute("aria-label", `Delete ${named}`);
-    buttons[1].dataset.fkey = `delete:${c.id}`;
+    buttons[1].setAttribute("aria-label", `${historyLabelFor("archive", c.pinned === true, archived)} ${named}`);
+    buttons[1].dataset.fkey = `archive:${c.id}`;
+  }
+  if (buttons[2]) {
+    buttons[2].setAttribute("aria-label", `Delete ${named}`);
+    buttons[2].dataset.fkey = `delete:${c.id}`;
   }
   const main = item.querySelector(".row-main");
   if (tagOf) main.append(tagPillNode(tagOf));
@@ -5692,7 +5786,7 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     main.append(p);
   }
   const kindTag = KIND_TAG[c.kind] || "";
-  if (c.hasVoice || c.tainted || (kindTag && c.kind !== "live")) {
+  if (c.hasVoice || c.tainted || archived || (kindTag && c.kind !== "live")) {
     const marks = el("span", "history-marks");
     // What kind of conversation it is (the chat audit, 2026-09-28). A Live
     // session says so in its line ("Live · 12 min · Today 14:05").
@@ -5711,6 +5805,12 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
       const taint = el("span", "history-mark history-mark-taint", "read outside text");
       taint.title = TAINT_TITLE;
       marks.append(taint);
+    }
+    // Put away (2026-10-29): the row says so, and the way back is Unarchive.
+    if (archived) {
+      const put = el("span", "history-mark history-mark-archived", ARCHIVED);
+      put.title = ARCHIVED_NOT_CONTINUED;
+      marks.append(put);
     }
     main.append(marks);
   }
@@ -5937,9 +6037,11 @@ function paintHistoryListNow(box) {
     box.append(top);
   }
   if (!chats.rows.length) {
-    box.append(el("p", "empty", chats.tag ? NO_TAG_CHATS : chats.kind ? HISTORY_FILTER_NONE : v.enabled
-      ? "No conversations kept yet."
-      : "No conversations kept. Chat history is off."));
+    box.append(el("p", "empty", chats.archived
+      ? "No chats are archived."
+      : chats.tag ? NO_TAG_CHATS : chats.kind ? HISTORY_FILTER_NONE : v.enabled
+        ? "No conversations kept yet."
+        : "No conversations kept. Chat history is off."));
     return;
   }
   // One letter, or a PC that cannot search the words: the list already
@@ -5960,6 +6062,22 @@ function paintHistoryListNow(box) {
     if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
     if (chats.openId === c.id) list.append(transcriptNode());
   };
+  // The archived list (2026-10-29): one flat list with one sentence saying why
+  // its rows are not carried on, rather than the live list's tag sections - an
+  // archived chat is somewhere chats are put, not a filing system of its own.
+  if (chats.archived) {
+    box.append(el("p", "hint history-archived-note", ARCHIVED_NOT_CONTINUED));
+    const list = el("div", "rows history-rows history-archived-rows");
+    for (const c of shown.filter(matchesTagChip)) appendRow(list, c);
+    box.append(list);
+    if (chats.more) {
+      const more = el("div", "row-actions history-more");
+      more.append(button(chats.older ? "Loading…" : "Load older", loadOlderHistory,
+        { title: "Show the next page of older conversations." }));
+      box.append(more);
+    }
+    return;
+  }
   const tagView = chats.tags && chats.tags.available && !chats.tags.hidden ? chats.tags : null;
   if (tagView && tagView.tags.length && !chats.tag) {
     // Sections, one per tag in the owner's order, "Untagged" last
@@ -6126,7 +6244,8 @@ function paintTagBarNow() {
   if (!box) return;
   const v = chats.view;
   const tv = chats.tags;
-  const show = Boolean(v && v.available && !v.hidden && tv && tv.available && !tv.hidden);
+  const show = Boolean(v && v.available && !v.hidden && !chats.archived
+    && tv && tv.available && !tv.hidden);
   // "Suggest tags overnight" holds no chat words, so its row still shows while
   // the private lists are hidden (JARVIS-API.md section 104.4); nothing else does.
   const sg = chats.suggest;
@@ -6647,9 +6766,10 @@ async function resolveFilingPending() {
 }
 
 /**
- * Above the list: "Show" (every kind, or Live only, and the rest) and a
- * way to "Forget a time frame" from the top of History - it used to be at
- * the very bottom (the chat audit, 2026-09-28).
+ * Above the list: "Show" (every kind, or Live only, and the rest), the
+ * Archived list switch (the owner's ask of 2026-10-29) and a way to "Forget a
+ * time frame" from the top of History - it used to be at the very bottom (the
+ * chat audit, 2026-09-28).
  */
 function paintHistoryTools() {
   const box = $("history-tools");
@@ -6660,6 +6780,7 @@ function paintHistoryTools() {
   if (box.dataset.built === "true") {
     const select = $("history-kind");
     if (select && select.value !== chats.kind) select.value = chats.kind;
+    paintHistoryArchivedToggle();
     return;
   }
   box.dataset.built = "true";
@@ -6690,9 +6811,51 @@ function paintHistoryTools() {
     if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
   });
   label.append(select);
+  // The archived list: ONE switch, one read (`archived=1`), no second list.
+  const archiveBtn = button("", () => setArchivedList(!chats.archived));
+  archiveBtn.id = "history-archived";
+  archiveBtn.classList.add("history-archived-toggle");
+  paintHistoryArchivedToggle();
   const link = button(FORGET_RANGE_LINK, () => openForgetRange(), { title: FORGET_RANGE_LINK_TITLE });
   link.classList.add("history-forget-range-link");
-  box.append(label, link);
+  box.append(label, archiveBtn, link);
+}
+
+/** The Archived control's own words, from the list on screen: "Archived" goes
+ *  to the archived list, "Back to your chats" returns to the live one. */
+function paintHistoryArchivedToggle() {
+  const node = $("history-archived");
+  if (!node) return;
+  node.textContent = chats.archived ? "Back to your chats" : ARCHIVED;
+  node.setAttribute("aria-pressed", chats.archived ? "true" : "false");
+  node.title = chats.archived
+    ? "Show the chats you are still using."
+    : "Show the chats you have put away. They are kept, and you can bring them back.";
+}
+
+/** Switches the History tab between the live list and the archived one
+ *  (2026-10-29). It is the SAME read with `archived=1`, never a second list:
+ *  the rows, the pages loaded and whatever was open belong to the list being
+ *  left, so they go. */
+function setArchivedList(on) {
+  const want = !!on;
+  if (chats.archived === want) return;
+  chats.archived = want;
+  chats.rows = [];
+  chats.more = false;
+  // The archived list is not grouped by tags here, so a chip left over from
+  // the live list must not silently narrow it.
+  chats.tag = "";
+  chats.openId = null;
+  chats.open = null;
+  chats.openFacts = null;
+  chats.deleting = null;
+  chats.at = 0;
+  paintHistory();
+  loadHistory();
+  // "Search what was said" still searches every kept chat, archived included;
+  // run it again so its results carry the new list's truth.
+  if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
 }
 
 /** Chats were removed or put back somewhere else (an Undo, "Forget a time
