@@ -275,6 +275,39 @@ _PROTECTED_SUFFIXES = (".pem", ".key", ".pfx", ".p12", ".kdbx", ".ppk",
 _PROTECTED_ENDINGS = ("/.cargo/credentials", "/.cargo/credentials.toml", "/.git/config")
 
 
+def protected_name(name: str) -> bool:
+    """True when a bare NAME - no path, no folder - is one of the things Jarvis
+    never opens, anywhere.
+
+    THE ONE LIST, AND THE ONE PLACE. `_protected_path` asks this for the name
+    part of a path, and jarvis_attached_file.py asks it for a file the owner
+    attached to a chat, which has a name and no path at all (2026-10-29). The
+    design called that out as its risk 7: a second copy of `_PROTECTED_NAMES`
+    would drift from this one, and the copy would be the one that was wrong.
+    `.env`, `id_rsa`, `.pem`, `.key`, `.kdbx`, browser data and Jarvis's own
+    files are named here once.
+
+    A name that carries a protected DIR in it ("C:\\Users\\me\\.ssh\\id_rsa" pasted
+    as a file name) is refused too: the bytes are the bytes, whatever the label
+    on them says. No name at all is refused: a PC that cannot say what a thing
+    is called cannot say it may be read.
+    """
+    low = str(name or "").replace("\\", "/").strip().lower()
+    if not low:
+        return True
+    if any(part in "/" + low + "/" for part in _PROTECTED_DIRS):
+        return True
+    if low.endswith(_PROTECTED_ENDINGS):
+        return True
+    base = low.rsplit("/", 1)[-1]
+    if base in _PROTECTED_NAMES or base.endswith(_PROTECTED_SUFFIXES):
+        return True
+    if base == ".env" or base.startswith(".env.") or base.startswith("id_rsa") \
+            or base.startswith("id_ed25519") or base.startswith("id_ecdsa"):
+        return True
+    return False
+
+
 def _protected_path(path: str) -> bool:
     """True when file_read must refuse `path` (see _PROTECTED_DIRS)."""
     try:
@@ -292,13 +325,10 @@ def _protected_path(path: str) -> bool:
         return True
     if low.endswith(_PROTECTED_ENDINGS):
         return True
-    name = low.rsplit("/", 1)[-1]
-    if name in _PROTECTED_NAMES or name.endswith(_PROTECTED_SUFFIXES):
-        return True
-    if name == ".env" or name.startswith(".env.") or name.startswith("id_rsa") \
-            or name.startswith("id_ed25519") or name.startswith("id_ecdsa"):
-        return True
-    return False
+    # The name rules are `protected_name`'s, and only its: one list, asked in
+    # two places (a path here, an attachment's bare name in
+    # jarvis_attached_file.py).
+    return protected_name(low.rsplit("/", 1)[-1])
 
 
 def _run_file_read(args: dict) -> dict:
@@ -7489,7 +7519,10 @@ SCREEN_TOOL = "read_screen"
 #: (2026-10-05). test_readpage.py checks this key is here, so the label
 #: cannot go missing without a suite saying so.
 _READ_LABELS = {PICTURE_TEXT_TOOL: "the words in your picture", SCREEN_TOOL: "your screen",
-                "read_web_page": "the web page you gave it"}
+                "read_web_page": "the web page you gave it",
+                # A file the owner attached to the chat (2026-10-29): the card
+                # says "Proposed after Jarvis read: the file you attached".
+                "read_attached_file": "the file you attached"}
 
 
 def _screen_mark_of(message) -> str:
@@ -7646,6 +7679,221 @@ def with_picture_text(messages: list, *, keep_picture: bool,
         kept.extend(pictures)
     msgs[idx] = dict(msgs[idx], content=kept)
     return msgs, info
+
+
+# --------------------------------------------------------------------------
+#   The file the owner ATTACHED (2026-10-29)
+# --------------------------------------------------------------------------
+#
+# The owner's decision, 2026-10-29: "file attachment in chat", both apps at once,
+# and the design's recommended defaults - a 2,500,000-byte raw cap, 12,000
+# characters of text to the model, no approval card (reusing `read_files_readonly`
+# for a card only when that row says ask), nothing written to disk, no new route,
+# images still on the picture path, no audio or video, no new Settings switch.
+#
+# THE SHAPE, and it is the apps' wiring contract (docs/JARVIS-API.md, "A file in
+# a chat"): the newest user message carries a sibling field, never a content part -
+#
+#   {"role": "user", "content": "what does this say?", "attachment":
+#    {"name": "taxes.pdf", "mime": "application/pdf", "size": 1234,
+#     "data": "<base64 of the raw bytes>"}}
+#
+# and the request's top level carries `"has_file": true` beside `has_image`.
+#
+# WHAT HAPPENS TO IT HERE. `with_file_text` reads the attachment through
+# jarvis_attached_file.py (validate by kind, magic bytes and size; never-read
+# names; zip-bomb refusal; the converter over a stream; the cap; the chat-marker
+# strip) and REPLACES the field with a `text` part of its own, after the owner's
+# words, carrying the labelled block. The `attachment` field is taken off EVERY
+# message before anything else happens - unconditionally, on every path, read or
+# refused - because the bytes must not reach a model, a provider, a history row
+# or the learner, and "fail closed" has to mean a shape this PC cannot strip is
+# not passed on either.
+#
+# WHY A PART AND NOT THE QUESTION'S OWN TEXT: the picture's words are a part of
+# their own so they never count as the owner's own words (2026-09-26), and a
+# file's words are exactly the same problem. `estimate_tokens` counts a text part
+# at 3 characters a token, so the trimmer sees the real cost and evicts older
+# turns to make room; a custom part type would look like a flat 1,000 tokens and
+# a 12,000-character file would overflow the window silently (design risk 2).
+#
+# THE NAME IT IS RECORDED UNDER is `read_attached_file`, on the apps' read-aloud
+# list and in the summary's `tools_ran`, so this PC's record of the turn marks
+# the conversation as having read outside text - a later web search or note in it
+# still asks, and the conversation is latched private (jarvis_gate.latch_taint).
+
+#: The name a file the owner attached is recorded under, as a reading tool's is.
+FILE_TEXT_TOOL = "read_attached_file"
+#: Said beside the answer while the PC reads the file (jarvis_ocr's own pattern).
+FILE_TEXT_NOTE = "reading the file you attached on this PC (it counts as outside text)"
+
+
+def _attachment_of(message) -> dict:
+    """The attachment a message carries, or {} - and PRESENCE is the test.
+
+    A client that sends `"attachment": null`, or something that is not an
+    object, still counts as carrying a file: the bytes are stripped and the turn
+    stays local either way, and this PC says plainly that it could not read it.
+    The direction that cannot send anything anywhere is the one to fail towards.
+    """
+    if not isinstance(message, dict):
+        return {}
+    if "attachment" not in message:
+        return {}
+    got = message.get("attachment")
+    return got if isinstance(got, dict) else {"__malformed__": True}
+
+
+def _carries_file(message) -> bool:
+    """Does this one message carry an attachment (whatever its value)?"""
+    return isinstance(message, dict) and "attachment" in message
+
+
+def newest_turn_has_file(messages: list) -> bool:
+    """Does the newest user message carry a file the owner attached?
+
+    The same walk `newest_turn_has_image` makes, and the same key the router's
+    gate reads: `has_file` in jarvis_router.choose() is this function's answer
+    as the request handler computes it. It is derived from the MESSAGES and not
+    from the request's `"has_file"` boolean alone, so a client that forgets the
+    flag - or one that lies about it - still cannot take a file's words to a
+    cloud lane.
+    """
+    for m in reversed(list(messages or [])):
+        if isinstance(m, dict) and m.get("role") == "user":
+            return _carries_file(m)
+    return False
+
+
+def _without_file(message):
+    """`message` with the `attachment` field taken off - a copy, never in place.
+
+    Every message of the request goes through this, not only the newest: an app
+    that re-sent an earlier turn with an attachment on it would otherwise put
+    those bytes in front of a model, in the history database and in the learner.
+    """
+    if not _carries_file(message):
+        return message
+    return {k: v for k, v in message.items() if k != "attachment"}
+
+
+def _latch_attached_file_read() -> bool:
+    """A file the owner attached was read: latch this conversation private.
+
+    The process-wide latch the voiceprint, the sandbox's file reads, the screen
+    and the picture's words all set (jarvis_gate.latch_taint). It is the second
+    of the two guards rule 1 needs: the router's `has_file` gate keeps THIS turn
+    home, and this keeps a LATER web search or note write in the same chat asking
+    first. Never raises - a backend without jarvis_gate.py keeps the feature.
+    """
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.latch_taint(why="attached_file"))
+    except Exception:
+        return False
+
+
+def with_file_text(messages: list, *, room_tokens: Optional[int] = None,
+                   read: Optional[Callable[[dict, int], dict]] = None) -> tuple:
+    """(messages, info): a copy of `messages` with the owner's attachment replaced
+    by a text part carrying the file's words as OUTSIDE TEXT - or a plain line
+    saying why it could not be read.
+
+    The `attachment` field never survives, on any path: it is taken off every
+    message before anything else, and `info` says what happened in counts.
+    `info`: {"read": bool, "text", "left_out", "chars", "total", "kind", "name",
+    "why", "said"} - "said" is the sentence code itself tells the owner, so a
+    refusal is never left to the model to pass on.
+
+    `room_tokens` is what is left of the window the PC measured for this turn
+    (`run_local_turn`'s `budget()`); the cap shrinks to fit it
+    (jarvis_attached_file.cap_chars) because the newest user message is never
+    dropped by the trimmer. None means "no measured window": the design's 12,000.
+
+    `read` is injectable so a suite can drive every branch without MarkItDown;
+    it is called as `read(attachment, limit)`.
+
+    Never changes `messages` itself, never raises: a broken file is a sentence the
+    owner can read, not a failed turn.
+    """
+    info = {"read": False, "text": "", "left_out": 0, "chars": 0, "total": 0,
+            "kind": "", "name": "", "why": "", "said": ""}
+    msgs = [_without_file(m) for m in (messages or [])]
+    idx = next((i for i in range(len(msgs) - 1, -1, -1)
+                if isinstance(msgs[i], dict) and msgs[i].get("role") == "user"), None)
+    if idx is None or not _carries_file(messages[idx] if idx < len(messages) else None):
+        return msgs, info
+    try:
+        import jarvis_attached_file as A
+    except Exception:
+        # Fail closed: the words are not read, the field is still stripped, and
+        # the model is told in words rather than being handed the owner's bytes.
+        why = "the part of Jarvis that reads attached files is not installed on this PC."
+        info.update(why=why, said="That file was not read: " + why)
+        return _with_part(msgs, idx,
+                          "[A file was attached to this message and was NOT read by this PC: "
+                          + why + " Say so plainly rather than guessing what is in it.]"), info
+    attachment = _attachment_of(messages[idx])
+    if attachment.get("__malformed__"):
+        why = A.WHY_NOT_A_DICT
+        info.update(why=why, said=A.refusal_line(why).strip("[]"))
+        return _with_part(msgs, idx, A.refusal_line(why)), info
+
+    own = 0
+    try:
+        own = estimate_tokens(msgs[idx])
+    except Exception:
+        own = 0
+    try:
+        cap = A.cap_chars(None if room_tokens is None else int(room_tokens) - own,
+                          reserve_chars=A.LABEL_CHARS)
+    except Exception:
+        cap = A.MAX_CHARS
+    reader = read or (lambda att, limit: A.read(att, limit=limit))
+    try:
+        got = reader(attachment, cap) or {}
+    except Exception:
+        got = {}
+    if not isinstance(got, dict):
+        got = {}
+    name = A.safe_name(got.get("name_said") or attachment.get("name"))
+    info["name"] = name
+    info["kind"] = str(got.get("kind") or A.KINDS.get(A.extension_of(name), ""))
+    if got.get("ok") and str(got.get("words") or "").strip():
+        words = str(got["words"])
+        chars = int(got.get("chars") or len(words))
+        left = int(got.get("left_out") or 0)
+        total = int(got.get("total") or (chars + left))
+        body = A.block(name, words, shown=chars, total=total, left_out=left)
+        info.update(read=True, text=words, left_out=left, chars=chars, total=total,
+                    why="", said="")
+    else:
+        why = str(got.get("why") or "").strip() or "it could not be read on this PC."
+        info["why"] = why
+        # Two sentences, and they are not the same one: the OWNER reads
+        # `said` (a sentence code says itself, so a refusal is never left to
+        # the model), and the model reads `refusal`, which also tells it to
+        # pass the bad news on rather than guess at the file.
+        said = str(got.get("said") or "").strip()
+        info["said"] = said or A.said_for(why)
+        body = str(got.get("refusal") or "").strip() or A.refusal_line(why)
+    return _with_part(msgs, idx, body), info
+
+
+def _with_part(msgs: list, idx: int, body) -> list:
+    """`msgs` with one text part appended to message `idx`'s own words."""
+    if body is None:
+        return msgs
+    parts = msgs[idx].get("content")
+    if isinstance(parts, list):
+        parts = list(parts)
+    elif isinstance(parts, str):
+        parts = [{"type": "text", "text": parts}] if parts else []
+    else:
+        parts = []
+    parts.append({"type": "text", "text": body})
+    msgs[idx] = dict(msgs[idx], content=parts)
+    return msgs
 
 
 def _any_picture(messages) -> bool:
@@ -9466,6 +9714,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     watch.lane = cur
     # Set below, once the keepalives are running (with_picture_text).
     picture_text = None
+    # ... and the same for a file the owner attached (with_file_text, 2026-10-29).
+    file_text = None
     screen_read = False
     # A crisis turn (jarvis_wellbeing.py): whether the full help message or
     # the short repeat line goes out (crisis_reply, below), decided once,
@@ -9660,7 +9910,18 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 c = m.get("content")
                 if isinstance(c, str):
                     question_text = c
-                    break
+                elif isinstance(c, list):
+                    # A list of parts - a picture, or a file the owner attached
+                    # (with_file_text, 2026-10-29). The owner's own words are
+                    # the first TEXT part; what this PC adds is always appended
+                    # AFTER them, so this never picks up the file's words in
+                    # place of the question. Before 2026-10-29 a list content
+                    # read as "no question", which cost a picture turn the
+                    # thinking choice and the prefix question for no reason.
+                    question_text = next(
+                        (str(p.get("text") or "") for p in c
+                         if isinstance(p, dict) and p.get("type") == "text"), "")
+                break
         base_url = chat_url().rsplit("/v1", 1)[0] if "/v1" in chat_url() else chat_url()
         # Held out of the call so that what this round really sends can be
         # measured against what the model says it read - see sent_use.
@@ -9984,6 +10245,41 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     # Exactly as a reading tool's result: counted, flagged,
                     # and what a card's arguments are checked against.
                     watch.took_in(PICTURE_TEXT_TOOL, {"text": picture_text["text"]})
+        # A FILE the owner ATTACHED to the chat (the owner's decision of
+        # 2026-10-29): this PC reads it - over a stream, never a file on disk -
+        # and puts its words in the newest user message as OUTSIDE TEXT, as a part
+        # of its own so they never count as the owner's own words. The
+        # `attachment` field comes off here on every path, read or refused, so
+        # the bytes reach no model, no provider and nothing this PC keeps.
+        # Here, beside the picture's words, for the same reason they are here:
+        # reading can take seconds, and the keepalives have already started.
+        file_text = None
+        if newest_turn_has_file(convo):
+            if announce is not None:
+                try:
+                    announce(FILE_TEXT_NOTE)
+                except Exception:
+                    pass
+            # The cap is `min(12,000, what is left of the window this PC
+            # measured for THIS turn)`: the newest user message is never
+            # dropped, so a 4,096-token model must get a small file, not a
+            # prompt whose start Ollama silently cuts.
+            convo, file_text = with_file_text(convo, room_tokens=budget())
+            if file_text.get("read"):
+                say_step("tool_started", FILE_TEXT_TOOL)
+                # Exactly as a reading tool's result: counted, flagged (the
+                # injection advisory reads it), and what a card's arguments are
+                # checked against. This also marks the conversation as having
+                # read outside text, in this PC's record of the turn.
+                watch.took_in(FILE_TEXT_TOOL, {"text": file_text["text"]})
+                _latch_attached_file_read()
+                say_step("tool_finished", FILE_TEXT_TOOL, ok=True)
+            elif file_text.get("said"):
+                # A refusal is code's own sentence in the answer, never left to
+                # the model to pass on (the picture path's rule, 2026-09-29).
+                tell_owner(file_text["said"])
+                said["gap"] = True
+                say_step("tool_finished", FILE_TEXT_TOOL, ok=False)
         # Is the model still to be loaded (after standby, or the first
         # question of the day)? Asked once, after the refusal check, so
         # nothing is asked of a machine that is not this PC.
@@ -10305,6 +10601,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     ran = [s["tool"] for s in steps if s.get("ran") and s["tool"] not in (SPENDING_TOOL, RETIREMENT_TOOL)]
     if picture_text is not None and picture_text.get("read"):
         ran = [PICTURE_TEXT_TOOL] + ran
+    if file_text is not None and file_text.get("read"):
+        ran = [FILE_TEXT_TOOL] + ran
     if screen_read:
         ran = [SCREEN_TOOL] + ran
     final_answer = "".join(answer)

@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_model_recommendations.install()` (takes the core's Handler)
 - The patch this replaces: `backend/model-recommendations.patch`
-- Position in the old patch stack: 155 of 161
+- Position in the old patch stack: 155 of 162
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_model_recommendations.py`), copied into the backend by

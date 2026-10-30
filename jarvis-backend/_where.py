@@ -1358,6 +1358,17 @@ SHIPPED = (
     # nowhere else. The same two entries are at the end of the script's $SHIPPED.
     "jarvis_connect_account.py",
     "jarvis_connect_account_wiring.py",
+    # A file the owner ATTACHED to a chat (2026-10-29; the owner chose "both
+    # apps at once" and the design's recommended defaults). Validation by kind,
+    # magic bytes and size, the never-read names, the zip-bomb refusal, the
+    # converter over a STREAM (jarvis_documents' new stdin mode - nothing is
+    # written to disk), the 12,000-character cap, the chat-marker strip and the
+    # outside-text sentence. jarvis_agent.with_file_text calls it,
+    # jarvis_router.choose(has_file=...) answers gate "file", and
+    # attached-file.patch adds the ONE line to the HUD's router call plus the
+    # relay belt. No route of its own, no new switch, no new permission.
+    # The same entry is at the end of the script's $SHIPPED.
+    "jarvis_attached_file.py",
 )
 
 
