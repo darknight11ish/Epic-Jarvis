@@ -14,7 +14,7 @@ you drop in and take out.
   - **28** replace a patch, and are generated from it;
   - **13** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **133 core patches**, which still go on through
+- **134 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -25,34 +25,34 @@ the catalogue cannot account for is refused, never silently left out.
 
 | # | Drop-in module | What it does | Replaces |
 |---|---|---|---|
-| 68 | `documents` | "Folders Jarvis may look in": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part at a time, and bringing in a Notion export. | `documents.patch` |
-| 76 | `media` | "pause", "next song", "what's playing": play, pause, next, previous and now-playing for whatever is playing on this PC (Spotify, a browser tab, or any other app that reports to Windows' own media cont | `media.patch` |
-| 77 | `news` | news headlines in the morning briefing, from RSS/Atom feed addresses the owner names. | `news.patch` |
-| 80 | `tool-updates` | "Check for tool updates", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newest version, or is a newer one out. | `tool-updates.patch` |
-| 85 | `goals` | "Goals with one card per step". | `goals.patch` |
-| 88 | `brain-reads` | the Brain's read-only routes (the Brain upgrades, and a chat's facts). | `brain-reads.patch` |
-| 90 | `photo-reminder` | "Photo to reminder": a picture in, a PROPOSED reminder out. Nothing is set up here. | `photo-reminder.patch` |
-| 91 | `history-import` | "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek". | `history-import.patch` |
-| 92 | `projects` | Projects, steps 1 and 2. | `projects.patch` |
-| 94 | `chatbot-routes` | the routes both apps use to have Jarvis talk to an AI chatbot for the owner. | `chatbot-routes.patch` |
-| 95 | `live` | Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no "hey Jarvis" between turns. | `live.patch` |
-| 97 | `sky` | the sun, the moon and the weather behind the animal faces and the robot (which counts as an animal face for every option). | `sky.patch` |
-| 108 | `quiz` | "Quiz me on a text". | `quiz.patch` |
-| 109 | `decks` | review decks. | `decks.patch` |
-| 110 | `spending` | "How much did I spend on food last month?", added up from a bank export the owner dropped into a folder Jarvis may look in. | `spending.patch` |
-| 111 | `retirement` | the retirement what-if calculator. | `retirement.patch` |
-| 112 | `progress` | the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-DESIGN.md part C and its "Progress contract (frozen)" | `progress.patch` |
-| 118 | `chatbot-limits-hud` | the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app. | `chatbot-limits-hud.patch` |
-| 120 | `tutorials` | Tutorials and the FAQ, for both apps, with the owner's progress. | `tutorials.patch` |
-| 130 | `docker` | the containers on Jarvis's OWN list, and start/stop for them. | `docker.patch` |
-| 131 | `screen-attach` | "look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it. | `screen-attach.patch` |
-| 140 | `card-prefs` | how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it. | `card-prefs.patch` |
-| 141 | `picture-card` | "which card draws the pictures, and what the chat does about it". | `picture-card.patch` |
-| 143 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
-| 144 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
-| 151 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
-| 153 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
-| 155 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
+| 69 | `documents` | "Folders Jarvis may look in": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part at a time, and bringing in a Notion export. | `documents.patch` |
+| 77 | `media` | "pause", "next song", "what's playing": play, pause, next, previous and now-playing for whatever is playing on this PC (Spotify, a browser tab, or any other app that reports to Windows' own media cont | `media.patch` |
+| 78 | `news` | news headlines in the morning briefing, from RSS/Atom feed addresses the owner names. | `news.patch` |
+| 81 | `tool-updates` | "Check for tool updates", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newest version, or is a newer one out. | `tool-updates.patch` |
+| 86 | `goals` | "Goals with one card per step". | `goals.patch` |
+| 89 | `brain-reads` | the Brain's read-only routes (the Brain upgrades, and a chat's facts). | `brain-reads.patch` |
+| 91 | `photo-reminder` | "Photo to reminder": a picture in, a PROPOSED reminder out. Nothing is set up here. | `photo-reminder.patch` |
+| 92 | `history-import` | "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek". | `history-import.patch` |
+| 93 | `projects` | Projects, steps 1 and 2. | `projects.patch` |
+| 95 | `chatbot-routes` | the routes both apps use to have Jarvis talk to an AI chatbot for the owner. | `chatbot-routes.patch` |
+| 96 | `live` | Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no "hey Jarvis" between turns. | `live.patch` |
+| 98 | `sky` | the sun, the moon and the weather behind the animal faces and the robot (which counts as an animal face for every option). | `sky.patch` |
+| 109 | `quiz` | "Quiz me on a text". | `quiz.patch` |
+| 110 | `decks` | review decks. | `decks.patch` |
+| 111 | `spending` | "How much did I spend on food last month?", added up from a bank export the owner dropped into a folder Jarvis may look in. | `spending.patch` |
+| 112 | `retirement` | the retirement what-if calculator. | `retirement.patch` |
+| 113 | `progress` | the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-DESIGN.md part C and its "Progress contract (frozen)" | `progress.patch` |
+| 119 | `chatbot-limits-hud` | the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app. | `chatbot-limits-hud.patch` |
+| 121 | `tutorials` | Tutorials and the FAQ, for both apps, with the owner's progress. | `tutorials.patch` |
+| 131 | `docker` | the containers on Jarvis's OWN list, and start/stop for them. | `docker.patch` |
+| 132 | `screen-attach` | "look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it. | `screen-attach.patch` |
+| 141 | `card-prefs` | how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it. | `card-prefs.patch` |
+| 142 | `picture-card` | "which card draws the pictures, and what the chat does about it". | `picture-card.patch` |
+| 144 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
+| 145 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
+| 152 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
+| 154 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
+| 156 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
 
 ## Drop-in modules with no patch of their own
 
@@ -65,18 +65,18 @@ it is one `apply-patches.ps1` copies in.
 
 | Loader order | Drop-in module | What it does |
 |---|---|---|
-| 145 | `skill-hub` | the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and /learn. |
-| 146 | `voiceprint` | Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it reaches a model. |
-| 147 | `receipts` | action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back. |
-| 148 | `auto-router` | estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first. |
-| 149 | `vault` | a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value. |
-| 150 | `notion-obsidian` | bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo. |
-| 152 | `self-improve` | two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do. |
-| 154 | `media-index` | searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (on asks once), and Delete the stored words. |
-| 156 | `vault-organizer` | plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice. |
-| 157 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
-| 158 | `antislop` | the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings. |
-| 159 | `google-calendar` | Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card. |
+| 146 | `skill-hub` | the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and /learn. |
+| 147 | `voiceprint` | Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it reaches a model. |
+| 148 | `receipts` | action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back. |
+| 149 | `auto-router` | estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first. |
+| 150 | `vault` | a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value. |
+| 151 | `notion-obsidian` | bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo. |
+| 153 | `self-improve` | two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do. |
+| 155 | `media-index` | searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (on asks once), and Delete the stored words. |
+| 157 | `vault-organizer` | plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the owner turns it on, with the one-card writer in a follow-up slice. |
+| 158 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
+| 159 | `antislop` | the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings. |
+| 160 | `google-calendar` | Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card. |
 | 160 | `jarvis-calendar` | Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch turns every surface off while keeping every event. |
 
 ## What stays in the core
@@ -124,6 +124,7 @@ stack's order and cannot be moved into a folder.
 | `power-mode.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `approval-expiry.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `no-expiry-cards.patch` | edits lines the core already has; it cannot be applied out of order |
+| `no-deadline-cards.patch` | edits lines the core already has; it cannot be applied out of order |
 | `bind-wildcard.patch` | edits lines the core already has; it cannot be applied out of order |
 | `chat-stream.patch` | edits lines the core already has; it cannot be applied out of order |
 | `voice-turn.patch` | adds lines to the core (routes, gate tables or a function) but removes none |

@@ -1465,12 +1465,19 @@ def t_the_gate_believes_no_approved_row_without_a_stamp():
     # `if row["state"] == "approved":`, so the walk pastes a copy of that line
     # immediately above `pending()`'s fragment. That copy opens no body - the
     # next line is a "# gap" marker - so it is not one of the gate's branches
-    # and counting it was the 2026-10-28 CI failure. The two real branches
-    # themselves did not move.
+    # and counting it was the 2026-10-28 CI failure.
+    #
+    # THERE ARE THREE REAL ONES SINCE `no-deadline-cards.patch` (2026-10-28):
+    # the answer that lands during the wait, the one the prompt's watcher
+    # catches as the wait ends, and - new with that patch - the one that lands
+    # in the gap AFTER the wait, where the old code marked the row `expired`.
+    # The card has no deadline now, so an answer that late is still this
+    # request's to honour; all three must ask for the stamp, and the two late
+    # ones are the two that can record a "yes" once the loop has ended.
     branches = [i for i, l in enumerate(lines)
                 if re.search(r'row\["state"\] == "approved"', l)
                 and i + 1 < len(lines) and not lines[i + 1].startswith(_stack.GAP)]
-    check("both of the gate's approved branches are there", len(branches) == 2, branches)
+    check("all three of the gate's approved branches are there", len(branches) == 3, branches)
     late = []
     for i in branches:
         after = "\n".join(lines[i + 1:i + 6])
@@ -1479,7 +1486,7 @@ def t_the_gate_believes_no_approved_row_without_a_stamp():
               and after.find("_approval_stamped") < after.find('_audit("gate.approved"'), after)
         if '"late": True' in after:
             late.append(i + 1)
-    check("the two are the wait's branch and the late-decision one", len(late) == 1, late)
+    check("two of the three are the late-decision branches", len(late) == 2, late)
 
     ns = {"_audit": lambda *a, **k: ns.setdefault("audits", []).append(a)}
 

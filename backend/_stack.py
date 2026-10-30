@@ -485,7 +485,18 @@ RATCHET = {
     #: than drift, for the same reason as the eight above: there is no earlier
     #: patch to anchor to, and hand-editing the owner's gate is what these
     #: patches exist to avoid. A ratchet: it may still only go down.
-    "jarvis_gate.py": 41,
+    #: RAISED 2026-10-28, 41 -> 49, for `no-deadline-cards.patch` (the owner's
+    #: ruling: "if there doesn't need to be a time limit don't have one"). Its
+    #: eight OWN hunks cost nothing - they edit `no-expiry-cards.patch`'s own
+    #: output, which this walk holds. The EIGHT it adds here read the owner's
+    #: original gate: `_pending_card_id()`'s SELECT and loop, `check()`'s ask
+    #: branch (`reused = False`, the INSERT's columns and values), its
+    #: late-answer block after the wait, `pending()`'s opening, `decide()`'s
+    #: body, the insertion point of `still_waiting()` and `withdraw()`'s
+    #: docstring. The walk reads 49 and names it at 8 in `by_patch`; measured
+    #: exactly with `materialised("jarvis_gate.py", patches)`. Honest for the
+    #: same reason as the nine above. A ratchet: it may still only go down.
+    "jarvis_gate.py": 49,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

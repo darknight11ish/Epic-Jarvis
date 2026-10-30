@@ -39,7 +39,7 @@ the backend's `jarvis_plugins\` folder and restart Jarvis.
   `POST /api/google-calendar/mode`, `POST /api/google-calendar/client`,
   `POST /api/google-calendar/events`, `POST /api/google-calendar/events/update`,
   `POST /api/google-calendar/events/delete`
-- Position in the loader's order: 159, after `antislop` at 158, so its routes
+- Position in the loader's order: 160, after `antislop` at 159, so its routes
   are checked in the order they were added rather than in the middle of
   somebody else's.
 - The patch this replaces: none - this is a new feature, not one that used to

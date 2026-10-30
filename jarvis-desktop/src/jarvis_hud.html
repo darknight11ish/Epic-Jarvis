@@ -7899,8 +7899,9 @@ async function apprDecide(id, ok, el){
       headers:{"Content-Type":"application/json", "X-Jarvis-Client":"hud"},
       body: JSON.stringify({id, by:"hud"})});
     const j = await r.json();
-    // 409 means it already timed out or was answered elsewhere. Say so rather
-    // than letting the tap look like it approved something.
+    // 409 means it was answered elsewhere, or - since cards stopped expiring
+    // (2026-10-28) - the request that raised it has finished waiting, so a yes
+    // could not run. Say so rather than letting the tap look like it approved.
     if(!j.ok){
       // PWA slice 2, Gemini ruling Q3(b): a browser cannot SIGN a risky
       // approval (that needs the paired phone's enrolled key, or the PC's
@@ -7908,9 +7909,12 @@ async function apprDecide(id, ok, el){
       // instead of claiming it is "no longer waiting".
       const risky = j.key === "no_approval_key"
         || /approval key/i.test(String(j.error || ""));
+      // The PC's own sentence when it sent one (the late-approval refusal says
+      // exactly which of the two happened); never "already decided" when the
+      // server did not say that.
       el.querySelector(".det").textContent = risky
         ? "This is a risky approval: answer it on your PC or your paired phone."
-        : "This request is no longer waiting — " + (j.error || "already decided.");
+        : (j.error || "This request is no longer waiting — it was answered or withdrawn.");
     }
   }catch(e){}
   setTimeout(() => { el.remove(); apprPoll(); }, 1200);

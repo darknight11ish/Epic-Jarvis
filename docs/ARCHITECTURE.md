@@ -242,21 +242,36 @@ immediate to turn off, and neither raises a card that something else answers:
 No approval card is ever answered for the owner, and no control approves
 more than one card.
 
-**A card waits 15 minutes and then refuses itself** (`approval_timeout_seconds`,
-900 in the shipped config since 2026-10-13, and changeable in Settings), because
-an unanswered request must not run. Four cards have no deadline at all, by the
-owner's ruling of 2026-10-23 (Q1, `backend/no-expiry-cards.patch`): pairing a
-device (`pair_device`, `unretire_shared_key`), registering a phone's approval
-key (`register_approval_key`) and restoring a backup (`restore_backup`). Those
-three ceremonies need the owner at the PC and can take longer than the window;
-a card that lapsed half way through loses the work. Every other card keeps the
-window, including "forget a time frame" and every switch that loosens a rule -
-the rescued work behind this patch exempted 23 actions and the owner refused
-that scope. **Waiting is not approving:** a never-expiring card still runs
-nothing until a person answers it, is still answerable only while it is the live
-card (a cancelled or replaced pairing is withdrawn), and a denial is still a
-denial. The gate decides this from its own action ids only - there is no flow
-argument and no caller-supplied value that can ask for it.
+**No card shows a time limit, and a card whose request has finished leaves the
+queue** (the owner's ruling of 2026-10-28: "if there doesn't need to be a time
+limit don't have one"; `backend/no-deadline-cards.patch`, applied after
+`no-expiry-cards.patch`). While its request is genuinely waiting, the card stays
+on every screen with Approve and Deny and NO countdown: `pending()` sends no
+`expires_in` for any card. **Waiting is still not approving:** nothing runs until
+a person answers, a denial is still a denial, and a card whose work is gone (a
+cancelled or replaced pairing) is withdrawn. **The request's own patience is
+what is bounded**, because the thread that waits is the thread that runs the
+action: it keeps `approval_timeout_seconds` (900 in the shipped config,
+changeable in Settings), and the moment it ends is written on the row
+(`waited_until`). **#965's read-time sweep is KEPT, re-keyed on that moment:**
+once `waited_until` plus the same 60-second grace has passed, `pending()` marks
+the row `expired` before it builds the list, so no screen is ever handed a live
+Approve that could only answer 409 - the "zombie Approve" trap a literal
+no-limit would create. It is a lapse, never a decision, and it is recomputed on
+the PC at the moment of the read. At the decision the PC also REVALIDATES:
+`jarvis_gate.still_waiting()` reads that moment against its own clock,
+`decide()` refuses an Approve for a row no request can still act on, and
+`jarvis_owner_check.approve_check()` answers 409 with one plain sentence and
+withdraws the card if a stale page gets there before the read. **A Deny always
+works**, including on an old card. The four ceremonies of the 2026-10-23 ruling
+(Q1: `pair_device`, `unretire_shared_key`, `register_approval_key`,
+`restore_backup`) carry `waited_until = NULL`: the sweep never touches them, and
+their request waits until its own flow withdraws the card, so they are answerable
+for as long as the owner needs. The gate decides all of this from its own action
+ids only - there is no flow argument and no caller-supplied value that can ask
+for a longer wait. Start-up runs the same sweep, so a card left by a process that
+died is settled too; both halves are proven by `backend/test_gate_no_deadline.py`
+and, for the sweep's own patch in isolation, `backend/test_pending_expiry_on_read.py`.
 
 It also means Jarvis never drives its own approval surfaces. "Control the
 computer" refuses every window of Jarvis's own, and "control the phone"
@@ -778,6 +793,53 @@ places between screens. Presentation only - no approval logic changed.
   `CardWords.TIMED_OUT`; `timed_out_next` is the phone's own second sentence
   (§8 below).
 
+- **A decided card leaves every live surface within 30 seconds; a killed phone's
+  widget is bounded by 30 minutes (2026-10-29).**
+  The owner's report: *"when a decision/approval card has already been addressed
+  (approved or denied) on either the Android app or the desktop program, make
+  sure the Android widgets (and every other surface that shows a
+  card/notification) update to reflect that - no stale card left showing, no dead
+  Approve/Deny on a resolved card."* The queue itself was already one thing -
+  `GET /api/pending` is the only list a surface draws from, a decided row is
+  gone from the next read, and `jarvis_gate.decide` answers `False` to a second
+  answer so a stale surface cannot record a verdict on a settled row. What was
+  missing was the second half of "one source": a **doorbell that can be missed**.
+  Every surface learned about a decision from the `approval` event, which is
+  `jarvis_events._poll_approvals` diffing ids on the backend's own pump - it
+  publishes only on CHANGE, and it swallows its own exceptions, so one failed
+  database read, one backend restart or a pump that is not running rings
+  nothing. The desktop survived that because its HUD page has carried a
+  30-second safety-net read since long before (`jarvis_hud.html`,
+  `setInterval(() => apprPoll(), 30000)`), and its stream re-reads the queue on
+  every connect and resume. The phone had **no** clock at all: a missed event
+  left the card on the home screen, in the notification drawer and on Home, with
+  a Deny that could only say "no longer waiting", until the app was restarted or
+  the link dropped. So both platforms now ask the same question on the same 30
+  seconds while a card is waiting on a **connected** link -
+  `QueueBeat.due` in `jarvis-client` (re-reading through `refreshPending`, the
+  one assignment `pending` ever gets, so the widget, the drawer and the in-app
+  list clear together) and `queue_beat_due` in `stream.rs` (re-reading through
+  `refresh_pending`, the one queue read all four desktop surfaces follow). Both
+  read **nothing** when the queue is empty, so this is not a poll of an idle PC,
+  and neither can approve or deny anything. `stale` is deliberately not a
+  condition on either side: a failed read is what makes a link stale, and the
+  next successful read is what clears it, so a `!stale` gate would switch off
+  the only retry that could recover - the desktop's first version did exactly
+  that, and one transient `/api/pending` failure held Approve until the hourly
+  reconnect. The HUD page's own 30 s `apprPoll` is still there beside the beat,
+  so while the HUD is visible and a card waits the PC runs **two** independent
+  30 s `/api/pending` reads (§6 names both as the safety-net exception). Two
+  things follow from the phone's process rather than from the rule: the
+  approvals widget now carries `updatePeriodMillis="1800000"` (the board
+  widget's period since it was written), because a RemoteViews drawn by a
+  killed process is otherwise held by the launcher for ever - so a **live**
+  surface is bounded by 30 s, but a killed phone's widget can lag up to
+  **30 minutes**, and a cold draw says "Not checked yet" rather than drawing a
+  card it cannot vouch for (`WidgetStates`). And a decision now says who made
+  it: the phone sends `"by": "phone"` on both `/api/approve` and `/api/deny`
+  (`SignedApproval.BY`), where it used to send only `{"id"}` and inherit the
+  route's `"hud"` default - the field evidence that started this.
+
 - **Two MECHANICAL guards against blind, stacked approvals (2026-10-20).**
   The owner's incident: one "approve all" click approved three backup
   restores, two imports and a device-key registration, because repeated
@@ -796,17 +858,23 @@ places between screens. Presentation only - no approval logic changed.
      auto-approved. The SELECT and INSERT are one `BEGIN IMMEDIATE`
      transaction (`jarvis_gate.check()`, `backend/gate-touches.patch` - the
      file is patch-carried, not shipped whole).
-     **A lapsed card really does reach `expired`, on every read (2026-10-28).**
-     The sweep that settles an overdue row is one helper, run at start-up and
-     again by `pending()` before it builds the list; until then it ran once per
-     PROCESS, so a card whose waiting thread died with an earlier process
-     stayed `pending` - served by `/api/pending`, drawn by both apps as an
-     unanswerable "waiting on you" card, and blocking a later identical request
-     for the life of that process (the owner's report of expired cards he could
-     not clear on his phone). It is a lapse and never a decision, it approves
-     nothing, and it cannot take a live card: the deadline is recomputed on the
-     PC at the moment of the read, and no client sends an id it could name a
-     card with.
+     **A card whose request has stopped waiting is not reused, and leaves on
+     the next read (2026-10-28).** The card draws no countdown, but its row
+     records the request's last moment (`waited_until`); `pending()` runs
+     #965's read-time sweep before it builds the list, so a routine row past
+     that moment plus the same 60-second grace is marked `expired` and not
+     served. That is what stops a live Approve that could only answer 409.
+     Until that read lands the row is still `pending`, and the match is the
+     row's own `waited_until`: a card past it can take no "yes", and a new
+     identical request gets a card of its own instead of being told "the same
+     request is already waiting for you" about one nothing is waiting on.
+     **A dead process's rows are settled by the same sweep at the next
+     start-up** - and by the next read, which is what the owner's 2026-10-28
+     report of expired cards he could not clear on his phone needed. It is a
+     lapse and never a decision, it approves nothing, and it cannot take the
+     card of a request still inside its wait. The four ceremonies carry no
+     `waited_until` and are never swept; an explicit `withdraw()` still takes
+     their card off when the work is gone.
   2. **State-replacing cards say so and take a second press.** The cards
      that REPLACE or delete what is already there - `restore_backup`,
      `register_approval_key`, `memory_forget_range`, and the
@@ -1960,7 +2028,22 @@ card - only an app's tap does. The invariants:
 ## 6. Events — one bus
 
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
-changes from it and from nowhere else. Kinds: `approval`, `proposal`,
+changes from it and from nowhere else. **One documented exception: safety-net
+reads of the approval queue** (2026-10-29). A missed ring on that queue is a
+safety problem - a dead card stays on screen, or Approve is held on a queue
+nobody re-read - so it is also confirmed directly: the HUD page's
+`setInterval(() => apprPoll(), 30000)` (`jarvis_hud.html:8133`, which returns
+early while `document.hidden`); the Rust stream's `QUEUE_BEAT` through
+`queue_beat_due` (`stream.rs`, 30 s while a card waits on a connected link, and
+its successful read is also what clears `stale`); the phone's `QueueBeat.due`
+(`jarvis-client`, the same 30 s and the same two conditions); and the one-off
+`/api/pending` reads on connect, `hello`, resume and an `approval` event. While
+the HUD is visible and a card waits, the PC therefore runs **two** independent
+30 s reads - the HUD's own poll and the stream's beat - deliberately, so either
+can fail without silencing the other. The pump is still what ANNOUNCES every
+change: these reads only re-confirm `/api/pending` (they can discover a change
+the pump failed to announce, which is the point), they introduce no state change
+of their own, and none of them can approve or deny anything. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
 `deep`, `memory_saved`, `schedule`, `focus`, `wellbeing`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table

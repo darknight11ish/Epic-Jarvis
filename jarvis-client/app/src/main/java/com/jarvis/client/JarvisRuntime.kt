@@ -27,6 +27,7 @@ import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.net.PendingRead
 import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.Hardware
 import com.jarvis.client.net.InboxTidy
@@ -548,6 +549,12 @@ object JarvisRuntime {
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
     /**
+     * Orders overlapping `/api/pending` reads, so a beat's older answer cannot
+     * put back a card a decision has just cleared. See [PendingRefreshOrder].
+     */
+    private val pendingReadOrder = PendingRefreshOrder()
+
+    /**
      * How much of an approval card is shown at first (the owner's request of
      * 2026-10-09; [com.jarvis.client.net.CardSummary], backend
      * `jarvis_card_summary.py`).
@@ -769,6 +776,17 @@ object JarvisRuntime {
     @Volatile private var faceJob: Job? = null
     private var widgetJob: Job? = null
     private var boardJob: Job? = null
+
+    /**
+     * The queue's own safety net - [QueueBeat]'s collector.
+     *
+     * Beside `widgetJob` because it exists for the same reason: every Android
+     * surface reads [_pending], and a missed `approval` event used to leave a
+     * decided card on the home screen, in the notification drawer and on Home
+     * until something else happened to re-read. Held so a restart replaces it
+     * rather than stacking a second one.
+     */
+    private var queueBeat: Job? = null
 
     /** The forced restart in flight, so two taps on Reconnect do not stack. */
     @Volatile private var restartJob: Job? = null
@@ -1076,6 +1094,35 @@ object JarvisRuntime {
                     ApprovalWidget().updateAll(app)
                     QuickLinkWidget().updateAll(app)
                 }
+        }
+        // The safety net under that doorbell (the owner's report of
+        // 2026-10-29). `widgetJob` above only redraws when `_pending` CHANGES,
+        // and the only thing that used to change it was the PC's `approval`
+        // event - so one missed event, one pump that is not running, or one
+        // backend restart left a decided card on the home screen with a Deny
+        // that could only say "no longer waiting". One re-read of the queue,
+        // every 30 seconds, and only while a card is actually waiting on a link
+        // that can answer (QueueBeat.due) - which is the desktop's own
+        // safety-net read, not a new poller: it reads nothing when the queue is
+        // empty.
+        //
+        // Every surface follows from it without a line of its own. A shorter
+        // queue emits `_pending`, which is what widgetJob redraws the widgets
+        // from and what EventService's own watcher resyncs the notification
+        // drawer from - so the card leaves the home screen, the drawer and the
+        // in-app list together, in one beat.
+        queueBeat?.cancel()
+        queueBeat = scope.launch {
+            while (true) {
+                delay(QueueBeat.EVERY_MS)
+                if (QueueBeat.due(
+                        waiting = _pending.value.size,
+                        connected = _link.value == LinkState.CONNECTED,
+                    )
+                ) {
+                    refreshPending()
+                }
+            }
         }
         // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
         // so read again from the PC - when the link comes or goes stale, when
@@ -3994,79 +4041,111 @@ object JarvisRuntime {
     }
 
     suspend fun refreshPending() {
+        // One number per read, taken BEFORE the request goes out. A beat's GET
+        // can still be in flight when a decision's own refresh starts and
+        // lands; without this the older, pre-decision answer arrived last and
+        // put the answered card - and its drawer notification - back for up to
+        // 30 s, which is exactly the stale card this whole change removes.
+        // Only the newest read that has STARTED may write; a superseded
+        // response is dropped whole, success or failure (see
+        // PendingRefreshOrder for why dropping the failure is safe too).
+        val generation = pendingReadOrder.begin()
         when (val read = api.pendingRead()) {
             is ApiResult.Ok -> {
-                val items = read.value.items
-                _pending.value = items
-                // A "Forget a time frame" card of this phone's may have been
-                // decided (here, or on the PC): the PC's own status says how,
-                // and Home leaves a chat that went (the chat audit, 2026-09-28).
-                if (forgetRangeChats.isNotEmpty()) {
-                    scope.launch { forgetRangeRead(com.jarvis.client.net.ForgetRange.PATH) }
+                if (!pendingReadOrder.applyIfLatest(generation) { applyQueueRead(read.value) }) {
+                    return
                 }
-                // A row this phone could not read is still a decision waiting
-                // on the desktop. Say so, rather than show a shorter list as
-                // if it were the whole queue. The rows it COULD read stay
-                // decidable: one odd row used to fail the whole read, which
-                // left every card stuck behind "Could not re-read what is
-                // waiting" (see decodePendingRows).
-                val skipped = read.value.skipped
-                if (skipped > 0) {
-                    Log.w(TAG, "$skipped approval row(s) could not be read")
-                    _notice.value = if (skipped == 1) {
-                        "1 waiting approval could not be read on this phone. Open Jarvis on the desktop to see it."
-                    } else {
-                        "$skipped waiting approvals could not be read on this phone. Open Jarvis on the desktop to see them."
-                    }
-                }
-                // A model request whose card has been answered - approved,
-                // denied or expired - is no longer waiting, so the Mind
-                // screen stops saying it is. One whose card could not be
-                // identified is dropped by the next refreshBrain instead.
-                val waitingOn = _brain.value.modelRequest?.cardId
-                if (waitingOn != null && items.none { it.id == waitingOn }) {
-                    _brain.update { b ->
-                        if (b.modelRequest?.cardId == waitingOn) b.copy(modelRequest = null) else b
-                    }
-                }
-                _absent.value = _absent.value - "approvals"
-                // The PC's own card setting (the owner's request of
-                // 2026-10-09): read again only while a card is actually
-                // waiting, so an idle phone makes no extra request for a
-                // preference nothing is drawn with - and a change made on the
-                // PC lands with the next refresh of the queue, without a
-                // restart.
-                if (items.isNotEmpty()) refreshCardPrefs()
-                // What is on screen is now what the desktop holds. This is the
-                // only thing that earns the gate the right to open.
-                refreshedSinceOpen = true
+                // The success path's one suspending follow-up. It runs after
+                // the guarded write, and only for a read that was applied.
+                if (read.value.items.isNotEmpty()) refreshCardPrefs()
             }
             is ApiResult.Failed -> {
-                // Gating switched off on the desktop. An empty approvals list
-                // would say "nothing is waiting for you", which is true and
-                // deeply misleading: nothing CAN wait, because nothing is
-                // asking.
-                if (read.error == ApiError.NotAvailable) {
-                    _pending.value = emptyList()
-                    _absent.value = _absent.value + "approvals"
-                    // Answered, just with "there is no queue here". Nothing is
-                    // being hidden, so this does not hold the gate shut.
-                    refreshedSinceOpen = true
-                } else {
-                    // Every other failure used to be swallowed whole: no log, no
-                    // notice, `_pending` silently keeping its old contents while
-                    // `_stale` stayed false — so the owner could approve from an
-                    // arbitrarily old list, and one malformed item turned the
-                    // whole refresh into a silent no-op. A queue that could not
-                    // be re-read is precisely what stale means, so say so and let
-                    // the gate that already reads it do the refusing.
-                    Log.w(TAG, "could not re-read the approval queue: ${read.error}")
-                    refreshedSinceOpen = false
-                    _stale.value = true
-                    _linkDetail.value = "Could not re-read what is waiting"
-                    _notice.value = describe(read.error)
+                pendingReadOrder.applyIfLatest(generation) {
+                    applyQueueReadFailure(read.error)
                 }
             }
+        }
+    }
+
+    /**
+     * Everything a successful queue read writes when it is the newest one.
+     *
+     * Non-suspending on purpose: `PendingRefreshOrder.applyIfLatest` calls this
+     * while holding the order lock, so the "still newest" check and the writes
+     * it guards are one atomic step. `refreshPending` runs the one suspending
+     * follow-up (`refreshCardPrefs`) after that step returns true.
+     */
+    private fun applyQueueRead(read: PendingRead) {
+        val items = read.items
+        _pending.value = items
+        // A "Forget a time frame" card of this phone's may have been
+        // decided (here, or on the PC): the PC's own status says how,
+        // and Home leaves a chat that went (the chat audit, 2026-09-28).
+        if (forgetRangeChats.isNotEmpty()) {
+            scope.launch { forgetRangeRead(com.jarvis.client.net.ForgetRange.PATH) }
+        }
+        // A row this phone could not read is still a decision waiting
+        // on the desktop. Say so, rather than show a shorter list as
+        // if it were the whole queue. The rows it COULD read stay
+        // decidable: one odd row used to fail the whole read, which
+        // left every card stuck behind "Could not re-read what is
+        // waiting" (see decodePendingRows).
+        val skipped = read.skipped
+        if (skipped > 0) {
+            Log.w(TAG, "$skipped approval row(s) could not be read")
+            _notice.value = if (skipped == 1) {
+                "1 waiting approval could not be read on this phone. Open Jarvis on the desktop to see it."
+            } else {
+                "$skipped waiting approvals could not be read on this phone. Open Jarvis on the desktop to see them."
+            }
+        }
+        // A model request whose card has been answered - approved,
+        // denied or expired - is no longer waiting, so the Mind
+        // screen stops saying it is. One whose card could not be
+        // identified is dropped by the next refreshBrain instead.
+        val waitingOn = _brain.value.modelRequest?.cardId
+        if (waitingOn != null && items.none { it.id == waitingOn }) {
+            _brain.update { b ->
+                if (b.modelRequest?.cardId == waitingOn) b.copy(modelRequest = null) else b
+            }
+        }
+        _absent.value = _absent.value - "approvals"
+        // What is on screen is now what the desktop holds. This is the
+        // only thing that earns the gate the right to open.
+        refreshedSinceOpen = true
+    }
+
+    /**
+     * Everything a failed queue read writes when it is the newest one.
+     *
+     * Non-suspending for the same reason as [applyQueueRead]: it runs inside
+     * the order lock, so a superseded failure can never mark a newer success
+     * stale.
+     */
+    private fun applyQueueReadFailure(error: ApiError) {
+        // Gating switched off on the desktop. An empty approvals list
+        // would say "nothing is waiting for you", which is true and
+        // deeply misleading: nothing CAN wait, because nothing is
+        // asking.
+        if (error == ApiError.NotAvailable) {
+            _pending.value = emptyList()
+            _absent.value = _absent.value + "approvals"
+            // Answered, just with "there is no queue here". Nothing is
+            // being hidden, so this does not hold the gate shut.
+            refreshedSinceOpen = true
+        } else {
+            // Every other failure used to be swallowed whole: no log, no
+            // notice, `_pending` silently keeping its old contents while
+            // `_stale` stayed false — so the owner could approve from an
+            // arbitrarily old list, and one malformed item turned the
+            // whole refresh into a silent no-op. A queue that could not
+            // be re-read is precisely what stale means, so say so and let
+            // the gate that already reads it do the refusing.
+            Log.w(TAG, "could not re-read the approval queue: $error")
+            refreshedSinceOpen = false
+            _stale.value = true
+            _linkDetail.value = "Could not re-read what is waiting"
+            _notice.value = describe(error)
         }
     }
 
@@ -4692,8 +4771,13 @@ object JarvisRuntime {
                 }
                 is ApiResult.Failed -> {
                     if (result.error == ApiError.AlreadyHandled) {
-                        // Routine when the desktop and the phone are both open.
-                        _notice.value = "Already handled on the desktop."
+                        // Routine when the desktop and the phone are both open -
+                        // and since cards stopped expiring (2026-10-28) also
+                        // what a 409 means when the request that raised the card
+                        // has finished waiting. "Already handled" was untrue for
+                        // the second: nothing had been handled, and nothing ran.
+                        _notice.value = "That card is not waiting any more — it was answered, " +
+                            "or the request that asked has finished. Nothing ran from this tap."
                         refreshPending()
                     } else {
                         // A signature refusal the PC explained is its own
