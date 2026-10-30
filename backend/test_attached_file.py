@@ -583,6 +583,294 @@ def t_the_words_never_appear_in_a_cloud_relay_body():
           "what does this say?" in relayed, relayed[:200])
 
 
+def _added_lines(patch: str) -> str:
+    """The `+` lines of a patch whose target text is not in this repo."""
+    lines = [l[1:] for l in (HERE / patch).read_text(encoding="utf-8").splitlines()
+             if l.startswith("+") and not l.startswith("+++")]
+    return "\n".join(lines)
+
+
+def _cloud_body_builder(src: str):
+    """`_open`'s cloud cut (`cloud-one-turn.patch`) followed by the real relay
+    strip `attached-file.patch` puts in the same function, as one callable.
+
+    Both are read out of the REAL patched text, in the order `_open` runs them
+    (cloud-one-turn.patch is at the top of `_open`; the strip is further down),
+    so this is the outbound payload a cloud hop would really build - not a
+    hand-written copy of either line.
+    """
+    cut = textwrap.dedent(_added_lines("cloud-one-turn.patch"))
+    strip = textwrap.dedent(_block_of(src, 'if isinstance(body.get("messages"), list):'))
+    if not cut or not strip:
+        return None
+    body_src = ("def run(lane, local_model, payload):\n"
+                "    body = dict(payload); body[\"model\"] = lane\n"
+                + textwrap.indent(cut, "    ") + "\n"
+                + textwrap.indent(strip, "    ") + "\n"
+                "    return body\n")
+    ns: dict = {"isinstance": isinstance, "dict": dict, "list": list}
+    exec(compile(body_src, "<open-outbound>", "exec"), ns)   # noqa: S102
+    return ns["run"]
+
+
+def t_a_file_turn_is_never_merged_into_a_cloud_request():
+    """Finding 3 (2026-10-30): with a cloud lane enabled, a turn carrying an
+    attached file must NOT be merged into a cloud request - and if a caller got
+    one there anyway, the body it builds must not hold a byte of the file.
+
+    Both halves are asserted on the OUTBOUND payload: the router's own answer
+    (local + gate "file", no offer) and the body `_open` really builds for a
+    cloud hop, with the REAL lines of both patches run against a request that
+    carries a conversation AND an attachment.
+    """
+    import _stack
+    att = text_file(name="tenancy-notes.txt")
+    earlier = {"role": "user", "content": "my salary is 91,000 and my bank is Nordea"}
+    newest = {"role": "user", "content": "what does this say?",
+              "attachment": att}
+    payload = {"messages": [earlier,
+                            {"role": "assistant", "content": "Noted."},
+                            newest],
+               "has_file": True, "stream": True}
+
+    # 1. The decision: with a cloud lane enabled and the owner's yes, a file
+    #    turn is still local. (No offer is made, so the HUD never builds a
+    #    cloud hop for it in the first place.)
+    cloud = dict(local_model="jarvis-primary", lanes=["jarvis-escalate"],
+                 owner_said_yes=True)
+    decision = RT.choose(
+        "Please compare these three paragraphs about the tenancy deposit scheme in "
+        "detail and explain which clause a landlord would prefer, and why, at length.",
+        has_file=True, budget=_NeverAsked(), **cloud)
+    check("cloud lane enabled: a file turn is decided LOCAL, gate 'file'",
+          decision.lane == "jarvis-primary" and decision.gate == "file",
+          decision.as_dict())
+    check("... and no cloud lane is offered for it", not decision.offer,
+          decision.as_dict())
+
+    # 2. The payload: even on the belt's path (a caller that ignored the gate),
+    #    the outbound cloud body holds no attachment and no file words.
+    src, log = _stack.stand_in("jarvis_hud.py")
+    if not src:
+        skip("the patch stack could not be built here: " + "; ".join((log or [])[-1:]))
+        return
+    run = _cloud_body_builder(src)
+    check("both real blocks are in the patched `_open`", run is not None)
+    if run is None:
+        return
+    body = run("jarvis-escalate", "jarvis-primary", payload)
+    sent = json.dumps(body)
+    check("the cloud body carries the NEWEST turn only - the earlier private turn is not merged",
+          len(body.get("messages") or []) == 1 and "91,000" not in sent, sent[:300])
+    check("... the attachment field is gone from it", "attachment" not in sent, sent[:300])
+    check("... not one character of the file's base64 is in it",
+          att["data"][:48] not in sent, sent[:300])
+    check("... nor a word the file was read for", SECRET_LINE not in sent, sent[:300])
+    check("... while the owner's own question still rides with it",
+          "what does this say?" in sent, sent[:300])
+    check("... and the cloud lane is still the one asked for",
+          body.get("model") == "jarvis-escalate", body.get("model"))
+
+    # 3. A client that forgets `has_file` cannot skip the gate: the patched
+    #    HUD's own `_file_turn` reads the field itself.
+    block = _block_of(src, "def _file_turn(body) -> bool:")
+    check("the patched HUD has _file_turn", bool(block), block[:120])
+    if block:
+        ns = {"jarvis_agent": AG}
+        exec(textwrap.dedent(block), ns)      # noqa: S102 - the shipped function
+        no_flag = {"messages": [dict(newest)]}
+        check("a request with the field and NO `has_file` flag is still a file turn",
+              ns["_file_turn"](no_flag) is True, ns["_file_turn"](no_flag))
+        check("... so its router call answers local too",
+              RT.choose("compare the tenancy deposit clauses at length and in detail",
+                        has_file=ns["_file_turn"](no_flag), budget=_NeverAsked(),
+                        **cloud).gate == "file")
+
+
+# ---------------------------------------------------------------------------
+#   The owner's own permission decides whether the file is read (finding 2)
+# ---------------------------------------------------------------------------
+
+class _NoRealIO:
+    """Fail loudly if the real network path runs; also capture the step sink."""
+    def __enter__(self):
+        self.saved = (AG._post, AG._open_stream, AG._get_json, AG._publish_step,
+                      AG._record_chain)
+        def boom(*a, **k):
+            raise AssertionError("a real HTTP request ran in a test")
+        AG._post, AG._open_stream = boom, boom
+        AG._get_json = lambda *a, **k: (_ for _ in ()).throw(OSError("no network in a test"))
+        AG._publish_step = lambda *_a, **_k: None
+        AG._record_chain = lambda *_a, **_k: None
+        AG._CTX_CACHE.clear()
+        AG._TOOLS_CACHE.clear()
+        return self
+
+    def __exit__(self, *a):
+        (AG._post, AG._open_stream, AG._get_json, AG._publish_step,
+         AG._record_chain) = self.saved
+        return False
+
+
+class _Gate:
+    """Stands in for jarvis_gate.check(): records the ask, answers once."""
+    def __init__(self, allowed: bool, outcome: str = "", reason: str = "", tier: str = "ask"):
+        self.allowed, self.outcome, self.reason, self.tier = allowed, outcome, reason, tier
+        self.asked = []
+
+    def __call__(self, action, detail, prompt):
+        self.asked.append((action, dict(detail), prompt))
+        return types.SimpleNamespace(allowed=self.allowed, outcome=self.outcome,
+                                     reason=self.reason, tier=self.tier)
+
+
+def _fake_chat_log(seen: list):
+    """A stand-in for jarvis_chat_log: no database is opened by this suite."""
+    mod = types.ModuleType("jarvis_chat_log")
+    mod.conversation_tainted = lambda cid, messages=None: False
+    mod.conversation_money = lambda cid, messages=None: False
+    mod.note_outside = lambda cid: seen.append(cid) or True
+    mod.note_money = lambda cid: None
+    return mod
+
+
+def _answer_text(streamed: list) -> str:
+    """The words an app would show, read out of the SSE frames."""
+    out = []
+    for line in b"".join(streamed).split(b"\n"):
+        line = line.strip()
+        if not line.startswith(b"data:") or line[5:].strip() == b"[DONE]":
+            continue
+        try:
+            obj = json.loads(line[5:])
+            out.append(((obj.get("choices") or [{}])[0].get("delta") or {}).get("content") or "")
+        except Exception:
+            continue
+    return "".join(out)
+
+
+def _drive_file_turn(gate, *, streamed: list):
+    """Run one real run_local_turn carrying an attachment; returns the payloads
+    the model was sent. No model and no network: `post` is a stand-in."""
+    calls = []
+
+    def post(url, payload):
+        calls.append(payload)
+        return {"choices": [{"message": {"role": "assistant", "content": "It says the deposit is 1200 pounds."}}]}
+
+    msgs = [{"role": "user", "content": "what does this say?",
+             "attachment": text_file(name="tenancy-notes.txt")}]
+    AG.run_local_turn(
+        msgs, "qwen3:8b", ollama_url="http://127.0.0.1:11434",
+        stream_out=streamed.append, gate_check=gate, post=post,
+        request={"conversation_id": "conv-attach-01", "messages": msgs},
+        context_length=8192, manner=None, lane_choice=None)
+    return calls
+
+
+def t_the_owners_ask_me_first_gate_is_consulted_before_the_bytes():
+    """Finding 2 (2026-10-30): an attached file's read goes through the SAME
+    permission the rest of the backend uses - `read_files_readonly` through
+    `jarvis_gate.check()` - and it is asked BEFORE a byte is decoded.
+    """
+    import jarvis_attached_file as AF
+    real_read = AF.read
+    reads = []
+    seen: list = []
+    real_chat_log = sys.modules.get("jarvis_chat_log")
+    sys.modules["jarvis_chat_log"] = _fake_chat_log(seen)
+    try:
+        AF.read = lambda *a, **k: reads.append(1) or {"ok": False, "why": "should not be read"}
+        # -- refused: the owner said no, so the file is never opened ----------
+        gate = _Gate(False, outcome="denied", reason="denied by a human")
+        streamed: list = []
+        with _NoRealIO():
+            calls = _drive_file_turn(gate, streamed=streamed)
+        check("the attachment turn ASKS the gate reading files uses",
+              bool(gate.asked) and gate.asked[0][0] == AF.GATE_ACTION, gate.asked[:1])
+        check("... the action is the same row file_read uses (read_files_readonly)",
+              AF.GATE_ACTION == DOCS.GATE_ACTION and gate.asked[0][0] == "read_files_readonly",
+              (AF.GATE_ACTION, DOCS.GATE_ACTION))
+        detail = gate.asked[0][1] if gate.asked else {}
+        check("... the card says the file's name and size, never a byte of it",
+              "tenancy-notes.txt" in json.dumps(detail)
+              and text_file()["data"][:40] not in json.dumps(detail)
+              and SECRET_LINE not in json.dumps(detail), detail)
+        check("... a refused read decodes NOTHING", reads == [], reads)
+        sent = json.dumps(calls)
+        check("... the model is told why, in words", "reading files asks first" in sent, sent[:300])
+        check("... and the file's words and base64 never reach it",
+              SECRET_LINE not in sent and text_file()["data"][:40] not in sent, sent[:300])
+        check("... the owner reads a sentence code said, not the model",
+              "Reading files asks first on this PC" in _answer_text(streamed),
+              _answer_text(streamed)[:200])
+
+        # -- allowed: the read happens, and the conversation is marked private --
+        AF.read = lambda *a, **k: (reads.append(1), real_read(*a, **k))[1]
+        reads.clear()
+        gate = _Gate(True, outcome="approved", reason="approved by a human")
+        streamed = []
+        with _NoRealIO():
+            calls = _drive_file_turn(gate, streamed=streamed)
+        check("an allowed read really reads the file", reads != [], reads)
+        last_user = [m for m in (calls[0].get("messages") or [])
+                     if m.get("role") == "user"][-1]
+        sent = json.dumps(calls)
+        check("... the words reach the model as outside text",
+              SECRET_LINE in json.dumps(last_user.get("content")), sent[:300])
+        check("... the attachment field itself is not on the message",
+              "attachment" not in last_user, list(last_user))
+        check("... and not one character of the base64 reaches the model",
+              text_file()["data"][:40] not in sent, sent[:300])
+        check("... and the CONVERSATION that carried it is marked private",
+              seen == ["conv-attach-01"], seen)
+        check("... not the whole PC: no process-wide gate latch is set",
+              not hasattr(AG, "_latch_attached_file_read"))
+    finally:
+        AF.read = real_read
+        if real_chat_log is None:
+            sys.modules.pop("jarvis_chat_log", None)
+        else:
+            sys.modules["jarvis_chat_log"] = real_chat_log
+
+
+def t_the_attachment_is_stripped_before_anything_can_keep_it():
+    """Finding 1's first half (2026-10-30): the history module owns the promise.
+
+    jarvis_chat_log.strip_attachment_fields is what record_turn applies to the
+    request before ANY reading path sees a message. This drives the helper, and
+    proves it never touches the bytes: the `data` value is a sentinel that
+    raises if anything reads it.
+    """
+    import jarvis_chat_log as CH
+
+    class _Boom:
+        """Raises if the attachment's bytes are read, in any way."""
+        def __getattr__(self, name):
+            raise AssertionError(f"the attachment's bytes were touched ({name})")
+
+    att = {"name": "tenancy-notes.txt", "mime": "text/plain",
+           "size": 1234, "data": _Boom()}
+    msgs = [{"role": "user", "content": "the question", "attachment": att}]
+    cleaned = CH.strip_attachment_fields(msgs)
+    check("the field is off the copy", "attachment" not in cleaned[0], list(cleaned[0]))
+    check("... the owner's own words are untouched", cleaned[0]["content"] == "the question")
+    check("... the caller's message is NOT edited", "attachment" in msgs[0], list(msgs[0]))
+    check("... and not one byte of the file was looked at", True)   # _Boom never raised
+    rows = CH.strip_attachment_fields(
+        [{"role": "user", "content": "old", "attachment": {"data": _Boom()}},
+         {"role": "assistant", "content": "ok"},
+         {"role": "user", "content": "new"}])
+    check("an attachment on an EARLIER re-sent message is stripped too",
+          all("attachment" not in m for m in rows), [list(m) for m in rows])
+    check("no messages at all comes back as it was",
+          CH.strip_attachment_fields(None) is None)
+    check("a list of odd entries is only ever copied",
+          CH.strip_attachment_fields(["junk", 3]) == ["junk", 3])
+    check("ATTACHMENT_FIELDS names the one field the wire format writes",
+          tuple(CH.ATTACHMENT_FIELDS) == ("attachment",), CH.ATTACHMENT_FIELDS)
+
+
 def t_no_log_line_and_no_audit_row_holds_the_words_or_the_name():
     folder = Path(tempfile.mkdtemp(prefix="jarvis-attach-audit-"))
     rows = []
@@ -731,6 +1019,9 @@ def main() -> int:
                t_newest_turn_has_file,
                t_the_router_keeps_a_file_turn_home_before_anything_else,
                t_the_words_never_appear_in_a_cloud_relay_body,
+               t_a_file_turn_is_never_merged_into_a_cloud_request,
+               t_the_owners_ask_me_first_gate_is_consulted_before_the_bytes,
+               t_the_attachment_is_stripped_before_anything_can_keep_it,
                t_no_log_line_and_no_audit_row_holds_the_words_or_the_name,
                t_the_patch_is_in_the_stack_and_applies_to_real_text,
                t_the_module_is_shipped_and_the_twin_matches,

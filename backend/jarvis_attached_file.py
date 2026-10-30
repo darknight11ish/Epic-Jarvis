@@ -32,9 +32,17 @@ WHAT IT IS NOT, and each of these is a rule rather than an omission:
     turn, on the owner's own gesture. It adds no folder and makes nothing
     readable later.
   * never a cloud lane. jarvis_router.choose(has_file=True) answers gate "file"
-    before any budget, offer or complexity check, and jarvis_agent latches the
-    conversation private (jarvis_gate.latch_taint) as it does for a picture's
-    words or the owner's screen.
+    before any budget, offer or complexity check, and the conversation that
+    carried the file is marked private at once - `jarvis_chat_log.note_outside`
+    through the turn watch, the SAME per-conversation mark a picture's words or
+    the owner's screen sets (2026-10-30: not the process-wide gate latch, so
+    one attachment cannot keep every other chat off the cloud lane).
+  * the owner's OWN permission decides whether it is read. Reading a file is
+    decided under `read_files_readonly` (GATE_ACTION), through the same
+    `jarvis_gate.check()` call every other file read uses - "Ask me first" in
+    Settings turns the attachment into a card showing the name and the size and
+    nothing else, and "never" refuses it. There is no second permission model,
+    and if the gate cannot answer, nothing is read (fail closed).
 
 THE NAME IS THE ONLY THING THIS MODULE SEES OF THE OWNER'S DISK, so the
 never-read list is asked about a NAME, not a path: `.env`, `id_rsa`, `.pem`,
@@ -84,6 +92,15 @@ except Exception:                               # a backend without it: refuse, 
 #: MAX_BODY (token-store.patch). A 2.8 MB file would barely fit; this is the
 #: number with a margin, and the refusal names it and the alternative.
 MAX_BYTES = 2_500_000
+
+#: The ONE permission row a file's read is decided under: `read_files_readonly`
+#: - the same row `file_read` and "Folders Jarvis may look in" use, the one the
+#: owner sees as "Ask me first" in Settings ("reading your own files"). It is
+#: re-used rather than given a switch of its own: a second switch for the same
+#: act would be a duplicate permission model (2026-10-30). jarvis_agent asks
+#: jarvis_gate.check() with this name BEFORE the bytes are touched, and the
+#: card carries the file's name and size, never a byte of it.
+GATE_ACTION = "read_files_readonly"
 
 #: What reaches the model. About 4,000 tokens at this project's own pessimistic
 #: count (3 characters a token) - under a third of the 16,384 window the chat

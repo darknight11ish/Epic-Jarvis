@@ -840,6 +840,11 @@ CHAT_HISTORY_KEY_MISSING = ("encryption key missing or mismatched in Windows "
 SEALED_KEY_UNREADABLE = ("encryption key missing or unreadable in Windows "
                          "Credential Manager")
 SNAPSHOT_FAILED = "could not be read"
+#: Why a settings file is not in the archive, in the brackets its
+#: `excluded_settings` entry carries (2026-10-30). It should never fire: a file
+#: attached to a chat is never written down. It exists so that if one ever is,
+#: the archive leaves it out AND says so rather than carrying it silently.
+ATTACHMENT_BODY_REFUSED = ("holds a file attached to a chat, which is never written down")
 ERASE_LIMIT = ("\"Erase the words\" cannot reach into an older backup: an erased fact's "
                "original words may still be readable in a backup kept from before it was "
                "erased, until that backup ages out of the last {keep} kept. A chat you "
@@ -1445,6 +1450,74 @@ def _named_settings_entries(names) -> list:
     return out
 
 
+# ---------------------------------------------------------------------------
+#   An attached file's bytes never ride in a backup (2026-10-30)
+# ---------------------------------------------------------------------------
+# The owner's decision of 2026-10-29: a file attached to a chat is read on this
+# PC and never written down. jarvis_chat_log.strip_attachment_fields enforces
+# that for the history, and jarvis_agent takes the field off before a model
+# sees it. This is the third boundary - the `.jbak` archive - because a backup
+# copies what this PC has written, and "nothing wrote it" is a promise that has
+# to be checkable at the door where it would leave the machine.
+#
+# What can carry a body: the encrypted chat-history.db (its rows are sealed by
+# jarvis_chat_log, and the field never entered a row at all), the notes walk,
+# the backend's own `*.py` sources, and the settings JSON files. Only the last
+# one is data an arbitrary code path could write, so it is the one this guard
+# reads: a settings JSON holding an `attachment` whose value carries `data` is
+# NOT written into the archive, and the manifest NAMES it - never its content.
+
+#: The field name(s) a file the owner attached rides in. jarvis_chat_log owns
+#: the list; a backend without it still has the one name the wire format uses.
+def attachment_fields() -> tuple:
+    """The field names an attachment rides in - jarvis_chat_log's own list."""
+    try:
+        import jarvis_chat_log
+        return tuple(jarvis_chat_log.ATTACHMENT_FIELDS)
+    except Exception:
+        return ("attachment",)
+
+
+def _attachment_body_in(value, depth: int = 0):
+    """The key path of an attached file's BYTES in a JSON-shaped value, or "".
+
+    Only a field that really holds bytes counts: an `attachment` whose value is
+    a dict carrying a `data` string (or bytes) longer than a name could argue
+    for. A settings file that merely mentions the word is left alone - this is
+    not a content filter, it is the one shape the wire format writes.
+    """
+    if depth > 12:
+        return ""
+    if isinstance(value, dict):
+        for key in attachment_fields():
+            got = value.get(key)
+            if isinstance(got, dict):
+                data = got.get("data")
+                if isinstance(data, (bytes, bytearray)) or (
+                        isinstance(data, str) and len(data) > 64):
+                    return str(key) + ".data"
+        for key, got in value.items():
+            found = _attachment_body_in(got, depth + 1)
+            if found:
+                return f"{key}.{found}" if isinstance(key, str) else found
+    elif isinstance(value, (list, tuple)):
+        for i, got in enumerate(value):
+            found = _attachment_body_in(got, depth + 1)
+            if found:
+                return f"[{i}].{found}"
+    return ""
+
+
+def _settings_json_holds_attachment(src: Path) -> bool:
+    """True when this settings file holds an attached file's bytes. Unreadable
+    or not-JSON is False: a file this guard cannot parse is the glob's own
+    ordinary case, not evidence about an attachment."""
+    try:
+        return bool(_attachment_body_in(json.loads(src.read_text(encoding="utf-8"))))
+    except Exception:
+        return False
+
+
 def build_archive() -> tuple:
     """(zip_bytes, manifest). The manifest is also written INSIDE the zip
     as manifest.json, so a restore preview can read counts and a date
@@ -1566,6 +1639,14 @@ def build_archive() -> tuple:
                     # be restored as if it were owner data, and could report an
                     # OLD restore as current (audit 2026-10-21, M1). Casefolded
                     # because NTFS is case-insensitive (V1 of the addendum).
+                    continue
+                if _settings_json_holds_attachment(jf):
+                    # 2026-10-30: a file attached to a chat is never written
+                    # down, so a backup must never carry one. A settings file
+                    # that somehow holds the bytes is LEFT OUT and named - the
+                    # same shape as a database the archive cannot open.
+                    manifest.setdefault("excluded_settings", []).append(
+                        f"{jf.name} ({ATTACHMENT_BODY_REFUSED})")
                     continue
                 try:
                     zf.write(jf, arcname=f"settings/{jf.name}")

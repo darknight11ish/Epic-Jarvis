@@ -7720,12 +7720,34 @@ def with_picture_text(messages: list, *, keep_picture: bool,
 # THE NAME IT IS RECORDED UNDER is `read_attached_file`, on the apps' read-aloud
 # list and in the summary's `tools_ran`, so this PC's record of the turn marks
 # the conversation as having read outside text - a later web search or note in it
-# still asks, and the conversation is latched private (jarvis_gate.latch_taint).
+# still asks, and the CONVERSATION is marked private (jarvis_chat_log.note_outside
+# through the turn watch, the same per-conversation mark a picture's words set).
+# It is deliberately not jarvis_gate.latch_taint: that latch is process-wide, so
+# one attachment would keep every other conversation off the cloud lane too
+# (2026-10-30 review finding 4).
+#
+# THE OWNER'S PERMISSION IS ASKED FIRST (2026-10-30 review finding 2). Reading a
+# file is decided under `read_files_readonly` - the SAME row `file_read` and
+# "Folders Jarvis may look in" use - through the same `jarvis_gate.check()` call
+# the tool loop makes. The card (only when that row says "ask") shows the file's
+# name and size and never a byte of it, and the check happens BEFORE the bytes
+# are touched: refused, never or timed out means the file is not opened at all.
+# `_file_gate_card`/`_file_turn_never_read` below build that detail, and
+# `FILE_GATE_REFUSED` is the sentence the owner reads.
 
 #: The name a file the owner attached is recorded under, as a reading tool's is.
 FILE_TEXT_TOOL = "read_attached_file"
 #: Said beside the answer while the PC reads the file (jarvis_ocr's own pattern).
 FILE_TEXT_NOTE = "reading the file you attached on this PC (it counts as outside text)"
+#: The line on the approval card when reading files asks first. Name and size
+#: only: the card is shown, stored in the approvals table and audited.
+FILE_GATE_PROMPT = ("Read the file you attached: {name}{size}. Its words are read on this PC, "
+                    "nothing is written back, and the file never leaves this PC.")
+#: Said to the model (and so to the owner) when the gate did not allow the read.
+FILE_GATE_REFUSED = "reading files asks first on this PC: {why}"
+#: Said when Stop everything was pressed while the gate waited - nobody wants
+#: the file read any more, so it is not.
+FILE_STOPPED_WHY = "you pressed Stop everything before the file was opened"
 
 
 def _attachment_of(message) -> dict:
@@ -7777,20 +7799,59 @@ def _without_file(message):
     return {k: v for k, v in message.items() if k != "attachment"}
 
 
-def _latch_attached_file_read() -> bool:
-    """A file the owner attached was read: latch this conversation private.
+def _newest_attachment(messages) -> dict:
+    """The newest user message's attachment dict, or {} - never its bytes.
 
-    The process-wide latch the voiceprint, the sandbox's file reads, the screen
-    and the picture's words all set (jarvis_gate.latch_taint). It is the second
-    of the two guards rule 1 needs: the router's `has_file` gate keeps THIS turn
-    home, and this keeps a LATER web search or note write in the same chat asking
-    first. Never raises - a backend without jarvis_gate.py keeps the feature.
+    This is the same walk `newest_turn_has_file` makes, and it is used only to
+    build the approval card's detail: the NAME and the SIZE. `data` is never
+    read, decoded or copied - the card, the approvals table and the audit log
+    must not be able to hold a byte of the file.
     """
+    for m in reversed(list(messages or [])):
+        if isinstance(m, dict) and m.get("role") == "user":
+            got = m.get("attachment")
+            return got if isinstance(got, dict) else {}
+    return {}
+
+
+def _file_gate_card(messages) -> Optional[dict]:
+    """The gate's detail for a file turn - name and size, nothing else - or
+    None when this PC cannot say what the file is (then the reader refuses it
+    in words and there is nothing to ask about)."""
+    att = _newest_attachment(messages)
+    if not att:
+        return None
     try:
-        import jarvis_gate
-        return bool(jarvis_gate.latch_taint(why="attached_file"))
+        import jarvis_attached_file as A
+        name = A.safe_name(att.get("name"))
+        size = att.get("size")
+        said = A.said_size(int(size)) if isinstance(size, (int, float)) \
+            and not isinstance(size, bool) else ""
     except Exception:
-        return False
+        return None
+    text = FILE_GATE_PROMPT.format(name=name, size=(f" ({said})" if said else ""))
+    return {"text": text}
+
+
+def _file_turn_never_read(messages) -> bool:
+    """Is the attachment's NAME one Jarvis never opens, anywhere?
+
+    A never-read file needs no card: `jarvis_attached_file.read` refuses it in
+    words through `protected_name` - the SAME list `_protected_path` uses - so
+    the gate is not asked about a file it would only refuse.
+    """
+    return protected_name(str(_newest_attachment(messages).get("name") or ""))
+
+
+def _file_gate_why(verdict) -> str:
+    """The card's answer as the owner's own words, for the answer and the log."""
+    outcome = str(getattr(verdict, "outcome", None) or "")
+    if outcome == "denied":
+        return "you said no on the card"
+    if outcome == "timed_out":
+        return "nobody answered the card in time, so it was refused"
+    reason = str(getattr(verdict, "reason", None) or "").strip()
+    return reason or "the approval gate did not allow it"
 
 
 def with_file_text(messages: list, *, room_tokens: Optional[int] = None,
@@ -10260,19 +10321,55 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     announce(FILE_TEXT_NOTE)
                 except Exception:
                     pass
+            # ---- the owner's permission, asked BEFORE a byte is touched -----
+            # (2026-10-30 review finding 2.) The SAME row every file read is
+            # decided under - `read_files_readonly`, "Ask me first" in Settings
+            # - through the SAME `checker` the tool loop calls, with the card
+            # carrying the name and the size and nothing else. `never` refuses
+            # with no card; `ask` waits for a person; a gate that cannot answer
+            # refuses (fail closed, as _gate_check does everywhere). A name on
+            # the never-read list needs no card - the reader refuses it itself.
+            gate_why = ""
+            card = _file_gate_card(convo)
+            if card is not None and not _file_turn_never_read(convo):
+                try:
+                    import jarvis_attached_file as _AF
+                    gate_action = getattr(_AF, "GATE_ACTION", "read_files_readonly")
+                except Exception:
+                    gate_action = "read_files_readonly"
+                out.set_status("approval")
+                verdict = checker(gate_action, card, card["text"])
+                out.card_answered(verdict)
+                out.set_status("thinking")
+                if _a_card_was_shown(verdict):
+                    watch.cards += 1
+                if not getattr(verdict, "allowed", False):
+                    gate_why = FILE_GATE_REFUSED.format(why=_file_gate_why(verdict))
+                elif out.gone:
+                    # Approved, but the app that asked has gone: nobody would
+                    # see the answer, so the file is NOT opened (the tool
+                    # loop's own rule). The bytes were never decoded.
+                    raise ClientGone()
+                elif watch.stopped():
+                    gate_why = FILE_STOPPED_WHY
             # The cap is `min(12,000, what is left of the window this PC
             # measured for THIS turn)`: the newest user message is never
             # dropped, so a 4,096-token model must get a small file, not a
             # prompt whose start Ollama silently cuts.
-            convo, file_text = with_file_text(convo, room_tokens=budget())
+            convo, file_text = with_file_text(
+                convo, room_tokens=budget(),
+                read=(None if not gate_why else
+                      (lambda att, limit, why=gate_why: {"ok": False, "why": why})))
             if file_text.get("read"):
                 say_step("tool_started", FILE_TEXT_TOOL)
                 # Exactly as a reading tool's result: counted, flagged (the
                 # injection advisory reads it), and what a card's arguments are
-                # checked against. This also marks the conversation as having
-                # read outside text, in this PC's record of the turn.
+                # checked against. `took_in` also marks the conversation as
+                # having read outside text NOW (jarvis_chat_log.note_outside,
+                # keyed by this conversation id) - the per-conversation latch a
+                # picture's words set, not the process-wide gate latch, so one
+                # attachment cannot disable the cloud lane for every other chat.
                 watch.took_in(FILE_TEXT_TOOL, {"text": file_text["text"]})
-                _latch_attached_file_read()
                 say_step("tool_finished", FILE_TEXT_TOOL, ok=True)
             elif file_text.get("said"):
                 # A refusal is code's own sentence in the answer, never left to

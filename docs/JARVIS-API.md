@@ -27070,12 +27070,22 @@ never multipart, never a temporary store:
 
 ### 163.2 What the PC does with it, in order
 
-1. **The field comes off every message** (`jarvis_agent.with_file_text`) and is
+1. **The owner's permission, asked BEFORE a byte is touched.**
+   `jarvis_gate.check("read_files_readonly", …)` is the same call, on the same
+   row, that `file_read` and "Folders Jarvis may look in" go through - the one
+   the owner sees as "Ask me first" for reading files. Its tier decides: `auto`
+   reads without a card, `ask` raises ONE card, `never` refuses with no card,
+   and a gate that cannot answer refuses (fail closed). The card's detail holds
+   the file's **name and size** and never a byte of it, so the approvals table
+   and the audit log cannot hold the contents either. A name on the never-read
+   list is refused by the reader itself and never reaches a card.
+2. **The field comes off every message** (`jarvis_agent.with_file_text`) and is
    replaced by a `text` part of its own, after the owner's words, carrying one
    labelled block. A message whose content was a string becomes a list of parts
    for that turn only; the caller's `messages`, the relay body and the learner
-   never see it.
-2. **Validation before any parser**: the bytes are really base64; the size is
+   never see it. A refused, malformed or unreadable attachment is stripped too -
+   the field never survives any path.
+3. **Validation before any parser**: the bytes are really base64; the size is
    under 2,500,000 (the bytes that arrived are measured, never the claimed
    `size`); the NAME is not on the never-read list (`.env`, `id_rsa*`, `.pem`,
    `.key`, `.pfx`, `.p12`, `.kdbx`, `.ppk`, `.jks`, `.keystore`, browser data,
@@ -27084,29 +27094,33 @@ never multipart, never a temporary store:
    seven; the magic bytes agree with it (`%PDF-`; `PK\x03\x04` plus the right
    `word/`, `xl/` or `ppt/` member inside; UTF-8 with no NUL bytes for text).
    An encrypted PDF (`/Encrypt` in its trailer) is refused in words.
-3. **Zip bombs** are refused before conversion by
+4. **Zip bombs** are refused before conversion by
    `jarvis_documents.zip_bomb_problem` (100 MB declared uncompressed) and its
    path check - the existing guard, not another one.
-4. **The text comes out of the one converter, over a stream.**
+5. **The text comes out of the one converter, over a stream.**
    `jarvis_documents.convert_bytes` calls `_default_convert("-", ext)` - the
    converter's new **stdin mode** - so the file is never written to disk, not
    even to a temporary one. Same child program, same scrubbed environment, same
    120-second clock, same 4,000,000-character stdout cap.
-5. **Chat markers are stripped** (`jarvis_agent.strip_chat_markers`), the text
+6. **Chat markers are stripped** (`jarvis_agent.strip_chat_markers`), the text
    is capped at `min(12,000, what the measured window can hold)` and the block
    says how much was left out.
-6. **Outside text**: the turn records a read of `read_attached_file`, so the
+7. **Outside text**: the turn records a read of `read_attached_file`, so the
    injection advisory runs on the words, a card raised afterwards says
-   "Proposed after Jarvis read: the file you attached", the conversation is
-   marked as having read outside text in this PC's record, and
-   `jarvis_gate.latch_taint(why="attached_file")` latches it private - a later
-   web search or note write in the same chat still asks.
-7. **The router gate**: `jarvis_router.choose(has_file=True)` answers
+   "Proposed after Jarvis read: the file you attached", and the conversation is
+   marked as having read outside text in this PC's record. It is marked private
+   **for that conversation** (`jarvis_chat_log.note_outside`, through the turn
+   watch - the same per-conversation mark a picture's words set), so a later web
+   search or note write in the same chat still asks, while another conversation
+   is not affected. It is deliberately **not** the process-wide
+   `jarvis_gate.latch_taint`: one attachment must not keep every other chat off
+   the cloud lane (2026-10-30 review finding 4).
+8. **The router gate**: `jarvis_router.choose(has_file=True)` answers
    `local_decision("file", ...)` **before** the private check, the budget, the
    complexity check and the offer. A turn carrying a file is never offered a
    cloud lane, never escalated, and never takes a manual cloud pick either
    (`f01-manual-lane-gate` comes through the same call).
-8. **The relay belt**: `_open()` strips `attachment` from every message on
+9. **The relay belt**: `_open()` strips `attachment` from every message on
    every hop of the relay, whatever route brought the turn there
    (`attached-file.patch`). The gate is the brace and this is the belt.
 
@@ -27140,15 +27154,33 @@ the model - the picture path's rule of 2026-09-29.
 | the converter is not installed | `That file was not read: the part of Jarvis that reads PDF, Word, Excel and PowerPoint files (MarkItDown) is not installed on this PC.` |
 | no words in it | `That file was not read: it has no words in it to read.` |
 
-### 163.5 What it deliberately does not do
+### 163.5 What it deliberately does not do, and exactly what is stored
 
 No upload route, no upload folder, no temporary file, no chunking, no resume, no
 document preview, no second image path, no new Settings switch, no new Android
 permission, no audio or video. The file is **not** added to any folder list, so
 a later turn cannot read it again: a second question about the same file needs
-it attached again, and the chip says so. Nothing is kept - not a history row, not
-a log line, not a memory fact, not a learner input: the file's words live in the
-one request they arrived in. Nothing from a file can approve, spend or write.
+it attached again, and the chip says so.
+
+**What is stored is the turn, not the file.** The owner's own typed words and
+the answer are kept in the encrypted history exactly as any other turn is.
+`jarvis_chat_log.strip_attachment_fields` takes the `attachment` field off a
+copy of the request **before** the history module reads any message, so the
+stored row holds no byte of the file, no base64 of it, and not even its name -
+and that is enforced in the module that writes history, not assumed from the
+caller. The same field is taken off before a model sees it
+(`jarvis_agent.with_file_text`), so there is no learner input, memory fact,
+audit row or log line with the words either.
+
+**And not in a backup.** A `.jbak` backup copies the sealed chat-history
+database and the settings files. The history rows hold no file body (above), and
+the backup boundary refuses to carry one: a settings file that somehow held an
+`attachment` with bytes is left out of the archive **and named** in its
+`excluded_settings`, rather than carried silently (`jarvis_backup.py`,
+2026-10-30). So an attached file's text is never in a backup in plaintext -
+because it was never written down at all.
+
+Nothing from a file can approve, spend or write.
 
 ### 163.6 Both apps
 
@@ -27173,6 +27205,16 @@ bomb refused, the 12,000-character cap **and** that it shrinks to fit a measured
 `choose(has_file=True)` local before the budget, the complexity check and the
 offer, the file's words never in a cloud relay body, **no file created** (a
 directory listing before and after is identical), **no log line containing the
-words**, and the file's name never in an audit row. The HUD half is
-`jarvis-desktop/tests/attach.mjs`, which pins the caps, the wording and the part
-shape.
+words**, and the file's name never in an audit row.
+
+The 2026-10-30 privacy findings add three checks to the same suite: the owner's
+gate is asked **before** a byte is decoded (`read_files_readonly`, the same row
+`file_read` uses; a refused read decodes nothing and the card holds the name and
+size only), with a cloud lane enabled a file turn is decided local and the
+**outbound payload** `_open` builds carries neither the attachment nor the
+earlier conversation, and the conversation - not the whole PC - is marked
+private. `backend/test_chat_log.py` opens the stored row and proves it holds only
+the owner's words, and `backend/test_backup.py` decrypts the archived history and
+scans every archive member to prove no backup carries the file's body, its
+base64 or its name. The HUD half is `jarvis-desktop/tests/attach.mjs`, which
+pins the caps, the wording and the part shape.
