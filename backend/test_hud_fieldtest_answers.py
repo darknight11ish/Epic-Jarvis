@@ -38,12 +38,13 @@ WHAT IT PROVES:
     exist in the registry and on the page;
   * it never asks for a secret: no "share the ... code/token with me" wording,
     no "refresh token", no browser-session claim;
-  * the Ashby answer is the Voices screen's own note plus the make line, and a
-    blend this PC really OFFERS still goes through the same setter as before;
+  * the Ashby answer is the picker's own `BLENDS_TO_MAKE` note through
+    `settings_choice_bad` (the contract main already pins), and a blend this PC
+    really OFFERS still goes through the same setter as before;
   * the voice answer is read from `jarvis_voices.speaker_view()`, not typed;
   * the pairing answer names both screens' own button words, checked against
     the two source files;
-  * all five answers change nothing (read-only intents, no card, no menu, no
+  * all four answers change nothing (read-only intents, no card, no menu, no
     facts) and only navigate Settings where that is what the answer says;
   * `jarvis-desktop/src/settings.html` no longer says the HUD always stays dark.
 
@@ -246,6 +247,14 @@ def t_the_not_connected_answer_names_no_missing_settings_row():
     check("a disconnected calendar says so", "not connected yet" in said.lower(), said)
     check("... it names Settings, Accounts", "Settings, Accounts" in said, said)
     check("... it says the private link is read-only", "read-only" in said, said)
+    # The step main already had, and the PR dropped on 2026-10-29: pasting the
+    # link is not enough - the read-only way has to be CHOSEN with this command.
+    # Restored 2026-10-30; without it the owner follows the sentence and still
+    # gets "not connected".
+    check("... it gives the command that chooses the read-only way",
+          "py -3 jarvis_google_calendar.py mode ical" in said, said)
+    check("... and says the command runs in the backend folder",
+          "in the backend folder" in said, said)
     check("... and it names the real read/write setup doc", G.SETUP_DOC in said, said)
     check("... it no longer names a 'Google sign-in' Settings row",
           "pick the private link or Google sign-in" not in said
@@ -262,14 +271,29 @@ def t_the_not_connected_answer_names_no_missing_settings_row():
               "pick the private link or Google sign-in" not in text, rel)
         check(f"{rel} names the real setup doc instead",
               "the one-time Google" in text and "sign-in commands in" in text, rel)
+        check(f"{rel} keeps the command that chooses the read-only way",
+              "then run " in text
+              and "mode ical` in the backend folder. For the " in text, rel)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 #   3. "change your voice to Ashby" - not a raw list of voice ids
+#      (the settings grammar's answer, not a second intent of its own)
 # ══════════════════════════════════════════════════════════════════════════
 
 def t_an_unoffered_ashby_says_how_to_make_it():
-    ashby = next(k for k, row in K.MIX.items() if row.get("name") == "Ashby")
+    """B3's contract, and it is the settings grammar's one.
+
+    "change your voice to Ashby" is a value `voice_speaker` does not have, so
+    the answer is main's `settings_choice_bad` + the picker's own
+    `jarvis_kokoro.BLENDS_TO_MAKE` sentence. This is the ONE contract the HUD
+    suite and `backend/test_settings_registry.py` both pin. The PR first added a
+    second intent here (`voice_blend_help`) and it was removed on 2026-10-30:
+    two answers for one sentence cannot both pass the required backend job, and
+    the settings answer is the one the rest of the PC already uses.
+
+    What it must NOT do is the field test's defect: dump every voice id.
+    """
     real_view = JV.speaker_view
 
     def unmade_view():
@@ -282,28 +306,38 @@ def t_an_unoffered_ashby_says_how_to_make_it():
     JV.speaker_view = unmade_view
     try:
         for said in ("change your voice to Ashby", "use the Ashby voice",
-                     "switch to the Ashby voice", "set your voice to Ashby"):
+                     "switch to the Ashby voice", "set your voice to Ashby",
+                     "change his voice to Ashby", "change your voice to Clara"):
             got = Q.match(said)
-            check(f"{said!r} is answered here, not with a list of ids",
-                  got is not None and got.name == "voice_blend_help", got)
+            check(f"{said!r} is the settings answer, not a list of ids",
+                  got is not None and got.name == "settings_choice_bad"
+                  and got.f.get("key") == "voice_speaker", got)
             r = _answer(said)
             check(f"... and it is answered, not the model ({said!r})", r is not None, r)
             if r is None:
                 continue
-            check(f"... it names Ashby ({said!r})", "Ashby" in r.reply, r.reply)
-            check(f"... it names Clara too ({said!r})", "Clara" in r.reply, r.reply)
-            check(f"... it says they are not made here ({said!r})",
-                  "not made yet" in r.reply, r.reply)
-            check(f"... it names the 'Make Ashby and Clara' line ({said!r})",
-                  "Make Ashby and Clara" in r.reply, r.reply)
-            check(f"... it gives the one line to run ({said!r})",
-                  K.MAKE_LINE in r.reply, r.reply)
-            check(f"... it points at Settings, Jarvis's voice ({said!r})",
-                  "Jarvis's voice" in r.reply, r.reply)
+            check(f"... it is the picker's own sentence, word for word ({said!r})",
+                  r.reply == K.BLENDS_TO_MAKE, r.reply)
+            for want in ("Ashby", "Clara", "not made yet", "Make Ashby and Clara",
+                         "README.md"):
+                check(f"... it says {want!r} ({said!r})", want in r.reply, r.reply)
             check(f"... and it is NOT the raw voice-id dump ({said!r})",
                   "Say one of:" not in r.reply and "af bella" not in r.reply, r.reply)
-        check("the blend id came from jarvis_kokoro.MIX, not a typed name",
-              Q._named_blend("use the ashby voice") == ashby, Q._named_blend("ashby"))
+        # The names come from jarvis_kokoro.MIX, never typed again: every blend
+        # the pack defines reaches this answer by its own `name`. A blend added
+        # to MIX is covered here without this test naming it.
+        for pid in K.MIX_IDS:
+            name = str((K.MIX.get(pid) or {}).get("name") or "").strip()
+            if not name:
+                continue
+            other = Q.match(f"change your voice to {name}")
+            check(f"the pack's own name {name!r} reaches the same answer",
+                  other is not None and other.name == "settings_choice_bad"
+                  and other.f.get("key") == "voice_speaker", other)
+            if other is not None:
+                check(f"... with the picker's sentence for {name!r}",
+                      Q._run_settings_choice_bad(other.f).reply == K.BLENDS_TO_MAKE,
+                      Q._run_settings_choice_bad(other.f).reply)
     finally:
         JV.speaker_view = real_view
 
@@ -332,8 +366,8 @@ def t_a_made_ashby_still_changes_the_voice():
                   and got.name in ("settings_choice", "control_set")
                   and got.f.get("key") == "voice_speaker"
                   and got.f.get("value") == want, got)
-            check(f"... and never the help answer ({said!r})",
-                  got is None or got.name != "voice_blend_help", got)
+            check(f"... and never the not-made-yet refusal ({said!r})",
+                  got is None or got.name != "settings_choice_bad", got)
         bad = Q.match("change your voice to Nobody")
         check("an unknown voice still gets the real choices",
               bad is not None and bad.name == "settings_choice_bad", bad)
@@ -436,7 +470,7 @@ def t_the_settings_page_no_longer_says_the_hud_stays_dark():
 # ══════════════════════════════════════════════════════════════════════════
 
 def t_they_change_nothing():
-    for name in ("accounts_connect", "voice_blend_help", "voice_ask", "pair_phone"):
+    for name in ("accounts_connect", "voice_ask", "pair_phone"):
         check(f"{name} is a read-only intent", name in Q.READ_ONLY_INTENTS, name)
     for said in ("connect my email", "change your voice to Ashby",
                  "what voice are you using", "how do I pair my phone"):
@@ -452,7 +486,8 @@ def t_they_change_nothing():
               sched.forgotten == [], sched.forgotten)
         check("... it is a private answer to a public question",
               r.private is False, r.private)
-    # Exactly two of the five navigate Settings, and both say why in the words.
+    # Exactly two of the four answers navigate Settings, and both say why in
+    # the words.
     check("the email/Google answer opens the Accounts card",
           _answer("connect my email").open_settings == "account-secrets",
           _answer("connect my email").open_settings)

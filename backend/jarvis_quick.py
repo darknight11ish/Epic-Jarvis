@@ -4064,13 +4064,13 @@ def _settings_choice(s: str) -> Optional[Intent]:
         import jarvis_settings_registry as R
     except Exception:
         return None
-    # A voice MADE FOR JARVIS that this PC does not offer (2026-10-29, the HUD
-    # field test): "change your voice to Ashby" used to reach the raw list of
-    # built-in voice ids below. Only an unoffered blend comes here - a made one
-    # falls through to the same setter it always used.
-    blend = _voice_blend(s)
-    if blend is not None:
-        return blend
+    # "change your voice to Ashby" is deliberately NOT intercepted here: an
+    # unoffered Jarvis-made blend is a value `voice_speaker` does not have, and
+    # the generic path below answers it with the picker's own "not made yet"
+    # sentence (`jarvis_settings_registry.choice_not_made_words`). A second
+    # `voice_blend_help` intent for the same sentence was removed on
+    # 2026-10-30: one sentence gets one deterministic answer, and main's
+    # `backend/test_settings_registry.py` already pins this one.
 
     def one(key: str, name_words: str, value_words: str) -> Optional[Intent]:
         setting = next((c for c in R.CHOICE_SETTINGS if c.key == key), None)
@@ -6497,122 +6497,26 @@ def _run_accounts_connect() -> Result:
     return Result(words, "accounts_connect", open_settings="account-secrets")
 
 
-# --- "change your voice to Ashby" (2026-10-29, the HUD field test) -----------
+# --- the voice sentences (2026-10-29, the HUD field test) -------------------
+#
+# "change your voice to Ashby" is NOT answered by a new intent here.
 #
 # WHAT WENT WRONG. On 2026-10-29 the owner said "change your voice to Ashby" and
 # got a raw dump of every built-in voice id ("Say one of: af, af bella, ..."),
 # which answers nothing: Ashby is one of the two voices MADE FOR JARVIS, and the
 # reason he is not in that list is that the optional pack is not made on this PC
-# yet. The Voices screen already says so in words (`jarvis_kokoro.BLENDS_TO_MAKE`,
-# shown as `speaker_view()["note"]`, with the one PowerShell line beside it as
-# `make_line`). So the sentence is answered from those same words, and it says
-# how to make them, instead of listing ids the owner never asked about.
-#
-# IT CHANGES NOTHING: a made and offered blend still goes through the existing
-# grammar to `set_voice_speaker` (the real setter, no card), exactly as before.
-# Only a blend this PC does not OFFER reaches the answer below, and it is
-# read-only.
+# yet. Main already fixed that in the settings grammar
+# (`jarvis_settings_registry.choice_not_made_words`), which answers an unoffered
+# blend with the picker's own `BLENDS_TO_MAKE` sentence - so the sentence is a
+# `settings_choice_bad` value, not a second answer of its own. A
+# `voice_blend_help` intent was tried here and removed on 2026-10-30: two
+# answers for one sentence cannot both be the contract, and
+# `backend/test_settings_registry.py` already pins the settings one.
 
+#: Shared: neither voice answer can read the pack.
 VOICE_MISSING = ("I cannot read the voice settings on this PC: jarvis_voices.py is not in "
                  "the backend folder. Run apply-patches.ps1 again, or use Settings, "
                  "Jarvis's voice.")
-
-#: The first sentence, fixed. `{name}` is the blend's own name from MIX.
-VOICE_BLEND_WORDS = (
-    "{name} is one of the two voices made for Jarvis - Ashby and Clara, each a blend of "
-    "two Kokoro voices - and this PC does not offer it right now. Settings, Jarvis's voice "
-    "(the \"Jarvis's built-in voice\" list) shows the same note: {why}{make}"
-)
-
-#: The one line that makes them, and that it is the README's own line. Appended
-#: only while the PC says it is what to run (`speaker_view()["make_line"]`).
-VOICE_BLEND_MAKE = " The one line to run in PowerShell: {line} Then restart Jarvis."
-
-
-def _named_blend(words: str) -> str:
-    """The blend id a sentence names ("Ashby" -> "mix_ashby"), or "".
-
-    Read from `jarvis_kokoro.MIX` by each blend's own `name`, never typed again,
-    so a blend added there answers here by itself."""
-    try:
-        import jarvis_kokoro as K
-    except Exception:                       # noqa: BLE001 - module absent
-        return ""
-    text = " ".join(str(words or "").lower().split())
-    if not text:
-        return ""
-    for pid in K.MIX_IDS:
-        name = str((K.MIX.get(pid) or {}).get("name") or "").strip()
-        if name and re.search(r"\b" + re.escape(name.lower()) + r"\b", text):
-            return pid
-    return ""
-
-
-def _blend_offered(pid: str) -> bool:
-    """Is that blend in the built-in voice list this PC really offers? The same
-    read the Voices screen makes, so "offered" means exactly that."""
-    try:
-        import jarvis_voices as JV
-        view = JV.speaker_view()
-    except Exception:                       # noqa: BLE001 - module absent
-        return False
-    return any(str(r.get("id") or "") == pid
-               for r in (view.get("choices") or ()) if isinstance(r, dict))
-
-
-def _voice_blend(s: str) -> Optional[Intent]:
-    """"change your voice to Ashby", "use the Ashby voice" (2026-10-29).
-
-    Only when the sentence names a real blend AND this PC does not offer it: a
-    made blend keeps the existing grammar and changes the voice."""
-    if "voice" not in s:
-        return None
-    pid = _named_blend(s)
-    if not pid or _blend_offered(pid):
-        return None
-    return Intent("voice_blend_help", {"name": pid})
-
-
-def _run_voice_blend_help(f: dict) -> Result:
-    """"change your voice to Ashby": why it is not selectable, and the line that
-    makes it. Read-only - no voice is changed and no card is raised."""
-    try:
-        import jarvis_kokoro as K
-        import jarvis_voices as JV
-    except Exception:                       # noqa: BLE001 - module absent
-        return Result(VOICE_MISSING, "voice_blend_help")
-    pid = str(f.get("name") or "")
-    row = K.MIX.get(pid) or {}
-    name = str(row.get("name") or "Ashby")
-    view = {}
-    try:
-        view = JV.speaker_view() or {}
-    except Exception:                       # noqa: BLE001 - read the pack only
-        view = {}
-    why = str(view.get("note") or "").strip()
-    if not why:
-        # The screen's note is missing (an older PC, or a pack it cannot read):
-        # the pack's own fixed sentence still says it, in the same words - and
-        # the OLD pack gets the upgrade sentence, never the make line, because
-        # no line can make them from a pack that does not hold them.
-        try:
-            kind = JV.pack_kind()
-        except Exception:                   # noqa: BLE001 - module absent
-            kind = ""
-        if kind == K.V019:
-            why = K.BLENDS_NEED_V1
-            up = str(K.upgrade_note() or "").strip()
-            if up:
-                why = why + " " + up
-        else:
-            why = K.BLENDS_TO_MAKE
-    make = ""
-    line = str(view.get("make_line") or "").strip()
-    if line:
-        make = VOICE_BLEND_MAKE.format(line=line)
-    return Result(VOICE_BLEND_WORDS.format(name=name, why=why, make=make),
-                  "voice_blend_help")
-
 
 # --- "what voice are you using?" (2026-10-29, the HUD field test) -----------
 #
@@ -8183,13 +8087,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # that already exists and already has its own permission model.
     if n == "voice_speed":
         return _run_voice_speed(intent)
-    # The HUD field test's four answers (2026-10-29): Google/Gmail paths, an
-    # unoffered Ashby/Clara, which voice speaks, and how a phone is paired.
-    # Every one is read-only: no card, no connection, no voice change.
+    # The HUD field test's three answers (2026-10-29): Google/Gmail paths,
+    # which voice speaks, and how a phone is paired. Every one is read-only:
+    # no card, no connection, no voice change. ("change your voice to Ashby"
+    # is NOT one of these - it is `settings_choice_bad`, answered by the
+    # settings grammar above.)
     if n == "accounts_connect":
         return _run_accounts_connect()
-    if n == "voice_blend_help":
-        return _run_voice_blend_help(f)
     if n == "voice_ask":
         return _run_voice_ask()
     if n == "pair_phone":
@@ -8738,11 +8642,12 @@ READ_ONLY_INTENTS = frozenset({
     # fixed answer that reads this PC's own settings and connects nothing, so it
     # must not take away what "cancel that" would undo.
     "calendar_setup",
-    # The HUD field test's four answers (2026-10-29): the Google/Gmail paths,
-    # an Ashby/Clara this PC does not offer, which voice is speaking, and how a
-    # phone is paired. Each one only reads and explains - no card is raised, no
-    # value is typed, no voice changes - so none may clear "cancel that".
-    "accounts_connect", "voice_blend_help", "voice_ask", "pair_phone",
+    # The HUD field test's three answers (2026-10-29): the Google/Gmail paths,
+    # which voice is speaking, and how a phone is paired. Each one only reads
+    # and explains - no card is raised, no value is typed, no voice changes -
+    # so none may clear "cancel that". ("change your voice to Ashby" is the
+    # settings grammar's own bad-value answer, already listed below.)
+    "accounts_connect", "voice_ask", "pair_phone",
     "face_ask", "feature_change", "feature_change_ask", "feature_change_refused",
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",

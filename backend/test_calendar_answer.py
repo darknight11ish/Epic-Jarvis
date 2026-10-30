@@ -316,6 +316,13 @@ def t_one_owner_per_sentence():
               reply.lower().count("not connected") == 1, reply)
         check("... the old desktop-only route that never said PC is gone",
               "pick the private link or Google sign-in" not in reply, reply)
+        # Restored 2026-10-30: the step main already had, which a shorter
+        # rewrite of this sentence dropped. Pasting the private link is not
+        # enough on its own - the read-only way is CHOSEN with this command, so
+        # without it the owner follows every word and still reads nothing.
+        check("... it keeps the command that chooses the read-only way",
+              "py -3 jarvis_google_calendar.py mode ical" in reply
+              and "in the backend folder" in reply, reply)
         add = Q.answer("add a meeting Tuesday 3pm", sched=_Sched())
         check("an event sentence is the Google answer's too",
               add is not None and add.intent == "google_calendar", add)
