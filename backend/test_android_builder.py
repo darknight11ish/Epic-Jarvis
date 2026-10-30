@@ -1122,6 +1122,142 @@ def t_the_audit_log_holds_counts_only():
     check("the audit log never carries a path, a command or a line of a page", bad == [], bad)
 
 
+def t_install_wires_the_card_plumbing():
+    """The wrapped POST path must hand _raise its gate/tier_of/spawn.
+
+    Found on the owner's PC (2026-10-30): the drop-in loader passes only
+    origin_ok/token_ok/read_body, the old install() forwarded nothing, and the
+    build route answered 503 {"error": "TypeError"} instead of raising a card.
+    """
+    calls = []
+    real_handle, real_p = A.handle_post, A.P
+
+    def fake_handle(route, body, **kw):
+        calls.append(kw)
+        return 202, {"ok": True, "waiting": True, "card": "app_build_android"}
+
+    A.handle_post = fake_handle
+    A.P = types.SimpleNamespace(_from_this_pc=lambda *a: True,
+                                _peer_local=lambda _s: ("127.0.0.1", 1))
+    sent = []
+
+    class Handler:
+        path = "/api/projects/p/app/tasks/t/android/build"
+
+        def _send(self, code, out):
+            sent.append((code, out))
+
+        def do_GET(self):
+            return None
+
+        def do_POST(self):
+            return None
+
+    try:
+        A.install(Handler, origin_ok=lambda _s: True, token_ok=lambda _s: True,
+                  read_body=lambda _s: b"{}")
+        Handler().do_POST()
+    finally:
+        A.handle_post, A.P = real_handle, real_p
+        A._reset_for_tests()
+
+    kw = calls[-1] if calls else {}
+    check("install()'s wrapped POST calls the route at all", bool(calls), calls)
+    check("... with a real gate, tier_of and spawn, not nothing",
+          all(callable(kw.get(k)) for k in ("gate", "tier_of", "spawn")),
+          sorted(kw))
+    check("... so a build answers 202 at once instead of TypeError 503",
+          sent[-1][0] == 202 if sent else False, sent[-1:])
+
+
+def t_install_respects_injected_plumbing():
+    """A caller that already has the three callables keeps its own."""
+    calls = []
+    real_handle, real_p = A.handle_post, A.P
+
+    def fake_handle(route, body, **kw):
+        calls.append(kw)
+        return 200, {"ok": True}
+
+    A.handle_post = fake_handle
+    A.P = types.SimpleNamespace(_from_this_pc=lambda *a: True,
+                                _peer_local=lambda _s: ("127.0.0.1", 1))
+    mine = {"gate": lambda *a: True, "tier_of": lambda _a: "ask",
+            "spawn": lambda fn: None}
+
+    class Handler:
+        path = "/api/projects/p/app/tasks/t/android/build"
+
+        def _send(self, code, out):
+            pass
+
+        def do_GET(self):
+            return None
+
+        def do_POST(self):
+            return None
+
+    try:
+        A.install(Handler, origin_ok=lambda _s: True, token_ok=lambda _s: True,
+                  read_body=lambda _s: b"{}", **mine)
+        Handler().do_POST()
+    finally:
+        A.handle_post, A.P = real_handle, real_p
+        A._reset_for_tests()
+    kw = calls[-1] if calls else {}
+    check("injectable plumbing is passed through unchanged",
+          kw.get("gate") is mine["gate"] and kw.get("tier_of") is mine["tier_of"]
+          and kw.get("spawn") is mine["spawn"], sorted(kw))
+
+
+def t_the_default_plumbing_builds_itself():
+    """The defaults come from jarvis_gate, and spawn really runs the wait in a
+    background thread so the HTTP answer is 202, not a stalled request."""
+    got = []
+
+    class Verdict:
+        allowed = True
+
+    fake_gate = types.ModuleType("jarvis_gate")
+    fake_gate.check = lambda action, **kw: (got.append((action, kw)), Verdict())[1]
+    fake_gate._tiers = lambda: {"app_build_android": "ask"}
+    fake_gate.pending = lambda: []
+
+    real_events = sys.modules.get("jarvis_events")
+    real_gate = sys.modules.get("jarvis_gate")
+    sys.modules["jarvis_gate"] = fake_gate
+    published = []
+    fake_events = types.ModuleType("jarvis_events")
+    fake_events.BUS = types.SimpleNamespace(publish=lambda kind, data: published.append((kind, data)))
+    sys.modules["jarvis_events"] = fake_events
+    ran = []
+    try:
+        card = A._card_plumbing()
+        yes = card["gate"]("app_build_android", {"how": "test"}, "card words")
+        tier = card["tier_of"]("app_build_android")
+        card["spawn"](lambda: ran.append(True))
+        for _ in range(50):
+            if ran:
+                break
+            time.sleep(0.01)
+        A._approval_doorbell()
+    finally:
+        if real_gate is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = real_gate
+        if real_events is None:
+            sys.modules.pop("jarvis_events", None)
+        else:
+            sys.modules["jarvis_events"] = real_events
+    check("the default gate asks jarvis_gate.check and returns its yes",
+          yes is True and got and got[-1][0] == "app_build_android", got)
+    check("the default tier_of reads the policy table", tier == "ask", tier)
+    check("the default spawn really starts a background thread", ran == [True], ran)
+    check("a raised card publishes the approval doorbell both apps re-read",
+          published and published[-1][0] == "approval", published)
+
+
 def main():
     try:
         for name, fn in list(globals().items()):

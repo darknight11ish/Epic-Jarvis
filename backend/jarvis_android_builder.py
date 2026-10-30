@@ -1131,6 +1131,50 @@ def _decide(plan: CommandPlan, token: str, action: str, gate: Callable,
             last["log"] = str(r.get("log", ""))[-4000:]
 
 
+def _card_plumbing() -> dict:
+    """The three callables a card needs, built here because a drop-in module
+    gets only origin_ok/token_ok/read_body from the loader.
+
+    `gate(action, detail, text)` blocks in the caller's thread until the owner
+    answers and returns whether it was a yes; `tier_of(action)` reads the same
+    policy table the core reads; `spawn(fn)` runs the wait in the background so
+    the HTTP request returns 202 at once (the card, not the build, is what the
+    route waits on). jarvis_gate.check() is the one entry point every other card
+    goes through, so the Windows-Hello rules, the risk words and the audit row
+    all still apply.
+    """
+
+    def gate(action: str, detail=None, text: str = "") -> bool:
+        import jarvis_gate
+        v = jarvis_gate.check(action, detail=detail if isinstance(detail, dict) else {},
+                              prompt=str(text or ""))
+        return bool(getattr(v, "allowed", False))
+
+    def tier_of(action: str) -> str:
+        try:
+            import jarvis_gate
+            return str(jarvis_gate._tiers().get(action, "unknown"))
+        except Exception:
+            return "unknown"
+
+    def spawn(fn) -> None:
+        threading.Thread(target=fn, name="jarvis-android-card", daemon=True).start()
+
+    return {"gate": gate, "tier_of": tier_of, "spawn": spawn}
+
+
+def _approval_doorbell() -> None:
+    """Tell both apps the queue changed; they re-read /api/pending on this
+    event. Silent on failure: the card is already up either way, and a missing
+    doorbell only means the screens learn on their next read."""
+    try:
+        import jarvis_events
+        import jarvis_gate
+        jarvis_events.BUS.publish("approval", {"count": len(jarvis_gate.pending())})
+    except Exception:
+        pass
+
+
 def _raise(app: str, task: str, plan: CommandPlan, action: str, *, gate: Callable,
            tier_of: Callable, spawn: Callable) -> tuple:
     if plan.refused:
@@ -1280,16 +1324,28 @@ def handle_post(route: str, body, *, here: bool = False, store=None, **card) -> 
 _ARMED = False
 
 
-def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
+def install(handler_cls, *, origin_ok, token_ok, read_body,
+            gate: Optional[Callable] = None, tier_of: Optional[Callable] = None,
+            spawn: Optional[Callable] = None) -> str:
     """Wrap `handler_cls.do_GET` and `do_POST` so the Android routes are
     answered here, after the server's own origin and token checks. Every other
     request goes to the original. Returns the banner line.
 
     Installed by the drop-in loader (`plugins/ready/android-builder`), the same
     way every other module's routes are, so this feature adds no patch to
-    `jarvis_hud.py`."""
+    `jarvis_hud.py`.
+
+    `gate`/`tier_of`/`spawn` may be injected by a caller that already has them;
+    when they are not (the drop-in loader hands over only the three core
+    callbacks) this module builds them itself from jarvis_gate, jarvis_events
+    and a daemon thread - see [_card_plumbing]. Without that default the build
+    and install routes called `_raise()` with no plumbing, raised TypeError in
+    the real process and answered 503 (found on the owner's PC, 2026-10-30)."""
     global _ARMED
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
+    built = _card_plumbing()
+    card = {"gate": gate or built["gate"], "tier_of": tier_of or built["tier_of"],
+            "spawn": spawn or built["spawn"]}
     if getattr(post0, "_jarvis_android", False):
         _ARMED = True
         return "  android    Made apps (already on)"
@@ -1331,9 +1387,12 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         except Exception as exc:
             return self._send(400, {"ok": False, "error": type(exc).__name__})
         try:
-            code, out = handle_post(route, body, here=P._from_this_pc(*P._peer_local(self)))
+            code, out = handle_post(route, body, here=P._from_this_pc(*P._peer_local(self)),
+                                    **card)
         except Exception as exc:
             code, out = 503, {"ok": False, "error": type(exc).__name__}
+        if code == 202 and isinstance(out, dict) and out.get("waiting"):
+            _approval_doorbell()
         return self._send(code, out)
 
     do_GET._jarvis_android = True
