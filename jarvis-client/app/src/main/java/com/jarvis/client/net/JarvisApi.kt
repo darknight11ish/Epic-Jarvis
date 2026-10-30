@@ -3207,15 +3207,19 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
-    suspend fun deny(id: String): ApiResult<Unit> = decide("/api/deny", id)
+    /**
+     * `POST /api/deny`. The body carries `"by"` as well as the id, so a denial
+     * from this phone is recorded as this phone's - see [SignedApproval.BY],
+     * and `SignedApproval.denyBody` for why the two bodies live together.
+     */
+    suspend fun deny(id: String): ApiResult<Unit> =
+        postJson("/api/deny", SignedApproval.denyBody(id))
 
     /**
      * The one state-changing thing a phone may drive, because it only ever
      * moves toward a state the owner already had.
      */
     suspend fun revert(id: String): ApiResult<Unit> = postId("/api/undo/revert", id)
-
-    private suspend fun decide(path: String, id: String): ApiResult<Unit> = postId(path, id)
 
     /**
      * Keeps or discards ONE proposed fact from `/api/memory/pending` (the
@@ -3883,12 +3887,20 @@ class JarvisApi(
          * no other; see [ChatHistory.requestBody]'s own doc on the field.
          */
         think: Boolean = false,
+        /**
+         * A document the owner attached to THIS question ([AttachFile]): it
+         * rides inside the newest user message as one `attachment` object and
+         * `has_file: true` beside `has_image`. No new route, no upload, no
+         * permission - the bytes travel in this body and the PC reads them
+         * within this turn only.
+         */
+        file: AttachFile.Ready? = null,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
             interrupted = interrupted, temporary = temporary, cloudYes = cloudYes, live = live,
-            screen = screen, think = think,
+            screen = screen, think = think, file = file,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()

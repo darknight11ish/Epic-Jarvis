@@ -239,6 +239,15 @@ object MenuPlaces {
         "settings.second-card.chat-card" to "SecondCardPlate: the Everyday chat runs on row",
         "brain.work.quiz.youtube" to "QuizPlate: the YouTube link block",
         "settings.focus-presets" to "HardwarePlate: the Focus presets section inside the Hardware plate",
+        // `settings.notifications` (2026-10-29, the settings wrong-app audit's
+        // finding 7): the phone DOES change the PC's own seven kinds, inside its
+        // Notifications from Jarvis row (SettingsScreen.kt, item jarvis-notify,
+        // which is why that row stays a `settings-row.*` in FindAnything rather
+        // than becoming this menu's place). It is never hideable (`hide` False in
+        // backend/jarvis_menus.py), so no screen reads `menus.shows(...)` for it;
+        // it is here because FindAnything lists every phone menu that has a
+        // place, and the phone draws this one inside that row.
+        "settings.notifications" to "SettingsScreen: the PC's own seven notification kinds, inside the Notifications from Jarvis row",
     )
 
     /**

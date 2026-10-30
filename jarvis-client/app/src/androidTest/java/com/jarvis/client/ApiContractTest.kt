@@ -201,21 +201,31 @@ class ApiContractTest {
         assertEquals(ApiError.NotAvailable, (out as ApiResult.Failed).error)
     }
 
-    /** A decision posts the id and nothing else — no verdict duplicated in the body. */
+    /**
+     * A decision posts the id and the surface that made it — no verdict
+     * duplicated in the body.
+     *
+     * The `by` field was added on 2026-10-29: the server stores it as
+     * `decided_by` and defaults an absent one to `"hud"`, so a phone body of
+     * `{"id":"a1"}` was recorded as the browser HUD's. This test kept expecting
+     * the old body and failed the `smoke` job on the PR's own head; it is the
+     * instrumentation half of `SignedApprovalTest`, which holds both verbs to
+     * the same constant.
+     */
     @Test
-    fun approvePostsTheIdAlone() = runBlocking {
+    fun approvePostsTheIdAndTheSurface() = runBlocking {
         routes["/api/approve"] = ok("{}")
         api.approve("a1")
         val req = server.takeRequest(10, TimeUnit.SECONDS)!!
         assertEquals("POST", req.method)
         assertEquals("/api/approve", req.path)
-        assertEquals("""{"id":"a1"}""", req.body.readUtf8())
+        assertEquals("""{"id":"a1","by":"phone"}""", req.body.readUtf8())
     }
 
     /**
      * CLAUDE.md's 2026-09-20 amendment: install joins switch as tier `ask`,
-     * so the request shape is the same one `approvePostsTheIdAlone` proves
-     * above for a different route - the same `{"ref": ...}` body
+     * so the request shape is the same one `approvePostsTheIdAndTheSurface`
+     * proves above for a different route - the same `{"ref": ...}` body
      * `switchModel` already sends, on `/install` instead of `/switch`.
      *
      * The 202 is the point, not an afterthought: `docs/JARVIS-API.md` says
@@ -451,6 +461,44 @@ class ApiContractTest {
         routes["/api/chat"] = answer("Hello.")
         chat.send("hi")
         assertEquals(listOf("user:hi"), roles(server.takeRequest(10, TimeUnit.SECONDS)!!))
+    }
+
+    /**
+     * A document attached to a question (2026-10-29), read off the wire from
+     * the real ChatSession: one `attachment` object on the newest user message
+     * (`name`, `mime`, `size`, raw base64 `data`), `has_file: true` at the top
+     * level beside `has_image`, and NOTHING carried on the next question - the
+     * bytes are sent once and never kept.
+     */
+    @Test
+    fun anAttachedFileRidesInTheNewestMessageAndIsNotKept() = runBlocking {
+        fun answer(text: String) = MockResponse().setResponseCode(200)
+            .setHeader("Content-Type", "text/plain").setBody(text)
+        val file = com.jarvis.client.net.AttachFile.picked(
+            "hello".toByteArray(), "taxes.pdf",
+        ) as com.jarvis.client.net.AttachFile.Picked.Ok
+        val chat = ChatSession(api)
+
+        routes["/api/chat"] = answer("It is a tax form.")
+        chat.send("what does this say?", attachment = file.file)
+        val first = org.json.JSONObject(server.takeRequest(10, TimeUnit.SECONDS)!!.body.readUtf8())
+        assertEquals(true, first.getBoolean("has_file"))
+        assertEquals(false, first.getBoolean("has_image"))
+        val msgs = first.getJSONArray("messages")
+        val last = msgs.getJSONObject(msgs.length() - 1)
+        assertEquals("user", last.getString("role"))
+        assertEquals("what does this say?", last.getString("content"))
+        val att = last.getJSONObject("attachment")
+        assertEquals("taxes.pdf", att.getString("name"))
+        assertEquals("application/pdf", att.getString("mime"))
+        assertEquals(5, att.getInt("size"))
+        assertEquals("aGVsbG8=", att.getString("data"))
+
+        routes["/api/chat"] = answer("Fine.")
+        chat.send("and the second page?")
+        val second = org.json.JSONObject(server.takeRequest(10, TimeUnit.SECONDS)!!.body.readUtf8())
+        assertFalse("has_file must be absent on a question with no file", second.has("has_file"))
+        assertFalse("the file must not survive in the conversation", second.toString().contains("aGVsbG8="))
     }
 
     /**

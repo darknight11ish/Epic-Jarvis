@@ -2,6 +2,7 @@
 # Written by tools/build_patch_history.py - do not edit by hand.
 # Columns: patch, file (under backend/patch-history/), commit, date, subject
 app-control.patch	app-control/2759987.patch	2759987e4fd87570b15c2e6846aa6b4bd79e9011	2026-10-19T19:38:16-07:00	feat(phone): app-control backend half - one allow-list, ONE card, ONE atomic step (OFF by default)
+appearance.patch	appearance/fcafd4e.patch	fcafd4e228140c5ab4ec321efd675c59d7d08982	2026-10-27T05:58:55Z	fix(appearance): a partial save merges instead of erasing the other half (#881)
 appearance.patch	appearance/6383842.patch	63838420943523cdcb608d60c8669e68bf4fce02	2026-09-16T16:52:07Z	Fix findings from two eight-agent audits: desktop<->Android and memory/self-improvement
 appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a23a	2026-09-15T03:11:39Z	Three honesty fixes: /api/visual-spec, the HUD proposal handler, INSTALL
 appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30Z	I invented a NameError, then reported it twice as a finding
@@ -104,6 +105,7 @@ memory-prefix.patch	memory-prefix/3040b3d.patch	3040b3dc0803600ff1ccd92e8ed6460c
 memory-safety.patch	memory-safety/3d8df73.patch	3d8df73437d50b3b98382c87bd41012e637e0cb4	2026-09-19T17:53:10Z	fix(backend): the audit's Python findings
 memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34Z	Master audit: the worst finding was a cloud lane nobody re-filtered
 memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51Z	Memory: stop the destructive paths, and start the event pump
+no-deadline-cards.patch	no-deadline-cards/0f15db5.patch	0f15db52ac0beeaf3908a01e10d9734c6bbe1073	2026-10-28T21:33:17-07:00	fix(approvals): no card has a deadline; a late yes is refused with the reason
 no-expiry-cards.patch	no-expiry-cards/0712359.patch	07123594c31eff25ac0ab2a4ec693740eef602cc	2026-10-23T15:49:55-07:00	feat(gate): only pairing, an approval key and a restore may never expire (rescue #4, Q1)
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49Z	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28Z	Logseq and Joplin notes that are really filed

@@ -242,21 +242,36 @@ immediate to turn off, and neither raises a card that something else answers:
 No approval card is ever answered for the owner, and no control approves
 more than one card.
 
-**A card waits 15 minutes and then refuses itself** (`approval_timeout_seconds`,
-900 in the shipped config since 2026-10-13, and changeable in Settings), because
-an unanswered request must not run. Four cards have no deadline at all, by the
-owner's ruling of 2026-10-23 (Q1, `backend/no-expiry-cards.patch`): pairing a
-device (`pair_device`, `unretire_shared_key`), registering a phone's approval
-key (`register_approval_key`) and restoring a backup (`restore_backup`). Those
-three ceremonies need the owner at the PC and can take longer than the window;
-a card that lapsed half way through loses the work. Every other card keeps the
-window, including "forget a time frame" and every switch that loosens a rule -
-the rescued work behind this patch exempted 23 actions and the owner refused
-that scope. **Waiting is not approving:** a never-expiring card still runs
-nothing until a person answers it, is still answerable only while it is the live
-card (a cancelled or replaced pairing is withdrawn), and a denial is still a
-denial. The gate decides this from its own action ids only - there is no flow
-argument and no caller-supplied value that can ask for it.
+**No card shows a time limit, and a card whose request has finished leaves the
+queue** (the owner's ruling of 2026-10-28: "if there doesn't need to be a time
+limit don't have one"; `backend/no-deadline-cards.patch`, applied after
+`no-expiry-cards.patch`). While its request is genuinely waiting, the card stays
+on every screen with Approve and Deny and NO countdown: `pending()` sends no
+`expires_in` for any card. **Waiting is still not approving:** nothing runs until
+a person answers, a denial is still a denial, and a card whose work is gone (a
+cancelled or replaced pairing) is withdrawn. **The request's own patience is
+what is bounded**, because the thread that waits is the thread that runs the
+action: it keeps `approval_timeout_seconds` (900 in the shipped config,
+changeable in Settings), and the moment it ends is written on the row
+(`waited_until`). **#965's read-time sweep is KEPT, re-keyed on that moment:**
+once `waited_until` plus the same 60-second grace has passed, `pending()` marks
+the row `expired` before it builds the list, so no screen is ever handed a live
+Approve that could only answer 409 - the "zombie Approve" trap a literal
+no-limit would create. It is a lapse, never a decision, and it is recomputed on
+the PC at the moment of the read. At the decision the PC also REVALIDATES:
+`jarvis_gate.still_waiting()` reads that moment against its own clock,
+`decide()` refuses an Approve for a row no request can still act on, and
+`jarvis_owner_check.approve_check()` answers 409 with one plain sentence and
+withdraws the card if a stale page gets there before the read. **A Deny always
+works**, including on an old card. The four ceremonies of the 2026-10-23 ruling
+(Q1: `pair_device`, `unretire_shared_key`, `register_approval_key`,
+`restore_backup`) carry `waited_until = NULL`: the sweep never touches them, and
+their request waits until its own flow withdraws the card, so they are answerable
+for as long as the owner needs. The gate decides all of this from its own action
+ids only - there is no flow argument and no caller-supplied value that can ask
+for a longer wait. Start-up runs the same sweep, so a card left by a process that
+died is settled too; both halves are proven by `backend/test_gate_no_deadline.py`
+and, for the sweep's own patch in isolation, `backend/test_pending_expiry_on_read.py`.
 
 It also means Jarvis never drives its own approval surfaces. "Control the
 computer" refuses every window of Jarvis's own, and "control the phone"
@@ -778,6 +793,53 @@ places between screens. Presentation only - no approval logic changed.
   `CardWords.TIMED_OUT`; `timed_out_next` is the phone's own second sentence
   (§8 below).
 
+- **A decided card leaves every live surface within 30 seconds; a killed phone's
+  widget is bounded by 30 minutes (2026-10-29).**
+  The owner's report: *"when a decision/approval card has already been addressed
+  (approved or denied) on either the Android app or the desktop program, make
+  sure the Android widgets (and every other surface that shows a
+  card/notification) update to reflect that - no stale card left showing, no dead
+  Approve/Deny on a resolved card."* The queue itself was already one thing -
+  `GET /api/pending` is the only list a surface draws from, a decided row is
+  gone from the next read, and `jarvis_gate.decide` answers `False` to a second
+  answer so a stale surface cannot record a verdict on a settled row. What was
+  missing was the second half of "one source": a **doorbell that can be missed**.
+  Every surface learned about a decision from the `approval` event, which is
+  `jarvis_events._poll_approvals` diffing ids on the backend's own pump - it
+  publishes only on CHANGE, and it swallows its own exceptions, so one failed
+  database read, one backend restart or a pump that is not running rings
+  nothing. The desktop survived that because its HUD page has carried a
+  30-second safety-net read since long before (`jarvis_hud.html`,
+  `setInterval(() => apprPoll(), 30000)`), and its stream re-reads the queue on
+  every connect and resume. The phone had **no** clock at all: a missed event
+  left the card on the home screen, in the notification drawer and on Home, with
+  a Deny that could only say "no longer waiting", until the app was restarted or
+  the link dropped. So both platforms now ask the same question on the same 30
+  seconds while a card is waiting on a **connected** link -
+  `QueueBeat.due` in `jarvis-client` (re-reading through `refreshPending`, the
+  one assignment `pending` ever gets, so the widget, the drawer and the in-app
+  list clear together) and `queue_beat_due` in `stream.rs` (re-reading through
+  `refresh_pending`, the one queue read all four desktop surfaces follow). Both
+  read **nothing** when the queue is empty, so this is not a poll of an idle PC,
+  and neither can approve or deny anything. `stale` is deliberately not a
+  condition on either side: a failed read is what makes a link stale, and the
+  next successful read is what clears it, so a `!stale` gate would switch off
+  the only retry that could recover - the desktop's first version did exactly
+  that, and one transient `/api/pending` failure held Approve until the hourly
+  reconnect. The HUD page's own 30 s `apprPoll` is still there beside the beat,
+  so while the HUD is visible and a card waits the PC runs **two** independent
+  30 s `/api/pending` reads (§6 names both as the safety-net exception). Two
+  things follow from the phone's process rather than from the rule: the
+  approvals widget now carries `updatePeriodMillis="1800000"` (the board
+  widget's period since it was written), because a RemoteViews drawn by a
+  killed process is otherwise held by the launcher for ever - so a **live**
+  surface is bounded by 30 s, but a killed phone's widget can lag up to
+  **30 minutes**, and a cold draw says "Not checked yet" rather than drawing a
+  card it cannot vouch for (`WidgetStates`). And a decision now says who made
+  it: the phone sends `"by": "phone"` on both `/api/approve` and `/api/deny`
+  (`SignedApproval.BY`), where it used to send only `{"id"}` and inherit the
+  route's `"hud"` default - the field evidence that started this.
+
 - **Two MECHANICAL guards against blind, stacked approvals (2026-10-20).**
   The owner's incident: one "approve all" click approved three backup
   restores, two imports and a device-key registration, because repeated
@@ -796,17 +858,23 @@ places between screens. Presentation only - no approval logic changed.
      auto-approved. The SELECT and INSERT are one `BEGIN IMMEDIATE`
      transaction (`jarvis_gate.check()`, `backend/gate-touches.patch` - the
      file is patch-carried, not shipped whole).
-     **A lapsed card really does reach `expired`, on every read (2026-10-28).**
-     The sweep that settles an overdue row is one helper, run at start-up and
-     again by `pending()` before it builds the list; until then it ran once per
-     PROCESS, so a card whose waiting thread died with an earlier process
-     stayed `pending` - served by `/api/pending`, drawn by both apps as an
-     unanswerable "waiting on you" card, and blocking a later identical request
-     for the life of that process (the owner's report of expired cards he could
-     not clear on his phone). It is a lapse and never a decision, it approves
-     nothing, and it cannot take a live card: the deadline is recomputed on the
-     PC at the moment of the read, and no client sends an id it could name a
-     card with.
+     **A card whose request has stopped waiting is not reused, and leaves on
+     the next read (2026-10-28).** The card draws no countdown, but its row
+     records the request's last moment (`waited_until`); `pending()` runs
+     #965's read-time sweep before it builds the list, so a routine row past
+     that moment plus the same 60-second grace is marked `expired` and not
+     served. That is what stops a live Approve that could only answer 409.
+     Until that read lands the row is still `pending`, and the match is the
+     row's own `waited_until`: a card past it can take no "yes", and a new
+     identical request gets a card of its own instead of being told "the same
+     request is already waiting for you" about one nothing is waiting on.
+     **A dead process's rows are settled by the same sweep at the next
+     start-up** - and by the next read, which is what the owner's 2026-10-28
+     report of expired cards he could not clear on his phone needed. It is a
+     lapse and never a decision, it approves nothing, and it cannot take the
+     card of a request still inside its wait. The four ceremonies carry no
+     `waited_until` and are never swept; an explicit `withdraw()` still takes
+     their card off when the work is gone.
   2. **State-replacing cards say so and take a second press.** The cards
      that REPLACE or delete what is already there - `restore_backup`,
      `register_approval_key`, `memory_forget_range`, and the
@@ -1944,7 +2012,22 @@ card - only an app's tap does. The invariants:
 ## 6. Events — one bus
 
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
-changes from it and from nowhere else. Kinds: `approval`, `proposal`,
+changes from it and from nowhere else. **One documented exception: safety-net
+reads of the approval queue** (2026-10-29). A missed ring on that queue is a
+safety problem - a dead card stays on screen, or Approve is held on a queue
+nobody re-read - so it is also confirmed directly: the HUD page's
+`setInterval(() => apprPoll(), 30000)` (`jarvis_hud.html:8133`, which returns
+early while `document.hidden`); the Rust stream's `QUEUE_BEAT` through
+`queue_beat_due` (`stream.rs`, 30 s while a card waits on a connected link, and
+its successful read is also what clears `stale`); the phone's `QueueBeat.due`
+(`jarvis-client`, the same 30 s and the same two conditions); and the one-off
+`/api/pending` reads on connect, `hello`, resume and an `approval` event. While
+the HUD is visible and a card waits, the PC therefore runs **two** independent
+30 s reads - the HUD's own poll and the stream's beat - deliberately, so either
+can fail without silencing the other. The pump is still what ANNOUNCES every
+change: these reads only re-confirm `/api/pending` (they can discover a change
+the pump failed to announce, which is the point), they introduce no state change
+of their own, and none of them can approve or deny anything. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
 `deep`, `memory_saved`, `schedule`, `focus`, `wellbeing`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
@@ -3143,6 +3226,7 @@ are deliberate and recorded rather than left to be discovered:
 | A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control. The desktop's temporary chat is in the Jarvis bar, where its chat is. Both apps have the feature (JARVIS-API §4). Since the owner's decision of 2026-10-06 the HUD's own chat box is shown and usable again, and a button beside it still opens the Jarvis bar; the box's turns are their own conversation, filed in History as HUD. |
 | The HUD's three layouts - Command Cockpit (default), Studio Split-Workspace, Ambient Voice Core - and the pickers for them (the owner's request of 2026-10-20, "i would also like to choose from 3 different UIs for the jarvis HUD in the settings... looking cutting edge while still being intuitive and effective"; `jarvis-desktop/src/jarvis_hud.html`, `hud-window.js`, `hud-window-settings.js`, the "The big HUD window" card in Settings) | **The desktop's only, because a phone has no HUD window** - the big always-on panel is a PC surface, and the phone's own look is its three themes (`Themes.kt`), shared with the desktop through `theme.css` and unchanged by this. The setting is cosmetic, like the theme: no approval card, no Rust command, no route. It is kept in the HUD origin's `localStorage` under `hud-window.js`'s `HUD_LAYOUT_KEY` (the same place and same road as the "Open the Jarvis bar" button switch above it), so the Settings card and the in-HUD picker write one key, and the open HUD obeys a change at once through the shared `storage` event. All three layouts are the one page switched by `document.body.dataset.hudLayout`; every DOM id stays in the document in every mode. `tools/check_parity.py` has nothing to classify: no route, no phone surface. **Fit (2026-10-21, field fix):** the HUD window's declared minimum is 960x640, and `window_memory.rs` (`MIN_INNER`, `clamp_restored_size`) now clamps a stale saved size back up to it on restore - Windows accepts a programmatic resize below the minimum, so the installed app once came back at 815x691 with its layout picker off-screen. The page itself also wraps its stage header and drops the Cockpit to one column at 720 CSS px, because the app's own Text-size / Ctrl+= zoom shrinks the CSS viewport without changing the window; no control is off-screen at any of those widths, and the right rail is the drawer the base stylesheet already provides below 1080px. |
 | The HUD Galaxy's three lenses - Memory, Neural, Unified - and their picker (the owner-approved Galaxy v2 slice G1, 2026-10-21; `jarvis-desktop/src/jarvis_hud.html`, `docs/DECISIONS.md` 2026-10-21) | **The desktop HUD window's alone, because a phone has no HUD window and the memory graph is off the phone** (standing rule; `tools/check_parity.py` has nothing to classify: no route, no phone surface). It is a VIEW over the ONE graph the HUD already reads - `GET /api/graph`, through the shell's fixed allowlist - so it adds no route, no permission and no Rust: `Neural` draws the capability half the PC's own `build_graph()` computed (`collect_models` brains, `collect_tools` ability groups and abilities), `Memory` draws the memory half (facts, documents, knowledge/entities, projects, skills, personas) **exactly as the PC sent it, so it is already redacted by the PC's lock rules when the owner has hidden memory lists**, and `Unified` shows both with a counts line that says which half is which. Every dot is also a real focusable HTML `<button>` with a label - the canvas is the picture, not the only surface - and the counts are computed from the payload, never typed into the page. The honest limits: the Memory lens shows names and counts, not the per-entity facts list (`/api/memory/entities` is deliberately not reachable from this window; Brain keeps that list), and `/api/presets` is not reachable either, so a lens cannot mark an active lane. The chosen lens is a cosmetic preference in the HUD origin's `localStorage` (`jarvis.galaxy.lens`), no approval card, no setting in Settings. Tests: `jarvis-desktop/tests/hud.mjs` (three lenses over a stub graph, computed counts that follow the payload, keyboard focus + Enter opening the inspector in every lens, an empty Memory lens saying so honestly, and the lens surviving a reload). **The Galaxy's eight looks and their Look switch (2026-10-27)** are the same surface for the same reason: the owner asked for "an easy way to change the appearance of the jarvis galaxy to the other models" and meant the memory/capability picture, so the switch sits in the HUD's own Galaxy view beside those lenses and lists the looks `galaxy-presets.js` builds (constellation, planetary orbit, neural arbor, nebula, DNA helix, radar dome, star map, clean tree, zen ring). It writes ONE `localStorage` key (`jarvis.galaxy.preset`), adds no route, no command and no phone surface, and the module is served beside the server like the page's other modules, which `backend/test_hud_static.py` pins. `jarvis-desktop/tests/hud-galaxy-looks.mjs` drives the switch in the real window and checks that the picture on screen IS that layout. **The Galaxy options surface and Hide the galaxy (2026-10-27)** are the same HUD-only surface, for the same reason: the owner asked to "simplify all the galaxy options ... to have it under Galaxy options", with "a new icon on the left column", "an option next to the word telemetry" and "an option to hide the galaxy under the Galaxy Options menu". Every galaxy-only control - the three lenses, the Look switch, "Search the brain…", Reset view, Pause spin and the computed counts line - moved (ids and listeners unchanged) into ONE `#galaxy-options` dialog after `#shell`, opened by a new left-column icon (`#rail-galaxy-options` in the shells whose left column is the rail, `#dock-galaxy-options` in the Studio dock), the stage words row's `#stage-galaxy-options` beside Telemetry, and, in the shells whose stage has no words row, `#stage-bar-galaxy-options` beside the Telemetry toggle. **It adds no route, command, backend or phone surface**: every action is the page's own listener that already existed, and Hide the galaxy is a view preference in the HUD origin's `localStorage` (`jarvis.galaxy.hidden`) with the CSS hiding the picture and the drawing loop stopping on the same attribute - no approval card, no setting in Settings, reversible from the panel and from the map's own place holder, and the key is removed when the galaxy is shown again. The page's visual look and rendering engine are deliberately untouched (a separate workstream ports the new look). Tests: `jarvis-desktop/tests/hud-galaxy-options.mjs` (the source half: one surface, the words order, the doors, the hide key) and `hud-galaxy-looks.mjs` (the browser half: the panel opens, every picker is inside it, hiding persists and reverses). |
+| **The Galaxy's look is now SHARED, superseding the per-device rule above** (2026-10-28, the owner: *"including changing the jarvis face model and galaxy models"*) | The paragraph above (2026-10-27) says the eight looks are the HUD's alone: ONE localStorage key, no route, no command and no phone surface. That was the design until the owner asked for the Galaxy to follow his devices the way the face and the voice do, and it had a real gap he could see: a look chosen on the PC could not reach the phone at all, because no device can read another device's localStorage. So the look is one more key in the same appearance document as the face (galaxy, docs/APPEARANCE-API.md), with the same merge, the same ppearance event and no approval card, and the HUD's Look switch writes it through ONE new narrow command (hud_set_galaxy_look, proved against galaxy-presets.js's own list, in the existing hud-faces set rather than a new one). **The phone draws it** with the desktop's own flat layout of that look (GalaxyLayouts.kt, ported from layoutStarMap/layoutCleanTree/layoutPlanetaryOrbit/layoutNeuralArbor/layoutNebula/layoutDnaHelix/layoutRadarDome, and held to the JavaScript's numbers by 	ools/gen_galaxy_picture_cases.py --check in CI and GalaxyPictureTest), and its Appearance screen gains a look picker, so a choice made on either app reaches the other. **One-sided on purpose, and said out loud:** the phone cannot draw the desktop's default constellation, whose picture is the PC's own physics simulation - it draws its zen ring for that one and the Galaxy plate says which look is on screen (Picture.drawn vs Picture.look), because docs/APPEARANCE-SYNC-PROPOSAL.md §2 makes "fall back, and SAY SO" the rule and a silent substitution the worst outcome. The Brain window's own look switch still writes the device key, which the HUD keeps in step, so it follows on its next load but not live yet: a named follow-up, not a hidden difference. What stays per device is unchanged and still written down here: the desktop theme, the face's sharpness/frame rate/speed, and the face's size on each screen. 	ools/check_parity.py classifies the new route key as shared (the phone both reads and writes it). |
 | "Chat history…" in the tray, and the Jarvis bar's "Esc: end chat" with "Chat ended. Kept chats are in Brain > History." (the chat audit, 2026-09-28) | A tray menu and an Esc key are the PC's. The phone's way to History is "Earlier chats" on Home (next to Temporary chat), which the bar has too; the phone's chat ends on New conversation, a temporary chat, Live, 30 quiet minutes or the app's process ending - it has no Esc. |
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily, Brave or DeepSeek key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature; DeepSeek added 2026-10-23. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`, `key deepseek`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |

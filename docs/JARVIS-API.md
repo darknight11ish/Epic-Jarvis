@@ -286,22 +286,33 @@ The current parser refuses names that mean "already dealt with"
 NAME, for the read-only "Activity" list. Section 41 has the details, and
 what could and could not be confirmed about its rows' exact shape.
 
-### Approve/deny bodies — the clients disagree
+### Approve/deny bodies — settled 2026-10-29: all three surfaces name themselves
 
 ```
-Desktop  →  {"id": "<id>", "by": "desktop_spotlight"}      commands.rs:914-916, 954-958
-Android  →  {"id": "<id>"}                                  JarvisApi.kt:395, 484
+Desktop  →  {"id": "<id>", "by": "desktop_spotlight"}      commands.rs:3064-3067
+HUD page →  {"id": "<id>", "by": "hud"}                    jarvis_hud.html (apprDecide)
+Android  →  {"id": "<id>", "by": "phone"}                  SignedApproval.BY, approveBody/denyBody
 ```
 
-The desktop adds `by` so the server can record which machine the human was
-sitting at. The phone sends no such field, so a decision made from the phone is
-attributed to nothing. Neither client knows whether the server reads `by` at
-all. See §7.
+`jarvis_hud.py`'s route for both methods reads `by` and stores it as the gate's
+`decided_by` column (`jarvis_hud.py` `/api/approve|/api/deny`,
+`jarvis_gate.decide`). The default when the field is **absent or empty** is
+`"hud"`, which is what the phone used to inherit by sending only `{"id"}` — so
+until 2026-10-29 every phone decision was recorded as the browser HUD's, and the
+Activity list on both apps repeated that back as the device that answered. The
+phone now sends `"by": "phone"` on **both** verbs, from one constant, because
+`approveBody` and `denyBody` in `SignedApproval` are built together and
+`SignedApprovalTest` holds them to the same word. A `by` longer than 64
+characters is cut, not refused — it lands in a stored column. `backend/test_decided_by_attribution.py`
+proves the whole path, including that a decided card is gone from the next
+`/api/pending` and that a second answer is refused. See §7.
 
 A **409** from either route means "already decided, expired, or unknown id"
 (`commands.rs:853-855`) — routine when both clients are open, and the Android
 client gives it its own named outcome rather than rendering it as a failure
-(`JarvisApi.kt:501`).
+(`JarvisApi.kt:501`). A 409 is also the server half of "no dead Approve on a
+resolved card": the verdict cannot be recorded twice, and both apps re-read the
+queue when they see one.
 
 ### Approving with a choice
 
@@ -365,26 +376,31 @@ A tool card's `detail.text` may end with a "What shaped this request:" block
 came from that text rather than from the owner (§4, "Tool calls and outside
 text"). It is part of the text; show it the way the rest is shown.
 
-`expires_in` is seconds left before the gate stops waiting and refuses the
-card (`approval_timeout_seconds`, 900 in the shipped config since 2026-10-14 -
-fifteen minutes, and changeable in Settings on either app, 5 minutes to an hour;
-it was 600, and 180 before that). Seconds left,
-not a clock time, so the phone's clock does not have to agree with the PC's.
-Without the patch the field is absent and no countdown is shown.
+**`expires_in` IS NOT SENT AT ALL SINCE 2026-10-28** (the owner's ruling: "if
+there doesn't need to be a time limit don't have one";
+`backend/no-deadline-cards.patch`). No screen is handed a countdown: while a
+request is genuinely waiting, its card shows Approve and Deny and no clock. The
+field is left OFF, never `0` (which both apps read as "expired now") and never a
+very large number (which would draw a countdown that ends in a refusal that
+never comes). Both clients already treat an absent field as "no countdown" —
+they have done so for the four ceremonies below since 2026-10-23 — so no client
+change was needed for the card to draw correctly. The field is still
+UNDERSTOOD: a backend older than this patch sends it (seconds left before it
+stops waiting, `approval_timeout_seconds`, 900 in the shipped config since
+2026-10-14, changeable in Settings), and the phone, desktop and HUD still count
+down from it. `backend/test_approval_contract.py` no longer builds `expires_in`
+into `jarvis-client/app/src/test/resources/contract/pending-rows.json`, and
+both clients' contract tests keep a check that an older backend's field is
+still read.
 
-**The field is also absent for the four cards that have NO deadline** (the
-owner's ruling of 2026-10-23, Q1; `backend/no-expiry-cards.patch`): pairing a
-device (`pair_device`, `unretire_shared_key`), registering a phone's approval
-key (`register_approval_key`) and restoring a backup (`restore_backup`) wait for
-the owner instead of running out. Every other action - including every routine
-one and every action nobody classified - keeps the 15-minute window above. The
-field is left OFF for the four, never `0` (which both apps read as "expired
-now") and never a very large number (which would draw a countdown that ends in a
-refusal that never comes). Both clients already treat an absent field as "no
-countdown", so no client change is needed; `backend/test_gate_no_expiry.py`
-drives the gate and `backend/test_approval_contract.py` still builds the
-fixture from the real `notice_for` and `expires_in` code into
-`jarvis-client/app/src/test/resources/contract/pending-rows.json`.
+**The four ceremonies of the 2026-10-23 ruling are not narrowed** (Q1;
+`backend/no-expiry-cards.patch`): pairing a device (`pair_device`,
+`unretire_shared_key`), registering a phone's approval key
+(`register_approval_key`) and restoring a backup (`restore_backup`) are
+answerable for as long as the owner needs. Since 2026-10-28 their rows carry no
+`waited_until`, so the read-time sweep below never touches them, and the
+difference is only in their REQUEST: theirs waits until its own flow withdraws
+the card, while every other request waits `approval_timeout_seconds`.
 
 **A card past its deadline is not served at all** (2026-10-28). `GET
 /api/pending` runs the gate's own expiry sweep before it builds the list, so the
@@ -404,13 +420,70 @@ out") because it believed the row. `backend/test_pending_expiry_on_read.py`
 proves an overdue card leaves while a live one stays. The bounded cost: an
 overdue row can still be served for up to that 60-second grace and until the
 next read after it, and a card that expires while a screen is already open sits
-there until that screen next reads the queue. **No client-side "clear expired"
-control exists, and none is needed** — the card is gone from the next read and
-nothing can be approved by a card that is not served. The phone's only added
-half is one line in `MainActivity.onResume` that re-reads this route when the
-app comes to the front (2026-10-28), so opening Jarvis is the whole answer; it is
-a read and decides nothing. The desktop's HUD, widget and bar re-read on the
-events they already receive.
+there until that screen next reads the queue — which since 2026-10-29 is at
+most **30 seconds while the app is running and the link is live**. That is not
+one number for every surface: a killed phone's widget keeps the last RemoteViews
+the launcher drew until the widget's own update,
+`android:updatePeriodMillis="1800000"`, so it can lag up to **30 minutes**; and
+while the desktop's stream is down there is no beat at all, so its bound is the
+next event or reconnect. A stale-but-connected desktop link recovers on the next
+beat, because that read is what clears `stale` (the `approval` event's success
+and the beat share one rule, `stream.rs`'s `queue_read_landed`). **No client-side
+"clear expired" control exists, and none is needed** — the card is gone from the
+next read and nothing can be approved by a card that is not served. The phone's
+own halves are one line in `MainActivity.onResume` that re-reads this route when
+the app comes to the front (2026-10-28), and `QueueBeat` — one re-read every 30 s
+while a card is waiting on a CONNECTED link, which is also what clears a card
+**decided elsewhere** (`JarvisRuntime`; the widget, the notification and Home all
+draw from that one `pending`). The desktop's HUD, widget and bar re-read on the
+events they already receive, and `stream.rs` adds the same 30-second re-read
+beside them (`queue_beat_due`) for the case where the `approval` event never
+arrives. While the HUD is visible and a card waits, that is TWO independent 30 s
+`/api/pending` reads on the PC - the HUD page's own `apprPoll` and the stream's
+beat - which is deliberate (either can fail without silencing the other) and is
+named in `ARCHITECTURE.md` §6.
+
+**A routine card whose request has finished is swept on the next read, so no
+live Approve is left; the 409 is the race guard** (2026-10-28, Gemini F3 /
+ruling f). The card has no countdown, but the request that raised it does, and
+that last moment is on the row (`waited_until`). `GET /api/pending` runs the
+gate's own `_expire_overdue()` before it builds the list: a routine row past
+`waited_until` plus the same 60-second grace is marked `expired` and **not
+served**, so no screen is handed a card whose Approve is guaranteed to answer
+409. **It is a lapse, never a decision** — nothing is approved or denied, and
+the row still appears in `history` (and in the Activity list, §42) as
+`expired`. **It cannot take a live card:** the moment is recomputed on the PC at
+the read, from this machine's clock; a card whose request is still waiting has
+`waited_until` in the future and is left alone.
+
+Inside that 60-second grace a card can still be on a screen whose queue was read
+just before the moment passed. A tap then must not record a yes that nothing
+will run, so `POST /api/approve` revalidates at the decision: the PC's own
+`jarvis_owner_check.approve_check()` asks `jarvis_gate.still_waiting()` before
+any Windows Hello prompt and again after it, answers **409** with one sentence —
+*"That card is not waiting for you any more: the request that asked has
+finished, so nothing can be approved from it. Nothing was changed - ask Jarvis
+again if you still want it."* — and takes the card off the list at that moment
+(`state` `expired`: a lapse, never a denial). **A Deny always works**, including
+on a card whose request is gone: refusing is the safe direction. The desktop HUD
+shows the 409's sentence as it is; the desktop bar/widget and the phone say
+their own plain sentence ("That card is not waiting any more — it was answered,
+or the request that asked has finished") and re-read the queue, so the withdrawn
+card leaves the screen. `backend/test_gate_no_deadline.py` proves all of it —
+including that a routine card inside the grace is still `pending` with no
+`expires_in`, that the next read after the grace takes it, and that a late
+approval is refused with that exact sentence and never silently expired.
+`backend/test_pending_expiry_on_read.py` stays as the evidence for the
+every-read sweep in the patch that introduced it.
+
+**A process that died mid-wait is still tidied at the next start-up** (and by
+the first read after it), which is what the 2026-10-28 "cards that are expired"
+report needed: the helper `_expire_overdue()` settles only rows no living
+request can act on — a routine row past its `waited_until` plus the grace, or a
+row from before this patch with no `waited_until` (nothing can approve it). It
+is a lapse, never a decision; nothing a person decided is hidden. The phone's
+one added line in `MainActivity.onResume` (re-reading this route when the app
+comes to the front) stays as it was — a read, which decides nothing.
 
 ### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
 
@@ -1721,7 +1794,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/digest` | GET | `attention.rs:81`, `routes.rs:35` | `JarvisApi.kt:280` | List key: `digest`. |
 | `/api/config` | GET | `routes.rs:36` | **no** | **Read-only: writing answers 501.** This is why there is no shared place to store a preference — `API-DISAGREEMENTS.md` §11. |
 | `/api/visual-spec` | GET | `spec_drift.rs:50` | **no** | Desktop checks its bundled spec against the server's at startup. The phone never fetches it. |
-| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Since 2026-09-28 a GET also carries `animal` - "Keep the animal still" and the behaviour switches (`animal.patch`, §93) - read only: a POST ignores it (they change through `/api/animal`). Since 2026-10-26 a POST MERGES: a key the request does not carry keeps its stored value, and only the keys it carries are replaced (clearing is explicit - `face: null` clears the face, `bindings: {}` clears the state bindings). Before that the whole document was replaced, so a fresh phone pushing its colours wrote `face: null` and erased the desktop's face. The face can also be ASKED for in chat ("change your face to Spiral", "use the Orbit face", §58.2.1): one `face` key through the same write, no card, and both apps follow it through the `appearance` event. Not in this document, on purpose: display choices kept on ONE device - the face's sharpness (quality), frame rate and speed. The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its `FaceTuning` (`AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. ("Keep the animal still" was one of these until 2026-09-28; each device's old "on" is sent to the PC once, §93.4.) |
+| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Since 2026-09-28 a GET also carries `animal` - "Keep the animal still" and the behaviour switches (`animal.patch`, §93) - read only: a POST ignores it (they change through `/api/animal`). Since 2026-10-26 a POST MERGES: a key the request does not carry keeps its stored value, and only the keys it carries are replaced (clearing is explicit - `face: null` clears the face, `bindings: {}` clears the state bindings). Before that the whole document was replaced, so a fresh phone pushing its colours wrote `face: null` and erased the desktop's face. The face can also be ASKED for in chat ("change your face to Spiral", "use the Orbit face", §58.2.1): one `face` key through the same write, no card, and both apps follow it through the `appearance` event. **Since 2026-10-28 the document also carries `galaxy`** - the Galaxy's look, the owner's "galaxy models": one look id from `galaxy-presets.js` (`constellation`, `planetary-orbit`, `neural-arbor`, `nebula`, `dna-helix`, `radar-dome`, `star-map`, `clean-tree`, `zen-ring`), the same merge and the same `appearance` event as `face`, no card, and the server reads the look list from that module (a machine without it stores the id unvalidated and says so). It used to be a per-device `localStorage` key on the PC, which the phone could not see at all; both apps now draw the same look, the phone with the desktop's own flat layout of it. Not in this document, on purpose: display choices kept on ONE device - the face's sharpness (quality), frame rate and speed, the face's size on the PC's HUD (`jarvis.face.size`) and on the phone (`FaceSize`), and the desktop theme. The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its `FaceTuning` (`AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. ("Keep the animal still" was one of these until 2026-09-28; each device's old "on" is sent to the PC once, §93.4.) |
 | `/api/animal` | GET / POST | `animal.rs` | `JarvisApi.animal` / `animalPost` | `animal.patch` (2026-09-28): the shared animal switches with the PC's words; ONE change per POST, no card. §93. |
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
@@ -1969,10 +2042,17 @@ know which side the backend agrees with.
    phone reads both framings through `net/ChatChunkParser.kt`, as the
    desktop does - `API-DISAGREEMENTS.md` §4.)
 
-2. **Approve/deny attribution.** Desktop sends `"by": "desktop_spotlight"`
-   (`commands.rs:914-916`); Android sends only `{"id": …}` (`JarvisApi.kt:395`).
-   If the server records `by`, phone decisions are attributed to nothing. If it
-   ignores `by`, the desktop is sending a field nobody reads.
+2. **Approve/deny attribution — SETTLED 2026-10-29.** Desktop sends
+   `"by": "desktop_spotlight"` (`commands.rs:3064-3067`), the browser HUD sends
+   `"by": "hud"`, and Android now sends `"by": "phone"` (`SignedApproval.BY`,
+   used by both `approveBody` and `denyBody`). The server **does** read it: the
+   route passes it to `jarvis_gate.decide`, which stores it as `decided_by`, and
+   an absent or empty one defaults to `"hud"` - so the phone's old `{"id"}`-only
+   body was recorded as the HUD's, which is the owner's 2026-10-29 field
+   evidence. `backend/test_decided_by_attribution.py` drives both halves. What
+   remains different between the clients is only the WORD each sends, and that
+   is deliberate: it is how a person reading the Activity list can tell which
+   surface answered.
 
 3. **`/api/appearance` — the clients used to contradict each other about
    whether it exists.** *Resolved on the desktop side:* `appearance.rs` now

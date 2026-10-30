@@ -193,18 +193,29 @@ def t_close_phrasings():
         i = Q.match(s)
         check(f"{s!r} is answered without the model",
               i is not None and i.name == "calendar_setup", i)
+    #: THE GOOGLE SENTENCES MOVED (2026-10-29, the HUD field test): a sentence
+    #: that names a GOOGLE calendar/account or email is now `accounts_connect`'s
+    #: (all four real paths, no card), because one iCal card cannot be the
+    #: answer to "my calendar and email". "external calendars like google or
+    #: outlook" names no Google calendar and keeps the card.
+    moved = (
+        "can you connect to my google calendar?",
+        "add my google calendar",
+    )
+    for s in moved:
+        i = Q.match(s)
+        check(f"{s!r} is the Google/email answer's now",
+              i is not None and i.name == "accounts_connect", i)
     #: The same request in the shapes the CONNECT CARD claims (2026-10-28
     #: merge). This answer must NOT shadow the card for any of them:
     #: `backend/test_connect_account.py` holds the card's own half, and the
     #: split itself is pinned by `t_one_owner_per_sentence` below.
     card = (
-        "can you connect to my google calendar?",
         "can you connect directly to external calendars like google or outlook?",
         "connect my calendar",
         "set up my calendar",
         "set up my calendar please",
         "set up a calendar bridge for me",
-        "add my google calendar",
         "link my outlook calendar",
         "hook up my calendar to jarvis",
         "how do I connect my calendar",
@@ -242,8 +253,13 @@ def t_one_owner_per_sentence():
         ("is my calendar connected?", "connect_account", "status", "calendar_ics"),
         ("set up github", "connect_account", "card", "github"),
         ("is github set up?", "connect_account", "status", "github"),
-        # an account this PC cannot test yet: answered honestly, no card
-        ("connect my email", "connect_account", "later", ""),
+        # -- the Google/email answer: every path, into which a value is never
+        # typed (2026-10-29, the HUD field test) --
+        ("can you connect my calendar and email", "accounts_connect", None, None),
+        ("what about connecting to a gmail account or google calendar?",
+         "accounts_connect", None, None),
+        ("connect my google calendar", "accounts_connect", None, None),
+        ("connect my email", "accounts_connect", None, None),
         # -- this answer: the setup shapes the card does not claim --
         ("calendar setup", "calendar_setup", None, None),
         ("sync my calendar with jarvis", "calendar_setup", None, None),
@@ -300,6 +316,13 @@ def t_one_owner_per_sentence():
               reply.lower().count("not connected") == 1, reply)
         check("... the old desktop-only route that never said PC is gone",
               "pick the private link or Google sign-in" not in reply, reply)
+        # Restored 2026-10-30: the step main already had, which a shorter
+        # rewrite of this sentence dropped. Pasting the private link is not
+        # enough on its own - the read-only way is CHOSEN with this command, so
+        # without it the owner follows every word and still reads nothing.
+        check("... it keeps the command that chooses the read-only way",
+              "py -3 jarvis_google_calendar.py mode ical" in reply
+              and "in the backend folder" in reply, reply)
         add = Q.answer("add a meeting Tuesday 3pm", sched=_Sched())
         check("an event sentence is the Google answer's too",
               add is not None and add.intent == "google_calendar", add)

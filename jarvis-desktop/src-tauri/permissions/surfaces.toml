@@ -2186,9 +2186,10 @@ permissions = [
 # through this set either - the shell pushes that into the page in any case.
 [[set]]
 identifier = "hud-faces"
-description = "Switch WHICH face model Jarvis wears: one face id, proved against the spec and saved through the Faces window's own appearance save. Cosmetic - no card, no colours, no bindings and no animal switch are reachable here."
+description = "Switch WHICH face model Jarvis wears and WHICH Galaxy look it shows: one face id and one look id, each proved against its own list (the spec's faces, galaxy-presets.js's built looks) and saved through the Faces window's own appearance save. Cosmetic - no card, no colours, no bindings and no animal switch are reachable here."
 permissions = [
   "allow-hud-set-face",
+  "allow-hud-set-galaxy-look",
 ]
 
 # The HUD Presets menu's Cloud escalation switch (2026-10-27). The owner asked
