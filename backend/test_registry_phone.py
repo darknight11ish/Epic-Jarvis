@@ -94,7 +94,7 @@ def t_the_real_registries_pass_and_are_read_at_all():
     check("every menu the audit corrected is recorded as one the phone has",
           len(C.PHONE_HAS) == 8, sorted(C.PHONE_HAS))
     check("the phone's own PC_ONLY list was really read",
-          "notifications" in C.open_place_pc_only(), sorted(C.open_place_pc_only()))
+          "shortcuts" in C.open_place_pc_only(), sorted(C.open_place_pc_only()))
 
 
 def t_a_parse_that_finds_nothing_raises():
@@ -206,22 +206,25 @@ def t_a_phone_screen_reading_a_desktop_only_id_fails_with_the_line():
 
 
 def t_the_two_registries_are_held_to_each_other():
-    """The `notifications` shape: a section only one registry knows about.
+    """A section only one registry knows about (the `shortcuts` shape).
 
     `PHONE_LACKS` is emptied alongside, because the point of this test is the
     agreement check alone - a desktop-only menu left without a reason would
-    otherwise fire first and mask it.
+    otherwise fire first and mask it. The example section is `shortcuts` rather
+    than `notifications` since 2026-10-29: the settings wrong-app audit (finding
+    7) made notifications a section BOTH apps have, so it is no longer in the
+    desktop-only list this check walks.
     """
     with patched(PHONE_LACKS={},
-                 settings_desktop_sections=lambda: ["notifications"],
-                 desktop_settings_card_ids=lambda: {"notifications", "voice"},
+                 settings_desktop_sections=lambda: ["shortcuts"],
+                 desktop_settings_card_ids=lambda: {"shortcuts", "voice"},
                  # Every other desktop-only section is named, so the ONE thing
                  # this test is about is the one thing it reports.
                  open_place_pc_only=lambda: set(C.SETTINGS_DESKTOP_ONLY),
                  desktop_only_ids=lambda: []):
         got = errors()
     check("a desktop Settings card called desktop-only with no such menu is reported",
-          any("no desktop-only `settings.notifications` menu" in line for line in got), got)
+          any("no desktop-only `settings.shortcuts` menu" in line for line in got), got)
 
     # ...and the same disagreement for a section that is NOT a real card at all
     # (a row inside one): the first loop's own words.

@@ -139,13 +139,13 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"more-options",',
     },
-    "settings.notifications": {
-        "name": "Notifications",
-        "why": ("The phone's notification controls are Android's own, per channel; the phone's "
-                "\"Notifications from Jarvis\" row opens Android's screen instead."),
-        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
-        "must_contain": '"notifications",',
-    },
+    # `settings.notifications` was a PHONE_LACKS entry until 2026-10-29. The
+    # settings wrong-app audit (finding 7) found the claim false: the phone
+    # draws the PC's own seven notification kinds in its "Notifications from
+    # Jarvis" row (SettingsScreen.kt's PcNotifySection, every line saying
+    # "(on your PC)"), through the same limits route the desktop card uses.
+    # `jarvis_menus.py` now records it as BOTH, so the entry is gone rather
+    # than repeated - a stale absence is how a real phone feature hides.
     "settings.hud-window": {
         "name": "The big HUD window",
         "why": "The big \"Jarvis\" window is the PC's; a phone has no such window.",
@@ -323,7 +323,7 @@ PHONE_HAS = {
 #: accepts either a desktop-only menu or a mention in `settings.html`.
 SETTINGS_DESKTOP_ONLY = (
     "first-run", "shortcuts", "account-secrets", "chatbot-api-keys", "tool-updates",
-    "more-options", "start-jarvis", "crash-notes", "hud-window", "notifications",
+    "more-options", "start-jarvis", "crash-notes", "hud-window",
 )
 
 #: Below this many ids the parse has broken and the check would pass by
