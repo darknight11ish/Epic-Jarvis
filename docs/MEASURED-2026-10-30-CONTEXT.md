@@ -201,7 +201,8 @@ costs is measurable:
   otherwise empty was not run.
 - **The 16,384 control run itself:** 1,046-token prompt, 23.7 s to first token
   (22.6 s of it the load), 41.9 tokens/s over a 32-token answer, all 33 layers
-  on the 2060, and it left the machine in the state it was found in.
+  on the 2060. Its 10-minute keep-alive then let the model unload, and it was
+  loaded once more at 16,384 so the machine was left as it was found.
 
 **What this means for the setting.** 16,384 stays the number to deploy. The
 bigger windows are *safe* - no out-of-memory error, no CPU offload, no lost
@@ -347,7 +348,11 @@ back afterwards (`/api/ps` on 11436 still reports `jarvis-primary:latest` at
 16,384). One intermittent runner warning, `llama-server GPU discovery watchdog
 timed out`, appeared on some loads (it did on the earlier 00:30 load too); each
 load still reported `offloaded 33/33 layers to GPU` and every request returned
-an answer. No setting, file, model or service was changed by this follow-up.
+an answer. The probe requests carried a 10-minute keep-alive, so the last
+16,384 load unloaded itself about ten minutes after the final request; it was
+then loaded once more at 16,384 (same model, same context, one two-token
+request) to leave the lane as it was found. No setting, file, model or service
+was changed by this follow-up.
 
 ---
 
