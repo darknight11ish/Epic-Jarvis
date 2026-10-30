@@ -193,8 +193,10 @@ await check("the icon reuses the rail's rules, and the toolbar wraps instead of 
 await check("the icon does not disturb HUD edit mode", () => {
   const edit = read(join(SRC, "hud-edit.js"));
   // Not a movable card: the editor's registry names the rail's sections, and
-  // the toolbar is not one of them.
-  assert.equal(/faces/i.test(edit), false,
+  // the toolbar is not one of them. The pin is word-bounded on purpose: the
+  // editor's own prose says "safety surfaces", and the substring hunt read the
+  // "faces" inside "surfaces" as an invented card id (PR #981, 2026-10-30).
+  assert.equal(/\bfaces\b/i.test(edit), false,
     "hud-edit.js mentions faces - a new card id or region was invented for a toolbar button");
   assert.equal(/rail-toolbar/.test(edit), false,
     "hud-edit.js started managing the toolbar, which the face icon now shares");
