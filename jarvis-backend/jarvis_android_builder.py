@@ -1144,11 +1144,15 @@ def _card_plumbing() -> dict:
     all still apply.
     """
 
-    def gate(action: str, detail=None, text: str = "") -> bool:
+    def gate(action: str, detail=None, text: str = ""):
+        # Hand back the gate's Verdict itself, never a bool: _decide() reads
+        # .tier, .outcome and P._person_said_yes() off it. Returning a bool made
+        # the module refuse EVERY approved card with "the gate answered at tier
+        # 'unknown'" (found on the owner's PC, 2026-10-30: the card was approved
+        # on the desktop and the build still refused).
         import jarvis_gate
-        v = jarvis_gate.check(action, detail=detail if isinstance(detail, dict) else {},
-                              prompt=str(text or ""))
-        return bool(getattr(v, "allowed", False))
+        return jarvis_gate.check(action, detail=detail if isinstance(detail, dict) else {},
+                                 prompt=str(text or ""))
 
     def tier_of(action: str) -> str:
         try:
