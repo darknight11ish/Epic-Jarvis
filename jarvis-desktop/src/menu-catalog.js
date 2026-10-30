@@ -1227,7 +1227,8 @@ export const MENUS = [
     "title": "Notifications",
     "about": "Which notifications Jarvis shows on this PC, quiet hours, and a test.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "settings",
     "view": "",
@@ -1236,7 +1237,7 @@ export const MENUS = [
     "parent": null,
     "hide": false,
     "collapse": false,
-    "why": "Desktop only: the phone's notification controls are Android's own, per channel (OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen).",
+    "why": "Both apps change the same seven kinds: on the phone they are drawn under \"Notifications from Jarvis\", each row saying it is the PC's; neither app has a hide row for them, so `hide` is False on both.",
     "names": [
       "notifications",
       "notification settings",

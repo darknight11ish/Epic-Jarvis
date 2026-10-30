@@ -95,7 +95,7 @@ class DevicesTest {
         )
         val now = 1790003600L + 120L
         assertEquals(
-            "phone · paired " + Devices.day(1790000000L, Locale.UK) + " · last used 2 minutes ago",
+            "phone · paired " + Devices.day(1790000000L, Locale.UK) + " · last active 2 minutes ago",
             Devices.detailLine(v.devices[1], now, Locale.UK),
         )
         assertTrue(Devices.day(1790000000L, Locale.UK).matches(Regex("\\d{1,2} \\w+")))
@@ -109,6 +109,28 @@ class DevicesTest {
         assertEquals("1 minute ago", Devices.ago(60))
         assertEquals("3 hours ago", Devices.ago(3 * 3600 + 5))
         assertEquals("2 days ago", Devices.ago(2 * 86400))
+    }
+
+    /**
+     * B6, phone field test 2026-10-29 (REPORT.md): both paired phones read
+     * "last used just now" on one screen, so the row claimed deliberate use
+     * the PC's number cannot support. The PC writes `last_seen` on ANY
+     * request the device makes, at most once a minute
+     * (`jarvis_devices.wrap_token_ok` -> `_note_seen`), and this app's own
+     * background reads count - the model-lane poll alone is one every 90
+     * seconds (`ModelWords.POLL_MS`). The row now says what the fact is:
+     * when the phone last checked in with the PC.
+     */
+    @Test
+    fun `a device's age line says last active, never last used`() {
+        val v = Devices.parse(designList)
+        val now = 1790003600L
+        val line = Devices.detailLine(v.devices[1].copy(lastSeen = now - 120), now, Locale.UK)
+        assertTrue("the honest words: $line", line.endsWith("last active 2 minutes ago"))
+        assertFalse(
+            "the PC's number cannot support a claim of deliberate use: $line",
+            line.contains("last used"),
+        )
     }
 
     @Test

@@ -520,10 +520,22 @@ def t_pages_that_need_the_owner():
     a = widget("zendesk", "leave")
     try:
         a.open()
-        end = time.monotonic() + 8
+        # The page leaves 800 ms after it loads, so this waits for a fact that
+        # is certain - but every `status()` is a round trip through the widget's
+        # own worker thread, and on a starved CI runner one of those can take
+        # seconds. It once took the whole 8 s budget here and the last reading
+        # was taken mid-navigation: the page's URL was still the help page while
+        # its chat had already gone, which reads as "no chat open" and says
+        # nothing about where the page went (run 40832512910, 2026-10-29 - the
+        # same suite passes on Windows, this was the Linux job alone). So the
+        # budget has room and the verdict is a reading taken after it, never the
+        # last one a slow call happened to leave behind.
+        end = time.monotonic() + 20
         st = a.status()
         while time.monotonic() < end and "localhost" not in st.reason:
             time.sleep(0.3)
+            st = a.status()
+        if "localhost" not in st.reason:
             st = a.status()
         check("the page sent elsewhere pauses, naming the host",
               st.state == "needs_owner" and "localhost" in st.reason, st)

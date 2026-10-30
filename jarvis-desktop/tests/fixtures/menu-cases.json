@@ -1095,7 +1095,8 @@
       "title": "Notifications",
       "about": "Which notifications Jarvis shows on this PC, quiet hours, and a test.",
       "apps": [
-        "desktop"
+        "desktop",
+        "phone"
       ],
       "area": "settings",
       "view": "",
@@ -1104,7 +1105,7 @@
       "parent": null,
       "hide": false,
       "collapse": false,
-      "why": "Desktop only: the phone's notification controls are Android's own, per channel (OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen).",
+      "why": "Both apps change the same seven kinds: on the phone they are drawn under \"Notifications from Jarvis\", each row saying it is the PC's; neither app has a hide row for them, so `hide` is False on both.",
       "names": [
         "notifications",
         "notification settings",
@@ -2826,7 +2827,7 @@
     },
     {
       "id": "settings.notifications",
-      "why": "Desktop only: the phone's notification controls are Android's own, per channel (OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen)."
+      "why": "Both apps change the same seven kinds: on the phone they are drawn under \"Notifications from Jarvis\", each row saying it is the PC's; neither app has a hide row for them, so `hide` is False on both."
     },
     {
       "id": "settings.menu-visibility",
@@ -3514,6 +3515,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -3714,6 +3716,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -3910,6 +3913,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -5383,6 +5387,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -6206,6 +6211,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -6401,6 +6407,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -6798,6 +6805,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -6993,6 +7001,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,
@@ -7194,6 +7203,7 @@
         "settings.limits": false,
         "settings.email-sending": false,
         "settings.about": false,
+        "settings.notifications": false,
         "settings.backend-supports": false,
         "settings.watch-notify": false,
         "settings.phone-notify": false,

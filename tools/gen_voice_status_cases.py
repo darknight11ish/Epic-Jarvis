@@ -57,6 +57,11 @@ import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
 import jarvis_voice_flow as F  # noqa: E402
+# The one PC-wide voice setting (the chosen voice, its speed, an animal face):
+# jarvis_speech reads it through _voices_mod(), which imports THIS module. Not
+# to be confused with V above - jarvis_voice.py is the owner's voice PRINT
+# (prove it is the owner talking), jarvis_voices.py is HOW Jarvis sounds.
+import jarvis_voices as VOICES  # noqa: E402
 
 # The audit log is NOT part of the fixture, and the cases below drive the real
 # routes, which audit. The settings file pinned above ships
@@ -195,6 +200,23 @@ class World:
         speaker_dir = missing_models("voice-models", "speaker")
         self.patches = [
             mock.patch.object(S, "_config_dir", return_value=d),
+            # THE CHOSEN VOICE, ITS SPEED AND AN ANIMAL FACE ARE BUILT TOO -
+            # jarvis_voices' own config folder, not the machine's (2026-10-29).
+            # status()'s speech block comes from jarvis_voices (speaker(),
+            # speed(), builtin_voice()), and the "One moment." clip's cache key
+            # is a hash of exactly those values (jarvis_voice_flow.moment_key).
+            # Left to the machine, the committed file held whichever voice that
+            # PC had saved: measured on this tree, the owner's PC (its
+            # `voices/state.json` says bm_george) answered key 373b7500b87b,
+            # while a machine with no saved choice answered 34c972a65e5f - the
+            # committed one. On CI the suites share ONE temporary config folder,
+            # so it can already hold a voice an earlier suite saved by the time
+            # this runs - and both jobs (ubuntu and windows) rendered the same
+            # third key and failed three checks in run 40832200470.
+            # tools/gen_phone_voice_cases.py already pins this same folder for
+            # its own fixture (its World, VS._config_dir); this producer was the
+            # one that did not.
+            mock.patch.object(VOICES, "_config_dir", return_value=d),
             mock.patch.object(V, "PROFILE_PATH", self.profile),
             mock.patch.object(W, "model_dir", return_value=wake_dir),
             mock.patch.object(T, "model_path", return_value=turn_file),

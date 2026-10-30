@@ -145,6 +145,18 @@ class VoiceSession(
     val recorder = Recorder(context)
     val speaker = Speaker(context)
 
+    private val _voiceNow = MutableStateFlow(VoiceNow.Source.NONE)
+
+    /**
+     * Which voice the last reply on this phone was really spoken in: the PC's
+     * (`/api/voice/say`), or this phone's own offline voice when the PC had no
+     * engine, or nothing yet. The Live screen shows it, so "the voice did not
+     * change" can be seen for what it is - a voice the PC is not using, or a
+     * PC with no voice at all - instead of looking like Live ignoring the
+     * setting (the owner's report of 2026-10-28; the rules are in [VoiceNow]).
+     */
+    val voiceNow: StateFlow<VoiceNow.Source> = _voiceNow.asStateFlow()
+
     private val turnModel: TurnModel? by lazy {
         runCatching {
             OrtTurnModel.load(context.assets.open("turn/${OrtTurnModel.FILE}").use { it.readBytes() })
@@ -1421,9 +1433,14 @@ class VoiceSession(
     private suspend fun playNow(turn: Turn, text: String, said: ApiResult<SaidAloud>) {
         when (said) {
             is ApiResult.Ok -> when (val out = said.value) {
-                is SaidAloud.Audio -> speaker.play(out.wav)
+                is SaidAloud.Audio -> {
+                    // The PC made this sound, in the voice both apps show.
+                    _voiceNow.value = VoiceNow.Source.PC
+                    speaker.play(out.wav)
+                }
                 is SaidAloud.NoEngine -> {
                     if (!out.fallbackOk) {
+                        _voiceNow.value = VoiceNow.Source.NONE
                         setNotice(
                             turn,
                             out.reason
@@ -1434,6 +1451,10 @@ class VoiceSession(
                     val spoke = runCatching { speaker.speakOnDevice(text) }
                         .onFailure { Log.w(TAG, "on-device synthesis failed", it) }
                         .getOrDefault(false)
+                    // The phone's own voice is a voice the PC cannot change, so
+                    // which one was used is published rather than assumed.
+                    _voiceNow.value = VoiceNow.sourceOf(
+                        saidOnPc = false, fallbackAllowed = out.fallbackOk, spoke = spoke)
                     // `speakOnDevice` also returns false when it was stopped;
                     // only a real failure is reported as one.
                     SpokenNotice.afterOnDevice(spoke, stoppedThisTurn = turn.silenced)
@@ -1444,6 +1465,7 @@ class VoiceSession(
             // that authorises this device to speak the text, and a failure is
             // not that - it carries no permission at all.
             is ApiResult.Failed -> {
+                _voiceNow.value = VoiceNow.Source.NONE
                 setNotice(
                     turn,
                     "Could not reach the desktop to speak that. The reply is on screen.",

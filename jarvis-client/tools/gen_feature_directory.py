@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +44,32 @@ def kt(s) -> str:
     text = "" if s is None else str(s)
     return '"' + (text.replace("\\", "\\\\").replace('"', '\\"')
                   .replace("$", "\\$").replace("\n", "\\n")) + '"'
+
+
+#: Words that already say the sentence is about the PC: "on the PC",
+#: "on your PC", or the "PC: ..." prefix. A row carrying one of these is left
+#: exactly as the contract wrote it.
+_PC_ALREADY_SAID = re.compile(r"(?i)\bon (?:the|your) pc\b|\bpc:")
+
+
+def phone_why(f: dict) -> str:
+    """The row's words as the PHONE may show them.
+
+    A `desktop`-surface row's `where` is the PC's own place - "Settings,
+    Accounts - the private calendar link", "Brain, Memory, What Jarvis knows
+    about you", "Settings, Shortcuts" - and this artifact is drawn on the
+    phone, which has no Accounts section, no tray icon and no Brain rail tabs.
+    Read on the phone with no qualifier, those words dead-end: the settings
+    wrong-app audit of 2026-10-29 (findings 1 and 2) counted 17 such rows.
+    So the PC is named in front, once, unless the contract's sentence already
+    names it. The contract is never modified here; the page's own copy of the
+    same words (jarvis-desktop/src/feature-directory.js) keeps them as written,
+    where they ARE this app's place.
+    """
+    why = str(f.get("where") or "")
+    if str(f.get("surface") or "") == "desktop" and not _PC_ALREADY_SAID.search(why):
+        return "On your PC: " + why
+    return why
 
 
 def row(f: dict) -> dict:
@@ -69,7 +96,7 @@ def row(f: dict) -> dict:
         "group": str(f.get("group") or ""),
         "surface": str(f.get("surface") or ""),
         "label": label,
-        "why": str(f.get("where") or ""),
+        "why": phone_why(f),
         "examplePhrase": str(evidence.get("example_phrase") or ""),
         "exampleWords": str(evidence.get("example_phrase") or ""),
         "settingsPath": str(evidence.get("screen_path") or ""),

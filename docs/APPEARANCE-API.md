@@ -51,6 +51,10 @@ falls back to the local store and every write says so on screen:
 * `bindings` — state id to binding. **A state that is absent keeps the spec's
   default.** A client that has never been edited is not a client with no face,
   so a partial document is valid and normal.
+* `galaxy` — the Galaxy's look, **since 2026-10-28** (see the section below).
+  One id from `galaxy-presets.js`. Absent and `null` both mean "no look has
+  been chosen", which each client draws as its own default; `null` in a write
+  clears it, like `face`.
 * `color` — **absent** for the two patterns whose `kind` is `hue_sweep`
   (`rainbow`, `sweep`). They generate their own hues, so storing a colour
   there would imply it does something.
@@ -74,6 +78,41 @@ below). The server owns `updated` and stamps it.
 ```json
 { "ok": true, "updated": 1758067200.0 }
 ```
+
+## The Galaxy's look, from either app (2026-10-28)
+
+The owner: *"including changing the jarvis face model and galaxy models"* - one
+sentence after asking that the voice be the same on both his apps. The face and
+the state colours already followed one another; the Galaxy's **look** did not
+follow anything, because it was a `localStorage` key on whichever PC window drew
+the picture (`galaxy-presets.js`'s `PRESET_STORAGE_KEY`), and no other device can
+see another's `localStorage`.
+
+So the look is one more key in this same document:
+
+* **`galaxy`** is a look id from `galaxy-presets.js` - the module the HUD's Look
+  switch is built from. The server reads the ids out of that module rather than
+  keeping its own list, because a list of another component's contents kept by
+  hand is the thing in this system that has rotted most reliably. A machine
+  without the module stores the id unvalidated and says so, exactly as it does
+  for an absent visual spec.
+* **A look no renderer knows is refused** (400, naming it). A stored typo would
+  draw the constellation everywhere while the switch showed something else - a
+  choice in effect nowhere, which is the worst of the three outcomes.
+* **No approval card**, no new route, no new secret: it changes a picture.
+* **The `appearance` event carries it**, so both apps repaint without a reload.
+  The HUD takes it from the document it already receives; the phone applies it
+  through `AppearanceStore.applySyncDocument`, next to the face.
+* **The phone draws it** with the desktop's own flat layout for that look
+  (`GalaxyLayouts.kt`, checked against `galaxy-presets.js`'s numbers by
+  `GalaxyPictureTest` and by `tools/gen_galaxy_picture_cases.py --check` in CI).
+  The one look it cannot draw is the desktop's default `constellation`, whose
+  picture is the PC's own physics simulation - so the phone draws its zen ring
+  for that one and the Galaxy plate **says so** in words, rather than showing a
+  different picture under the same name.
+* **What stays per device**: the PC's theme, the face's sharpness/frame
+  rate/speed, and the face's size on each screen. Those are tastes about one
+  screen, and neither app can draw the other's.
 
 ## Asking for a face, from either app (2026-10-26)
 
