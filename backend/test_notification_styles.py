@@ -1,6 +1,6 @@
 """test_notification_styles.py - "Notification styles you describe"
 (jarvis_notification_styles.py; the owner's ask of 2026-10-30; docs/JARVIS-API.md
-section 163).
+section 167).
 
     python -B backend/test_notification_styles.py
 

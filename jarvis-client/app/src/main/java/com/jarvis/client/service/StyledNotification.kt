@@ -10,7 +10,7 @@ import com.jarvis.client.net.NotificationStyle
 
 /**
  * Draws a notification the owner styled (2026-10-30; see
- * [NotificationStyle] and docs/JARVIS-API.md section 163).
+ * [NotificationStyle] and docs/JARVIS-API.md section 167).
  *
  * This file is the ONLY place that touches RemoteViews, and it does three
  * things: ask [NotificationStyle.plan] whether a style applies (it can say

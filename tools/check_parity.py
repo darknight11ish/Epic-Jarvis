@@ -778,17 +778,17 @@ PHONE_ONLY = {
     # "Notification styles you describe" (2026-10-30; the owner's ask: "does
     # jarvis android have custom animated notifications? ... i want them
     # customizable and buildable by just chatting to jarvis"; JARVIS-API
-    # section 163; backend/jarvis_notification_styles.py, installed by
+    # section 167; backend/jarvis_notification_styles.py, installed by
     # jarvis_brain_reads.install()). PHONE-ONLY because the thing being styled
     # is the phone's notification: the desktop's notifications are Windows
     # toasts drawn from a fixed XML template by Windows itself, so there is no
     # layout to style there. The desktop's chat still makes the same preview
     # (the data the phone draws). ARCHITECTURE.md section 8 records why.
-    "/api/notification-styles": ("phone-only", "The saved notification styles, the previews waiting for Add, and which style is live for each kind (JARVIS-API section 163; the owner's ask of 2026-10-30). Phone: net/NotificationStyle.kt, ui/screens/NotificationStylesPlate.kt, and the notifiers via service/StyledNotification.kt. Desktop: nothing to draw them on - Windows draws a toast from its own template - so the desktop only answers the chat preview (docs/ARCHITECTURE.md section 8)."),
-    "/api/notification-styles/draft": ("phone-only", "A style PREVIEW from the owner's own typed words: the PC's local model answers JSON on a closed menu and plain code checks it; nothing is applied (JARVIS-API section 163). Same phone-only reason as GET /api/notification-styles: what is being styled is the phone's notification. The chat path reaches the same route's data from both apps."),
-    "/api/notification-styles/add": ("phone-only", "Keep ONE preview exactly as shown, so the style becomes live for its kinds (JARVIS-API section 163). Phone: NotificationStylesPlate's Add, held on a stale link. No approval card: a style shows nothing new and grants nothing. Phone-only for the same reason as GET /api/notification-styles."),
-    "/api/notification-styles/discard": ("phone-only", "Drop ONE style preview (JARVIS-API section 163). Not held on a stale link - it only drops. Phone-only for the same reason as GET /api/notification-styles."),
-    "/api/notification-styles/delete": ("phone-only", "Delete ONE saved style, at once (JARVIS-API section 163). Phone: NotificationStylesPlate's Delete, held on a stale link. Phone-only for the same reason as GET /api/notification-styles."),
+    "/api/notification-styles": ("phone-only", "The saved notification styles, the previews waiting for Add, and which style is live for each kind (JARVIS-API section 167; the owner's ask of 2026-10-30). Phone: net/NotificationStyle.kt, ui/screens/NotificationStylesPlate.kt, and the notifiers via service/StyledNotification.kt. Desktop: nothing to draw them on - Windows draws a toast from its own template - so the desktop only answers the chat preview (docs/ARCHITECTURE.md section 8)."),
+    "/api/notification-styles/draft": ("phone-only", "A style PREVIEW from the owner's own typed words: the PC's local model answers JSON on a closed menu and plain code checks it; nothing is applied (JARVIS-API section 167). Same phone-only reason as GET /api/notification-styles: what is being styled is the phone's notification. The chat path reaches the same route's data from both apps."),
+    "/api/notification-styles/add": ("phone-only", "Keep ONE preview exactly as shown, so the style becomes live for its kinds (JARVIS-API section 167). Phone: NotificationStylesPlate's Add, held on a stale link. No approval card: a style shows nothing new and grants nothing. Phone-only for the same reason as GET /api/notification-styles."),
+    "/api/notification-styles/discard": ("phone-only", "Drop ONE style preview (JARVIS-API section 167). Not held on a stale link - it only drops. Phone-only for the same reason as GET /api/notification-styles."),
+    "/api/notification-styles/delete": ("phone-only", "Delete ONE saved style, at once (JARVIS-API section 167). Phone: NotificationStylesPlate's Delete, held on a stale link. Phone-only for the same reason as GET /api/notification-styles."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 

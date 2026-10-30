@@ -9,7 +9,7 @@ import kotlinx.serialization.json.put
 
 /**
  * "Notification styles you describe" (the owner's ask of 2026-10-30;
- * docs/JARVIS-API.md section 163; backend jarvis_notification_styles.py).
+ * docs/JARVIS-API.md section 167; backend jarvis_notification_styles.py).
  *
  * A style is a small CHECKED DESCRIPTION the PC keeps - a colour name, a
  * figure, an animation, a speed and which notifications it is for - never

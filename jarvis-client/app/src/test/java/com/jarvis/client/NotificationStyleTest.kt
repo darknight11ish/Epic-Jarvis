@@ -17,7 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * "Notification styles you describe" (docs/JARVIS-API.md section 163; the
+ * "Notification styles you describe" (docs/JARVIS-API.md section 167; the
  * owner's ask of 2026-10-30).
  *
  * Everything here is the PURE decision layer: the wire enums, the strict

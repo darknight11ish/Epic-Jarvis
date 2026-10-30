@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 /**
  * "Notification styles" on Brain, under "Notifications from Jarvis"
  * ([NotificationStyle], the owner's ask of 2026-10-30; docs/JARVIS-API.md
- * section 163).
+ * section 167).
  *
  * The saved styles (Delete, ONE per tap, at once), the previews waiting for
  * Add (Add keeps ONE exactly as shown; Discard drops it), what is live now,

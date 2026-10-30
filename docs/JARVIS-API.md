@@ -27218,7 +27218,7 @@ page the host's own card list, clicks Save, and asserts the boxes come from
 the boxes are empty after the save and the values reached the backend as one card
 id plus the declared fields - with no token in the page.
 
-## 163. Notification styles: a closed look for the phone's notifications, described by talking (phone and backend, added 2026-10-30)
+## 167. Notification styles: a closed look for the phone's notifications, described by talking (phone and backend, added 2026-10-30)
 
 The owner asked, 2026-10-30: *"does jarvis android have custom animated notifications? if not can you
 build this feature into it? i want them customizable and buildable by just chatting to jarvis"*.
