@@ -228,15 +228,15 @@ class HistoryViewTest {
     // ------------------------------------------------------------ menu ---
 
     @Test
-    fun `the overflow menu is Open, Pin or Unpin, Move when there are tags, Delete`() {
+    fun `the overflow menu is Open, Pin or Unpin, Move when there are tags, Archive, Delete`() {
         assertEquals(
-            listOf(HistoryView.Action.OPEN, HistoryView.Action.PIN, HistoryView.Action.DELETE),
+            listOf(HistoryView.Action.OPEN, HistoryView.Action.PIN, HistoryView.Action.ARCHIVE, HistoryView.Action.DELETE),
             HistoryView.menu(emptyList(), filing = false),
         )
         assertEquals(
             listOf(
                 HistoryView.Action.OPEN, HistoryView.Action.PIN,
-                HistoryView.Action.MOVE, HistoryView.Action.DELETE,
+                HistoryView.Action.MOVE, HistoryView.Action.ARCHIVE, HistoryView.Action.DELETE,
             ),
             HistoryView.menu(listOf(work), filing = false),
         )
@@ -245,6 +245,9 @@ class HistoryViewTest {
         assertEquals("Pin to top", HistoryView.actionLabel(HistoryView.Action.PIN, pinned = false))
         assertEquals("Unpin", HistoryView.actionLabel(HistoryView.Action.PIN, pinned = true))
         assertEquals("Move to", HistoryView.actionLabel(HistoryView.Action.MOVE, pinned = false))
+        assertEquals("Archive", HistoryView.actionLabel(HistoryView.Action.ARCHIVE, pinned = false))
+        assertEquals("Unarchive", HistoryView.actionLabel(HistoryView.Action.ARCHIVE, pinned = false, archived = true))
+        assertEquals("Archive", HistoryView.actionLabel(HistoryView.Action.ARCHIVE, pinned = true))
         assertEquals("Delete", HistoryView.actionLabel(HistoryView.Action.DELETE, pinned = false))
         assertEquals("Chat actions for Dentist", HistoryView.actionsFor("Dentist"))
     }

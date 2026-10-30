@@ -976,6 +976,310 @@ def t_delete_one_and_no_delete_all():
         w.done()
 
 
+def t_archiving_one_chat_hides_it_and_unarchive_brings_it_back():
+    """Archive (the owner, 2026-10-29: "make sure i can archive and delete
+    chats (with a confirm step)"; JARVIS-API section 18.3): one reversible
+    local flag, no card and no confirm step. The ordinary list is only the
+    chats NOT archived; `?archived=1` is the second list, and the two are
+    never mixed. Unarchive is the same route with `false`."""
+    w = World()
+    try:
+        w.log.record_turn(req(SENTENCE, cid="conv-arch001"), turn=local("kept"))
+        w.clock.t += 60
+        w.log.record_turn(req("the other one", cid="conv-arch002"), turn=local("kept"))
+        before = {c["id"]: c for c in H.handle_get("/api/history", "")[1]["conversations"]}
+        check("before archiving both chats are in the ordinary list",
+              sorted(before) == ["conv-arch001", "conv-arch002"], sorted(before))
+        check("every row carries `archived` as a JSON boolean, false by default",
+              all(c["archived"] is False for c in before.values()), str(before))
+        check("the archive is empty before anything is put away",
+              H.handle_get("/api/history", "archived=1")[1]["conversations"] == [])
+        old_updated = before["conv-arch001"]["updated"]
+        code, out = H.handle_post("/api/history/archive",
+                                  {"id": "conv-arch001", "archived": True})
+        check("POST /api/history/archive answers 200", code == 200, str((code, out)))
+        check("its reply is exactly {ok, id, archived}",
+              out == {"ok": True, "id": "conv-arch001", "archived": True}, str(out))
+        code, body = H.handle_get("/api/history", "")
+        check("the archived chat is gone from the ordinary list",
+              [c["id"] for c in body["conversations"]] == ["conv-arch002"],
+              str([c["id"] for c in body["conversations"]]))
+        code, body = H.handle_get("/api/history", "archived=1")
+        check("?archived=1 lists it, and only it",
+              [c["id"] for c in body["conversations"]] == ["conv-arch001"],
+              str([c["id"] for c in body["conversations"]]))
+        check("its row there says archived: true",
+              body["conversations"][0]["archived"] is True, str(body["conversations"]))
+        check("?archived=true is the same list",
+              [c["id"] for c in H.handle_get("/api/history", "archived=true")[1]
+               ["conversations"]] == ["conv-arch001"])
+        check("?archived=0 is the ordinary list",
+              [c["id"] for c in H.handle_get("/api/history", "archived=0")[1]
+               ["conversations"]] == ["conv-arch002"])
+        check("a nonsense ?archived= is ignored, like kind and tag",
+              [c["id"] for c in H.handle_get("/api/history", "archived=maybe")[1]
+               ["conversations"]] == ["conv-arch002"])
+        conv = H.handle_get("/api/history/conversation", "id=conv-arch001")[1]
+        check("opening the archived chat says archived: true", conv["archived"] is True)
+        check("... and its words are still there: archiving deletes nothing",
+              conv["turns"][0]["text"] == SENTENCE, str(conv["turns"]))
+        # It composes with the existing filters: one archived chat, tagged.
+        tag = next(t for t in w.log.tags()["tags"] if t["name"] == "Work")["id"]
+        H.handle_post("/api/history/tag", {"id": "conv-arch001", "tag_id": tag})
+        check("?archived=1 composes with ?tag=",
+              [c["id"] for c in H.handle_get("/api/history", f"archived=1&tag={tag}")[1]
+               ["conversations"]] == ["conv-arch001"])
+        check("... and the ordinary list with the same tag does not show it",
+              H.handle_get("/api/history", f"tag={tag}")[1]["conversations"] == [])
+        H.handle_post("/api/history/archive", {"id": "conv-arch002", "archived": True})
+        code, body = H.handle_get("/api/history", "archived=1&limit=1")
+        check("?archived=1 composes with ?limit= (newest archived first)",
+              [c["id"] for c in body["conversations"]] == ["conv-arch002"]
+              and body["conversations"][0]["archived"] is True,
+              str([c["id"] for c in body["conversations"]]))
+        code, body = H.handle_get(
+            "/api/history", f"archived=1&limit=1&before={body['conversations'][-1]['updated']}")
+        check("... and with ?before= (the older archived chat comes next)",
+              [c["id"] for c in body["conversations"]] == ["conv-arch001"],
+              str([c["id"] for c in body["conversations"]]))
+        H.handle_post("/api/history/archive", {"id": "conv-arch002", "archived": False})
+        code, out = H.handle_post("/api/history/archive",
+                                  {"id": "conv-arch001", "archived": False})
+        check("Unarchive is the same route with false, and answers 200",
+              code == 200 and out == {"ok": True, "id": "conv-arch001",
+                                      "archived": False}, str((code, out)))
+        rows = [c["id"] for c in H.handle_get("/api/history", "")[1]["conversations"]]
+        check("both are back in the ordinary list, in their old order",
+              rows == ["conv-arch002", "conv-arch001"], rows)
+        check("... and the archive is empty again",
+              H.handle_get("/api/history", "archived=1")[1]["conversations"] == [])
+        check("unarchiving did not move its `updated` (putting away is not an edit)",
+              H.handle_get("/api/history", "")[1]["conversations"][1]["updated"]
+              == old_updated, f"{old_updated} -> "
+                            f"{H.handle_get('/api/history', '')[1]['conversations'][1]['updated']}")
+        # The archive survives a restart because it is a column in the file.
+        H.handle_post("/api/history/archive", {"id": "conv-arch001", "archived": True})
+        again = H.ChatLog(w.log.db_path, w.log.settings_path, lambda: KEY, clock=w.clock)
+        archived = [c["id"] for c in again.list(archived=True)["conversations"]]
+        ordinary = [c["id"] for c in again.list()["conversations"]]
+        check("a NEW ChatLog on the same file reads the archive back (restart)",
+              archived == ["conv-arch001"] and ordinary == ["conv-arch002"],
+              f"archived={archived}, ordinary={ordinary}")
+        # The phone's Archived view sends its own filters WITH archived=1 and
+        # expects the PC to AND them: one archived Live session, and ?kind=
+        # narrows the archive rather than being ignored.
+        w.clock.t += 60
+        # Jarvis Live marks the MESSAGE it sends (`live: true`), not the body:
+        # that is what makes the conversation kind "live".
+        w.log.record_turn({"conversation_id": "conv-archlive", "device": "hud",
+                           "messages": [{"role": "user", "content": "a live session",
+                                         "provenance": "voice", "live": True}]},
+                          lane="t", turn=local("ok"))
+        check("a Live session to put away",
+              H.handle_post("/api/history/archive",
+                            {"id": "conv-archlive", "archived": True})[0] == 200)
+        code, body = H.handle_get("/api/history", "archived=1&kind=live")
+        check("?archived=1 composes with ?kind=live",
+              [c["id"] for c in body["conversations"]] == ["conv-archlive"],
+              str([c["id"] for c in body["conversations"]]))
+        code, body = H.handle_get("/api/history", "archived=1&kind=chat")
+        check("... and ?kind=chat in the archive does not show the Live session",
+              [c["id"] for c in body["conversations"]] == ["conv-arch001"],
+              str([c["id"] for c in body["conversations"]]))
+    finally:
+        w.done()
+
+
+def t_the_archive_exact_refusals_and_metadata_only():
+    """The archive route's contract (section 18.3): 400 for a body that is not
+    exactly {"id", "archived"} or an id/flag of the wrong type, 404 for a
+    well-formed id that names no chat - and nothing written by any refusal.
+    The flag is a number in the conversations table, never a word; the raw
+    file holds no title text; archiving twice keeps the first moment."""
+    w = World()
+    try:
+        w.log.record_turn(req("my sister Priya is visiting on Sunday",
+                              cid="conv-arch-meta"), turn=local("ok"))
+        cases = [
+            ("a body that is not an object", "not an object", 400),
+            ("a missing `archived`", {"id": "conv-arch-meta"}, 400),
+            ("a missing `id`", {"archived": True}, 400),
+            ("an extra key", {"id": "conv-arch-meta", "archived": True, "why": "because"},
+             400),
+            ("`archived` as a string", {"id": "conv-arch-meta", "archived": "yes"}, 400),
+            ("`archived` as 1 (an int, not a JSON boolean)",
+             {"id": "conv-arch-meta", "archived": 1}, 400),
+            ("`archived` as null", {"id": "conv-arch-meta", "archived": None}, 400),
+            ("an id that is not a string", {"id": 12345678, "archived": True}, 400),
+            ("an empty id", {"id": "", "archived": True}, 400),
+            ("an id longer than 128 characters", {"id": "x" * 129, "archived": True}, 400),
+            # A well-formed string that names no chat is a 404, never a 400.
+            ("a chat that is not there", {"id": "conv-zzzz", "archived": True}, 404),
+            ("a path, taken as an id", {"id": "../etc/passwd", "archived": True}, 404),
+            ("the cap's own length, naming no chat", {"id": "x" * 128, "archived": True},
+             404),
+        ]
+        for label, body, want in cases:
+            code, out = H.handle_post("/api/history/archive", body)
+            check(f"refused: {label} -> {want}",
+                  code == want and out.get("ok") is False
+                  and out.get("error") == ("bad_request" if want == 400 else "not_found")
+                  and out.get("message"), str((code, out)))
+        check("none of the refusals archived anything",
+              [c["id"] for c in H.handle_get("/api/history", "")[1]["conversations"]]
+              == ["conv-arch-meta"])
+        check("... and none of them invented a chat (no ghost row)",
+              H.handle_get("/api/history", "archived=1")[1]["conversations"] == [])
+        check("archiving it for real answers 200",
+              H.handle_post("/api/history/archive",
+                            {"id": "conv-arch-meta", "archived": True})[0] == 200)
+        with closing(sqlite3.connect(str(w.log.db_path))) as c:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(conversations)")}
+            stored = c.execute("SELECT archived_at FROM conversations WHERE id=?",
+                               ("conv-arch-meta",)).fetchone()
+        check("the table has the plain `archived_at` column", "archived_at" in cols, cols)
+        check("... and archiving writes a number there, not a word",
+              stored is not None and isinstance(stored[0], (int, float)) and stored[0] > 0,
+              str(stored))
+        first = stored[0]
+        w.clock.t += 300
+        H.handle_post("/api/history/archive", {"id": "conv-arch-meta", "archived": True})
+        with closing(sqlite3.connect(str(w.log.db_path))) as c:
+            again = c.execute("SELECT archived_at FROM conversations WHERE id=?",
+                              ("conv-arch-meta",)).fetchone()[0]
+        check("archiving twice keeps the FIRST moment it was archived", again == first,
+              f"{first} then {again}")
+        raw = w.raw()
+        check("the raw history file holds no title text (the flag stores no words)",
+              b"Priya" not in raw)
+        # While App lock / "Hide memory lists and chat history" is on, the route
+        # answers the SAME 423 for every id, so a locked PC is not an existence
+        # oracle - exactly the pin route's rule.
+        try:
+            import jarvis_private_view as pv
+        except Exception:
+            skip("jarvis_private_view is not importable here")
+            return
+        H.use(w.log)
+        was = pv.state()
+        try:
+            pv.note_state(app_locked=True)
+            here = H.handle_post("/api/history/archive",
+                                 {"id": "conv-arch-meta", "archived": False})
+            there = H.handle_post("/api/history/archive",
+                                  {"id": "conv-zzzz", "archived": True})
+            check("while locked, archiving a chat that exists answers 423",
+                  here[0] == 423 and here[1].get("error") == "locked", str(here))
+            check("... and an id that does not exist answers the SAME 423",
+                  there[0] == 423 and there[1] == here[1], str(there))
+            code, out = H.handle_get("/api/history", "archived=1")
+            check("... and the archived list withholds its rows too",
+                  out.get("hidden") is True and out.get("conversations") == [], str(out)[:160])
+        finally:
+            pv.note_state(app_locked=was.get("app_locked"),
+                          hide_memory_lists=was.get("hide_memory_lists"))
+        check("with the lock off again, the archive is intact (nothing was written)",
+              [c["id"] for c in H.handle_get("/api/history", "archived=1")[1]
+               ["conversations"]] == ["conv-arch-meta"])
+    finally:
+        w.done()
+
+
+def t_an_old_history_file_is_given_the_archived_column():
+    """A history kept before archiving existed is migrated in place: the plain
+    `archived_at` column is added on the first use, every chat it already
+    holds reads `archived: false`, and it takes an archive straight away."""
+    w = World()
+    try:
+        w.log.record_turn(req("what is on my list today", cid="conv-oldarch"),
+                          turn=local("ok"))
+        check("the fixture chat exists before the migration",
+              [c["id"] for c in H.handle_get("/api/history", "")[1]["conversations"]]
+              == ["conv-oldarch"])
+        # A history kept before archiving: the same file, with the column
+        # dropped. SQLite can drop a column since 3.35; if it cannot, the test
+        # says so instead of pretending.
+        try:
+            with closing(sqlite3.connect(str(w.log.db_path))) as c:
+                with c:
+                    c.execute("ALTER TABLE conversations DROP COLUMN archived_at")
+        except sqlite3.OperationalError as exc:
+            skip(f"this SQLite cannot DROP COLUMN ({exc})")
+            return
+        check("the file really has no `archived_at` column now", "archived_at" not in {
+            r[1] for r in sqlite3.connect(str(w.log.db_path)).execute(
+                "PRAGMA table_info(conversations)")})
+        old = H.ChatLog(w.log.db_path, w.log.settings_path, lambda: KEY, clock=w.clock)
+        H.use(old)
+        rows = H.handle_get("/api/history", "")[1]["conversations"]
+        check("the migrated file still lists its chat", [c["id"] for c in rows]
+              == ["conv-oldarch"], str(rows))
+        check("... and that chat reads archived: false rather than failing",
+              rows[0]["archived"] is False, str(rows[0]))
+        code, out = H.handle_post("/api/history/archive",
+                                  {"id": "conv-oldarch", "archived": True})
+        check("the migrated file takes an archive", code == 200
+              and out["archived"] is True, str((code, out)))
+        check("... and the column is really there now", "archived_at" in {
+            r[1] for r in sqlite3.connect(str(w.log.db_path)).execute(
+                "PRAGMA table_info(conversations)")})
+    finally:
+        w.done()
+
+
+def t_archive_leaves_pin_tag_delete_and_search_alone():
+    """Archiving composes with what was already there: pin, tag and delete
+    still act on an archived chat, search still finds its words (it is kept,
+    not deleted), and a fork of it is NOT archived - a fork is a new chat the
+    owner just made and must show in the list."""
+    w = World()
+    try:
+        w.log.record_turn(req("the dentist is on Tuesday", cid="conv-mix0001"),
+                          turn=local("ok"))
+        w.clock.t += 60
+        w.log.record_turn(req("the sea otter floats", cid="conv-mix0002"),
+                          turn=local("ok"))
+        check("a chat to put away",
+              H.handle_post("/api/history/archive",
+                            {"id": "conv-mix0001", "archived": True})[0] == 200)
+        code, out = H.handle_post("/api/history/pin",
+                                  {"id": "conv-mix0001", "pinned": True})
+        check("pin still works on an archived chat",
+              code == 200 and out["pinned"] is True, str((code, out)))
+        tag = next(t for t in w.log.tags()["tags"] if t["name"] == "Work")["id"]
+        code, out = H.handle_post("/api/history/tag",
+                                  {"id": "conv-mix0001", "tag_id": tag})
+        check("tag still works on an archived chat",
+              code == 200 and out["tag_id"] == tag, str((code, out)))
+        row = H.handle_get("/api/history", "archived=1")[1]["conversations"][0]
+        check("the archived row carries the pin and the tag too",
+              row["id"] == "conv-mix0001" and row["pinned"] is True
+              and row["tag_id"] == tag and row["archived"] is True, str(row))
+        found = w.log.search("dentist", limit=10)
+        check("search still finds an archived chat (it is kept, not deleted)",
+              found["conversations"] and found["conversations"][0]["id"] == "conv-mix0001"
+              and found["conversations"][0]["archived"] is True,
+              str(found["conversations"]))
+        code, out = H.handle_post("/api/history/fork",
+                                  {"id": "conv-mix0001", "upto": 1})
+        check("a fork of an archived chat is made", code == 200, str((code, out)))
+        if code == 200:
+            rows = {c["id"]: c for c in H.handle_get("/api/history", "")[1]
+                    ["conversations"]}
+            check("... and the fork is NOT archived (a new chat shows in the list)",
+                  rows[out["id"]]["archived"] is False, str(rows.get(out["id"])))
+        code, out = H.handle_post("/api/history/delete", {"id": "conv-mix0001"})
+        check("delete still deletes an archived chat",
+              code == 200 and out == {"ok": True}, str((code, out)))
+        check("... and it is gone from both lists",
+              H.handle_get("/api/history", "archived=1")[1]["conversations"] == []
+              and "conv-mix0001" not in [c["id"] for c in
+                                         H.handle_get("/api/history", "")[1]
+                                         ["conversations"]])
+    finally:
+        w.done()
+
+
 def t_keep_days_sweep():
     w = World()
     try:

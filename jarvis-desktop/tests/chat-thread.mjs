@@ -296,15 +296,18 @@ async function historyTab(history = {}, extra = {}) {
   return page;
 }
 
-await check("History: every row's Open and Delete name their chat", async () => {
+await check("History: every row's Open, Archive and Delete name their chat", async () => {
+  // Archive joined the row on 2026-10-29 ("make sure i can archive and delete
+  // chats (with a confirm step)"), so it names its chat like the other two:
+  // "Archive" ten times over says nothing about which chat it puts away.
   const page = await historyTab({ conversations: LIST, transcripts: TRANSCRIPTS });
   const names = await page.locator("#history-list .row-item button").evaluateAll(
     (bs) => bs.map((b) => b.getAttribute("aria-label")));
   await page.close();
   assert.deepEqual(names, [
-    "Open Planning the weekend", "Delete Planning the weekend",
-    "Open Groupon refund", "Delete Groupon refund",
-    "Open Dentist on Tuesday", "Delete Dentist on Tuesday"]);
+    "Open Planning the weekend", "Archive Planning the weekend", "Delete Planning the weekend",
+    "Open Groupon refund", "Archive Groupon refund", "Delete Groupon refund",
+    "Open Dentist on Tuesday", "Archive Dentist on Tuesday", "Delete Dentist on Tuesday"]);
 });
 
 await check("History: a search keeps each row's kind, and combines with Show", async () => {
