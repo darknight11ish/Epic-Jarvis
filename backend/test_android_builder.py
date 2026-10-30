@@ -1,5 +1,5 @@
 """test_android_builder.py - an app Jarvis builds and sideloads, from the
-owner's own words (jarvis_android_builder.py, docs/JARVIS-API.md section 168,
+owner's own words (jarvis_android_builder.py, docs/JARVIS-API.md section 166,
 docs/APP-BUILDER-DESIGN.md milestones C, F and G).
 
     python3 backend/test_android_builder.py

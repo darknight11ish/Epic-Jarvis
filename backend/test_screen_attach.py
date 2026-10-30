@@ -491,6 +491,11 @@ def t_hygiene():
     # /api/screen wrapper this patch installs.
     stack_order = __import__("_stack").order()
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
+             # attached-file.patch (2026-10-29, the owner's "a file in a chat"):
+             # ONE hunk, in jarvis_hud.py only (the attach line on the chat
+             # request), appended after this patch and immediately before
+             # plugin-loader.patch - it rewrites nothing this patch wrote.
+             "attached-file.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no line
              # this patch POST /api/screen wrapper wrote.

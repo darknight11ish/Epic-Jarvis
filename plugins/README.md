@@ -9,12 +9,12 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **41 drop-in modules**, in [`ready/`](ready/) -
+- **42 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **28** replace a patch, and are generated from it;
-  - **13** replace no patch: they were born as folders, and
+  - **14** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **134 core patches**, which still go on through
+- **135 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -56,7 +56,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 13 were never patches. There is nothing in the core
+These 14 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -77,6 +77,7 @@ it is one `apply-patches.ps1` copies in.
 | 158 | `sandbox` | the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once). |
 | 159 | `antislop` | the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buzzwords or generic CTAs, no decorative code comments, and an audit that checks contrast, dead controls and focus rings. |
 | 160 | `google-calendar` | Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time - and every change to an event waits on its own approval card. |
+| 161 | `jarvis-calendar` | Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch turns every surface off while keeping every event. |
 | 168 | `android-builder` | Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for the install. The card for the build names the exact command and says that a first build downloads Gradle and the Android Gradle plugin. |
 
 ## What stays in the core
@@ -220,6 +221,7 @@ stack's order and cannot be moved into a folder.
 | `cloud-escalate.patch` | edits lines the core already has; it cannot be applied out of order |
 | `f01-manual-lane-gate.patch` | edits lines the core already has; it cannot be applied out of order |
 | `learning-extract-reason.patch` | edits lines the core already has; it cannot be applied out of order |
+| `attached-file.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one

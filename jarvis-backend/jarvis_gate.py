@@ -361,7 +361,7 @@ _RISK: dict[str, tuple[str, str, str]] = {
     "app_merge_change": ("no", "local", "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet"),
     # jarvis_android_builder.py (2026-10-30, the owner's question "can jarvis
     # build android apps? that i can sideload into my phone?"; docs/
-    # APP-BUILDER-DESIGN.md milestones C, F and G; JARVIS-API section 168).
+    # APP-BUILDER-DESIGN.md milestones C, F and G; JARVIS-API section 166).
     # TWO actions, because they are two different risks and the owner is
     # entitled to say yes to one and no to the other:
     #   * app_build_android runs Gradle in one task's copy. A worktree is NOT a

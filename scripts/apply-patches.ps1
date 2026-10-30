@@ -1849,6 +1849,36 @@ $PATCHES = @(
     # after f01-manual-lane-gate.patch, and its context is the `_local_llm`
     # block of the owner's own file, which no patch before it writes.
     'learning-extract-reason.patch'
+
+    # attached-file.patch (2026-10-29, the owner's "file attachment in chat",
+    # both apps at once; the design is .dsh-scratch/
+    # FILE-UPLOAD-FEASIBILITY-2026-10-29/REPORT.md sections 7-8): the file the
+    # owner attaches rides in the NEWEST user message of the /api/chat request
+    # that already exists, and this PC turns it into text before any model sees
+    # it - no route, no upload, no temporary store, nothing written to disk.
+    # TWO hunks, both in jarvis_hud.py:
+    #   1. `_file_turn`, beside screen.patch's `_screen_turn` (its context is
+    #      that patch's own lines), and `has_file=_file_turn(body),` in the ONE
+    #      jarvis_router.choose() call - context: cloud-escalate.patch's
+    #      `has_screen=` line and f01-manual-lane-gate's own call shape, so it
+    #      goes after both and after screen.patch.
+    #   2. the relay belt in `_open()`, on chat-history.patch's own
+    #      `_chat_client_fields_off` lines: the `attachment` field comes off
+    #      every message of every relay request, unconditionally, whatever route
+    #      got the turn there. The router's gate "file" is the brace; this is
+    #      the belt, and it is why the file's words cannot be in a cloud request
+    #      even when a client forgot its `has_file` flag.
+    # The `attachment` field is NOT put in _CHAT_CLIENT_FIELDS, and that is not
+    # an oversight: that list is applied to the messages BEFORE the local
+    # answering loop is handed them, so a field on it would be gone before
+    # jarvis_agent.with_file_text could read it. The relay's own copy is what
+    # needs stripping, and hunk 2 strips it there.
+    # The reader itself is jarvis_attached_file.py (shipped whole, no patch):
+    # jarvis_agent.with_file_text replaces the field with a text part and
+    # jarvis_router.choose() answers gate "file". Needs jarvis_attached_file.py
+    # copied in (the $SHIPPED list above does it); without it every attachment
+    # is refused in plain words and nothing is read.
+    'attached-file.patch'
     'plugin-loader.patch'
 )
 
@@ -1946,6 +1976,7 @@ $SHIPPED = @(
     'jarvis_manner.py'           # manner.patch: warm and brief, or plain - the wording of answers only
     'jarvis_personality_creator.py' # chat co-creation of a personality (2026-10-25): drafts with the LOCAL model in the conversation and saves through jarvis_manner; called from jarvis_quick.py, no patch
     'jarvis_antislop.py'         # the Anti-Slop filter (2026-10-28): miqdadbadjuber/anti-slop v3.2.23 (MIT) distilled into one module - a prompt block scoped by the copy/code/ui switches, a deterministic em-dash and code-comment scrub, and a HIGH/MEDIUM/LOW auditor. GET/POST /api/antislop and POST /api/antislop/audit come from its own install(), called by plugins/ready/antislop, so it needs no patch of its own. A cardless preference either way, like the prompt coach
+    'jarvis_local_calendar.py'   # the Jarvis-owned local calendar (2026-10-29): the owner's own events in calendar.db, ON when no settings file says otherwise, OFF keeps every row. GET /api/calendar and the three writes come from its own install(), called by plugins/ready/jarvis-calendar, so it needs no patch. The writes are cardless by the owner's 2026-10-29 ruling (one event, no bulk, ids-only audit)
     'jarvis_card_words.py'       # approval-notice.patch: every approval card's plain title, and what Jarvis says aloud about a card
     'jarvis_card_summary.py'     # card-prefs.patch (the owner's request of 2026-10-09): the "Start short" / "Always show everything" choice for approval cards - GET/POST /api/card-prefs, kept in card-prefs.json so BOTH apps read the one setting. Cosmetic, so no card either way. The summary's words are jarvis_card_words.py's; this owns the preference and the "what one card shows" rule both apps follow
     # --- the tools jarvis_agent.py offers the model ---
@@ -2515,6 +2546,23 @@ $SHIPPED = @(
     'jarvis_android_builder.py'
     'jarvis-android-gradlew.bat'
     'jarvis-android-wrapper.jar'
+    # A file the owner ATTACHED to a chat (2026-10-29, the owner chose "both
+    # apps at once"; the design is .dsh-scratch/FILE-UPLOAD-FEASIBILITY-2026-10-29/
+    # REPORT.md): validation by kind, magic bytes and size, the never-read
+    # names, the zip-bomb refusal, the converter over a STREAM (jarvis_documents'
+    # new stdin mode, so nothing is written to disk), the 12,000-character cap,
+    # the chat-marker strip and the outside-text sentence.
+    # jarvis_agent.with_file_text calls it and jarvis_router.choose(has_file=...)
+    # answers gate "file"; attached-file.patch adds the ONE line to the HUD's
+    # router call and the relay belt. No route of its own, no new switch and no
+    # new permission on either app. The same entry is at the end of
+    # backend/_where.py's SHIPPED list.
+    'jarvis_attached_file.py'
+    # What a parking stay costs, minute by minute (2026-10-30, the parking
+    # blueprint of 2026-10-29). Its sentences are answered by jarvis_quick.py
+    # (already shipped above), so this adds no patch, no route, no gate list
+    # and no tool. Standard library only, so requirements.lock does not move.
+    'jarvis_parking.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

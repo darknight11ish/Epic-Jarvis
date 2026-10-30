@@ -18,8 +18,8 @@ import org.junit.Test
  * "Sun, moon and weather" on the phone reads what the PC really answers
  * (`contract/sky-cases.json`, made by `tools/gen_sky_cases.py` from the real
  * `jarvis_sky.view()`), shows the PC's words, sends only the changes a phone
- * may send (never a town), and keeps only the rounded position and the
- * weather numbers.
+ * may send (the town among them, the owner's decision of 2026-10-29), and
+ * keeps only the rounded position and the weather numbers.
  */
 class SkySettingsTest {
 
@@ -100,5 +100,27 @@ class SkySettingsTest {
         // Damaged storage is "nothing kept", never a guess.
         assertEquals(SkySettings.Stored(false, null, null, 0L), SkySettings.decode("{nope"))
         assertEquals(SkySettings.Stored(false, null, null, 0L), SkySettings.decode(null))
+    }
+
+    @Test
+    fun thePhoneMayTypeItsOwnTown() {
+        // The PC's answer says whether this phone may type one (the owner's
+        // decision of 2026-10-29: the town is not PC-only any more).
+        val real = case("town_on_the_phone")
+        assertTrue(SkySettings.parse(real)!!.canSetPlace)
+        assertTrue(real.getValue("can_set_place").jsonPrimitive.content.toBoolean())
+        // An older PC that does not say: the phone shows its words and no field.
+        val older = JsonObject(real.filterKeys { it != "can_set_place" })
+        assertFalse(SkySettings.parse(older)!!.canSetPlace)
+        // One town, trimmed, as the one change a POST makes; blank and an
+        // accidental paste are never sent - the PC gives its own reason for
+        // anything it does not know.
+        assertEquals("""{"place":"Denver"}""", SkySettings.townBody("  Denver \n"))
+        assertEquals("""{"place":"Springfield, Illinois"}""", SkySettings.townBody("Springfield, Illinois"))
+        assertNull(SkySettings.townBody(""))
+        assertNull(SkySettings.townBody("   "))
+        assertNull(SkySettings.townBody("x".repeat(SkySettings.MAX_TOWN_CHARS + 1)))
+        // Typing a town adds something, so it waits for a live link (rule 4).
+        assertTrue(SkySettings.adds(SkySettings.townBody("Denver")!!))
     }
 }

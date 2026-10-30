@@ -687,6 +687,11 @@ def t_the_patch_is_registered_and_carries_the_change():
     # produces), so a patch appended after this one goes immediately before
     # it, and this check is what says so.
     later = {"plugin-loader.patch",
+             # attached-file.patch (2026-10-29, the owner's "a file in a chat"):
+             # ONE hunk, in jarvis_hud.py only (the attach line on the chat
+             # request), appended after this patch and immediately before
+             # plugin-loader.patch - it rewrites nothing this patch wrote.
+             "attached-file.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing this patch wrote.

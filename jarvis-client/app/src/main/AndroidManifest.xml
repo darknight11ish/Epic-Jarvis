@@ -540,6 +540,28 @@
                 android:resource="@xml/widget_board_info" />
         </receiver>
 
+        <!-- "Jarvis Calendar" (2026-10-29; widget/CalendarWidget.kt): today's
+             date and the next three events, in 4x2. The SIXTH widget and the
+             only one that shows the plan for the day. Exported for the same
+             reason as the five above - the launcher sends APPWIDGET_UPDATE
+             from outside this app's own process. Redrawn by JarvisRuntime's own
+             state changes (link, stale, the calendar itself, App lock and "Hide
+             memory lists"), never by a polling clock of its own beyond
+             updatePeriodMillis in widget_calendar_info.xml - which is the
+             launcher's half-hour floor, and the honest limit that a closed app
+             can still show yesterday for up to half an hour after midnight. -->
+        <receiver
+            android:name=".widget.CalendarWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_calendar_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_calendar_info" />
+        </receiver>
+
         <!-- The phone's HANDS for app control (the owner's decision of
              2026-10-19; data/AppControl.kt, service/JarvisAccessibilityService.kt,
              res/xml/accessibility_service_config.xml). The PC is the brain and

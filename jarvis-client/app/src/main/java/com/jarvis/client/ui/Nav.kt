@@ -124,6 +124,16 @@ enum class Screen {
      * older build restores by name.
      */
     PINS,
+
+    /**
+     * "Jarvis Calendar" (ui/screens/CalendarPlate.kt, the owner's ask of
+     * 2026-10-29: a full calendar of Jarvis's own, on by default, with its own
+     * home-screen widget). Opened from the Brain row beside "Coming up" and
+     * from the calendar widget's tap. Last, for the same reason as every entry
+     * above it: the back stack is saved as names, so a new screen must never
+     * be inserted in the middle.
+     */
+    CALENDAR,
 }
 
 /**

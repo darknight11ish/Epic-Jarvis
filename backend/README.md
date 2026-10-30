@@ -20082,7 +20082,7 @@ nothing. The build runs with `jarvis_child_env.inherited()` (never a token, key
 or password) plus `ANDROID_HOME`, `ANDROID_SDK_ROOT` and `JAVA_HOME`; its
 output goes to `build/jarvis-build.log` inside the task's copy (gitignored) and
 only the END is kept. Success needs exit 0 **and** the APK. Routes:
-`docs/JARVIS-API.md` section 168.
+`docs/JARVIS-API.md` section 166.
 
 ## Limits, said plainly
 

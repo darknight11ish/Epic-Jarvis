@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Jarvis Calendar" (2026-10-29; widget/CalendarWidget.kt, docs/JARVIS-API.md
+     section 163): today's date and the next three events, in 4x2.
+
+     initialLayout is required for the same reason as widget_approval_info.xml -
+     without it the launcher shows "Problem loading widget" before the first
+     Glance update lands - and it is that file's res/layout/widget_initial for
+     the same reason too, not Glance's spinner (owner's report, 2026-10-27; see
+     app/proguard-rules.pro): in the release APK before that day no Glance
+     update could run at all, so the spinner was permanent. previewLayout is
+     the same file, so the widget picker shows the same sentence rather than the
+     launcher's own fallback.
+
+     updatePeriodMillis is the launcher's half-hour floor. It is the ONLY thing
+     that redraws this widget with the app closed, which is why the widget
+     itself says so: just after midnight it can still show yesterday for up to
+     half an hour. An AlarmManager wake-up would fix that and is not in this
+     slice. While Jarvis runs, JarvisRuntime redraws it whenever the link, the
+     calendar or the two privacy switches change. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_initial"
+    android:previewLayout="@layout/widget_initial"
+    android:description="@string/widget_calendar_desc"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:maxResizeWidth="500dp"
+    android:maxResizeHeight="400dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

@@ -15,7 +15,7 @@ phone? if not add them"*. `backend/jarvis_android_builder.py` now does
 exactly that and nothing more: it writes a FIXED Android project (one WebView
 showing the owner's own page) into a task's copy, runs exactly
 `gradlew.bat assembleDebug`, and runs exactly `adb install -r <apk>` - each
-build and install behind its own risky card (JARVIS-API section 168). Every
+build and install behind its own risky card (JARVIS-API section 166). Every
 other kind of command, every other kind of project and every other adb
 subcommand is still unbuilt. **The three programs the app builder can start
 are now git, `gradlew.bat assembleDebug` and `adb install -r <apk>`**, and no
