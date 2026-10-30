@@ -78,6 +78,15 @@ pub struct Appearance {
     /// so a client that has never been edited is not a client with no face.
     #[serde(default)]
     pub bindings: BTreeMap<String, Binding>,
+    /// The Galaxy's look (2026-10-28, the owner's "galaxy models"), or `None`
+    /// to leave each client on its own default.
+    ///
+    /// One of [`GALAXY_LOOKS`]. It lives in this document rather than in each
+    /// page's `localStorage` so that the HUD, the Brain window and the phone
+    /// draw the same Galaxy - the phone could not see a `localStorage` key on
+    /// the PC at all, which is the gap the owner reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub galaxy: Option<String>,
     /// Unix seconds at the last write. The tie-break between two clients.
     #[serde(default)]
     pub updated: f64,
@@ -89,6 +98,31 @@ pub struct Appearance {
     /// `POST /api/appearance` - they change through `set_animal` (animal.rs).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animal: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// Every Galaxy look the desktop can draw, in `galaxy-presets.js`'s own order:
+/// the default first, then `BUILT_PRESETS`.
+///
+/// A frozen list rather than a runtime parse of the page module, because this
+/// is Rust and the module is JavaScript - and a test below reads the module and
+/// fails when the two disagree, which is what keeps a frozen list honest.
+pub const GALAXY_LOOKS: [&str; 9] = [
+    "constellation",
+    "planetary-orbit",
+    "neural-arbor",
+    "nebula",
+    "dna-helix",
+    "radar-dome",
+    "star-map",
+    "clean-tree",
+    "zen-ring",
+];
+
+/// Is `look` one this app can draw? The same shape as [`crate::spec::has_face`]:
+/// a typo must be refused and named, never stored and then drawn as the
+/// default, because that looks like "the choice was ignored".
+pub fn has_galaxy_look(look: &str) -> bool {
+    GALAXY_LOOKS.contains(&look)
 }
 
 /// The appearance as the rest of the process sees it.
@@ -506,6 +540,44 @@ pub async fn hud_set_face(app: AppHandle, face: String) -> Result<Loaded, String
     set_appearance(app, doc).await
 }
 
+/// The stored document with `galaxy` replaced, and nothing else touched.
+///
+/// The HUD's Look switch is the caller (`hud_set_galaxy_look`): it may change
+/// WHICH Galaxy the owner is looking at and nothing else - not one binding,
+/// colour, pattern, face or animal switch - so this is the owner's document
+/// with one field set. An id the app cannot draw is REFUSED rather than
+/// stored: `galaxy-presets.js`'s own `storedPreset` would draw the constellation
+/// for it, which looks exactly like "the choice was ignored".
+pub fn with_galaxy(doc: &Appearance, look: &str) -> Result<Appearance, String> {
+    let look = look.trim();
+    if look.is_empty() {
+        return Err("A Galaxy look needs a name.".into());
+    }
+    if !has_galaxy_look(look) {
+        return Err(format!("{look} is not one of the Galaxy's looks."));
+    }
+    let mut next = doc.clone();
+    next.galaxy = Some(look.to_string());
+    Ok(next)
+}
+
+/// The HUD's Look switch: ONE look id, saved through the SAME path the Faces
+/// window's own save uses ([`set_appearance`] - this PC's store first, then
+/// `POST /api/appearance`), so the phone draws it too and a reload keeps it.
+///
+/// The document to change is READ FIRST ([`get_appearance`]), not taken from
+/// this process's cache - the same reason [`hud_set_face`] does: posting a
+/// document built from a stale cache would wipe the face or the colours the
+/// owner set on the other device.
+///
+/// Cosmetic, so no approval card: a look changes nothing but the picture.
+#[tauri::command]
+pub async fn hud_set_galaxy_look(app: AppHandle, look: String) -> Result<Loaded, String> {
+    let current = get_appearance(app.clone()).await;
+    let doc = with_galaxy(&current.appearance, &look)?;
+    set_appearance(app, doc).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -520,6 +592,7 @@ mod tests {
     fn an_unbound_state_falls_through_to_the_spec() {
         let state = AppearanceState::default();
         state.put(&Appearance {
+            galaxy: None,
             face: None,
             bindings: [(
                 "idle".to_string(),
@@ -548,6 +621,7 @@ mod tests {
     fn a_blank_pattern_is_not_treated_as_a_choice() {
         let state = AppearanceState::default();
         state.put(&Appearance {
+            galaxy: None,
             face: None,
             bindings: [(
                 "idle".to_string(),
@@ -574,6 +648,7 @@ mod tests {
         let mut params = serde_json::Map::new();
         params.insert("span_deg".into(), serde_json::json!(58));
         state.put(&Appearance {
+            galaxy: None,
             face: None,
             bindings: [(
                 "thinking".to_string(),
@@ -738,6 +813,106 @@ mod tests {
         assert!(
             message.contains("not-a-face"),
             "the refusal does not say what was refused"
+        );
+    }
+
+    /// A Galaxy look change keeps the face, every binding and the animal
+    /// switches - it sets ONE field.
+    #[test]
+    fn a_look_change_keeps_the_face_the_bindings_and_the_animal_switches() {
+        let mut animal = serde_json::Map::new();
+        animal.insert("still".into(), serde_json::json!(true));
+        let mut doc = Appearance {
+            face: Some("redpanda".into()),
+            galaxy: Some("nebula".into()),
+            updated: 42.0,
+            animal: Some(animal),
+            ..Default::default()
+        };
+        doc.bindings.insert(
+            "idle".into(),
+            Binding {
+                pattern: "breathe".into(),
+                color: Some("ice-3".into()),
+                params: serde_json::Map::new(),
+            },
+        );
+        let next = with_galaxy(&doc, "dna-helix").expect("the DNA helix is a built look");
+        assert_eq!(next.galaxy.as_deref(), Some("dna-helix"));
+        assert_eq!(
+            next.face.as_deref(),
+            Some("redpanda"),
+            "choosing a Galaxy look changed the face"
+        );
+        assert_eq!(next.bindings.len(), 1, "a binding was dropped");
+        assert_eq!(next.bindings["idle"].pattern, "breathe");
+        assert_eq!(next.updated, 42.0, "the timestamp was rewritten");
+        assert_eq!(
+            next.animal.as_ref().and_then(|a| a.get("still")),
+            Some(&serde_json::json!(true)),
+        );
+        // The caller's document is untouched.
+        assert_eq!(doc.galaxy.as_deref(), Some("nebula"));
+    }
+
+    /// A look the page module does not build is refused, never stored.
+    #[test]
+    fn a_galaxy_look_the_module_does_not_build_is_refused() {
+        let doc = Appearance::default();
+        for bad in ["", "   ", "not-a-look", "Nebula", "../nebula"] {
+            let refused = with_galaxy(&doc, bad);
+            assert!(refused.is_err(), "{bad:?} was accepted as a Galaxy look");
+        }
+        let message = with_galaxy(&doc, "not-a-look").unwrap_err();
+        assert!(
+            message.contains("not-a-look"),
+            "the refusal does not say what was refused"
+        );
+    }
+
+    /// The frozen list IS `galaxy-presets.js`'s own list.
+    ///
+    /// A source-text pin, the same guard the tray's and the HUD's own pins use:
+    /// this is Rust and that list is JavaScript, so the only honest check is
+    /// reading the module. A look added there must be added here; a look renamed
+    /// there must be renamed here, or this fails.
+    #[test]
+    fn the_look_list_is_the_page_modules_own() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("src")
+            .join("galaxy-presets.js");
+        let js = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("could not read {}: {e}", path.display()));
+
+        // The default look, from the module's own `DEFAULT_PRESET`.
+        let said = js
+            .split("DEFAULT_PRESET = \"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("galaxy-presets.js no longer names a DEFAULT_PRESET");
+        assert_eq!(
+            GALAXY_LOOKS[0], said,
+            "the default look is not the module's default any more"
+        );
+
+        // Every built look in the module is in this list, and nothing else.
+        let built = js
+            .split("BUILT_PRESETS = Object.freeze([")
+            .nth(1)
+            .and_then(|rest| rest.split("])").next())
+            .expect("galaxy-presets.js no longer lists BUILT_PRESETS");
+        let mut ids: Vec<&str> = built
+            .split("id: \"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .collect();
+        ids.sort_unstable();
+        let mut mine: Vec<&str> = GALAXY_LOOKS.iter().skip(1).copied().collect();
+        mine.sort_unstable();
+        assert_eq!(
+            ids, mine,
+            "the looks this app offers are not the looks galaxy-presets.js builds"
         );
     }
 }

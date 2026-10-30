@@ -61,9 +61,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "src");
 const ROOT = join(HERE, "..", "..");
 const read = (path) => readFileSync(path, "utf8");
+/** A source read with its line endings made LF, for the checks that match a
+ *  command's body with a `\n}` anchor. `.gitattributes` stores everything as
+ *  LF, but a Windows checkout can still carry CRLF in the working tree (git
+ *  normalises it on commit, so `git status` reports nothing) - and there this
+ *  suite would fail on a regex that is correct, for a file that is correct.
+ *  Measured 2026-10-29: `appearance.rs` had 918 CRLF pairs here and
+ *  "appearance.rs has no hud_set_face command" was the only red line. */
+const readLf = (path) => read(path).replace(/\r\n/g, "\n");
 const page = read(join(SRC, "jarvis_hud.html"));
 const presetsSrc = read(join(SRC, "hud-presets.js"));
-const appearanceRs = read(join(SRC, "..", "src-tauri", "src", "appearance.rs"));
+const appearanceRs = readLf(join(SRC, "..", "src-tauri", "src", "appearance.rs"));
 const specRs = read(join(SRC, "..", "src-tauri", "src", "spec.rs"));
 const libRs = read(join(SRC, "..", "src-tauri", "src", "lib.rs"));
 const buildRs = read(join(SRC, "..", "src-tauri", "build.rs"));
