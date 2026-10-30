@@ -201,21 +201,31 @@ class ApiContractTest {
         assertEquals(ApiError.NotAvailable, (out as ApiResult.Failed).error)
     }
 
-    /** A decision posts the id and nothing else — no verdict duplicated in the body. */
+    /**
+     * A decision posts the id and the surface that made it — no verdict
+     * duplicated in the body.
+     *
+     * The `by` field was added on 2026-10-29: the server stores it as
+     * `decided_by` and defaults an absent one to `"hud"`, so a phone body of
+     * `{"id":"a1"}` was recorded as the browser HUD's. This test kept expecting
+     * the old body and failed the `smoke` job on the PR's own head; it is the
+     * instrumentation half of `SignedApprovalTest`, which holds both verbs to
+     * the same constant.
+     */
     @Test
-    fun approvePostsTheIdAlone() = runBlocking {
+    fun approvePostsTheIdAndTheSurface() = runBlocking {
         routes["/api/approve"] = ok("{}")
         api.approve("a1")
         val req = server.takeRequest(10, TimeUnit.SECONDS)!!
         assertEquals("POST", req.method)
         assertEquals("/api/approve", req.path)
-        assertEquals("""{"id":"a1"}""", req.body.readUtf8())
+        assertEquals("""{"id":"a1","by":"phone"}""", req.body.readUtf8())
     }
 
     /**
      * CLAUDE.md's 2026-09-20 amendment: install joins switch as tier `ask`,
-     * so the request shape is the same one `approvePostsTheIdAlone` proves
-     * above for a different route - the same `{"ref": ...}` body
+     * so the request shape is the same one `approvePostsTheIdAndTheSurface`
+     * proves above for a different route - the same `{"ref": ...}` body
      * `switchModel` already sends, on `/install` instead of `/switch`.
      *
      * The 202 is the point, not an afterthought: `docs/JARVIS-API.md` says

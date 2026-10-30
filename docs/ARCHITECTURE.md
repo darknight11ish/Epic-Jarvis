@@ -778,6 +778,53 @@ places between screens. Presentation only - no approval logic changed.
   `CardWords.TIMED_OUT`; `timed_out_next` is the phone's own second sentence
   (§8 below).
 
+- **A decided card leaves every live surface within 30 seconds; a killed phone's
+  widget is bounded by 30 minutes (2026-10-29).**
+  The owner's report: *"when a decision/approval card has already been addressed
+  (approved or denied) on either the Android app or the desktop program, make
+  sure the Android widgets (and every other surface that shows a
+  card/notification) update to reflect that - no stale card left showing, no dead
+  Approve/Deny on a resolved card."* The queue itself was already one thing -
+  `GET /api/pending` is the only list a surface draws from, a decided row is
+  gone from the next read, and `jarvis_gate.decide` answers `False` to a second
+  answer so a stale surface cannot record a verdict on a settled row. What was
+  missing was the second half of "one source": a **doorbell that can be missed**.
+  Every surface learned about a decision from the `approval` event, which is
+  `jarvis_events._poll_approvals` diffing ids on the backend's own pump - it
+  publishes only on CHANGE, and it swallows its own exceptions, so one failed
+  database read, one backend restart or a pump that is not running rings
+  nothing. The desktop survived that because its HUD page has carried a
+  30-second safety-net read since long before (`jarvis_hud.html`,
+  `setInterval(() => apprPoll(), 30000)`), and its stream re-reads the queue on
+  every connect and resume. The phone had **no** clock at all: a missed event
+  left the card on the home screen, in the notification drawer and on Home, with
+  a Deny that could only say "no longer waiting", until the app was restarted or
+  the link dropped. So both platforms now ask the same question on the same 30
+  seconds while a card is waiting on a **connected** link -
+  `QueueBeat.due` in `jarvis-client` (re-reading through `refreshPending`, the
+  one assignment `pending` ever gets, so the widget, the drawer and the in-app
+  list clear together) and `queue_beat_due` in `stream.rs` (re-reading through
+  `refresh_pending`, the one queue read all four desktop surfaces follow). Both
+  read **nothing** when the queue is empty, so this is not a poll of an idle PC,
+  and neither can approve or deny anything. `stale` is deliberately not a
+  condition on either side: a failed read is what makes a link stale, and the
+  next successful read is what clears it, so a `!stale` gate would switch off
+  the only retry that could recover - the desktop's first version did exactly
+  that, and one transient `/api/pending` failure held Approve until the hourly
+  reconnect. The HUD page's own 30 s `apprPoll` is still there beside the beat,
+  so while the HUD is visible and a card waits the PC runs **two** independent
+  30 s `/api/pending` reads (§6 names both as the safety-net exception). Two
+  things follow from the phone's process rather than from the rule: the
+  approvals widget now carries `updatePeriodMillis="1800000"` (the board
+  widget's period since it was written), because a RemoteViews drawn by a
+  killed process is otherwise held by the launcher for ever - so a **live**
+  surface is bounded by 30 s, but a killed phone's widget can lag up to
+  **30 minutes**, and a cold draw says "Not checked yet" rather than drawing a
+  card it cannot vouch for (`WidgetStates`). And a decision now says who made
+  it: the phone sends `"by": "phone"` on both `/api/approve` and `/api/deny`
+  (`SignedApproval.BY`), where it used to send only `{"id"}` and inherit the
+  route's `"hud"` default - the field evidence that started this.
+
 - **Two MECHANICAL guards against blind, stacked approvals (2026-10-20).**
   The owner's incident: one "approve all" click approved three backup
   restores, two imports and a device-key registration, because repeated
@@ -1944,7 +1991,22 @@ card - only an app's tap does. The invariants:
 ## 6. Events — one bus
 
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
-changes from it and from nowhere else. Kinds: `approval`, `proposal`,
+changes from it and from nowhere else. **One documented exception: safety-net
+reads of the approval queue** (2026-10-29). A missed ring on that queue is a
+safety problem - a dead card stays on screen, or Approve is held on a queue
+nobody re-read - so it is also confirmed directly: the HUD page's
+`setInterval(() => apprPoll(), 30000)` (`jarvis_hud.html:8133`, which returns
+early while `document.hidden`); the Rust stream's `QUEUE_BEAT` through
+`queue_beat_due` (`stream.rs`, 30 s while a card waits on a connected link, and
+its successful read is also what clears `stale`); the phone's `QueueBeat.due`
+(`jarvis-client`, the same 30 s and the same two conditions); and the one-off
+`/api/pending` reads on connect, `hello`, resume and an `approval` event. While
+the HUD is visible and a card waits, the PC therefore runs **two** independent
+30 s reads - the HUD's own poll and the stream's beat - deliberately, so either
+can fail without silencing the other. The pump is still what ANNOUNCES every
+change: these reads only re-confirm `/api/pending` (they can discover a change
+the pump failed to announce, which is the point), they introduce no state change
+of their own, and none of them can approve or deny anything. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
 `deep`, `memory_saved`, `schedule`, `focus`, `wellbeing`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
