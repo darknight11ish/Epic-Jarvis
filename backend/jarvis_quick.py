@@ -6294,7 +6294,7 @@ def _run_connect(f: dict) -> Result:
     svc = C.SERVICES[sid]
     boxes = " and ".join(f.label for f in svc.fields)
     return Result(
-        f"{svc.name}. One card is waiting in the Jarvis window on this PC: type the "
+        f"{svc.name}. One card is waiting in the HUD window on this PC: type the "
         f"{boxes} there and press Save. " + CONNECT_SAFE_NOTE + " Then I run one real "
         "test and tell you exactly what it proved.",
         "connect_account")

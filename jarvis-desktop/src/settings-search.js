@@ -588,8 +588,14 @@ export function mountSettingsSearch(doc = document) {
     }
     // The live region is written only when the ANSWER changes: a count that
     // re-announced on every keystroke would talk over the owner's typing.
-    if (say && searching && !empty) {
-      const line = showing === 1 ? SEARCH_ONE : SEARCH_MANY.replace("{n}", String(showing));
+    // It is EMPTIED when there is nothing to count - the box is empty, or
+    // nothing matches - because the count used to outlive its search: with
+    // "zzzz" the page said "Nothing here matches" and still announced the last
+    // number, and a cleared box kept it too (settings wrong-app audit,
+    // 2026-10-29, finding 9).
+    if (say) {
+      const line = !searching || empty ? ""
+        : (showing === 1 ? SEARCH_ONE : SEARCH_MANY.replace("{n}", String(showing)));
       if (say.textContent !== line) say.textContent = line;
     }
     doc.body.classList.toggle("searching", searching);
