@@ -7005,10 +7005,34 @@ def _client_surface(peer, local, given: Optional[str] = None) -> str:
 PARKING_MISSING = ("Your PC's Jarvis cannot look up parking yet - run apply-patches.ps1 "
                    "on the PC, which copies jarvis_parking.py.")
 
+#: Why the parking lane does not look while Lockdown is on (the privacy audit
+#: of 2026-10-30): Lockdown makes every way out of this PC ask first or stop,
+#: and the parking lookup has three public services and no card of its own, so
+#: it stops instead of asking.
+PARKING_LOCKDOWN_WORDS = (
+    "Lockdown is on, so I am not sending your parking question to a map "
+    "service. Turn Lockdown off (on the PC, Settings, What asks first), or "
+    "give me a latitude and longitude.")
+
+
+def _parking_lockdown_on() -> bool:
+    """Lockdown (jarvis_asks_first.py): False without that module; True if it
+    cannot be read - a lookup that cannot tell does not look."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
+
 
 def _run_parking(intent: Intent, client_surface: str = "hud",
                  now: Optional[float] = None) -> Result:
     """Price the stay, in the words the device that asked can use."""
+    if _parking_lockdown_on():
+        return Result(PARKING_LOCKDOWN_WORDS, intent.name)
     import datetime as _dt
     try:
         import jarvis_parking as P
