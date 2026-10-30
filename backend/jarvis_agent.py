@@ -2099,7 +2099,7 @@ def _run_connect_tool(args: dict) -> dict:
             "service_label": card["service_label"],
             "fields": [f["label"] for f in card["fields"]],
             "stored_in": "Windows Credential Manager, on this PC",
-            "said": ("One card is waiting in the Jarvis window on this PC. The owner "
+            "said": ("One card is waiting in the HUD window on this PC. The owner "
                      "types the value there and presses Save; nothing is saved until "
                      "then, and I test it straight away.")}
 

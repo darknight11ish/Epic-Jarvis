@@ -372,6 +372,16 @@ def _read_antislop():
     return M.is_enabled() is True
 
 
+def _read_jarvis_calendar():
+    """The Jarvis calendar's switch (2026-10-29): ON when no file says otherwise.
+
+    Read from the module itself. A damaged settings file reads OFF there (with
+    a reason the route carries), which is the safe direction for "is it on?".
+    """
+    import jarvis_local_calendar as M
+    return M.is_on() is True
+
+
 def _read_auto_learn(key: str):
     import jarvis_auto_learn as M
     return M.settings().get(key) is True
@@ -518,6 +528,7 @@ STATE_READERS = {
     "lights_without_card": _read_lights_without_card,
     "prompt_coach": _read_prompt_coach,
     "antislop": _read_antislop,
+    "jarvis_calendar": _read_jarvis_calendar,
     "ask_before_every_search": lambda: _read_search("ask_every_time"),
     "web_search": lambda: _read_search("enabled"),
     "smartwatch_notifications": _read_watch_notify,
@@ -739,14 +750,17 @@ def _phone_settings_words(row: dict) -> str:
 
 
 #: The phone-only rows whose feature the PC ALSO has, as a DIFFERENT control.
-#: Each row's own `surface_reason` says so - "the desktop's floating face draws the
-#: real animal" (phone-floating) and "the desktop's frame-rate setting is the
-#: animal's, a different thing" (phone-screen-rate) - so "The PC does not have that
-#: control" contradicted the surface line printed in the same answer (2026-10-26,
-#: part B). The PC's control is not this setting, and the row's `where` names only
-#: the phone's.
+#: Each row's own `surface_reason` says so - "the desktop's frame-rate setting is
+#: the animal's, a different thing" (phone-screen-rate) - so "The PC does not have
+#: that control" contradicted the surface line printed in the same answer
+#: (2026-10-26, part B). The PC's control is not this setting, and the row's
+#: `where` names only the phone's.
+#:
+#: phone-floating was here until 2026-10-29; the settings wrong-app audit
+#: (finding 6) found the row was not phone-only at all - the PC's floating face is
+#: a toggle inside Appearance - so it is `surface: "both"` now and this map is
+#: never asked about it.
 PHONE_PC_COUNTERPART = {
-    "phone-floating": "The PC's floating face is a different control.",
     "phone-screen-rate": "The PC's frame-rate setting is the animal's, a different control.",
 }
 
@@ -760,15 +774,18 @@ def _phone_pc_claim(row: dict) -> str:
 def phone_change_words(row: dict) -> str:
     """How a PHONE-ONLY row is changed: on the phone, never "on this PC".
 
-    Five rows (phone-notifications, phone-watch, phone-floating, phone-tiles,
-    phone-screen-rate) carry the PC-Only label because the phone is the only app
-    with the control, and `_label_from` picks that label from the row's reason
-    without looking at `surface`. The label's own words therefore said "on this
-    PC" for rows the PC does not have at all (2026-10-26 review, F3). The row's
-    `surface` wins, and the row's own `where` names the place.
+    Four rows (phone-notifications, phone-watch, phone-tiles, phone-screen-rate)
+    carry the PC-Only label because the phone is the only app with the control,
+    and `_label_from` picks that label from the row's reason without looking at
+    `surface`. The label's own words therefore said "on this PC" for rows the PC
+    does not have at all (2026-10-26 review, F3). The row's `surface` wins, and
+    the row's own `where` names the place. phone-floating was the fifth until
+    2026-10-29: the settings wrong-app audit (finding 6) found the PC really does
+    have a floating face - the toggle inside Appearance - so that row is `both`
+    now and never reaches this sentence.
 
     The closing claim about the PC is per row (`_phone_pc_claim`): three of the
-    five really have no PC control, and saying so for the other two would
+    four really have no PC control, and saying so for the other one would
     contradict the surface line in the same answer.
     """
     return (f"It is changed in {_phone_settings_words(row)} "
@@ -790,10 +807,11 @@ def both_pc_change_words(row: dict) -> str:
     setting is the PC's (the contract's own reason for these rows is "no backend
     route to change it").
 
-    TWO rows are the exception, and their sentence is replaced rather than
-    softened for all four: the phone's Appearance screen really does write the
+    THREE rows are the exception, and their sentence is replaced rather than
+    softened for all of them: the phone's Appearance screen really does write the
     SHARED document - it picks a face and pushes it, and the desktop adopts it
-    (2026-10-26 semantic read, finding 3). See BOTH_PHONE_WRITES.
+    (2026-10-26 semantic read, finding 3) - and the phone's Floating Jarvis card
+    really does turn its own bubble on. See BOTH_PHONE_WRITES.
     """
     fid = str(row.get("id") or "")
     if fid in BOTH_PHONE_WRITES:
@@ -1468,6 +1486,11 @@ EXTRA_CONTROLS = {
     # the phone has no Settings row of its own for it, and its directory sends
     # that name to the big-model row instead (2026-10-23, #749).
     "big-model": ("big_coder",),
+    # The Jarvis-owned local calendar (2026-10-29) has its own typed switch
+    # from the day its store lands; no Settings row links it yet, so the
+    # matrix is told by hand rather than through a `covers` section that the
+    # pages do not have.
+    "jarvis-calendar": ("jarvis_calendar",),
 }
 
 #: Features that ARE command-controllable but have NO desktop Settings control
@@ -1489,7 +1512,21 @@ EXTRA_CONTROLS = {
 #: The dict is kept (and still checked by tools/check_feature_controls.py and
 #: backend/test_feature_guide.py) so the next real gap is recorded in the one
 #: place the matrix reads, rather than being noticed by nobody.
-SETTINGS_GAPS = {}
+#:
+#: 2026-10-29: the Jarvis calendar's typed switch is real and its four routes
+#: are built, but neither Settings page draws the switch yet - the Calendar
+#: Settings card and the phone row are the UI slice's. Recorded here rather
+#: than as a fake `covers` section the pages do not have.
+SETTINGS_GAPS = {
+    "jarvis-calendar": {
+        "controls": ["jarvis_calendar"],
+        "desktop": "setup-ui",
+        "phone": "setup-ui",
+        "reason": ("The typed switch and the four routes are real now; both "
+                   "Settings halves are the calendar UI slice's, so no page "
+                   "draws them yet."),
+    },
+}
 
 #: Feature ids whose ADJUST phrase does not sit behind a `settings.<id>` cover
 #: (the catalogue names a Brain page), with the Settings place that proves it.
@@ -1570,6 +1607,9 @@ OWN_CONTROLS = {
     "web-search": (("web_search",), ("search_use", "settings_bool"), {}),
     "what-asks-first": ((), ("settings_asks_first",), {}),
     "write-like-me": (("write_like_me",), ("settings_bool",), {}),
+    # The Jarvis calendar (2026-10-29): its typed switch is its own control,
+    # linked by EXTRA_CONTROLS because no Settings card draws it yet.
+    "jarvis-calendar": (("jarvis_calendar",), ("settings_bool",), {}),
     "look-at-this": (("screen_picture",), ("feature_switch",), {}),
 }
 OWN_ACTIONS = {
@@ -2014,23 +2054,34 @@ ALWAYS_ON_DISPLAY = {
     "app-lock": "Always On (Core Safety Rule — Off Only With Windows Hello)",
 }
 
-#: Rows BOTH apps have whose SHARED appearance document the phone really does
-#: write. The blanket `both_pc_change_words()` sentence says the phone "cannot
-#: change the PC's setting", which is false for these two (2026-10-26 semantic
-#: read, finding 3): the phone's Appearance screen picks a face and pushes it -
+#: Rows BOTH apps have whose control the phone really does use itself. The
+#: blanket `both_pc_change_words()` sentence says the phone "cannot change the
+#: PC's setting", which is false for these three.
+#:
+#: Two of them write a SHARED appearance document (2026-10-26 semantic read,
+#: finding 3): the phone's Appearance screen picks a face and pushes it -
 #: `appearance.setFace()` then `JarvisRuntime.pushAppearance()`
 #: (`jarvis-client/.../MainActivity.kt:3233-3236`), the document carries `face`
 #: (`.../data/AppearanceStore.kt:424-429`), and the desktop adopts it
 #: (`jarvis-desktop/src-tauri/src/appearance.rs:76`, `:166-177`). The theme is
 #: deliberately NOT in that document (`AppearanceStore.kt:417-422`), so each row
-#: says which half travels. Each string is the sentence after "Its setting is
-#: in <place>. "
+#: says which half travels.
+#:
+#: The third is `phone-floating`, which joined on 2026-10-29 (the settings
+#: wrong-app audit, finding 6) when its row became `surface: both`: the PC's
+#: half is the "Floating face" toggle inside Appearance and the phone's is its
+#: own Floating Jarvis card, each saved on its own device. It is not a shared
+#: document, so its sentence says so rather than borrowing the two above.
+#: Each string is the sentence after "Its setting is in <place>. "
 BOTH_PHONE_WRITES = {
     "faces": ("On the phone, Appearance picks the same face and sends it to the "
               "PC, so either app can change it."),
     "appearance": ("On the phone, Appearance changes the same face and state "
                    "colours and sends them to the PC; the theme itself stays on "
                    "each device."),
+    "phone-floating": ("On the phone, Settings, Floating Jarvis turns that phone's "
+                       "own bubble on or off; the PC keeps its own floating face, "
+                       "in Appearance."),
 }
 
 #: One-switch Switchable rows: does loosening the switch ask on a card?
@@ -2062,6 +2113,9 @@ CARD_FREE_SWITCHES = frozenset({
     "pictures",       # "BOTH directions ... neither asks" registry:736-738
     "antislop",       # "No card either way - it changes only how an answer is
                       # worded" (the Anti-Slop filter's own setter, 2026-10-28)
+    # The Jarvis calendar's switch hides or shows the owner's own events and
+    # keeps every one of them: no card either way (2026-10-29).
+    "jarvis_calendar",
 })
 
 #: The Settings place the owner is sent to for an ability with no switch. The

@@ -658,11 +658,14 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     # ("I wanted it encrypted as well and part of that file"), which took the
     # exclusions from 8 to 7 and the carried databases from 17 to 18 - it lives
     # in its own medical/ folder and now travels under db/medical/health.db.
+    # calendar.db (the Jarvis-owned local calendar, 2026-10-29) took the carried
+    # databases from 18 to 19: a calendar is closer to a reminder than to the
+    # sealed chat transcript, so it is kept and backed up like schedule.db.
     # Both numbers are asserted rather than derived, on purpose - the point is
     # that adding a database is a decision somebody has to make here as well as
     # in the module, and this is the line that asks.
     #
-    # 18 + 8 since 2026-10-30: `parking-cache.db` (jarvis_parking.py, the
+    # 19 + 8 since 2026-10-30: `parking-cache.db` (jarvis_parking.py, the
     # parking cost estimator) joined the EXCLUSIONS, and it is the one entry
     # here that is not in the owner's settings folder at all - it sits beside
     # the module and holds 24 hours of PUBLIC parking prices for an area, so a
@@ -673,8 +676,8 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases this program names, split 18 + 8, are all accounted for",
-          len(B.SOURCE_DBS) == 18 and len(B.NOT_BACKED_UP) == 8,
+    check("the databases this program names, split 19 + 8, are all accounted for",
+          len(B.SOURCE_DBS) == 19 and len(B.NOT_BACKED_UP) == 8,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 

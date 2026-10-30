@@ -947,9 +947,25 @@ the tiers themselves are section 3 above.)
 |---|---|---|
 | **Appearance and layout** - the desktop's `theme` (`commands::set_theme`, the settings store's appearance class) and the big HUD's layout document (`hud_layout.rs` `set_hud_layout`) | Paint and arrangement only: no private material, no backend call, no outbound request, and changing it back is one press. | Rust's closed-world normaliser (`hud_layout::sanitise`) is the authority for the saved document and the page's normaliser is a second line; the layout write is its own appearance-class grant (`hud-layout-write`, owner-approved 2026-10-21, `capabilities/hud.json`), separate from the page's schedule grant, and the page holds no pairing token. |
 | **One job on the schedule** - pause, resume, delete, done, add time or snooze on ONE job, plus a ONE-OFF reminder/alarm/timer add (`jarvis_schedule` `act()` / the add route) | "Stopping only makes things quieter": one job's state, or one new item. There is no list form and no delete-all - clearing a named list stays the Brain window's, by Ruling 15. | The stale-link hold blocks ACTING while the event stream is stale (rule 4); the audit line carries ids, kinds and outcomes only, never the item's words; and a REPEATING add does raise its one `schedule_repeat` card at tier `ask`. |
+| **One local calendar event** - add, change or delete ONE event in Jarvis's own calendar (`jarvis_local_calendar` `handle_add`/`handle_act`, 2026-10-29) | The same reasoning as the row above, and the owner's 2026-10-29 decision: it writes one row on the owner's own PC, changes nothing outside it, and there is no list form, no delete-all and no bulk anything. | The same stale-link hold blocks ACTING where a surface draws it (rule 4); the three routes ride the server's existing origin and token checks with no new permission model; the audit line is `calendar.add` / `calendar.change` / `calendar.delete` with the id and outcome only, never the title, place or note; and the store is wall clock plus `tz`, never an epoch. |
 | **A ready-for-review marker** - Wave D-1's ready-for-review path (`Scheduler.propose_ready`, `jarvis_schedule.py`; JARVIS-API section 21) - the ruling calls this `suggest_done` | It completes nothing and changes no state: it only says "Jarvis's part is done - check it". | Only a to-do can be marked; the item stays `active`/`paused` until the owner's own `act("done")`, the one action that completes a task; the audit line is `schedule.ready` with ids, kind and a short reason only - never the item's words. |
 | **The next message's lane** - the big HUD's ONE Cloud button (the same lane switch the bar always had; `jarvis_hud.html`'s rail) | It routes one message: it approves nothing, sends nothing, stores nothing, and it marks nothing until `/api/status` says the proxy is up. | The server's own rule-1 refusals still apply: a turn touching private material never runs on a cloud lane (`jarvis_agent.local_model_refusal`; `_one_call` refuses it again before any card - section 4). |
 | **Actions that only reduce or refuse** - Stop, Stop everything, Pause, Cancel, Mute, Deny and Undo | "Stopping is never gated" (section 3 above): each makes Jarvis do less or refuses a request, so a card asking permission to stop would be a card that cannot be safely refused. | Stop everything also refuses the remaining tool calls of the answer being written, and works while App lock is on; Deny is always the safe direction; Undo only puts back what ONE card removed, inside 10 minutes; none of them approves, denies, starts or resumes anything (only Resume raises a card). |
+
+**The Jarvis calendar (owner's decision 2026-10-29) is the third row of that
+table, "One local calendar event".** The owner asked for "a full fledged easy to use
+calendar built into Jarvis ... disabled but on by default", local-only and
+shown beside Google Calendar and iCal, never synced out. It is a **third
+reader**, not a fourth `jarvis_google_calendar.MODES` value (that list means
+which one calendar Jarvis reads, so a local entry there would replace Google
+instead of sitting beside it): `backend/jarvis_local_calendar.py` has its own
+`calendar.db`, its own four routes and **no gate**, because nothing leaves the
+PC. The store keeps the wall clock plus the zone, never an epoch, and the switch
+is ON with no settings file. Adding, changing or deleting ONE event is cardless
+by this row; every later surface (the HUD card, the phone plate, the widget)
+still holds its writes on a stale link. The contract the screens build against
+is `docs/JARVIS-API.md` §164; the reasoning, in the owner's words and with the
+limits stated, is the `decisions.d/2026-10-29-jarvis-calendar.md` fragment.
 
 **Wave D-1 (PR #722) is proactive, read-only and local-only, and its Rule-1
 and Rule-4 position is recorded here before it ships.** Its proactive reads -
