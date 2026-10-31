@@ -30,15 +30,21 @@
  *   widget, card counting down       before 60 -> after 0 own wakes
  *   the same, window hidden          before 60 -> after 0
  *
- * "0" is not "the clock stopped": the same runs show the text moving by
- * exactly one minute (`59:00 left to decide` -> `58:00`), and the waits asked
- * for are 60,9xx ms idle and ~1,000 ms while a card counts down.
+ * "0" is not "the clock stopped": every wake while a card is up re-reads the
+ * countdown from `expiryWords` (jarvis-link.js), which now prints the ONE
+ * shared wording (`countdownWords`, card-words.js: "60m 0s left", then
+ * "59m 59s left" a second later - the owner's 2026-10-30 ruling put that timer
+ * on every desktop surface), and the waits asked for are 60,9xx ms idle and
+ * ~1,000 ms while a card counts down. The per-second words themselves are
+ * pinned by `tests/expiry-parity.mjs`; this suite pins the cadence and that
+ * the bar's line carries those same words.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import * as K from "./uikit.mjs";
+import { expiryWords } from "../src/jarvis-link.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
@@ -65,9 +71,10 @@ const pairPoll = await import("../src/devices-pair-poll.js");
 
 await check("the idle wait is a minute, and a shown clock's wait is the second it shows", async () => {
   // A minute is the slow cadence the rest of the app's panels use; the clock
-  // itself changes every second it is on screen (expiryWords prints M:SS), so
-  // the audit's "changes 60 times an hour" does not describe this clock. The
-  // alignment is what makes the digits turn over ON the second.
+  // itself changes every second it is on screen (expiryWords prints the shared
+  // "14m 59s left" wording), so the audit's "changes 60 times an hour" does not
+  // describe this clock. The alignment is what makes the digits turn over ON
+  // the second.
   assert.equal(clock.IDLE_MS, 60000);
   assert.equal(clock.alignMs(0), 1000);
   assert.equal(clock.alignMs(1), 999);
@@ -278,7 +285,26 @@ async function aMinute(file, data, viewport, { hidden = false } = {}) {
   await page.addInitScript(watchWaits, ["isHidden()) return arm()"]);
   await page.reload();
   await page.waitForTimeout(700);
+  const readLine = () => page.evaluate(() => {
+    const line = document.querySelector("#approval .approval-reassure")
+      || document.getElementById("appr-risk");
+    return line ? line.textContent : null;
+  });
+  // Pause the fake clock BEFORE reading the line: no app time can pass after
+  // this, so this reading is the card's first paint, not a value that moved
+  // while the test was still setting up.
   await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 500)));
+  let firstText = await readLine();
+  // A card can reach the bar after the fixed 700 ms on a loaded CI runner, and
+  // a fixed sleep is a guess in both directions (uikit.mjs's own rule: wait on
+  // an observable condition). The fake clock is paused, so this can only wait
+  // for the app's promise chain to finish, never for the countdown to move.
+  if (Array.isArray(data && data.pending) && data.pending.length) {
+    for (let i = 0; i < 60 && !/^Nothing runs until you decide\. \d+m \d+s left$/.test((firstText || "").trim()); i++) {
+      await page.waitForTimeout(50);
+      firstText = await readLine();
+    }
+  }
   if (hidden) {
     await page.evaluate(() => {
       Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
@@ -291,13 +317,9 @@ async function aMinute(file, data, viewport, { hidden = false } = {}) {
     await page.waitForTimeout(2);
   }
   const asked = await page.evaluate(() => window.__asked);
-  const text = await page.evaluate(() => {
-    const line = document.querySelector("#approval .approval-reassure")
-      || document.getElementById("appr-risk");
-    return line ? line.textContent : null;
-  });
+  const text = await readLine();
   await page.close();
-  return { asked, wakes: wakeUps(asked, 60_000), text };
+  return { asked, wakes: wakeUps(asked, 60_000), text, firstText };
 }
 
 await check("the Jarvis bar's clock: 60 wakes a minute becomes none when there is no card", async () => {
@@ -322,13 +344,31 @@ await check("the widget's clock: 60 wakes a minute becomes none when there is no
 });
 
 await check("with a card counting down the line keeps its countdown", async () => {
+  // The owner's ruling of 2026-10-30 put the timer on every card with a
+  // limited life, in ONE wording on every desktop surface: `expiryWords`
+  // (jarvis-link.js) now returns `countdownWords` (card-words.js), so the bar
+  // says "60m 0s left" - not the old "60:00 left to decide". The words are
+  // pinned second by second in `tests/expiry-parity.mjs`; here they are used
+  // the other way round, to prove the countdown really is counting DOWN (the
+  // old assertion only checked that some colon countdown was on the line).
+  assert.equal(expiryWords(NOW + 3_600_000, NOW), "60m 0s left");
+  assert.equal(expiryWords(NOW + 3_600_000, NOW + 1_000), "59m 59s left");
+  assert.equal(expiryWords(NOW + 3_600_000, NOW + 60_000), "59m 0s left");
+  assert.equal(expiryWords(NOW + 42_000, NOW), "42s left \u2014 under a minute to decide.");
   const shown = await aMinute("index.html", { pending: [APPROVAL] }, { width: 760, height: 1600 });
-  // The countdown is on screen. The fix changes how often the timer wakes,
-  // never what the owner reads - the same shape the old line had.
-  const m = /(\d+):(\d\d) left to decide/.exec(shown.text || "");
-  assert.ok(m, `no countdown on the line: ${shown.text}`);
-  const left = Number(m[1]) * 60 + Number(m[2]);
-  assert.ok(left > 0 && left <= 60 * 60, `an odd countdown: "${m[0]}"`);
+  // The line the owner reads: the fixed sentence plus the one shared wording.
+  const countdown = (t) =>
+    /^Nothing runs until you decide\. (\d+)m (\d+)s left$/.exec((t || "").trim());
+  const first = countdown(shown.firstText);
+  assert.ok(first, `no countdown on the line at first paint: ${shown.firstText}`);
+  assert.equal(Number(first[1]) * 60 + Number(first[2]), 3_600,
+    `the first paint is not the row's 3,600 s request: "${first[0]}"`);
+  const last = countdown(shown.text);
+  assert.ok(last, `no countdown on the line: ${shown.text}`);
+  const left = Number(last[1]) * 60 + Number(last[2]);
+  assert.ok(left > 0 && left <= 3_600, `an odd countdown: "${last[0]}"`);
+  assert.ok(left <= Number(first[1]) * 60 + Number(first[2]),
+    `the countdown went UP: "${first[0]}" -> "${last[0]}"`);
   // And every wait it asked for is one the display can use. The very first is
   // the idle minute - the clock arms at page load, before the card reaches the
   // page - and after that the second being shown, or the queue's own ~2 s
