@@ -12082,15 +12082,18 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             return
         # The owner's decision (rule 1): the card says PLAINLY, at the top, when
         # outside text shaped a plan that types or puts words in an address.
-        top = browser_card_lines(state, watch)
-        if top:
-            plan_text = "\n".join(top) + "\n\n" + plan_text
+        # The prepend itself happens AFTER the Gap-1 address reason below, so
+        # this line stays the card's very FIRST one when both apply (rule 1 is
+        # the older promise, and test_browser_engine pins it; 2026-10-30).
+        browser_top = browser_card_lines(state, watch)
     if name == "read_web_page" or name == "browser_control":
         # Gap 1 (Gemini's S-2, 2026-10-30): the same rule web_search already
         # has, for a URL this PC is about to CONTACT. When outside text shaped
         # this turn (or the conversation is tainted, or saved memories were
         # recalled) and the address is not one the owner typed or said, the
-        # card says why, at the top, before anything is fetched. Both tools
+        # card says why, above the plan's own words, before anything is
+        # fetched (the browser's own rule-1 line stays above it when both
+        # apply). Both tools
         # are in NEEDS_A_PERSON, so a card was always going to be raised -
         # what was missing is that the card could not tell the owner the
         # address was the MODEL's choice rather than theirs.
@@ -12105,6 +12108,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             # - both fetchers are in NEEDS_A_PERSON, which already stops a
             # looser tier running them without a person, and that refusal is
             # the second line for the day either leaves that set.
+    if name == "browser_control" and browser_top:
+        # Rule 1's own plain line goes on LAST so it is the card's FIRST line;
+        # the Gap-1 address reason prepended above follows it. Neither line is
+        # dropped - only their order is fixed (2026-10-30: prepending the
+        # address reason after rule 1's line buried the line the owner's rule 1
+        # puts at the top, and test_browser_engine caught it).
+        plan_text = "\n".join(browser_top) + "\n\n" + plan_text
     if name == "tidy_inbox":
         # A plan that says why nothing could be done (nothing matches, too
         # many, not set up, the module missing): nothing to ask about, so no
