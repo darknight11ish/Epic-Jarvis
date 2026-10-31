@@ -251,6 +251,20 @@ NOTE_ALWAYS = "Always asks. This cannot be changed from an app."
 #: own ONE approval card to do it, and that card is the card, not this line.
 NOTE_FILE = ("There is no switch for this one: going looser is only possible by hand in your "
              "PC's settings file (jarvis-framework.toml).")
+
+#: The note under a row whose action the gate has no risk line for (Gemini's
+#: ruling Q2, 2026-10-30). It is the same rule the gate itself enforces: an
+#: unclassified action is given the worst case and is forced to "ask", so no
+#: switch, no app and no settings file may loosen it.
+NOTE_NOT_CLASSIFIED = ("Jarvis has not written down what this action can do, so it always "
+                       "asks you first. No switch can loosen it until somebody adds its own "
+                       "line to the gate's risk table.")
+
+#: What the app answers when somebody asks to loosen one anyway. Plain words,
+#: and it says the file was not touched, because it was not.
+NOT_CLASSIFIED = ("This action is not classified yet, so it always asks you first, and nothing "
+                  "was changed. Only a person, adding its line to the gate's own risk table, "
+                  "can let it stop asking.")
 NOTE_WIKI = ("Always asks: the wiki is written only on your yes (security audit), so it "
              "cannot be loosened - a looser line would switch \"Add to wiki\" off.")
 #: "Check for tool updates" (2026-09-27, the owner's own request): a card
@@ -801,6 +815,29 @@ def _tier(action: str) -> str:
     return t if t in SAYS else "ask"
 
 
+def _classified(action: str) -> bool:
+    """Whether the gate has a risk line for `action`.
+
+    Gemini's ruling of 2026-10-30: an action the gate has not classified is
+    given the worst case and is forced to "ask" by `jarvis_gate.check()`, so no
+    app and no settings line may stop it asking. This answers whether the page
+    can PROVE that; it reads the gate's own table rather than a copy.
+
+    A gate that cannot be read answers True, and that is deliberate rather than
+    lazy: this is the refusal's evidence, and the enforcement is the gate's own
+    forced "ask" - a loosened line changes nothing there while the gate runs.
+    Every suite in this repository runs WITHOUT `jarvis_gate.py` (it is the
+    owner's file, not shipped), so `False` on a missing module would disable
+    every switch on the page in CI and test a behaviour the owner's PC does not
+    have. The owner's PC always has the gate, where this reads the real table.
+    """
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.risk_for(action).get("classified"))
+    except Exception:
+        return True
+
+
 def _search_asks_every_time() -> bool:
     """"Ask before every web search" (jarvis_search.settings - a damaged
     file reads as on there). False when web search is not on this PC."""
@@ -926,8 +963,17 @@ def _row(action: str, *, here: bool) -> dict:
         if tier != "never":
             row["switch"] = {"asks": tier == "ask", "loose": LOOSE[action],
                              "can_loosen": bool(here) and not lockdown_on()}
+            if not _classified(action):
+                # Gemini's ruling Q2 (2026-10-30): nothing may loosen an action
+                # the gate has no risk line for. Its own card would say so, and
+                # the gate forces it to "ask" whatever this file says, so the
+                # switch is not offered at all.
+                row["switch"]["can_loosen"] = False
+                row["not_classified"] = True
         row["note"] = NOTE_ROW.get(action) or (
             NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE)
+        if not _classified(action):
+            row["note"] = NOTE_NOT_CLASSIFIED
         if tier == "ask" and not here and not row.get("lockdown"):
             row["note"] += " " + PHONE_LOOSEN
         for old, new in OLDER_NAMES.items():
@@ -1265,13 +1311,20 @@ def request_tier(body, *, peer=None, local=None, gate: Optional[Callable] = None
                  tier_of: Optional[Callable[[str], str]] = None,
                  spawn: Optional[Callable] = None, write: Optional[Callable] = None,
                  armed: Optional[Callable[[], bool]] = None,
+                 classified: Optional[Callable[[str], bool]] = None,
                  here: Optional[bool] = None) -> tuple:
-    """POST /api/asks_first/tier {"action", "ask": bool}. (code, body)."""
+    """POST /api/asks_first/tier {"action", "ask": bool}. (code, body).
+
+    `classified` answers "does the gate have a risk line for this action?"
+    (`_classified`, reading the gate's own table). It is injected the way the
+    other dependencies are, so a suite can prove the refusal without a gate on
+    the path."""
     gate = gate or _gate
     tier_of = tier_of or _tier
     spawn = spawn or _spawn
     write = write or (lambda a, t: set_tier(a, t))
     armed = armed or _owner_check_armed
+    classified = classified or _classified
     if not isinstance(body, dict) or not isinstance(body.get("ask"), bool) \
             or not isinstance(body.get("action"), str):
         return 400, {"ok": False, "error": 'need {"action": "<name>", "ask": true|false}'}
@@ -1312,6 +1365,13 @@ def request_tier(body, *, peer=None, local=None, gate: Optional[Callable] = None
         return 200, {"ok": True, "changed": True, "view": view(here=_here(here, peer, local)),
                      "message": "Done - it asks you first from now on."}
     # Looser: the PC only, one card plus Windows Hello.
+    # ...and NOT AT ALL for an action the gate has no risk line for (Gemini's
+    # ruling Q2, 2026-10-30): it is given the worst case and forced to "ask" by
+    # the gate itself, so a looser line would only make the settings file and
+    # the page disagree with what happens. Refused before the card is raised,
+    # on whichever device asked, and nothing is written.
+    if not classified(action):
+        return 409, {"ok": False, "error": NOT_CLASSIFIED, "not_classified": True}
     if not _here(here, peer, local):
         return 403, {"ok": False, "error": PC_ONLY, "pc_only": True}
     if now_tier == LOOSE[action] or (now_tier == "auto" and LOOSE[action] == "notify"):

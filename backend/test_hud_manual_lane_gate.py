@@ -145,7 +145,7 @@ def t_the_patch_and_the_base():
     # same rule test_gate_touches.py, test_gate_risk_rows.py, test_referee.py,
     # test_screen_attach.py and test_devices.py use: every new patch is
     # appended, so the next one pushes this one up the list, and that is not a
-    # defect in either of them. TWO are there now:
+    # defect in either of them. THREE are there now:
     # learning-extract-reason.patch (2026-10-28, DEF-017) touches
     # jarvis_extract.py only - ONE file, no install block, no route, no gate
     # row - so it rewrites nothing this patch wrote and the loader's anchor
@@ -154,8 +154,14 @@ def t_the_patch_and_the_base():
     # after it: its hunks are the router call's `has_file=` line and a strip in
     # `_open`, and it adds no install block, route or gate row of its own
     # (test_attached_file.py proves its context is what the earlier patches
-    # wrote). Neither moves the loader's anchor.
-    later = {"learning-extract-reason.patch", "attached-file.patch"}
+    # wrote); and unknown-risk-approvable.patch (2026-10-30, Gemini's Q2
+    # ruling) touches jarvis_gate.py only - ONE file, no install block, no
+    # route, no HUD text - so it rewrites nothing this patch wrote either, and
+    # it is appended last among the patches that write jarvis_gate.py, before
+    # the loader (scripts/apply-patches.ps1 says so at its entry). None of the
+    # three moves the loader's anchor.
+    later = {"learning-extract-reason.patch", "attached-file.patch",
+             "unknown-risk-approvable.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

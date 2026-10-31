@@ -300,6 +300,15 @@ def t_the_patch_is_registered_last():
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
              "model-recommendations.patch",
+             # unknown-risk-approvable.patch (2026-10-30, Gemini's ruling Q2) is
+             # appended last of the code patches, immediately before
+             # plugin-loader.patch: four hunks in jarvis_gate.py (nine rows at
+             # the END of _RISK, the UNCLASSIFIED_WARNING sentence, risk_for's
+             # docstring, notice_for's body and check()'s tier resolution). It
+             # touches neither of the two stale rows this patch removes - it
+             # adds rows at the other end of the table - and its own suite pins
+             # that, so it cannot quietly rewrite them.
+             "unknown-risk-approvable.patch",
              "cloud-honesty.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",

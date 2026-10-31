@@ -347,6 +347,45 @@ row with no action "Jarvis is asking for your approval". A row with **no
 fallback in both apps. `backend/test_card_words.py` fails when an action the
 gate knows has no phrase.
 
+**`risk.classified: false` - an action the gate has no row for (2026-10-30).**
+The `risk` object is `{"reversible", "reach", "swipe_ok", "why", "classified"}`
+and it is DERIVED at read time from `jarvis_gate._RISK`; `classified` is false
+when that table has no row for the row's action. Since Gemini's Q2 ruling
+(`backend/unknown-risk-approvable.patch`) such a card is **approvable with
+maximum friction**, not refused:
+
+- `reversible` is `"no"`, `reach` is `"outbound"`, so `swipe_ok` is `false` -
+  the worst case the table has. Nothing on any screen may let a swipe or a
+  single tap decide it.
+- `risk.why` is the warning, word for word: **`Unclassified action - treated as
+  permanent and able to leave this PC`**, and `notice.body` begins with the
+  same sentence and adds why ("nobody has written down what it does, so it is
+  given the worst case"). Both come from `jarvis_gate.UNCLASSIFIED_WARNING`, so
+  they cannot drift apart. **No new field**: the three clients already draw
+  `risk.why` (the desktop's `riskLine`, the HUD's `apprRiskLine`, the phone's
+  `ApprovalCard`), so the warning appears with no client change, and the phone
+  already shows its `UNCLASSIFIED` pill for `classified: false`.
+- `notice.weight` is `"heavy"` (it leaves the machine and cannot be undone), a
+  `deny_ok: true` and the usual `approve_ok: false`.
+- The action is also forced to tier `"ask"` by `jarvis_gate.check()` whatever
+  `[autonomy.tiers]` says, so an unclassified action can never run with nobody
+  asked. `"never"` is stricter and is untouched.
+- **Approval needs a person.** Such a card takes the ordinary risky path -
+  Windows Hello on this PC, or the phone's own lock and signature from another
+  device - and nothing else. `POST /api/approve` on the PC reaches the Windows
+  Hello prompt instead of the 403 `unlabelled` below (the gate's warning line is
+  the written title the prompt needs), and an approval that did NOT come through
+  that check is refused by the gate itself, so no other client can record a yes
+  that runs. `jarvis_asks_first.request_tier` refuses to loosen one (409,
+  `not_classified: true`, nothing written), and its page offers no switch.
+- The eight actions that had an `auto` line and no row (`calendar_read`,
+  `email_read`, `notes_search`, `home_read`, `news_read`, `page_read`,
+  `github_read`, `docker_service_stop`) were given their own rows by the same
+  patch, so **no action that runs unattended is unclassified** any more. (The
+  ninth of that shape, `lower_api_limit`, already had a row from
+  `chatbot-limits.patch`.) `backend/test_gate_unknown_risk.py` fails a tree
+  where one is.
+
 **One card on every screen.** The Jarvis bar, the widget, the HUD page, the
 phone's card and its home-screen widget all show the label "Needs your OK",
 then the title, then the rest of the card, with **Deny on the left and
@@ -528,7 +567,7 @@ a client:
   | 403 | `{"ok": false, "owner_check": "not_set_up", "error": "Windows Hello is not set up on this PC, ..."}` | No Windows Hello on the PC: "no lock, no risky approval". |
   | 403 | `{"ok": false, "owner_check": "cancelled", "error": "..."}` | The owner dismissed the prompt. |
   | 403 | `{"ok": false, "owner_check": "failed", "error": "..."}` | The prompt could not be shown just now. |
-  | 403 | `{"ok": false, "owner_check": "unlabelled", "error": "Jarvis has no written words for this action yet, ..."}` | The action has no written title (`jarvis_card_words.has_written_title`), so a prompt could only quote a name back. Refused before any prompt is shown; nothing is approved. |
+  | 403 | `{"ok": false, "owner_check": "unlabelled", "error": "Jarvis has no written words for this action yet, ..."}` | The action has no written title (`jarvis_card_words.has_written_title`), so a prompt could only quote a name back. Refused before any prompt is shown; nothing is approved. **ONE EXCEPTION since 2026-10-30 (Gemini's Q2 ruling):** a card whose `risk.classified` is false is NOT refused here - the gate's own warning line is the written title the prompt needs, so it reaches Windows Hello like any other risky card (see "`risk.classified: false`" above). The refusal still holds for a classified action with no written words. |
   | 409 | `{"ok": false, "owner_check": "gone", "error": "This request stopped waiting while Windows Hello was open ..."}` | It ran out of time or was answered while the prompt was open, the prompt was closed because the card had stopped waiting (the watcher), or it had already run out when its turn for the prompt came. Both apps read a 409 as "no longer waiting". |
   | 503 | `{"ok": false, "owner_check": "unreadable", "error": "..."}` | The queue could not be read, so nothing was approved. |
 

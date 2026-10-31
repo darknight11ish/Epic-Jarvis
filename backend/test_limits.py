@@ -628,32 +628,36 @@ def t_the_voice_bar_lives_only_in_the_print_and_is_never_logged():
 
 
 def _the_gates_own_risk_table(text: str, where: str):
-    """`risk_for`, run on `text`'s OWN `_RISK`, `_UNKNOWN_RISK` and `risk_for` -
-    so this is the answer a card really gets from that file.
+    """`risk_for`, run on `text`'s OWN `_RISK`, `_UNKNOWN_RISK`,
+    `UNCLASSIFIED_WARNING` and `risk_for` - so this is the answer a card really
+    gets from that file.
 
     WHY IT CUTS THE PIECES OUT rather than importing the module: `jarvis_gate.py`
     is not one of the modules this repository ships whole, so a plain
     `import jarvis_gate` only works on a run that has a backend folder to import
     from, and this suite must also run straight out of a clone. Reading the
-    file's own three pieces and running them is the same instrument
+    file's own pieces and running them is the same instrument
     `test_gate_raise_rows.py` uses for the same reason, and the pieces it finds
     are asserted below: a file whose table was renamed would say so here rather
     than quietly grading nothing.
 
     The pieces are kept in FILE ORDER (`compile` runs them in order), which
-    `_UNKNOWN_RISK` and `risk_for` both depend on.
+    `_UNKNOWN_RISK` and `risk_for` both depend on. 2026-10-30 (Gemini's Q2
+    ruling): `_UNKNOWN_RISK` is now built from `UNCLASSIFIED_WARNING`, so that
+    sentence is kept too; it is not one of the three REQUIRED names below - a
+    file that has no unclassified fallback simply never reads it.
     """
     tree = ast.parse(text)
     keep, names = [], set()
     for node in tree.body:
         if isinstance(node, ast.Assign):
             ids = {t.id for t in node.targets if isinstance(t, ast.Name)}
-            if ids & {"_RISK", "_UNKNOWN_RISK"}:
+            if ids & {"_RISK", "_UNKNOWN_RISK", "UNCLASSIFIED_WARNING"}:
                 keep.append(node)
                 names |= ids
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             # The shipped file annotates this one: `_RISK: dict[...] = {`.
-            if node.target.id in ("_RISK", "_UNKNOWN_RISK"):
+            if node.target.id in ("_RISK", "_UNKNOWN_RISK", "UNCLASSIFIED_WARNING"):
                 keep.append(node)
                 names.add(node.target.id)
         elif isinstance(node, ast.FunctionDef) and node.name == "risk_for":

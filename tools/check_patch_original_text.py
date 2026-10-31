@@ -97,7 +97,7 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all NINETEEN - those thirteen, plus `private-chat.patch` at position 152, added
+all TWENTY - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -121,7 +121,13 @@ card has a deadline: EIGHT of its sixteen hunks read the owner's `jarvis_gate.py
 late-answer block after the wait, `pending()`'s opening, `decide()`'s body, the
 insertion point of `still_waiting()` and `withdraw()`'s docstring - and no
 earlier patch writes any of them; its other eight hunks edit
-`no-expiry-cards.patch`'s own output and cost nothing) - with their positions,
+`no-expiry-cards.patch`'s own output and cost nothing) - and, on
+2026-10-30, ONE patch: `unknown-risk-approvable.patch` at position 162 (four of
+its five hunks read the owner's own `jarvis_gate.py` text: the `_RISK` table's
+opening line where the eight rows are added, `_UNKNOWN_RISK`'s line beside the
+new `UNCLASSIFIED_WARNING`, `risk_for()`'s docstring, and `check()`'s
+`tier = tiers.get(...)` line - the fifth anchors on `approval-notice.patch`'s
+own added block and costs nothing) - with their positions,
 instead of pretending they are not there. The position-29 rule is kept as a
 REPORTED fact, not a gate.
 
@@ -267,6 +273,28 @@ PIN = {
     # BOTH patches to the published base with `git apply` (no fuzz), compiles
     # the result and drives the card's whole life.
     "no-deadline-cards.patch":                 (8, 133),    # position 37
+    # 2026-10-30, unknown-risk-approvable.patch (Gemini's ruling Q2: an action
+    # with no risk row is approvable with maximum friction). FOUR of its five
+    # hunks read text only the owner's PC holds, and every one is honest rather
+    # than drift - no patch in this walk writes it:
+    #   * the table's OPENING line and `# reading anything`, where the eight
+    #     rows are added. The TOP of the table, not the end, because the end is
+    #     different on a PC whose stack has run (chatbot-limits.patch writes
+    #     rows there) and on one where it has not, while the opening is the
+    #     same in both - so one hunk applies to either state;
+    #   * `_UNKNOWN_RISK`'s own two lines at the table's end, beside the new
+    #     `UNCLASSIFIED_WARNING` sentence (the old words are the owner's);
+    #   * `risk_for()`'s docstring, which is the owner's own file;
+    #   * `check()`'s `tier = tiers.get(action, UNKNOWN_TIER)` line, where the
+    #     forced "ask" is applied - deliberately INSIDE check()'s first try, so
+    #     that the hunks around it (`gate-touches`, `gate-outcome`, `no-expiry`,
+    #     `no-deadline`) are not disturbed: `gate-touches.patch`'s own hunk
+    #     starts three lines BELOW this one.
+    # The fifth hunk (`notice_for()`'s body) anchors on approval-notice.patch's
+    # own added block and costs nothing. Checked the other way by
+    # backend/test_gate_unknown_risk.py, which reverses this patch out of the
+    # published base and applies it forwards again, byte for byte.
+    "unknown-risk-approvable.patch":            (4, 20),    # position 162
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under

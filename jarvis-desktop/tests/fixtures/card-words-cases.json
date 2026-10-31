@@ -605,9 +605,9 @@
       "notice": {
         "title": "Jarvis wants to read your calendar",
         "summary": "Jarvis wants to read your calendar.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
-        "weight": "heavy",
+        "full": "reads your calendar on this PC; changes nothing in it. nothing has happened yet.",
+        "body": "reads your calendar on this PC; changes nothing in it. nothing has happened yet.",
+        "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -833,9 +833,9 @@
       "notice": {
         "title": "Jarvis wants to stop one of the containers it uses on this PC",
         "summary": "Jarvis wants to stop one of its containers.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
-        "weight": "heavy",
+        "full": "stops a service you started on this PC; starting it again is its own card. nothing has happened yet.",
+        "body": "stops a service you started on this PC; starting it again is its own card. nothing has happened yet.",
+        "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -905,9 +905,9 @@
       "notice": {
         "title": "Jarvis wants to read your email",
         "summary": "Jarvis wants to read your email.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
-        "weight": "heavy",
+        "full": "reads your mail on this PC through your own account; sends nothing and changes nothing. nothing has happened yet.",
+        "body": "reads your mail on this PC through your own account; sends nothing and changes nothing. nothing has happened yet.",
+        "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -953,8 +953,8 @@
       "notice": {
         "title": "Jarvis wants to check GitHub for a \"tell me when\"",
         "summary": "Jarvis wants to check GitHub for a \"tell me when\".",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "full": "reads public GitHub data; sends nothing of yours and changes nothing. nothing has happened yet.",
+        "body": "reads public GitHub data; sends nothing of yours and changes nothing. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1025,9 +1025,9 @@
       "notice": {
         "title": "Jarvis wants to check your smart home",
         "summary": "Jarvis wants to check your smart home.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
-        "weight": "heavy",
+        "full": "asks the home devices you set up on your own network for their state; switches nothing. nothing has happened yet.",
+        "body": "asks the home devices you set up on your own network for their state; switches nothing. nothing has happened yet.",
+        "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -1169,8 +1169,8 @@
       "notice": {
         "title": "Jarvis wants to read a news feed you added",
         "summary": "Jarvis wants to read a news feed you added.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "full": "fetches the news feeds you chose; a public read that changes nothing. nothing has happened yet.",
+        "body": "fetches the news feeds you chose; a public read that changes nothing. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1181,9 +1181,9 @@
       "notice": {
         "title": "Jarvis wants to search your notes",
         "summary": "Jarvis wants to search your notes.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
-        "weight": "heavy",
+        "full": "searches your notes on this PC; changes nothing in them. nothing has happened yet.",
+        "body": "searches your notes on this PC; changes nothing in them. nothing has happened yet.",
+        "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -1229,8 +1229,8 @@
       "notice": {
         "title": "Jarvis wants to fetch a web page you're watching",
         "summary": "Jarvis wants to fetch a page you're watching.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "full": "reads the one page you already named; that site sees this PC's address, and nothing changes. nothing has happened yet.",
+        "body": "reads the one page you already named; that site sees this PC's address, and nothing changes. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

@@ -133,10 +133,32 @@ def _risky_row(rid="r1", expires_in=150, action=None):
 
 
 def _unlabelled_row(rid="u1", expires_in=150):
-    """The fixture row the review quoted: an action nobody wrote words for."""
+    """The fixture row the review quoted: an action nobody wrote words for.
+
+    Since Gemini's ruling of 2026-10-30 this row is NOT refused any more: it
+    is the card that bricked the app builder on the owner's PC, and the gate now
+    sends its own written warning for it, so a prompt CAN name what it is asking
+    about. `_classified_unwritten_row` below is the row the UNLABELLED guard
+    still refuses: the same missing words, but an action the gate has a risk row
+    for.
+    """
     row = dict(_case_rows()["not in the gate's table: unclassified"]["row"])
     row["id"] = rid
     row["expires_in"] = expires_in
+    return row
+
+
+def _classified_unwritten_row(rid="w1", expires_in=150):
+    """A CLASSIFIED risky row whose action has no written title.
+
+    It is the 2026-10-26 case, unchanged: a prompt built on a name Jarvis has
+    never been told about asks the owner to confirm a blank. The difference from
+    `_unlabelled_row` is ONE field - `risk.classified` - and that is the whole of
+    Gemini's ruling Q2 (2026-10-30): the refusal survives for a classified
+    action, and is lifted only for one the gate has no row for.
+    """
+    row = _unlabelled_row(rid, expires_in)
+    row["risk"] = dict(row["risk"], classified=True)
     return row
 
 
@@ -525,20 +547,27 @@ def _watch_prompt_then(change, rid, row):
 
 
 def t_only_an_action_with_written_words_may_prompt():
-    """The fixture row the review quoted - an action nobody wrote words for -
-    is refused BEFORE the verifier is called. The actions that DO have words
-    still prompt, so this is a guard, not a blanket refusal (2026-10-26)."""
-    row = _unlabelled_row("u1")
+    """A CLASSIFIED action with no written words is refused BEFORE the verifier
+    is called. The actions that DO have words still prompt, so this is a guard,
+    not a blanket refusal (2026-10-26).
+
+    AND THE ONE EXCEPTION (Gemini's ruling Q2, 2026-10-30): an action the gate
+    has NOT classified is asked about anyway, because the gate itself sends a
+    written warning for it. That is the card that was unapprovable on the
+    owner's PC while he was pressing Approve, and the last checks here prove it
+    now goes through the very same prompt.
+    """
+    row = _classified_unwritten_row("w1")
     v = Verifier(RuntimeError("no prompt may be shown"))
-    got = _run({"id": "u1"}, lambda: [row], v)
-    check("unlabelled: 403 with its own owner_check",
+    got = _run({"id": "w1"}, lambda: [row], v)
+    check("classified but unwritten: 403 with its own owner_check",
           got is not None and got[0] == 403 and got[1]["owner_check"] == "unlabelled", got)
     check("the sentence is plain and says nothing was approved",
           got is not None and got[1]["error"] == OC.UNLABELLED
           and "written words" in OC.UNLABELLED
           and "Nothing was approved" in OC.UNLABELLED, got)
     check("the verifier was never called", not v.asked, v.asked)
-    check("nothing stamped", not OC.take_stamp("u1", row["action"]))
+    check("nothing stamped", not OC.take_stamp("w1", row["action"]))
 
     for action in ("app_merge_change", "unclassified_tool", "send_email"):
         row = _risky_row(f"c_{action}", action=action)
@@ -550,11 +579,22 @@ def t_only_an_action_with_written_words_may_prompt():
     # The guard belongs to THIS PC's prompt. A phone approval checks its own
     # fingerprint and is untouched, which is the documented split (the phone
     # is not changed by this fix).
-    row = _unlabelled_row("u2")
+    row = _classified_unwritten_row("w2")
     v = Verifier(RuntimeError("no prompt on the PC for another device"))
-    got = _run({"id": "u2"}, lambda: [row], v, peer="100.101.102.103", local="100.64.0.5")
+    got = _run({"id": "w2"}, lambda: [row], v, peer="100.101.102.103", local="100.64.0.5")
     check("a card from another device is not this guard's business",
           got is None and not v.asked, got)
+
+    # --- the exception: an UNCLASSIFIED action, no written words, still asked
+    row = _unlabelled_row("u1")
+    v = Verifier("confirmed")
+    got = _run({"id": "u1"}, lambda: [row], v)
+    check("unclassified: the very same card now PROMPTS instead of being refused",
+          got is None and len(v.asked) == 1, (got, v.asked))
+    check("... and the prompt is built from the card's own title and risk line",
+          bool(v.asked) and v.asked[0][0] == OC.approval_message(row), v.asked)
+    check("... `unclassified()` is the one thing that decides it",
+          OC.unclassified(row) is True and OC.unclassified(_classified_unwritten_row()) is False)
 
 
 def t_a_queued_prompt_gets_the_time_its_card_has_left_now():
@@ -1136,7 +1176,11 @@ def t_the_live_row_is_checked_again_after_the_wait():
     check("...not for the action read before the wait",
           OC.take_stamp("lr1", before["action"]) is False)
 
-    pending, reads = labelled_first_then(_unlabelled_row("lr1", expires_in=900))
+    # The row that LOST its written words. It is CLASSIFIED on purpose: since
+    # Gemini's ruling Q2 (2026-10-30) the second-read refusal covers a
+    # classified action only - an unclassified card is asked about anyway,
+    # because the gate sends its own warning for it.
+    pending, reads = labelled_first_then(_classified_unwritten_row("lr1", expires_in=900))
     v = Verifier(RuntimeError("no prompt for a row with no written words"))
     got = _run({"id": "lr1"}, pending, v)
     check("an action that LOST its written words is refused before the prompt",

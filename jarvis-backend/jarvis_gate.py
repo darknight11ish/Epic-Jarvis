@@ -267,6 +267,33 @@ _SIDE_EFFECT = re.compile(
 #   schema migration.
 # --------------------------------------------------------------------------
 _RISK: dict[str, tuple[str, str, str]] = {
+    # unknown-risk-approvable.patch (Gemini's Q2 ruling, 2026-10-30). These
+    # EIGHT had an "auto" line in [autonomy.tiers] and NO row here: they were
+    # the only actions that run with nobody asked while the gate itself calls
+    # them unclassified. The ruling forces every unclassified action to "ask",
+    # and these rows are what stops that rule from turning every calendar
+    # read, mail read, notes search and status check into an approval card.
+    # Each is the sentence its own tier line already implies - a read, and
+    # nothing changes - so nothing any screen shows changes today: an "auto"
+    # action raises no card. What is left of the forced "ask" is aimed at the
+    # actions nobody has written down at all.
+    #
+    # The ninth one of that shape is `lower_api_limit`, and it is NOT here on
+    # purpose: chatbot-limits.patch already gives it a row, and a second row
+    # would be dead code - the LAST one wins - which
+    # backend/test_gate_risk_words.py fails. They sit FIRST in the table, with
+    # the other reads, and that is also the placement that works: the table's
+    # END is different on a PC whose patch stack has run and on one where it
+    # has not (chatbot-limits.patch writes rows there), while these lines are
+    # the same in both.
+    "calendar_read": ("yes", "local", "reads your calendar on this PC; changes nothing in it"),
+    "email_read": ("yes", "local", "reads your mail on this PC through your own account; sends nothing and changes nothing"),
+    "notes_search": ("yes", "local", "searches your notes on this PC; changes nothing in them"),
+    "home_read": ("yes", "local", "asks the home devices you set up on your own network for their state; switches nothing"),
+    "news_read": ("yes", "outbound", "fetches the news feeds you chose; a public read that changes nothing"),
+    "page_read": ("yes", "outbound", "reads the one page you already named; that site sees this PC's address, and nothing changes"),
+    "github_read": ("yes", "outbound", "reads public GitHub data; sends nothing of yours and changes nothing"),
+    "docker_service_stop": ("yes", "local", "stops a service you started on this PC; starting it again is its own card"),
     # reading anything
     "web_research":        ("yes", "outbound", "a public query leaves the machine; nothing changes"),
     "read_calendar":       ("yes", "local", "reads the calendar; changes nothing in it"),
@@ -668,8 +695,16 @@ _RISK: dict[str, tuple[str, str, str]] = {
     "read_web_page": ("no", "outbound", "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on"),
 }
 
-_UNKNOWN_RISK = ("no", "outbound",
-                 "not classified, so treated as irreversible and outbound")
+#: What the card says when the gate has NO row for the action. Gemini's ruling
+#: of 2026-10-30 asks for it in plain words, and these are they: the action is
+#: given the worst case this gate has - it cannot be undone, and it can leave
+#: this PC - and the owner may still say yes, with the human check every risky
+#: card already needs. ONE sentence, used by `risk_for` and `notice_for`, so
+#: the card's warning line and its body cannot drift apart.
+UNCLASSIFIED_WARNING = ("Unclassified action - treated as permanent and able "
+                        "to leave this PC")
+
+_UNKNOWN_RISK = ("no", "outbound", UNCLASSIFIED_WARNING)
 
 
 def risk_for(action: str) -> dict:
@@ -679,6 +714,15 @@ def risk_for(action: str) -> dict:
     decisions. The rest is there so a UI can EXPLAIN the decision rather than
     just enforce it - a card that says "no undo: there is no unsend" teaches
     the rule, and a card that silently refuses a swipe does not.
+
+    `classified` is False when the table above has no row for `action`. Since
+    Gemini's ruling of 2026-10-30 that is not a refusal: the action is given
+    the worst case the table has (reversible "no", reach "outbound", so no
+    swipe), its `why` is UNCLASSIFIED_WARNING - the plain warning line every
+    card shows - and the owner may still approve it, through the same human
+    check (Windows Hello on this PC, the phone's own lock) every risky card
+    needs. `check()` is the other half: it forces such an action to tier
+    "ask", so it can never run unattended.
     """
     rev, reach, why = _RISK.get(action or "", _UNKNOWN_RISK)
     return {
@@ -750,6 +794,13 @@ def notice_for(item: dict) -> dict:
     heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised
 
     bits = [r["why"]]
+    if not r["classified"]:
+        # The warning line above is the headline; this says WHY the worst case
+        # was chosen, in the plainest words there are. Both are this file's own
+        # strings, so the notice is still safe by construction on a lock screen
+        # (see the docstring above): nothing here reads the payload.
+        bits.append("nobody has written down what it does, so it is given the "
+                    "worst case")
     if raised:
         # Said, never quoted. That something tried to rush you is the fact that
         # changes your decision; its actual words are not needed to convey it,
@@ -1728,6 +1779,38 @@ def check(action: str,
             # is no reading of "no policy" under which a tool call is safe.
             raise RuntimeError("autonomy tier table is empty")
         tier = tiers.get(action, UNKNOWN_TIER)
+        # AN ACTION WITH NO RISK ROW MAY NOT RUN WITH NOBODY ASKED (Gemini's
+        # ruling Q2, 2026-10-30). risk_for() already gives such an action the
+        # worst case it has - permanent and outbound - and this is the other
+        # half: whatever [autonomy.tiers] says, an action the risk table does
+        # not know is forced to "ask". "never" is stricter than ask and is left
+        # exactly as it is. A risk table that cannot be read forces it too.
+        #
+        # TWO NAMES ARE NOT "AN ACTION" for this rule, and they are named
+        # rather than left to chance: `_SYNTH_TIERS` holds the TOOLS whose tier
+        # `action_for_tool()` sets directly from `_TOOL_ACTIONS` ("calculator"
+        # -> auto, "memory_store" -> notify, "git_commit" -> ask). Those are
+        # the gate's own per-tool decisions, not actions the risk table
+        # classifies - forcing them to ask would card every calculation and
+        # every saved memory, which is not what this rule is for. Everything
+        # else is covered, including an action with no tier line at all (whose
+        # fallback used to be loosened by `[autonomy] unknown_action_tier` in
+        # the owner's file).
+        #
+        # Nothing that runs unattended today changes: every action the shipped
+        # config sets to "auto" or "notify" has its own row (the nine that did
+        # not are added by this patch), so this closes the hole for the NEXT
+        # action somebody adds without one.
+        try:
+            _forced = (tier != "never"
+                       and not (isinstance(action, str) and action in _SYNTH_TIERS)
+                       and not risk_for(action)["classified"])
+        except Exception:
+            _forced = tier != "never"
+        if _forced:
+            if tier != "ask":
+                _audit("gate.unclassified_forced_ask", {"action": action, "was": tier})
+            tier = "ask"
     except Exception as exc:
         # Cannot read the policy -> cannot claim the action is permitted.
         _audit("gate.policy_unreadable", {"action": action, "error": str(exc)})

@@ -507,6 +507,12 @@ def t_hygiene():
              # `_RISK` row), and no jarvis_hud.py hunk at all - so it cannot
              # rewrite the POST /api/screen wrapper this patch installs.
              "reminder-actions.patch",
+             # unknown-risk-approvable.patch (2026-10-30, Gemini's ruling Q2) is
+             # appended last of the code patches, immediately before
+             # plugin-loader.patch: four hunks, every one in jarvis_gate.py, and
+             # no jarvis_hud.py hunk at all - so it cannot rewrite the
+             # POST /api/screen wrapper this patch installs.
+             "unknown-risk-approvable.patch",
              # update-in-chat.patch (2026-10-26): ONE hunk in jarvis_gate.py
              # that appends `desktop_update` to the END of _NO_RULE_FROM_DENIAL,
              # after uncensored-optins.patch's own last entry, and no

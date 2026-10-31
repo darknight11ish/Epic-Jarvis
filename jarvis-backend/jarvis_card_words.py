@@ -653,6 +653,14 @@ def has_written_title(action) -> bool:
     because a card still has to show a readable title for an action this
     repository has never seen.
 
+    ONE EXCEPTION (Gemini's ruling Q2, 2026-10-30): an action the gate has NOT
+    classified is asked about anyway. The gate sends its own written warning
+    line - "Unclassified action - treated as permanent and able to leave this
+    PC" - and a prompt built from that plus the action's quoted name says
+    honestly what is being approved. Refusing it instead left a card the owner
+    could see and press Approve on, and nothing could ever approve it. See
+    `jarvis_owner_check.unclassified`.
+
     A plug-in program's own name counts as written: the owner wrote that name
     themself (the `[mcp.servers.<name>]` line), and `title_for` puts it in a
     written sentence. An empty action, a bare prefix, or anything else is

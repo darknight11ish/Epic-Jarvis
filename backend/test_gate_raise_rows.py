@@ -308,12 +308,20 @@ def pre_image(text: str, why: str = "") -> str:
 
 
 def risk_for_in(text: str, action: str):
-    """The file's OWN `_RISK`, `_UNKNOWN_RISK` and `risk_for()`, run on a stub
-    namespace - so this is the answer the card would really get."""
+    """The file's OWN `_RISK`, `_UNKNOWN_RISK`, `UNCLASSIFIED_WARNING` and
+    `risk_for()`, run on a stub namespace - so this is the answer the card would
+    really get.
+
+    2026-10-30 (Gemini's Q2 ruling): `_UNKNOWN_RISK` is now ONE line built from
+    the new `UNCLASSIFIED_WARNING` sentence, so the warning line is cut out too
+    and run first, in file order (the tuple reads it). The `_UNKNOWN_RISK`
+    regex ends at a `)` at end of line, which accepts both the one-line form
+    and the older two-line one."""
     ns: dict = {}
     pieces = [
         re.search(r"^_RISK: dict.*?^\}$", text, re.S | re.M),
-        re.search(r"^_UNKNOWN_RISK = \(.*?^\s+\"[^\n]*\)$", text, re.S | re.M),
+        re.search(r"^UNCLASSIFIED_WARNING = \(.*?\)$", text, re.S | re.M),
+        re.search(r"^_UNKNOWN_RISK = \(.*?\)$", text, re.S | re.M),
         re.search(r"^def risk_for\(.*?(?=^\S)", text, re.S | re.M),
     ]
     for m in pieces:
