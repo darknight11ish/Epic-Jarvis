@@ -333,7 +333,8 @@ def t_plan_payload_is_the_preview_the_next_slice_needs():
           set(summary) == {"notes_scanned", "notes_moved", "notes_tagged",
                            "mocs_to_create", "databases_indexed",
                            "links_rewritten", "duplicates_found",
-                           "empty_stubs_found"}, sorted(summary))
+                           "empty_stubs_found", "scoped", "selected_notes"},
+          sorted(summary))
     check("the summary counts the real vault",
           summary["notes_scanned"] == 3 and summary["mocs_to_create"] >= 2,
           summary)
@@ -800,6 +801,172 @@ def t_a_denied_card_changes_nothing():
           backups() == before_backups, backups())
     check("... and it says so in plain words", "nothing changed" in res.get("why", ""),
           res.get("why"))
+
+
+def t_a_scoped_plan_changes_only_the_selected_notes():
+    """PICK-A-SET (owner decision, 2026-10-31): only the picked notes are read
+    for content and only they are in the plan; no moves, no MOC/Home."""
+    fresh()
+    write("Work/Alpha.md", "# Alpha\n\nThe boiler was serviced in August.\n")
+    write("Work/Beta.md", "# Beta\n\nThe radiator valve was replaced.\n")
+    write("Garden/Gnomes.md", "# Gnomes\n\nThree gnomes by the shed.\n")
+    unselected_before = {rel: sha for rel, sha, _size in tree(VAULT)
+                         if rel in ("Work/Beta.md", "Garden/Gnomes.md")}
+    reads = []
+    original_read = V._read
+
+    def spy(path, *a, **k):
+        reads.append(os.path.realpath(str(path)))
+        return original_read(path, *a, **k)
+
+    V._read = spy
+    try:
+        out = plan(scope=["Work/Alpha.md"])
+    finally:
+        V._read = original_read
+    check("a scoped plan is ok and says it is scoped",
+          out.get("ok") is True and out.get("scoped") is True, out)
+    check("... and its scope is exactly the selected note",
+          out.get("scope") == ["Work/Alpha.md"], out.get("scope"))
+    check("... with one selected note read, no move and no MOC/Home",
+          out["summary"]["selected_notes"] == 1
+          and out["summary"]["notes_scanned"] == 1
+          and out["summary"]["notes_moved"] == 0
+          and out["summary"]["mocs_to_create"] == 0
+          and out["mocs_preview"] == [] and out["home_preview"] == {},
+          out["summary"])
+    check("... and the plan's tag work names only the selected note",
+          [row["path"] for row in out["tag_plan"]] == ["Work/Alpha.md"],
+          out.get("tag_plan"))
+    check("... and no other note was opened for content in the plan",
+          reads == [os.path.realpath(str(VAULT / "Work" / "Alpha.md"))], reads)
+    check("... and the plan words say nothing has changed yet",
+          "A scoped plan for 1 selected note(s)" in out.get("said", "")
+          and "Nothing has been changed yet." in out.get("said", ""),
+          out.get("said"))
+    unselected_after = {rel: sha for rel, sha, _size in tree(VAULT)
+                        if rel in unselected_before}
+    check("... and no unselected note changed while planning",
+          unselected_after == unselected_before,
+          (unselected_before, unselected_after))
+    # Chat's grammar lower-cases the owner's words; a vault-relative path in a
+    # different case must still find the one real file, never a different one.
+    lowered = plan(scope=["work/alpha.md"])
+    check("a path in a different case still selects the one real file",
+          lowered.get("ok") is True and [p.lower() for p in lowered.get("scope") or []]
+          == ["work/alpha.md"] and lowered["summary"]["selected_notes"] == 1,
+          lowered)
+
+
+def t_scoped_selection_refusals_change_nothing():
+    """The selection matrix: empty / absolute / .. / outside / hidden /
+    unknown / ambiguous are each refused in the module's own words, no card,
+    no plan, no file changed."""
+    fresh()
+    write("Work/Alpha.md", "# Alpha\n\nThe boiler was serviced.\n")
+    write("Work/Same.md", "# Same one\n\nOne copy.\n")
+    write("Garden/Same.md", "# Same two\n\nTwo copy.\n")
+    (VAULT / ".obsidian").mkdir(exist_ok=True)
+    (VAULT / ".obsidian" / "secret.md").write_text("# Secret\n", encoding="utf-8")
+    link = VAULT / "Link.md"
+    made_link = False
+    try:
+        link.symlink_to(VAULT / "Work" / "Alpha.md")
+        made_link = True
+    except (OSError, NotImplementedError):
+        pass
+    before = tree(VAULT)
+    cases = [
+        ("empty", [], V.SCOPE_EMPTY),
+        ("absolute", [str((VAULT / "Work" / "Alpha.md").resolve())], V.SCOPE_OUTSIDE),
+        ("traversal", ["Work/../Work/Alpha.md"], V.SCOPE_OUTSIDE),
+        ("outside", ["../outside.md"], V.SCOPE_OUTSIDE),
+        ("hidden", [".obsidian/secret.md"], V.SCOPE_HIDDEN),
+        ("unknown", ["NotANote"], V.SCOPE_UNKNOWN),
+        ("ambiguous", ["Same"], V.SCOPE_AMBIGUOUS),
+    ]
+    if made_link:
+        cases.append(("link", ["Link.md"], V.SCOPE_LINK))
+    with Framework(enabled=True):
+        for name, paths, want in cases:
+            gate = Gate()
+            code, out = V.handle_post(
+                V.PLAN_PATH, {"paths": paths, "vault": str(VAULT)},
+                peer="127.0.0.1", local="127.0.0.1",
+                gate=gate, tier_of=lambda a: "ask")
+            check(f"the {name} selection is refused with the module's own words",
+                  code == 200 and out.get("ok") is False and out.get("why") == want,
+                  (name, code, out))
+            check(f"... the {name} selection raises no card",
+                  gate.calls == [], (name, gate.calls))
+    check("... and no refusal changed or created a file",
+          tree(VAULT) == before,
+          (before, tree(VAULT)))
+    out = plan(scope=[])
+    check("the plan function itself refuses an empty selection too",
+          out.get("ok") is False and out.get("why") == V.SCOPE_EMPTY, out)
+
+
+def t_a_scoped_apply_writes_only_selected_and_undo_restores():
+    fresh()
+    write("Work/Alpha.md", "# Alpha\n\nThe boiler was serviced in August.\n")
+    write("Work/Beta.md", "# Beta\n\nThe radiator valve was replaced.\n")
+    write("Garden/Gnomes.md", "# Gnomes\n\nThree gnomes by the shed.\n")
+    before = tree(VAULT)
+    out = plan(scope=["Work/Alpha.md", "Garden/Gnomes.md"])
+    check("(set-up) the scoped plan is ok and knows its two notes",
+          out.get("ok") is True and out.get("scoped") is True
+          and out["summary"]["selected_notes"] == 2, out)
+    gate = Gate()
+    res = V.apply_plan(out["plan_id"], out["digest"], gate=gate,
+                       tier_of=lambda a: "ask")
+    check("the scoped writer raises exactly ONE card", len(gate.calls) == 1,
+          gate.calls)
+    if gate.calls:
+        _action, detail, prompt = gate.calls[0]
+        check("... the card says it is scoped, with counts only and no titles",
+              detail.get("scoped") is True and detail.get("selected") == 2
+              and "Alpha" not in prompt and "Gnomes" not in prompt
+              and "selected note" in prompt, (detail, prompt))
+    check("the scoped writer succeeds", res.get("ok") is True and res.get("scoped") is True,
+          res)
+    check("... it changed only the selected files and created none",
+          res.get("created") == 0 and res.get("selected") == 2
+          and "Map of Content" not in res.get("said", ""), res)
+    after = tree(VAULT)
+    changed = {rel for rel, sha, _size in after
+               if (rel, sha, _size) not in before}
+    allowed = {"Work/Alpha.md", "Garden/Gnomes.md"}
+    check("... every changed file is a selected note", changed <= allowed, changed)
+    unchanged_paths = {"Work/Beta.md"}
+    check("... and an unselected note is byte-identical",
+          {rel: sha for rel, sha, _size in after if rel in unchanged_paths}
+          == {rel: sha for rel, sha, _size in before if rel in unchanged_paths})
+    check("... no MOC or Vault Home was created",
+          not any("_MOC - " in rel or rel == "00 - Vault Home.md"
+                  for rel, _sha, _size in after), [r[0] for r in after])
+    undo = R.undo(res["receipt_id"])
+    check("the receipt's ONE Undo restores exactly the scoped batch",
+          undo.get("ok") is True and tree(VAULT) == before,
+          (undo, tree(VAULT) == before))
+
+
+def t_the_whole_vault_mode_is_unchanged_by_pick_a_set():
+    fresh()
+    write("Work/Alpha.md", "# Alpha\n\nThe boiler was serviced.\n")
+    write("Work/Beta.md", "# Beta\n\nThe radiator valve was replaced.\n")
+    out = plan()
+    check("the default plan is still the whole vault",
+          out.get("scoped") is False and out.get("scope") == []
+          and out["summary"]["selected_notes"] == 0, out)
+    check("... and it still creates Maps of Content and a Vault Home",
+          bool(out["mocs_preview"]) and bool(out["home_preview"]), out)
+    before = tree(VAULT)
+    res = V.apply_plan(out["plan_id"], out["digest"], gate=Gate(),
+                       tier_of=lambda a: "ask")
+    check("... and the whole-vault writer still works end to end",
+          res.get("ok") is True and res.get("scoped") is False
+          and tree(VAULT) != before, res)
 
 
 def t_a_low_tier_is_not_a_person_saying_yes():
@@ -1449,6 +1616,10 @@ def main() -> int:
                t_the_writer_does_exactly_what_the_plan_promised,
                t_the_card_is_one_card_and_says_what_it_does,
                t_a_denied_card_changes_nothing,
+               t_a_scoped_plan_changes_only_the_selected_notes,
+               t_scoped_selection_refusals_change_nothing,
+               t_a_scoped_apply_writes_only_selected_and_undo_restores,
+               t_the_whole_vault_mode_is_unchanged_by_pick_a_set,
                t_a_low_tier_is_not_a_person_saying_yes,
                t_a_card_that_cannot_be_shown_changes_nothing,
                t_a_stale_plan_is_refused_and_writes_nothing,

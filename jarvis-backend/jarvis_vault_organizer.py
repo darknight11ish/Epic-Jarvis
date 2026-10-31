@@ -50,6 +50,17 @@ guesswork), and every one of them is CALLED, never re-implemented:
     `change_own_config` card at tier ask; a gate that cannot be asked, a tier
     that is not "ask", or a setting that cannot be saved changes nothing).
 
+PICK-A-SET MODE (owner decision, 2026-10-31). The plan route also accepts an
+explicit scope: `POST /api/vault/organize-plan` with `{"paths": [...]}` (paths
+relative to the vault, or bare unique note names). A scoped plan validates each
+selection (inside the vault, a real `.md` file, not hidden/protected, not a
+link, no absolute path or `..`) and computes operations for ONLY those notes:
+tags are merged on them, no note moves, and no Map-of-Content or Vault Home is
+created - those are whole-vault artefacts and a scoped run does not touch them.
+No other note is read for content. The scoped plan is the same read-only dry
+run, and its writer is the same ONE-card whole-batch route with the same
+snapshot/Undo logic; a denial writes nothing. The default stays the whole vault.
+
 HARD RULES THIS MODULE KEEPS.
   * No model call and no embeddings: the clustering is pure Python (a
     deterministic TF-IDF over headings/tags/folder names, plus the note's own
@@ -169,6 +180,24 @@ SWITCH_LAST_WORDS = {"enabled": "the vault organizer is on",
 _OFF_WHY = ("The vault organizer is off. Turn it on first; it is off by "
             "default and turning it on is one approval card.")
 _ARITY = "the organizer needs a vault folder and a scheme it knows"
+
+#: Pick-a-set mode (owner decision, 2026-10-31). A scoped plan takes an
+#: explicit list of note paths/names and computes operations for ONLY those
+#: notes: tags, no moves, no Map-of-Content and no Vault Home (those are
+#: whole-vault artefacts). The refusals never echo a note title - a hidden
+#: lists reply must not leak one - and every refusal changes nothing.
+SCOPE_EMPTY = ("a scoped plan needs at least one note to organize; nothing "
+               "was planned or changed")
+SCOPE_OUTSIDE = ("a selected path is outside the vault, so nothing was "
+                 "planned or changed")
+SCOPE_LINK = ("a selected note is a link, and links are refused; nothing was "
+              "planned or changed")
+SCOPE_HIDDEN = ("a selected note is in the hidden or protected part of the "
+                "vault, so nothing was planned or changed")
+SCOPE_UNKNOWN = ("a selected note is not a real .md file in this vault, so "
+                 "nothing was planned or changed")
+SCOPE_AMBIGUOUS = ("a selected note name is not unique in this vault, so "
+                   "nothing was planned or changed")
 
 #: `_PLANS` keeps the most recent plans in memory for the apply slice to look
 #: up by plan_id. Nothing here is written to disk (the plan is not a setting),
@@ -751,6 +780,10 @@ class Plan:
     partial: list = field(default_factory=list)
     archive_stubs: bool = False
     created: float = 0.0
+    #: Pick-a-set mode: True when this plan covers only `scope` (vault-relative
+    #: paths). A scoped plan writes only those notes and creates no MOCs/Home.
+    scoped: bool = False
+    scope: tuple = ()
 
     def summary(self) -> dict:
         notes = [n for n in self.notes if n.kind == "note"]
@@ -763,6 +796,8 @@ class Plan:
             "links_rewritten": _incoming_links_to_moved_notes(self.notes),
             "duplicates_found": len(self.duplicates),
             "empty_stubs_found": len(self.stubs),
+            "scoped": bool(self.scoped),
+            "selected_notes": len(self.scope) if self.scoped else 0,
         }
 
     def payload(self) -> dict:
@@ -773,6 +808,8 @@ class Plan:
             "vault": self.vault,
             "scheme": self.scheme,
             "max_clusters": self.max_clusters,
+            "scoped": bool(self.scoped),
+            "scope": list(self.scope),
             "summary": self.summary(),
             "moves_preview": self.moves,
             "mocs_preview": self.mocs,
@@ -808,6 +845,24 @@ def _incoming_links_to_moved_notes(notes: list) -> int:
 
 def describe(plan: Plan) -> str:
     s = plan.summary()
+    if plan.scoped:
+        # Pick-a-set mode: counts only, never a note title (the same rule the
+        # hidden-lists mode needs), and the honest scope of the run.
+        lines = [f"A scoped plan for {s['selected_notes']:,} selected note(s) in "
+                 f"\"{Path(plan.vault).name}\":",
+                 f"  {s['notes_scanned']:,} note(s) read, {s['notes_tagged']:,} to "
+                 f"be tagged.",
+                 "  Only the notes you picked are read or changed; no other note "
+                 "is read for content, no note moves, and no Map-of-Content or "
+                 "Vault Home is created in a scoped run."]
+        if s["duplicates_found"] or s["empty_stubs_found"]:
+            lines.append(f"  {s['duplicates_found']:,} duplicate(s) and "
+                         f"{s['empty_stubs_found']:,} empty stub(s) found - "
+                         f"listed, never deleted.")
+        if plan.partial:
+            lines.append("  Partial: " + "; ".join(plan.partial) + ".")
+        lines.append("Nothing has been changed yet.")
+        return "\n".join(lines)
     scheme_words = {
         "mocs_only": "without moving a single file",
         "topic_folders": "into topic folders",
@@ -830,13 +885,23 @@ def describe(plan: Plan) -> str:
     return "\n".join(lines)
 
 
-def _scan(vault: Path, plan: Plan, deadline: float) -> None:
+def _scan(vault: Path, plan: Plan, deadline: float,
+          selected=None) -> None:
     """Read every note under `vault` into `plan.notes`; refuses what the path
-    rules refuse, and records every refusal in `plan.warnings`."""
+    rules refuse, and records every refusal in `plan.warnings`.
+
+    A SCOPED plan passes `selected` (vault-relative paths): only those files are
+    listed and opened. No other note is read for content - the scoped plan needs
+    no other note's body, and link names are matched from the selected notes'
+    own words. The whole-vault path is byte-for-byte the old scan.
+    """
     root = os.path.realpath(str(vault))
     counted = 0
     try:
-        paths = sorted(p for p in vault.rglob("*.md") if p.is_file())
+        if selected is not None:
+            paths = [vault.joinpath(*rel.split("/")) for rel in selected]
+        else:
+            paths = sorted(p for p in vault.rglob("*.md") if p.is_file())
     except OSError as exc:                                # noqa: BLE001
         plan.warnings.append(f"the vault could not be listed "
                              f"({type(exc).__name__})")
@@ -1084,6 +1149,13 @@ def _assign_paths(plan: Plan) -> None:
     STANDALONE pages are moved by `topic_folders`/`para`; the rows still get
     their tags and up: link in place, exactly as `mocs_only` does."""
     notes = [n for n in plan.notes if n.kind in ("note", "database")]
+    if plan.scoped:
+        # Pick-a-set mode never moves a note: a scoped run changes only the
+        # selected notes' tags, so their paths stay exactly where the owner
+        # keeps them.
+        for note in notes:
+            note.new_rel = note.rel
+        return
     if plan.scheme == "mocs_only":
         for note in notes:
             note.new_rel = note.rel
@@ -1139,6 +1211,8 @@ def _digest(plan: Plan) -> str:
     canonical = {
         "vault": plan.vault,
         "scheme": plan.scheme,
+        "scoped": bool(plan.scoped),
+        "scope": list(plan.scope),
         "moves": sorted((m["from_path"], m["to_path"], tuple(m["tags_added"]),
                          m["up"]) for m in plan.moves),
         "mocs": sorted((m["name"], _sha_bytes(m["body"].encode("utf-8")))
@@ -1154,7 +1228,8 @@ def _digest(plan: Plan) -> str:
 
 def plan_vault_organization(vault=None, *, scheme: str = DEFAULT_SCHEME,
                             max_clusters: int = MAX_CLUSTERS,
-                            archive_empty_stubs: bool = False) -> dict:
+                            archive_empty_stubs: bool = False,
+                            scope=None) -> dict:
     """The 100% read-only dry run: what a tidy-up WOULD do, and nothing else.
 
     `vault` defaults to the owner's configured vault (`[notes.obsidian]
@@ -1162,6 +1237,16 @@ def plan_vault_organization(vault=None, *, scheme: str = DEFAULT_SCHEME,
     obsidian_vault()`. `scheme` is one of SCHEMES; the default is the least
     destructive one, `mocs_only`, which moves no file. The return value is the
     preview payload described in the module docstring.
+
+    PICK-A-SET (owner decision, 2026-10-31). `scope` is an optional list of
+    vault-relative paths or bare unique note names. When it is present the plan
+    computes operations for ONLY those notes: their tags are inferred and
+    merged, no note moves, and no Map-of-Content or Vault Home is created (those
+    are whole-vault artefacts). No other note is read for content; the selected
+    notes' own link names are matched against the selection and the vault's
+    paths, and a link to a note outside the scope is never rewritten. A scoped
+    plan is the same read-only preview: no file is created, changed, moved or
+    deleted, no card is raised and no model is called.
 
     Everything this opens is opened for reading. No file is created, changed,
     moved or deleted, no card is raised, no model is called, and no note text
@@ -1190,8 +1275,22 @@ def plan_vault_organization(vault=None, *, scheme: str = DEFAULT_SCHEME,
                 max_clusters=max(1, min(int(max_clusters or MAX_CLUSTERS),
                                         MAX_CLUSTERS)),
                 archive_stubs=bool(archive_empty_stubs), created=time.time())
-    _scan(Path(plan.vault), plan, deadline)
+    if scope is not None:
+        selected, why = resolve_scope_paths(Path(plan.vault), scope)
+        if why:
+            return _scope_refusal(why)
+        plan.scoped = True
+        plan.scope = tuple(selected)
+    _scan(Path(plan.vault), plan, deadline,
+          selected=list(plan.scope) if plan.scoped else None)
+    if plan.scoped and not plan.notes:
+        return _scope_refusal(SCOPE_UNKNOWN)
     _assign_topics(plan)
+    if plan.scoped:
+        # No MOC is created for a scoped run, so an up: link would point at a
+        # note that never exists - the scoped plan changes tags only.
+        for note in plan.notes:
+            note.up_link = ""
     _find_duplicates(plan)
     plan.stubs = [n.rel for n in plan.notes if n.stub]
     _assign_paths(plan)
@@ -1207,21 +1306,22 @@ def plan_vault_organization(vault=None, *, scheme: str = DEFAULT_SCHEME,
                                   "tags_added": list(note.tags_added),
                                   "tags_after": list(note.tags_after),
                                   "up": note.up_link})
-    topics: dict = {}
-    for note in plan.notes:
-        if note.kind == "note":
-            topics.setdefault(note.topic, []).append(note)
-    databases_by_topic: dict = {}
-    for note in plan.notes:
-        if note.kind == "database":
-            databases_by_topic.setdefault(note.topic, []).append(note)
-    for topic in sorted(topics):
-        members = sorted(topics[topic], key=lambda n: (n.title.lower(), n.rel))
-        body = _moc_body(topic, members, databases_by_topic.get(topic, []))
-        plan.mocs.append({"name": _moc_name(topic), "topic": topic,
-                          "body": body, "notes": [n.rel for n in members]})
-    if plan.notes:
-        plan.home = {"name": HOME_NAME, "body": _home_body(plan)}
+    if not plan.scoped:
+        topics: dict = {}
+        for note in plan.notes:
+            if note.kind == "note":
+                topics.setdefault(note.topic, []).append(note)
+        databases_by_topic: dict = {}
+        for note in plan.notes:
+            if note.kind == "database":
+                databases_by_topic.setdefault(note.topic, []).append(note)
+        for topic in sorted(topics):
+            members = sorted(topics[topic], key=lambda n: (n.title.lower(), n.rel))
+            body = _moc_body(topic, members, databases_by_topic.get(topic, []))
+            plan.mocs.append({"name": _moc_name(topic), "topic": topic,
+                              "body": body, "notes": [n.rel for n in members]})
+        if plan.notes:
+            plan.home = {"name": HOME_NAME, "body": _home_body(plan)}
     plan.digest = _digest(plan)
     plan.plan_id = "vplan_" + plan.digest
     with _PLANS_LOCK:
@@ -1234,6 +1334,7 @@ def plan_vault_organization(vault=None, *, scheme: str = DEFAULT_SCHEME,
     _audit("vault_organizer.plan", {
         "scheme": scheme, "notes": len([n for n in plan.notes if n.kind == "note"]),
         "moves": len(plan.moves), "mocs": len(plan.mocs),
+        "scoped": bool(plan.scoped), "selected": len(plan.scope),
         "partial": len(plan.partial)})
     return plan.payload()
 
@@ -1343,6 +1444,38 @@ ORGANIZE_CARD_COPY = (
     "the real vault; the same snapshots, receipt and ONE Undo cover this batch.\n"
     "  The plan you looked at still matches the vault (digest {digest})."
 )
+#: The pick-a-set card (owner decision, 2026-10-31). Counts only - it never
+#: names a note, so it is safe while the hidden lists are on - and it promises
+#: exactly what the scoped plan does: tags on the selected notes, no moves, no
+#: MOC/Home, no deletion, one Undo for the batch.
+ORGANIZE_CARD_SCOPED = (
+    "Jarvis will organize {notes} selected note(s) in the Obsidian vault "
+    "\"{name}\" on this PC.\n"
+    "  Scope: only the notes you picked are read and changed; no other note "
+    "is read for content, no note moves, and no Map-of-Content or Vault Home "
+    "is created in a scoped run.\n"
+    "  {files} selected file(s) will change: {notes} note(s) get tags; nothing "
+    "is created or deleted.\n"
+    "  A copy of every file it changes is saved first, so ONE Undo restores "
+    "exactly this batch.\n"
+    "  The plan you looked at still matches the vault (digest {digest})."
+)
+#: The first-run scoped card: the real vault is not the thing this batch touches.
+ORGANIZE_CARD_SCOPED_COPY = (
+    "Jarvis will organize {notes} selected note(s) in a COPY of your Obsidian "
+    "vault \"{name}\" on this PC.\n"
+    "  The real vault is NOT touched: this batch runs on \"{copy}\", a copy "
+    "Jarvis makes beside it first.\n"
+    "  Scope: only the notes you picked are read and changed; no other note "
+    "is read for content, no note moves, and no Map-of-Content or Vault Home "
+    "is created in a scoped run.\n"
+    "  {files} selected file(s) will change on the copy: {notes} note(s) get "
+    "tags; nothing is created or deleted.\n"
+    "  After inspecting the copy, mark it verified to let a later run work on "
+    "the real vault; the same snapshots, receipt and ONE Undo cover this scoped "
+    "batch.\n"
+    "  The plan you looked at still matches the vault (digest {digest})."
+)
 SCHEME_WORDS = {
     "mocs_only": "no file moves; tags, Map-of-Content notes and a Vault Home",
     "topic_folders": "notes grouped into topic folders under fixed numbered buckets",
@@ -1411,6 +1544,140 @@ def _vault_path(vault: str, rel: str) -> Optional[str]:
     if not rel or ".." in rel.split("/"):
         return None
     return _inside_vault(vault, os.path.join(vault, *rel.split("/")))
+
+
+def _scope_refusal(words: str) -> dict:
+    """A scoped-plan refusal in the module's own words. Names no note."""
+    return {"ok": False, "error": words, "why": words}
+
+
+def _scope_protected(real: str) -> bool:
+    """Is this path in the protected set the rest of the backend respects?"""
+    try:
+        import jarvis_protection as P
+        return bool(P.protected_path(real) or P.blocked_path(real))
+    except Exception:                                     # noqa: BLE001
+        return False
+
+
+def _scope_hidden(rel: str) -> bool:
+    return any(part.startswith(".") for part in rel.replace("\\", "/").split("/"))
+
+
+def _scope_candidate(vault: Path, raw) -> tuple:
+    """(rel, "") for one selected note, or ("", refusal words).
+
+    Paths are accepted only as vault-relative paths or bare unique names.
+    Absolute paths, traversal, links, hidden/protected paths, non-.md files and
+    names that fit more than one note are refused - and the refusal never
+    echoes the name, because chat may be in the hidden-lists mode.
+    """
+    text = str(raw or "").strip().strip('"\'`')
+    if not text:
+        return "", SCOPE_EMPTY
+    norm = text.replace("\\", "/")
+    if os.path.isabs(text) or re.match(r"^[A-Za-z]:", text):
+        return "", SCOPE_OUTSIDE
+    parts = [p for p in norm.split("/") if p not in ("", ".")]
+    if not parts:
+        return "", SCOPE_EMPTY
+    if ".." in parts:
+        return "", SCOPE_OUTSIDE
+    if _scope_hidden(norm):
+        return "", SCOPE_HIDDEN
+    root = Path(vault)
+    direct = root.joinpath(*parts)
+    candidates = []
+    if direct.is_file():
+        candidates = [direct]
+    elif not direct.suffix and direct.with_suffix(".md").is_file():
+        candidates = [direct.with_suffix(".md")]
+    elif len(parts) == 1:
+        # A bare name may be the note's stem anywhere in the vault; a name
+        # that fits two notes is refused rather than guessed.
+        wanted = parts[0].lower()
+        for path in root.rglob("*.md"):
+            try:
+                rel = os.path.relpath(str(path), str(root)).replace("\\", "/")
+            except ValueError:
+                continue
+            if _scope_hidden(rel) or not path.is_file():
+                continue
+            if path.stem.lower() == wanted or path.name.lower() == wanted:
+                candidates.append(path)
+        if len(candidates) > 1:
+            return "", SCOPE_AMBIGUOUS
+    else:
+        # Chat's grammar lower-cases the owner's words, so a path from chat may
+        # arrive in a different case than the file's. Match the vault-relative
+        # path case-insensitively - one real file, never a guess among two.
+        wanted_rel = "/".join(parts).lower()
+        if not wanted_rel.endswith(".md"):
+            wanted_rel += ".md"
+        for path in root.rglob("*.md"):
+            try:
+                rel = os.path.relpath(str(path), str(root)).replace("\\", "/")
+            except ValueError:
+                continue
+            if _scope_hidden(rel) or not path.is_file():
+                continue
+            if rel.lower() == wanted_rel:
+                candidates.append(path)
+        if len(candidates) > 1:
+            return "", SCOPE_AMBIGUOUS
+    if len(candidates) != 1:
+        return "", SCOPE_UNKNOWN
+    path = candidates[0]
+    if path.suffix.lower() != ".md":
+        return "", SCOPE_UNKNOWN
+    if os.path.islink(str(path)):
+        return "", SCOPE_LINK
+    try:
+        rel = os.path.relpath(str(path), str(root)).replace("\\", "/")
+        real = os.path.realpath(str(path))
+    except (OSError, ValueError):
+        return "", SCOPE_UNKNOWN
+    # A link anywhere in the path is a trick, not a selection: refuse it even
+    # when its target happens to be inside the vault.
+    probe = root
+    try:
+        for part in rel.split("/")[:-1]:
+            probe = probe / part
+            if os.path.islink(str(probe)):
+                return "", SCOPE_LINK
+    except OSError:
+        return "", SCOPE_UNKNOWN
+    if _scope_hidden(rel):
+        return "", SCOPE_HIDDEN
+    if jarvis_notes is None or not jarvis_notes._inside(
+            os.path.realpath(str(root)), real):
+        return "", SCOPE_OUTSIDE
+    if _scope_protected(real):
+        return "", SCOPE_HIDDEN
+    return rel, ""
+
+
+def resolve_scope_paths(vault: Path, items) -> tuple:
+    """(sorted, deduped rel paths, "") or ([], refusal words).
+
+    The one place a scoped selection is validated, so the plan route and the
+    writer's freshness re-read use exactly the same rule.
+    """
+    if isinstance(items, str):
+        items = [items]
+    if not isinstance(items, (list, tuple)) or not items:
+        return [], SCOPE_EMPTY
+    out, seen = [], set()
+    for raw in items:
+        rel, why = _scope_candidate(Path(vault), raw)
+        if why:
+            return [], why
+        if rel not in seen:
+            seen.add(rel)
+            out.append(rel)
+    if not out:
+        return [], SCOPE_EMPTY
+    return out, ""
 
 
 def _yaml_tag(tag: str) -> str:
@@ -1594,24 +1861,39 @@ def _write_backup(bdir: Path, files: list) -> list:
 
 
 def record_card_detail(plan: "Plan", actions: dict, *, copy_of: str = "") -> dict:
-    """The approval card's words and fields. With `copy_of`, the card says the
-    batch runs on the copy, names it, and says the real vault is NOT touched."""
-    if copy_of:
+    """The approval card's words and fields.
+
+    With `copy_of`, the card says the batch runs on the copy, names it, and says
+    the real vault is NOT touched. A SCOPED plan uses the scoped wording: counts
+    only, no note titles (safe while the hidden lists are on), and only the
+    promises a scoped run keeps (tags on the selected notes, no moves, no
+    Map-of-Content or Vault Home, one Undo for the batch).
+    """
+    notes = len(actions["actions"])
+    files = len(actions["actions"]) + len(actions["creates"])
+    if plan.scoped:
+        template = (ORGANIZE_CARD_SCOPED_COPY if copy_of
+                    else ORGANIZE_CARD_SCOPED)
+        text = template.format(
+            name=Path(copy_of).name if copy_of else Path(plan.vault).name,
+            copy=Path(plan.vault).name, notes=notes, files=files,
+            digest=plan.digest)
+    elif copy_of:
         text = ORGANIZE_CARD_COPY.format(
             name=Path(copy_of).name, copy=Path(plan.vault).name,
             scheme_words=_scheme_words(plan.scheme),
-            files=len(actions["actions"]) + len(actions["creates"]),
-            notes=len(actions["actions"]), moves=actions["moves"],
+            files=files, notes=notes, moves=actions["moves"],
             creates=len(actions["creates"]), digest=plan.digest)
     else:
         text = ORGANIZE_CARD.format(
             name=Path(plan.vault).name, scheme_words=_scheme_words(plan.scheme),
-            files=len(actions["actions"]) + len(actions["creates"]),
-            notes=len(actions["actions"]), moves=actions["moves"],
+            files=files, notes=notes, moves=actions["moves"],
             creates=len(actions["creates"]), digest=plan.digest)
-    detail = {"text": text, "vault_name": Path(plan.vault).name, "scheme": plan.scheme,
-              "files": len(actions["actions"]) + len(actions["creates"]),
+    detail = {"text": text, "vault_name": Path(plan.vault).name,
+              "scheme": plan.scheme, "files": files,
               "moves": actions["moves"], "creates": len(actions["creates"]),
+              "scoped": bool(plan.scoped),
+              "selected": len(plan.scope) if plan.scoped else 0,
               "undo": True, "deletes": False, "leaves_this_pc": False}
     if copy_of:
         detail["copy_of"] = Path(copy_of).name
@@ -1828,6 +2110,21 @@ def _write_copy_note(copy_path: Path, original: str, plan: "Plan") -> None:
         pass
 
 
+def _replan_plan(plan: "Plan", vault=None) -> dict:
+    """The writer's freshness re-read, with the SAME scope as the plan.
+
+    A scoped plan is re-planned against the same selected paths, so its digest
+    can only match when exactly those notes are unchanged; a selected note that
+    was edited (or removed) makes the plan stale instead of silently widening
+    the run to the whole vault.
+    """
+    kwargs = {"scheme": plan.scheme, "max_clusters": plan.max_clusters,
+              "archive_empty_stubs": plan.archive_stubs}
+    if plan.scoped:
+        kwargs["scope"] = list(plan.scope)
+    return plan_vault_organization(vault or plan.vault, **kwargs)
+
+
 def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
                tier_of: Optional[Callable[[str], str]] = None,
                apply_on_copy: Optional[bool] = None) -> dict:
@@ -1858,9 +2155,7 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
         # The writer reads note text for real, so the turn is private BEFORE
         # the first note is opened (the freshness check below reads them).
         _latch_taint()
-        fresh = plan_vault_organization(plan.vault, scheme=plan.scheme,
-                                        max_clusters=plan.max_clusters,
-                                        archive_empty_stubs=plan.archive_stubs)
+        fresh = _replan_plan(plan)
         if fresh.get("ok") is not True:
             return _card_refusal(
                 f"the vault could not be re-read before writing: "
@@ -1895,9 +2190,7 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
                 return _card_refusal(
                     "the copy is not byte-for-byte the same vault (the copy was "
                     "removed; the real vault is unchanged)", copy_mode=True)
-            sub = plan_vault_organization(copy_path, scheme=plan.scheme,
-                                          max_clusters=plan.max_clusters,
-                                          archive_empty_stubs=plan.archive_stubs)
+            sub = _replan_plan(plan, copy_path)
             if sub.get("ok") is not True:
                 shutil.rmtree(copy_path, ignore_errors=True)
                 return _card_refusal(
@@ -1977,10 +2270,15 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
                     "scheme": plan.scheme, "files": backup_rows,
                     "snapshots": snap_rows, "created": created,
                     "moved_to": moved_to, "created_dirs": created_dirs}
-        summary = (f"organized the Obsidian vault \"{Path(plan.vault).name}\" "
-                   f"({plan.scheme}): {len(actions['actions'])} note(s), "
-                   f"{actions['moves']} moved, {len(actions['creates'])} "
-                   f"note(s) created, nothing deleted")
+        summary = (
+            f"organized {len(actions['actions'])} selected note(s) in the "
+            f"Obsidian vault \"{Path(plan.vault).name}\" (scoped): nothing "
+            f"moved, no note created, nothing deleted"
+            if plan.scoped else
+            f"organized the Obsidian vault \"{Path(plan.vault).name}\" "
+            f"({plan.scheme}): {len(actions['actions'])} note(s), "
+            f"{actions['moves']} moved, {len(actions['creates'])} "
+            f"note(s) created, nothing deleted")
         before = {"plan_id": plan.plan_id, "files": len(backup_rows)}
         after = {"changed": len(actions["actions"]),
                  "moved": actions["moves"], "created": len(created)}
@@ -2044,23 +2342,39 @@ def apply_plan(plan_id, digest, *, gate: Optional[Callable] = None,
             "created": len(actions["creates"]),
             "snapshots": len(snap_rows), "index": index})
         s = plan.summary()
-        said = (f"Organized \"{Path(plan.vault).name}\": {changed:,} file(s) "
-                f"written, {moved:,} note(s) moved, {len(actions['creates']):,} "
-                f"note(s) created ({s['mocs_to_create']:,} Map of Content and "
-                f"the Vault Home). Nothing was deleted. One click of Undo "
-                f"puts the whole vault back.")
+        if plan.scoped:
+            said = (f"Organized {len(actions['actions']):,} selected note(s) in "
+                    f"\"{Path(plan.vault).name}\": {changed:,} file(s) written, "
+                    f"no note moved and no note created. Nothing was deleted. "
+                    f"One click of Undo puts exactly those notes back.")
+        else:
+            said = (f"Organized \"{Path(plan.vault).name}\": {changed:,} file(s) "
+                    f"written, {moved:,} note(s) moved, {len(actions['creates']):,} "
+                    f"note(s) created ({s['mocs_to_create']:,} Map of Content and "
+                    f"the Vault Home). Nothing was deleted. One click of Undo "
+                    f"puts the whole vault back.")
         mode = "copy" if copy_path else "in_place"
-        said = said if not copy_path else (
-            f"Organized a COPY of \"{Path(original_vault).name}\": the copy is "
-            f"\"{Path(copy_path).name}\" beside it. The real vault was NOT "
-            f"changed. {changed:,} file(s) written in the copy, {moved:,} note(s) "
-            f"moved, {len(actions['creates']):,} note(s) created. Nothing was "
-            f"deleted. One click of Undo puts the copy back; inspect it, then mark "
-            f"it verified to let a later run work on the real vault.")
+        if copy_path and plan.scoped:
+            said = (f"Organized a COPY of \"{Path(original_vault).name}\": the "
+                    f"copy is \"{Path(copy_path).name}\" beside it. The real "
+                    f"vault was NOT changed. {changed:,} selected file(s) written "
+                    f"in the copy, no note moved or created. Nothing was deleted. "
+                    f"One click of Undo puts the copy back; inspect it, then mark "
+                    f"it verified to let a later run work on the real vault.")
+        elif copy_path:
+            said = (
+                f"Organized a COPY of \"{Path(original_vault).name}\": the copy is "
+                f"\"{Path(copy_path).name}\" beside it. The real vault was NOT "
+                f"changed. {changed:,} file(s) written in the copy, {moved:,} note(s) "
+                f"moved, {len(actions['creates']):,} note(s) created. Nothing was "
+                f"deleted. One click of Undo puts the copy back; inspect it, then mark "
+                f"it verified to let a later run work on the real vault.")
         out = {"ok": True, "applied": True, "plan_id": plan.plan_id,
                "receipt_id": rid, "backup": str(bdir),
                "changed": changed, "moved": moved,
                "created": len(actions["creates"]),
+               "scoped": bool(plan.scoped),
+               "selected": len(plan.scope) if plan.scoped else 0,
                "snapshots": len(snap_rows),
                "links_rewritten": actions["rewrites"],
                "index_refresh": index, "said": said,
@@ -2250,9 +2564,10 @@ def handle_post(route: str, body, *, peer=None, local=None,
         clusters = int(body.get("max_clusters") or MAX_CLUSTERS)
     except (TypeError, ValueError):
         clusters = MAX_CLUSTERS
-    out = plan_vault_organization(body.get("vault"), scheme=scheme,
-                                  max_clusters=clusters,
-                                  archive_empty_stubs=body.get("archive_empty_stubs") is True)
+    out = plan_vault_organization(
+        body.get("vault"), scheme=scheme, max_clusters=clusters,
+        archive_empty_stubs=body.get("archive_empty_stubs") is True,
+        scope=(body.get("paths") if "paths" in body else None))
     out.setdefault("enabled", True)
     return 200, out
 
