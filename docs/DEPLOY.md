@@ -1,12 +1,13 @@
-# Deploying the backend, and the two checks that prove it
+# Deploying the backend, and the checks that prove it
 
-Two tools do the deploy-side work, and both are read-only until told
+Three tools do the deploy-side work, and all of them are read-only until told
 otherwise. This page says what each one is for, how it is run, and what was
-measured on this PC on 2026-10-20 (the deploy-tooling area of the audit).
+measured on this PC on 2026-10-20 (the deploy-tooling area of the audit) and on
+2026-10-30 (the reseal, below).
 
-Neither tool is part of the backend the PC runs; they live in this repository's
-`tools/` folder and are run from a checkout. Neither one installs an app, edits
-a patch, or restarts Jarvis.
+None of the three is part of the backend the PC runs; they live in this
+repository's `tools/` folder and are run from a checkout. None of them installs
+an app, edits a patch, or restarts Jarvis.
 
 ## 1. `tools/check_field_test_binaries.py` - Step 0 of every field test
 
@@ -145,7 +146,73 @@ the program does not have. `BLOCKED_DELTAS` is now empty, the dry run reports
 (`backend/test_sqlite_perf.py`). This is not a claim that a writer exists: the
 cap acts only if a store from an older build or a backup restore appears.
 
-## 3. The old one-off scripts are superseded
+## 3. `tools/reseal_live_install.py` - the half the deploy must not write
+
+The deploy above moves `$SHIPPED` files but never writes the installer's own
+record, `_jarvis-state.json` (written beside the backend by
+`scripts/apply-patches.ps1`), and the patcher cannot replay its stack on a
+folder whose five patched base files sit on an older intermediate state. That
+leaves two halves of one gap, and they are what the preflight reports: files
+older than this repository's `backend/rebuilt/*`, and record rows holding the
+hashes of that older state ("changed since the installer wrote it" - measured
+on 2026-10-30 as 93 FAIL rows). Gemini's Q3 ruling chose `(b')`: on a quiet
+`main`, put the folder back on this repository's bytes directly.
+
+**Dry-run by default; `--apply` is the only thing that writes.**
+
+- `$SHIPPED` and every module's bytes come from `--ref` (`git show
+  <ref>:scripts/apply-patches.ps1` and `<ref>:backend/<path>`), never the
+  working tree, and each entry is compared with the live folder **by bytes**;
+- `--apply` copies the repository's exact bytes, keeps every replaced file as
+  `<name>.before-reseal-<stamp>` beside it, compiles the file that is **now in
+  the folder** (its bytecode goes to a temporary file, so none is left behind),
+  purges stale `__pycache__/*.pyc`, and runs the same comparison again as its
+  convergence proof. A write or compile failure restores every file it wrote and
+  removes every file it created;
+- it then rewrites **only** the record rows it can prove: a row whose file this
+  repository ships gets the repository's hash. `written`, `patches`,
+  `patchList` and every untouched row stay exactly as the installer left them,
+  and a `resealed` key records the tool, the commit and the row names;
+- a row for a file this repository does **not** ship (the five patched base
+  files) is never re-hashed: it is printed with both hashes and the run exits 1.
+  `--rebaseline-unprovable` records the folder's own bytes for exactly those
+  rows - the patcher's own "take the current files as the baseline" rule for a
+  run with no usable record - and it is off by default.
+
+```
+py -3 tools\reseal_live_install.py --backend-path "<live backend>"            # dry run
+py -3 tools\reseal_live_install.py --backend-path "<live backend>" --apply    # after review
+py -3 tools\reseal_live_install.py --backend-path "<live backend>" --apply --rebaseline-unprovable
+```
+
+Exit codes: 0 converged, 1 repaired but rows this tool will not invent remain,
+2 refused before writing (nothing written, or everything written was rolled
+back). Unlike the deploy, it has no worktree guard: every byte comes from
+`--ref`, so it runs from the branch that carries it, and it prints both commits
+when the checkout and `--ref` differ.
+
+**It cannot reach 0 FAIL on its own, and the tool says so out loud.** The
+preflight's *patch* check is about `.patch` text in the five base files this
+repository does not ship; only `scripts/apply-patches.ps1` (when it can run) or
+a targeted repair moves those rows - `tools/repair_live_backend_gaps.py` (#997)
+carried the two pieces it could. The dry run prints both halves: the module rows
+it will fix, and the patch rows it counts now and after, through
+`backend/selftest.py`'s own `patch_states` (its own `read` seam, so the "after"
+list is the same rules over this repository's bytes). Its own suite,
+`backend/test_reseal_live_install.py`, proves 92 checks on synthetic live
+folders - including the real `pf_modules` going from three FAIL rows to one, the
+row for the file the repository does not ship. **Not run against the owner's
+live folder when it was written:** the dry run is the first thing to read, and
+it writes nothing.
+
+**Order matters.** Run it after a deploy and after `repair_live_backend_gaps.py`,
+not before: each of those writes files, and a later write is a later drift the
+record has not seen. The safe sequence is `reconcile_live_backend.py` (dry run,
+then `--apply`), `repair_live_backend_gaps.py --apply`, this tool (dry run,
+then `--apply`), a restart, then `selftest.py --preflight`, whose patch check is
+the one thing left that says whether the patcher still has work to do.
+
+## 4. The old one-off scripts are superseded
 
 The 2026-10-20 deploy used two throwaway scripts kept in scratch:
 
@@ -225,12 +292,23 @@ A dry run that reports refusals is **not** a partial success: it plans no delta 
 refused patches and exits 2, so nothing is written. That is the point - `--apply` can no
 longer claim a reconcile over a patch whose hunks are absent.
 
-## 4. Limits worth knowing
+## 5. Limits worth knowing
 
 - The reconcile tool writes only that repository's `$SHIPPED` Python modules and
   the HUD deltas; it does not handle the non-Python beside-files
   (`requirements.lock`, `quiz_grader_cases.json`, the plugin catalogue) that
   `apply-patches.ps1` carries. Those stay that script's job.
+- The reseal tool moves the **whole** `$SHIPPED` list, which includes the
+  non-Python files that list names (`jarvis_hud.html`, `static/*`), and it does
+  still not handle the beside-files either - `requirements.lock`,
+  `quiz_grader_cases.json` and the Cargo lock are copied under their own names
+  by `apply-patches.ps1` step 3b, not from `$SHIPPED`. They stay that script's
+  job, and the reseal does not claim otherwise.
+- Neither the deploy nor the reseal repairs a patch. `jarvis_hud.py`,
+  `jarvis_gate.py`, `jarvis_extract.py`, `jarvis_models.py` and
+  `jarvis_skills.py` are produced by the stack; no copy in this repository is
+  their bytes, so their record rows stay red until the patcher runs (or
+  `--rebaseline-unprovable` records them deliberately).
 - It never restarts Jarvis. After `--apply`, restart and read the start-up
   banner; the probes only prove the routes answer while the new code is running.
 - `jarvis-backend/` is never copied over the live folder - it is a snapshot of
