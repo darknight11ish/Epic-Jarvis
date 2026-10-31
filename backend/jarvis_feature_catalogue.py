@@ -3,7 +3,7 @@
 The owner's feature list, as data: 144 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 51e9f678249d6c7fa3f1ff990bcb66dddefffaee031d84c96103fb0725a4841d); the apps' Features pages read their own
+`features/features.json` (sha256 81cdef48cf1364acf4d0ac4068ca3f68e5f49c0a6a24161e149c254a5f4390a3); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "51e9f678249d6c7fa3f1ff990bcb66dddefffaee031d84c96103fb0725a4841d"
+SOURCE_SHA256 = "81cdef48cf1364acf4d0ac4068ca3f68e5f49c0a6a24161e149c254a5f4390a3"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1549,7 +1549,7 @@ FEATURES = (
         "asks": "Nothing runs until you decide. There is no approve-all anywhere. Approving a risky card asks for Windows Hello on the PC, or your screen lock on the phone.",
         "limit": "Four cards wait for you instead of expiring after 15 minutes - pairing a device, unretiring a shared key, registering a phone's approval key, and restoring a backup. On a PC with no Windows Hello, or a phone with no screen lock, a risky approval is refused until one is set up, with a plain message saying how.",
         "surface": "both",
-        "covers": ["safety.approvals", "settings.approval-cards", "asks-first", "phone-approvals"],
+        "covers": ["safety.approvals", "settings.approval-cards", "settings.protection", "asks-first", "phone-approvals"],
     },
     {
         "id": "what-asks-first",
