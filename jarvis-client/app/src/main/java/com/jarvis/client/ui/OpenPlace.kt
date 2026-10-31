@@ -55,6 +55,10 @@ object OpenPlace {
         // (GET/POST /api/card-prefs) - so "open approval cards" lands on the
         // row that changes it.
         "approval-cards" to Where.Go(Screen.SETTINGS, "approval-cards"),
+        // "Protected from Jarvis" (2026-10-31): its own row on the phone's
+        // Settings screen, keyed "protection" like the desktop card's id, so
+        // "open protected from jarvis" lands on the row that reads the list.
+        "protection" to Where.Go(Screen.SETTINGS, "protection"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
         // The prompt coach's master switch (docs/PROMPT-COACH-DESIGN.md,

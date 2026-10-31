@@ -208,17 +208,17 @@ class ProtectedContractTest {
     fun `the Settings row, the jump list and the search index are wired to one key`() {
         val screen = file("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt")
         assertTrue("SettingsScreen has no protected row",
-            screen.contains("item(key = \"protected\")"))
+            screen.contains("item(key = \"protection\")"))
         assertTrue("the row does not draw the plate", screen.contains("ProtectedSection(canAct = canAct)"))
         // The index map moved: "protection" sits right after the folder allow-list.
         assertTrue("the settings index has no protected entry",
-            Regex("\"protected\" to (\\d+),").find(screen) != null)
+            Regex("\"protection\" to (\\d+),").find(screen) != null)
         val jump = file("jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt")
         assertTrue("the jump list has no entry",
-            jump.contains("Entry(\"Protected from Jarvis\", \"protected\")"))
+            jump.contains("Entry(\"Protected from Jarvis\", \"protection\")"))
         val search = file("jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsSearch.kt")
         assertTrue("the search index has no row",
-            search.contains("key = \"protected\", title = \"Protected from Jarvis\""))
+            search.contains("key = \"protection\", title = \"Protected from Jarvis\""))
     }
 
     /** A repository file, from Gradle's working folder (`jarvis-client/app`). */

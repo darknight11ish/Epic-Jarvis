@@ -337,7 +337,7 @@ class FindAnythingTest {
             // this list is where a no-menu Settings row must be declared.
             listOf(
                 "settings-row.app-control",
-                "settings-row.protected",
+                "settings-row.protection",
                 "settings-row.jarvis-notify",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
