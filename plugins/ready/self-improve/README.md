@@ -12,9 +12,9 @@ self-improve`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_self_improve.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: 153, after every folder the old patch stack had
-  and after the other no-patch folders added before it (`notion-obsidian` at 151
-  is the one immediately before it, and `setup` at 152 is the patch that made
+- Position in the loader's order: 154, after every folder the old patch stack had
+  and after the other no-patch folders added before it (`notion-obsidian` at 152
+  is the one immediately before it, and `setup` at 153 is the patch that made
   room for this one), so its two paths are checked in the order they were added
   rather than in the middle of somebody else's
 
