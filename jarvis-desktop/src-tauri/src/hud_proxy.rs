@@ -91,6 +91,14 @@ const RETRIEVE_PATH: &str = "/api/retrieve";
 /// [`allowed_get`]. Named once so the list, the check and the tests agree.
 const CALENDAR_PATH: &str = "/api/calendar";
 
+/// The Memory tab's list of pending cards (2026-10-31). Its two query forms
+/// are the only ones this page sends: the full read the phone's Learning plate
+/// also makes (`retire_cards=1&sleep_offer=1`) when the tab opens, and the
+/// `retire_cards=1` refresh on the same 30-second beat as the banner.
+const MEMORY_PENDING_PATH: &str = "/api/memory/pending";
+const MEMORY_PENDING_QUERY: &str = "retire_cards=1&sleep_offer=1";
+const MEMORY_PENDING_RETIRE_QUERY: &str = "retire_cards=1";
+
 /// A question longer than this is not one the page sends (it sends the
 /// user's own message, which the chat box keeps short).
 const MAX_QUERY_BYTES: usize = 16 * 1024;
@@ -120,8 +128,8 @@ pub fn allowed_get(path: &str) -> Option<String> {
         None => (path, None),
     };
     if HUD_GET_PATHS.contains(&route) {
-        // The calendar is the ONE path on this list that carries a query
-        // (2026-10-29): `?days=N`, a whole number from 1 to 90, and nothing
+        // The calendar is one of the two paths on this list that carries a
+        // query (the Memory tab's read is the other, below)        // (2026-10-29): `?days=N`, a whole number from 1 to 90, and nothing
         // else. The page asks for 90 once and draws its month/week/day views
         // from that one window, so that is the only value it sends; a sign, a
         // padding zero, a second parameter or anything but digits is refused
@@ -146,6 +154,19 @@ pub fn allowed_get(path: &str) -> Option<String> {
                 return None;
             }
             return Some(format!("{CALENDAR_PATH}?days={days}"));
+        }
+        // The Memory tab's pending-card list (2026-10-31): the same read the
+        // phone's Learning plate makes, plus the retire-only refresh the HUD's
+        // own beat sends. The bare path stays allowed for the existing banner,
+        // and every other query is refused here, before it reaches the PC.
+        if route == MEMORY_PENDING_PATH {
+            return match query {
+                None => Some(MEMORY_PENDING_PATH.to_string()),
+                Some(q) if q == MEMORY_PENDING_QUERY || q == MEMORY_PENDING_RETIRE_QUERY => {
+                    Some(format!("{MEMORY_PENDING_PATH}?{q}"))
+                }
+                Some(_) => None,
+            };
         }
         return query.is_none().then(|| route.to_string());
     }
@@ -485,6 +506,29 @@ mod tests {
             None,
             "a padded number is not one the page sends"
         );
+        // The Memory tab's pending-card list (2026-10-31): the two query forms
+        // the page really sends, rebuilt from the checked strings, and every
+        // other form refused - a script in the page cannot use hud_get to ask
+        // for a different memory read through this path.
+        assert_eq!(
+            allowed_get("/api/memory/pending?retire_cards=1&sleep_offer=1").as_deref(),
+            Some("/api/memory/pending?retire_cards=1&sleep_offer=1")
+        );
+        assert_eq!(
+            allowed_get("/api/memory/pending?retire_cards=1").as_deref(),
+            Some("/api/memory/pending?retire_cards=1")
+        );
+        for bad in [
+            "/api/memory/pending?sleep_offer=1",
+            "/api/memory/pending?retire_cards=0",
+            "/api/memory/pending?retire_cards=1&retire_cards=1",
+            "/api/memory/pending?retire_cards=1&merge_cards=1",
+            "/api/memory/pending?retire_cards=1&sleep_offer=1&x=1",
+            "/api/memory/pending?retire_cards=1&sleep_offer=1#x",
+            "/api/memory/pending/",
+        ] {
+            assert_eq!(allowed_get(bad), None, "{bad:?} was allowed");
+        }
     }
 
     #[test]
