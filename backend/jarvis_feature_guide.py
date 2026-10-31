@@ -1119,6 +1119,225 @@ def list_features(words=None) -> dict:
     return explain(words)
 
 
+# ---------------------------------------------------------------------------
+#   "What can you do with <area>?" - the capability overview (2026-10-31)
+# ---------------------------------------------------------------------------
+#
+# THE FIELD-TEST GAP (2026-10-31, pass 9, PART B). Eight questions were asked
+# through the live HUD's own chat box and only two answers were accurate.
+# "what can you do with the calendar?" went to the model, which claimed
+# invitations and availability that do not exist; "what are the smart features
+# of the calendar?" said it was unaware of them; "what can you edit in my
+# notes?" invented adding entries; "can I protect a folder from you?" invented
+# a filesystem-permissions workaround. The owner's own feature list already
+# held the honest answers - these rows, in the words both apps' Features pages
+# show.
+#
+# So a capability question is answered from the rows and NEVER from the
+# model's memory: the area is matched against the rows' own names first (the
+# exact ids and titles, then a group's name), and the matching rows are quoted
+# back with their own title, where, asks and limit. It claims no more than a
+# row says, it says plainly when a thing is not a feature, and when more than
+# a few rows match it names them and asks which one - it never guesses.
+
+CAPABILITY_NOT_A_FEATURE = "That is not one of my features on this PC."
+CAPABILITY_TAIL = ('Open "Everything Jarvis can do" - Brain, Tutorials and the '
+                   "FAQ - to read the whole list.")
+
+#: Words that belong to the QUESTION, not to the area being asked about.
+_CAP_FILLER = frozenset({
+    "what", "which", "who", "whom", "can", "could", "would", "should", "do",
+    "does", "did", "you", "jarvis", "i", "me", "my", "mine", "the", "a", "an",
+    "of", "about", "with", "for", "in", "on", "onto", "into", "from", "to",
+    "is", "are", "was", "were", "there", "your", "yours", "it", "this",
+    "that", "these", "those", "here", "please", "tell", "know", "capable",
+    "able", "ability", "abilities", "describe", "explain", "list", "show",
+    "name", "get", "have", "smart", "feature", "features", "option",
+    "options", "setting", "settings", "something", "anything", "stuff",
+    "things", "thing", "all", "many", "much", "so", "currently", "right",
+    "now",
+})
+#: Asking verbs. A capability question may say what the owner wants to DO
+#: ("what can you edit in my notes?"); the verb is answered from the rows' own
+#: words, never assumed.
+_CAP_VERBS = frozenset({
+    "add", "create", "make", "put", "edit", "change", "delete", "remove",
+    "rename", "see", "view", "read", "check", "find", "search", "open",
+    "use", "set", "track", "schedule", "cancel", "stop", "start", "share",
+    "send", "write", "save", "move", "copy", "update", "protect", "block",
+    "control", "manage",
+})
+#: The words a row may use to show that it supports the asking verb. A match
+#: is a plain substring of the row's own title/what/where/asks/limit, lowered.
+_CAP_VERB_WORDS = {
+    "add": ("add",), "create": ("creat",), "make": ("make", "creat"),
+    "put": ("put", "add"), "edit": ("edit", "change", "rewrit", "modif"),
+    "change": ("change", "edit", "adjust"), "delete": ("delet", "remov"),
+    "remove": ("remov", "delet"), "rename": ("rename", "edit"),
+    "see": ("see", "read", "view", "show"), "view": ("view", "see"),
+    "read": ("read", "see"), "check": ("check", "read", "see"),
+    "find": ("find", "search"), "search": ("search", "find"),
+    "open": ("open",), "use": ("use", "say", "ask", "press", "tap"),
+    "set": ("set", "chang", "turn"), "track": ("track", "watch", "follow"),
+    "schedule": ("schedul", "repeat"),
+    "cancel": ("cancel", "delet", "remov", "stop"), "stop": ("stop", "cancel"),
+    "start": ("start", "open"), "share": ("share", "send"),
+    "send": ("send", "share"), "write": ("writ", "note"), "save": ("sav", "writ"),
+    "move": ("move", "drag"), "copy": ("cop", "duplicat"),
+    "update": ("updat",), "protect": ("protect", "block", "read-only"),
+    "block": ("block", "protect"), "control": ("control", "tap", "press"),
+    "manage": ("manag", "change", "edit"),
+}
+#: More matching rows than this and the answer names them and asks which one.
+_CAP_AMBIGUOUS_LIMIT = 4
+
+
+def _capability_display(words) -> str:
+    """The area as the owner said it, for the answer's own sentences."""
+    parts = _norm(words).split()
+    if parts and parts[0] in ("the", "my", "your", "a", "an"):
+        parts = parts[1:]
+    return " ".join(parts) or "that"
+
+
+def _capability_query(words, *, strip_verbs: bool = True) -> str:
+    """The area words in a capability question - its verbs and filler taken off."""
+    keep = _CAP_FILLER if strip_verbs else (_CAP_FILLER - _CAP_VERBS)
+    return " ".join(w for w in _norm(words).split()
+                    if w not in keep and (not strip_verbs or w not in _CAP_VERBS))
+
+
+def _capability_title_tokens(row: dict) -> tuple:
+    """The row's OWN names: its id and title words (never its prose, never its
+    aliases - an alias belongs to one feature and must not pull a group in)."""
+    return _tokens(row["id"].replace("-", " ")) + _tokens(row["title"])
+
+
+def _capability_rows(words, *, strip_verbs: bool = True) -> list:
+    """The rows whose own names (or whose group's name) match the area words."""
+    query = _capability_query(words, strip_verbs=strip_verbs)
+    if not query:
+        return []
+    tokens = tuple(sorted({w for w in _singular_all(query).split() if w not in _STOP}))
+    if not tokens:
+        return []
+    rows = features()
+    # A feature whose own name is the whole multi-word phrase wins first:
+    # "prompt coach" is one row, and it must not be diluted by the loose title
+    # words of nearby rows.
+    if strip_verbs and len(tokens) >= 2:
+        got = find(" ".join(tokens), loose=True)
+        if got["kind"] == "feature":
+            return [got["row"]]
+        if got["kind"] == "ambiguous":
+            return got["rows"]
+    if strip_verbs and "-" in str(words or ""):
+        got = find(words, loose=False)
+        if got["kind"] == "feature":
+            return [got["row"]]
+    id_hits = [r for r in rows if _contains_all(_tokens(r["id"].replace("-", " ")),
+                                                tokens)]
+    title_hits = [r for r in rows if _contains_all(_tokens(r["title"]), tokens)]
+    hits = id_hits or title_hits
+    groups_hit = []
+    for group in groups():
+        group_words = tuple(w for w in _singular_all(_norm(group["group"])).split()
+                            if w not in _STOP)
+        if _contains_all(group_words, tokens):
+            groups_hit.append(group["group"])
+    if groups_hit:
+        in_group = [r for r in hits if r["group"] in groups_hit]
+        if in_group:
+            return in_group
+        if not hits:
+            return [r for r in rows if r["group"] in groups_hit]
+    return hits
+
+
+def _singular_all(text: str) -> str:
+    """`_norm`ed words singularised once, for the tokens used in a lookup."""
+    return " ".join(_singular(w) for w in _norm(text).split())
+
+
+def _capability_verb_supported(verb: str, rows: list) -> bool:
+    """Does any matching row's own words show it can do this asking verb?"""
+    want = _CAP_VERB_WORDS.get(verb, (verb,))
+    for row in rows:
+        blob = " ".join(str(row.get(k) or "").lower()
+                        for k in ("title", "what", "where", "asks", "limit"))
+        if any(word in blob for word in want):
+            return True
+    return False
+
+
+def _capability_row_words(row: dict) -> str:
+    """One row's own facts, in the order the list itself writes them."""
+    bits = [str(row["title"]).strip() + "."]
+    for key, label in (("what", ""), ("where", "Where: "),
+                       ("asks", "Does it ask first? "), ("limit", "The honest limit: ")):
+        value = str(row.get(key) or "").strip()
+        if value:
+            bits.append(label + value)
+    return " ".join(bits)
+
+
+def _capability_rows_words(rows: list, query: str) -> str:
+    head = (f"Here is what my feature list says about {query}:"
+            if query else "Here is what my feature list says:")
+    return head + "\n\n" + "\n\n".join(_capability_row_words(r) for r in rows)
+
+
+def capabilities(words, *, verb: str = "", strip_verbs: bool = True) -> dict:
+    """The owner asked what Jarvis can do with something - answer from the list.
+
+    `words` is the area ("the calendar", "my notes", ...); `verb` is the asking
+    verb when the sentence had one ("edit", "add"). Every sentence in `words`
+    comes from a catalogue row or says a thing is not a feature; nothing is
+    inferred and the model is never involved.
+
+    `strip_verbs=False` keeps a verb that is part of the SUBJECT ("can I
+    protect a folder from you?") - the area must then really be a row's name,
+    or the honest "not one of my features" answer is given.
+    """
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": ("The feature list is not installed on this PC, so I cannot "
+                          "read it. Nothing here was invented.")}
+    verb = str(verb or "").strip().lower()
+    query = _capability_query(words, strip_verbs=strip_verbs)
+    display = _capability_display(words)
+    rows = _capability_rows(words, strip_verbs=strip_verbs)
+    if not rows and query:
+        got = find(query, loose=True)
+        if got["kind"] == "feature":
+            rows = [got["row"]]
+        elif got["kind"] == "ambiguous":
+            return {"ok": False, "kind": "ambiguous",
+                    "candidates": [{"id": r["id"], "title": r["title"]}
+                                   for r in got["rows"]],
+                    "words": _ambiguous_words(got["rows"]) + " " + CAPABILITY_TAIL}
+    if not rows:
+        return {"ok": False, "kind": "unknown",
+                "words": CAPABILITY_NOT_A_FEATURE + " " + CAPABILITY_TAIL}
+    supported = not verb or _capability_verb_supported(verb, rows)
+    if verb and not supported:
+        head = (f"That is not one of my features on this PC. I cannot {verb} "
+                f"anything in your {display}.")
+        body = _capability_rows_words(rows, display)
+        return {"ok": False, "kind": "not_feature",
+                "features": [{"id": r["id"], "title": r["title"]} for r in rows],
+                "words": head + "\n\n" + body + " " + CAPABILITY_TAIL}
+    if len(rows) > _CAP_AMBIGUOUS_LIMIT:
+        return {"ok": False, "kind": "ambiguous",
+                "candidates": [{"id": r["id"], "title": r["title"]}
+                               for r in rows[:_CAP_AMBIGUOUS_LIMIT]],
+                "words": _ambiguous_words(rows[:_CAP_AMBIGUOUS_LIMIT])
+                + " " + CAPABILITY_TAIL}
+    return {"ok": True, "kind": "rows",
+            "features": [{"id": r["id"], "title": r["title"]} for r in rows],
+            "words": _capability_rows_words(rows, display) + " " + CAPABILITY_TAIL}
+
+
 # --------------------------------------------------------------------------
 #   "Is it on?": a feature, or a plain setting the registry already names
 # --------------------------------------------------------------------------

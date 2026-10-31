@@ -1152,6 +1152,15 @@ def _match(text, now: float) -> Optional[Intent]:
     if not s or len(s) > 400 or "\n" in s:
         return None
 
+    # --- a question about Jarvis's OWN features, from the raw sentence -------
+    # The capability questions (2026-10-31, the pass-9 field test) are read
+    # BEFORE the tidied sentence, because "can you add something to my
+    # calendar?" loses its "can you" on the way in and would otherwise be
+    # treated as an action request. See _feature_capability_question.
+    got = _feature_capability_question(text)
+    if got is not None:
+        return got
+
     # --- the voice reflex (2026-10-21, Live/Voice audit V4) -----------------
     # Before everything else, because it is a whole short sentence: "speak
     # faster". It routes into an action that already exists
@@ -1508,6 +1517,11 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- "remind me next time I talk about ..." (jarvis_next_time.py) ------------------
     got = _next_time(s)
+    if got is not None:
+        return got
+
+    # --- "what's my next reminder?" (the scheduler's own list, 2026-10-31) -------------
+    got = _next_up(s)
     if got is not None:
         return got
 
@@ -2184,6 +2198,26 @@ def _next_time(s: str) -> Optional[Intent]:
     return None
 
 
+#: "What's my next reminder?" (2026-10-31, the pass-9 field test). The model
+#: offered to read "your device's notification history" - a phone feature this
+#: PC cannot read - instead of the PC's own schedule. The answer comes from the
+#: scheduler's own list, with no model, and says plainly when nothing is set.
+_NEXT_UP = re.compile(
+    r"(?:what(?:'s| is)|when(?:'s| is))\s+(?:my|the)\s+next\s+"
+    r"(?P<kind>reminder|alarm|timer)\??"
+    r"|what(?:'s| is)\s+next\s+(?:on\s+)?(?:my|the)\s+"
+    r"(?:schedule|list|reminders?)\??"
+    r"|what(?:'s| is)\s+coming\s+up(?:\s+next)?\??")
+
+
+def _next_up(s: str) -> Optional[Intent]:
+    """("next_up", the kind asked for) for "what's my next reminder?", or None."""
+    m = _NEXT_UP.fullmatch(s)
+    if not m:
+        return None
+    return Intent("next_up", {"kind": (m.groupdict().get("kind") or "").lower()})
+
+
 #: "PC help" (jarvis_pc_help.py, 2026-09-28): five read-only questions about
 #: this PC, answered without the model. Each must be the WHOLE sentence, so
 #: "why is my PC slow to boot after the update, and should I reinstall?"
@@ -2716,6 +2750,42 @@ def _run_next_time(intent: Intent, sched) -> Optional[Result]:
         return None
     ok, said = NT.cancel(f["about"], sched=sched)
     return Result(said, n)
+
+
+NEXT_UP_MISSING = ("I cannot read your schedule on this PC just now.")
+NEXT_UP_NOTHING = "Nothing is scheduled on this PC."
+
+
+def _run_next_up(intent: Intent, sched) -> Result:
+    """"What's my next reminder?" - the scheduler's own list, no model."""
+    n = "next_up"
+    kind = str(intent.f.get("kind") or "").lower()
+    try:
+        jobs = sched.listed() if sched is not None else []
+    except Exception:
+        return Result(NEXT_UP_MISSING, n)
+    items = [j for j in jobs if isinstance(j, dict)]
+    if kind:
+        items = [j for j in items if str(j.get("kind") or "").lower() == kind]
+    else:
+        items = [j for j in items
+                 if str(j.get("kind") or "").lower() in ("reminder", "alarm", "timer")]
+    if not items:
+        said = f"No {kind} is set on this PC." if kind else NEXT_UP_NOTHING
+        return Result(said, n, private=True)
+    item = items[0]
+    text = str(item.get("text") or "").strip()
+    when = str(item.get("when") or "").strip()
+    label = str(item.get("kind") or "item")
+    if text and when:
+        said = f'Your next {label} is "{text}" {when}.'
+    elif text:
+        said = f'Your next {label} is "{text}".'
+    elif when:
+        said = f"Your next {label} is {when}."
+    else:
+        said = f"Your next {label} has no time I can read."
+    return Result(said, n, private=True)
 
 
 def _run_find_phone(intent: Intent) -> Result:
@@ -4484,6 +4554,111 @@ _FEATURE_SWITCH = re.compile(
     r"|(enable|disable)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
 
 
+# ---- "what can you do with the calendar?" (2026-10-31, the pass-9 field test)
+#
+# THE GAP: the owner asked their own chat box what Jarvis could do with the
+# calendar, what its smart features were, what could be edited in their notes,
+# and whether a folder could be protected from Jarvis. Only the time and the
+# picture-in-picture answer were right; the other answers were the model's own
+# prose, which over-claimed invitations and availability, said it was unaware
+# of its own features, invented note editing and a filesystem-permissions
+# workaround, and offered to read a phone's "notification history".
+#
+# These are capability questions about JARVIS's OWN features, so they are
+# answered from jarvis_feature_guide's rows - the same list the owner reads on
+# the Features page - with no model. Whole sentences only, like every fixed
+# phrase here, so a general question keeps its own path. The "can you <verb>
+# something ..." shape claims only an area the guide knows, so "can you add
+# milk to my shopping list?" keeps its own (real) path; the plain
+# "what can you do with X" shapes always answer, with the guide's honest
+# "that is not one of my features" when X is not in the list.
+_CAP_AREA_NOUNS = (
+    r"(?:calendar|notes?|reminders?|alarms?|timers?|emails?|mail|memory|"
+    r"pictures?|photos?|phone|folders?|files?|documents?|weather|news|"
+    r"models?|settings?|updates?|tasks?|lists?)")
+_CAPS_WHAT = re.compile(
+    r"(?:what|which)\s+(?:can|could)\s+(?:you|jarvis)\s+do\s+"
+    r"(?:with|about|for|in|on)\s+(?:the\s+|my\s+|your\s+)?(.+)"
+    r"|what\s+are\s+(?:the\s+)?(?:smart\s+)?features?\s+of\s+"
+    r"(?:the\s+|my\s+|your\s+)?(.+)"
+    r"|what\s+features?\s+(?:does|do)\s+(?:jarvis|you)\s+have\s+"
+    r"(?:for|with|about|in|on)\s+(?:the\s+|my\s+)?(.+)")
+_CAPS_EDIT = re.compile(
+    r"what\s+can\s+(?:you|i|jarvis)\s+"
+    r"(?P<verb>add|create|make|put|edit|change|delete|remove|rename|see|view|"
+    r"read|check|find|search|open|use|track|schedule|cancel|stop|start|share|"
+    r"send|write|save|move|copy|update|manage|control)\s+"
+    r"(?:something\s+|anything\s+|a\s+|an\s+|the\s+)?(?:in|on|with|to|about|for)\s+"
+    r"(?:the\s+|my\s+|your\s+)?(?P<area>" + _CAP_AREA_NOUNS + r")\b.*")
+_CAPS_CAN = re.compile(
+    r"can\s+(?:you|jarvis)\s+"
+    r"(?P<verb>add|create|make|put|edit|change|delete|remove|rename|see|view|"
+    r"read|check|find|search|open|use|track|schedule|cancel|stop|start|share|"
+    r"send|write|save|move|copy|update|manage|control)\s+"
+    r"(?:something|anything|some\s+things?)\s+"
+    r"(?:to|in|on|into|from|with|for)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?P<area>" + _CAP_AREA_NOUNS + r")\b.*")
+_CAPS_PROTECT = re.compile(
+    r"can\s+(?:i|you|jarvis)\s+(?:protect|block)\s+(?:a\s+|the\s+|my\s+)?"
+    r"(?:folder|file|program)s?\s+from\s+(?:you|jarvis)\??")
+
+
+def _feature_capabilities(s: str) -> Optional[Intent]:
+    """Capability questions the feature list can answer, or None (2026-10-31)."""
+    m = _CAPS_PROTECT.fullmatch(s)
+    if m:
+        # The verb is part of the SUBJECT here ("protect a folder"), so the
+        # guide keeps it: no row has it, and it says so, rather than answering
+        # with the allow-list row or inventing a workaround.
+        return Intent("feature_capabilities",
+                      {"words": "protect a folder from you", "strip_verbs": False})
+    m = _CAPS_EDIT.fullmatch(s)
+    if m:
+        return Intent("feature_capabilities",
+                      {"words": m.group("area"), "verb": m.group("verb")})
+    m = _CAPS_CAN.fullmatch(s)
+    if m:
+        # Only an area the feature list really knows is claimed, so a request
+        # that happens to use this shape ("add milk to my shopping list") keeps
+        # the path that can actually do it.
+        FG = _guide()
+        if FG is None:
+            return None
+        area, verb = m.group("area"), m.group("verb")
+        try:
+            out = FG.capabilities(area, verb=verb)
+        except Exception:
+            return None
+        if out.get("kind") != "unknown":
+            return Intent("feature_capabilities", {"words": area, "verb": verb})
+        return None
+    m = _CAPS_WHAT.fullmatch(s)
+    if m:
+        area = next((got for got in m.groups() if got), "")
+        if area:
+            return Intent("feature_capabilities", {"words": area})
+    return None
+
+
+def _feature_capability_question(raw) -> Optional[Intent]:
+    """A capability question read off the RAW sentence (2026-10-31).
+
+    `normalize_spoken_command()` drops a leading "can you ", which turns "can
+    you add something to my calendar?" into the imperative "add something to my
+    calendar" and hands it to the action paths (it raised the unsolicited
+    Connect-an-account card that way). The raw sentence still says it is a
+    question about ability, so the fixed answer claims it first. Only the
+    narrow shapes in `_feature_capabilities` match, so an ordinary request
+    keeps its own path.
+    """
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text:
+        return None
+    return _feature_capabilities(text)
+
+
+
 def _feature_target(words) -> str:
     """The words after the pattern, with a trailing "feature"/"option" taken
     off - "the prompt coach feature" names the prompt coach.
@@ -5192,6 +5367,9 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
         # Answered here, deterministically, so a model never gets to suggest a
         # third-party sync folder.
         return Intent("feature_explain", {"id": s})
+    got = _feature_capabilities(s)
+    if got is not None:
+        return got
     if _FEATURES_LIST.fullmatch(s):
         return Intent("features_list")
     m = _FEATURES_GROUP.fullmatch(s)
@@ -8343,6 +8521,16 @@ def _run_features_group(f: dict) -> Result:
     return Result(str(out.get("words") or FG.groups_words()), "features_group")
 
 
+def _run_feature_capabilities(f: dict) -> Result:
+    """"What can you do with <area>?" - from the feature list's own rows."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_capabilities")
+    out = FG.capabilities(f.get("words") or "", verb=f.get("verb") or "",
+                          strip_verbs=bool(f.get("strip_verbs", True)))
+    return Result(str(out.get("words") or FG.groups_words()), "feature_capabilities")
+
+
 def _run_feature_explain(f: dict) -> Result:
     FG = _guide()
     if FG is None:
@@ -8652,6 +8840,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_features_list(f)
     if n == "features_group":
         return _run_features_group(f)
+    if n == "feature_capabilities":
+        return _run_feature_capabilities(f)
     if n == "feature_explain":
         return _run_feature_explain(f)
     if n == "feature_unknown":
@@ -8819,6 +9009,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_media(intent)
     if n.startswith("next_time_"):
         return _run_next_time(intent, sched)
+    if n == "next_up":
+        return _run_next_up(intent, sched)
     if n.startswith("today_"):
         return _run_today(intent, sched)
     if n in ("time_now", "date_today", "clock_both"):
@@ -9144,13 +9336,15 @@ READ_ONLY_INTENTS = frozenset({
     # so none may clear "cancel that". ("change your voice to Ashby" is the
     # settings grammar's own bad-value answer, already listed below.)
     "accounts_connect", "voice_ask", "pair_phone",
-    "face_ask", "feature_change", "feature_change_ask", "feature_change_refused",
+    "face_ask", "feature_capabilities", "feature_change", "feature_change_ask",
+    "feature_change_refused",
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown", "setting_explain",
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
     "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",
+    "next_up",
     # "can you process all my Notion notes into Obsidian?" (2026-10-28): a
     # fixed answer that reads nothing and imports nothing, so it must not
     # clear what "cancel that" would take back.
