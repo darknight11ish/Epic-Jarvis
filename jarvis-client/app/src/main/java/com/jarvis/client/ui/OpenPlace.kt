@@ -55,6 +55,10 @@ object OpenPlace {
         // (GET/POST /api/card-prefs) - so "open approval cards" lands on the
         // row that changes it.
         "approval-cards" to Where.Go(Screen.SETTINGS, "approval-cards"),
+        // "File from your PC" (2026-10-31): its own row on the phone's Settings
+        // screen, keyed "files" - so "open my files" / "what did Jarvis send me"
+        // lands on the row that lists the one approved file.
+        "files" to Where.Go(Screen.SETTINGS, "files"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
         // The prompt coach's master switch (docs/PROMPT-COACH-DESIGN.md,
