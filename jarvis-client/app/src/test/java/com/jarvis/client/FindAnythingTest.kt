@@ -332,6 +332,10 @@ class FindAnythingTest {
             // the row itself in MenuPlaces.SETTINGS.
             listOf(
                 "settings-row.app-control",
+                // "File from your PC" (2026-10-31): no menu id in the catalogue
+                // yet (the backend lane owns the settings-registry row), so the
+                // Settings row is always drawn and must be declared here.
+                "settings-row.files",
                 "settings-row.jarvis-notify",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },

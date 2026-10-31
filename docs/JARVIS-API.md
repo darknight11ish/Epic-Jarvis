@@ -28753,3 +28753,89 @@ absence is load-bearing and is not the same fact as an empty list.
   The phone half is compiled and unit-tested here but has NOT been driven on the
   owner's phone against the live backend: that is the field check, and it is
   his - start one job, watch it park, answer it, on either app.
+
+## 172. Send one file from the PC to the phone (added 2026-10-31)
+
+The owner's own words: *"am i able to ask jarvis to search for a file for me and
+send it to the jarvis android app to view and or download directly? this would
+be a file on the desktop"*. Gemini ruled on it the same day (Q7): build the
+bounded slice, NOT a text-only halfway step and NOT a "share folder" the owner
+must fill by hand at the PC. This is the backend half; the phone's View / Save
+to Downloads screens are the follow-up phone lane, and the desktop needs
+nothing. Section number: main ends at 169, the notes-editor PR (#1017) takes
+170 and the protection PR (#1019) takes 171, so 172 was chosen to sit after
+both (the next REAL free number once their two sections land).
+
+### 172.1 The two phone-facing routes (no path is ever a parameter)
+
+    GET /api/files/send                approved files waiting for the phone
+    GET /api/files/download?id=<id>    the bytes of ONE approved file
+
+Both are behind the core's own origin + token checks (`X-Jarvis-Client` and the
+pairing token, mesh only in practice), exactly like `/api/protection` and
+`/api/pictures/file`; this feature adds no new auth scheme. `send` answers
+`{ok, count, files:[{id, name, folder, size_bytes, mime, expires_in}],
+cap_bytes, ttl_seconds, single_use, said}`. `download` answers
+`{ok, name, size_bytes, mime, sha256, data}` where `data` is base64 (the same
+shape `/api/pictures/file` uses), and its ONLY parameter is `id`: a raw path is
+never accepted, and the answer never carries one. Unknown, expired, already
+downloaded or not-yet-approved ids are `404` with one plain sentence.
+
+### 172.2 The one card, and what happens around it
+
+The chat tool `send_file_to_phone` (schema: `query` or `path`) searches the
+existing **"Folders Jarvis may look in"** allow-list through
+`jarvis_documents.allowed_path()` - the same door `my_files` uses, so hidden
+folders, private places and links out are never candidates. When the
+"Protected from Jarvis" module (PR #1019) is importable, its ONE keep-out check
+(`path_refusal`) is asked as a soft hook; this section does not duplicate it,
+and on a tree without that module the allow-list is the whole story.
+
+With exactly ONE match it raises ONE card under the shipped action
+`send_file_to_phone` (tier **"ask"**, in both copies of
+`jarvis-framework.toml`). The card's words are built by `prepare()` and name
+the EXACT file:
+
+    Send "invoice.pdf" from C:\Users\you\Documents to your phone? It is
+    1,482,331 bytes (1.4 MB large). This slice sends ONE file at a time and
+    refuses anything over 10 MiB (10,485,760 bytes); the link lasts 10 minutes
+    and works once.
+
+`prepare()` refuses, BEFORE any card, with a plain sentence: no match, more
+than one match (it lists up to 8 names and asks to narrow), a path outside the
+allow-list, or a file over the cap. Nothing becomes fetchable until the gate's
+approved verdict runs `execute()`; a Deny leaves nothing behind. A file that
+vanished between the card and the fetch answers in plain words; a file that
+changed is answered as changed, never silently sent.
+
+The action is not classified in `jarvis_gate._RISK` (a shipped/drop-in tool
+cannot add that row; a follow-up patch can), so the gate treats it as an
+unclassified action: **forced to "ask"**, carrying its own **outbound**
+worst-case line - the bytes leave the PC for the phone and the phone can keep a
+copy after downloading it. Nothing about that is looser than the tier row; it
+is the same safe side the protection cards use.
+
+### 172.3 Named limits (all of them)
+
+- **one file per card**, one card at a time;
+- **cap 10 MiB** (`10,485,760` bytes; Gemini's ruling allows 10-25 MB). Over
+  the cap is a refusal in words - never a silent truncation;
+- **TTL 10 minutes** from the card's yes, after which the id is gone;
+- **single use**: one successful fetch consumes the id, a second fetch is a
+  plain `404` ("already downloaded or the ten-minute window passed"). This is
+  the deliberate choice: a bounded slice with a one-shot id is safer than a
+  re-downloadable link, and the owner can simply ask again;
+- at most **8 ids alive** in memory (oldest dropped first), and a restart
+  clears every id - the phone then says "ask Jarvis again";
+- only inside the **"Folders Jarvis may look in"** allow-list, minus anything
+  the optional protection check refuses;
+- the desktop needs nothing, and the desktop app is not part of this slice.
+
+### 172.4 What the phone lane still owns
+
+The phone's `FileProvider`, `ACTION_VIEW` (View) and `MediaStore.Downloads`
+(Save to Downloads) screens, its own list UI for `GET /api/files/send`, and its
+client tests. `tools/check_parity.py` classifies both routes as `todo` with
+that reason: the backend half is built, documented and authenticated; no app
+calls it yet.
+

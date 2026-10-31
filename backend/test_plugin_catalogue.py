@@ -57,6 +57,10 @@ NO_PATCH = {
     # added to `jarvis_hud.py`.
     "android-builder",
     "jarvis-calendar",
+    # Send one file to the phone (2026-10-31, Gemini Q7): its two routes
+    # come from jarvis_send_file.install(), called by the drop-in loader, so
+    # the folder is the whole of its wiring and no patch is added.
+    "send-file",
     "auto-router",
     "media-index",
     "notion-obsidian",

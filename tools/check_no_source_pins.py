@@ -87,6 +87,12 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # not an approval; the ratchet only turns DOWN.
     "backend/test_antislop.py": 8,
     "backend/test_account_secrets.py": 1,
+    # "backend/test_file_to_phone.py" (2026-10-31, the send-file-to-phone
+    # slice): a NEW suite may only have zero pins. It has 11, measured here
+    # with `--measure`: source-text pins on the card's words, the route's
+    # no-path rule and the records. Recorded as debt, not approval - the
+    # ratchet only turns down.
+    "backend/test_file_to_phone.py": 11,
     "backend/test_animal.py": 6,
     # 2026-10-30: the live-repair tool's suite pins the exact anchor lines it
     # inserts (the two `_RISK` rows, the two history routes, and since the

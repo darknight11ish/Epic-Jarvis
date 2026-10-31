@@ -541,7 +541,10 @@ GROUPS = (
                             # is NOT in MUST_ASK for the same reason (the module calls
                             # jarvis_gate.check and does not refuse a looser tier
                             # itself). The plan route raises NO card at all.
-                            "import_notion_export", "organize_obsidian_vault"]),
+                            # "Send a file to the phone" (2026-10-31, Gemini Q7):
+                            # ONE file a card, ten minutes, one download.
+                            "import_notion_export", "organize_obsidian_vault",
+                            "send_file_to_phone"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat",
                               # reminder-actions.patch (2026-10-27): a reminder
