@@ -942,27 +942,38 @@ DELTA_TABLE = {
             "hunks": True,
         },
     },
-    # unknown-risk-approvable.patch (2026-10-30, Gemini's Q2 ruling): an action
-    # with no `_RISK` row is given the worst case, APPROVABLE through the human
-    # check, and forced to tier "ask"; the eight reads that ran unattended get
-    # their own rows, so the rule changes nothing the owner uses today. FIVE
-    # hunks in jarvis_gate.py and nothing else, so `hunks: True` carries them in
-    # file order with no hand-written anchor. The probes are one ADDED line from
-    # each hunk - across all five regions - so only a fully applied file counts
-    # as present and a partly applied one is completed hunk by hunk.
+    # unknown-risk-approvable.patch (2026-10-30, Gemini's Q2 ruling; extended
+    # 2026-10-31 with DEF-021's sixth hunk): an action with no `_RISK` row is
+    # given the worst case, APPROVABLE through the human check, and forced to
+    # tier "ask"; the eight reads that ran unattended get their own rows, so
+    # the rule changes nothing the owner uses today. SIX hunks in
+    # jarvis_gate.py and nothing else - the rows, the warning, risk_for's
+    # docstring, notice_for's body, `_tiers()`/`_file_tier_names()` (DEF-021:
+    # the file's own line wins) and the forced "ask" in check() - so
+    # `hunks: True` carries them in file order with no hand-written anchor.
+    # The probes are one ADDED line from each hunk - across all six regions -
+    # so only a fully applied file counts as present and a partly applied one
+    # is completed hunk by hunk.
     #
-    # MEASURED ON THE OWNER'S PC (2026-10-30, read-only dry run): hunks 2-5 each
-    # find their pre-image exactly once, but hunk 1 does NOT - the earlier
-    # `gate` repair inserted the app-builder rows immediately after the table's
-    # opening brace, so hunk 1's two-line pre-image (`_RISK...{` then
-    # `    # reading anything`) is gone. So on THIS PC the change reaches the
-    # file through `tools/repair_live_backend_gaps.py`'s `unknown-risk` repair
-    # FIRST; after that every probe is present and this entry reports
-    # ALREADY_PRESENT. Run the other way round (reconcile first), the tool
-    # refuses hunk 1 by name and writes nothing - loud, never half applied. On a
-    # folder where the patch is genuinely absent and hunk 1's pre-image is
-    # intact, this entry carries the whole patch itself (proved byte for byte in
+    # MEASURED ON THE OWNER'S PC (2026-10-30, read-only dry run, when that file
+    # held none of the change and the patch still had five hunks): the four
+    # hunks after hunk 1 each found their pre-image exactly once; hunk 1's
+    # two-line one (`_RISK...{` then `    # reading anything`) did not, because
+    # the earlier `gate` repair inserted the app-builder rows immediately after
+    # the table's opening brace. So on THIS PC the change reached the file
+    # through `tools/repair_live_backend_gaps.py`'s `unknown-risk` repair FIRST;
+    # after that every probe is present and this entry reports ALREADY_PRESENT.
+    # Run the other way round (reconcile first), the tool refuses hunk 1 by name
+    # and writes nothing - loud, never half applied. On a folder where the patch
+    # is genuinely absent and hunk 1's pre-image is intact, this entry carries
+    # the whole patch itself (proved byte for byte in
     # backend/test_reconcile_live_backend.py).
+    #
+    # DEF-021's `_tiers()` hunk (2026-10-31) is measured the same way by the
+    # same suite: the entry's own six hunks reproduce the published base from
+    # the patch pre-image byte for byte, and the new probe is a line only that
+    # hunk adds. That is a proof against the published base, not a re-measure of
+    # the 2026-10-30 install.
     "unknown-risk-approvable.patch": {
         "jarvis_gate.py": {
             "probes": (
@@ -971,6 +982,7 @@ DELTA_TABLE = {
                 'permanent and able "',
                 "`classified` is False when the table above has no row for `action`.",
                 "nobody has written down what it does, so it is given the ",
+                "out = dict(_SYNTH_TIERS)",
                 "gate.unclassified_forced_ask",
             ),
             "hunks": True,
