@@ -23,6 +23,7 @@
       "never_look": "something on your Never look at list",
       "protected": "a window that asks not to be captured",
       "protection": "a program on your Protected from Jarvis list",
+      "protection_visible": "a program on your Protected from Jarvis list is visible on this screen",
       "private_window": "a private browser window",
       "jarvis": "one of Jarvis's own windows",
       "lock_screen": "the lock screen",
