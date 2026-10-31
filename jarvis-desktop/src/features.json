@@ -2583,7 +2583,9 @@
       "block a folder from jarvis"
     ],
     "covers": [
-      "protected-items"
+      "protected-items",
+      "protection",
+      "settings.protection"
     ],
     "must_mention": [
       "blocked",

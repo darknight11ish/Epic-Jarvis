@@ -3,7 +3,7 @@
 The owner's feature list, as data: 146 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 03dca79947a3381fbf0997d4144841ddadc126fb4353882e8cc07e8c9c00d12c); the apps' Features pages read their own
+`features/features.json` (sha256 4a58c71bb297c375631d89652bcb553bea637b80995785848ded8ff4231ec6bb); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "03dca79947a3381fbf0997d4144841ddadc126fb4353882e8cc07e8c9c00d12c"
+SOURCE_SHA256 = "4a58c71bb297c375631d89652bcb553bea637b80995785848ded8ff4231ec6bb"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1685,6 +1685,6 @@ FEATURES = (
         "limit": "A program is matched by its executable name. The v1 gaps are named in the docs, section 171.5.",
         "surface": "both",
         "aliases": ["protected from jarvis", "the protected list", "protected list", "protect a folder", "protect a file", "protect a program", "block a folder from jarvis"],
-        "covers": ["protected-items"],
+        "covers": ["protected-items", "protection", "settings.protection"],
     },
 )

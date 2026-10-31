@@ -1193,6 +1193,92 @@ _CAP_VERB_WORDS = {
 #: More matching rows than this and the answer names them and asks which one.
 _CAP_AMBIGUOUS_LIMIT = 4
 
+#: RULING (d), 2026-10-31 (Gemini, after the overnight wave): common owner words
+#: are mapped to the catalogue rows they mean, so a capability is never falsely
+#: denied because the list uses a different word. "obsidian"/"vault" are the
+#: notes rows, "schedule"/"events"/"appointments" the calendar rows,
+#: "block"/"exclude"/"permissions" the protected-items row, and "send file"/
+#: "download file" the files rows. Each pattern is whole-word, so it cannot
+#: rewrite the middle of another word.
+CAPABILITY_SYNONYMS = (
+    (re.compile(r"\b(?:obsidian|vault|vaults)\b"), "notes"),
+    (re.compile(r"\b(?:schedule|schedules|scheduled|event|events|"
+                r"appointment|appointments)\b"), "calendar"),
+    (re.compile(r"\b(?:block|blocks|blocked|blocking|exclude|excludes|"
+                r"excluded|permission|permissions)\b"), "protected from jarvis"),
+    (re.compile(r"\b(?:send|sending|sent|download|downloads|downloading)"
+                r"\s+(?:a\s+|an\s+|the\s+|my\s+)?files?\b"), "files"),
+)
+
+#: RULING (d): topics the list genuinely does NOT have, so the hard "That is not
+#: one of my features on this PC." sentence is allowed even when another word in
+#: the sentence overlaps a row. Each is a phrase the field test caught the model
+#: inventing; the list has no row for any of them. "permissions" alone is NOT
+#: here - ruling (d) maps it to the Protected from Jarvis row - only the invented
+#: "system permissions"/"filesystem permissions" workaround is.
+CAPABILITY_UNSUPPORTED = (
+    "system permissions",
+    "filesystem permissions",
+    "notification history",
+    "calendar invitations",
+    "invitations",
+    "availability",
+)
+
+
+def _capability_canonical(words) -> tuple:
+    """(the area words with ruling (d)'s synonyms applied, unsupported topic).
+
+    The unsupported topic is returned (and the words left alone) when the
+    question names one of CAPABILITY_UNSUPPORTED; the caller may then use the
+    hard "not one of my features" sentence. Otherwise owner words are mapped to
+    the catalogue's own words before the row lookup.
+
+    Only a REPEATED canonical word is collapsed ("schedule events" is one
+    calendar, not two). An ordinary repeated word is kept: a feature's own
+    title can repeat one ("Picture-in-picture"), and flattening that would stop
+    its title naming its own row.
+    """
+    text = " ".join(_norm(words).split())
+    for phrase in CAPABILITY_UNSUPPORTED:
+        if phrase in text:
+            return text, phrase
+    changed = text
+    for rx, target in CAPABILITY_SYNONYMS:
+        if rx.search(changed):
+            changed = rx.sub(target, changed)
+    out = []
+    for word in changed.split():
+        if out and out[-1] == word:
+            continue
+        out.append(word)
+    return " ".join(out), None
+
+
+def _capability_overlap_rows(words, *, strip_verbs: bool = True) -> list:
+    """Rows whose own prose shares a real word with the question.
+
+    Ruling (d): this is the "catalogue overlap" a hard denial must not ignore.
+    Only words of three letters or more count, and the rows with the most shared
+    words come first (catalogue order breaks ties), up to the same short list an
+    ambiguous answer uses. It never invents: the rows are quoted by the caller.
+    """
+    query = _capability_query(words, strip_verbs=strip_verbs)
+    tokens = {_singular(w) for w in _norm(query).split()
+              if w not in _STOP and len(w) >= 3}
+    if not tokens:
+        return []
+    scored = []
+    for index, row in enumerate(features()):
+        blob = " ".join(str(row.get(key) or "") for key in
+                        ("title", "what", "where", "asks", "limit", "group"))
+        have = {_singular(w) for w in re.findall(r"[a-z0-9]+", blob.lower())}
+        shared = tokens & have
+        if shared:
+            scored.append((len(shared), -index, row))
+    scored.sort(key=lambda item: (-item[0], -item[1]))
+    return [row for _shared, _index, row in scored[:_CAP_AMBIGUOUS_LIMIT]]
+
 
 def _capability_display(words) -> str:
     """The area as the owner said it, for the answer's own sentences."""
@@ -1270,9 +1356,16 @@ def _capability_rows(words, *, strip_verbs: bool = True) -> list:
         if _contains_all(group_words, tokens):
             groups_hit.append(group["group"])
     if groups_hit:
-        in_group = [r for r in hits if r["group"] in groups_hit]
-        if in_group:
-            return in_group
+        # A word that names a GROUP belongs to the group's rows: "files" is the
+        # Notes and files group's documents row, not the config file's own id
+        # ("settings-file") outside it. The id/title preference still applies
+        # INSIDE the group first.
+        id_in_group = [r for r in id_hits if r["group"] in groups_hit]
+        if id_in_group:
+            return id_in_group
+        title_in_group = [r for r in title_hits if r["group"] in groups_hit]
+        if title_in_group:
+            return title_in_group
         if not hits:
             return [r for r in rows if r["group"] in groups_hit]
     return hits
@@ -1337,10 +1430,11 @@ def capabilities(words, *, verb: str = "", strip_verbs: bool = True) -> dict:
                 "words": ("The feature list is not installed on this PC, so I cannot "
                           "read it. Nothing here was invented.")}
     verb = str(verb or "").strip().lower()
-    query = _capability_query(words, strip_verbs=strip_verbs)
-    display = _capability_display(words)
-    rows = _capability_rows(words, strip_verbs=strip_verbs)
-    if not rows and query:
+    canonical, unsupported = _capability_canonical(words)
+    query = _capability_query(canonical, strip_verbs=strip_verbs)
+    display = _capability_display(canonical)
+    rows = _capability_rows(canonical, strip_verbs=strip_verbs)
+    if not rows and query and not unsupported:
         got = find(query, loose=True)
         if got["kind"] == "feature":
             rows = [got["row"]]
@@ -1350,6 +1444,19 @@ def capabilities(words, *, verb: str = "", strip_verbs: bool = True) -> dict:
                                    for r in got["rows"]],
                     "words": _ambiguous_words(got["rows"]) + " " + CAPABILITY_TAIL}
     if not rows:
+        # RULING (d), 2026-10-31: the hard sentence is for NO catalogue overlap
+        # or a known unsupported topic only. When the question shares real words
+        # with the list, quote the nearest rows and point at the whole list
+        # instead - a capability must never be falsely denied because a synonym
+        # or a phrase was not an exact row name.
+        if not unsupported:
+            nearest = _capability_overlap_rows(canonical, strip_verbs=strip_verbs)
+            if nearest:
+                return {"ok": True, "kind": "rows",
+                        "features": [{"id": r["id"], "title": r["title"]}
+                                     for r in nearest],
+                        "words": _capability_rows_words(nearest, display)
+                        + " " + CAPABILITY_TAIL}
         return {"ok": False, "kind": "unknown",
                 "words": CAPABILITY_NOT_A_FEATURE + " " + CAPABILITY_TAIL}
     # An asking verb narrows an area to the rows that really do it: "what can
@@ -1362,8 +1469,11 @@ def capabilities(words, *, verb: str = "", strip_verbs: bool = True) -> dict:
             rows = supporting
     supported = not verb or _capability_verb_supported(verb, rows)
     if verb and not supported:
-        head = (f"That is not one of my features on this PC. I cannot {verb} "
-                f"anything in your {display}.")
+        # RULING (d): this is not a denial of the feature (the rows above ARE
+        # in the list) - it says the list has no such asking verb for them, in
+        # the list's own words, and still points at the whole list.
+        head = (f"My feature list has no {verb} for your {display} - here is "
+                f"what it does say about it.")
         body = _capability_rows_words(rows, display)
         return {"ok": False, "kind": "not_feature",
                 "features": [{"id": r["id"], "title": r["title"]} for r in rows],
@@ -1986,16 +2096,34 @@ def _quick_intent(phrase: str) -> Optional[str]:
     return got.name if got is not None else None
 
 
+#: Ruling (c), 2026-10-31 (Gemini, after the overnight wave): a feature row may
+#: carry BOTH its Settings-registry SECTION id ("protection") and its Settings
+#: MENU id ("settings.protection"). They are different facts - the section is
+#: the surface the row OWNS, the menu id is where it opens - and the row that
+#: does this is the list itself, not a stored setting living inside the section.
+#: Folding that section into `sections` here would derive status "open-only" and
+#: flip the owner's five-label row to Settings-Only, which the owner's decision
+#: of 2026-10-22 reserves for accounts and restore-backup. So for the named row
+#: the section is NOT folded in: its covers still name both ids, its label stays
+#: Command-Only. Kept as an explicit, dated map rather than a heuristic.
+SETTINGS_ROW_IDS = {"protected-items": "protection"}
+
+
 def _sections_in(row: dict) -> list:
     R = _registry_module()
     if R is None:
         return []
+    row_id = str((row or {}).get("id") or "")
+    owned_section = SETTINGS_ROW_IDS.get(row_id)
     out = []
     for cover in row.get("covers") or ():
         text = str(cover or "")
         if not text.startswith("settings."):
             continue
         sid = text.split("settings.", 1)[1]
+        if sid == owned_section:
+            # The row OWNS this section (ruling (c)); it is not a setting in it.
+            continue
         if R.section_by_id(sid) is not None and sid not in out:
             out.append(sid)
     return out

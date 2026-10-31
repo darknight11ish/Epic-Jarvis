@@ -180,6 +180,7 @@ MENU_PLACES = (
     / "client" / "ui" / "MenuPlaces.kt"
 )
 TUTORIALS_PY = ROOT / "backend" / "jarvis_tutorials.py"
+SETTINGS_REGISTRY = ROOT / "backend" / "jarvis_settings_registry.py"
 
 #: The groups, in the order both apps draw them (docs/FEATURES-LIST-DESIGN.md).
 GROUPS = [
@@ -451,6 +452,58 @@ def lesson_ids() -> list:
     return [lesson["id"] for lesson in catalogue_lessons()]
 
 
+def settings_section_ids() -> list:
+    """Every Settings-registry section id, in file order (ruling (c), 2026-10-31).
+
+    THE FOURTH KIND OF COVER ID, and the difference matters. A `covers` id may
+    name a screen/menu/route (checked against the three registries), a LESSON,
+    or now a real `jarvis_settings_registry.SECTIONS` section id. Gemini's
+    ruling (c) of 2026-10-31 requires the "Protected from Jarvis" feature row to
+    carry BOTH its section id (`protection`) and its Settings menu id
+    (`settings.protection`): the section is the thing the row IS, the menu id is
+    where it opens.
+
+    These ids are real (read from the registry's own `SECTIONS`, with `ast`, the
+    same refuse-to-guess parse the lesson catalogue uses), so a cover naming one
+    is not a phantom. They are NOT added to `known_ids()`: that dict is the set
+    of route sections and menu ids that every one of them must be COVERED by a
+    row (rule 1), and a settings section is not a screen that needs its own line
+    - most sections are already named by the feature rows that own them, and
+    requiring all 56 would be a different rule than the one this checker's
+    docstring states. A cover id that no longer exists fails: this function
+    re-reads the registry every run.
+    """
+    text = SETTINGS_REGISTRY.read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    found = None
+    for node in tree.body:
+        if (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+                and node.target.id == "SECTIONS" and isinstance(node.value, ast.Tuple)):
+            found = node.value
+            break
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "SECTIONS"
+                and isinstance(node.value, ast.Tuple)):
+            found = node.value
+            break
+    if found is None:
+        raise AssertionError(
+            "could not read SECTIONS from jarvis_settings_registry.py - the parse broke")
+    ids = []
+    for element in found.elts:
+        if (isinstance(element, ast.Call) and isinstance(element.func, ast.Name)
+                and element.func.id == "Section" and element.args
+                and isinstance(element.args[0], ast.Constant)
+                and isinstance(element.args[0].value, str)):
+            ids.append(element.args[0].value)
+    if len(ids) < 20:
+        raise AssertionError(
+            f"read only {len(ids)} settings section ids from jarvis_settings_registry.py "
+            "- the parse broke")
+    return ids
+
+
 def lesson_text(lesson: dict) -> str:
     """The words a lesson teaches with: every step's `title` and `body`.
 
@@ -600,17 +653,26 @@ def field_problems(got: list) -> list:
 
 
 def phantom_covers(got: list, known: dict) -> list:
-    """Rule 2: a `covers` id that is no longer in the code (or in INTERNAL)."""
+    """Rule 2: a `covers` id that is no longer in the code (or in INTERNAL).
+
+    Four real kinds are accepted: a registry id (route section or menu id), an
+    INTERNAL id, a lesson id, and a Settings-registry section id (ruling (c),
+    2026-10-31 - see `settings_section_ids()`), which is re-read every run so a
+    section that is deleted fails here.
+    """
     bad = []
     lessons = set(lesson_ids())
+    sections = set(settings_section_ids())
     for e in got:
         for c in e.get("covers") or []:
             if c in known or c in INTERNAL:
                 continue
             if c in lessons:
                 continue
+            if c in sections:
+                continue
             bad.append(f"{e.get('id')}: covers `{c}`, which is in no registry, "
-                       "in no lesson and in INTERNAL")
+                       "in no lesson, in no settings section and in INTERNAL")
     return bad
 
 

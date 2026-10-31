@@ -30,8 +30,10 @@ catalogue and a made-up schedule only.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -403,6 +405,135 @@ def t_the_quick_paths_are_registered_where_answers_are_looked_up():
     check("... so a private chat does not change state with it",
           all(name in Q.READ_ONLY_INTENTS
               for name in ("feature_capabilities", "next_up")))
+
+
+def t_ruling_c_the_protection_row_covers_both_its_settings_ids():
+    """Ruling (c), 2026-10-31: both ids in `covers`, without a wrong label.
+
+    The section id `protection` is a fourth, real kind of cover id (the checker
+    reads the registry's own SECTIONS with `ast`); the menu id
+    `settings.protection` is the place it opens. The row must not become
+    Settings-Only, because the owner's 2026-10-22 decision reserves that label
+    for accounts and restore-backup exactly.
+    """
+    row = next(r for r in SOURCE if r["id"] == "protected-items")
+    check("the protection feature row covers both its section and menu id",
+          {"protection", "settings.protection"} <= set(row.get("covers") or []),
+          row.get("covers"))
+    check("... and still names the lesson that teaches it",
+          "protected-items" in (row.get("covers") or []), row.get("covers"))
+    spec = importlib.util.spec_from_file_location(
+        "check_feature_list_for_answers", REPO / "tools" / "check_feature_list.py")
+    CL = importlib.util.module_from_spec(spec)
+    sys.modules["check_feature_list_for_answers"] = CL
+    spec.loader.exec_module(CL)
+    check("check_feature_list knows settings-registry sections as a cover kind",
+          "protection" in CL.settings_section_ids())
+    check("... and the list passes it", CL.problems() == [], CL.problems()[:3])
+    for tool in ("check_feature_list.py", "check_feature_controls.py"):
+        run = subprocess.run([sys.executable, "-B", str(REPO / "tools" / tool)],
+                             cwd=str(REPO), capture_output=True, text=True,
+                             timeout=180)
+        check(f"tools/{tool} exits 0 with both ids in covers",
+              run.returncode == 0, (run.stdout + run.stderr)[-700:])
+    contract = __import__("json").loads(
+        (REPO / "contract" / "feature-controls.json").read_text(encoding="utf-8"))
+    check("Settings-Only is still exactly accounts + backup",
+          {x["feature"] for x in contract.get("settings_only") or []}
+          == {"accounts", "backup"},
+          contract.get("settings_only"))
+    prow = next(f for f in contract["features"] if f["id"] == "protected-items")
+    check("... and the protection row is still Command-Only",
+          prow["label"] == FG.LABEL_COMMAND_ONLY, prow["label"])
+    check("... never Settings-Only", prow["label"] != FG.LABEL_SETTINGS_ONLY)
+    matrix = next(r for r in FG.control_matrix() if r["id"] == "protected-items")
+    check("the guide still derives Command-Only for the protection row",
+          matrix["label"] == FG.LABEL_COMMAND_ONLY
+          and matrix["status"] == "not-a-setting",
+          (matrix["label"], matrix["status"]))
+    feat = next(r for r in FG.features() if r["id"] == "protected-items")
+    check("... with the owned section not folded into its Settings sections",
+          FG._sections_in(feat) == [], FG._sections_in(feat))
+
+
+def t_ruling_d_owner_words_map_to_catalogue_rows():
+    """Ruling (d), 2026-10-31: synonyms map; a capability is never denied by
+    the list using a different word."""
+    cases = {
+        "obsidian": {"notes-write", "notes-editor"},
+        "vault": {"notes-write", "notes-editor"},
+        "schedule": {"calendar", "jarvis-calendar"},
+        "events": {"calendar", "jarvis-calendar"},
+        "appointments": {"calendar", "jarvis-calendar"},
+        "block": {"protected-items"},
+        "exclude": {"protected-items"},
+        "permissions": {"protected-items"},
+        "send file": {"documents"},
+        "download file": {"documents"},
+    }
+    for words, expected in cases.items():
+        out = FG.capabilities(words)
+        named = {f["id"] for f in out.get("features", [])}
+        check(f"ruling (d): {words!r} maps to the rows it means",
+              out.get("kind") != "unknown" and bool(named & expected),
+              (out.get("kind"), sorted(named)))
+        check(f"... and {words!r} is not falsely denied",
+              FG.CAPABILITY_NOT_A_FEATURE not in out.get("words", ""),
+              out.get("words", "")[:220])
+        check(f"... and points at the whole feature list",
+              "Everything Jarvis can do" in out.get("words", ""))
+    # Through the real fast path: the same mapping must hold, with no model.
+    got = ask("what can you do with obsidian?")
+    check("the fast path maps 'obsidian' to the notes rows",
+          got is not None and got.intent == "feature_capabilities"
+          and "Browse and edit your notes" in (got.reply or ""),
+          got.reply[:200] if got else "the model")
+    got = ask("what can you do with appointments?")
+    check("the fast path maps 'appointments' to the calendar rows",
+          got is not None and got.intent == "feature_capabilities"
+          and "Read your own calendar" in (got.reply or ""),
+          got.reply[:200] if got else "the model")
+    got = ask("what can you do with permissions?")
+    check("the fast path maps 'permissions' to Protected from Jarvis",
+          got is not None and got.intent == "feature_capabilities"
+          and "Protected from Jarvis" in (got.reply or ""),
+          got.reply[:200] if got else "the model")
+
+
+def t_ruling_d_hard_sentence_only_on_zero_overlap_or_unsupported():
+    """Ruling (d): the hard denial is for no overlap or a known unsupported
+    topic only; any real catalogue overlap gets words and the list pointer."""
+    zero = FG.capabilities("chainsaw")
+    check("zero catalogue overlap keeps the honest denial",
+          zero.get("kind") == "unknown"
+          and FG.CAPABILITY_NOT_A_FEATURE in zero.get("words", ""),
+          zero.get("words", "")[:200])
+    check("... and it still points at the whole list",
+          "Everything Jarvis can do" in zero.get("words", ""))
+    for phrase in ("system permissions", "notification history",
+                   "calendar invitations"):
+        out = FG.capabilities(phrase)
+        check(f"the known unsupported topic {phrase!r} is denied plainly",
+              out.get("kind") == "unknown"
+              and FG.CAPABILITY_NOT_A_FEATURE in out.get("words", ""),
+              out.get("words", "")[:220])
+        got = ask(f"what can you do with {phrase}?")
+        check(f"... the fast path says it too: {phrase!r}",
+              got is not None and got.intent == "feature_capabilities"
+              and FG.CAPABILITY_NOT_A_FEATURE in (got.reply or ""),
+              got.reply[:200] if got else "the model")
+    partial = FG.capabilities("password")
+    check("a partial catalogue overlap is answered, not denied",
+          partial.get("kind") != "unknown"
+          and FG.CAPABILITY_NOT_A_FEATURE not in partial.get("words", ""),
+          (partial.get("kind"), partial.get("words", "")[:220]))
+    check("... with the whole-list pointer",
+          "Everything Jarvis can do" in partial.get("words", ""))
+    check("'permissions' maps to protection while 'system permissions' stays "
+          "unsupported",
+          any(f["id"] == "protected-items"
+              for f in FG.capabilities("permissions").get("features", []))
+          and FG.capabilities("system permissions").get("kind") == "unknown")
 
 
 def main() -> int:
