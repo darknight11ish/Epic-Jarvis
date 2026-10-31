@@ -3948,6 +3948,22 @@ half, so `tools/check_parity.py` classifies nothing new.
 **Picture-in-picture is the phone's, and the platform is why** (2026-10-30, the owner's settled design of 2026-10-11: *"can you add a picture in picture mode to jarvis that's similar to Google maps"*; `docs/PIP-DESIGN.md`). Android's own PiP - a small Jarvis window that stays on screen while other apps are in front - is the activity itself, resized by the OS: `MainActivity` declares `supportsPictureInPicture`, draws its own compact layout while `isInPictureInPictureMode` is true, and shows the face and the first line of the answer, the last few messages, or Jarvis Live (`data/PipMode.kt`, `ui/PipWindow.kt`). **The PC has no such window**: its nearest equivalent is the floating face over other windows (`docs/JARVIS-API.md` §57), which is a window of Jarvis's own and not an OS-managed miniature of the whole activity, so there is no desktop PiP layout to build and no desktop Settings row of the same name - the mode is saved on that phone only (`ClientSettings.pipMode`, key `pip_mode`), like every other display setting. It adds **no route and no permission**: the window is fed by the existing chat and Live flows, and its only system action is Expand. Two rules are the reason it is a design rather than a shrunken screen: it never approves anything (`JarvisRuntime.decide` is not reachable from that surface at all), and while "Hide memory lists and chat history" or App lock hides content it draws a dimmed face and the owner's own sentence - "Hidden while Jarvis is locked." - never the answer or the conversation (`docs/PIP-DESIGN.md` §4, §5, §9.1). `tools/check_parity.py` has nothing to classify here.
 
 
+**Sending ONE file from the PC to the phone: the request and the card are shared, the
+download is the phone's, and that is one-sided on purpose** (2026-10-31, the owner's
+own ask *"am i able to ask jarvis to search for a file for me and send it to the
+jarvis android app to view and or download directly?"*; Gemini ruling Q7;
+JARVIS-API section 172; `backend/jarvis_send_file.py`). Either app reaches the feature
+the same way - by chatting, which runs on the PC's own local model - and both apps can
+decide the ONE `send_file_to_phone` card (the phone decides it with its fingerprint).
+What is deliberately phone-only is the receiving half: View (`FileProvider` +
+`ACTION_VIEW`) and Save to Downloads (`MediaStore.Downloads`) exist on the phone
+because that is where the file is wanted, while a Windows PC has no reason to fetch a
+file it already holds. The phone lane calls both routes, so
+`tools/check_parity.py` classifies `/api/files/send` and `/api/files/download` as
+**`phone-only`** with that reason written beside each row - the desktop is not
+missing a half to be "fixed" later; it was never meant to have one.
+
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

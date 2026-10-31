@@ -370,9 +370,9 @@ def t_the_records_agree():
           and "GET /api/files/download?id=" in docs
           and "10,485,760" in docs and "single use" in docs and "10 minutes" in docs)
     parity = (repo / "tools" / "check_parity.py").read_text(encoding="utf-8")
-    check("parity classifies both routes as todo with the phone-lane reason",
+    check("parity classifies both routes phone-only (the phone calls them)",
           '"/api/files/send"' in parity and '"/api/files/download"' in parity
-          and "phone lane" in parity)
+          and '"phone-only"' in parity)
     frag = repo / "changelog.d" / "2026-10-31-send-file-to-phone.md"
     check("ONE changelog fragment is there with one bold bullet",
           frag.is_file() and frag.read_text(encoding="utf-8").count("\n- **") == 0

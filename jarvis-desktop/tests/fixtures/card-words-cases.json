@@ -391,6 +391,10 @@
       "title": "Jarvis wants to send an email"
     },
     {
+      "action": "send_file_to_phone",
+      "title": "Jarvis wants to send a file from your PC to your phone"
+    },
+    {
       "action": "spend_money",
       "title": "Jarvis wants to spend money"
     },
@@ -1591,6 +1595,18 @@
         "summary": "Jarvis wants to send the email shown.",
         "full": "sends the email shown on the card from your own account, to exactly the people it lists; once sent it cannot be taken back. nothing has happened yet.",
         "body": "sends the email shown on the card from your own account, to exactly the people it lists; once sent it cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "send_file_to_phone",
+      "notice": {
+        "title": "Jarvis wants to send a file from your PC to your phone",
+        "summary": "Jarvis wants to send one file from your folders to your phone.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

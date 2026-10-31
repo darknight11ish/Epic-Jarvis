@@ -546,6 +546,34 @@
       "read": false
     },
     {
+      "name": "the tool send_file_to_phone ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "send_file_to_phone"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "send_file_to_phone"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool my_spending ran",
       "heard": {
         "private_aloud": false,
