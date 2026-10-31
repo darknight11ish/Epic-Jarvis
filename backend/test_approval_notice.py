@@ -139,8 +139,13 @@ def t_deny_is_offered_and_approve_is_not():
 def t_an_unknown_action_is_treated_as_the_worst_case():
     n = G.notice_for({"action": "something_nobody_classified"})
     check("an unclassified action is heavy", n["weight"] == "heavy", repr(n))
+    # 2026-10-30 (Gemini's Q2 ruling): the body now LEADS with
+    # jarvis_gate.UNCLASSIFIED_WARNING and then says why the worst case was
+    # chosen - still "unclassified, nobody has written it down", never an
+    # invented reason, so the promise this check exists for is unchanged.
     check("and says it is unclassified rather than inventing a reason",
-          "not classified" in n["body"], n["body"])
+          "unclassified action" in n["body"].lower()
+          and "nobody has written down what it does" in n["body"], n["body"])
 
 
 def t_it_never_raises():

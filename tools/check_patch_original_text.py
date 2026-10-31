@@ -97,7 +97,7 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all NINETEEN - those thirteen, plus `private-chat.patch` at position 152, added
+all TWENTY - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -121,7 +121,13 @@ card has a deadline: EIGHT of its sixteen hunks read the owner's `jarvis_gate.py
 late-answer block after the wait, `pending()`'s opening, `decide()`'s body, the
 insertion point of `still_waiting()` and `withdraw()`'s docstring - and no
 earlier patch writes any of them; its other eight hunks edit
-`no-expiry-cards.patch`'s own output and cost nothing) - with their positions,
+`no-expiry-cards.patch`'s own output and cost nothing) - and, on
+2026-10-30, ONE patch: `unknown-risk-approvable.patch` at position 162 (four of
+its five hunks read the owner's own `jarvis_gate.py` text: the `_RISK` table's
+opening line where the eight rows are added, `_UNKNOWN_RISK`'s line beside the
+new `UNCLASSIFIED_WARNING`, `risk_for()`'s docstring, and `check()`'s
+`tier = tiers.get(...)` line - the fifth anchors on `approval-notice.patch`'s
+own added block and costs nothing) - with their positions,
 instead of pretending they are not there. The position-29 rule is kept as a
 REPORTED fact, not a gate.
 
