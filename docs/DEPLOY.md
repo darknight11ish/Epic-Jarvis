@@ -324,3 +324,77 @@ longer claim a reconcile over a patch whose hunks are absent.
   old state-file fallback used to wave through; each is either genuinely absent (run
   `apply-patches.ps1`, then step 4 above) or present-but-rewritten (add a rule). The
   tests prove the decisions on temporary folders and the published base only.
+
+## 5. The phone app's signing key: an accepted boundary, and a one-command rotation
+
+**This is not a backend deploy step.** It is here because this is the operations
+page, and because the key is the one part of the phone app's release that is a
+decision rather than a build step.
+
+**Decided 2026-10-30 (Gemini's Q4 ruling): the app keeps the shared debug
+signing key while it is sideloaded onto the owner's own phone only.** It is
+signed with one shared key held in the `DEBUG_KEYSTORE_B64` repository secret
+(`keystore/README.md` is the key's own page), and it is never listed on Play. Its
+one update path is the in-app check and download from this repository's
+`client-latest` release: https only, GitHub's own hosts, and the APK's signing
+certificate must match `UpdateCheck.SIGNER_SHA256` before Android's installer is
+offered anything (`docs/ARCHITECTURE.md`). So the update path does not expose the
+key - and it is still a shared debug key, not a release key. That is the
+accepted boundary, written down rather than left implied.
+
+**When it must be revisited** - any one of these, and "keep it" is no longer the
+answer:
+
+- the APK is distributed publicly, or handed to anyone other than the owner;
+- this repository is made public together with its release assets;
+- the key or the `DEBUG_KEYSTORE_B64` secret leaks. The certificate pin does not
+  make a leaked key harmless: an APK signed with the same key carries the same
+  pin.
+
+**The rotation, in one command:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\rotate-android-signing-key.ps1 -Rotate
+```
+
+It does the key half and stops. It makes a new keystore **outside this
+repository** (default `%USERPROFILE%\.jarvis\keys\debug.keystore`), reads the
+alias and the password from `jarvis-client/app/build.gradle.kts` instead of
+carrying them, reads the new certificate's SHA-256 back out of the new key,
+writes the base64 text for the secret beside it, and prints the remaining steps
+with the new fingerprint. It refuses to run without `-Rotate`, refuses to
+overwrite an existing key, and refuses an output folder inside a repository. It
+does not touch the secret, CI, the phone or the backend, and it publishes
+nothing. `-SelfTest` runs its safety checks and makes no key; CI's
+`powershell-5` job runs that.
+
+**What the re-pair ceremony costs, exactly.** Android refuses a build signed
+with a different certificate over an installed app, so the phone's copy has to
+be uninstalled once - and that deletes the app's data:
+
+- the pairing token, and the device id it carries (Keystore alias
+  `jarvis_token_key`, encrypted blob in the `jarvis_secure` preferences);
+- the fingerprint/PIN approval key (Keystore alias `jarvis_approval_key_v1`), so
+  signed approvals are registered again on the next pairing;
+- the three home-screen widget slots' saved choices (`home_widget_*` in the
+  `jarvis_client` preferences); a widget already on the home screen becomes a
+  dead tile to remove;
+- the captured-notifications key and its preferences;
+- every local preference: the saved address, appearance, menu order, the
+  notification watch list, update settings and so on.
+
+Nothing on the PC is deleted by the uninstall: memory, notes, chat history and
+approvals stay, and pairing again is enough.
+
+**One trap worth knowing before the ceremony.** The app already on the phone
+pins the **old** fingerprint, so its own Download button will refuse the new
+APK - that is the pin working, not a fault. Download the new APK in the phone's
+browser from the release page instead, then uninstall, install it, and pair
+again. The release that carries it should also carry the checked-in
+`jarvis-client/RELEASE-KEY-ROTATION` flag, which makes the workflow put a
+one-time-uninstall banner at the top of the release notes; delete the flag in a
+later PR, after that release is out. The script prints the same steps.
+
+**What only the owner's phone can prove:** that the new APK installs after the
+uninstall, that the app starts, and that pairing again succeeds. Nothing on this
+PC can prove those three, and no test can.

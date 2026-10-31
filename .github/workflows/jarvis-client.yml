@@ -1147,8 +1147,8 @@ jobs:
           fi
 
           # The FIRST release after a release-key rotation is a one-time
-          # breaking change. The runbook (.dsh-scratch/ANDROID-SIGNING-ROTATION.md)
-          # says the rotator creates this checked-in flag in the rotation PR;
+          # breaking change. The runbook (docs/DEPLOY.md section 5) says the
+          # rotator creates this checked-in flag in the rotation PR;
           # while it exists, this banner is a REQUIRED line at the top of the
           # release notes (and UpdateCheck has no dual-key transition by design).
           rotation=()
