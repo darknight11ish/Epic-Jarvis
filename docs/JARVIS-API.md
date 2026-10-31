@@ -6667,6 +6667,25 @@ with one more condition ("… tomorrow at 5", "… on my phone") still falls thr
 to the model. And in a private chat every read-only fast-path answer goes to the
 model by design (§156), so this one does too.
 
+**Jarvis's own windows, opened from a typed sentence (2026-10-31).**
+`jarvis_open.py` also resolves "open the second brain" / "open brain" / "open
+memory" / "open the memory map" (the Brain window), "open history" / "open
+earlier chats" (the Brain on History), "open tutorials" / "open the FAQ" (the
+Brain on Tutorials), and "open my notes" / "open notes" / "open documents" (the
+Brain - and the answer says the notes are in it). They ride on
+`X-Jarvis-Route`'s EXISTING `open_brain` field with the places the apps already
+open - `"brain"`, `"history"`, `"tutorials"` - through the same
+navigation-only `open_fix_place` the Settings gear uses; no route, field or
+command is added. "open settings, <section>" and "open Jarvis settings,
+<section>" jump Jarvis's Settings window to the registry's own section id (the
+existing `open_place`; the settings grammar's `open_settings` is unchanged),
+and a section that does not exist is answered honestly, with NO route field
+("open settings, sound"). The HUD's injected bootstrap and the bar's chat
+window both act on those fields, and a program named in the words is started
+in Rust by the same shared call (`commands.rs::open_app_from_route`) from
+either chat. Backend: `backend/test_jarvis_open.py` (243 checks), including
+that real programs, the refusals and "open my calendar" are unchanged.
+
 Tests: `backend/test_calendar_answer.py` - the setup sentences this answer keeps
 and the card's own shapes checked to belong to the card, the phrase→owner table
 above, 11 near misses keeping their own answer, the answer's steps checked against
@@ -26376,7 +26395,7 @@ answers):
 |---|---|---|
 | "switch to cockpit/studio/ambient [mode/layout]" | The HUD layout is a DESKTOP LOCAL STORAGE setting; the backend cannot write a webview's storage, and no settings-write or route-field for it exists | `jarvis-desktop/src/hud-window.js:120` (`HUD_LAYOUT_KEY = "jarvis.hud.layout"`), `:179` (`storage.setItem`); `git grep hud_layout -- '*.py'` finds nothing; the `X-Jarvis-Route` whitelist in `jarvis-desktop/src-tauri/src/commands.rs` has no such key |
 | "pin/unpin the bar" | Pinning is a Tauri window command, not a backend setting | `jarvis-desktop/src/main.js:5437` (`invoke("set_quickbar_pinned")`); the bar's open state is `jarvis.hud.openBar` in local storage (`jarvis-desktop/src/hud-window.js:41`, `:74`); no Python route or setting for it |
-| "open galaxy" / "open today" | No honest navigation channel: `open_place` is a Jarvis Settings SECTION id, and `open_brain` is handled by the apps only for `history`, `topics` and `forget-range`; there is no `galaxy`/`today` place to name, and adding one needs BOTH apps | `jarvis-desktop/src/main.js` `openBrainFromRoute`; `jarvis-desktop/src/main.js:1755` (`open_place`); `jarvis-client` `ui/OpenPlace.kt` maps menu ids, not route places. These two phrases keep whatever the PRE-EXISTING "open a program" path does - unchanged - which does not open the HUD |
+| "open galaxy" / "open today" | No honest navigation channel: `open_place` is a Jarvis Settings SECTION id, and `open_brain` is handled by the apps for `history`, `topics`, `forget-range`, `brain` and `tutorials` (the last two since 2026-10-31); there is no `galaxy`/`today` place to name, and adding one needs BOTH apps | `jarvis-desktop/src/main.js` `openBrainFromRoute`; `jarvis-desktop/src/main.js:1755` (`open_place`); `jarvis-client` `ui/OpenPlace.kt` maps menu ids, not route places. These two phrases keep whatever the PRE-EXISTING "open a program" path does - unchanged - which does not open the HUD |
 | "mute / unmute / mute for N minutes" | Live's mute is the app's microphone control; there is no timed mute and no TTS-output mute. A muted microphone cannot HEAR "unmute", so a voice unmute is impossible by construction | `jarvis_live.py:1053` (`LiveSession.mute`, driven by the app's Mute button/`/api/voice/live` body); no timer for it anywhere |
 | "repeat that" | Nothing stores the last spoken reply for replay, and no route field asks a client to say it again | no `last_reply`/replay path in `backend/*.py`; the route whitelist has no key for it |
 | "scroll down/up", "go back", "go home" | `jarvis_ui_control` acts only through an APPROVED carded plan (`plan`/`run`); there is no standalone non-carded navigation primitive, and adding one would be a new screen action without a card - forbidden | `jarvis_ui_control.py` "ONE WINDOW AT A TIME, AND PROOF THAT AN ACTION LANDED"; the phone's `scroll` is `jarvis_app_control`'s swipe on the PHONE's screen, a different device |

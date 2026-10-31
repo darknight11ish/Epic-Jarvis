@@ -2412,49 +2412,65 @@ pub fn quick_intent_from_route(header: &str) -> Option<String> {
     route.get("quick")?.as_str().map(str::to_string)
 }
 
-/// "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
-/// the owner's request of 2026-10-10): opens what the owner named, and answers
-/// with the one plain sentence to show when it could not.
+/// The PROGRAM a fast-path answer names, from `X-Jarvis-Route`:
+/// `(kind, target, built)` - or `None` when this answer names no program.
 ///
-/// Runs on the `X-Jarvis-Route` header of a fast-path answer, from
-/// [`stream_chat`], so nothing here crosses the IPC boundary and no window
-/// needs a grant to start a program. Only the four kinds `jarvis_open.py`
-/// produces are acted on, and only the `app`, `panel` and `other` kinds start
-/// anything - `jarvis` is a door to the Settings window, which main.js opens
-/// from the same header (`openSettingsFromRoute`).
-///
-/// A failure is never silent: it comes back as one plain sentence for the
-/// owner, because the backend has already answered "Opening Notion on this
-/// PC." and a sentence that promised something which did not happen is the
-/// one outcome this must not leave standing.
-pub fn open_app_from_route(header: &str, _app: &AppHandle) -> Result<Option<String>, String> {
-    let Ok(route) = serde_json::from_str::<serde_json::Value>(header) else {
-        return Ok(None);
-    };
+/// Two of `jarvis_open.py`'s kinds are WINDOWS, not programs: `jarvis` is
+/// Jarvis's own Settings window (with `open_place`), and `brain` (2026-10-31)
+/// is the Brain's own places (`open_brain`: the window itself, History, the
+/// Tutorials). The page opens those through `open_fix_place`; Rust must start
+/// nothing for them. This is the ONE place that decision is made -
+/// [`open_app_from_route`] acts on it and the tests below read it, so "which
+/// kinds start a program" cannot drift between the two chat paths.
+pub fn open_app_target_from_route(header: &str) -> Option<(String, String, bool)> {
+    let route: serde_json::Value = serde_json::from_str(header).ok()?;
     if route.get("quick").and_then(|v| v.as_str()) != Some("open_app") {
-        return Ok(None);
+        return None;
     }
     let kind = route
         .get("open_app_kind")
         .and_then(|v| v.as_str())
         .unwrap_or("");
     let target = route.get("open_app").and_then(|v| v.as_str()).unwrap_or("");
+    if kind.is_empty() || target.is_empty() {
+        return None;
+    }
+    // `jarvis` (the Settings window) and `brain` (the Brain's places): the
+    // app's own windows, opened by the page from this same line - never a
+    // program started here, or each would be opened twice.
+    if kind == "jarvis" || kind == "brain" {
+        return None;
+    }
     let built = route
         .get("open_app_built")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    Some((kind.to_string(), target.to_string(), built))
+}
 
-    // `jarvis`: not a program. main.js's own `openSettingsFromRoute` opens the
-    // Settings window from this same route line, so this returns "nothing to
-    // say" rather than a second, competing door.
-    if kind == "jarvis" {
+/// "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+/// the owner's request of 2026-10-10): opens what the owner named, and answers
+/// with the one plain sentence to show when it could not.
+///
+/// Runs on the `X-Jarvis-Route` header of a fast-path answer, from
+/// [`stream_chat`] and from the HUD's own chat (`hud_proxy.rs`), so nothing
+/// here crosses the IPC boundary and no window needs a grant to start a
+/// program. Only the `app`, `panel` and `other` kinds start anything - the
+/// `jarvis` kind is a door to the Settings window and the `brain` kind a door
+/// to the Brain window and its own places, and the page opens both from the
+/// same header (`main.js openSettingsFromRoute` / `openBrainFromRoute`, and
+/// the HUD's injected bootstrap).
+///
+/// A failure is never silent: it comes back as one plain sentence for the
+/// owner, because the backend has already answered "Opening Notion on this
+/// PC." and a sentence that promised something which did not happen is the
+/// one outcome this must not leave standing.
+pub fn open_app_from_route(header: &str, _app: &AppHandle) -> Result<Option<String>, String> {
+    let Some((kind, target, built)) = open_app_target_from_route(header) else {
         return Ok(None);
-    }
-    if target.is_empty() || kind.is_empty() {
-        return Ok(None);
-    }
+    };
 
-    match crate::open_app::open(kind, target, built) {
+    match crate::open_app::open(&kind, &target, built) {
         Ok(crate::open_app::Opened::Started) => Ok(None),
         Ok(crate::open_app::Opened::NotFound) => Ok(Some(format!(
             "I could not find an app called {} on this PC. Open it once from the \
@@ -7456,6 +7472,72 @@ mod turn_tests {
         assert_eq!(got["quick"], "forget_range");
         let odd = super::route_line_from_header(r#"{"lane": "x", "open_brain": 3}"#).unwrap();
         assert!(!odd.contains("open_brain"), "{odd}");
+    }
+
+    /// "open the second brain" / "open history" / "open tutorials" / "open my
+    /// notes" (2026-10-31): the fast path answers with `open_brain` naming the
+    /// WINDOW place, so the route carries it to the page - and Rust starts
+    /// NOTHING for it, exactly as the `jarvis` kind is the Settings window's
+    /// door and not a program. BITE: make `open_app_target_from_route` return
+    /// the place as a target and `open_app.rs` would look "brain" up on the
+    /// Start menu while the page opened the Brain - two doors, one wrong.
+    #[test]
+    fn a_brain_place_route_is_the_windows_own_door_and_starts_no_program() {
+        for place in ["brain", "history", "tutorials"] {
+            let header = format!(r#"{{"lane":"x","quick":"open_app","open_brain":"{place}"}}"#);
+            let line = super::route_line_from_header(&header).expect("a route line");
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(got["open_brain"], place, "{line}");
+            assert!(got.get("open_app").is_none(), "{line}");
+            assert!(
+                super::open_app_target_from_route(&header).is_none(),
+                "{header} must start no program"
+            );
+        }
+        let jarvis = r#"{"lane":"x","quick":"open_app","open_app_kind":"jarvis","open_place":""}"#;
+        assert!(
+            super::open_app_target_from_route(jarvis).is_none(),
+            "{jarvis}"
+        );
+    }
+
+    /// The kinds that DO start a program answer with exactly what to start;
+    /// nothing else does - a Brain place, a Settings section, the honest
+    /// answer-only sentence, a model answer and wrong types all name no
+    /// program, so no client may start one for them.
+    #[test]
+    fn only_the_program_kinds_are_started_from_a_route() {
+        for (kind, target, built) in [
+            ("app", "notion", false),
+            ("app", "notepad.exe", true),
+            ("panel", "ms-settings:", false),
+            ("other", "explorer.exe", false),
+        ] {
+            let header = format!(
+                r#"{{"lane":"x","quick":"open_app","open_app_kind":"{kind}","open_app":"{target}","open_app_built":{built}}}"#
+            );
+            let got = super::open_app_target_from_route(&header).expect("a program");
+            assert_eq!(got.0, kind);
+            assert_eq!(got.1, target);
+            assert_eq!(got.2, built);
+        }
+        for header in [
+            // A model answer, not the fast path at all.
+            r#"{"lane":"x"}"#,
+            // The honest fallback (2026-10-31): a sentence, no target.
+            r#"{"lane":"x","quick":"open_app"}"#,
+            // The Brain place: a window, not a program.
+            r#"{"lane":"x","quick":"open_app","open_brain":"brain"}"#,
+            // A settings section: a page jump, not a program.
+            r#"{"lane":"x","quick":"settings_open","open_settings":"web-search"}"#,
+            // Wrong types are left out, never guessed.
+            r#"{"lane":"x","quick":"open_app","open_app_kind":7,"open_app":"notion"}"#,
+        ] {
+            assert!(
+                super::open_app_target_from_route(header).is_none(),
+                "{header}"
+            );
+        }
     }
 
     /// Topic controls (2026-09-30): `open_brain: "topics"` opens the picker for

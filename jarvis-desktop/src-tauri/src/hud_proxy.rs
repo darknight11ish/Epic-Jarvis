@@ -340,7 +340,7 @@ pub async fn hud_chat(
     let base = jarvis_base(&app);
     let headers = jarvis_headers(&app)?;
     let outcome = tokio::select! {
-        result = pump(base, headers, payload, &on_event) => result,
+        result = pump(&app, base, headers, payload, &on_event) => result,
         _ = cancel.notified() => Ok(()),
     };
     app.state::<HudChatState>().0.finish(&cancel);
@@ -355,6 +355,7 @@ pub fn hud_chat_cancel(app: AppHandle) {
 }
 
 async fn pump(
+    app: &AppHandle,
     base: String,
     headers: reqwest::header::HeaderMap,
     payload: serde_json::Value,
@@ -367,14 +368,41 @@ async fn pump(
         .send()
         .await
         .map_err(|e| reach_error(&base, &e))?;
+
+    // "open Notion", "open Chrome", "open the calculator" (jarvis_open.py): a
+    // fast-path answer that names a PROGRAM is started HERE, in Rust, exactly
+    // as the Jarvis bar's own chat command starts one for its window
+    // (`commands.rs::open_app_from_route` - the same shared call, so the two
+    // chat paths cannot disagree about it). The HUD page holds no shell
+    // command and no token; this is the half that can open a program. The
+    // `jarvis` (Settings) and `brain` kinds are WINDOWS, and the page's own
+    // route action opens them through `open_fix_place` - the same door its
+    // settings gear already uses - so nothing here may start them twice.
+    let route = header(&response, "X-Jarvis-Route");
+    let open_note = route.as_deref().and_then(|raw| {
+        crate::commands::open_app_from_route(raw, app)
+            .ok()
+            .flatten()
+    });
     send_frame(
         on_event,
         &ChatFrame::Head {
             status: response.status().as_u16(),
             content_type: header(&response, "Content-Type").unwrap_or_default(),
-            route: header(&response, "X-Jarvis-Route"),
+            route: route.clone(),
         },
     )?;
+    // The backend already said it was opening it; when the PC could not, its
+    // one plain sentence is part of the answer the owner reads, exactly as the
+    // bar's stream appends the same note.
+    if let Some(note) = open_note {
+        send_frame(
+            on_event,
+            &ChatFrame::Data {
+                text: format!("{note}\n"),
+            },
+        )?;
+    }
 
     // Whole lines, cut from raw bytes so a character split across two
     // network chunks is never decoded half-way.

@@ -78,6 +78,8 @@ has one exact sentence to reword and the fixed phrases have one to say as-is.
 """
 from __future__ import annotations
 
+import re
+
 from typing import Optional
 
 try:                                    # shipped beside this module
@@ -1119,6 +1121,374 @@ def list_features(words=None) -> dict:
     return explain(words)
 
 
+# ---------------------------------------------------------------------------
+#   "What can you do with <area>?" - the capability overview (2026-10-31)
+# ---------------------------------------------------------------------------
+#
+# THE FIELD-TEST GAP (2026-10-31, pass 9, PART B). Eight questions were asked
+# through the live HUD's own chat box and only two answers were accurate.
+# "what can you do with the calendar?" went to the model, which claimed
+# invitations and availability that do not exist; "what are the smart features
+# of the calendar?" said it was unaware of them; "what can you edit in my
+# notes?" invented adding entries; "can I protect a folder from you?" invented
+# a filesystem-permissions workaround. The owner's own feature list already
+# held the honest answers - these rows, in the words both apps' Features pages
+# show.
+#
+# So a capability question is answered from the rows and NEVER from the
+# model's memory: the area is matched against the rows' own names first (the
+# exact ids and titles, then a group's name), and the matching rows are quoted
+# back with their own title, where, asks and limit. It claims no more than a
+# row says, it says plainly when a thing is not a feature, and when more than
+# a few rows match it names them and asks which one - it never guesses.
+
+CAPABILITY_NOT_A_FEATURE = "That is not one of my features on this PC."
+CAPABILITY_TAIL = ('Open "Everything Jarvis can do" - Brain, Tutorials and the '
+                   "FAQ - to read the whole list.")
+
+#: Words that belong to the QUESTION, not to the area being asked about.
+_CAP_FILLER = frozenset({
+    "what", "which", "who", "whom", "can", "could", "would", "should", "do",
+    "does", "did", "you", "jarvis", "i", "me", "my", "mine", "the", "a", "an",
+    "of", "about", "with", "for", "in", "on", "onto", "into", "from", "to",
+    "is", "are", "was", "were", "there", "your", "yours", "it", "this",
+    "that", "these", "those", "here", "please", "tell", "know", "capable",
+    "able", "ability", "abilities", "describe", "explain", "list", "show",
+    "name", "get", "have", "smart", "feature", "features", "option",
+    "options", "setting", "settings", "something", "anything", "stuff",
+    "things", "thing", "all", "many", "much", "so", "currently", "right",
+    "now",
+})
+#: Asking verbs. A capability question may say what the owner wants to DO
+#: ("what can you edit in my notes?"); the verb is answered from the rows' own
+#: words, never assumed.
+_CAP_VERBS = frozenset({
+    "add", "create", "make", "put", "edit", "change", "delete", "remove",
+    "rename", "see", "view", "read", "check", "find", "search", "open",
+    "use", "set", "track", "schedule", "cancel", "stop", "start", "share",
+    "send", "write", "save", "move", "copy", "update", "protect", "block",
+    "control", "manage",
+})
+#: The words a row may use to show that it supports the asking verb. A match
+#: is a plain substring of the row's own title/what/where/asks/limit, lowered.
+_CAP_VERB_WORDS = {
+    "add": ("add",), "create": ("creat",), "make": ("make", "creat"),
+    "put": ("put", "add"), "edit": ("edit", "change", "rewrit", "modif"),
+    "change": ("change", "edit", "adjust"), "delete": ("delet", "remov"),
+    "remove": ("remov", "delet"), "rename": ("rename", "edit"),
+    "see": ("see", "read", "view", "show"), "view": ("view", "see"),
+    "read": ("read", "see"), "check": ("check", "read", "see"),
+    "find": ("find", "search"), "search": ("search", "find"),
+    "open": ("open",), "use": ("use", "say", "ask", "press", "tap"),
+    "set": ("set", "chang", "turn"), "track": ("track", "watch", "follow"),
+    "schedule": ("schedul", "repeat"),
+    "cancel": ("cancel", "delet", "remov", "stop"), "stop": ("stop", "cancel"),
+    "start": ("start", "open"), "share": ("share", "send"),
+    "send": ("send", "share"), "write": ("writ", "note"), "save": ("sav", "writ"),
+    "move": ("move", "drag"), "copy": ("cop", "duplicat"),
+    "update": ("updat",), "protect": ("protect", "block", "read-only"),
+    "block": ("block", "protect"), "control": ("control", "tap", "press"),
+    "manage": ("manag", "change", "edit"),
+}
+#: More matching rows than this and the answer names them and asks which one.
+_CAP_AMBIGUOUS_LIMIT = 4
+
+#: RULING (d), 2026-10-31 (Gemini, after the overnight wave): common owner words
+#: are mapped to the catalogue rows they mean, so a capability is never falsely
+#: denied because the list uses a different word. "obsidian"/"vault" are the
+#: notes rows, "schedule"/"events"/"appointments" the calendar rows,
+#: "block"/"exclude"/"permissions" the protected-items row, and "send file"/
+#: "download file" the files rows. Each pattern is whole-word, so it cannot
+#: rewrite the middle of another word.
+CAPABILITY_SYNONYMS = (
+    (re.compile(r"\b(?:obsidian|vault|vaults)\b"), "notes"),
+    (re.compile(r"\b(?:schedule|schedules|scheduled|event|events|"
+                r"appointment|appointments)\b"), "calendar"),
+    (re.compile(r"\b(?:block|blocks|blocked|blocking|exclude|excludes|"
+                r"excluded|permission|permissions)\b"), "protected from jarvis"),
+    (re.compile(r"\b(?:send|sending|sent|download|downloads|downloading)"
+                r"\s+(?:a\s+|an\s+|the\s+|my\s+)?files?\b"), "files"),
+)
+
+#: RULING (d): topics the list genuinely does NOT have, so the hard "That is not
+#: one of my features on this PC." sentence is allowed even when another word in
+#: the sentence overlaps a row. Each is a phrase the field test caught the model
+#: inventing; the list has no row for any of them. "permissions" alone is NOT
+#: here - ruling (d) maps it to the Protected from Jarvis row - only the invented
+#: "system permissions"/"filesystem permissions" workaround is.
+CAPABILITY_UNSUPPORTED = (
+    "system permissions",
+    "filesystem permissions",
+    "notification history",
+    "calendar invitations",
+    "invitations",
+    "availability",
+)
+
+
+def _capability_canonical(words) -> tuple:
+    """(the area words with ruling (d)'s synonyms applied, unsupported topic).
+
+    The unsupported topic is returned (and the words left alone) when the
+    question names one of CAPABILITY_UNSUPPORTED; the caller may then use the
+    hard "not one of my features" sentence. Otherwise owner words are mapped to
+    the catalogue's own words before the row lookup.
+
+    Only a REPEATED canonical word is collapsed ("schedule events" is one
+    calendar, not two). An ordinary repeated word is kept: a feature's own
+    title can repeat one ("Picture-in-picture"), and flattening that would stop
+    its title naming its own row.
+    """
+    text = " ".join(_norm(words).split())
+    for phrase in CAPABILITY_UNSUPPORTED:
+        if phrase in text:
+            return text, phrase
+    changed = text
+    for rx, target in CAPABILITY_SYNONYMS:
+        if rx.search(changed):
+            changed = rx.sub(target, changed)
+    out = []
+    for word in changed.split():
+        if out and out[-1] == word:
+            continue
+        out.append(word)
+    return " ".join(out), None
+
+
+def _capability_overlap_rows(words, *, strip_verbs: bool = True) -> list:
+    """Rows whose own prose shares a real word with the question.
+
+    Ruling (d): this is the "catalogue overlap" a hard denial must not ignore.
+    Only words of three letters or more count, and the rows with the most shared
+    words come first (catalogue order breaks ties), up to the same short list an
+    ambiguous answer uses. It never invents: the rows are quoted by the caller.
+    """
+    query = _capability_query(words, strip_verbs=strip_verbs)
+    tokens = {_singular(w) for w in _norm(query).split()
+              if w not in _STOP and len(w) >= 3}
+    if not tokens:
+        return []
+    scored = []
+    for index, row in enumerate(features()):
+        blob = " ".join(str(row.get(key) or "") for key in
+                        ("title", "what", "where", "asks", "limit", "group"))
+        have = {_singular(w) for w in re.findall(r"[a-z0-9]+", blob.lower())}
+        shared = tokens & have
+        if shared:
+            scored.append((len(shared), -index, row))
+    scored.sort(key=lambda item: (-item[0], -item[1]))
+    return [row for _shared, _index, row in scored[:_CAP_AMBIGUOUS_LIMIT]]
+
+
+def _capability_display(words) -> str:
+    """The area as the owner said it, for the answer's own sentences."""
+    parts = _norm(words).split()
+    if parts and parts[0] in ("the", "my", "your", "a", "an"):
+        parts = parts[1:]
+    return " ".join(parts) or "that"
+
+
+def _capability_query(words, *, strip_verbs: bool = True) -> str:
+    """The area words in a capability question - its verbs and filler taken off."""
+    keep = _CAP_FILLER if strip_verbs else (_CAP_FILLER - _CAP_VERBS)
+    return " ".join(w for w in _norm(words).split()
+                    if w not in keep and (not strip_verbs or w not in _CAP_VERBS))
+
+
+def _capability_title_tokens(row: dict) -> tuple:
+    """The row's OWN names: its id and title words (never its prose, never its
+    aliases - an alias belongs to one feature and must not pull a group in)."""
+    return _tokens(row["id"].replace("-", " ")) + _tokens(row["title"])
+
+
+def _capability_rows(words, *, strip_verbs: bool = True) -> list:
+    """The rows whose own names (or whose group's name) match the area words."""
+    rows = features()
+    raw = _norm(str(words or ""))
+    # A row's own TITLE or alias, said exactly, is that row - always. This is
+    # what makes every feature in the list answerable by its own name, even
+    # when its words would otherwise be eaten as filler ("About Jarvis").
+    for row in rows:
+        if raw and (raw == _norm(row["title"])
+                    or any(raw == _norm(alias) for alias in row.get("aliases") or ())):
+            return [row]
+    query = _capability_query(words, strip_verbs=strip_verbs)
+    if not query:
+        # An id made only of filler words ("now", "about") still names its own
+        # row: fall back to the exact id rather than answering "not a feature".
+        for row in rows:
+            if raw and raw == _norm(row["id"].replace("-", " ")):
+                return [row]
+        return []
+    tokens = tuple(sorted({w for w in _singular_all(query).split() if w not in _STOP}))
+    if not tokens:
+        for row in rows:
+            if raw and raw == _norm(row["id"].replace("-", " ")):
+                return [row]
+        return []
+    # A multi-word id said exactly ("phone-notifications") wins over the loose
+    # token hits, which would otherwise answer with a neighbouring feature.
+    if len(raw.split()) >= 2:
+        for row in rows:
+            if raw == _norm(row["id"].replace("-", " ")):
+                return [row]
+    # A feature whose own name is the whole multi-word phrase wins next:
+    # "prompt coach" is one row, and it must not be diluted by the loose title
+    # words of nearby rows.
+    if strip_verbs and len(tokens) >= 2:
+        got = find(" ".join(tokens), loose=True)
+        if got["kind"] == "feature":
+            return [got["row"]]
+        if got["kind"] == "ambiguous":
+            return got["rows"]
+    if strip_verbs and "-" in str(words or ""):
+        got = find(words, loose=False)
+        if got["kind"] == "feature":
+            return [got["row"]]
+    id_hits = [r for r in rows if _contains_all(_tokens(r["id"].replace("-", " ")),
+                                                tokens)]
+    title_hits = [r for r in rows if _contains_all(_tokens(r["title"]), tokens)]
+    hits = id_hits or title_hits
+    groups_hit = []
+    for group in groups():
+        group_words = tuple(w for w in _singular_all(_norm(group["group"])).split()
+                            if w not in _STOP)
+        if _contains_all(group_words, tokens):
+            groups_hit.append(group["group"])
+    if groups_hit:
+        # A word that names a GROUP belongs to the group's rows: "files" is the
+        # Notes and files group's documents row, not the config file's own id
+        # ("settings-file") outside it. The id/title preference still applies
+        # INSIDE the group first.
+        id_in_group = [r for r in id_hits if r["group"] in groups_hit]
+        if id_in_group:
+            return id_in_group
+        title_in_group = [r for r in title_hits if r["group"] in groups_hit]
+        if title_in_group:
+            return title_in_group
+        if not hits:
+            return [r for r in rows if r["group"] in groups_hit]
+    return hits
+
+
+def _singular_all(text: str) -> str:
+    """`_norm`ed words singularised once, for the tokens used in a lookup."""
+    return " ".join(_singular(w) for w in _norm(text).split())
+
+
+#: The suffix forms a verb stem may take in the catalogue's own prose, so the
+#: match is on a WHOLE word's beginning: "adding" is the verb add, "address" is
+#: not (the old plain-substring test called the read-only iCal row an adding
+#: feature because "address" contains "add").
+_VERB_SUFFIX = r"(?:s|e|es|ed|ing|ion|ions|er|ers|ment|ments)?"
+
+
+def _capability_verb_supported(verb: str, rows: list) -> bool:
+    """Does any matching row's own words show it can do this asking verb?"""
+    want = _CAP_VERB_WORDS.get(verb, (verb,))
+    patterns = [re.compile(r"(?<![a-z0-9])" + re.escape(word) + _VERB_SUFFIX
+                           + r"(?![a-z0-9])") for word in want]
+    for row in rows:
+        blob = " ".join(str(row.get(k) or "").lower()
+                        for k in ("title", "what", "where", "asks", "limit"))
+        if any(rx.search(blob) for rx in patterns):
+            return True
+    return False
+
+
+def _capability_row_words(row: dict) -> str:
+    """One row's own facts, in the order the list itself writes them."""
+    bits = [str(row["title"]).strip() + "."]
+    for key, label in (("what", ""), ("where", "Where: "),
+                       ("asks", "Does it ask first? "), ("limit", "The honest limit: ")):
+        value = str(row.get(key) or "").strip()
+        if value:
+            bits.append(label + value)
+    return " ".join(bits)
+
+
+def _capability_rows_words(rows: list, query: str) -> str:
+    head = (f"Here is what my feature list says about {query}:"
+            if query else "Here is what my feature list says:")
+    return head + "\n\n" + "\n\n".join(_capability_row_words(r) for r in rows)
+
+
+def capabilities(words, *, verb: str = "", strip_verbs: bool = True) -> dict:
+    """The owner asked what Jarvis can do with something - answer from the list.
+
+    `words` is the area ("the calendar", "my notes", ...); `verb` is the asking
+    verb when the sentence had one ("edit", "add"). Every sentence in `words`
+    comes from a catalogue row or says a thing is not a feature; nothing is
+    inferred and the model is never involved.
+
+    `strip_verbs=False` keeps a verb that is part of the SUBJECT ("can I
+    protect a folder from you?") - the area must then really be a row's name,
+    or the honest "not one of my features" answer is given.
+    """
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": ("The feature list is not installed on this PC, so I cannot "
+                          "read it. Nothing here was invented.")}
+    verb = str(verb or "").strip().lower()
+    canonical, unsupported = _capability_canonical(words)
+    query = _capability_query(canonical, strip_verbs=strip_verbs)
+    display = _capability_display(canonical)
+    rows = _capability_rows(canonical, strip_verbs=strip_verbs)
+    if not rows and query and not unsupported:
+        got = find(query, loose=True)
+        if got["kind"] == "feature":
+            rows = [got["row"]]
+        elif got["kind"] == "ambiguous":
+            return {"ok": False, "kind": "ambiguous",
+                    "candidates": [{"id": r["id"], "title": r["title"]}
+                                   for r in got["rows"]],
+                    "words": _ambiguous_words(got["rows"]) + " " + CAPABILITY_TAIL}
+    if not rows:
+        # RULING (d), 2026-10-31: the hard sentence is for NO catalogue overlap
+        # or a known unsupported topic only. When the question shares real words
+        # with the list, quote the nearest rows and point at the whole list
+        # instead - a capability must never be falsely denied because a synonym
+        # or a phrase was not an exact row name.
+        if not unsupported:
+            nearest = _capability_overlap_rows(canonical, strip_verbs=strip_verbs)
+            if nearest:
+                return {"ok": True, "kind": "rows",
+                        "features": [{"id": r["id"], "title": r["title"]}
+                                     for r in nearest],
+                        "words": _capability_rows_words(nearest, display)
+                        + " " + CAPABILITY_TAIL}
+        return {"ok": False, "kind": "unknown",
+                "words": CAPABILITY_NOT_A_FEATURE + " " + CAPABILITY_TAIL}
+    # An asking verb narrows an area to the rows that really do it: "what can
+    # you edit in my notes?" is the notes editor, not every note feature. When
+    # no matching row shows the verb, the rows stay as they are and the answer
+    # says plainly that the ability is not there.
+    if verb:
+        supporting = [r for r in rows if _capability_verb_supported(verb, [r])]
+        if supporting:
+            rows = supporting
+    supported = not verb or _capability_verb_supported(verb, rows)
+    if verb and not supported:
+        # RULING (d): this is not a denial of the feature (the rows above ARE
+        # in the list) - it says the list has no such asking verb for them, in
+        # the list's own words, and still points at the whole list.
+        head = (f"My feature list has no {verb} for your {display} - here is "
+                f"what it does say about it.")
+        body = _capability_rows_words(rows, display)
+        return {"ok": False, "kind": "not_feature",
+                "features": [{"id": r["id"], "title": r["title"]} for r in rows],
+                "words": head + "\n\n" + body + " " + CAPABILITY_TAIL}
+    if len(rows) > _CAP_AMBIGUOUS_LIMIT:
+        return {"ok": False, "kind": "ambiguous",
+                "candidates": [{"id": r["id"], "title": r["title"]}
+                               for r in rows[:_CAP_AMBIGUOUS_LIMIT]],
+                "words": _ambiguous_words(rows[:_CAP_AMBIGUOUS_LIMIT])
+                + " " + CAPABILITY_TAIL}
+    return {"ok": True, "kind": "rows",
+            "features": [{"id": r["id"], "title": r["title"]} for r in rows],
+            "words": _capability_rows_words(rows, display) + " " + CAPABILITY_TAIL}
+
+
 # --------------------------------------------------------------------------
 #   "Is it on?": a feature, or a plain setting the registry already names
 # --------------------------------------------------------------------------
@@ -1359,6 +1729,11 @@ NO_COMMAND_REASON = {
     "typing": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "talk-button": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "voice-training": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # Added with the two 2026-10-31 rows: the notes editor and Protected from
+    # Jarvis are abilities/read-write actions, not stored settings with a switch
+    # of their own. Their cards and Settings row carry the real rules.
+    "notes-editor": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    "protected-items": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "voice-check": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "interrupt": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "live": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
@@ -1721,16 +2096,34 @@ def _quick_intent(phrase: str) -> Optional[str]:
     return got.name if got is not None else None
 
 
+#: Ruling (c), 2026-10-31 (Gemini, after the overnight wave): a feature row may
+#: carry BOTH its Settings-registry SECTION id ("protection") and its Settings
+#: MENU id ("settings.protection"). They are different facts - the section is
+#: the surface the row OWNS, the menu id is where it opens - and the row that
+#: does this is the list itself, not a stored setting living inside the section.
+#: Folding that section into `sections` here would derive status "open-only" and
+#: flip the owner's five-label row to Settings-Only, which the owner's decision
+#: of 2026-10-22 reserves for accounts and restore-backup. So for the named row
+#: the section is NOT folded in: its covers still name both ids, its label stays
+#: Command-Only. Kept as an explicit, dated map rather than a heuristic.
+SETTINGS_ROW_IDS = {"protected-items": "protection"}
+
+
 def _sections_in(row: dict) -> list:
     R = _registry_module()
     if R is None:
         return []
+    row_id = str((row or {}).get("id") or "")
+    owned_section = SETTINGS_ROW_IDS.get(row_id)
     out = []
     for cover in row.get("covers") or ():
         text = str(cover or "")
         if not text.startswith("settings."):
             continue
         sid = text.split("settings.", 1)[1]
+        if sid == owned_section:
+            # The row OWNS this section (ruling (c)); it is not a setting in it.
+            continue
         if R.section_by_id(sid) is not None and sid not in out:
             out.append(sid)
     return out

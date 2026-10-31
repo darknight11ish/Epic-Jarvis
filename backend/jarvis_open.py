@@ -92,12 +92,24 @@ class Opened:
       "panel"    - a Windows panel. `target` is its `ms-settings:` address.
       "jarvis"   - Jarvis's own Settings window. `target` is a settings.html
                    section id, or "" for the top of the window.
+      "brain"    - one of Jarvis's own windows an "open ..." sentence may name
+                   (2026-10-31, the owner's HUD report): "open the second
+                   brain", "open history", "open tutorials", "open my notes".
+                   `target` is the place the desktop already opens: "brain"
+                   (the window), "history" or "tutorials". Nothing new is
+                   opened from here - the same `open_fix_place` command the
+                   Settings gear and "Earlier chats" already use is the door.
       "other"    - a Windows shell target that is not an app or a panel:
                    File Explorer, the Control Panel. `target` is the command.
       "refused"  - the words asked for more than one thing, or for a command
                    to be run, so NOTHING is named and nothing is opened. `said`
                    is the one sentence to answer with, and no client has
                    anything to act on (D4, the live campaign of 2026-10-25).
+      "answer"   - the answer IS the sentence and nothing is opened (the
+                   honest fallback, 2026-10-31): used when the words name a
+                   place this PC has no route to ("open settings, sound" - no
+                   such Jarvis section). No client is told to open anything, so
+                   no sentence can claim an opening that will not happen.
     built:
       True when `target` is already a program the shell can start by itself
       (a name from `BUILT_IN`, an explorer/control command), so the desktop
@@ -466,6 +478,71 @@ def _applied(what: str) -> Opened:
     return Opened("app", what, False, what)
 
 
+#: THE IN-APP PLACES AN "OPEN ..." SENTENCE MAY NAME (2026-10-31, the owner's
+#: HUD field report: "open the second brain" was answered as a PROGRAM called
+#: "second brain", and nothing opened). ONE table, here, because this module is
+#: the one place that decides what the owner's words name - jarvis_quick.py's
+#: `_open` only asks it, and both apps read the answer off one route field.
+#:
+#: The values are the `open_brain` places the desktop ALREADY opens
+#: (`main.js` openBrainFromRoute, the HUD's injected bootstrap, and Rust's
+#: `plain_errors::open_fix_place`, which accepts "brain", "history" and
+#: "tutorials"). Nothing new is started and no new window is added: these are
+#: the app's own windows, reached by the navigation door the Settings gear and
+#: "Earlier chats" already use. A real program named in the owner's words
+#: ("open Notion", "open Chrome") never reaches this table - it only holds
+#: Jarvis's own words.
+_BRAIN_PLACES = {
+    "brain": "brain",
+    "second brain": "brain",
+    "jarvis brain": "brain",
+    "memory": "brain",
+    "memory map": "brain",
+    "memory graph": "brain",
+    "history": "history",
+    "chat history": "history",
+    "earlier chats": "history",
+    "tutorials": "tutorials",
+    "tutorial": "tutorials",
+    "faq": "tutorials",
+}
+
+#: The words for the notes the Brain shows. There is no separate "notes"
+#: place to open (the Brain's Notes plate is not a routable place), so these
+#: open the Brain window - which is true and does happen - and the answer says
+#: where the notes are inside it. Never "Opening your notes" when no notes
+#: view is opened.
+_NOTES_WORDS = frozenset({"notes", "documents", "my notes", "my documents"})
+_NOTES_NOTE = "Your notes are in the Brain window, under Notes."
+
+
+def _settings_section_words(key: str) -> Optional[str]:
+    """The section words in "settings, <section>" / "jarvis settings, <section>".
+
+    The owner's own shape for a section jump (2026-10-31): "open settings,
+    sound" and "open Jarvis settings, web search". The words after the comma
+    are handed to the SAME registry lookup every other section phrase uses
+    (`_section_for`), so a section that does not exist gets an honest sentence
+    rather than an app called "settings, sound".
+
+    None when the sentence is not this shape at all. `""` never comes back: a
+    bare "open settings" is the whole window and is matched before this.
+    """
+    for lead in ("jarvis settings", "settings"):
+        if not key.startswith(lead):
+            continue
+        rest = key[len(lead):]
+        if rest[:1] in (",",):
+            rest = rest[1:].strip()
+        elif rest[:1] == " ":
+            rest = rest.strip()
+        else:
+            continue              # "settings app" / "settingsx": not this shape
+        if rest:
+            return rest
+    return None
+
+
 def _resolve_unprotected(name: str, is_jarvis: bool = False) -> object:
     """What to open for `name`, or a `Choice` when Jarvis must not guess.
 
@@ -514,6 +591,17 @@ def _resolve_unprotected(name: str, is_jarvis: bool = False) -> object:
     if program is not None:
         return Opened("app", program, True, key)
 
+    # Jarvis's own windows and places (2026-10-31): "open the second brain",
+    # "open history", "open tutorials", "open my notes". Checked after the
+    # tables above, so no Windows panel, shell target or accessory named with
+    # the same word can be taken from it; checked before the app fallback, so
+    # these are never looked up as programs on the Start menu.
+    place = _BRAIN_PLACES.get(key)
+    if place is not None:
+        return Opened("brain", place, True, key)
+    if key in _NOTES_WORDS:
+        return Opened("brain", "brain", True, key, _NOTES_NOTE)
+
     # "open the settings app" / "the display settings screen": take one
     # trailing kind-noun off and try all of the above again, in the same
     # order, so the bare "open settings" keeps meaning Jarvis's window here
@@ -541,7 +629,27 @@ def _resolve_unprotected(name: str, is_jarvis: bool = False) -> object:
         program = BUILT_IN.get(bare)
         if program is not None:
             return Opened("app", program, True, bare)
+        place = _BRAIN_PLACES.get(bare)
+        if place is not None:
+            return Opened("brain", place, True, bare)
+        if bare in _NOTES_WORDS:
+            return Opened("brain", "brain", True, bare, _NOTES_NOTE)
         key = bare
+
+    # "open settings, <section>" / "open Jarvis settings, <section>" (2026-10-31):
+    # the owner naming a section by hand. The words after the comma go through
+    # the same registry lookup as every other section phrase; a section that
+    # does not exist is answered honestly instead of becoming an app called
+    # "settings, sound".
+    section_words = _settings_section_words(key)
+    if section_words is not None:
+        section = _section_for(section_words)
+        if section is None:
+            return Opened(
+                "answer", "", False,
+                f'There is no Jarvis Settings section called "{section_words}", so '
+                f'nothing was opened. Say "open settings" to open it at the top.')
+        return Opened("jarvis", section, True, section_words)
 
     # Anything else is an app by name, resolved on the PC itself - unless the
     # words name one of Jarvis's own Settings sections ("open web search",
@@ -624,6 +732,14 @@ def words(opened: Opened, *, this_pc: bool = True, can_open: bool = True) -> str
     only made where it can be kept:
       * nothing at all for a REFUSED sentence (`kind == "refused"`) - that
         answer is the refusal's own words, and no client is told to act;
+      * `said` alone for a sentence that only ever ANSWERS (`kind ==
+        "answer"`): it names a place this PC has no door to, so it promises
+        nothing and no client is told to open anything;
+      * "Opening the Brain ..." for one of Jarvis's own windows (`kind ==
+        "brain"`, 2026-10-31): the app that asked owns that window and opens
+        it through the door it already has (`open_fix_place`), so this is the
+        same kept promise as "Opening Jarvis settings on this PC." A `note`
+        (the notes words) says where inside the window to look;
       * `ON_PC` when the request did not come from this PC, for every kind
         that is opened by an app on the PC;
       * "Opening <X> on this PC." only for a target the BACKEND named itself
@@ -637,6 +753,17 @@ def words(opened: Opened, *, this_pc: bool = True, can_open: bool = True) -> str
     """
     if opened.kind == "refused":
         return opened.said
+    if opened.kind == "answer":
+        return opened.said
+    if opened.kind == "brain":
+        if not this_pc:
+            return ON_PC
+        what = {"brain": "the Brain",
+                "history": "your earlier chats",
+                "tutorials": "the tutorials and the FAQ"}.get(opened.target,
+                                                               "the Brain")
+        line = f"Opening {what} on this PC."
+        return f"{line} {opened.note}" if opened.note else line
     if opened.kind == "jarvis":
         if not this_pc:
             return ON_PC

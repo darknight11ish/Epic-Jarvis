@@ -26,6 +26,19 @@ module starts nothing at all - see its own docstring). What it proves:
    field X-Jarvis-Route needs - including the empty `open_place` that means
    "the top of the Settings window", which an empty string would otherwise
    drop on the floor.
+6. Jarvis's OWN windows (2026-10-31, the owner's HUD field report): "open the
+   second brain" / "open brain" / "open memory" / "open the memory map" open
+   the Brain window; "open history" / "open earlier chats" open it on
+   History; "open tutorials" / "open the FAQ" on Tutorials; "open my notes" /
+   "open notes" / "open documents" open the Brain and say where the notes
+   are. They ride on the route's EXISTING `open_brain` field - the same door
+   main.js's `openBrainFromRoute` and plain_errors.rs's `open_fix_place`
+   already use - so no new field, route or command is added. "open settings,
+   <section>" / "open Jarvis settings, <section>" jump Settings on that
+   section (the registry's own ids), and a section that does not exist is
+   answered honestly with NO route field ("open settings, sound"). The
+   program path ("open Notion", "open Chrome", "open the calculator"),
+   the refusals, and "open my calendar" are held unchanged.
 """
 from __future__ import annotations
 
@@ -371,6 +384,170 @@ def t_never_opening_when_nothing_can_be_opened():
     ref = Q.run(Q.match("run a command shell and show me ipconfig"), None, 0.0)
     check("a refusal is the same wherever it was asked from",
           ref.reply == O.SHELL_REFUSED)
+
+
+# --------------------------------------------------------------------------
+#   Jarvis's own windows and places (2026-10-31, the owner's HUD report)
+# --------------------------------------------------------------------------
+
+#: The phrases the owner typed in the HUD, and the ONE `open_brain` place each
+#: must produce. Values are the places plain_errors.rs::open_fix_place already
+#: opens ("brain", "history", "tutorials") - no new window and no new field.
+BRAIN_SENTENCES = [
+    ("open the second brain", "brain"),
+    ("open brain", "brain"),
+    ("open memory", "brain"),
+    ("open the memory map", "brain"),
+    ("open the memory graph", "brain"),
+    ("open my memory", "brain"),
+    ("open history", "history"),
+    ("open chat history", "history"),
+    ("open earlier chats", "history"),
+    ("open my earlier chats", "history"),
+    ("open tutorials", "tutorials"),
+    ("open the tutorial", "tutorials"),
+    ("open the FAQ", "tutorials"),
+]
+
+BRAIN_WORDS = {
+    "brain": "Opening the Brain on this PC.",
+    "history": "Opening your earlier chats on this PC.",
+    "tutorials": "Opening the tutorials and the FAQ on this PC.",
+}
+
+
+def t_the_brain_window_and_its_places_are_named_as_jarvis_windows():
+    # THE BUG (measured through the running HUD, 2026-10-31): every one of
+    # these was answered as a PROGRAM called the words, "I have asked this PC
+    # to open brain." - and nothing opened. They are Jarvis's own windows.
+    for said, place in BRAIN_SENTENCES:
+        got = where(said)
+        check(f"{said!r} is the Brain's {place!r} place, not an app",
+              got is not None and got[:2] == ("brain", place), got)
+    for said, place in BRAIN_SENTENCES:
+        reply = O.words(O.resolve(O.parse(said)[0], O.parse(said)[1]))
+        check(f"{said!r} says which window opens",
+              reply == BRAIN_WORDS[place], reply)
+        check(f"...and never asks this PC to look a program up ('asked ... to open')",
+              "asked this PC to open" not in reply, reply)
+
+    # The notes words: there is no separate notes place to open, so they open
+    # the Brain (true, and it happens) and the answer says where the notes
+    # are inside it - never "Opening your notes" when no notes view opens.
+    for said in ("open my notes", "open notes", "open documents"):
+        got = where(said)
+        check(f"{said!r} opens the Brain, not a program called notes",
+              got is not None and got[:2] == ("brain", "brain"), got)
+        reply = O.words(O.resolve(O.parse(said)[0], O.parse(said)[1]))
+        check(f"{said!r} says where the notes are",
+              reply.startswith("Opening the Brain on this PC.")
+              and "notes are in the Brain window" in reply, reply)
+
+
+def t_the_route_carries_the_brain_place_the_apps_already_open():
+    def route(said):
+        return Q.route_fields(Q.run(Q.match(said), None, 0.0))
+
+    for said, place in BRAIN_SENTENCES:
+        r = route(said)
+        check(f"{said!r} carries open_brain={place!r}", r.get("open_brain") == place, r)
+        check(f"...and NO open_app: it is a window, not a program",
+              "open_app" not in r and "open_app_kind" not in r, r)
+        check(f"...and no Settings field either", "open_place" not in r, r)
+
+    r = route("open my notes")
+    check("the notes words ride on the same open_brain field",
+          r.get("open_brain") == "brain", r)
+    check("...and the route's own `quick` is the open_app intent",
+          r.get("quick") == "open_app", r)
+
+    # The real /api/chat request shape: the HUD page sends the owner's own
+    # message with provenance "typed", and that is what lets the fast path
+    # answer at all (newest_own_words, which never writes or reads a
+    # schedule). A body with no provenance falls to the model - the measured
+    # split between the live HUD and a hand-made POST, and why the route line
+    # is the thing both are checked through. (`answer_turn` itself needs the
+    # PC's schedule/config, so the pure gate is read here instead.)
+    typed = Q.newest_own_words({"messages": [
+        {"role": "user", "content": "open the second brain",
+         "provenance": "typed"}]})
+    check("a HUD-shaped message (provenance typed) is the owner's own words",
+          typed == "open the second brain", typed)
+    bare = Q.newest_own_words({"messages": [
+        {"role": "user", "content": "open the second brain"}]})
+    check("a message with no provenance still goes to the model, unchanged",
+          bare is None, bare)
+
+    # From the phone: the sentence says it happens on the PC (the phone cannot
+    # open a window), exactly as the program path already does.
+    phone = Q.run(Q.match("open the second brain"), None, 0.0,
+                  peer="100.64.0.9", local="100.64.0.1")
+    check("from the phone, the Brain answer says it happens on the PC",
+          phone.reply == O.ON_PC, phone.reply)
+
+
+def t_settings_section_forms_and_the_honest_no_route_answer():
+    # "open settings, <section>" / "open Jarvis settings, <section>": the
+    # section words go through the registry, so they land on its real id.
+    for said, section in (("open settings, web search", "web-search"),
+                          ("open Jarvis settings, voice", "voice"),
+                          ("open settings, backups", "backup")):
+        got = where(said)
+        check(f"{said!r} jumps Settings to {section!r}",
+              got is not None and got[:2] == ("jarvis", section), got)
+        r = Q.route_fields(Q.run(Q.match(said), None, 0.0))
+        check(f"{said!r} carries the jarvis kind and the section id",
+              r.get("open_app_kind") == "jarvis" and r.get("open_place") == section, r)
+        check(f"...and no open_app, because the place field carries it",
+              "open_app" not in r, r)
+    jump = Q.route_fields(Q.run(Q.match("open web search"), None, 0.0))
+    check("the registry's own section matcher is still a settings jump",
+          jump.get("open_settings") == "web-search", jump)
+
+    # A section that does not exist is answered honestly - NO route field, so
+    # no client may claim it opened anything (the owner's rule: never claim
+    # an opening that does not happen).
+    for said in ("open settings, sound", "open Jarvis settings, door"):
+        got = where(said)
+        check(f"{said!r} is only an answer, not a place",
+              got is not None and got[0] == "answer", got)
+        reply = Q.run(Q.match(said), None, 0.0).reply
+        check(f"{said!r} says nothing was opened",
+              "nothing was opened" in reply and "Opening" not in reply, reply)
+        r = Q.route_fields(Q.run(Q.match(said), None, 0.0))
+        for key in ("open_app", "open_app_kind", "open_place", "open_settings",
+                    "open_brain"):
+            check(f"{said!r} carries no {key}", key not in r, r)
+
+
+def t_the_program_path_refusals_and_calendar_are_unchanged():
+    # The program path stays for real programs (the owner's item 5): the
+    # capture above must not have taken one of them.
+    for said, kind, target in (
+            ("open Notion", "app", "notion"),
+            ("open Chrome", "app", "chrome"),
+            ("open the calculator", "app", "calc.exe"),
+            ("open notepad", "app", "notepad.exe"),
+            ("open file explorer", "other", "explorer.exe")):
+        got = where(said)
+        check(f"{said!r} is still {kind} {target!r}",
+              got is not None and got[:2] == (kind, target), got)
+    check("a program named in the owner's words is still asked for, not promised",
+          Q.run(Q.match("open Notion"), None, 0.0).reply.startswith(
+              "I have asked this PC to open notion"))
+    check("a command is still refused", where("open a script")[0] == "refused")
+    check("more than one thing is still refused",
+          where("open notepad and type hello")[0] == "refused")
+    check("a name that matches nothing is still not claimed to exist",
+          where("open the door")[:2] == ("app", "door"))
+
+    # "Open my calendar" still opens it: the registry marks the Calendar row
+    # openable=False (its words are the feature's), so it stays an app name -
+    # the pre-existing path, unchanged by this feature.
+    for said in ("open my calendar", "open the calendar"):
+        got = where(said)
+        check(f"{said!r} still takes the pre-existing program path",
+              got is not None and got[:2] == ("app", "calendar"), got)
 
 
 def main():
