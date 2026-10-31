@@ -1632,8 +1632,8 @@ jobs:
           Assert-True ($r.Out -match 'no published desktop installer was found') 'update -Print carried on when that address could not be reached'
           Assert-True ($r.Out -match 'would run|the desktop app cannot be built here') 'update -Print said what it would do about the desktop app'
 
-          # 7. The updater's two decisions, tested by the script that owns them.
-          #    Both were measured wrong on 2026-10-30 and both are now pinned:
+          # 7. The updater's three decisions, tested by the script that owns them.
+          #    All three were measured wrong and are now pinned:
           #
           #    - the release page's reply arrives as BYTES. GitHub serves
           #      latest.json with Content-Type application/octet-stream, so
@@ -1647,13 +1647,18 @@ jobs:
           #      itself), so a folder standing on the release's own commit -
           #      what a pull leaves whenever the release is current - rebuilt
           #      instead of installing the release that is exactly that code.
+          #    - a folder standing on that same commit with UNCOMMITTED work was
+          #      read as "same" too (DEF-020), so the signed release replaced the
+          #      work silently; the answer is now "dirty", which builds.
           #
           #    scripts\test-update-jarvis.ps1 lifts the functions out of the
           #    script AS IT IS WRITTEN and asserts the reply in both shapes, the
-          #    download route, and the four ancestry answers (same / release-ahead
-          #    / local-ahead / unknown) against a real throwaway repository. It
-          #    runs here in 5.1, like the rest of this job, and it touches no
-          #    network, no app and no backend.
+          #    download route, and the five ancestry answers (same / release-ahead
+          #    / local-ahead / dirty / unknown) against a real throwaway
+          #    repository - "dirty" is DEF-020: standing on the release's own
+          #    commit with uncommitted work must build, not install, so the work
+          #    is never silently replaced. It runs here in 5.1, like the rest of
+          #    this job, and it touches no network, no app and no backend.
           $testUpdate = Join-Path $tmp 'scripts\test-update-jarvis.ps1'
           if (-not (Test-Path -LiteralPath $testUpdate)) { throw "scripts\test-update-jarvis.ps1 is missing" }
           $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $testUpdate, '-Script', $update)

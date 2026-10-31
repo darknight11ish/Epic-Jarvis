@@ -27,10 +27,13 @@
        which included the case where the release commit IS HEAD - and its
        caller read TRUE as "build from source". So a folder standing on the
        release's own commit rebuilt instead of installing the signed release
-       that is that exact code. `Get-LocalVsRelease` answers four ways instead,
+       that is that exact code. `Get-LocalVsRelease` answers five ways instead,
        and every one is asserted below against a real throwaway git repository:
        same, release-ahead, local-ahead (the newer local build that must not be
-       downgraded) and unknown (unrelated histories, or no git at all).
+       downgraded), dirty (standing on the release's commit with uncommitted
+       work on top of it, which a build from this folder would include and the
+       release would silently replace; DEF-020, 2026-10-31) and unknown
+       (unrelated histories, or no git at all).
 
 .PARAMETER Script
   The updater to test. Defaults to update-jarvis.ps1 beside this file. Point it
@@ -227,6 +230,14 @@ if ($ancestry) {
     Assert-That $false 'the updater has Get-LocalVsRelease (it can tell "same" from "moved past")' 'not run: the function is missing - this IS the old defect, where an equal release commit was read as "build from source"'
 }
 
+# DEF-020: the "dirty" answer is only worth anything if the CALLER acts on it,
+# says why, and leaves untracked files alone. Pinned as source, because the
+# answer is computed by the lifted function above and used by top-level code
+# that cannot be lifted without running an update.
+Assert-That ($text -match '\$where -eq ''dirty''') 'the updater builds on the new "dirty" answer'
+Assert-That ($text -match 'has uncommitted') 'the updater says why a dirty folder is built instead'
+Assert-That ($text -match 'status --porcelain --untracked-files=no') 'the dirty check leaves untracked files out on purpose'
+
 function Assert-Placement {
     param($Repo, $Commit, [string] $Want, [string] $What)
     if (-not $script:HaveAncestry) {
@@ -270,21 +281,41 @@ try {
     if ((@(Invoke-Git $repo @('rev-parse', 'HEAD'))[0]) -ne $second) { throw 'the test repository did not go back to its second commit' }
 
     # A commit in this repository from an UNRELATED history: its objects are
-    # here, but it shares no ancestor with HEAD.
-    $other = Join-Path $root 'other'
-    New-Item -ItemType Directory -Force -Path $other | Out-Null
-    [void](Invoke-Git $other @('init', '-q'))
-    Set-Content -LiteralPath (Join-Path $other 'x.txt') -Value 'unrelated'
-    [void](Invoke-Git $other @('add', '-A'))
-    [void](Invoke-Git $other ($ident + @('commit', '-qm', 'unrelated')))
-    [void](Invoke-Git $other @('checkout', '-q', '-b', 'topic'))
-    [void](Invoke-Git $repo @('fetch', '--no-tags', '--quiet', $other, 'topic'))
-    $unrelated = @(Invoke-Git $repo @('rev-parse', 'FETCH_HEAD'))[0]
+    # here, but it shares no ancestor with HEAD. Made as an ORPHAN branch in
+    # this repository rather than fetched from a second one: it is the same
+    # shape and needs no second repository - a local `git fetch` runs
+    # git-upload-pack through sh, which a restricted desk can refuse (Win32
+    # error 5, "couldn't create signal pipe"), and this test must run at the
+    # desk as well as in CI.
+    [void](Invoke-Git $repo @('checkout', '-q', '--orphan', 'unrelated'))
+    Set-Content -LiteralPath (Join-Path $repo 'x.txt') -Value 'unrelated'
+    [void](Invoke-Git $repo @('add', '-A'))
+    [void](Invoke-Git $repo ($ident + @('commit', '-qm', 'unrelated')))
+    $unrelated = @(Invoke-Git $repo @('rev-parse', 'HEAD'))[0]
+    [void](Invoke-Git $repo @('checkout', '-q', $base))
 
     $notARepo = Join-Path $root 'not-a-repo'
     New-Item -ItemType Directory -Force -Path $notARepo | Out-Null
 
     Assert-Placement $repo $second 'same' 'a release commit that IS HEAD: use the signed release (no rebuild)'
+
+    # DEF-020 (fixed 2026-10-31): the COMMIT being equal is not the FILES being
+    # equal. A tracked file changed but not committed means a build from this
+    # folder is not the released code, and installing the release over it would
+    # silently replace the work - so it must build, not install.
+    Set-Content -LiteralPath (Join-Path $repo 'a.txt') -Value 'uncommitted newer work'
+    Assert-Placement $repo $second 'dirty' 'a folder standing on the release commit with uncommitted work: build, do not replace it'
+    [void](Invoke-Git $repo @('add', 'a.txt'))
+    Assert-Placement $repo $second 'dirty' '... and a change that is only staged still counts'
+    [void](Invoke-Git $repo (@('reset', '-q', '--hard', 'HEAD')))
+    # Untracked files are build output and scratch, and a build does not ship
+    # them: --untracked-files=no means one alone leaves the folder AT the
+    # release, so the signed release is still the right route.
+    Set-Content -LiteralPath (Join-Path $repo 'build-output.tmp') -Value 'scratch'
+    Assert-Placement $repo $second 'same' '... while an untracked file alone does not count (it is not in the build)'
+    Remove-Item -LiteralPath (Join-Path $repo 'build-output.tmp') -Force
+    Assert-Placement $repo $second 'same' 'the release commit with nothing changed is the release again'
+
     Assert-Placement $repo $first 'local-ahead' 'a release commit this folder has moved past: keep the local build, do not downgrade'
     Assert-Placement $repo $side 'release-ahead' 'a release commit on a branch this folder is not on: update from the release'
     Assert-Placement $repo '0123456789abcdef0123456789abcdef01234567' 'release-ahead' 'a release commit this folder has never seen: update from the release'
