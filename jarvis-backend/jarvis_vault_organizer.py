@@ -376,6 +376,8 @@ def request_enabled(on, *, gate: Optional[Callable] = None,
     if enabled():
         return 200, {"ok": True, "enabled": True, "waiting": False,
                      "message": SWITCH_ALREADY_WORDS}
+    # A marker left by a card the gate no longer has must not block a new one.
+    _reconcile_pending()
     with _SWITCH:
         with _P_LOCK:
             if _PENDING:
@@ -402,7 +404,109 @@ def _finish_result(pid: str, code: int, why: str) -> tuple:
                   "error": why}
 
 
+#: The gate's own approval timeout, read only as a conservative fallback for a
+#: gate that cannot list its waiting cards. 180 s is the gate's shipped default.
+def _approval_timeout() -> float:
+    try:
+        import jarvis_gate as G
+        value = getattr(G, "APPROVAL_TIMEOUT", None)
+        return float(value) if value is not None else 180.0
+    except Exception:                                     # noqa: BLE001
+        return 180.0
+
+
+def _gate_pending_rows():
+    """The gate's waiting rows, or None when this gate cannot list them.
+
+    `None` is different from `[]`: it means "cannot reconcile, use the timeout
+    fallback", never "no card is waiting".
+    """
+    try:
+        import jarvis_gate as G
+        fn = getattr(G, "pending", None)
+        if not callable(fn):
+            return None
+        rows = fn()
+        return rows if isinstance(rows, list) else None
+    except Exception:                                     # noqa: BLE001
+        return None
+
+
+def _switch_card_waiting(rows: list) -> bool:
+    """Is one of the gate's waiting rows THIS organizer's switch card?
+
+    The module's own `_PENDING["id"]` is its private card id, not the gate's
+    approval id, so the two cannot be compared directly. Match the gate row by
+    the action the switch uses and the prompt/setting it sends instead.
+    """
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("action") or "") != SWITCH_ACTION:
+            continue
+        prompt = str(row.get("prompt") or "")
+        detail = row.get("detail")
+        if isinstance(detail, str):
+            try:
+                detail = json.loads(detail)
+            except Exception:                             # noqa: BLE001
+                detail = {}
+        setting = str((detail or {}).get("setting") or "") \
+            if isinstance(detail, dict) else ""
+        if prompt == SWITCH_CARD or setting == "vault_organizer_enabled":
+            # The gate's own expiry bounds the marker even when a row lingers:
+            # a matching card with no time left is not a card to wait for.
+            if "expires_in" in row:
+                try:
+                    if float(row.get("expires_in") or 0) <= 0:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            return True
+    return False
+
+
+def _reconcile_pending() -> bool:
+    """Clear a switch card that no longer exists in the gate.
+
+    THE STALE-PENDING BUG (measured live 2026-10-31): a turn-on card whose
+    window was dismissed or whose approval timed out left `_PENDING` saying a
+    card was waiting while `/api/pending` showed none. Later turn-ons then said
+    "one card is already waiting" and never raised a new one. This reconciles
+    the in-memory marker with the gate's real waiting rows before any read or
+    turn-on; when the gate cannot list its rows, the gate's own timeout bounds
+    the marker instead. Returns True when a stale marker was cleared.
+    """
+    with _P_LOCK:
+        pid = str(_PENDING.get("id") or "")
+        since = float(_PENDING.get("since") or 0.0)
+    if not pid:
+        return False
+    rows = _gate_pending_rows()
+    if rows is not None:
+        if _switch_card_waiting(rows):
+            return False
+    else:
+        timeout = _approval_timeout()
+        if not since or (time.time() - since) < timeout:
+            return False
+    with _P_LOCK:
+        if _PENDING.get("id") != pid:
+            return False
+        _PENDING.clear()
+        _WITHDRAWN.pop(pid, None)
+        _LAST_CARD.clear()
+        _LAST_CARD.update(
+            outcome="timed_out", at=time.time(),
+            why="the approval card is no longer waiting (it expired or was "
+                "dismissed), so it stays off",
+            message=SWITCH_LAST_WORDS.get("timed_out", ""))
+    _audit("vault_organizer.switch.stale_pending", {"outcome": "timed_out"})
+    return True
+
+
 def switch_status() -> dict:
+    _reconcile_pending()
     with _P_LOCK:
         pending = dict(_PENDING)
         last = dict(_LAST_CARD)
