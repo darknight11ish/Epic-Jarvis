@@ -159,7 +159,7 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // allow-list it outranks. It has no menu id in the catalogue yet (the
     // backend lane owns the settings-registry row), so the row is always drawn -
     // like "App control" above - and every index below it moved down by one.
-    "protected" to 17,
+    "protection" to 17,
     "backup" to 18,
     "watch-notify" to 19,
     "phone-notify" to 20,
@@ -700,7 +700,7 @@ fun SettingsScreen(
             // lists it and can ASK for one entry to be removed (one approval card,
             // never decided here); the pickers are on the PC. No menu id in the
             // catalogue yet, so it is always drawn, like "App control" above.
-            if (drawn("protected")) item(key = "protected") { ProtectedSection(canAct = canAct) }
+            if (drawn("protection")) item(key = "protection") { ProtectedSection(canAct = canAct) }
             if (menus.shows("settings.backup")) if (drawn("backup")) if (menus.shows("settings.backup")) item(key = "backup") { MenuFrame(menus, "settings.backup") { BackupSection(canAct = canAct) } }
             if (menus.shows("settings.watch-notify")) if (drawn("watch-notify")) if (menus.shows("settings.watch-notify")) item(key = "watch-notify") { MenuFrame(menus, "settings.watch-notify") { WatchNotifySection(canAct = canAct) } }
             if (menus.shows("settings.phone-notify")) if (drawn("phone-notify")) if (menus.shows("settings.phone-notify")) item(key = "phone-notify") {

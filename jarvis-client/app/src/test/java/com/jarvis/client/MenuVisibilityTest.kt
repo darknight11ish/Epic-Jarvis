@@ -464,7 +464,7 @@ class MenuVisibilityTest {
         // registry's own checker requires every registry Section to be a menu,
         // so it now has `settings.calendar` in the catalogue (`hide = false`)
         // and its place is the row itself in MenuPlaces.SETTINGS.
-        // "protected" joined them on 2026-10-31 (ProtectedPlate.kt): the PC's
+        // "protection" joined them on 2026-10-31 (ProtectedPlate.kt): the PC's
         // "Protected from Jarvis" list. Its catalogue menu id belongs to the
         // backend lane's registry change (backend/jarvis_menus.py, which this
         // lane may not touch and whose generated MenuCatalog.kt this lane cannot
@@ -473,7 +473,7 @@ class MenuVisibilityTest {
         // should gain a `menus.shows(...)` guard in the same change.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
-                "protected")
+                "protection")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

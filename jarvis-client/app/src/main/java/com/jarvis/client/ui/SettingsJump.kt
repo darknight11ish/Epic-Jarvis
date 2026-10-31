@@ -72,7 +72,7 @@ object SettingsJump {
         // "Protected from Jarvis" (2026-10-31, .dsh-scratch/PROTECTED-ITEMS-
         // 2026-10-31/CONTRACT.md): the PC's owner-editable list of what Jarvis
         // may not touch, right beside the folder allow-list it outranks.
-        Entry("Protected from Jarvis", "protected"),
+        Entry("Protected from Jarvis", "protection"),
         Entry("Backups", "backup"),
         Entry("Smartwatch notifications", "watch-notify"),
         Entry("Phone notifications", "phone-notify"),

@@ -303,7 +303,7 @@ object SettingsSearch {
             source = JUMP + listOf(PLATES + "FoldersPlate.kt"),
         ),
         Row(
-            key = "protected", title = "Protected from Jarvis",
+            key = "protection", title = "Protected from Jarvis",
             label = "What Jarvis may not touch; blocked; read-only; protected folders, files " +
                 "and programs; remove protection",
             quotes = listOf("Protected from Jarvis"),

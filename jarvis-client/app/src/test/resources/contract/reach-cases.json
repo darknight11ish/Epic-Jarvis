@@ -1260,6 +1260,10 @@
      "name": "Searching your notes"
     },
     {
+     "id": "protect_from_jarvis",
+     "name": "Protecting a folder, file or program from Jarvis (one card each)"
+    },
+    {
      "id": "retirement_whatif",
      "name": "A retirement what-if from numbers you type (shown on screen only)"
     },
