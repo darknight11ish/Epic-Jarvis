@@ -27,13 +27,16 @@
        which included the case where the release commit IS HEAD - and its
        caller read TRUE as "build from source". So a folder standing on the
        release's own commit rebuilt instead of installing the signed release
-       that is that exact code. `Get-LocalVsRelease` answers five ways instead,
+       that is that exact code. `Get-LocalVsRelease` answers six ways instead,
        and every one is asserted below against a real throwaway git repository:
-       same, release-ahead, local-ahead (the newer local build that must not be
-       downgraded), dirty (standing on the release's commit with uncommitted
-       work on top of it, which a build from this folder would include and the
-       release would silently replace; DEF-020, 2026-10-31) and unknown
-       (unrelated histories, or no git at all).
+       same, release-ahead (a clean folder behind the release - the ordinary
+       update path), release-ahead-dirty (behind the release WITH uncommitted
+       work, which installing would replace), local-ahead (the newer local
+       build that must not be downgraded), dirty (standing on the release's
+       commit with uncommitted work on top of it) and unknown (unrelated
+       histories, or no git at all). Both dirty answers are DEF-020
+       (2026-10-31): one shape - a release installed over uncommitted work -
+       fixed on both branches it can happen on.
 
 .PARAMETER Script
   The updater to test. Defaults to update-jarvis.ps1 beside this file. Point it
@@ -237,6 +240,10 @@ if ($ancestry) {
 Assert-That ($text -match '\$where -eq ''dirty''') 'the updater builds on the new "dirty" answer'
 Assert-That ($text -match 'has uncommitted') 'the updater says why a dirty folder is built instead'
 Assert-That ($text -match 'status --porcelain --untracked-files=no') 'the dirty check leaves untracked files out on purpose'
+# ...and the SAME shape from the other branch: behind the release with
+# uncommitted work builds too, and the caller says so in this shape's words.
+Assert-That ($text -match '\$where -eq ''release-ahead-dirty''') 'the updater builds on the new "release-ahead-dirty" answer'
+Assert-That ($text -match 'behind the released code') 'the updater says why a dirty folder BEHIND the release is built instead'
 
 function Assert-Placement {
     param($Repo, $Commit, [string] $Want, [string] $What)
@@ -317,6 +324,25 @@ try {
     Assert-Placement $repo $second 'same' 'the release commit with nothing changed is the release again'
 
     Assert-Placement $repo $first 'local-ahead' 'a release commit this folder has moved past: keep the local build, do not downgrade'
+
+    # DEF-020's OTHER HALF (fixed on the same branch): the same data-loss shape
+    # one branch over. A folder BEHIND the release is the ordinary update case
+    # and installs the release - but only while the folder is clean. With
+    # uncommitted work on it the release would replace that work, so it must
+    # build instead, exactly like the equal-commit case above.
+    [void](Invoke-Git $repo @('checkout', '-q', '--detach', $first))
+    Assert-Placement $repo $second 'release-ahead' 'a CLEAN folder behind the release: install it (the ordinary update path, unchanged)'
+    Set-Content -LiteralPath (Join-Path $repo 'a.txt') -Value 'uncommitted newer work'
+    Assert-Placement $repo $second 'release-ahead-dirty' 'a folder behind the release with uncommitted work: build, do not install over it'
+    [void](Invoke-Git $repo @('add', 'a.txt'))
+    Assert-Placement $repo $second 'release-ahead-dirty' '... and a change that is only staged still counts'
+    [void](Invoke-Git $repo (@('reset', '-q', '--hard', 'HEAD')))
+    Set-Content -LiteralPath (Join-Path $repo 'build-output.tmp') -Value 'scratch'
+    Assert-Placement $repo $second 'release-ahead' '... while an untracked file alone does not count'
+    Remove-Item -LiteralPath (Join-Path $repo 'build-output.tmp') -Force
+    Assert-Placement $repo $second 'release-ahead' 'the clean behind folder is the release again'
+    [void](Invoke-Git $repo @('checkout', '-q', $base))
+
     Assert-Placement $repo $side 'release-ahead' 'a release commit on a branch this folder is not on: update from the release'
     Assert-Placement $repo '0123456789abcdef0123456789abcdef01234567' 'release-ahead' 'a release commit this folder has never seen: update from the release'
     Assert-Placement $repo $unrelated 'unknown' 'a release commit from an unrelated history: cannot tell, so install and say so'

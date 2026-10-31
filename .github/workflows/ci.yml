@@ -1649,16 +1649,20 @@ jobs:
           #      instead of installing the release that is exactly that code.
           #    - a folder standing on that same commit with UNCOMMITTED work was
           #      read as "same" too (DEF-020), so the signed release replaced the
-          #      work silently; the answer is now "dirty", which builds.
+          #      work silently; the answer is now "dirty", which builds. The same
+          #      shape while BEHIND the release is "release-ahead-dirty", which
+          #      also builds - a clean behind folder still installs the release,
+          #      which is the ordinary update path.
           #
           #    scripts\test-update-jarvis.ps1 lifts the functions out of the
           #    script AS IT IS WRITTEN and asserts the reply in both shapes, the
-          #    download route, and the five ancestry answers (same / release-ahead
-          #    / local-ahead / dirty / unknown) against a real throwaway
-          #    repository - "dirty" is DEF-020: standing on the release's own
-          #    commit with uncommitted work must build, not install, so the work
-          #    is never silently replaced. It runs here in 5.1, like the rest of
-          #    this job, and it touches no network, no app and no backend.
+          #    download route, and the six ancestry answers (same / release-ahead
+          #    / release-ahead-dirty / local-ahead / dirty / unknown) against a
+          #    real throwaway repository - the two dirty answers are DEF-020: a
+          #    release installed over uncommitted work must build instead, on
+          #    both branches that shape can happen on, so the work is never
+          #    silently replaced. It runs here in 5.1, like the rest of this job,
+          #    and it touches no network, no app and no backend.
           $testUpdate = Join-Path $tmp 'scripts\test-update-jarvis.ps1'
           if (-not (Test-Path -LiteralPath $testUpdate)) { throw "scripts\test-update-jarvis.ps1 is missing" }
           $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $testUpdate, '-Script', $update)
