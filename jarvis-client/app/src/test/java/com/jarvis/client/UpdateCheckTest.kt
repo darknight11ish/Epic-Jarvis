@@ -393,10 +393,9 @@ class UpdateCheckTest {
     }
 
     // ROTATION STEP 2 of 2: the expected certificate, paired with
-    // UpdateCheck.SIGNER_SHA256 (STEP 1). The runbook is
-    // `.dsh-scratch/ANDROID-SIGNING-ROTATION.md`; the two values change in the
-    // same commit, in lowercase hex with no colons, and the tests below fail
-    // loudly if they drift apart.
+    // UpdateCheck.SIGNER_SHA256 (STEP 1). The runbook is `docs/DEPLOY.md`
+    // section 5; the two values change in the same commit, in lowercase hex
+    // with no colons, and the tests below fail loudly if they drift apart.
     private val expectedSigner =
         "62ef7742e35e742a94a071bba83631fd6db78b5b50961f7b45719d736500d7b5"
 
@@ -405,7 +404,7 @@ class UpdateCheckTest {
         // keytool, on the owner's own keystore, and apksigner, on the copy
         // installed on his phone, both read exactly this (2026-10-11). It is
         // the one thing a swapped file cannot fake. ROTATION: this compares the
-        // two STEP-marked values above; see `.dsh-scratch/ANDROID-SIGNING-ROTATION.md`.
+        // two STEP-marked values above; see `docs/DEPLOY.md` section 5.
         assertEquals(expectedSigner, UpdateCheck.SIGNER_SHA256)
         assertTrue(UpdateCheck.SIGNER_SHA256.matches(Regex("^[0-9a-f]{64}$")))
     }

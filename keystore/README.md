@@ -91,5 +91,10 @@ passwords (`android` / `android`, alias `androiddebugkey`), which are public;
 what keeps it private is that the file itself is only in the secret.
 
 Rotating it again (for example if the secret leaks) costs the same one
-uninstall and re-pair as above: make a new keystore, put its base64 in
-`DEBUG_KEYSTORE_B64`, and say so in the next release notes.
+uninstall and re-pair as above. It is more than "make a new keystore and put its
+base64 in `DEBUG_KEYSTORE_B64`": the certificate's SHA-256 is also pinned in
+`UpdateCheck.SIGNER_SHA256` and `UpdateCheckTest.kt`, and the release workflow
+needs the checked-in `RELEASE-KEY-ROTATION` flag for its one-time banner.
+`scripts/rotate-android-signing-key.ps1 -Rotate` does the key half and prints
+the rest; [`docs/DEPLOY.md`](../docs/DEPLOY.md) section 5 is the ceremony in
+writing. Do not rotate by hand.

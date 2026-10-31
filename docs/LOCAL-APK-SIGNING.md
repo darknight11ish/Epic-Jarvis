@@ -292,6 +292,12 @@ the one uninstall and re-pair. The three steps are at the end of
 [`keystore/README.md`](../keystore/README.md), and
 [`INSTALL.md`](INSTALL.md) mentions it where `adb install -r` is described.
 
+**Replacing the key on purpose is a different job from fixing a missing one.**
+The whole ceremony - why the key is being kept for now, the one command that
+starts a rotation, the two code pins it changes, and what the uninstall deletes -
+is in [`DEPLOY.md`](DEPLOY.md) section 5. Do not rotate by hand: a new key
+without those two pins is one the app on the phone will refuse to update to.
+
 ## What is deliberately not in this repository
 
 No keystore, no password and no base64 blob - not in this document, not in the

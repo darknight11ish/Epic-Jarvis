@@ -1212,6 +1212,14 @@ jobs:
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\get-export.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "get-export self-test exited $LASTEXITCODE" }
+      - name: Run rotate-android-signing-key.ps1's safety self-test in 5.1
+        run: |
+          # Proves the guards that stop a phone signing key being made or
+          # replaced by accident: no -Rotate, an existing key or base64 file, an
+          # output folder inside a repository, and no password on a command
+          # line. It makes no key and needs no JDK.
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\rotate-android-signing-key.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "the signing-key rotation self-test exited $LASTEXITCODE" }
       - name: Run apply-patches.ps1 in 5.1 against a stand-in backend
         run: |
           $ErrorActionPreference = 'Stop'
