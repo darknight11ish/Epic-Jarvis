@@ -3713,7 +3713,7 @@ def _settings_open(s: str) -> Optional[Intent]:
     # A Section that is the feature's own switch (`openable=False`, today only
     # the Jarvis Calendar row) is not a place this sentence may jump to: its
     # words belong to the feature, which answers them later in this dispatch
-    # (`_open`, and `docs/JARVIS-API.md` section 166 says "open my calendar"
+    # (`_open`, and `docs/JARVIS-API.md` section 21.13 says "open my calendar"
     # still opens it). Falling through here is what keeps that true.
     if section is None or not getattr(section, "openable", True):
         return None

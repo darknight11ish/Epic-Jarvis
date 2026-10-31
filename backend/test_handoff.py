@@ -24,6 +24,13 @@ paused-at-owner-page state"), in code and in behaviour:
     when there is no screen - skipped when neither is here): a real JPEG of
     the one page, the owner's tap reaching a checkbox, typing reaching a box,
     and a tap that takes the page to another host ending the hand-off.
+  * the picture step is retried FRAME_ATTEMPTS times, and if the real browser
+    still cannot take it the failure is named INFRASTRUCTURE - the runner's
+    browser/display answering HTTP 503 - with the job told to re-run, instead
+    of the ZeroDivisionError the old code crashed into. A product break is not
+    retried into a skip: a non-503 answer, or a 200 that is not a JPEG of the
+    right size, still fails the JPEG check and stops the tapping half with a
+    plain "nothing to aim at" line.
 
 NOTHING RUNS WITHOUT AN EXPLICIT OPT-IN (2026-10-26). That real browser is a
 VISIBLE window, so unless JARVIS_ALLOW_VISIBLE_BROWSER_TESTS=1 is set this
@@ -844,17 +851,75 @@ def _screen():
     return p, ""
 
 
+#: How many times the real browser may fail to take the ONE picture before this
+#: suite calls it infrastructure. A 503 here means Playwright's own screenshot
+#: raised (jarvis_handoff.frame()'s `except Exception` branch) - on a CI runner
+#: that is the runner's browser/display, and it failed backend jobs
+#: 124334342509 (#1000) and 124366661030 (#1008) on 2026-10-30 with "The
+#: picture could not be taken (Error). Try again.". A transient one is ridden
+#: over by the extra attempts; a real product break answers 503 on EVERY
+#: attempt, so retrying cannot hide it - it only stops a runner problem being
+#: reported as the ZeroDivisionError the old code crashed into (it divided by
+#: the 1/1 defaults a failed frame left behind).
+FRAME_ATTEMPTS = 3
+
+
+def _frame_with_retries(hid):
+    """The one picture, retried on the 503 path only. Returns (code, out, tries).
+
+    jarvis_handoff.frame() answers 429 while its two-pictures-a-second budget is
+    spent (it sets `last_frame` even for a failed screenshot), so a 429 is
+    waited out from its own `retry_ms` and is never counted as an attempt. A
+    503 IS an attempt. Any other answer is returned at once.
+    """
+    code, out = None, {}
+    for attempt in range(FRAME_ATTEMPTS):
+        for _ in range(3):
+            code, out = HO.frame(hid)
+            if code != 429:
+                break
+            retry_ms = float((out or {}).get("retry_ms") or 50)
+            time.sleep(min(1.5, retry_ms / 1000.0) + 0.02)
+        if code != 503:
+            return code, out, attempt + 1
+        time.sleep(0.1)   # a breath before the next screenshot attempt
+    return code, out, FRAME_ATTEMPTS
+
+
 def t_real_browser(a):
     fresh()
     HO._reset_for_tests()   # the real clock: the page takes real time
     s = session(code="captcha", adapter=a)
     hid = HO.start("chatbot", s.id)[1]["handoff"]
-    code, out = HO.frame(hid)
+    code, out, tries = _frame_with_retries(hid)
+    if code == 503:
+        # The visible browser could not take a picture on every attempt. Say it
+        # as INFRASTRUCTURE, name the failed job line, and stop: no assertion
+        # below can run without a picture to aim at, and a product break would
+        # show here on every attempt too (the route's own contract is proven on
+        # the fake page by the checks above, which still run).
+        print("INFRASTRUCTURE  test_handoff.py's real-browser half: the visible "
+              "browser could not take a picture after "
+              f"{tries} attempt(s) (HTTP 503: {out.get('error', '')!r}). This is "
+              "the CI runner's browser/display, NOT a product assertion; the "
+              "tap/typing checks below did NOT run and did NOT pass. Re-run the "
+              "job (and see the suite's own note in its docstring).")
+        FAILED.append("INFRASTRUCTURE: real-browser picture unavailable (HTTP 503)")
+        return
     data = base64.b64decode(out.get("jpeg", "")) if code == 200 else b""
-    check("real: a JPEG of the one page, in page pixels", code == 200
-          and data[:2] == b"\xff\xd8" and out["width"] > 600 and out["height"] > 500,
+    jpeg_ok = (code == 200 and data[:2] == b"\xff\xd8"
+               and out.get("width", 0) > 600 and out.get("height", 0) > 500)
+    check("real: a JPEG of the one page, in page pixels", jpeg_ok,
           (code, {k: v for k, v in out.items() if k != "jpeg"}))
-    w, h = out.get("width", 1), out.get("height", 1)
+    if not jpeg_ok:
+        # No product assertion below can aim without a picture with real pixel
+        # sizes. Say so and stop, instead of dividing by the 1/1 defaults (the
+        # old failure mode, a ZeroDivisionError that hid the real reason).
+        print("SKIP the rest of the real-browser half: the picture check above "
+              "failed, so the tap and typing checks have nothing to aim at and "
+              "did NOT run.")
+        return
+    w, h = out["width"], out["height"]
 
     def tap(px, py):
         return HO.send_input(hid, {"type": "tap", "x": px / (w - 1), "y": py / (h - 1)})

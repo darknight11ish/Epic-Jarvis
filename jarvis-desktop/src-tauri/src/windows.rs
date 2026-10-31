@@ -1518,7 +1518,19 @@ pub fn widget_is_visible(app: &AppHandle) -> bool {
 /// Label of the minimalist floating face window.
 pub const FLOATING_LABEL: &str = "floating";
 
-/// Fixed size, both directions — the round face never letterboxes inside a
+/// The face sizes this mode offers, in logical pixels, smallest first: a
+/// "picture-in-picture" face the owner can make bigger when he is leaning
+/// back and smaller when it is in the way. The tray's two "Floating face:
+/// bigger / smaller" rows step through them and wrap; the choice is
+/// remembered in [`FloatingPrefs::size`].
+///
+/// All four are square, because the round face never letterboxes inside a
+/// rectangular window, and all four keep the face's own picture filling the
+/// window (the page is 100% wide), so no measurement or hit-grid constant
+/// changes with the size.
+pub const FLOATING_SIZES: [f64; 4] = [160.0, 200.0, 240.0, 300.0];
+
+/// Default size, both directions — the round face never letterboxes inside a
 /// rectangular window.
 ///
 /// The Widget's own embedded face is 120 CSS px (widget.css `#face-frame`),
@@ -1530,14 +1542,43 @@ pub const FLOATING_LABEL: &str = "floating";
 /// the owner is doing behind it.
 const FLOATING_SIZE: f64 = 200.0;
 
-/// Geometry and on/off state, persisted between runs — the same shape as
-/// [`WidgetPrefs`] and the same reason: four scalars, written from Rust, so
-/// a plugin would add a dependency and a capability grant to buy nothing.
+/// A stored or requested size snapped to one of [`FLOATING_SIZES`]; anything
+/// else (an older `floating.json`, a hand-edited file, `NaN`) falls back to
+/// the default. Keeping the prefs file to four known sizes is what makes the
+/// tray's cycle predictable and the window stay square.
+fn sanitize_floating_size(size: f64) -> f64 {
+    FLOATING_SIZES
+        .iter()
+        .copied()
+        .find(|allowed| (size - allowed).abs() < 0.5)
+        .unwrap_or(FLOATING_SIZE)
+}
+
+/// The next size in the tray's cycle, wrapping at both ends.
+fn stepped_floating_size(current: f64, bigger: bool) -> f64 {
+    let current = sanitize_floating_size(current);
+    let at = FLOATING_SIZES
+        .iter()
+        .position(|allowed| (current - allowed).abs() < 0.5)
+        .unwrap_or(1); // the default, 200, sits at index 1
+    let len = FLOATING_SIZES.len();
+    let next = if bigger {
+        (at + 1) % len
+    } else {
+        (at + len - 1) % len
+    };
+    FLOATING_SIZES[next]
+}
+
+/// Geometry, size and on/off state, persisted between runs — the same shape
+/// as [`WidgetPrefs`] and the same reason: a few scalars, written from Rust,
+/// so a plugin would add a dependency and a capability grant to buy nothing.
 ///
-/// Unlike `WidgetPrefs`, every field's derived default (`None`, `false`) is
-/// already the one this needs — off, no saved position — so `Default` is
-/// derived rather than written out by hand.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// `Default` is written out by hand rather than derived: `size` must default
+/// to the middle of [`FLOATING_SIZES`], and a derived `f64::default()` is
+/// `0.0` — a zero-pixel window on a first run, which is exactly the kind of
+/// "looks like it never opened" bug a default exists to prevent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct FloatingPrefs {
     pub x: Option<f64>,
@@ -1552,6 +1593,22 @@ pub struct FloatingPrefs {
     /// animal can still be grabbed and moved. Cosmetic, so it applies at
     /// once and asks for no approval card.
     pub click_through: bool,
+    /// The face's size in logical pixels; one of [`FLOATING_SIZES`]. A size
+    /// is cosmetic like the two switches above, so choosing one asks for no
+    /// approval card; it is applied live and remembered.
+    pub size: f64,
+}
+
+impl Default for FloatingPrefs {
+    fn default() -> Self {
+        Self {
+            x: None,
+            y: None,
+            enabled: false,
+            click_through: false,
+            size: FLOATING_SIZE,
+        }
+    }
 }
 
 /// In-memory copy of [`FloatingPrefs`], flushed to disk by the telemetry
@@ -1641,6 +1698,138 @@ pub fn load_floating_prefs(app: &AppHandle) -> FloatingPrefs {
         .unwrap_or_default()
 }
 
+/// Picks the monitor a floating window belongs on: the one it overlaps most,
+/// or — when it overlaps none — the one whose centre is nearest.
+///
+/// The floating face can be placed from a SAVED spot that no monitor contains
+/// any more (a monitor was unplugged, or the saved x/y came from a mixed-DPI
+/// desktop), and `current_monitor()` on a hidden window answers whichever
+/// monitor it happened to be built on rather than the owner's. This is the
+/// arithmetic that replaces both guesses.
+fn monitor_for_rect(monitors: &[(i32, i32, u32, u32)], win: (i32, i32, u32, u32)) -> Option<usize> {
+    let (wx, wy, ww, wh) = win;
+    let mut best: Option<(usize, i64, i64)> = None; // index, overlap, centre distance
+    for (index, &(mx, my, mw, mh)) in monitors.iter().enumerate() {
+        let left = wx.max(mx);
+        let top = wy.max(my);
+        let right = (wx + ww as i32).min(mx + mw as i32);
+        let bottom = (wy + wh as i32).min(my + mh as i32);
+        let overlap = (right - left).max(0) as i64 * (bottom - top).max(0) as i64;
+        let dx = (wx + (ww as i32) / 2) - (mx + (mw as i32) / 2);
+        let dy = (wy + (wh as i32) / 2) - (my + (mh as i32) / 2);
+        let distance = (dx as i64).abs().pow(2) + (dy as i64).abs().pow(2);
+        let better = match best {
+            None => true,
+            Some((_, best_overlap, best_distance)) => {
+                overlap > best_overlap || (overlap == best_overlap && distance < best_distance)
+            }
+        };
+        if better {
+            best = Some((index, overlap, distance));
+        }
+    }
+    best.map(|(index, _, _)| index)
+}
+
+/// Puts the floating face where the owner will see it, and never where he
+/// cannot reach it.
+///
+/// With a saved spot: the window is clamped fully inside the monitor it
+/// overlaps most, so a monitor that has been unplugged — or a saved physical
+/// position from a mixed-DPI desktop — cannot leave part of the face
+/// off-screen (the same class of defect `keep_widget_on_screen` fixed for the
+/// Widget on 2026-10-10). With no saved spot: the face opens centred on the
+/// monitor under the CURSOR, the one the owner is looking at, rather than
+/// always on the primary display, which is the wrong screen the moment a
+/// second monitor is in use. Physical throughout, the one coordinate space
+/// Windows has (see `center_quickbar`'s note).
+fn place_floating(window: &WebviewWindow, saved: Option<(f64, f64)>) -> Result<(), String> {
+    let monitors: Vec<(i32, i32, u32, u32)> = window
+        .available_monitors()
+        .map_err(|e| format!("unable to list the monitors: {e}"))?
+        .iter()
+        .map(|m| {
+            (
+                m.position().x,
+                m.position().y,
+                m.size().width,
+                m.size().height,
+            )
+        })
+        .collect();
+    if monitors.is_empty() {
+        // Headless or a very unusual session: leave the builder's own centre.
+        return Ok(());
+    }
+    let size = window
+        .outer_size()
+        .map(|s| (s.width, s.height))
+        .unwrap_or((FLOATING_SIZE as u32, FLOATING_SIZE as u32));
+    let (x, y) = match saved {
+        Some((sx, sy)) => (sx.round() as i32, sy.round() as i32),
+        None => {
+            let monitor = window
+                .cursor_position()
+                .ok()
+                .and_then(|c| window.monitor_from_point(c.x, c.y).ok().flatten())
+                .or_else(|| window.current_monitor().ok().flatten())
+                .or_else(|| window.primary_monitor().ok().flatten());
+            let (mx, my, mw, mh) = monitor
+                .map(|m| {
+                    (
+                        m.position().x,
+                        m.position().y,
+                        m.size().width,
+                        m.size().height,
+                    )
+                })
+                .unwrap_or(monitors[0]);
+            (
+                mx + (mw.saturating_sub(size.0) / 2) as i32,
+                my + (mh.saturating_sub(size.1) / 2) as i32,
+            )
+        }
+    };
+    let area = monitor_for_rect(&monitors, (x, y, size.0, size.1))
+        .map(|index| monitors[index])
+        .unwrap_or(monitors[0]);
+    let (cx, cy) = clamp_into((x, y), size, area);
+    window
+        .set_position(PhysicalPosition::new(cx, cy))
+        .map_err(|e| format!("unable to place the floating face: {e}"))
+}
+
+/// Sets the floating face's size (one of [`FLOATING_SIZES`]), remembers it,
+/// and resizes the window if it is open — then pulls it back on screen,
+/// because a bigger face near an edge is how a window gets clipped. The
+/// choice is cosmetic like the click-through switch, so it applies at once
+/// and asks for no approval card.
+pub fn set_floating_size(app: &AppHandle, size: f64) -> Result<f64, String> {
+    let size = sanitize_floating_size(size);
+    app.state::<FloatingState>()
+        .update(|prefs| prefs.size = size);
+    if let Some(window) = app.get_webview_window(FLOATING_LABEL) {
+        if window.is_visible().unwrap_or(false) {
+            window
+                .set_size(LogicalSize::new(size, size))
+                .map_err(|e| format!("unable to resize the floating face: {e}"))?;
+            let before = window
+                .outer_position()
+                .ok()
+                .map(|p| (p.x as f64, p.y as f64));
+            place_floating(&window, before)?;
+        }
+    }
+    Ok(size)
+}
+
+/// Steps the floating face one size bigger (`true`) or smaller (`false`)
+/// through [`FLOATING_SIZES`], wrapping at both ends. Returns the new size.
+pub fn step_floating_size(app: &AppHandle, bigger: bool) -> Result<f64, String> {
+    let current = app.state::<FloatingState>().snapshot().size;
+    set_floating_size(app, stepped_floating_size(current, bigger))
+}
+
 /// Opens the floating face — the picture-in-picture-style mode: just
 /// Jarvis's animated face, voice-only, no title bar, no resize handles, no
 /// text box — or brings it forward if it is already open. Built on demand,
@@ -1676,16 +1865,19 @@ pub fn show_floating(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| format!("unable to show the floating face: {e}"));
     }
 
-    // Built hidden and centred first, then repositioned if a saved spot is
-    // still on screen, then shown — the same order `setup_widget` uses, so
-    // there is never a visible flash-then-jump on a mixed-DPI desktop.
+    let prefs = load_floating_prefs(app);
+
+    // Built hidden at the remembered size and centred first, then placed on
+    // the monitor it belongs to (a saved spot, clamped; else under the
+    // cursor), then shown — the same order `setup_widget` uses, so there is
+    // never a visible flash-then-jump on a mixed-DPI desktop.
     let window = tauri::WebviewWindowBuilder::new(
         app,
         FLOATING_LABEL,
         tauri::WebviewUrl::App("floating.html".into()),
     )
     .title("Jarvis")
-    .inner_size(FLOATING_SIZE, FLOATING_SIZE)
+    .inner_size(prefs.size, prefs.size)
     .resizable(false)
     .maximizable(false)
     .minimizable(false)
@@ -1726,11 +1918,8 @@ pub fn show_floating(app: &AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| format!("unable to open the floating face: {e}"))?;
 
-    let prefs = load_floating_prefs(app);
-    if let (Some(x), Some(y)) = (prefs.x, prefs.y) {
-        if position_is_visible(&window, x, y) {
-            let _ = window.set_position(PhysicalPosition::new(x, y));
-        }
+    if let Err(err) = place_floating(&window, prefs.x.zip(prefs.y)) {
+        eprintln!("[jarvis] unable to place the floating face: {err}");
     }
 
     attach_floating_listeners(app, &window);
@@ -2033,6 +2222,73 @@ mod tests {
             clamp_into((50, 50), (3000, 2000), (0, 0, 1920, 1080)),
             (0, 0)
         );
+    }
+
+    // ---- the floating face's size and placement (2026-10-30) -------------
+
+    #[test]
+    fn the_floating_face_size_cycle_wraps_both_ways() {
+        assert_eq!(stepped_floating_size(200.0, true), 240.0);
+        assert_eq!(stepped_floating_size(240.0, true), 300.0);
+        assert_eq!(stepped_floating_size(300.0, true), FLOATING_SIZES[0]);
+        assert_eq!(stepped_floating_size(160.0, false), FLOATING_SIZES[3]);
+        assert_eq!(stepped_floating_size(200.0, false), 160.0);
+        // A stored size that is not one of the four steps from the default,
+        // rather than from nowhere: the tray must never dead-end.
+        assert_eq!(stepped_floating_size(0.0, true), 240.0);
+    }
+
+    #[test]
+    fn only_the_four_offered_face_sizes_are_kept_and_the_default_is_200() {
+        for size in FLOATING_SIZES {
+            assert_eq!(sanitize_floating_size(size), size, "{size} was not kept");
+        }
+        for bad in [0.0, 120.0, 200.4, -50.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(
+                sanitize_floating_size(bad),
+                FLOATING_SIZE,
+                "{bad} was kept instead of falling back"
+            );
+        }
+        // A missing/older floating.json must give a real, visible window —
+        // never a zero-pixel one (the reason Default is hand-written).
+        let fresh = FloatingPrefs::default();
+        assert_eq!(fresh.size, FLOATING_SIZE);
+        assert!(!fresh.enabled);
+        assert!(!fresh.click_through);
+        assert_eq!(fresh.x, None);
+        assert_eq!(fresh.y, None);
+    }
+
+    #[test]
+    fn a_face_saved_near_an_edge_is_pulled_fully_back_on_screen() {
+        let monitors = [(0, 0, 1920, 1080), (1920, 0, 2560, 1440)];
+        // Saved on the second screen, 20px past its right edge.
+        let index = monitor_for_rect(&monitors, (4300, 100, 200, 200));
+        assert_eq!(index, Some(1));
+        assert_eq!(
+            clamp_into((4300, 100), (200, 200), monitors[index.unwrap()]),
+            (4280, 100)
+        );
+        // Saved from a monitor that has since been unplugged: the nearest
+        // monitor is chosen and the face is clamped inside it.
+        let index = monitor_for_rect(&monitors, (-400, -300, 200, 200));
+        assert_eq!(index, Some(0));
+        assert_eq!(
+            clamp_into((-400, -300), (200, 200), monitors[index.unwrap()]),
+            (0, 0)
+        );
+    }
+
+    #[test]
+    fn a_face_straddling_the_seam_belongs_to_the_monitor_it_covers_most() {
+        let monitors = [(0, 0, 1920, 1080), (1920, 0, 1920, 1080)];
+        // 120px on the left screen, 80px on the right.
+        assert_eq!(monitor_for_rect(&monitors, (1800, 100, 200, 200)), Some(0));
+        // 70px on the left, 130px on the right.
+        assert_eq!(monitor_for_rect(&monitors, (1850, 100, 200, 200)), Some(1));
+        // No overlap at all: the nearest monitor by centre.
+        assert_eq!(monitor_for_rect(&monitors, (5000, 5000, 200, 200)), Some(1));
     }
 
     /// A grid of `n` cells, all background except the ones named (row, col).

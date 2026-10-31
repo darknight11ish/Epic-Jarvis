@@ -994,7 +994,7 @@ await check("every rule that sizes the face keeps its base and multiplies the sa
   assert.match(css, /html\{--face-scale:1\.25;\}\nhtml\[data-face-size="small"\]\{--face-scale:1;\}/,
     "the page's own default is not Medium's 1.25, so a device with no saved size would flash the old size");
   // EVERY rule that sizes #reactor - 232 base, 150 narrow page, Cockpit's
-  // 220/96/88, Studio's 120 and the 200 it takes when the galaxy is hidden,
+  // 220/96/88, Studio's 120 and the 240 it takes when the galaxy is hidden,
   // Ambient's 320/240/240/190 - keeps its own number and multiplies it. A new
   // shell rule written as a bare width/height fails here, which is the point:
   // it would not follow the chosen size.
@@ -1013,15 +1013,18 @@ await check("every rule that sizes the face keeps its base and multiplies the sa
   }
   // The bases the shells rely on are still the same numbers.
   assert.deepEqual(rules.map((rule) => Number(/width:calc\((\d+)px/.exec(rule.body)[1])).sort((a, b) => a - b),
-    [88, 96, 120, 150, 150, 190, 200, 220, 232, 240, 240, 320],
+    [88, 96, 120, 150, 150, 190, 220, 232, 240, 240, 240, 320],
     "a shell's own face size changed while the multiplier was raised");
   // The two sizes the owner's report NAMED: the shell he is in, and the space
-  // the hidden galaxy gives back.
+  // the hidden galaxy gives back. The hidden one is 240 since 2026-10-30, when
+  // the face moved into the Galaxy's own right-hand column: the biggest base
+  // that still keeps the face inside the 405px row at Large in the owner's
+  // 1280x650 window, and it draws 240 / 300 / 360 at Small / Medium / Large.
   assert.match(css,
     /html\[data-hud-shell="split-stage"\] #reactor\{width:calc\(120px \* var\(--face-scale, 1\)\)/,
     "Studio still draws the 48px face the owner measured as too small");
   assert.match(css,
-    /html\[data-hud-shell="split-stage"\]\[data-hud-tab="galaxy"\]\[data-galaxy-hidden\] #reactor\{[\s\S]{0,120}?width:calc\(200px \* var\(--face-scale, 1\)\)/,
+    /html\[data-hud-shell="split-stage"\]\[data-hud-tab="galaxy"\]\[data-galaxy-hidden\] #reactor\{[\s\S]{0,120}?width:calc\(240px \* var\(--face-scale, 1\)\)/,
     "the hidden galaxy's freed space is not the face's");
   // The size is read BEFORE first paint: inside the page's first inline
   // <script> in <head>, before the stylesheet that paints the shell.
@@ -1248,10 +1251,10 @@ await check("the 48-96px shells stay sane at every face size, and the keyboard c
     "a CSP refusal or a page error in the small shells when the face size changed");
 });
 
-/* ── The owner's 2026-10-29 HUD report ──────────────────────────────────── *
+/* ── The owner's 2026-10-29 and 2026-10-30 HUD reports ──────────────────── *
  *
- * Four sentences, measured on his own installed 0.2.356 at 1280x650 in the
- * Studio shell:
+ * 2026-10-29, four sentences, measured on his own installed 0.2.356 at
+ * 1280x650 in the Studio shell:
  *   1. "the Jarvis face models are too small on the HUD" - the face drew at
  *      48px (60 with Large chosen) beside a 671px conversation column.
  *   2. "when the Galaxy is hidden, the face model should take up that space
@@ -1261,6 +1264,12 @@ await check("the 48-96px shells stay sane at every face size, and the keyboard c
  *      650px window; Close off-screen; reopens fine)".
  *   4. "the header chip can read NO AI MODEL right after a quick-path turn
  *      while the model is up".
+ *
+ * 2026-10-30, the same shell with the Galaxy hidden, from his screenshot:
+ *   5. "i wanted the jarvis face model on the right half to take up where the
+ *      galaxy was if i hide the galaxy" - so the face owns the Galaxy's RIGHT-
+ *      HAND 45% column and the conversation keeps the LEFT half, instead of
+ *      both being stacked in one collapsed column.
  */
 
 const hudGeometry = (page) => page.evaluate(() => {
@@ -1278,6 +1287,7 @@ const hudGeometry = (page) => page.evaluate(() => {
     return w > 0 && h > 0 ? w * h : 0;
   };
   const stage = document.getElementById("stage");
+  const talk = document.getElementById("talk");
   const off = document.getElementById("galaxy-hidden");
   const chip = document.getElementById("galaxy-show-placeholder");
   const face = rect("#reactor");
@@ -1285,6 +1295,11 @@ const hudGeometry = (page) => page.evaluate(() => {
   const composer = rect(".composer");
   return {
     face, log, composer,
+    stage: rect("#stage"),
+    wrap: rect(".reactor-wrap"),
+    // "grid" here is the hidden Galaxy taking the whole stage row and splitting
+    // it 55/45 itself; every other state/tab/shell keeps the normal layout.
+    talkDisplay: getComputedStyle(talk).display,
     galaxyHidden: document.documentElement.hasAttribute("data-galaxy-hidden"),
     columns: getComputedStyle(stage).gridTemplateColumns.split(" ").filter(Boolean).length,
     brain: getComputedStyle(document.getElementById("brain")).display,
@@ -1326,19 +1341,42 @@ await check("a hidden galaxy gives its space to the face, and no paragraph fills
 
 
   assert.equal(hidden.galaxyHidden, true, "the checkbox did not hide the galaxy");
+  // THE PICTURE AND ITS FURNITURE ARE STILL GONE - that is what "hidden" means.
   assert.equal(hidden.brain, "none", "the empty Inspector column is still on the stage");
-  assert.equal(hidden.columns, 1, "the freed column was not given back to the stage");
   assert.equal(hidden.placeholderDrawn, false,
     "the paragraph is still drawn over the stage - the owner asked for the face's space, not the words");
   assert.match(hidden.placeholderText, /The galaxy is hidden/,
     "the sentence left the page entirely, so a screen reader finds nothing on the empty map");
-  // THE ASK: the face uses the space the picture gave back, and it is big.
+  // THE ASK (2026-10-30): the face takes the RIGHT half the Galaxy picture had,
+  // and the conversation keeps the LEFT half - the stage keeps its two columns
+  // and the TALK view spans both, split 55% conversation / 45% face.
+  assert.equal(hidden.columns, 2,
+    "the stage lost its two columns - the face needs the Galaxy's own right-hand column");
+  assert.equal(hidden.talkDisplay, "grid",
+    `the conversation and the face are still stacked (talk's display is ${hidden.talkDisplay})`);
+  assert.ok(Math.abs(hidden.log.w - hidden.stage.w * 0.55) <= 3,
+    `the conversation is ${hidden.log.w}px of the stage's ${hidden.stage.w}px, not its 55% left half`);
+  assert.ok(hidden.wrap && Math.abs(hidden.wrap.w - hidden.stage.w * 0.45) <= 3,
+    `the face's column is ${hidden.wrap && hidden.wrap.w}px of the stage's ${hidden.stage.w}px, not the Galaxy's own 45%`);
+  assert.ok(hidden.log.right <= hidden.face.x + 1,
+    `the face (x=${hidden.face.x}) is not to the RIGHT of the conversation (right=${hidden.log.right})`);
+  assert.ok(hidden.face.x > hidden.stage.x + hidden.stage.w / 2,
+    `the face (x=${hidden.face.x}) is not in the stage's right half`);
+  const columnCentre = hidden.stage.x + hidden.stage.w * 0.775;   // 55% + half of 45%
+  const faceCentre = hidden.face.x + hidden.face.w / 2;
+  assert.ok(Math.abs(faceCentre - columnCentre) <= 3,
+    `the face is not centred in the freed right-hand column (face centre ${faceCentre}, column centre ${columnCentre})`);
+  assert.ok(hidden.face.right <= hidden.stage.right,
+    `the face runs past the stage's right edge (${hidden.face.right} > ${hidden.stage.right})`);
+  // THE ASK: it is big - the 240px base at Medium's 1.25, so 300px square.
+  assert.equal(hidden.face.w, 300,
+    `the face is ${hidden.face.w}px in the freed column, not the 300px its 240px base draws at Medium`);
   assert.ok(hidden.face.w >= Math.round(shown.face.w * 1.4),
     `the face is ${hidden.face.w}px hidden against ${shown.face.w}px shown - it did not grow into the freed space`);
   assert.equal(Math.round(hidden.face.h), Math.round(hidden.face.w), "the grown face is not square");
   assert.equal(hidden.overlapLog, 0, "the grown face covers the conversation");
   assert.equal(hidden.overlapComposer, 0, "the grown face covers the composer");
-  assert.ok(hidden.log.h >= 40, `only ${hidden.log.h}px of conversation is left under the face`);
+  assert.ok(hidden.log.h >= 40, `only ${hidden.log.h}px of conversation is left beside the face`);
   assert.ok(hidden.composer.bottom <= hidden.viewport.h,
     `the composer was pushed off the window (${hidden.composer.bottom} > ${hidden.viewport.h})`);
   // ...and the way back is ONE small chip, in the bar, inside the window.
@@ -1367,6 +1405,78 @@ await check("a hidden galaxy gives its space to the face, and no paragraph fills
   assert.equal(back.columns, 2, "the Inspector column did not come back");
   await page.close();
   assert.deepEqual(problems, [], "a CSP refusal or a page error while the galaxy was hidden");
+});
+
+/* THE OTHER DIRECTION, and the reason the rule is scoped so tightly: the
+ * freed column belongs to the STUDIO shell's GALAXY tab alone. The Inspector
+ * column is also where the Approvals, Reminders, Memory and Telemetry tabs
+ * draw, and every other shell has its own face size and stage - so with the
+ * galaxy hidden, another tab or another shell must measure exactly as it did
+ * before. Measured, not assumed: each is compared against its own baseline. */
+await check("the freed column is the Studio Galaxy tab's alone - tabs and shells keep their layout", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.setViewportSize({ width: 1280, height: 650 });
+  const read = () => hudGeometry(page);
+  const tabIs = (name) => page.waitForFunction(
+    (want) => document.body.dataset.hudTab === want, name, { timeout: 5000 });
+
+  // The two baselines, BEFORE anything is hidden.
+  await setHudLook(page, "studio");
+  await tabIs("galaxy");
+  const studioShown = await read();
+  await setHudLook(page, "ambient");
+  await page.waitForTimeout(150);
+  const ambientShown = await read();
+  assert.notEqual(ambientShown.face.w, studioShown.face.w,
+    "the two shells draw the same face size, so this check cannot tell them apart");
+
+  // Hide the galaxy in Studio (the owner's own road).
+  await setHudLook(page, "studio");
+  await tabIs("galaxy");
+  await openGalaxyOptions(page);
+  await page.locator("#galaxy-hide").check();
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.getElementById("galaxy-options-close").click());
+  await page.waitForTimeout(150);
+  const studioHidden = await read();
+  assert.equal(studioHidden.talkDisplay, "grid",
+    "the hidden galaxy did not hand its column to the face in Studio");
+  assert.equal(studioHidden.face.w, 300, `the freed column's face is ${studioHidden.face.w}px, not 300px`);
+
+  // ANOTHER SHELL, with the galaxy still hidden: its own face size and its own
+  // talk layout are exactly the pre-hide baseline.
+  await setHudLook(page, "ambient");
+  await page.waitForTimeout(150);
+  const ambientHidden = await read();
+  assert.equal(ambientHidden.talkDisplay, ambientShown.talkDisplay,
+    "another shell's talk view changed layout when the Galaxy was hidden");
+  assert.equal(ambientHidden.face.w, ambientShown.face.w,
+    `another shell's face changed size when the Galaxy was hidden (${ambientHidden.face.w}px vs ${ambientShown.face.w}px)`);
+
+  // ANOTHER TAB in Studio, with the galaxy still hidden: same again.
+  await setHudLook(page, "studio");
+  await tabIs("galaxy");
+  await page.click('#stage-tabs [data-hud-tab-choice="today"]');
+  await tabIs("today");
+  await page.waitForTimeout(150);
+  const otherTab = await read();
+  assert.equal(otherTab.columns, 2, "another stage tab lost the Studio stage's two columns");
+  assert.equal(otherTab.talkDisplay, studioShown.talkDisplay,
+    "the conversation left its normal layout on another stage tab");
+  assert.equal(otherTab.face.w, studioShown.face.w,
+    `the face kept the freed column on another stage tab (${otherTab.face.w}px vs ${studioShown.face.w}px)`);
+
+  // ...and back on the Galaxy tab the space is the face's again.
+  await page.click('#stage-tabs [data-hud-tab-choice="galaxy"]');
+  await tabIs("galaxy");
+  await page.waitForTimeout(150);
+  const backOnGalaxy = await read();
+  assert.equal(backOnGalaxy.talkDisplay, "grid",
+    "coming back to the Galaxy tab did not give the frozen column back to the face");
+  assert.equal(backOnGalaxy.face.w, 300, "the face did not take its column back");
+
+  await page.close();
+  assert.deepEqual(problems, [], "a CSP refusal or a page error while another tab or shell was measured");
 });
 
 await check("the faces panel's first open is wholly inside the window, Close included", async () => {

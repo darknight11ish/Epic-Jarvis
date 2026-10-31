@@ -64,7 +64,7 @@ pub mod big_coder;
 pub mod history_settings;
 pub mod media_index;
 // Jarvis's own calendar's ONE switch, for Settings (calendar_settings.rs;
-// 2026-10-30; JARVIS-API section 166): the phone has drawn this switch since
+// 2026-10-30; JARVIS-API section 168): the phone has drawn this switch since
 // its own slice, and the desktop's calendar lives in the HUD, which has no
 // Settings page - so this is the Settings window's narrow path to it. It reads
 // the switch and writes the switch; no event, title or count is returned, and
@@ -1493,7 +1493,7 @@ pub fn run() {
             big_coder::big_coder,
             history_settings::history_settings,
             // The Jarvis Calendar's ONE switch (calendar_settings.rs;
-            // 2026-10-30; JARVIS-API section 166): {"on": bool}, immediate in
+            // 2026-10-30; JARVIS-API section 168): {"on": bool}, immediate in
             // both directions, no approval card either way and never held on a
             // stale link. It returns the switch and the PC's own `why` and no
             // event, title or count; OFF never deletes anything. Settings only.

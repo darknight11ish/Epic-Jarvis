@@ -20,7 +20,8 @@
 //! Open the Brain
 //! Settings and help…
 //! More… ▸ Start Watch with me · Show or hide the widget · Show or hide the
-//!         floating face · Chat history… · Faces… · Everything Jarvis can do…
+//!         floating face · Floating face: bigger · Floating face: smaller ·
+//!         Chat history… · Faces… · Everything Jarvis can do…
 //!         Backend: not supervised · Reconnect the event stream · Run a status
 //!         check · Jarvis Desktop <version> - a version LABEL, not a check:
 //!         when an update is known it reads "Update available — <version>…"
@@ -136,6 +137,12 @@ const ID_SHOW_FEATURES: &str = "show-features";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
 const ID_TOGGLE_FLOATING: &str = "toggle-floating";
+/// The floating face's size cycle (2026-10-30): two rows rather than a new
+/// Settings control, because every Settings toggle is generated from the
+/// backend's settings registry (a cross-app contract); this is desktop-only
+/// and lives where the face's own on/off row already lives.
+const ID_FLOATING_BIGGER: &str = "floating-bigger";
+const ID_FLOATING_SMALLER: &str = "floating-smaller";
 const ID_RECONNECT: &str = "reconnect";
 const ID_SETTINGS: &str = "settings";
 const ID_UPDATE: &str = "update";
@@ -367,6 +374,25 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         accel(app, "toggle_floating").as_deref(),
     )?;
+    // The face's size cycle, next to its on/off row (2026-10-30). Plain rows,
+    // not a submenu and not a Settings toggle: a Settings toggle means a new
+    // row in backend/jarvis_settings_registry.py and both contract fixtures,
+    // and this is a desktop-only cosmetic choice the owner asked to be able to
+    // feel. Each click resizes the face at once (and the choice is remembered).
+    let floating_bigger = MenuItem::with_id(
+        app,
+        ID_FLOATING_BIGGER,
+        "Floating face: bigger",
+        true,
+        None::<&str>,
+    )?;
+    let floating_smaller = MenuItem::with_id(
+        app,
+        ID_FLOATING_SMALLER,
+        "Floating face: smaller",
+        true,
+        None::<&str>,
+    )?;
     let reconnect = MenuItem::with_id(
         app,
         ID_RECONNECT,
@@ -418,6 +444,8 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &watch,
             &toggle_widget,
             &toggle_floating,
+            &floating_bigger,
+            &floating_smaller,
             &chat_history,
             &show_faces,
             &show_features,
@@ -1604,6 +1632,21 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_TOGGLE_FLOATING => {
             if let Err(err) = windows::toggle_floating(app) {
                 eprintln!("[jarvis] tray: floating face toggle failed: {err}");
+            }
+        }
+
+        // The face's size cycle. Cosmetic, so it applies at once with no
+        // approval card; if the face is closed the choice is still remembered
+        // and shows the next time it opens.
+        ID_FLOATING_BIGGER => {
+            if let Err(err) = windows::step_floating_size(app, true) {
+                eprintln!("[jarvis] tray: floating face could not grow: {err}");
+            }
+        }
+
+        ID_FLOATING_SMALLER => {
+            if let Err(err) = windows::step_floating_size(app, false) {
+                eprintln!("[jarvis] tray: floating face could not shrink: {err}");
             }
         }
 

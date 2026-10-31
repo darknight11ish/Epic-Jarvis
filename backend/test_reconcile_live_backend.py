@@ -3510,6 +3510,208 @@ def t_the_no_deadline_chain_keeps_the_earlier_entries_provable():
               old_probe)
 
 
+def git_reverse_oracle(text: str, patch: str, target: str) -> str:
+    """The pre-image `patch` was cut against, made by git's own applier in REVERSE.
+
+    The twin of `git_apply_oracle`: same throwaway `git init` folder, same one file,
+    but `git apply -R` - so the pre-image is git's reading of the patch, not ours."""
+    root = tmpdir("reconcile-git-reverse-")
+    try:
+        (root / target).write_bytes(text.encode("utf-8"))
+        _git(root, "init", "-q")
+        (root / patch).write_bytes(patch_text(patch))
+        proc = subprocess.run(["git", "apply", "-R", "--whitespace=nowarn", patch],
+                              cwd=str(root), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+        if proc.returncode != 0:
+            raise AssertionError(f"git apply -R {patch} failed: "
+                                 f"{(proc.stderr or '').strip()}")
+        return (root / target).read_text(encoding="utf-8")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_unknown_risk_delta_carries_its_five_hunks_byte_for_byte():
+    """#1008's unclassified-action change is carried by a DELTA_TABLE rule.
+
+    2026-10-30: `unknown-risk-approvable.patch` rewrites `jarvis_gate.py` in five
+    disjoint regions (eight `_RISK` rows, the worst-case warning, `risk_for`'s
+    docstring, `notice_for`'s body, and the forced "ask" in `check()`). One anchor
+    cannot carry that, so its entry says `"hunks": True` and the patch's own
+    hunks are the regions. This proves the rule carries the patch EXACTLY: the
+    pre-image is made by git applying the patch in REVERSE to the published base,
+    the plan runs against it, and the staged gate must equal BOTH git's own
+    forward application of the patch AND the published base, byte for byte. A
+    second plan against the base itself must be ALREADY_PRESENT and stage
+    nothing.
+
+    NOTE (measured on the owner's PC, read-only dry run): hunk 1's two-line
+    pre-image is GONE from that install - the earlier `gate` repair inserted the
+    app-builder rows right after the table's opening brace - so a deploy must
+    run `tools/repair_live_backend_gaps.py`'s `unknown-risk` repair FIRST there.
+    After it, every probe below is present and this entry reports already.
+    """
+    name = "unknown-risk-approvable.patch"
+    base = BASE_GATE.read_text(encoding="utf-8")
+    pre = git_reverse_oracle(base, name, "jarvis_gate.py")
+    check("the unknown-risk patch reverses out of the published base", pre != base)
+    root = tmpdir("reconcile-unknown-risk-")
+    try:
+        live = make_base_live(root, "pre", {"jarvis_gate.py": pre})
+        deltas, staged, refusals = R.plan_deltas(
+            live, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("the unknown-risk delta plans cleanly against the patch's pre-image",
+              refusals == [] and staged.get("jarvis_gate.py") is not None,
+              (refusals, sorted(staged)))
+        check("the staged gate is the patch applied by git, byte for byte",
+              staged.get("jarvis_gate.py")
+              == git_apply_oracle(pre, [name], "jarvis_gate.py"))
+        check("... and the published base, byte for byte",
+              staged.get("jarvis_gate.py") == base)
+        check("the delta is the patch's five hunks in one insert",
+              [(d.patch, d.status, d.anchor) for d in deltas]
+              == [(name, "insert", "5 hunk(s)")], deltas)
+
+        live2 = make_base_live(root, "post", {"jarvis_gate.py": base})
+        deltas2, staged2, refusals2 = R.plan_deltas(
+            live2, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("a gate that already carries the change plans nothing and refuses nothing",
+              refusals2 == [] and staged2 == {}, (refusals2, sorted(staged2)))
+        check("... and the patch is reported ALREADY_PRESENT",
+              [(d.patch, d.status) for d in deltas2] == [(name, "already")], deltas2)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_jobs_routes_delta_carries_its_four_hunks_byte_for_byte():
+    """#1000's jobs routes (four hunks in jarvis_hud.py) are carried by a rule.
+
+    Measured read-only on the owner's live HUD (2026-10-30), the gap this rule
+    closes is NOT a refusal: with NO entry, `patch_presence` says ALREADY
+    PRESENT because the added line `import jarvis_watch` also occurs in the live
+    HUD from another context - a SILENT SKIP, so a deploy on that PC would report
+    the patch carried while the routes never arrived. The rule's probes are
+    lines only the patch's own post-image contains, so it stays absent until the
+    routes are really there. Hunk 3's own pre-image is gone from the live file
+    (the live POST route tuple carries two later routes of its own), so it is
+    carried as an adapted pair whose OLD side is the sentence both shapes share;
+    on the patch pre-image that pair gives the patch's own hunk-3 output, which
+    is what this test proves against git's own applier.
+    """
+    name = "jobs-routes.patch"
+    raw = patch_text(name).decode("utf-8")
+    hunks = R.patch_hunks(raw, "jarvis_hud.py")
+    check("jobs-routes.patch has four hunks for jarvis_hud.py", len(hunks) == 4, len(hunks))
+    entry = R.DELTA_TABLE[name]["jarvis_hud.py"]
+    base = BASE_HUD.read_text(encoding="utf-8")
+    # The published base HUD is "the state the stack left when the base was last
+    # re-taken" (tools/gen_base_from_backend.py's own rule), and for this patch it
+    # is its PRE-image: measured 2026-10-30 at #1000's head, the base blob is
+    # `30ce3f4`, which is the patch's own `a/` side. Be robust to a later re-take
+    # that carries the post-image instead, and derive the pair either way.
+    if all(str(p) in base for p in entry["probes"]):
+        pre = git_reverse_oracle(base, name, "jarvis_hud.py")
+        post = base
+        check("the published base already carries the routes, and reverses out",
+              pre != base)
+    else:
+        pre = base
+        post = git_apply_oracle(pre, [name], "jarvis_hud.py")
+        check("the published base is the patch's pre-image, and git applies it",
+              post != base)
+    check("its entry carries the patch's own hunks", entry.get("hunks") is True)
+    check("... adapts exactly hunk 3", sorted(entry.get("adapted_hunks") or {}) == [3],
+          sorted(entry.get("adapted_hunks") or {}))
+    added = "\n".join(R.parse_patch_files(raw)["jarvis_hud.py"]["added"])
+    check("every entry probe is a line the patch ADDS",
+          all(str(p) in added for p in entry["probes"]), entry["probes"])
+    h3 = (entry.get("adapted_hunks") or {}).get(3) or {}
+    old_block = "\n".join(R._delta_lines(R.JOBS_ROUTES_H3_OLD_FILE))
+    new_block = "\n".join(R._delta_lines(R.JOBS_ROUTES_H3_NEW_FILE))
+    check("the adapted OLD block is the sentence both shapes share",
+          old_block == '"/api/jobs/cancel", "/api/holds/cancel",', old_block)
+    check("... and the NEW block is the patch's own hunk-3 route lines",
+          new_block == '"/api/jobs/cancel",\n' + hunks[2]["new"][4], new_block)
+    check("... with a post-image probe so a second deploy skips the hunk",
+          bool(h3.get("probes")) and all(
+              any(str(p) in line for line in R._delta_lines(R.JOBS_ROUTES_H3_NEW_FILE))
+              for p in h3.get("probes") or ()), h3.get("probes"))
+
+    root = tmpdir("reconcile-jobs-routes-")
+    try:
+        # The BITE, measured on the owner's PC: with no entry the patch is
+        # SILENTLY "already present" on the pre-image, because `import
+        # jarvis_watch` lives elsewhere in the same file.
+        live0 = make_base_live(root, "no-entry", {"jarvis_hud.py": pre})
+        deltas0, staged0, refusals0 = R.plan_deltas(
+            live0, [name], show=show_patches(name), repo=REPO, state_patches=[], table={})
+        check("without the entry the patch is SILENTLY reported already present",
+              refusals0 == [] and staged0 == {}
+              and [(d.patch, d.status) for d in deltas0] == [(name, "already")],
+              (refusals0, sorted(staged0), deltas0))
+
+        live = make_base_live(root, "pre", {"jarvis_hud.py": pre})
+        deltas, staged, refusals = R.plan_deltas(
+            live, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("the entry plans cleanly against the patch's pre-image",
+              refusals == [], refusals)
+        check("... the staged HUD is git's own application of the patch, byte for byte",
+              staged.get("jarvis_hud.py") == git_apply_oracle(pre, [name], "jarvis_hud.py"))
+        check("... and is the post-image the entry is meant to produce",
+              staged.get("jarvis_hud.py") == post)
+        check("... as one insert of four hunks",
+              [(d.patch, d.status, d.anchor) for d in deltas]
+              == [(name, "insert", "4 hunk(s)")], deltas)
+
+        live2 = make_base_live(root, "post", {"jarvis_hud.py": post})
+        deltas2, staged2, refusals2 = R.plan_deltas(
+            live2, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("a HUD that already carries the routes plans nothing",
+              refusals2 == [] and staged2 == {}, (refusals2, sorted(staged2)))
+        check("... and reports the patch ALREADY_PRESENT",
+              [(d.patch, d.status) for d in deltas2] == [(name, "already")], deltas2)
+
+        # The LIVE shape, made from the pre-image: the two later routes the live
+        # tuple carries are inserted exactly where the live file holds them.
+        live_text = pre
+        live_extras = (
+            ('                     "/api/attention/mute", "/api/attention/unmute",\n',
+             '                     "/api/limits/settings",\n'),
+            ('                     "/api/digest/seen", "/api/watch/add", "/api/watch/remove",\n',
+             '                     "/api/attention/settings",\n'),
+        )
+        for after, extra in live_extras:
+            check(f"the live-shape fixture can grow {extra.strip()}", live_text.count(after) == 1)
+            live_text = live_text.replace(after, after + extra, 1)
+        live3 = make_base_live(root, "live-shape", {"jarvis_hud.py": live_text})
+        deltas3, staged3, refusals3 = R.plan_deltas(
+            live3, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        text3 = staged3.get("jarvis_hud.py", "")
+        expected = live_text
+        for index in (1, 2, 4):
+            expected = expected.replace("\n".join(hunks[index - 1]["old"]),
+                                        "\n".join(hunks[index - 1]["new"]), 1)
+        expected = expected.replace(old_block, new_block, 1)
+        check("a HUD in the owner's live shape plans cleanly", refusals3 == [], refusals3)
+        check("... keeping every live route while adding the two new ones",
+              all(extra in text3 for _after, extra in live_extras)
+              and "/api/jobs/answer" in text3)
+        check("... the result is exactly the three own hunks + the adapted pair",
+              text3 == expected, (len(text3), len(expected)))
+        # The BITE for the adapted pair: the same live shape with the patch's own
+        # hunk 3 (no adapted_hunks) must refuse it, never guess.
+        no_adapted = {name: {"jarvis_hud.py": {"probes": entry["probes"], "hunks": True}}}
+        live4 = make_base_live(root, "live-shape-old", {"jarvis_hud.py": live_text})
+        deltas4, staged4, refusals4 = R.plan_deltas(
+            live4, [name], show=show_patches(name), repo=REPO, state_patches=[],
+            table=no_adapted)
+        check("without the adapted pair the SAME live shape is refused on hunk 3",
+              staged4 == {} and len(refusals4) == 1 and "hunk 3" in refusals4[0]
+              and "0 time(s)" in refusals4[0], refusals4)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -3536,6 +3738,8 @@ def main():
                t_the_no_expiry_chain_carries_965_byte_for_byte,
                t_the_no_deadline_hunk_9_is_carried_from_the_live_shape,
                t_the_no_deadline_chain_keeps_the_earlier_entries_provable,
+               t_the_unknown_risk_delta_carries_its_five_hunks_byte_for_byte,
+               t_the_jobs_routes_delta_carries_its_four_hunks_byte_for_byte,
                t_a_patch_whose_only_match_is_unchanged_context_is_refused,
                t_a_patch_with_no_distinctive_line_is_refused_by_name,
                t_the_dry_run_prints_every_refusal_and_writes_nothing,

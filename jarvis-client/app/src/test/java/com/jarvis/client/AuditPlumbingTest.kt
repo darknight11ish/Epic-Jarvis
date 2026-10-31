@@ -257,7 +257,11 @@ class AuditPlumbingTest {
         // The whole of VoiceBar again - see fullScreensMicrophoneIsGated...
         val voiceBar = home.substringAfter("private fun VoiceBar(")
             .substringBefore("private fun ReplyPeek(")
-        val menu = home.substringAfter("private fun HomeMoreMenu(")
+        // The short menu itself, and the sub-sheet the three chat modes moved
+        // into on 2026-10-30 (the owner's choice: fewer options in More).
+        val menu = home.substringAfter("private fun HomeMoreMain(")
+            .substringBefore("private fun HomeMoreModes(")
+        val modes = home.substringAfter("private fun HomeMoreModes(")
         // The chat bar keeps only the typing box, Send and the microphone -
         // and the one button that opens the rest (the owner's ask of
         // 2026-10-25). None of the moved controls may be drawn in it.
@@ -283,18 +287,32 @@ class AuditPlumbingTest {
             "the full-screen bar no longer says why the microphone is greyed",
             voiceBar.contains("MicWords.heldLine("),
         )
-        // ...and that one menu carries every moved control, under the same
-        // offer gates the controls themselves used.
+        // ...and these surfaces still carry every moved control, under the same
+        // offer gates the controls themselves used. Since 2026-10-30 the three
+        // chat modes sit one tap deeper in HomeMoreModes, and the rows that left
+        // the menu (Earlier chats, Pinned messages, Jarvis Presets) are gone.
         for (word in listOf(
-            "MoreMenuWords.PRESETS",
             "MoreMenuWords.PHOTO",
-            "Thinking.ONE_SHOT_LABEL",
-            "TemporaryChat.START",
-            "ChatHistory.EARLIER_CHATS",
+            "MoreMenuWords.FILE",
+            "MoreMenuWords.MODES",
             "MoreMenuWords.NOTIFICATIONS",
             "MoreMenuWords.QUICK_NOTE",
         )) {
             assertTrue("the shared More menu does not offer $word", menu.contains(word))
+        }
+        for (word in listOf(
+            "Thinking.ONE_SHOT_LABEL",
+            "TemporaryChat.START",
+            "coach.button",
+        )) {
+            assertTrue("the Modes sub-sheet does not offer $word", modes.contains(word))
+        }
+        for (gone in listOf(
+            "MoreMenuWords.PRESETS",
+            "ChatHistory.EARLIER_CHATS",
+            "ChatPins.TITLE",
+        )) {
+            assertFalse("the short More menu still draws $gone", menu.contains(gone))
         }
         // The coach button left PromptCoachBar for the menu: the bar must be
         // able to hide its own button and to be asked to coach from outside.

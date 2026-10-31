@@ -53,10 +53,11 @@ and `tools/gen_open_chat_cases.py` are one example).
 
 ## Building
 
-There is no Android SDK in the container most Claude sessions on this
-project run in, so **GitHub Actions is the only compiler** - see the root
-`CLAUDE.md`, "How the Android apps get built". On a real machine with the
-Android SDK installed:
+The owner's Windows PC, where these sessions run, has the Android SDK and a JDK
+installed, so **the unit tests build and run locally** - see the root
+`CLAUDE.md`, "How the Android apps get built". CI is still where the APK that is
+published and installed is built, signed and smoke-tested. On a machine with
+the Android SDK installed:
 
 ```bash
 ./gradlew assembleDebug     # app/build/outputs/apk/debug/app-debug.apk

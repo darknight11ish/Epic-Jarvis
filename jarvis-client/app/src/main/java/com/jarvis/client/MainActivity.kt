@@ -2982,7 +2982,6 @@ class MainActivity : FragmentActivity() {
                             status = status,
                             version = version,
                             attention = attention,
-                            jobs = jobs,
                             brain = brain,
                             onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
                             onBack = { nav.back() },
@@ -3248,6 +3247,10 @@ class MainActivity : FragmentActivity() {
                             chat.newConversationSaid()
                             nav.resetTo(Screen.HOME)
                         },
+                        // "Pinned" in History's own header (moved there from the
+                        // More menu, the owner's choice of 2026-10-30): the same
+                        // PinnedScreen one tap away, not a copy of it.
+                        onOpenPins = { nav.go(Screen.PINS) },
                         // "Hide memory lists and chat history" hides the conversations too.
                         privateHidden = privateHidden,
                         onShowPrivate = ::showPrivateLists,
@@ -4222,7 +4225,9 @@ class MainActivity : FragmentActivity() {
                                         JarvisRuntime.setNotice(com.jarvis.client.data.ChatPins.UNPIN_DONE)
                                     }
                                 },
-                                onOpenPins = { nav.go(Screen.PINS) },
+                                // "Open pins" left Home's actions with the list
+                                // itself (2026-10-30): History's header owns the
+                                // one Pinned action now.
                                 // "Try the cloud model": a genuinely new
                                 // turn, the same shape as onSend below, so
                                 // it runs on this composable's own scope

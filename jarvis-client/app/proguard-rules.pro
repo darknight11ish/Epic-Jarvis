@@ -132,3 +132,48 @@
 # fails at runtime in the minified release build only. The 1.22.0 AAR ships no
 # consumer rules of its own (checked by unzipping it: no proguard.txt).
 -keep class ai.onnxruntime.** { *; }
+
+# A HOME-SCREEN WIDGET'S CLASS NAME IS ITS IDENTITY TO GLANCE - R8 MUST NOT
+# MERGE THESE SEVEN CLASSES INTO ONE. (Measured 2026-10-30, from the shipped
+# APK and the library it uses, not inferred.)
+#
+# Glance's redraw call is
+#   GlanceAppWidget.updateAll(context) ->
+#     GlanceAppWidgetManager.getGlanceIds(this.getClass())
+# and getGlanceIds does `klass.getCanonicalName()` and looks that name up in
+# `State.providerNameToReceivers`, a table built from this package's receivers
+# (each receiver is instantiated and the class of its `glanceAppWidget` is the
+# key). It then calls `update()` on the SAME widget instance for every id it
+# finds. Two widget classes with the same canonical name are therefore
+# indistinguishable: EACH one's updateAll repaints BOTH widgets' cards with its
+# own content.
+#
+# R8 gave them the same name by merging them. `dexdump classes.dex` on the
+# shipped client-latest APK (jarvis-client-263ea0d.apk, commit 263ea0d - the
+# 0.2.3285 build) shows all seven classes gone and only two obfuscated ones
+# created by the receivers:
+#
+#   JarvisBoardWidgetOne/Two/ThreeReceiver -> new-instance Ljd2; (slot 0/1/2)
+#   Approval/QuickLink/CalendarWidgetReceiver -> new-instance Lvo; (disc 0/1/2)
+#
+# The phone symptom (field test, 2026-10-30 18:17-18:27): the owner put the
+# saved widget into slot 2 and the launcher card kept reading "No widget
+# chosen". JarvisBoardWidgets.updateAll calls One, then Two, then Three; with
+# one merged class all three calls resolve to the same receiver list, so the
+# last call - slot 3, which was empty - repainted every board card. The debug
+# APK is not minified (`isMinifyEnabled = false` in build.gradle.kts), which is
+# why the same code worked in the morning and only the release build failed.
+# The same merge lets Approval, QuickLink and Calendar repaint each other's
+# cards with their own words.
+#
+# A kept class cannot be renamed or optimized into another, so these seven
+# names survive and each receiver maps to exactly its own widget. No member
+# spec is needed: the constructors are called directly by this app's code, and
+# what the merge broke is class identity, not reflection by name.
+-keep class com.jarvis.client.widget.ApprovalWidget
+-keep class com.jarvis.client.widget.QuickLinkWidget
+-keep class com.jarvis.client.widget.CalendarWidget
+-keep class com.jarvis.client.widget.JarvisBoardWidget
+-keep class com.jarvis.client.widget.JarvisBoardWidgetOne
+-keep class com.jarvis.client.widget.JarvisBoardWidgetTwo
+-keep class com.jarvis.client.widget.JarvisBoardWidgetThree

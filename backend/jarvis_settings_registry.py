@@ -535,7 +535,7 @@ SECTIONS: tuple = (
             app="phone"),
     # "Jarvis Calendar" (2026-10-29, both apps since 2026-10-30; the owner's
     # ask: a full calendar of Jarvis's own, ON by default, "disableable in
-    # Settings"; JARVIS-API section 166; backend jarvis_local_calendar.py).
+    # Settings"; JARVIS-API section 168; backend jarvis_local_calendar.py).
     # BOTH apps now draw it, and each in its own idiom: the phone's row is a
     # real `item(key = "calendar")` on SettingsScreen.kt
     # (CalendarSettingsPlate.kt), the desktop's is the "Jarvis Calendar" card in
@@ -551,7 +551,7 @@ SECTIONS: tuple = (
     #
     # (2026-10-29, the chain integration) NOT A PLACE TO OPEN. "open my
     # calendar" is the feature's own sentence: `jarvis_open.py` answers it with
-    # `open_app` (docs/JARVIS-API.md section 166 says so - "'Open my calendar'
+    # `open_app` (docs/JARVIS-API.md section 21.13 says so - "'Open my calendar'
     # still opens it"), and this row is the switch that turns the feature back
     # on rather than the calendar itself. So `openable=False`: the two "open"
     # matchers leave those words to the feature that already owns them, while

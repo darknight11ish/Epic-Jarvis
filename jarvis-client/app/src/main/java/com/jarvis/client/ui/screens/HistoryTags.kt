@@ -3,6 +3,7 @@ package com.jarvis.client.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -330,6 +332,12 @@ internal fun ConversationKindIcon(
  * "All", one chip per tag, then "Untagged" (the PC takes `tag=none`; both apps
  * show it, docs/CHAT-TAGS-DESIGN.md section 10): filters the list to one tag;
  * "All" clears it.
+ *
+ * Since the owner's choice of 2026-10-30 this is drawn twice from ONE list of
+ * chips: [TagFilterChipsRow] is History's single visible row (it scrolls
+ * sideways rather than wrapping), and [TagFilterChips] is the same chips
+ * inside the Filters sheet, where they may wrap. Neither can drift from the
+ * other - both render [TagChipItems].
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -339,53 +347,85 @@ internal fun TagFilterChips(
     selected: String,
     onPick: (String) -> Unit,
 ) {
-    val chrome = LocalChrome.current
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Quiet(
-            if (selected.isEmpty()) "• ${ChatTags.ALL}" else ChatTags.ALL,
-            color = if (selected.isEmpty()) chrome.textHi else chrome.textMid,
-            modifier = Modifier.semantics {
-                contentDescription = "Tag filter: ${ChatTags.ALL}" + if (selected.isEmpty()) ", chosen" else ""
-            },
-            onClick = { onPick("") },
-        )
-        tags.forEach { t ->
-            val on = selected == t.id.toString()
-            val ink = tagInk(t.colour)
-            Row(
-                Modifier
-                    .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .pressable(role = Role.Button, onClick = { onPick(t.id.toString()) })
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = "Tag filter: ${t.name}" + if (on) ", chosen" else ""
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                TagIcon(t.icon, ink, size = 16.dp)
-                Text(
-                    if (on) "• ${t.name}" else t.name,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ink,
-                    maxLines = 1,
-                )
-            }
-        }
-        val noneOn = selected == ChatTags.NONE_FILTER
-        Quiet(
-            (if (noneOn) "• " else "") + ChatTags.UNTAGGED + " ($untagged)",
-            color = if (noneOn) chrome.textHi else chrome.textMid,
-            modifier = Modifier.semantics {
-                contentDescription = "Tag filter: ${ChatTags.UNTAGGED}" + if (noneOn) ", chosen" else ""
-            },
-            onClick = { onPick(ChatTags.NONE_FILTER) },
-        )
+        TagChipItems(tags, untagged, selected, onPick)
     }
+}
+
+/**
+ * The same chips on ONE line that scrolls sideways - History's filter row.
+ * It never wraps: the row stays one line tall however many tags the PC has,
+ * and the Filters button beside it is always visible.
+ */
+@Composable
+internal fun TagFilterChipsRow(
+    tags: List<ChatTags.Tag>,
+    untagged: Int,
+    selected: String,
+    onPick: (String) -> Unit,
+) {
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        TagChipItems(tags, untagged, selected, onPick)
+    }
+}
+
+/** The chips themselves, in the one order both rows show. */
+@Composable
+private fun TagChipItems(
+    tags: List<ChatTags.Tag>,
+    untagged: Int,
+    selected: String,
+    onPick: (String) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Quiet(
+        if (selected.isEmpty()) "• ${ChatTags.ALL}" else ChatTags.ALL,
+        color = if (selected.isEmpty()) chrome.textHi else chrome.textMid,
+        modifier = Modifier.semantics {
+            contentDescription = "Tag filter: ${ChatTags.ALL}" + if (selected.isEmpty()) ", chosen" else ""
+        },
+        onClick = { onPick("") },
+    )
+    tags.forEach { t ->
+        val on = selected == t.id.toString()
+        val ink = tagInk(t.colour)
+        Row(
+            Modifier
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .pressable(role = Role.Button, onClick = { onPick(t.id.toString()) })
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "Tag filter: ${t.name}" + if (on) ", chosen" else ""
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            TagIcon(t.icon, ink, size = 16.dp)
+            Text(
+                if (on) "• ${t.name}" else t.name,
+                style = MaterialTheme.typography.labelMedium,
+                color = ink,
+                maxLines = 1,
+            )
+        }
+    }
+    val noneOn = selected == ChatTags.NONE_FILTER
+    Quiet(
+        (if (noneOn) "• " else "") + ChatTags.UNTAGGED + " ($untagged)",
+        color = if (noneOn) chrome.textHi else chrome.textMid,
+        modifier = Modifier.semantics {
+            contentDescription = "Tag filter: ${ChatTags.UNTAGGED}" + if (noneOn) ", chosen" else ""
+        },
+        onClick = { onPick(ChatTags.NONE_FILTER) },
+    )
 }
 
 /**

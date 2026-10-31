@@ -250,11 +250,25 @@ draft and mistaking it for the source file.
 
 ## How the Android apps get built
 
-There is no local Android build in this container. `dl.google.com` is blocked
-by the network policy, so the Android Gradle plugin cannot resolve and
-**GitHub Actions is the only compiler available** for `jarvis-client` and
-`jarvis-android`. Expect a CI round trip (~15 min) to find out whether
-anything compiles. Check work carefully before pushing.
+**A local Android build DOES exist on the owner's PC**, and this section used
+to say it did not. The JDK (`C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot`),
+the Android SDK (`C:\Users\pcadmin\AppData\Local\Android\Sdk`) and a warm
+Gradle cache are installed, so from `jarvis-client/`:
+
+```powershell
+$env:JAVA_HOME="C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot"; $env:ANDROID_HOME="C:\Users\pcadmin\AppData\Local\Android\Sdk"; .\gradlew.bat testDebugUnitTest --offline
+```
+
+compiles the app and runs its JVM/contract unit tests in about two minutes.
+That is not a guess: it was verified on this PC on 2026-10-14
+(`docs/FIELD-TEST-PLAN-2026-10-14.md`: `BUILD SUCCESSFUL in 1m 47s`, exit 0)
+and again on 2026-10-27 (the whole suite green, 2,720 tests,
+`docs/DECISIONS.md`). So compile and run the unit tests before pushing; do not
+read Kotlin by eye and spend a CI round trip on what the local compiler would
+have caught. **The APK that is published and installed is still CI's**:
+GitHub Actions builds and signs `client-latest` and runs the emulator smoke
+job, and only that exact APK goes on the phone. Nothing here verifies a local
+build of the old `jarvis-android` app. Check work carefully before pushing.
 
 **A phone face's AGSL shader must stay under Android's size limit.** Android
 compiles `RuntimeShader`s in Skia's strict mode, which refuses any shader

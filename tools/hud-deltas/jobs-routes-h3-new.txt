@@ -1,0 +1,2 @@
+"/api/jobs/cancel",
+                     "/api/jobs", "/api/jobs/answer", "/api/holds/cancel",

@@ -1676,54 +1676,85 @@ html[data-hud-shell="split-stage"] .reactor-state{
 }
 html[data-hud-shell="split-stage"] .rail-toggle{display:none;}
 
-/* ---- THE HIDDEN GALAXY'S SPACE BECOMES THE FACE'S (2026-10-29) ---------- *
- * The owner, verbatim: "when the Galaxy is hidden, the face model should take
- * up that space instead of showing the 'The galaxy is hidden. Your brain map
- * is still here...' description + 'Show the galaxy' button".
+/* ---- THE HIDDEN GALAXY'S SPACE BECOMES THE FACE'S (2026-10-29; the FACE
+ *      takes the RIGHT HALF from 2026-10-30) ------------------------------ *
+ * The owner, verbatim (2026-10-29): "when the Galaxy is hidden, the face model
+ * should take up that space instead of showing the 'The galaxy is hidden. Your
+ * brain map is still here...' description + 'Show the galaxy' button".
  *
- * In THIS shell both views are on screen at once, so hiding the picture left an
- * empty 45% Inspector column holding one paragraph and one button - the emptiest
- * thing in the window, wearing the loudest words. The column is gone now: the
- * stage is ONE column, the face is the centrepiece of the space it freed, and
- * the Galaxy's own place holder is the small chip in the bar (`#galaxy-show-
- * placeholder`, see "the way back" in the style) rather than a paragraph.
+ * THE FIRST ANSWER WAS NOT WHAT HE WANTED, and his own screenshot says so
+ * (2026-10-30): "i wanted the jarvis face model on the right half to take up
+ * where the galaxy was if i hide the galaxy". The 2026-10-29 layout collapsed
+ * the stage to ONE column and centred a square face above the log - the face
+ * was bigger, but the Inspector's whole right half was still empty, and the
+ * conversation was squeezed under the face.
+ *
+ * NOW: the stage keeps its two columns and the TALK view spans both of them,
+ * split the same way the stage is - the conversation in the left column
+ * (`minmax(0, 1fr)`, the same 55% the conversation always had) and the face
+ * centred in the RIGHT column, which is the SAME 45% the Galaxy picture used.
+ * The picture's own furniture is still gone (`#brain` stays `display:none`),
+ * so the space is REUSED, not shared: nothing about what "hidden" means
+ * changes - the picture, its dots, its legend and its trace still go.
  *
  * Scoped to the Galaxy TAB on purpose: the Inspector column is also where the
  * Approvals, Reminders, Memory and Telemetry tabs draw, and hiding the picture
- * must not take those away. Nothing about what "hidden" MEANS changes - the
- * picture, its dots, its legend and its trace still go; only the space they
- * leave is used. */
-html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #stage{
-  grid-template-columns:minmax(0, 1fr);
+ * must not take those away. hud.mjs holds both halves: the hidden+galaxy+
+ * Studio state must put the face in the right column, and every OTHER tab and
+ * shell must measure exactly the same as before. */
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #talk{
+  display:grid;
+  /* The TALK view takes the whole stage row, so its own split is the stage's:
+     conversation left (1fr), face right (the Galaxy's own 45%). The right
+     column's MINIMUM is its own content, so a window narrower than 45% of the
+     face lets the column grow instead of pushing the face over the
+     conversation - at the owner's 1280x650 the 45% is 549px and the minimum
+     never comes into play. */
+  grid-column:1 / -1;
+  grid-template-columns:minmax(0, 1fr) minmax(min-content, 45%);
+  grid-template-rows:minmax(0, 1fr) auto auto auto;
+  min-width:0; min-height:0;
 }
 html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #brain{
   display:none !important;
 }
-html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .reactor-wrap{
-  flex-direction:column; justify-content:center; gap:2px;
-  /* 2026-10-30: the attach line under the composer costs the conversation
-     height, and hud.mjs requires 40px of it left under the grown face at
-     1280x650. The face keeps its pinned 200px base; the room comes from this
-     layout's own margins and the attach line's padding, scoped to this layout
-     only. Measured before: wrap 276 + log 24 + composer 73 + attach 37 in a
-     405px column. */
-  padding:0 18px 0;
+/* The conversation keeps the left column, in its normal order: the log takes
+   the height, the strip (drawn only in the drawer shells, so no row here in
+   Studio), then the composer and the attach line. */
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #log{
+  grid-column:1; grid-row:1; min-width:0; min-height:0;
+}
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .history-bar{
+  grid-column:1; grid-row:2;
 }
 html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .composer{
-  padding:8px 18px 10px;
+  grid-column:1; grid-row:3; padding:8px 18px 10px;
 }
 html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .attach-bar{
-  padding:0 18px 2px;
+  grid-column:1; grid-row:4; padding:0 18px 2px;
 }
 html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .attach-pick{
   padding:1px 7px; font-size:11px;
 }
-/* The freed column's worth of face. 200px x the device's own step, so the
-   three-step control still owns the size (200/250/300 at 1280x650) and the
-   wrap reserves all of it - the log below keeps whatever is left. */
+/* The face in the Galaxy's column: centred both ways, its own state word under
+   it, and nothing else in the column. `align-items` is NOT set here: the base
+   `.reactor-wrap` already centres it, and the built-in orb fallback (a plain
+   browser with no face page) is a GRID whose `place-items:stretch` must keep
+   winning, or the orb would shrink to nothing. */
+html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] .reactor-wrap{
+  grid-column:2; grid-row:1 / -1;
+  flex-direction:column; justify-content:center; gap:2px;
+  padding:0 18px; min-width:0;
+}
+/* The freed column's worth of face. 240px x the device's own step, so the
+   three-step control still owns the size (240/300/360 at 1280x650: Small /
+   Medium / Large) and the wrap centres it in the 45% column the Galaxy used -
+   where the old rule centred a 200px base over the WHOLE stage instead. 240 is
+   the largest base that still leaves the face inside the 405px row at Large,
+   which is the 1280x650 window the owner reports on. */
 html[data-hud-shell="split-stage"][data-hud-tab="galaxy"][data-galaxy-hidden] #reactor{
-  width:calc(200px * var(--face-scale, 1));
-  height:calc(200px * var(--face-scale, 1));
+  width:calc(240px * var(--face-scale, 1));
+  height:calc(240px * var(--face-scale, 1));
 }
 /* The Studio word row carries the Galaxy options word instead (2026-10-27). */
 html[data-hud-shell="split-stage"] #stage-bar-galaxy-options{display:none;}

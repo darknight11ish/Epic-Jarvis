@@ -2123,8 +2123,8 @@ neither app says it would.
 |---|---|---|---|---|---|
 | `/api/undo/revert` | POST | `{"id": …}` | `brain.rs:158` | `JarvisApi.kt:403` | "The one state-changing thing a phone may drive" — it only moves toward a state the owner already had. |
 | `/api/jobs/cancel` | POST | `{"id": …}` | `brain.rs:169` | `JarvisApi.kt:450` | |
-| `/api/jobs` | POST | `{"kind", "text"?, "when"?, "needs"?}` | `brain.rs` `brain_create_job` | **no** (section 169) | Starts ONE job from the owner's words. `needs` is the capability set frozen onto the row - **the desktop sends `[]`**, so a job started from the Work pane runs with nothing and parks on its first need. Approves nothing. |
-| `/api/jobs/answer` | POST | `{"id", "approved": true\|false}` | `brain.rs` `brain_answer_job` | **no** (section 169) | Answers the ONE grant a parked job is waiting on: one job, one use, and a No stops that job with no rule left behind. There is no list form and no "allow all". |
+| `/api/jobs` | POST | `{"kind", "text"?, "when"?, "needs"?}` | `brain.rs` `brain_create_job` | `JarvisRuntime.startJob` | Starts ONE job from the owner's words. `needs` is the capability set frozen onto the row - **both apps send `[]`**, so a job started from either Work pane runs with nothing and parks on its first need. Approves nothing. |
+| `/api/jobs/answer` | POST | `{"id", "approved": true\|false}` | `brain.rs` `brain_answer_job` | `JarvisRuntime.answerJob` | Answers the ONE grant a parked job is waiting on: one job, one use, and a No stops that job with no rule left behind. There is no list form and no "allow all". Both apps hold it on a live link. |
 | `/api/holds/cancel` | POST | `{"handle": …}` | `brain.rs` `brain_cancel_hold` | `JarvisRuntime.cancelHold` | Both clients take the handle from the undo shelf (`GET /api/undo`): an entry with `category: "hold"` and `detail.handle` - the desktop's reading of that shape, which the phone now shares (2026-09-23). **Unconfirmed against the backend's `jarvis_undo.py`**, which is not in this repo; a shelf without those fields shows no Stop button. |
 | `/api/watch/add` | POST | object | `brain.rs:219` | **no** | |
 | `/api/watch/remove` | POST | object | `brain.rs:228` | **no** | |
@@ -12116,8 +12116,11 @@ do?" and "who are you?" (§54).
 ### 57.1 The window: local only, nothing here to document as a route
 
 `jarvis-desktop/src-tauri/src/windows.rs`'s `show_floating`/`hide_floating`/
-`toggle_floating`, a 200×200 borderless always-on-top window at a new page,
-`floating.html` - not `faces.html` itself. That page embeds the SAME
+`toggle_floating`/`step_floating_size`, a borderless always-on-top window at a
+new page, 200×200 by default and one of **four remembered sizes** (160, 200,
+240, 300 logical px) chosen with the tray's "Floating face: bigger / smaller"
+rows (2026-10-30; each click resizes it at once), `floating.html` - not
+`faces.html` itself. That page embeds the SAME
 `faces.html?mode=display&feed=parent` frame the desktop widget's tray
 already runs, driven by postMessage exactly as `widget.js`'s `postFace`
 drives it (`floating.js` mirrors that function): `faces.html` is the
@@ -12130,10 +12133,17 @@ the (read-only) permission instead. Off by default, turned on from
 Settings → Appearance ("Floating face"), the tray ("Show or hide the
 floating face") or a rebindable hotkey (`Alt+Shift+F` by default,
 Settings → Shortcuts). Two purely local Tauri commands, never HTTP: `get_
-floating` (`{x, y, enabled}`) and `set_floating({enabled})`. Not behind the
-app lock - see `windows.rs`'s own doc comment on `show_floating` for why:
-it shows strictly less than the widget's own status row, which lock.rs
-already leaves uncovered.
+floating` (`{x, y, enabled, clickThrough, size}`) and `set_floating({enabled,
+clickThrough?, size?})`. **Where it opens** (2026-10-30) is chosen once and
+then remembered: with a saved position the window is clamped fully inside the
+monitor it overlaps most, so a monitor that has been unplugged (or a saved
+position from a mixed-DPI desktop) cannot leave part of the face off-screen;
+with no saved position it opens centred on the monitor **under the cursor**
+rather than always on the primary display. That placement, the size and the
+click-through switch are all cosmetic, local, and ask for no approval card.
+Not behind the app lock - see `windows.rs`'s own doc comment on
+`show_floating` for why: it shows strictly less than the widget's own status
+row, which lock.rs already leaves uncovered.
 
 ### 57.2 "Open a chat" - the fast path, and how it reaches the window
 
@@ -28636,10 +28646,11 @@ permission model is one card per action.
 
 **A Yes does not run the job inside the request.** It marks the grant and
 returns; the one heartbeat picks the job up (`[jobs] approval_retry_seconds`
-after it parked). The desktop says so in its toast rather than pretending the
-work already happened. **A No does stop it immediately**, because leaving a row
-saying "waiting for you" about a question already answered, for up to a
-heartbeat (thirty minutes as shipped), would make No look like it did nothing.
+after it parked). Both apps say so in the line under the buttons rather than
+pretending the work already happened. **A No does stop it immediately**, because
+leaving a row saying "waiting for you" about a question already answered, for up
+to a heartbeat (thirty minutes as shipped), would make No look like it did
+nothing.
 
 ### 169.3 The read the Work pane already makes
 
@@ -28655,6 +28666,12 @@ heartbeat (thirty minutes as shipped), would make No look like it did nothing.
   makes the pane say a job started now would never run - and what makes the
   create route answer 503.
 
+**Both keys are also how a client tells an older PC from a busy one.** A body
+with no `ticking` at all is a backend that predates this section, so neither
+POST exists on it: both apps keep the read-only list they always had and say
+which patch the PC needs, rather than offering a form that would 404. The
+absence is load-bearing and is not the same fact as an empty list.
+
 ### 169.4 In the apps
 
 - **Desktop (built).** The Brain's Work tab → "Start a background job": a select
@@ -28666,14 +28683,21 @@ heartbeat (thirty minutes as shipped), would make No look like it did nothing.
   in the `brain-act` permission set beside `brain_cancel_job`, and neither is in
   the Brain's read allow-list. `jarvis-desktop/tests/job-list.mjs` holds the
   contracts.
-- **Phone (not built, deliberately named).** Its Work pane is a read-only job
-  list (`JobPlate`): it shows the frozen set and a state word, and it has never
-  had a create, cancel or answer control for Long Fuse. Its `JobRecord` drops
-  `grants` and `status.handlers`, so reaching these routes needs a model change
-  first, not just a button. `tools/check_parity.py` records `/api/jobs/answer` as
-  `todo` with that reason, and ARCHITECTURE.md section 8 records the one-sided
-  slice; the phone half is the next slice, and when it lands the classification
-  becomes `ported`.
+- **Phone (built 2026-10-30, the same slice).** The Brain screen's Work pane,
+  "Background jobs" (`ui/screens/JobsPlate.kt`): a "Start a background job" form
+  whose only choices are the bodies the PC registered (`status.handlers`), a
+  text box for the owner's words, and Start - and under a parked job the
+  sentence it is asking about plus exactly two answers, "No" and "Allow once".
+  It posts through `JarvisRuntime.startJob` / `JarvisRuntime.answerJob`
+  (`net/Jobs.kt` carries the bodies and every sentence), both held on a live
+  link (`actionBlocker`, the same rule-4 gate as the desktop's), and the request
+  freezes NO capability (`"needs": []`) exactly as the desktop sends - so a job
+  started from the phone begins with nothing and parks at its first need. The
+  phone's `JobRecord` needed no new row fields: the grants arrive in the same
+  GET body, by job id, and `net/Jobs.kt`'s `Feed` reads the whole body.
+  `tools/check_parity.py` classifies `/api/jobs/answer` as **`ported`**.
+  `BackgroundJobsTest.kt` holds the parse, the two bodies, both answers' words
+  and the wiring.
 
 ### 169.5 What is proven, and what is not
 
@@ -28697,7 +28721,19 @@ heartbeat (thirty minutes as shipped), would make No look like it did nothing.
   their own job, and the backend patch sends the keys the pane reads. The DOM
   half (a parked job's two buttons, and the exact `{approved, id}` the click
   sends) needs Playwright and runs in CI.
+- `jarvis-client`'s `BackgroundJobsTest.kt` (JVM unit tests, no emulator): the
+  whole GET body reads, grants are joined to their OWN job, an answered job is
+  not offered its buttons twice, an older PC keeps its read-only list and names
+  the patch, `available: false` is never an empty list, both request bodies are
+  the contract's letter for letter (the owner's words escaped, `approved` a real
+  boolean, `"needs": []` and nothing that could freeze a capability), the form
+  is replaced by the server's own reason when it could not work, every start and
+  answer sentence including the PC's refusals and a missing route, and the
+  wiring that makes it reachable (the same jobs plate on Brain, both writes held
+  on a stale link, both using the transport that keeps the PC's own sentence).
 - **NOT proven here:** the real WebView2 window on the owner's PC, and
   `watch_github` against GitHub from a job. This desk has no Playwright, and the
   queue has never been ticked on the owner's machine by a route-created job.
-  The field check is his: start one job, watch it park, answer it.
+  The phone half is compiled and unit-tested here but has NOT been driven on the
+  owner's phone against the live backend: that is the field check, and it is
+  his - start one job, watch it park, answer it, on either app.

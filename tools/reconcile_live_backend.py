@@ -436,6 +436,23 @@ HUD_STATIC_ROUTE_FILE = "hud-static-route.txt"
 HUD_STATIC_ASSETS_ANCHOR = "class Handler(BaseHTTPRequestHandler):"
 HUD_STATIC_ROUTE_ANCHOR = '        if path in ("/", "/index.html"):'
 
+#: jobs-routes.patch (2026-10-30, PR #1000): Long Fuse's way IN
+#: (`POST /api/jobs`) and its way OUT of a parked grant
+#: (`POST /api/jobs/answer`), FOUR hunks in `jarvis_hud.py`. Three of their
+#: pre-images still match the published base AND the owner's live HUD exactly
+#: once; the POST route TUPLE's does not, because the live tuple carries two
+#: later routes of its own (`/api/limits/settings` and
+#: `/api/attention/settings`, measured read-only on the live HUD 2026-10-30).
+#: So that one hunk is carried as an adapted OLD -> NEW pair instead. The pair is
+#: deliberately the smallest sentence both shapes share -
+#: `"/api/jobs/cancel", "/api/holds/cancel",` - and the NEW side splits that line
+#: and puts the two new routes immediately before `"/api/holds/cancel"`, which is
+#: EXACTLY where the patch itself puts them. So the pair equals the patch's own
+#: hunk-3 output when applied to the pre-image, and it is usable on the owner's
+#: live tuple as it stands today. The two block files are:
+JOBS_ROUTES_H3_OLD_FILE = "jobs-routes-h3-old.txt"
+JOBS_ROUTES_H3_NEW_FILE = "jobs-routes-h3-new.txt"
+
 #: The line the two guard helpers are inserted in front of. `check()` is
 #: defined once in `jarvis_gate.py`; the tool refuses if that is not true in
 #: the live file.
@@ -923,6 +940,78 @@ DELTA_TABLE = {
                 "models     NOT ON",
             ),
             "hunks": True,
+        },
+    },
+    # unknown-risk-approvable.patch (2026-10-30, Gemini's Q2 ruling): an action
+    # with no `_RISK` row is given the worst case, APPROVABLE through the human
+    # check, and forced to tier "ask"; the eight reads that ran unattended get
+    # their own rows, so the rule changes nothing the owner uses today. FIVE
+    # hunks in jarvis_gate.py and nothing else, so `hunks: True` carries them in
+    # file order with no hand-written anchor. The probes are one ADDED line from
+    # each hunk - across all five regions - so only a fully applied file counts
+    # as present and a partly applied one is completed hunk by hunk.
+    #
+    # MEASURED ON THE OWNER'S PC (2026-10-30, read-only dry run): hunks 2-5 each
+    # find their pre-image exactly once, but hunk 1 does NOT - the earlier
+    # `gate` repair inserted the app-builder rows immediately after the table's
+    # opening brace, so hunk 1's two-line pre-image (`_RISK...{` then
+    # `    # reading anything`) is gone. So on THIS PC the change reaches the
+    # file through `tools/repair_live_backend_gaps.py`'s `unknown-risk` repair
+    # FIRST; after that every probe is present and this entry reports
+    # ALREADY_PRESENT. Run the other way round (reconcile first), the tool
+    # refuses hunk 1 by name and writes nothing - loud, never half applied. On a
+    # folder where the patch is genuinely absent and hunk 1's pre-image is
+    # intact, this entry carries the whole patch itself (proved byte for byte in
+    # backend/test_reconcile_live_backend.py).
+    "unknown-risk-approvable.patch": {
+        "jarvis_gate.py": {
+            "probes": (
+                '"calendar_read": ("yes", "local"',
+                'UNCLASSIFIED_WARNING = ("Unclassified action - treated as '
+                'permanent and able "',
+                "`classified` is False when the table above has no row for `action`.",
+                "nobody has written down what it does, so it is given the ",
+                "gate.unclassified_forced_ask",
+            ),
+            "hunks": True,
+        },
+    },
+    # jobs-routes.patch (2026-10-30, PR #1000): Long Fuse's way IN and way OUT
+    # of a parked grant. FOUR hunks in jarvis_hud.py - the /api/jobs READ gains
+    # `grants` and `ticking`, `_desktop_action` gains the create/answer branch,
+    # the POST route TUPLE gains the two routes, and main() registers
+    # jarvis_watch's own job body - so `"hunks": True` carries them in file
+    # order. The `jarvis_jobs.py` module those routes call is a SHIPPED module
+    # and arrives through deploy step 1; no rule is needed for it.
+    #
+    # WHY AN ENTRY IS NEEDED AT ALL, measured read-only on the owner's live HUD
+    # (2026-10-30): with NO entry the fallback rule says ALREADY PRESENT, because
+    # the added line `import jarvis_watch` already occurs in the live HUD from
+    # another context. That is a SILENT SKIP, not a deploy: once a ref contains
+    # #1000 every reconcile run on that PC would report the patch present and
+    # never carry the routes (recorded as DEF-018; the refusal the runbook
+    # expected does not reproduce here).
+    #
+    # Hunk 3 is the exception: the live POST tuple carries two later routes of
+    # its own, so the patch's own seven-line pre-image is gone there (0 times;
+    # once in the published base). Its `adapted_hunks` pair is the smallest
+    # sentence both shapes share and is the patch's own hunk-3 output when
+    # applied to the pre-image - see the JOBS_ROUTES_H3_* block comment above.
+    # The other three hunks are the patch's own bytes and match both files.
+    "jobs-routes.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                'if route in ("/api/jobs", "/api/jobs/answer"):',
+                '"grants": jarvis_jobs.pending_grants(),',
+                '"/api/jobs", "/api/jobs/answer", "/api/holds/cancel",',
+                "jarvis_watch.register_job()",
+            ),
+            "hunks": True,
+            "adapted_hunks": {
+                3: {"file": JOBS_ROUTES_H3_NEW_FILE,
+                    "replace_file": JOBS_ROUTES_H3_OLD_FILE,
+                    "probes": ('"/api/jobs", "/api/jobs/answer", "/api/holds/cancel",',)},
+            },
         },
     },
 }

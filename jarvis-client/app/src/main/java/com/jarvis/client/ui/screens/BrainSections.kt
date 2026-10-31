@@ -256,7 +256,7 @@ internal object BrainSections {
                 Plate("focus", guard = "brain.work.focus"),
                 Plate("chatbot", guard = "brain.work.chatbot"),
                 Plate("support", guard = "brain.work.support"),
-                Plate("jobs", guard = "brain.work.jobs", note = "drawn only when there are background jobs"),
+                Plate("jobs", guard = "brain.work.jobs", note = "always drawn; the plate draws its own start form and empty line"),
                 Plate("tasks", guard = "brain.work.jobs"),
                 Plate("watch", note = "always drawn; the watch list draws its own empty line"),
                 Plate("initiative", guard = "brain.now.findings"),
