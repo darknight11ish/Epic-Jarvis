@@ -1166,6 +1166,11 @@ def _match(text, now: float) -> Optional[Intent]:
     # the local-calendar read are owned here, before any honesty sentence.
     # (The note lane's capture path really files even when the note TOOL is
     # off; the honesty lane's old note_write off-answer is retired.)
+    # notes read/search (2026-10-31) before the older note-honesty
+    # shapes: 'read my note <title>' is a real read now.
+    got = _notes_chat(s)
+    if got is not None:
+        return got
     got = _note_asking(s)
     if got is not None:
         return got
@@ -1508,6 +1513,12 @@ def _match(text, now: float) -> Optional[Intent]:
     # BEFORE the feature guide: "update Jarvis" must never be read as "update
     # <a feature>", and "what changed in the update" names no feature anyway.
     got = _update(s)
+    if got is not None:
+        return got
+    # notes: read and search (deterministic, read-only, no card). BEFORE
+    # the honesty/discussion shapes: 'read my note' is a real read now, and
+    # the old 'chat does not read note text' refusal must not answer it.
+    got = _notes_chat(s)
     if got is not None:
         return got
     # "what's coming up" / "what's my next reminder" is the SCHEDULER's list,
@@ -8475,6 +8486,123 @@ def _run_vault_organizer_on(peer=None, local=None) -> Result:
     return Result(said if said.endswith(".") else said + ".", "vault_organizer_on")
 
 
+# --- notes: read and search (2026-10-31, the owner's "read & search" half) ---
+#
+# Deterministic, read-only, no card and no model: the answers come from
+# jarvis_notes_edit.chat_* which read the SAME vault files the editor routes
+# read, under the same hidden-folder, protection and size rules. The hidden
+# rule is jarvis_private_view, the backend's one hook: with the lists hidden
+# this says so and shows neither a title nor a word of a note.
+
+NOTES_READ_HIDDEN = ("The memory lists and chat history are hidden on this PC right now, "
+                     "so I will not show a note's words.")
+NOTES_SEARCH_HIDDEN = ("The memory lists and chat history are hidden on this PC right now, "
+                       "so I will not list note titles.")
+NOTES_ONE_AT_A_TIME = "I can read one note at a time; tell me which one."
+NOTES_SEARCH_DOOR = "You can search the whole vault in the notes editor on this PC."
+
+
+def _notes_hidden() -> bool:
+    try:
+        import jarvis_private_view as PV
+        state = PV.effective()
+        return bool(state.get("app_locked") or state.get("hide_memory_lists"))
+    except Exception:
+        return False
+
+
+_NOTE_READ_MY = re.compile(r"read\s+my\s+note\s+(.+)")
+_NOTE_READ = re.compile(
+    r"(?:what\s+does|what\s+is\s+in|what'?s\s+in|read\s+me|read|show\s+me)\s+"
+    r"(?:my\s+)?(.+?)\s+note(?:\s+(?:say|says|contain|contains))?$")
+_NOTE_READ_PLURAL = re.compile(r"(?:read|show)\s+(?:me\s+)?my\s+notes?\s*$")
+_NOTE_OPEN_ALT = re.compile(r"open\s+(?:my\s+)?note\s+(.+)")
+_NOTE_OPEN = re.compile(
+    r"open\s+(?:my\s+|the\s+)?(.+?)\s+note(?:\s+in\s+the\s+notes?\s+editor)?$")
+_NOTE_MENTION = re.compile(r"which\s+notes?\s+mention\s+(.+)")
+_NOTE_SEARCH = re.compile(
+    r"(?:find|search|show|list|any)\s+(?:me\s+)?(?:my\s+)?notes?\s+"
+    r"(?:about|for|mentioning|mention|on)\s+(.+)")
+
+
+def _notes_chat(s: str) -> Optional[Intent]:
+    """The three note questions this file answers without a model."""
+    if _NOTE_READ_PLURAL.fullmatch(s):
+        return Intent("note_read", {"title": ""})
+    m = _NOTE_READ_MY.fullmatch(s) or _NOTE_READ.fullmatch(s)
+    if m:
+        return Intent("note_read", {"title": m.group(1).strip(" \"'")})
+    m = _NOTE_OPEN_ALT.fullmatch(s) or _NOTE_OPEN.fullmatch(s)
+    if m:
+        return Intent("note_open", {"title": m.group(1).strip(" \"'")})
+    m = _NOTE_MENTION.fullmatch(s) or _NOTE_SEARCH.fullmatch(s)
+    if m:
+        return Intent("note_search", {"needle": m.group(1).strip(" \"'")})
+    return None
+
+
+def _run_note_read(title: str) -> Result:
+    if _notes_hidden():
+        return Result(NOTES_READ_HIDDEN, "note_read")
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_read_note(title)
+    except Exception:
+        return Result("The notes could not be read on this PC.", "note_read")
+    if code == 409:
+        titles = "; ".join(body.get("titles") or [])
+        said = NOTES_ONE_AT_A_TIME + (" " + titles if titles else "")
+        return Result(said, "note_read")
+    if code != 200:
+        return Result(str(body.get("said") or NE.CHAT_NO_NOTE.format(title)), "note_read")
+    said = '"{0}" says:\n\n{1}'.format(body["title"], body["text"])
+    if body.get("more"):
+        said += "\n\n\u2026and {0} more characters.".format(body["more"])
+    return Result(said, "note_read")
+
+
+def _run_note_search(needle: str) -> Result:
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_search_notes(needle)
+    except Exception:
+        return Result("The notes could not be searched on this PC.", "note_search")
+    if code != 200:
+        return Result(str(body.get("said") or "The notes could not be searched."), "note_search")
+    count = int(body.get("count") or 0)
+    if _notes_hidden():
+        if count == 0:
+            return Result(NOTES_SEARCH_HIDDEN + " No notes match.", "note_search")
+        return Result(NOTES_SEARCH_HIDDEN + " {0} note(s) match.".format(count), "note_search")
+    if count == 0:
+        return Result('No notes in your vault match "{0}". {1}'.format(
+            str(needle or "").strip(), NOTES_SEARCH_DOOR), "note_search")
+    titles = "; ".join(body.get("titles") or [])
+    said = '{0} note(s) match "{1}": {2}.'.format(
+        count, str(needle or "").strip(), titles)
+    shown = len(body.get("titles") or [])
+    if count > shown:
+        said += " I have shown the first {0}.".format(shown)
+    if body.get("capped"):
+        said += " I looked through the first {0} notes.".format(int(body.get("scanned") or 0))
+    return Result(said, "note_search")
+
+
+def _run_note_open(title: str) -> Result:
+    if _notes_hidden():
+        return Result(NOTES_READ_HIDDEN, "note_open")
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_open_note(title)
+    except Exception:
+        return Result("The notes could not be read on this PC.", "note_open")
+    if code != 200:
+        return Result(str(body.get("said") or NE.CHAT_NO_NOTE.format(title)), "note_open")
+    said = ('Opening the Brain on this PC. Your notes are under Notes - look for '
+            '"{0}" there.'.format(body["title"]))
+    return Result(said, "note_open", open_brain="brain")
+
+
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     the owner's request of 2026-10-10), and Jarvis's own windows and places
@@ -10604,6 +10732,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
             "window on this PC, with your fingerprint for a risky one. "
             "Typing or saying a decision here cannot approve anything, and "
             "that is on purpose.", n)
+    if n == "note_read":
+        return _run_note_read(intent.f.get("title") or "")
+    if n == "note_search":
+        return _run_note_search(intent.f.get("needle") or "")
+    if n == "note_open":
+        return _run_note_open(intent.f.get("title") or "")
     if n == "open_app":
         # "open Notion", "open settings", "open Jarvis settings"
         # (jarvis_open.py, 2026-10-10). Nothing is opened from here: the app

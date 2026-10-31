@@ -489,8 +489,8 @@ def t_no_over_capture_of_reminders_desks_or_reading():
     check("'organize my desk' is still the model's", got is None,
           (got.intent if got else "")[:120])
     got = ask("what does my Welcome note say?")
-    check("a note-reading question is the honest door, not a write or a claim",
-          got is not None and got.intent == "note_read_honest",
+    check("a note-reading question is the note reader, not a write or a claim",
+          got is not None and got.intent == "note_read",
           got.intent if got else "the model")
     got = ask("what can I change in settings")
     check("the settings-help lane still wins for its own phrase",
@@ -524,24 +524,35 @@ def t_the_read_only_intents_are_registered_the_repo_way():
         pass
 
 
-def t_note_reading_questions_say_the_real_door_and_never_claim_a_read():
-    """The audit's "I have located your notes" with no tool run: never again."""
+def t_note_reading_questions_really_read_or_say_they_cannot():
+    """The old "chat does not read note text" refusal is replaced (2026-10-31):
+    the chat now really reads one note, and on an empty vault it says honestly
+    that no such note exists - never the audit's "I have located your notes"
+    with no read behind it."""
     reset_all()
     before = tree(VAULT)
-    for phrase in ("what does my Welcome note say?",
-                   "find my notes about vault",
-                   "search my notes for the boiler",
-                   "read my Welcome note"):
+    for phrase in ("what does my Welcome note say?", "read my Welcome note"):
         got = ask(phrase)
-        check(f"{phrase!r} is the honest note-reading answer",
-              got is not None and got.intent == "note_read_honest",
+        check(f"{phrase!r} goes to the note reader",
+              got is not None and got.intent == "note_read",
               got.intent if got else "the model")
         reply = got.reply if got else ""
-        check("... saying chat does not read note text today",
-              "Chat does not read note text today." in reply, reply[:260])
-        check("... naming the real door, the Notes plate",
-              "Notes plate" in reply and "Brain window" in reply, reply[:300])
-        check("... never claiming it located or read the note",
+        check("... and on an empty vault says it cannot find that note",
+              "could not find a note called" in reply, reply[:260])
+        check("... never claiming it located or read a note",
+              "located" not in reply.lower() and "I read" not in reply,
+              reply[:260])
+    for phrase in ("find my notes about vault", "search my notes for the boiler"):
+        got = ask(phrase)
+        check(f"{phrase!r} goes to the note search",
+              got is not None and got.intent == "note_search",
+              got.intent if got else "the model")
+        reply = got.reply if got else ""
+        check("... and on an empty vault says no notes match",
+              "No notes in your vault match" in reply, reply[:260])
+        check("... naming the real door, the Notes plate editor",
+              "notes editor" in reply, reply[:300])
+        check("... never claiming it located or read a note",
               "located" not in reply.lower() and "I read" not in reply,
               reply[:260])
     check("no card was raised and the vault is unchanged",

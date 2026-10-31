@@ -136,7 +136,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 # ---------------------------------------------------------------------------
 #   The contract's constants
@@ -750,6 +750,115 @@ def handle_save_status(query: str = "") -> tuple:
     except Exception:                                       # noqa: BLE001
         jid = ""
     return save_status(jid)
+
+
+# ---------------------------------------------------------------------------
+#   Chat doors (2026-10-31): read and search, deterministic and read-only
+# ---------------------------------------------------------------------------
+#
+# The owner chose all three Obsidian abilities on 2026-10-31. This is the
+# read/search half's backend: the chat answers call THESE functions, which call
+# the same `handle_list` and `handle_read` the routes use - one reader, one
+# vault resolution (`_vault()`), the same hidden-folder/protection/size rules.
+# Nothing here writes, raises a card, or starts a model.
+
+#: How much of one note the chat quotes before it says how much is left.
+CHAT_READ_CHARS = 4000
+#: How many notes one content search will open. Honest about the bound.
+CHAT_SEARCH_SCAN = 500
+#: How many matching titles one search prints.
+CHAT_SEARCH_SHOWN = 5
+
+CHAT_NO_NOTE = "I could not find a note called \"{}\" in the vault."
+CHAT_ONE_AT_A_TIME = "I can read one note at a time; tell me which one."
+CHAT_SEARCH_DOOR = "You can search the whole vault in the notes editor on this PC."
+
+
+def _chat_notes_meta() -> tuple:
+    """Every note's path/title from the ONE list reader; `(None, why)` on error."""
+    code, body = handle_list("")
+    if code != 200:
+        return None, str(body.get("error") or "The vault could not be read.")
+    return list(body.get("notes") or []), ""
+
+
+def chat_find_notes(title: str) -> tuple:
+    """Notes whose title equals (then merely contains) `title`, newest first."""
+    want = str(title or "").strip()
+    if not want:
+        return 400, {"said": CHAT_ONE_AT_A_TIME}
+    notes, why = _chat_notes_meta()
+    if notes is None:
+        return 503, {"said": why}
+    low = want.lower()
+    exact = [n for n in notes if str(n.get("title", "")).lower() == low]
+    if exact:
+        return 200, {"ok": True, "matches": exact, "exact": True}
+    return 200, {"ok": True,
+                 "matches": [n for n in notes if low in str(n.get("title", "")).lower()],
+                 "exact": False}
+
+
+def _chat_read(path: str) -> tuple:
+    return handle_read("?path=" + quote(str(path), safe=""))
+
+
+def chat_read_note(title: str) -> tuple:
+    """One note's text, bounded, named only by the real title it was read from."""
+    code, found = chat_find_notes(title)
+    if code != 200:
+        return code, found
+    matches = found["matches"]
+    if not matches:
+        return 404, {"said": CHAT_NO_NOTE.format(str(title or "").strip())}
+    if len(matches) > 1:
+        return 409, {"said": CHAT_ONE_AT_A_TIME,
+                     "titles": [str(n.get("title") or "") for n in matches[:CHAT_SEARCH_SHOWN]],
+                     "count": len(matches)}
+    note = matches[0]
+    code, read = _chat_read(note.get("path", ""))
+    if code != 200:
+        return code, {"said": str(read.get("error") or "The note could not be read.")}
+    text = str(read.get("text") or "")
+    cut = text[:CHAT_READ_CHARS]
+    return 200, {"ok": True, "title": str(note.get("title") or ""),
+                 "path": note.get("path", ""), "text": cut,
+                 "total_chars": len(text), "more": max(0, len(text) - len(cut))}
+
+
+def chat_search_notes(needle: str) -> tuple:
+    """Titles whose NOTE TEXT contains `needle`; never a body, never a path."""
+    want = str(needle or "").strip()
+    if not want:
+        return 400, {"ok": True, "count": 0, "titles": [], "scanned": 0, "capped": False}
+    notes, why = _chat_notes_meta()
+    if notes is None:
+        return 503, {"said": why}
+    low = want.lower()
+    titles, scanned = [], 0
+    for note in notes[:CHAT_SEARCH_SCAN]:
+        scanned += 1
+        code, read = _chat_read(note.get("path", ""))
+        if code != 200:
+            continue
+        if low in str(read.get("text") or "").lower():
+            titles.append(str(note.get("title") or ""))
+    return 200, {"ok": True, "count": len(titles),
+                 "titles": titles[:CHAT_SEARCH_SHOWN],
+                 "scanned": scanned, "capped": len(notes) > scanned}
+
+
+def chat_open_note(title: str) -> tuple:
+    """The note's title/path when it exists (the chat says to open the Brain)."""
+    code, found = chat_find_notes(title)
+    if code != 200:
+        return code, found
+    matches = found["matches"]
+    if not matches:
+        return 404, {"said": CHAT_NO_NOTE.format(str(title or "").strip())}
+    first = matches[0]
+    return 200, {"ok": True, "title": str(first.get("title") or ""),
+                 "path": first.get("path", ""), "count": len(matches)}
 
 
 # ---------------------------------------------------------------------------
