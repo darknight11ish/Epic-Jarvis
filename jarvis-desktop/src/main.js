@@ -1847,6 +1847,15 @@ function openBrainFromRoute(route) {
     invoke("open_fix_place", { place: "brain" });
     return;
   }
+  // "open the second brain" / "open brain" / "open memory" / "open my notes"
+  // (jarvis_open.py, 2026-10-31): the Brain window itself, and "open
+  // tutorials" / "open the FAQ" its own Tutorials tab. Both are places
+  // `open_fix_place` already opens, and the answer has already named which
+  // one, so there is nothing to add here.
+  if (route.open_brain === "brain" || route.open_brain === "tutorials") {
+    invoke("open_fix_place", { place: route.open_brain });
+    return;
+  }
   // Topic controls (docs/TOPIC-CONTROLS-DESIGN.md C1): "switch off my work
   // topic" is ambiguous, so the PC opens the picker instead of guessing.
   // Only the place and a whole-number topic id ride along; the Brain checks

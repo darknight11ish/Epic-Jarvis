@@ -3055,6 +3055,28 @@ are one pair - the owner's asks were "the spacing of the two new buttons is
 uneven" and "i want the settings to be in a similar style of icon to the
 others".
 
+**Typed "open ..." sentences now open the window they name, in the HUD too
+(2026-10-31).** The owner typed "open settings" and "open the second brain"
+into the HUD's own chat: the answers were right ("Opening Jarvis settings on
+this PC.", "I have asked this PC to open brain.") and nothing opened - the
+second was even answered as if "brain" were a program on this PC. The vendored
+page shows the answer but acted on none of the route's open fields; only the
+bar's own chat window did (`main.js openSettingsFromRoute` /
+`openBrainFromRoute`). The fix is ONE mapping and both chat paths, with NO new
+route, command, field or permission: `jarvis_open.py` resolves the in-app words
+to the places the apps already open ("brain", "history", "tutorials" on the
+EXISTING `open_brain` field; Settings sections on the existing `open_place` /
+`open_settings` fields, with "open settings, <section>" / "open Jarvis
+settings, <section>" going through the registry's own ids, and a section that
+does not exist answered honestly with NO route field). The HUD's injected
+bootstrap acts on those same fields through the SAME navigation-only
+`open_fix_place` its settings gear already calls, and `hud_proxy.rs` starts a
+named PROGRAM with the same shared `commands.rs::open_app_from_route` the bar's
+chat uses - so the two chat paths cannot disagree about what opens. Real
+programs ("open Notion", "open Chrome"), the refusals and "open my calendar"
+are unchanged. The phone opens nothing here and reads neither field, and the
+sentences say "on this PC", so there is no phone parity change to classify.
+
 **The menu is called "Presets" now, and it lists the PC's own presets
 (2026-10-27).** The owner's words: *"you didnt put presets, you put hud
 layouts"*, and *"i also want the presets to include all the ideal local ai
