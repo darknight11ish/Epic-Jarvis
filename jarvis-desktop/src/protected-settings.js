@@ -203,22 +203,6 @@ async function load() {
   paint();
 }
 
-/** Run one command with the buttons held and the PC's answer in the status line. */
-async function run(command, args, working) {
-  if (busy) return null;
-  busy = true;
-  say(working);
-  paint();
-  try {
-    return await TAURI.core.invoke(command, args);
-  } catch (error) {
-    say(problemWords(error), "bad");
-    return null;
-  } finally {
-    busy = false;
-  }
-}
-
 async function startPick(kind) {
   if (busy) return;
   busy = true;

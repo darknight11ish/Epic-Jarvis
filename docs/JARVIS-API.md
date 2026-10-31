@@ -28861,19 +28861,24 @@ called).
 
 ### 170.6 The apps and honest limits
 
-Desktop Settings has the full surface in its own lane (list, the three native
-pickers, mode choice, Remove, and plain sentences for refusals); the phone lane
-shows the list, the mode, Remove (which asks the PC for one card) and one line
-saying the pickers are on the PC. Both apps list it either way; there is no
-phone file browser. `POST /api/protection/add` is PC-only and raises no card;
-the chat add and every removal are one card each.
+Desktop Settings has the full surface (list, the three native pickers, mode
+choice, Remove, and plain sentences for refusals); the phone shows the list, the
+mode, Remove (which asks the PC for one card) and one line saying the pickers
+are on the PC. Both apps list it either way; there is no phone file browser.
+`POST /api/protection/add` is PC-only and raises no card; the chat add and every
+removal are one card each. Adding from the phone is not missing, only one step
+slower: the owner asks in chat and the same `protect_item` card waits.
 
 **Implemented and proved in this repository, NOT deployed to the owner's live
 PC by this change** - the live deploy is its own pass, so the owner's apps do
-not show it until then. The two new documented routes are not called by either
-app until the desktop and phone lanes merge, so `tools/check_parity.py` reports
-them as documented-but-uncalled in the meantime (reported, not hidden). The
-card words and "What asks first" rows are in this change; the app-side contract
-fixtures are owed by the app lanes, and a follow-up patch can give the two
-actions `_RISK` rows so their cards show classified words instead of the gate's
-generic unclassified warning.
+not show it until then. Both lanes are in: the desktop Settings surface, the
+phone's list, and `tools/check_parity.py` classifies `/api/protection` and
+`/api/protection/remove` as ported, `/api/protection/add` as the desktop's alone
+on purpose (`docs/ARCHITECTURE.md` §8), and the chat door
+`/api/protection/propose` as backend-only. The card words, the "What asks first"
+rows and the six app-side contract fixtures (`card-words-cases.json`,
+`asks-first-cases.json`, `screen-cases.json`, each app's copy) are in this
+change. One follow-up is written down rather than hidden: a patch can give the
+two actions `_RISK` rows so their cards show classified words instead of the
+gate's generic unclassified warning; the gate already forces `ask` on both, so
+nothing is loosened in the meantime.
