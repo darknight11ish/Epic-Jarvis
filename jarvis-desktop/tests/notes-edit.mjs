@@ -226,6 +226,12 @@ await check("notes.js has no way to decide an approval: the page only asks", asy
   assert.match(js, /APPROVE_WHERE/);
 });
 
+await check("Rust holds a save while the event stream is stale (rule 4)", async () => {
+  const rs = fs.readFileSync(path.join(HERE, "..", "src-tauri", "src", "commands.rs"), "utf8");
+  assert.match(rs, /pub async fn notes_save[\s\S]{0,600}StreamState[\s\S]{0,160}stale/,
+    "notes_save does not refuse on a stale link");
+});
+
 /* ── The Brain window, in a browser ─────────────────────────────────────── */
 
 let K = null;

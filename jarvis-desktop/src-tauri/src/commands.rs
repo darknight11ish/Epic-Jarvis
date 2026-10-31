@@ -5522,6 +5522,11 @@ pub async fn notes_read(app: AppHandle, path: String) -> Result<serde_json::Valu
 /// `202` with a job id and `state: "waiting"`, and nothing is written before
 /// the owner answers. A `409` means the expected hash no longer matches: the
 /// answer names the current hash and nothing is overwritten.
+///
+/// Held while the event stream is stale (rule 4), like the wiki builder's
+/// add: the card it raises should be answered by someone looking at a live
+/// queue. The page greys Save for the same reason, but any window holding the
+/// capability reaches this command directly, whatever its button shows.
 #[tauri::command]
 pub async fn notes_save(
     app: AppHandle,
@@ -5537,6 +5542,12 @@ pub async fn notes_save(
     if expected_sha256.is_empty() {
         return Err(
             "open the note before saving it, so the PC can check it has not changed".to_string(),
+        );
+    }
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "the event stream is stale, so a save cannot be asked for until it reconnects"
+                .to_string(),
         );
     }
     let payload = serde_json::json!({
