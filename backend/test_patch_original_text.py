@@ -137,15 +137,16 @@ def t_the_late_patches_are_pinned_and_not_new():
     check("every patch after the audit's position 29 that reads original text is "
           "pinned, so none of them is a new patch arriving unnoticed", not unpinned,
           f"unpinned late patch(es): {unpinned}")
-    # 2026-10-30: two independent patches raise the count by one each, and both
-    # are in this merged stack - this branch's show-card-timer.patch at
-    # position 38 (one of its three hunks reads `pending()`'s own SELECT line)
-    # and unknown-risk-approvable.patch, now at position 163 after that
-    # insertion (Gemini's Q2 ruling: four of its five hunks read the owner's
-    # own jarvis_gate.py text). PIN and the tool's docstring name both, so the
-    # count moved with them.
-    check("the twenty-one exceptions the tool's docstring names are the "
-          "twenty-one the walk finds", len(late) == 21,
+    # 2026-10-30: THREE patches raise the count by one each, and all are in this
+    # merged stack - this branch's show-card-timer.patch at position 38 (one of
+    # its three hunks reads `pending()`'s own SELECT line); the Q2 ruling's
+    # unknown-risk-approvable.patch at position 163 after that insertion (four
+    # of its five hunks read the owner's own jarvis_gate.py text); and #1000's
+    # jobs-routes.patch, the LAST core patch at position 164 (all four of its
+    # hunks read the owner's original jarvis_hud.py job routes). PIN and the
+    # tool's docstring name all three, so the count moved with them.
+    check("the twenty-two exceptions the tool's docstring names are the "
+          "twenty-two the walk finds", len(late) == 22,
           f"the walk found {len(late)}: {late}")
 
 

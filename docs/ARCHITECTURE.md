@@ -3947,6 +3947,8 @@ half, so `tools/check_parity.py` classifies nothing new.
 
 **Picture-in-picture is the phone's, and the platform is why** (2026-10-30, the owner's settled design of 2026-10-11: *"can you add a picture in picture mode to jarvis that's similar to Google maps"*; `docs/PIP-DESIGN.md`). Android's own PiP - a small Jarvis window that stays on screen while other apps are in front - is the activity itself, resized by the OS: `MainActivity` declares `supportsPictureInPicture`, draws its own compact layout while `isInPictureInPictureMode` is true, and shows the face and the first line of the answer, the last few messages, or Jarvis Live (`data/PipMode.kt`, `ui/PipWindow.kt`). **The PC has no such window**: its nearest equivalent is the floating face over other windows (`docs/JARVIS-API.md` §57), which is a window of Jarvis's own and not an OS-managed miniature of the whole activity, so there is no desktop PiP layout to build and no desktop Settings row of the same name - the mode is saved on that phone only (`ClientSettings.pipMode`, key `pip_mode`), like every other display setting. It adds **no route and no permission**: the window is fed by the existing chat and Live flows, and its only system action is Expand. Two rules are the reason it is a design rather than a shrunken screen: it never approves anything (`JarvisRuntime.decide` is not reachable from that surface at all), and while "Hide memory lists and chat history" or App lock hides content it draws a dimmed face and the owner's own sentence - "Hidden while Jarvis is locked." - never the answer or the conversation (`docs/PIP-DESIGN.md` §4, §5, §9.1). `tools/check_parity.py` has nothing to classify here.
 
+**Long Fuse's start/answer loop is the desktop's for now, and the phone half is the named next slice** (2026-10-30, JARVIS-API §169; `backend/jobs-routes.patch`). `POST /api/jobs` and `POST /api/jobs/answer` exist now, and the desktop's Work tab uses both: a "Start a background job" form offering only the bodies this PC registered, and "Allow once: <action>" / "No" under a parked job. **The phone does not, for a measured reason rather than taste:** its Work tab has never had a control for Long Fuse - it draws `JobPlate`, a read-only row showing the state and the frozen set - and its `JobRecord` (`net/ApiModels.kt`) parses neither the `grants` the answer needs nor the `status.handlers` list the form needs. So the phone half is a model change plus a control, not a button; it is the next slice, and nothing about the permission model changes when it lands (the same one grant, one use, no standing rule). `tools/check_parity.py` records `/api/jobs/answer` as `todo` with that reason, while `/api/jobs` stays `ported` because the phone already makes that read. **This entry is a slice boundary, not a decision that the phone should never have it** - it is deleted when the phone half is built.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
@@ -4282,14 +4284,54 @@ they landed):
   that ran something. The receipt carries no label, no param and no error text:
   those are the owner's words and the audit log is not private.
 
-  **Said plainly, because it is a real gap:** there is no route that CREATES a
-  job, and no route that answers a parked job's grant
-  (`GET /api/jobs` lists, `POST /api/jobs/cancel` cancels, and nothing else).
-  A job can therefore only be created by code that calls `create()`, and a
-  parked job waits for ever until a route exists. Waiting is the safe
-  direction - rule 4 is absolute - but it is not a finished feature, and the
-  person who adds the route must pass the owner's own action through
-  `create()`, which is what makes the frozen set his yes.
+  **THE GAP IS CLOSED (2026-10-30): the way in and the way out exist.** Until
+  that day there was no route that CREATED a job and no route that answered a
+  parked job's grant - `GET /api/jobs` listed, `POST /api/jobs/cancel`
+  cancelled, and nothing else, so `create()` had no production caller and a
+  parked job waited for ever. `backend/jobs-routes.patch` adds the two:
+
+  * **`POST /api/jobs`** creates ONE job. `kind` names a body this PC
+    registered (`status.handlers` from the GET above), `text` is the owner's
+    own words and becomes the label, `when` is the queue's own time field, and
+    `needs` is the capability set frozen onto the row. It passes all four
+    through `create()`, which is what makes that set his yes; it approves
+    nothing itself, never widens a set, and answers **503 when the one
+    heartbeat is off** rather than queue a job nothing would run. The desktop
+    Work pane sends `needs: []` on purpose: the job starts with nothing and
+    parks on its first need, where the owner answers one question at a time.
+  * **`POST /api/jobs/answer`** answers the ONE grant a parked job waits on,
+    with `{"id", "approved": true|false}`. It is the owner's own answer
+    arriving over HTTP - the card's button, not a policy change. One job, one
+    grant, one use: `_grant_step` spends it, a second tap is 409, and a **No
+    stops that job at once** (`_stop_denied`) and leaves no rule behind - the
+    next job needing the same action parks and asks again. There is no list
+    form and no "allow all".
+  * The GET the pane already makes now also carries **`grants`** (the pending
+    ones, by job) and **`ticking`** (is the heartbeat running), so the pane can
+    say what it is asking and refuse to promise a job will run when it cannot.
+
+  Both routes sit beside `POST /api/jobs/cancel` in `jarvis_hud.py`, behind the
+  same origin and token checks, and the same power shape is granted to the
+  desktop in one permission set (`brain-act`) - never through the Brain's read
+  allow-list. `backend/test_jobs.py` tests the logic and rehearses the patch;
+  `jarvis-desktop/tests/job-list.mjs` holds the desktop's half.
+
+  **One-sided for now, and the reason written down:** only the DESKTOP has the
+  loop. The phone's Work pane is a read-only job list (`JobPlate`) that has
+  never offered a create, a cancel or an answer for Long Fuse, and its
+  `JobRecord` drops both `grants` and `status.handlers` - so the phone half
+  needs a model change before it can be a button, not only a control.
+  `tools/check_parity.py` records `/api/jobs/answer` as `todo` with that
+  reason, and JARVIS-API section 169.4 says the same. When the phone half is
+  built the classification becomes `ported`; it is NOT a deliberate omission.
+
+  **One job body exists in production, and that is said plainly too:** the
+  start-up call this patch adds to `jarvis_watch.register_job()` (the function
+  existed with no caller at all) registers `watch_github`. It is the one real
+  thing a route-created job can do today; every other handler in the queue is
+  the suite's own. The route is the missing half of the feature - "what a job
+  can DO" grows one registration at a time, and a kind that is not registered
+  is refused in words rather than queued.
 
   **Two payload mismatches on `/api/initiative` were fixed the same day**, in
   the backend, and neither app changed: `jarvis_initiative.drain()` now mirrors

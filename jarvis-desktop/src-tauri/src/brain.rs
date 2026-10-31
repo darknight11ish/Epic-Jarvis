@@ -270,6 +270,70 @@ pub async fn brain_cancel_job(app: AppHandle, id: String) -> Result<serde_json::
     post(&app, "/api/jobs/cancel", serde_json::json!({ "id": id })).await
 }
 
+/// Starts ONE Long Fuse job from the owner's own words (2026-10-30,
+/// `jobs-routes.patch`; JARVIS-API section 21.10).
+///
+/// **This command approves nothing, and cannot.** `kind` is the name of a job
+/// body this PC has registered — the window offers only what
+/// `GET /api/jobs` reported under `status.handlers`, so a page cannot invent
+/// one — and `needs` is the capability list the owner ticked for THIS job. It
+/// is sent empty by the Work pane on purpose: a job created here runs with no
+/// capabilities frozen and PARKS the moment it needs one, which is what the
+/// answer command below is for. There is no route and no argument that widens
+/// a frozen set, and no branch here reaches an approval.
+///
+/// Gated on a live link for the same reason `brain_cancel_job` is: creating a
+/// job against a list that could not be confirmed live risks a second copy of
+/// one the owner already started.
+#[tauri::command]
+pub async fn brain_create_job(
+    app: AppHandle,
+    kind: String,
+    text: Option<String>,
+    needs: Option<Vec<String>>,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    post(
+        &app,
+        "/api/jobs",
+        serde_json::json!({
+            "kind": kind,
+            "text": text.unwrap_or_default(),
+            "needs": needs.unwrap_or_default(),
+            "by": "hud",
+        }),
+    )
+    .await
+}
+
+/// Answers the ONE grant a parked job is waiting on (2026-10-30,
+/// `jobs-routes.patch`; JARVIS-API section 21.10).
+///
+/// The owner's own yes or no, for one job, arriving where a tool call would
+/// have been: the server turns it into that job's single pending grant, which
+/// is spent on its next use, so a second ask asks again. It is NOT a standing
+/// permission and nothing here writes one — a No fails that job and the next
+/// job needing the same action parks and asks again. There is deliberately no
+/// list form: one tap approves nothing beyond the one question it names.
+///
+/// Gated on a live link like every write here: answering a card that could not
+/// be confirmed live risks deciding one that has already been answered, or
+/// whose job has already finished on its own.
+#[tauri::command]
+pub async fn brain_answer_job(
+    app: AppHandle,
+    id: String,
+    approved: bool,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    post(
+        &app,
+        "/api/jobs/answer",
+        serde_json::json!({ "id": id, "approved": approved, "by": "hud" }),
+    )
+    .await
+}
+
 /// Steers one job in the job list (2026-10-08, JARVIS-API section 118):
 /// `pause`, `resume`, `cancel`, `retry`, or answers a question a job stopped
 /// on (`input`, where `value` is the owner's answer).

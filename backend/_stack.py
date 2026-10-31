@@ -320,7 +320,21 @@ RATCHET = {
     #: `jarvis-backend/jarvis_hud.py` (apply, reverse, byte for byte -
     #: backend/test_cloud_honesty.py re-runs it). A ratchet: it may still only
     #: go down.
-    "jarvis_hud.py": 64,
+    #: RAISED 2026-10-30: 64 -> 68 for `jobs-routes.patch` (Long Fuse's way in
+    #: and out: POST /api/jobs and POST /api/jobs/answer). ALL FOUR of its hunks
+    #: have to invent their pre-image, and it is the honest kind rather than
+    #: drift: no patch in this walk writes any of the four places - the GET
+    #: /api/jobs body, the `_desktop_action` branch beside `/api/jobs/cancel`,
+    #: the POST route TUPLE, and the initiative start-up block that registers
+    #: the one production job body. The queue shipped whole (it is in
+    #: `$SHIPPED`), its routes never did, and `jarvis_hud.py` is not a file any
+    #: patch re-writes wholesale. That is also why the patch has to exist: the
+    #: missing routes were the missing half of the feature. Measured, not
+    #: argued: the walk now reads 68. Checked the other way with `git apply`
+    #: against `jarvis-backend/jarvis_hud.py` (apply, reverse, byte for byte,
+    #: and the applied file compiled - backend/test_jobs.py re-runs it). A
+    #: ratchet: it may still only go down.
+    "jarvis_hud.py": 68,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

@@ -1037,6 +1037,12 @@ pub fn run() {
             brain::brain_read,
             brain::brain_revert_undo,
             brain::brain_cancel_job,
+            // Long Fuse's way in and the way out of a parked grant (2026-10-30,
+            // jobs-routes.patch): start ONE job from the owner's words, and
+            // answer ONE grant for ONE job. Neither approves beyond the one
+            // question it names, and neither can widen a frozen capability set.
+            brain::brain_create_job,
+            brain::brain_answer_job,
             brain::brain_task_act,
             brain::brain_cancel_hold,
             brain::brain_watch_add,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-answer-job"
+description = "Enables the brain_answer_job command without any pre-configured scope."
+commands.allow = ["brain_answer_job"]
+
+[[permission]]
+identifier = "deny-brain-answer-job"
+description = "Denies the brain_answer_job command without any pre-configured scope."
+commands.deny = ["brain_answer_job"]

@@ -671,9 +671,16 @@ def t_the_patch_and_the_lists():
     later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
              # attached-file.patch (2026-10-29, the owner's "a file in a chat"):
              # ONE hunk, in jarvis_hud.py only (the attach line on the chat
-             # request), appended after this patch and immediately before
-             # plugin-loader.patch - it rewrites nothing this patch wrote.
+             # request), appended after this patch and before the newest one -
+             # it rewrites nothing this patch wrote.
              "attached-file.patch",
+             # jobs-routes.patch (2026-10-30, Long Fuse's way in and out): four
+             # hunks in jarvis_hud.py only (the GET /api/jobs body, the
+             # _desktop_action branch, the POST route list and the initiative
+             # start-up block), appended after this patch and immediately before
+             # plugin-loader.patch - it adds no tier row, no _RISK row and no
+             # _TOOL_ACTIONS line, so it rewrites nothing referee.patch wrote.
+             "jobs-routes.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing referee.patch wrote.

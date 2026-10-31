@@ -692,6 +692,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              # request), appended after this patch and immediately before
              # plugin-loader.patch - it rewrites nothing this patch wrote.
              "attached-file.patch",
+             # jobs-routes.patch (2026-10-30, Long Fuse's way in and out): four
+             # hunks in jarvis_hud.py only (the GET /api/jobs body, the
+             # _desktop_action branch, the POST route list and the initiative
+             # start-up block), appended after this patch and immediately
+             # before plugin-loader.patch - jarvis_gate.py not at all, so it
+             # rewrites nothing this patch wrote.
+             "jobs-routes.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing this patch wrote.

@@ -97,7 +97,7 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all TWENTY-ONE - those thirteen, plus `private-chat.patch` at position 152, added
+all TWENTY-TWO - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -131,9 +131,22 @@ the owner's own `jarvis_gate.py` text: the `_RISK` table's opening line where
 the eight rows are added, `_UNKNOWN_RISK`'s line beside the new
 `UNCLASSIFIED_WARNING`, `risk_for()`'s docstring, and `check()`'s
 `tier = tiers.get(...)` line - the fifth anchors on `approval-notice.patch`'s
-own added block and costs nothing) - with their positions,
-instead of pretending they are not there. The position-29 rule is kept as a
-REPORTED fact, not a gate.
+own added block and costs nothing) - plus, on the same day, ONE more:
+`jobs-routes.patch` at position 164 (the LAST core patch, immediately
+before `plugin-loader.patch`), the first patch since the queue
+landed that touches `jarvis_hud.py`'s job routes. All FOUR of its hunks read
+the owner's original HUD text (the GET body, the `_desktop_action` branch
+beside `/api/jobs/cancel`, the POST route tuple, and the initiative start-up
+block), because no patch in this walk writes any of those four places - which
+is also why the routes were missing at all. It was appended at the end on
+purpose: an earlier draft stood in the middle of the stack and changed the
+context a LATER patch anchored on, which moved that patch's own invented-hunk
+count in `_stack.RATCHET` - the drift this tool and that pin exist to catch.
+Checked the other way by
+`backend/test_jobs.py`: it applies the patch to the published base, reverses
+it byte for byte, and walks the applied AST for both route branches. With
+their positions, instead of pretending they are not there. The position-29
+rule is kept as a REPORTED fact, not a gate.
 
 THE PIN
 
@@ -405,6 +418,30 @@ PIN = {
     # drives the field and its three absences - and whose `built()` fails if
     # `git apply` refuses any of them.
     "show-card-timer.patch":                   (1, 7),     # position 38
+
+    # 2026-10-30, jobs-routes.patch (Long Fuse's way in and out: POST /api/jobs
+    # and POST /api/jobs/answer). ALL FOUR of its hunks read the owner's
+    # original `jarvis_hud.py`, and that is honest rather than drift - no patch
+    # in this walk writes any of the four places:
+    #   * the GET /api/jobs body, where the two new keys (`grants`, `ticking`)
+    #     join what the route already sent;
+    #   * `_desktop_action`'s branch beside the `/api/jobs/cancel` one, which the
+    #     owner's file already had (`jarvis_jobs.py` was added to the base by a
+    #     RE-TAKE, not a patch - see the "five the base already carried" block
+    #     in backend/_where.py's SHIPPED list);
+    #   * the POST route TUPLE - no patch adds a job route to it, which is the
+    #     whole defect this patch fixes;
+    #   * the initiative start-up block (`_ENGINE.start()`), where the one
+    #     production job body is now registered.
+    # Checked the other way by backend/test_jobs.py, which applies this patch to
+    # the published `jarvis-backend/jarvis_hud.py` with `git apply` (no fuzz),
+    # reverses it out byte for byte, and compiles the applied file.
+    # It is the LAST core patch (position 164), immediately before
+    # plugin-loader.patch. That is deliberate: appended rather than inserted, so
+    # no later patch's context moves - an earlier draft in the middle of the
+    # stack changed one later patch's invented-hunk count and
+    # backend/test_app_control.py caught it.
+    "jobs-routes.patch":                       (4, 27),     # position 164
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

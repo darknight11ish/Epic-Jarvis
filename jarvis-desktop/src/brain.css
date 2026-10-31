@@ -1006,6 +1006,31 @@ body {
   white-space: nowrap;
 }
 
+/* Long Fuse's "Start a background job" (2026-10-30; jobs-routes.patch). The
+   controls sit in a `row`, which wraps: .row-actions above is nowrap because
+   it holds two buttons, and a select, a text box and a button in it would push
+   the jobs card wider than the window. */
+.job-start {
+  margin: 0 0 12px;
+}
+
+.job-start-head {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.job-start .row {
+  align-items: center;
+}
+
+.job-start .field {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 .empty {
   color: var(--text-faint);
   font-size: var(--text-sm);

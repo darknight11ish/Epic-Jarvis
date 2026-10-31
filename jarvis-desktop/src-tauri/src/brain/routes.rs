@@ -132,6 +132,17 @@ mod tests {
             "/api/shutdown",
             "/api/undo/revert",
             "/api/jobs/cancel",
+            // Long Fuse's way out (2026-10-30, jobs-routes.patch): POST
+            // /api/jobs/answer decides an approval question - the one thing a
+            // read grant must never be able to do. POST /api/jobs (the way IN)
+            // shares its path with the GET above and is deliberately NOT here:
+            // this list is paths, and forbidding the path would forbid the read
+            // too. `brain_read` issues a GET and nothing else (`get_json_status`
+            // only ever calls `.get`), so the shared path cannot reach the POST,
+            // and the POST itself is granted in the brain-act set beside
+            // brain_cancel_job (permissions/surfaces.toml), which
+            // tools/check_command_acl.py holds to this list's own commands.
+            "/api/jobs/answer",
             // The job list's steering actions (2026-10-08). They are POSTs
             // for a reason and must never be reachable through the read
             // grant: Pause and Cancel stop work, Resume puts a job back in
