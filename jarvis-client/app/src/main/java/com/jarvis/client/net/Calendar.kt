@@ -115,6 +115,22 @@ object Calendar {
      */
     const val HIDDEN_TITLE = "(hidden)"
 
+    /**
+     * What the screen may say after a calendar write while titles are hidden
+     * (DEF-025; field-test pass 9, section P8). The PC's own success sentence
+     * is built as `"<title>, Saturday 31 October at 09:00."` by
+     * `jarvis_local_calendar._said()`, so it CONTAINS the title: while App lock
+     * or "Hide memory lists and chat history" is on it must never be drawn,
+     * echoed into a node, or attached to a semantic node. These three lines are
+     * the phone's own title-free replacements ([displaySaid]).
+     */
+    const val HIDDEN_SAVED =
+        "Saved. Its words stay hidden while your memory lists are hidden."
+    const val HIDDEN_DELETED =
+        "Deleted. Its words stay hidden while your memory lists are hidden."
+    const val HIDDEN_NOT_SAVED =
+        "Not saved. The reason stays hidden while your memory lists are hidden."
+
     /** A link that is down or catching up: never a guess. */
     const val STALE = "Not up to date"
     const val STALE_SUB = "Tap to open Jarvis and reconnect"
@@ -826,6 +842,25 @@ object Calendar {
             "The Jarvis calendar is off. Nothing was deleted."
         }
         else -> "Done."
+    }
+
+    /**
+     * The ONE sentence the screen may show after a calendar write (DEF-025).
+     *
+     * [said]'s answer is passed in whole ([sentence]); while [hidden] it is not
+     * used at all, because the PC's success form names the event and the screen
+     * is drawing "(hidden)" instead. [deleted] tells a delete from an add or an
+     * update, so the replacement line says the right thing. The plate also
+     * clears the semantics of that line to the same words, so a title can
+     * never reach the accessibility tree this way (field-test pass 9, P8).
+     */
+    fun displaySaid(ok: Boolean, deleted: Boolean, hidden: Boolean, sentence: String): String {
+        if (!hidden) return sentence
+        return when {
+            !ok -> HIDDEN_NOT_SAVED
+            deleted -> HIDDEN_DELETED
+            else -> HIDDEN_SAVED
+        }
     }
 
     /** A PC without the route at all: the screen says so instead of "empty". */

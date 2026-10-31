@@ -1074,6 +1074,28 @@ class JarvisApi(
     suspend fun briefing(): ApiResult<JsonObject> = probe(Briefing.PATH)
 
     /**
+     * `GET /api/today/cockpit` - the Today board (GTD-2, 2026-10-18; the one
+     * real phone gap the 2026-10-31 parity audit named, ported that day;
+     * docs/JARVIS-API.md section 82.7, shapes in [Today]). A READ, so never
+     * held on a stale link. [hidden] asks the PC to withhold every word: the
+     * board sends `?hidden=1` while the private lists are hidden or App lock
+     * is on, and the PC answers with a board and no sections at all.
+     * [probeKeeping503] keeps a 503's own sentence (`{"available": false,
+     * "why": ...}`), which the board shows in the PC's words.
+     */
+    suspend fun todayCockpit(hidden: Boolean): ApiResult<JsonObject> =
+        probeKeeping503(Today.cockpitPath(hidden))
+
+    /**
+     * `POST /api/today/cockpit {"enabled": ...}` - the board's own said-I'd-do
+     * switch. OFF is immediate; ON is 202 while ONE `change_own_config`
+     * approval card waits, and nothing is read until a person approves it.
+     * The answer's own `message` / `waiting` / `enabled` are [Today.switchSaid].
+     */
+    suspend fun setTodayUnspoken(enabled: Boolean): ApiResult<JsonObject> =
+        postExplained(Today.COCKPIT_PATH, Today.unspokenBody(enabled))
+
+    /**
      * `POST /api/briefing/senders`: "Show who new emails are from". OFF is
      * done at once; ON is 202 while ONE approval card waits on the PC.
      */
