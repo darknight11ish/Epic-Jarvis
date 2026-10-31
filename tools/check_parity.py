@@ -150,6 +150,22 @@ CLASSIFICATION = {
     "/api/connect-account/cancel": ("deliberate", "Cancelling the connect-account card is PC-only, like the card itself: it exists only in the desktop HUD (ARCHITECTURE section 8)."),
 
     "/api/appearance": ("ported", ""),
+    # Send ONE file from the PC to the phone (2026-10-31, the owner's ask;
+    # Gemini Q7; JARVIS-API section 172). Backend: jarvis_send_file.py.
+    # The PHONE HALF is the follow-up lane: its View / Save to Downloads UI
+    # (FileProvider, ACTION_VIEW, MediaStore.Downloads) is not written yet, so
+    # no app calls either route today, so this tool's own word for it is
+    # `planned` - "built on the backend and neither app calls it yet" (a
+    # warning, not a failure: its absence from both apps is the phone lane's
+    # follow-up, and the moment the phone calls them this is reclassified).
+    "/api/files/send": ("planned", "The phone's View/Save list is the phone lane's "
+                                   "follow-up (Gemini Q7); the backend half is built, "
+                                   "documented and behind the normal token, and no app "
+                                   "calls it yet."),
+    "/api/files/download": ("planned", "The phone's View / Save to Downloads is the "
+                                       "phone lane's follow-up (Gemini Q7); the backend "
+                                       "serves ONE approved file by opaque id, ten "
+                                       "minutes, one download, and no app calls it yet."),
     # `/api/work/cloud-escalate` (the standing cloud-escalation switch, 2026-10-27):
     # PC-only. The desktop half is the `hud_cloud_escalate` command, which raises
     # the one change_own_config card; the phone reads `cloud.escalate` from
@@ -1216,7 +1232,20 @@ RETIRED = {
 #: checker reports as a warning in its own true words ("the phone calls it; the
 #: desktop does not yet"), and they become `ported` when the HUD card lands. The
 #: mechanism stays for the next backend-first route.
-PENDING_CLIENTS = {}
+PENDING_CLIENTS = {
+    # Send ONE file to the phone (2026-10-31, the owner's ask; Gemini Q7;
+    # JARVIS-API section 172). Backend: jarvis_send_file.py, behind the normal
+    # token. The phone half is the next lane: FileProvider + ACTION_VIEW for
+    # View, MediaStore.Downloads for Save to Downloads, and its own list UI for
+    # these two routes. Nothing in either app mentions them yet, which is why
+    # this is the PENDING state and not a missing caller.
+    "/api/files/send": ("the phone lane's View/Save list is the follow-up slice; the "
+                        "backend half is built, documented and authenticated, and no "
+                        "app names the route yet."),
+    "/api/files/download": ("the phone lane's View / Save to Downloads is the follow-up "
+                            "slice; the backend serves ONE approved file by opaque id, "
+                            "ten minutes and one download, and no app names the route yet."),
+}
 
 
 def _nothing_calls_it(route: str) -> str:

@@ -272,6 +272,8 @@ TITLES = {
     # --- the Phase-2 Obsidian vault organizer (2026-10-20): ONE card for the
     # whole batch, after a plan the owner has already seen.
     "organize_obsidian_vault": "organize your Obsidian vault with tags and Maps of Content",
+    # "Send a file to the phone" (2026-10-31, the owner's ask; Gemini Q7).
+    "send_file_to_phone": "send a file from your PC to your phone",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -443,6 +445,8 @@ SUMMARY = {
     "import_notion_export": "bring your Notion export in",
     # --- the Phase-2 Obsidian vault organizer (2026-10-20)
     "organize_obsidian_vault": "organize your Obsidian vault",
+    # "Send a file to the phone" (2026-10-31): ONE file, one card
+    "send_file_to_phone": "send one file from your folders to your phone",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

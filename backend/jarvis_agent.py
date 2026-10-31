@@ -903,6 +903,17 @@ FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of docum
                        "was read. Answer from what you have, and tell the owner they can ask "
                        "about the next part in a new message.")
 
+#: "Send a file to the phone" (2026-10-31, Gemini Q7): ONE file from the
+#: owner's listed folders, ONE card, an opaque id the phone fetches. The tier
+#: line `send_file_to_phone = "ask"` is in both shipped settings copies; a
+#: drop-in/shipped tool cannot add a `_RISK` row (a follow-up patch can), so
+#: the gate treats it as unclassified: FORCED to ask, with its own outbound
+#: worst-case line - never looser. `_gate_prompt` is replaced by the card's own
+#: words for this tool (see _one_call), so the card shows the exact filename,
+#: folder and byte size.
+SEND_FILE_TOOL = "send_file_to_phone"
+SEND_FILE_ACTION = "send_file_to_phone"
+
 
 def _prepare_my_files(args: dict):
     action = str(args.get("action") or "").strip().lower()
@@ -1497,6 +1508,37 @@ def _run_note(args: dict, plan_obj, **_) -> dict:
     return NC.run(plan_obj, approved=True)
 
 
+def _prepare_send_file(args: dict):
+    """prepare() for `send_file_to_phone` (jarvis_send_file.py, 2026-10-31).
+
+    Searches the owner's listed folders (the same allow-list `my_files` uses)
+    and returns the ONE candidate's state plus the card's own words. Raises
+    ValueError for no match / several matches / over-cap / outside the list -
+    a plain refusal BEFORE any card. The notification that a file becomes
+    fetchable is `execute()`, i.e. the approved verdict's run.
+    """
+    try:
+        import jarvis_send_file as SEND
+    except Exception as exc:                                # noqa: BLE001
+        return None, f"Send a file to your phone (unavailable: {type(exc).__name__})"
+    state, plan_text = SEND.prepare(args or {})
+    return state, plan_text
+
+
+def _run_send_file(args: dict, state, **_) -> dict:
+    """execute() for `send_file_to_phone`: the card said yes, so the id lives."""
+    try:
+        import jarvis_send_file as SEND
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": "the send-file module is not available here "
+                                      f"({type(exc).__name__})"}
+    try:
+        return SEND.approve(state or {})
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+
 class Tool:
     """One tool. The gate action is looked up against jarvis_gate's own
     tables (`action_for_tool`) rather than duplicated here, so the tier the
@@ -1620,6 +1662,9 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
 _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
+                                  # One file and ONE card are a deliberate direct act:
+                                  # a plan step would put a second mechanism around it.
+                                  "send_file_to_phone",
                                   # "connect_account" (CONNECT_TOOL, 2026-10-28): raising
                                   # the connect card is one deliberate act with its own
                                   # host path, never a step of a plan. Written as the
@@ -2601,6 +2646,23 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "file_read",
         instead={"notes_search": "For Obsidian or Joplin notes, use notes_search.",
                  "file_read": "For a PDF or Word file, use this, not file_read."}),
+    # Send ONE file to the phone (jarvis_send_file.py, 2026-10-31, Gemini Q7).
+    # The owner's own words: ask Jarvis to search for a file and send it to the
+    # Jarvis Android app to view or download. ONE card, exact filename/folder/
+    # size, 10 MiB cap, ten-minute single-use opaque id - the route never takes
+    # a path. See SEND_FILE_TOOL and docs/JARVIS-API.md section 172.
+    SEND_FILE_TOOL: Tool(
+        SEND_FILE_TOOL,
+        "Send ONE file from the owner's own listed folders to their phone app. "
+        "Use when they ask to search for a file and send, view or download it on "
+        "the phone. Give query (a few words of the file's name) or path (the full "
+        "path, if known). ONE card, ONE file, at most 10 MiB; nothing is fetchable "
+        "until the owner approves.",
+        {"type": "object", "properties": {
+            "query": {"type": "string", "description": "a few words of the file's name"},
+            "path": {"type": "string", "description": "one file's full path, if known"}},
+         "required": []},
+        _prepare_send_file, _run_send_file),
     # Spending from a bank export (jarvis_spending.py). Decided under
     # file_read's action - see SPENDING_TOOL.
     "my_spending": Tool(
@@ -3141,6 +3203,10 @@ NEEDS_A_PERSON = {
                     "anything the tools inside it can do",
     "rea_investigate": "starts a local reverse-engineering program and reads a program's "
                        "own files",
+    # Send one file to the phone: it leaves this PC's own folders for the
+    # phone's storage and the phone can keep a copy after it downloads it.
+    SEND_FILE_TOOL: "makes one of the owner's own files fetchable by the phone, which "
+                    "can keep a copy after it downloads it",
 }
 
 #: The same rule for every tool from a plug-in program (jarvis_mcp.py): a
@@ -6817,7 +6883,7 @@ TOOL_GROUPS = (
     ("documents", "find and read files in the listed folders",
      ("my_files", "my_spending")),
     ("files", "read a file or run a command or small script",
-     ("file_read", "shell_exec", SANDBOX_TOOL, REA_TOOL)),
+     ("file_read", "shell_exec", SANDBOX_TOOL, REA_TOOL, SEND_FILE_TOOL)),
     # Its own group: my_spending's group is dropped while no folder is listed,
     # and this needs no folder.
     ("retirement", "a retirement what-if", ("retirement_whatif",)),
@@ -11965,6 +12031,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         except Exception:
             pass
     action_name = _sandbox_action_for(name, action_name, args)
+    if name == SEND_FILE_TOOL:
+        # Its OWN action name (SEND_FILE_ACTION): the gate keeps an unknown
+        # action at "ask" with its outbound worst case, and the tier row in
+        # both shipped settings copies says "ask" too.
+        action_name = SEND_FILE_ACTION
     if name == "send_email":
         action_name = SEND_EMAIL_ACTION
     if name == "draft_email":
@@ -12186,7 +12257,10 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # The gate may wait minutes for a person. Say so to the app (after a
         # moment, so a tool the gate lets straight through never flashes it).
         out.set_status("approval")
-        verdict = checker(action_name, {"text": plan_text}, _gate_prompt(name, args))
+        # The send-file card shows the filename, folder, size and cap in its
+        # OWN words (prepare() built them), not the generic tool-call line.
+        prompt = plan_text if name == SEND_FILE_TOOL else _gate_prompt(name, args)
+        verdict = checker(action_name, {"text": plan_text}, prompt)
         out.card_answered(verdict)
         out.set_status("thinking")
         if _a_card_was_shown(verdict):

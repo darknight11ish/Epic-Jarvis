@@ -333,6 +333,16 @@ append_obsidian_daily     = "auto"
 # than written unasked. A file without this line asks too (unknown_action_tier).
 write_notes_after_outside_text = "ask"
 
+# "Send a file to the phone" (2026-10-31, the owner's ask; Gemini Q7): ONE card
+# per file showing the exact filename, the folder and the byte size; nothing is
+# fetchable until the owner's yes, and the opaque id lasts ten minutes once.
+# Its reach is "outbound" in the gate's own words: the bytes leave this PC for
+# the phone, and the phone can keep a copy after it downloads them. A drop-in
+# tool cannot add a _RISK row, so the gate treats the action as unclassified -
+# FORCED to "ask", with its own outbound worst-case line (never looser). A
+# follow-up patch can classify it; keep this line at "ask".
+send_file_to_phone       = "ask"
+
 # --- Models: three separate decisions, deliberately not bundled --------
 # Reading public catalogues says nothing about you (see the privacy note in
 # jarvis_models.py) so it is free. A download spends bandwidth and disk. A
@@ -1872,7 +1882,7 @@ star_floor = 25        # ...but never fewer than this many
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "calculator", "memory_search", "my_files"]
+enabled = ["web_search", "change_setting", "feature_guide", "calculator", "memory_search", "my_files", "send_file_to_phone"]
 
 # ------------------------------------------------------------------------
 # ENERGY - what one answer cost the graphics card (jarvis_energy.py)
