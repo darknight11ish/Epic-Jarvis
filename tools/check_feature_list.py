@@ -402,6 +402,17 @@ TEACHING_GAP = {
         "when-something-is-wrong",
         "no step mentions the rush-latch banner, outside text trying to hurry "
         "an approval, or the fact that no control clears it"),
+    # Added with the feature (2026-10-30, docs/PIP-DESIGN.md). It covers the
+    # phone-extras lesson because that is where a phone-only extra belongs, and
+    # it is a recorded gap for the reason the gate exists: the lesson teaches
+    # the floating face, the quick tiles and the screen rate, and none of its
+    # steps mentions Android's own picture-in-picture window. A work item for
+    # the teaching side, not an exemption.
+    "phone-pip": (
+        "phone-extras",
+        "teaches the phone's floating face, quick tiles and screen rate; "
+        "nothing about Android's own picture-in-picture window, what it shows "
+        "or that it never approves anything"),
 }
 
 #: Rule 7: how a `must_mention` list is judged. Only its SHAPE, plus whether

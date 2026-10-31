@@ -1,14 +1,20 @@
 package com.jarvis.client
 
 import android.Manifest
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
 import android.app.role.RoleManager
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.media.audiofx.AcousticEchoCanceler
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Rational
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -51,6 +57,10 @@ import com.jarvis.client.data.CheckMethod
 import com.jarvis.client.data.CheckOutcome
 import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.data.LockSession
+import com.jarvis.client.data.PipLayout
+import com.jarvis.client.data.PipMode
+import com.jarvis.client.data.PipPresence
+import com.jarvis.client.data.PipWords
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.data.calmFace
@@ -264,6 +274,18 @@ class MainActivity : FragmentActivity() {
      * rotation builds a new activity, and must neither unlock nor relock.
      */
     private val lockTick = mutableIntStateOf(0)
+
+    /**
+     * Whether Android is showing this activity in a picture-in-picture window
+     * right now (2026-10-30, `docs/PIP-DESIGN.md` §3).
+     *
+     * Set from [onPictureInPictureModeChanged] and read by `App()`, which draws
+     * the PiP layout instead of the current screen while it is true. Android
+     * mirrors whatever the activity shows into the little window, so without
+     * this the window would be a shrunken Settings screen or a shrunken History
+     * list - which is not a design, it is an accident.
+     */
+    private val pipNow = mutableStateOf(false)
 
     /** A fingerprint or PIN check for Unlock, Show or a Security change is up. */
     private val ownerCheckBusy = mutableStateOf(false)
@@ -1432,6 +1454,13 @@ class MainActivity : FragmentActivity() {
         val stale by JarvisRuntime.stale.collectAsState()
         val activity by JarvisRuntime.activity.collectAsState()
         val faceState by JarvisRuntime.face.collectAsState()
+        // Picture-in-picture (2026-10-30, docs/PIP-DESIGN.md): the mode the
+        // owner chose, what the window shows of the chat, and whether a Live
+        // session is running (a running one takes the window over, §2.4).
+        val pipMode by JarvisRuntime.settings.pipMode.collectAsState()
+        val pipAnswer by JarvisRuntime.chat.reply.collectAsState()
+        val pipThread by JarvisRuntime.chat.thread.collectAsState()
+        val pipLiveStatus by JarvisRuntime.liveStatus.collectAsState()
         val faceOffline by JarvisRuntime.faceOffline.collectAsState()
         val faceFocusQuiet by JarvisRuntime.faceFocusQuiet.collectAsState()
         val faceSerious by JarvisRuntime.faceSerious.collectAsState()
@@ -2260,6 +2289,59 @@ class MainActivity : FragmentActivity() {
             // phone's own "remove animations", read from the same flag the
             // theme's Motion already reads. Only ever slows the face.
             val calmMotion = look.motion.calmFace(LocalMotion.current.reduced)
+
+            // ---- PICTURE-IN-PICTURE (2026-10-30, docs/PIP-DESIGN.md §3) ----
+            // What the little window draws, decided purely from the setting,
+            // whether Live runs, and the two privacy states (§6.1) - so the
+            // truth table lives in one tested function and not in this tree.
+            val pipLayout = PipLayout.fromState(
+                mode = pipMode,
+                liveRunning = com.jarvis.client.voice.LiveRules.onHere(pipLiveStatus),
+                privateHidden = privateHidden,
+                appLock = locked,
+            )
+            // The face the app already draws, built once and handed to BOTH the
+            // PiP window and the Live screen: one source for the faces, never a
+            // second implementation (docs/CRITTERS.md).
+            val faceHolder = com.jarvis.client.ui.screens.LiveFace(
+                state = faceState,
+                face = face,
+                bindings = bindings,
+                offline = faceOffline,
+                focusQuiet = faceFocusQuiet,
+                serious = faceSerious,
+                notches = attention.pending,
+                glow = chrome.postScale * look.glow,
+                calmMotion = calmMotion,
+                stillAnimal = stillAnimal,
+                micLevel = micLevel,
+                speechLevel = speechLevel,
+                speechMouth = speechMouth,
+            )
+            // The system parameters follow the layout on EVERY composition, not
+            // only while the window is up: Android enters the window by itself
+            // (setAutoEnterEnabled) the moment the owner swipes home, so the
+            // aspect ratio and the one Expand action must already be right.
+            LaunchedEffect(pipLayout, pipNow.value) {
+                applyPipParams(pipLayout)
+            }
+
+            // While Android shows this activity in a PiP window, the window
+            // draws THE PIP LAYOUT instead of whatever screen is current - no
+            // Settings page, no History list, no card. The app lock does NOT
+            // short-circuit here: the window says "Hidden while Jarvis is
+            // locked." itself (§4, §9.1) instead of mirroring the lock screen,
+            // and the real screen (and its fingerprint ask) comes back the
+            // moment the window expands.
+            if (pipNow.value) {
+                com.jarvis.client.ui.PipWindow(
+                    layout = pipLayout,
+                    face = faceHolder,
+                    answer = pipAnswer,
+                    thread = pipThread,
+                )
+                return@JarvisTheme
+            }
 
             // The app lock outranks everything, pairing included: nothing
             // behind it is composed. Approving from the notification or the
@@ -3257,22 +3339,10 @@ class MainActivity : FragmentActivity() {
                         // start jarvis live, i dont see the face of jarvis ...
                         // should be the largest part of my phone screen").
                         // Every value is the one Home hands FaceView, so the
-                        // two screens draw the same face.
-                        face = com.jarvis.client.ui.screens.LiveFace(
-                            state = faceState,
-                            face = face,
-                            bindings = bindings,
-                            offline = faceOffline,
-                            focusQuiet = faceFocusQuiet,
-                            serious = faceSerious,
-                            notches = attention.pending,
-                            glow = chrome.postScale * look.glow,
-                            calmMotion = calmMotion,
-                            stillAnimal = stillAnimal,
-                            micLevel = micLevel,
-                            speechLevel = speechLevel,
-                            speechMouth = speechMouth,
-                        ),
+                        // two screens draw the same face - and since 2026-10-30
+                        // it is the ONE holder built above, shared with the
+                        // picture-in-picture window rather than built twice.
+                        face = faceHolder,
                         // "Talk about this in Live": held here until Send.
                         shared = liveSharedHeld,
                         onDropShared = { liveSharedHeld = null },
@@ -3444,6 +3514,12 @@ class MainActivity : FragmentActivity() {
                         },
                         floatingAvatar = floatingAvatar,
                         onFloatingAvatarChange = { JarvisRuntime.settings.setFloatingAvatar(it) },
+                        // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md):
+                        // its own row under Floating Jarvis, saved on this phone
+                        // only. `App()` above draws the window from the same
+                        // setting, so this row is the one place it is changed.
+                        pipMode = pipMode,
+                        onPipModeChange = { JarvisRuntime.settings.setPipMode(it) },
                         overlayGranted = remember(tick) {
                             Settings.canDrawOverlays(this@MainActivity)
                         },
@@ -4692,6 +4768,126 @@ class MainActivity : FragmentActivity() {
                 JarvisRuntime.startStream(force = true)
             }
         }
+        // Picture-in-picture (2026-10-30, docs/PIP-DESIGN.md §3): the window's
+        // parameters are re-armed on every resume. The setting or the Live
+        // session may have changed while another screen was in front, and
+        // auto-enter must stop the moment the owner picks Off - the escape from
+        // a window he did not mean to get (§8's own risk note). Reads state and
+        // sets the window's own parameters; it neither opens the app nor
+        // enters PiP.
+        syncPipPresence()
+        if (JarvisRuntime.isInitialized) {
+            runCatching { setPictureInPictureParams(buildPipParams(pipLayoutNow())) }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //   Picture-in-picture (2026-10-30, docs/PIP-DESIGN.md)
+    // ------------------------------------------------------------------
+
+    /**
+     * Android has entered or left the picture-in-picture window (§3).
+     *
+     * While it is up the app draws the PiP layout instead of its current screen
+     * (`App()` reads [pipNow]); leaving it puts the real screen back, on the
+     * same screen it left - this activity is `singleTask` and nothing here
+     * navigates. [PipPresence] is set for one reason: the Floating Jarvis
+     * overlay hides its own window while this one is up and shows it again when
+     * it ends (§2.2) - it yields rather than stopping, so the setting is never
+     * touched.
+     */
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        pipNow.value = isInPictureInPictureMode
+        PipPresence.setUp(isInPictureInPictureMode)
+        // The aspect ratio can change with the layout (mode 2 is taller; a
+        // running Live session takes the window over, §2.4), and Android asks
+        // for the new parameters the moment the window is up.
+        if (JarvisRuntime.isInitialized) {
+            runCatching { setPictureInPictureParams(buildPipParams(pipLayoutNow())) }
+        }
+    }
+
+    /**
+     * Below Android 12 the window is reached from here, because auto-enter does
+     * not exist yet; from Android 12 up `setAutoEnterEnabled(true)` in
+     * [buildPipParams] already drops the app into the window when the owner
+     * swipes home, which is the Maps behaviour he asked for.
+     *
+     * **This branch cannot run on any phone this build supports**: `minSdk` is
+     * 33, so every supported phone is Android 13+. It is written down rather
+     * than assumed, exactly as `docs/PIP-DESIGN.md` §3 says - the sentence in
+     * that document is about a fallback nobody should need, and a fallback
+     * nobody can reach is only honest if the code says so.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !pipNow.value &&
+            JarvisRuntime.isInitialized &&
+            JarvisRuntime.settings.pipMode.value != PipMode.OFF
+        ) {
+            runCatching {
+                enterPictureInPictureMode(buildPipParams(pipLayoutNow()))
+            }
+        }
+    }
+
+    /** The layout the window would draw right now, from the same pure rule. */
+    private fun pipLayoutNow(): PipLayout = PipLayout.fromState(
+        mode = if (JarvisRuntime.isInitialized) JarvisRuntime.settings.pipMode.value else PipMode.OFF,
+        liveRunning = JarvisRuntime.isInitialized && JarvisRuntime.liveOnHere(),
+        privateHidden = lockSession.privateHidden(currentSecurity()),
+        appLock = lockSession.locked(currentSecurity()),
+    )
+
+    /** One place that sets both the presence flag the overlay reads and the parameters. */
+    private fun syncPipPresence() {
+        PipPresence.setUp(isInPictureInPictureMode)
+    }
+
+    /**
+     * THE PiP PARAMETERS, and the ONLY place they are built.
+     *
+     * EXACTLY ONE ACTION, and it is [PipWords.EXPAND] (§9.4): the window's one
+     * job on a tap is to bring the real app back. There is deliberately no
+     * Approve, no Deny, no Forget, no Send and no "keep this fact" - a PiP
+     * window is glanceable, Android can move or cover it, and a decision in it
+     * would be one accidental tap away from acting (§5). `PipTest` reads this
+     * function's source and fails the build if a second action ever appears
+     * here, which is the whole reason it is one small function.
+     *
+     * The aspect ratio is the layout's own: modes 1 and 3 are about 16:9, mode
+     * 2 is taller (9:16) because it is a short list (§3). Auto-enter is armed
+     * only when the setting is not Off, so Off really means no window.
+     */
+    private fun buildPipParams(layout: PipLayout): PictureInPictureParams {
+        val expand = RemoteAction(
+            Icon.createWithResource(this, R.drawable.ic_notification),
+            PipWords.EXPAND,
+            PipWords.EXPAND,
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ),
+        )
+        return PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(layout.aspectW, layout.aspectH))
+            .setActions(listOf(expand))
+            .setAutoEnterEnabled(layout != PipLayout.OFF)
+            .build()
+    }
+
+    /** Applies [buildPipParams] for [layout] and never lets a stale window throw. */
+    private fun applyPipParams(layout: PipLayout) {
+        runCatching { setPictureInPictureParams(buildPipParams(layout)) }
     }
 
     /**

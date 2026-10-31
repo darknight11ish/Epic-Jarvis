@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 143,
+  "feature_count": 144,
   "features": [
     {
       "id": "typing",
@@ -7880,6 +7880,56 @@
       "own_intents": [],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "phone-pip",
+      "name": "Picture-in-picture",
+      "group": "Phone",
+      "surface": "phone",
+      "where": "Settings, Picture-in-picture.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": null,
+        "turn_off": null,
+        "adjust": [],
+        "intent": null
+      },
+      "desktop": {
+        "section": "pip-mode",
+        "location": "— (no desktop row: Android's own window over other apps)",
+        "search": [],
+        "found": false
+      },
+      "phone": {
+        "section": "pip-mode",
+        "location": "Settings > picture in picture",
+        "search": [
+          "picture in picture",
+          "Picture-in-picture"
+        ],
+        "found": true
+      },
+      "status": "pc-only",
+      "owner": "Session B",
+      "reason": "Phone-only, by the platform: Android's picture-in-picture is an OS window over other apps, and the desktop's nearest equivalent is the floating face over other windows (docs/ARCHITECTURE.md section 8). Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
+      "label": "PC-Only Setting (Honest Refusal on Phone)",
+      "label_evidence": {
+        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "screen_path": "desktop: no row (Android only); phone: Settings, Picture-in-picture"
+      },
+      "command": {
+        "status": "open-only",
+        "reason_code": "app-local",
+        "owner": "Session B",
+        "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
+        "settings_gap": null,
+        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -9480,6 +9530,21 @@
       "app": "both",
       "where": "settings",
       "in_desktop_settings": true,
+      "in_phone_settings": true
+    },
+    {
+      "id": "pip-mode",
+      "names": [
+        "picture in picture",
+        "picture-in-picture",
+        "pip",
+        "the small window",
+        "the little window over other apps",
+        "the floating window"
+      ],
+      "app": "phone",
+      "where": "settings",
+      "in_desktop_settings": false,
       "in_phone_settings": true
     }
   ],
@@ -11854,7 +11919,7 @@
   "label_counts": {
     "Command-Only (Runs When You Ask — No Switch Needed)": 71,
     "Switchable / Adjustable (Typed & Settings)": 43,
-    "PC-Only Setting (Honest Refusal on Phone)": 15,
+    "PC-Only Setting (Honest Refusal on Phone)": 16,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2
   },

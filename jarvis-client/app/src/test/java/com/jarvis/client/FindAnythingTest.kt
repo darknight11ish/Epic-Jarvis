@@ -235,9 +235,14 @@ class FindAnythingTest {
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 126 menus has all of its names searched for.
+            // of the 127 menus has all of its names searched for.
+            //
+            // 126 -> 127 (2026-10-30, docs/PIP-DESIGN.md): `settings.pip-mode`
+            // is the phone's "Picture-in-picture" row (SettingsScreen.kt item
+            // "pip-mode") with a real place in MenuPlaces.SETTINGS, so the
+            // catalogue is one larger because a real place was added.
             "the catalogue must still carry the names at all",
-            126,
+            127,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

@@ -41,6 +41,11 @@ object MenuPlaces {
         // halves, which is how the pair is kept in step.
         "approval-cards" to "settings.approval-cards",
         "floating-avatar" to "settings.floating-avatar",
+        // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md): its own
+        // Settings row (SettingsScreen.kt, item "pip-mode") next to Floating
+        // Jarvis, saved on this phone only - so like that row it needs a PLACE
+        // here, or MenuVisibilityTest would report it as un-hideable.
+        "pip-mode" to "settings.pip-mode",
         "manner" to "settings.manner",
         // "A new conversation starts after" (the audit of 2026-10-08): a
         // CLIENT-SIDE choice, so its row is this phone's own setting and its

@@ -1347,6 +1347,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.pip-mode",
+    "title": "Picture-in-picture",
+    "about": "A small Jarvis window that stays on screen over other apps: the face and the answer, the conversation, or Jarvis Live.",
+    "apps": [
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "picture in picture",
+      "picture-in-picture",
+      "pip",
+      "the small window",
+      "the little window over other apps",
+      "the floating window"
+    ]
+  },
+  {
     "id": "settings.quick-tiles",
     "title": "Quick Settings tiles",
     "about": "The tiles in the phone's quick panel.",
@@ -2915,6 +2939,7 @@ export const ALIASES = {
   "first-time setup": "settings.setup-questionnaire",
   "floating face": "settings.floating-avatar",
   "floating jarvis": "settings.floating-avatar",
+  "floating window": "settings.pip-mode",
   "focus": "brain.work.focus",
   "focus presets": "settings.focus-presets",
   "focus session": "brain.work.focus",
@@ -2964,6 +2989,7 @@ export const ALIASES = {
   "limits": "settings.limits",
   "limits and frequencies": "settings.limits",
   "limits and frequency": "settings.limits",
+  "little window over other apps": "settings.pip-mode",
   "look at this": "settings.screen-look",
   "look at this and watch with me": "settings.screen-look",
   "making pictures": "settings.pictures",
@@ -2995,9 +3021,12 @@ export const ALIASES = {
   "people and things": "brain.memory.people-things",
   "phone notifications": "settings.phone-notify",
   "picture gallery": "settings.pictures",
+  "picture in picture": "settings.pip-mode",
+  "picture-in-picture": "settings.pip-mode",
   "pictures": "settings.pictures",
   "pin everyday chat": "settings.second-card.chat-card",
   "pinned facts": "brain.memory.profile",
+  "pip": "settings.pip-mode",
   "preset selector": "settings.focus-presets",
   "presets": "settings.focus-presets",
   "progress": "brain.projects.progress",
@@ -3048,6 +3077,7 @@ export const ALIASES = {
   "show or hide": "settings.menu-visibility",
   "show the prompt coach": "settings.prompt-coach",
   "skills": "brain.model.skills",
+  "small window": "settings.pip-mode",
   "smartwatch notifications": "settings.watch-notify",
   "solve it here settings": "settings.handoff",
   "spending": "settings.spending",

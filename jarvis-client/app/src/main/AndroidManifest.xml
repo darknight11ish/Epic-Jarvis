@@ -166,12 +166,28 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:resizeableActivity="true">
             <!-- resizeableActivity: recommended for the Activity a chat
                  bubble expands into ("Floating Jarvis: Bubble",
                  service/WakeWordService.kt's attachBubble) - the bubble's
                  floating window resizes this same Activity rather than a
                  second, cut-down one. Harmless with Floating Jarvis off. -->
+            <!-- supportsPictureInPicture (2026-10-30, docs/PIP-DESIGN.md §3):
+                 Android's own picture-in-picture window - the small Jarvis
+                 window that stays on screen while the owner uses other apps.
+                 MAIN ACTIVITY ONLY: the window is a miniature of THIS app, so
+                 the activity the owner leaves is the one that has to ask for it.
+                 No permission is involved - PiP needs none.
+
+                 configChanges: these four are the ones the design names, so
+                 Android RESIZES this window instead of restarting the activity
+                 under the owner when the window changes shape. Without them a
+                 rotation would rebuild everything (and drop the shared text,
+                 the draft, the typing position) the moment the window changes
+                 shape. Nothing here changes how the app draws - it only stops
+                 the restart. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

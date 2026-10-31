@@ -56,6 +56,12 @@ object SettingsJump {
         // screen - what it changes is how much of a card is DRAWN.
         Entry("Approval cards", "approval-cards"),
         Entry("Floating Jarvis", "floating-avatar"),
+        // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md): the small
+        // window that stays on screen while the owner uses other apps. Its own
+        // row right under Floating Jarvis - the two are separate settings and
+        // may both be on (§2.2) - and the label is the feature's own title
+        // because the desktop has no row of the same name to copy words from.
+        Entry("Picture-in-picture", "pip-mode"),
         Entry("How Jarvis talks", "manner"),
         Entry("Web search", "web-search"),
         Entry("Prompt coach", "prompt-coach"),
