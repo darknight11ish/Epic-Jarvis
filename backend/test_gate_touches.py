@@ -703,6 +703,16 @@ def t_the_patch_is_registered_and_carries_the_change():
              # `_RISK` row) - a different list from the two `_PROTECTED` ones and
              # check()'s call this patch writes, and it removes no line at all.
              "reminder-actions.patch",
+             # unknown-risk-approvable.patch (2026-10-30, Gemini's ruling Q2) is
+             # appended last of the code patches, immediately before
+             # plugin-loader.patch: four hunks in jarvis_gate.py - nine rows at
+             # the END of `_RISK`, the UNCLASSIFIED_WARNING sentence beside
+             # them, `risk_for`'s docstring, `notice_for`'s body, and the tier
+             # read INSIDE check()'s first try (not the `_PROTECTED` call this
+             # patch rewrites, and not the comment above it) - so it rewrites
+             # nothing this patch wrote. Its own suite reverses this patch's
+             # output out of the published gate, which is what proves it.
+             "unknown-risk-approvable.patch",
              # picture-card.patch (2026-10-11) is the first patch to take that
              # advice: it sits immediately BEFORE plugin-loader.patch, and it
              # touches jarvis_gate.py not at all (ONE hunk, in jarvis_hud.py, on
