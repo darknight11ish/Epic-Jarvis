@@ -381,9 +381,14 @@ def t_a_non_feature_question_still_reaches_the_model():
           got is not None and got.intent == "todo_add",
           got.intent if got else "the model")
     got = ask("what can you do?")
-    check("'what can you do?' keeps the things-you-can-say answer",
-          got is not None and got.intent == "sayable_help",
+    check("'what can you do?' is the feature OVERVIEW, not only sayable examples",
+          got is not None and got.intent == "feature_overview",
           got.intent if got else "the model")
+    check("... naming the list's groups and pointing at Everything Jarvis can do",
+          got is not None and "features in" in (got.reply or "")
+          and "groups" in (got.reply or "")
+          and "Everything Jarvis can do" in (got.reply or ""),
+          (got.reply or "")[:220])
 
 
 def t_the_quick_paths_are_registered_where_answers_are_looked_up():
@@ -571,6 +576,200 @@ def t_settings_help_keeps_its_precedence_over_the_catalogue_path():
     check("... while a real capability question is still answered from the list",
           got is not None and got.intent == "feature_capabilities",
           got.intent if got else "the model")
+
+
+def t_discussion_shapes_quote_the_rows_own_fields():
+    """The pass-11 audit's exact limits failures, plus asks/app/why/state."""
+    def reply_of(phrase):
+        got = ask(phrase)
+        return got, (got.reply if got is not None else "")
+
+    cases = {
+        "what are the limits of Galaxy": ("feature_limits", "Galaxy",
+                                          "Drawn from the same memory lists"),
+        "what are the limits of Protected from Jarvis":
+            ("feature_limits", "Protected from Jarvis", "executable name"),
+        "what are the limits of lights, plugs and fans":
+            ("feature_limits", "Lights, plugs and fans", "Locks, doors"),
+        "what are the limits of Jarvis Calendar":
+            ("feature_limits", "Jarvis Calendar", "Local only: no Google sync"),
+    }
+    for phrase, (want_intent, title, own_words) in cases.items():
+        got, reply = reply_of(phrase)
+        check(f"{phrase!r} is answered from the list", got is not None
+              and got.intent == want_intent, got.intent if got else "the model")
+        check(f"... quoting {title!r}'s own title", title in reply, reply[:260])
+        check(f"... and its own limit words {own_words!r}", own_words in reply,
+              reply[:300])
+        check("... and not a model's invented limit",
+              got is not None, reply[:200])
+    # The audit's specific wrong answer about Jarvis Calendar (the OTHER
+    # calendar row): the local calendar's own Where must be the one quoted.
+    _got, reply = reply_of("what are the limits of Jarvis Calendar")
+    check("... and the local calendar is not called the read-only iCal row",
+          "Settings, Accounts" not in reply, reply[:260])
+    got, reply = reply_of("does protected from jarvis ask first?")
+    check("'does X ask first?' quotes the row's own asks field",
+          got is not None and got.intent == "feature_asks"
+          and "raises one card" in reply, reply[:260])
+    got, reply = reply_of("which app can use picture-in-picture?")
+    check("'which app can use X?' quotes the row's own surface",
+          got is not None and got.intent == "feature_app"
+          and "phone only" in reply, reply[:260])
+    got, reply = reply_of("why would I use galaxy?")
+    check("'why would I use X?' quotes the row's own what/where/limit",
+          got is not None and got.intent == "feature_why"
+          and "A map of what Jarvis knows" in reply
+          and "Drawn from the same memory lists" in reply, reply[:320])
+    got, reply = reply_of("is quiet hours on or off?")
+    check("'is quiet hours on or off?' answers from the Notifications row",
+          got is not None and got.intent == "feature_state"
+          and "Notifications" in reply, reply[:260])
+
+
+def t_every_row_can_be_discussed_by_two_shapes():
+    """Every catalogue row resolves through tell-me and what-does-it-do."""
+    rows = __import__("json").loads(
+        (REPO / "features" / "features.json").read_text(encoding="utf-8"))
+    bad_match, bad_fields = [], []
+    for row in rows:
+        fid, title = row["id"], row["title"]
+        for phrase in (f"tell me about {title}", f"what does {title} do"):
+            got = Q.match(phrase, NOW)
+            if (got is None or got.name != "feature_explain"
+                    or got.f.get("id") != fid):
+                bad_match.append((fid, phrase, got.name if got else "the model",
+                                  got.f.get("id") if got else ""))
+        out = FG.explain(title)
+        words = str(out.get("words") or "")
+        fields = [str(row.get(k) or "").strip() for k in
+                  ("what", "where", "asks", "limit")]
+        quoted = [f for f in fields if f and f in words]
+        if row["title"] not in words or len(quoted) < 2:
+            bad_fields.append((fid, len(quoted)))
+    check(f"all {len(rows)} rows resolve through BOTH tell-me and what-does-it-do",
+          not bad_match, bad_match[:8])
+    check(f"all {len(rows)} rows quote at least two of their own fields",
+          not bad_fields, bad_fields[:8])
+
+
+def t_group_overview_answers_by_group_and_points_at_the_list():
+    got = ask("what can you do?")
+    reply = got.reply if got is not None else ""
+    check("'what can you do?' is the group overview",
+          got is not None and got.intent == "feature_overview",
+          got.intent if got else "the model")
+    check("... naming the group counts", "features in" in reply
+          and "groups" in reply and "Talking" in reply, reply[:260])
+    check("... and pointing at Everything Jarvis can do",
+          "Everything Jarvis can do" in reply, reply[:260])
+    got = ask("list what you can do")
+    check("'list what you can do' is the same overview",
+          got is not None and got.intent == "feature_overview"
+          and "groups" in (got.reply or ""), got.intent if got else "the model")
+    got = ask("what can you do about safety")
+    reply = got.reply if got is not None else ""
+    check("a group word answers BY GROUP ('safety')",
+          got is not None and got.intent == "feature_overview"
+          and "The Safety group has" in reply, reply[:260])
+    check("... capped, with a count and the whole-list pointer",
+          "and 6 more" in reply or "and " in reply
+          and "Everything Jarvis can do" in reply, reply[:300])
+
+
+def t_comparison_quotes_both_rows_side_by_side():
+    got = ask("what's the difference between reminders and alarms?")
+    reply = got.reply if got is not None else ""
+    check("'reminders vs alarms' is the fixed comparison",
+          got is not None and got.intent == "feature_difference",
+          got.intent if got else "the model")
+    check("... saying they are the SAME feature row, never inventing a difference",
+          "same feature row" in reply
+          and "Timers, alarms, reminders and lists" in reply, reply[:320])
+    got = ask("what's the difference between Galaxy and the wiki Jarvis builds?")
+    reply = got.reply if got is not None else ""
+    check("two real rows are quoted side by side",
+          got is not None and got.intent == "feature_difference"
+          and "Galaxy" in reply and "The wiki Jarvis builds" in reply,
+          reply[:360])
+    check("... each with its own limit",
+          "Drawn from the same memory lists" in reply, reply[:500])
+    got = ask("what's the difference between Galaxy and a bicycle?")
+    reply = got.reply if got is not None else ""
+    check("one real row + one non-row is honest about the other",
+          got is not None and got.intent == "feature_difference"
+          and "has no" in reply and "bicycle" in reply, reply[:300])
+
+
+def t_discussion_ordering_does_not_steal_working_quick_answers():
+    """The two measured ordering bugs: scheduler status must keep its lane."""
+    cases = {
+        "what's coming up": "next_up",
+        "what's my next reminder?": "next_up",
+        "what timers are running?": "timer_status",
+    }
+    for phrase, want in cases.items():
+        got = Q.match(phrase, NOW)
+        check(f"{phrase!r} keeps its own quick answer ({want})",
+              got is not None and got.name == want,
+              got.name if got else "the model")
+    got = Q.match("what jobs are running?", NOW)
+    check("the feature matcher does not claim 'what jobs are running'",
+          got is None or not got.name.startswith("feature_"),
+          got.name if got else "the model")
+    got = Q.match("how do timers work", NOW)
+    check("'how do timers work' explains the timers row, not a model denial",
+          got is not None and got.name == "feature_explain"
+          and got.f.get("id") == "coming-up",
+          (got.name, got.f) if got else "the model")
+    got = Q.match("what can I change in settings", NOW)
+    check("the settings-help phrase still keeps its own lane",
+          got is not None and got.name == "settings_help",
+          got.name if got else "the model")
+
+
+def t_discussion_shapes_do_not_over_capture():
+    """Ordinary conversation about non-features still reaches the model."""
+    for phrase in ("what's the difference between a car and a bike?",
+                   "what are the limits of a car?",
+                   "does my oven ask first?",
+                   "which app can use my printer?",
+                   "why would I use a bicycle?"):
+        got = ask(phrase)
+        check(f"{phrase!r} is still the model's", got is None,
+              (got.intent if got else "")[:120])
+
+
+def t_settings_shaped_features_answer_from_their_own_rows():
+    """The audit's settings-ish names resolve and quote the catalogue row."""
+    cases = {
+        "tell me about quiet hours": ("notifications", "Notifications"),
+        "tell me about thinking level": ("attention-budget",
+                                         "How much Jarvis may interrupt you"),
+        "tell me about memories": ("memory-saved", "Facts Jarvis saved by itself"),
+        "tell me about personality presets": ("manner", "How Jarvis talks"),
+    }
+    for phrase, (fid, title) in cases.items():
+        got = ask(phrase)
+        target = phrase.replace("tell me about ", "")
+        resolved = FG.explain(target).get("feature", {}).get("id")
+        check(f"{phrase!r} discusses the catalogue row",
+              got is not None and got.intent == "feature_explain"
+              and resolved == fid,
+              (got.intent if got else "the model", resolved))
+        check(f"... in the row's own words ({title!r})",
+              got is not None and title in (got.reply or ""),
+              (got.reply or "")[:240])
+    # The surface field is stated when it is asked about (the audit's
+    # PC-only/phone-only confusion).
+    got = ask("which app can use picture-in-picture?")
+    check("a phone-only row says it is on the phone only",
+          got is not None and got.intent == "feature_app"
+          and "phone only" in (got.reply or ""), (got.reply or "")[:200])
+    got = ask("which app can use what jarvis knows about you?")
+    check("a desktop-only row says it is on the PC only",
+          got is not None and got.intent == "feature_app"
+          and "PC only" in (got.reply or ""), (got.reply or "")[:200])
 
 
 def main() -> int:

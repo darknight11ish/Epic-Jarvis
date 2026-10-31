@@ -28,8 +28,12 @@ no connection, no card - and this suite holds it to the truth:
   1. the owner's exact sentence and close phrasings are answered without the
      model, and both of his 2026-10-28 sentences are;
   2. near misses keep their own answer - a reminder is still a reminder, "open
-     my calendar" still opens it, a plain "what's on my calendar today" still
-     goes to the model (unchanged), and one more condition still falls through;
+     my calendar" still opens it, and one more condition still falls through.
+     **Since 2026-10-31 (pass 11) a plain "what's on my calendar today" is the
+     LOCAL Jarvis Calendar's read** (`local_calendar_read`, the chat-honesty
+     lane), not this suite's and not the model's: this file now checks that the
+     Google answer still owns the CONNECT shapes and the event changes, and
+     reads its own disconnected sentence through the module itself;
   3. every step it names is real: the Accounts card's section id, the
      Credential Manager entry's name, the Google path `jarvis_calendar`'s own
      docstring documents, the reading-tool sentence's own grammar, and the
@@ -264,7 +268,11 @@ def t_one_owner_per_sentence():
         ("calendar setup", "calendar_setup", None, None),
         ("sync my calendar with jarvis", "calendar_setup", None, None),
         # -- the Google answer: reads and event changes, asked only last --
-        ("what's on my calendar today", None, None, None),
+        # Since 2026-10-31 (pass 11) a calendar READ is answered by the LOCAL
+        # Jarvis Calendar (`local_calendar_read`) before this fall-through, so
+        # only the CONNECT shapes are this suite's read-owner rows now; the
+        # Google answer still owns the event changes and its connect sentence.
+        ("what's on my calendar today", "local_calendar_read", None, None),
         ("add a meeting Tuesday 3pm", None, None, None),
         ("add a calendar event at 5pm", None, None, None),
         # -- and the two that must never move --
@@ -290,19 +298,16 @@ def t_one_owner_per_sentence():
           reply is not None and "Integrate calendar" not in reply.reply,
           reply and reply.reply)
 
-    # The Google answer owns the reads and the event sentences. Only the mode
-    # is stubbed - to the real default, "off" - so the read runs through the
-    # module's own disconnected answer (no network, no Credential Manager) and
-    # the sentence asserted here is the one the phone really shows.
+    # The Google answer still owns the event sentences and its own connect
+    # sentence; since 2026-10-31 (pass 11) the calendar READ is the LOCAL
+    # calendar's answer (`local_calendar_read`), so the Google disconnected
+    # sentence is read through the module itself here. Only the mode is stubbed
+    # - to the real default, "off" - so no network and no Credential Manager.
     old_mode = G.mode
     G.mode = lambda: "off"
     try:
-        r = Q.answer("what's on my calendar today", sched=_Sched())
-        check("a calendar read is the Google answer's, marked as a read",
-              r is not None and r.intent == "google_calendar" and
-              r.read == ["calendar_read"], r and (r.intent, r.read))
-        reply = r.reply if r is not None else ""
-        check("... answered from the real state, not a promise",
+        reply = G.answer("what's on my calendar") or ""
+        check("the Google answer's own disconnected sentence is still read",
               "not connected yet" in reply.lower(), reply)
         # B2, the phone field test of 2026-10-29: the phone read "Not connected
         # yet - Google Calendar is not connected yet - Settings, Accounts, pick
@@ -330,11 +335,16 @@ def t_one_owner_per_sentence():
               add is not None and "needs the Google sign-in way" in add.reply and
               "I have added" not in add.reply and "Done" not in add.reply,
               add and add.reply)
+        read = Q.answer("what's on my calendar today", sched=_Sched())
+        check("a calendar READ is now the LOCAL calendar's answer (pass 11)",
+              read is not None and read.intent == "local_calendar_read",
+              read and (read.intent, read.reply))
     finally:
         G.mode = old_mode
 
-    # A private chat must not reach Google at all (private-chat.patch).
-    check("a private chat does not reach the Google answer",
+    # A private chat must not reach a calendar read either (private-chat.patch:
+    # a read-only fast path is not offered there, so the model answers instead).
+    check("a private chat does not reach the calendar answer",
           Q.answer("what's on my calendar today", sched=_Sched(), private=True) is None)
 
 
@@ -361,11 +371,13 @@ def t_near_misses_keep_their_own_answer():
     check("a reminder that mentions a calendar is still a reminder",
           getattr(Q.match("remind me to set up my calendar at 5pm"), "name", None)
           == "reminder_set")
-    # The reading question is deliberately NOT claimed by this answer: it goes
-    # to the model, exactly as before this fix, and this suite does not pretend
-    # otherwise.
-    check("a plain 'what's on my calendar today' is still the model's",
-          Q.match("what's on my calendar today") is None)
+    # The reading question is NOT this answer's (nor the model's since
+    # 2026-10-31 pass 11): it is the LOCAL calendar's own read, which has its
+    # own suite (`test_chat_honesty.py`). Here it must simply stay out of
+    # `calendar_setup`, which is what the near-miss loop above proves too.
+    got = Q.match("what's on my calendar today")
+    check("a plain 'what's on my calendar today' is the local calendar's read",
+          getattr(got, "name", None) == "local_calendar_read", got)
 
 
 def t_the_test_would_have_caught_the_old_answer():

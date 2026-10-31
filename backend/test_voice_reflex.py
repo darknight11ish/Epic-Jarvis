@@ -188,8 +188,13 @@ UNCHANGED = (
     "half an hour",
     "an hour and a half",
     "what about tomorrow",
-    "read my notes",
+    "read my emails",
 )
+
+#: "read my notes" was in UNCHANGED until 2026-10-31 (the owner's chat audit):
+#: a note READ now has its own fixed, honest answer from the chat-honesty lane
+#: (chat cannot read note text; the door is the Brain's Notes plate), so it is
+#: deliberately no longer "left to the model". See backend/test_chat_honesty.py.
 
 #: The reads PR #691 owns (Live turns, the same primitives). This fast path
 #: must NOT match them, or it would intercept the phrase before that path can
@@ -284,6 +289,16 @@ def t_the_safe_number_rule_never_hijacks_ordinary_words():
             continue        # not questions; the normaliser test above covers them
         got = Q.match(phrase)
         check(f"ordinary words stay chat: {phrase!r}", got is None, got)
+    # 2026-10-31 (the owner's chat audit; integrated in the chat-gaps tree):
+    # a note READ is the note lane's fixed answer now - `note_read_honest`,
+    # read-only and no card - because chat cannot read note text and the door
+    # is the Brain's Notes plate. This suite pinned the freshness lane's own
+    # intent name before the merge; the integrated truth is the note lane's.
+    got = Q.match("read my notes")
+    check("a note read is the note lane's fixed answer now",
+          getattr(got, "name", None) == "note_read_honest", got)
+    check("... and that answer is read-only, so no 'cancel that' is lost",
+          getattr(got, "name", None) in Q.READ_ONLY_INTENTS, got)
     check("'one of the files' is left byte-for-byte alone",
           Q.normalize_spoken_command("one of the files needs sorting")
           == "one of the files needs sorting")

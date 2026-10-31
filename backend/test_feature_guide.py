@@ -129,7 +129,9 @@ FEATURE_INTENTS = ("feature_explain", "feature_unknown", "feature_state",
                    "feature_state_setting", "feature_howto",
                    "feature_howto_setting", "feature_switch",
                    "feature_switch_refused", "feature_change", "features_list",
-                   "features_group")
+                   "features_group", "feature_limits", "feature_asks",
+                   "feature_app", "feature_why", "feature_difference",
+                   "feature_overview")
 
 #: The owner's own questions (2026-10-26) and the intent each must reach. Every
 #: row is asked every one of them through its title, id and aliases below.
@@ -419,7 +421,7 @@ def t_the_fixed_phrases_do_not_swallow_other_questions():
              "turn on the kitchen light", "what is my name",
              "what's a good pasta recipe", "what is quantum physics",
              "tell me about your day", "is it going to rain tomorrow",
-             "turn off the weather", "what can you do", "what did I miss",
+             "turn off the weather", "what did I miss",
              # Gemini's §11.8.3 examples: a general question that merely
              # CONTAINS a feature's word is not that feature's question.
              "what is a focus session in psychology",
@@ -1386,27 +1388,29 @@ def t_the_new_questions_do_not_swallow_other_questions():
 
 
 def t_what_can_you_do_still_answers():
-    """"What can you do?" is the neighbour these questions must not eat."""
+    """"What can you do?" is the feature OVERVIEW now (2026-10-31 audit)."""
     got = match("what can you do")
-    check("'what can you do' is still the sayable answer",
-          got is not None and got.name == "sayable_help",
+    check("'what can you do' is the group overview",
+          got is not None and got.name == "feature_overview",
           got.name if got else None)
     out = say(got)
-    check("...and it still lists the real sentences",
-          out is not None and "Set a timer for 10 minutes." in out.reply,
-          out.reply[:120] if out else None)
+    check("...and it names the catalogue's groups and points at the whole list",
+          out is not None and "features in" in out.reply
+          and "groups" in out.reply and "Everything Jarvis can do" in out.reply,
+          out.reply[:160] if out else None)
     # THE OWNER'S OWN SCREENSHOT QUESTION (2026-10-26). "what are you capable
-    # of?" matched NOTHING in jarvis_quick.py's fast grammar - the word
-    # "capable" appeared nowhere in the module and nowhere in this branch - so
-    # it went to the model and could be answered differently every time. It is
-    # the same question as "what can you do?", so it is the same fixed list.
+    # of?" is the same fixed answer, and the sayable list keeps its own wordings.
     for phrase in ("what are you capable of", "what are you capable of?",
                    "what are you able to do", "what are my capabilities",
-                   "what is jarvis capable of", "what can jarvis do"):
+                   "what is jarvis capable of"):
         got = match(phrase)
         check(f"the owner's own wording answers with no model: {phrase!r}",
               got is not None and got.name == "sayable_help",
               got.name if got else "the model")
+    got = match("what can jarvis do")
+    check("'what can jarvis do' is the same group overview",
+          got is not None and got.name == "feature_overview",
+          got.name if got else "the model")
     for phrase in ("what are you capable of", "what are you able to do"):
         out = say(match(phrase))
         check(f"...and {phrase!r} lists the real sentences, not a model's prose",
