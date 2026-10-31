@@ -38,8 +38,13 @@ stubbed, a gate that records what it was asked, and a watch built by the real
 `_TurnWatch`. No model, no network, no real file, no real approval card.
 
 Hermetic: the rush latch, the audit log and the framework's tiers all live in
-a temp folder made here, before the import. The owner's `~/.openjarvis` is
-never read or written.
+a temp folder made here, before the import. `JARVIS_FRAMEWORK_TOML` is pointed
+at that temp file as well (`_write_tiers` sets it), because
+`backend/run_suites.py` sets that variable to its own config copy before this
+suite starts and `jarvis_framework.config_path()` tries it FIRST - without the
+line, the runner's tiers would be the ones read and this suite's fixtures
+inert (measured 2026-10-30: passed at the desk, failed in CI). The owner's
+`~/.openjarvis` is never read or written.
 """
 from __future__ import annotations
 
@@ -95,10 +100,22 @@ def check(name, cond, detail=""):
 
 
 def _write_tiers(tiers: dict) -> None:
-    """Rewrite this run's own jarvis-framework.toml and reload the framework."""
+    """Rewrite this run's own jarvis-framework.toml and reload the framework.
+
+    `JARVIS_FRAMEWORK_TOML` is tried BEFORE the config dirs
+    (jarvis_framework.config_path()), and `backend/run_suites.py` sets it to
+    its own copy before this suite starts - so the variable must point at the
+    file written here, or the runner's tiers win and the fixture is inert.
+    That is exactly what happened in CI on 2026-10-30: `calendar_write` read
+    "ask" from the runner's file, the note-rule action swap did not happen,
+    and the Gap 3 check failed here while it passed at a desk that had no
+    runner variable set.
+    """
+    toml = CFG / "jarvis-framework.toml"
+    os.environ["JARVIS_FRAMEWORK_TOML"] = str(toml)
     lines = ["[autonomy]", 'unknown_action_tier = "ask"', "", "[autonomy.tiers]"]
     lines += [f"{k} = \"{v}\"" for k, v in sorted(tiers.items())]
-    (CFG / "jarvis-framework.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    toml.write_text("\n".join(lines) + "\n", encoding="utf-8")
     FW.reload_framework()
 
 
