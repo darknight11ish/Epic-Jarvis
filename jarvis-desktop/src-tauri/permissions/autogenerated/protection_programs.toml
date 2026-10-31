@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-protection-programs"
+description = "Enables the protection_programs command without any pre-configured scope."
+commands.allow = ["protection_programs"]
+
+[[permission]]
+identifier = "deny-protection-programs"
+description = "Denies the protection_programs command without any pre-configured scope."
+commands.deny = ["protection_programs"]

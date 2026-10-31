@@ -401,7 +401,11 @@ class LimitsTest {
         // (SettingsScreen.kt, item "pip-mode"; docs/PIP-DESIGN.md) sits under
         // Floating Jarvis above it, so every number below that row moved down
         // by one - and SettingsJumpTest holds the whole map to the real order.
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 28"))
+        // 29, not 28, since 2026-10-31: "Protected from Jarvis"
+        // (.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md) sits directly
+        // under the folder allow-list above it, so every number below that row
+        // moved down by one again.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 29"))
     }
 
     // ------------------------------------------- a time of day, and the PC's

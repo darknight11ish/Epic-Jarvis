@@ -177,6 +177,23 @@ _APPEND_FLAGS = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY",
 _LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def _cfg(section: str, key: str, default=None):
     try:
         import jarvis_framework as fw
@@ -481,8 +498,10 @@ def plan(target: str, text: str, *, title: str = "", notebook: str = "",
         day = (now or _dt.datetime.now()).date()
         graph = logseq_graph()
         path = graph / "journals" / f"{day:%Y_%m_%d}.md"
+        _P = _protection()
+        _said = _P.path_refusal(str(path), write=True) if _P is not None else ""
         return Plan(target="logseq", text=body, file=str(path), day=day.isoformat(),
-                    reason_empty=problem)
+                    reason_empty=_said or problem)
 
     if target == "obsidian":
         day = (now or _dt.datetime.now()).date()
@@ -495,6 +514,14 @@ def plan(target: str, text: str, *, title: str = "", notebook: str = "",
         if why:
             p.reason_empty = why
             return p
+        # Protected from Jarvis (2026-10-31): a blocked or read-only file
+        # is never written; the plan says so before any card.
+        _P = _protection()
+        if _P is not None:
+            _said = _P.path_refusal(p.file, write=True)
+            if _said:
+                p.reason_empty = _said
+                return p
         parent = Path(p.file).parent
         if not parent.exists():
             p.new_folder = os.path.relpath(str(parent), p.vault).replace(os.sep, "/")

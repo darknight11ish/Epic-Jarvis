@@ -85,6 +85,12 @@ WHAT IT WILL NOT DO
     they answer through the core's own origin + token checks; not one byte of
     a note's text is put in a message, an audit line or a log (the audit
     records the path, the sizes and the job id only).
+  - Touch a note the owner put on the "Protected from Jarvis" list (2026-10-31):
+    a BLOCKED folder or file is never listed, never read and never saved; a
+    READ-ONLY one is read normally and refused on save. The refusal is a plain
+    sentence and raises NO card - it is a keep-out, not an approval question.
+    When that module is not on the backend at all, this editor behaves as it did
+    before the list existed. No note's bytes are read to answer it.
   - Create, delete or rename a note. This slice edits notes that exist; the
     contract says so, and a missing path is a 404 on read and on save.
 
@@ -235,6 +241,30 @@ def _inside(root: Path, path: Path) -> bool:
         return False
 
 
+
+def _protection():
+    """jarvis_protection, or None when that module is not on this backend.
+
+    The "Protected from Jarvis" list (2026-10-31) is a separate drop-in module.
+    On a backend that has it, `path_refusal` is the ONE keep-out check every
+    door asks before it reads, writes, opens or controls anything; on a backend
+    that does not (an older install, or this branch before the list merges) this
+    editor behaves exactly as it did before - the feature is absent, never a
+    guess. The check is a plain sentence and raises no card.
+
+    Looked up by NAME through importlib rather than with an `import` line: this
+    editor merges BEFORE the list does, so this branch's base must not claim a
+    module it does not ship - test_base_matches_repo.py's import closure is red
+    on `import jarvis_protection` alone. On the assembled tree both shapes find
+    the very same module.
+    """
+    try:
+        import importlib
+        return importlib.import_module("jarvis_protection")
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def note_parts(raw) -> tuple:
     """`(parts, "")` for a safe vault-relative note path, or `([], why)`.
 
@@ -357,6 +387,14 @@ def handle_list(query: str = "") -> tuple:
     vault, why = _vault()
     if vault is None:
         return _error(503, "No notes list: " + why + ".")
+    # "Protected from Jarvis" (2026-10-31): the list is a READ of every note
+    # it names, and of the vault folder itself, so it asks before the walk.
+    # A blocked vault refuses the whole answer; a blocked note is left out.
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(vault))
+        if _said:
+            return _error(403, _said)
     try:
         raw_q = (parse_qs(_query(query)).get("q") or [""])[0]
     except Exception:                                       # noqa: BLE001
@@ -368,12 +406,17 @@ def handle_list(query: str = "") -> tuple:
             here = Path(dirpath)
             dirnames[:] = [d for d in sorted(dirnames)
                            if not d.startswith(".")
-                           and not _is_link_or_reparse(here / d)]
+                           and not _is_link_or_reparse(here / d)
+                           # "Protected from Jarvis": a blocked folder inside
+                           # the vault is not even listed, let alone walked.
+                           and not (_P is not None and _P.blocked_path(here / d))]
             for name in filenames:
                 if name.startswith(".") or not name.lower().endswith(TEXT_SUFFIXES):
                     continue
                 full = here / name
                 if _is_link_or_reparse(full):
+                    continue
+                if _P is not None and _P.blocked_path(full):
                     continue
                 try:
                     st = os.stat(str(full))
@@ -419,6 +462,13 @@ def handle_read(query: str = "") -> tuple:
     full, rel, why = _resolve_note(raw)
     if why:
         return _error(400, why)
+    # "Protected from Jarvis": a blocked note is not read; a read-only one is
+    # a read and is allowed. The check comes before `_stat_note`/`_read_bytes`.
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(full))
+        if _said:
+            return _error(403, _said)
     if not full.is_file():
         return _error(404, f"There is no note at {rel} in your Obsidian vault.")
     try:
@@ -616,6 +666,16 @@ def handle_save(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
     full, rel2, why = _resolve_note(raw_path)
     if why:
         return _error(400, why, state="refused")
+    # "Protected from Jarvis" (2026-10-31): a save is a WRITE. Blocked and
+    # read-only are both refused, BEFORE the existing bytes are read and
+    # before the job/card exists - a keep-out must never raise a card. The
+    # File Guardian copy after the card stays as it is (one guarded door;
+    # this check is the earlier one, not a duplicate of that copy).
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(full), write=True)
+        if _said:
+            return _error(403, _said, state="refused")
     if not full.is_file():
         return _error(404, f"There is no note at {rel2} in your Obsidian vault.",
                       state="refused")

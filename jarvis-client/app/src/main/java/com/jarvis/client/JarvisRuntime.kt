@@ -5185,6 +5185,94 @@ object JarvisRuntime {
         return ApiResult.Ok(Unit)
     }
 
+    // --------------------------------------------------------- protection ----
+    // "Protected from Jarvis" (2026-10-31, .dsh-scratch/PROTECTED-ITEMS-2026-10-31/
+    // CONTRACT.md): the PC's owner-editable list of what Jarvis may not touch.
+    // The phone lists it and can ASK for one entry to be removed; removal is
+    // loosening, so the PC raises ONE approval card and this phone never decides
+    // it. There is no add path here - adding is the PC's pickers or a chat
+    // request that raises the same kind of card.
+
+    private val _protectionLine =
+        MutableStateFlow<Pair<String, com.jarvis.client.net.Protected.Said>?>(null)
+
+    /**
+     * The entry last asked to be removed (its id), and the PC's answer, in the
+     * PC's own words - null until something is removed. The plate shows it only
+     * for the entry it belongs to ([Pair.first]) and re-reads the list when it
+     * becomes final.
+     */
+    val protectionLine: StateFlow<Pair<String, com.jarvis.client.net.Protected.Said>?> =
+        _protectionLine.asStateFlow()
+
+    /** `GET /api/protection` - what is protected, in the PC's own words. */
+    suspend fun protection(): ApiResult<JsonObject> = api.protection()
+
+    /**
+     * Ask the PC to remove one protected entry. Held on a stale or dropped link
+     * ([actionBlocker], rule 4) - a card raised from a queue nobody can trust is
+     * not a decision anyone asked for. The PC raises ONE approval card and the
+     * entry stays until it is approved; the phone watches the LIST to see it
+     * disappear (the list is the truth - there is no remove-status route in the
+     * contract, so a `GET /api/protection` poll is what can be proved).
+     *
+     * @return true when the request left the phone (the card is up); false when
+     *   it was refused before any card, with the sentence in [protectionLine].
+     */
+    suspend fun removeProtected(id: String): Boolean {
+        actionBlocker()?.let {
+            _protectionLine.value = id to com.jarvis.client.net.Protected.Said(it, removing = false)
+            return false
+        }
+        val answer = when (val r = api.protectionRemove(id)) {
+            is ApiResult.Failed -> {
+                val why = com.jarvis.client.net.Protected.failure(r.error) ?: describe(r.error)
+                _protectionLine.value = id to com.jarvis.client.net.Protected.Said(why, removing = false)
+                return false
+            }
+            is ApiResult.Ok -> r.value
+        }
+        val said = com.jarvis.client.net.Protected.describe(answer)
+        _protectionLine.value = id to said
+        if (!said.removing) return false
+        scope.launch {
+            val started = SystemClock.elapsedRealtime()
+            // The same retry rules as every other followed job: skip while the
+            // link is down, tolerate a failed poll or two.
+            val follow = com.jarvis.client.net.JobFollow()
+            while (true) {
+                delay(com.jarvis.client.net.Protected.POLL_MS)
+                if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Protected.GIVE_UP_MS) {
+                    _protectionLine.value = id to com.jarvis.client.net.Protected.Said(
+                        com.jarvis.client.net.Protected.STILL_THERE, removing = false,
+                    )
+                    break
+                }
+                if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
+                val next = api.protection()
+                if (next is ApiResult.Failed) {
+                    if (!follow.failed()) continue
+                    _protectionLine.value = id to com.jarvis.client.net.Protected.Said(
+                        "Lost track of the list (${describe(next.error)}). Refresh it in a moment.",
+                        removing = false,
+                    )
+                    break
+                }
+                follow.answered()
+                val still = com.jarvis.client.net.Protected.view((next as ApiResult.Ok).value)
+                    .items.any { it.id == id }
+                if (!still) {
+                    _protectionLine.value = id to com.jarvis.client.net.Protected.Said(
+                        com.jarvis.client.net.Protected.REMOVED, removing = false,
+                    )
+                    break
+                }
+            }
+        }
+        return true
+    }
+
+
     // ------------------------------------------------------------ notes ----
     // The notes editor (2026-10-31, .dsh-scratch/NOTES-EDITOR-2026-10-31/
     // CONTRACT.md): the whole Obsidian vault, from this phone. The four routes

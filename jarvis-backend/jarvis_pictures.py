@@ -974,6 +974,11 @@ def save_picture(folder, prompt: str, piece: Piece, settings: dict, *,
     two leaves a picture with no record (readable, just unexplained), never a
     record pointing at a picture that is not there.
     """
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(folder), write=True)
+        if _said:
+            raise ValueError(_said)
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     stem = picture_stem(time.time() if when is None else when, prompt)
@@ -1092,6 +1097,23 @@ def picture_path(folder, pid: str) -> Optional[Path]:
 # --------------------------------------------------------------------------
 #   The routes (docs/JARVIS-API.md section 129)
 # --------------------------------------------------------------------------
+
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
 
 BASE = "/api/pictures"
 GET_ROUTES = (BASE, BASE + "/file")
@@ -1568,6 +1590,11 @@ def file_answer(pid: str, settings: dict) -> tuple:
     """
     settings = dict(settings or {})
     folder = settings.get("folder") or str(default_folder())
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(folder)
+        if _said:
+            return 404, {"ok": False, "error": _said}
     png = picture_path(folder, pid)
     if png is None:
         return 404, {"ok": False, "error": "There is no picture with that name."}

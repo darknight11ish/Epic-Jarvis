@@ -2638,6 +2638,14 @@ $SHIPPED = @(
     # (already shipped above), so this adds no patch, no route, no gate list
     # and no tool. Standard library only, so requirements.lock does not move.
     'jarvis_parking.py'
+    # "Protected from Jarvis" (jarvis_protection.py, 2026-10-31; the owner's
+    # request: a list of folders, files and programs that blocks Jarvis, or
+    # makes it read-only). Its routes come from its own install(), called by
+    # the drop-in folder plugins/ready/protected-items, so this adds no patch.
+    # Every covered entry point calls its ONE check first; the chat add and
+    # every removal are ONE approval card, and a damaged store is empty and
+    # safe. The same entry is at the end of backend/_where.py's SHIPPED list.
+    'jarvis_protection.py'
     # Browse, read and save ANY note in the owner's Obsidian vault
     # (jarvis_notes_edit.py, 2026-10-31; the owner's "the whole vault, both
     # apps"): the four routes come from its own install(), called by the

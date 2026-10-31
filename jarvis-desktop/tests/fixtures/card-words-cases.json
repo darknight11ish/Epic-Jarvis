@@ -291,6 +291,10 @@
       "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)"
     },
     {
+      "action": "protect_item",
+      "title": "Jarvis wants to protect a folder, file or program from Jarvis"
+    },
+    {
       "action": "quiz_cloud_grade",
       "title": "Jarvis wants to send a quiz to a cloud AI service to be graded better"
     },
@@ -433,6 +437,10 @@
     {
       "action": "undo_action",
       "title": "Jarvis wants to put back a change it made"
+    },
+    {
+      "action": "unprotect_item",
+      "title": "Jarvis wants to stop protecting something from Jarvis"
     },
     {
       "action": "unretire_shared_key",
@@ -1301,6 +1309,18 @@
       }
     },
     {
+      "action": "protect_item",
+      "notice": {
+        "title": "Jarvis wants to protect a folder, file or program from Jarvis",
+        "summary": "Jarvis wants to protect a folder, file or program from Jarvis.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "quiz_cloud_grade",
       "notice": {
         "title": "Jarvis wants to send a quiz to a cloud AI service to be graded better",
@@ -1725,6 +1745,18 @@
       "notice": {
         "title": "Jarvis wants to put back a change it made",
         "summary": "Jarvis wants to put back the change shown.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "unprotect_item",
+      "notice": {
+        "title": "Jarvis wants to stop protecting something from Jarvis",
+        "summary": "Jarvis wants to stop protecting a folder, file or program.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

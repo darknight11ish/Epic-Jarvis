@@ -109,6 +109,7 @@ TOOL_NAMES = {
     "github_search": "GitHub research",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
+    "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",
     "send_email": "Send an email (one card each)",
     "draft_email": "Save an email draft (one card each)",
     "tidy_inbox": "Tidy your inbox (one card lists every email)",

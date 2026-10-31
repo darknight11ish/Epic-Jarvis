@@ -302,6 +302,23 @@ class Refused(ValueError):
 # --------------------------------------------------------------------------
 
 
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def _config_dir() -> Path:
     """The settings folder - the same rule jarvis_receipts.py follows.
 
@@ -1106,6 +1123,13 @@ def _path_for_copy(copy_id) -> Optional[str]:
 
 
 def _restore_path(real: str, sha: str) -> None:
+    # Protected from Jarvis (2026-10-31): a restore is a WRITE, so a
+    # blocked or read-only file is refused before anything is written.
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(real, write=True)
+        if _said:
+            raise Refused(_said)
     """Put one saved version back over one file. The rules are applied again here."""
     real, _roots = _check_path(real, None)
     data = _load_blob(sha)

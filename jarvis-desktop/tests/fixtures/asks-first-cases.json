@@ -251,6 +251,24 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
        "action": "edit_vault_note",
        "fixed": false,
        "id": "edit_vault_note",
@@ -1570,6 +1588,24 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
        "action": "edit_vault_note",
        "fixed": false,
        "id": "edit_vault_note",
@@ -2886,6 +2922,24 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
        "action": "edit_vault_note",
        "fixed": false,
        "id": "edit_vault_note",
@@ -4195,6 +4249,24 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
        "action": "edit_vault_note",
        "fixed": false,
        "id": "edit_vault_note",
@@ -5502,6 +5574,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Organize your Obsidian vault with tags and Maps of Content"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
       },
       {
        "action": "edit_vault_note",
@@ -6825,6 +6915,24 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
        "action": "edit_vault_note",
        "fixed": false,
        "id": "edit_vault_note",
@@ -8139,6 +8247,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Organize your Obsidian vault with tags and Maps of Content"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
       },
       {
        "action": "edit_vault_note",

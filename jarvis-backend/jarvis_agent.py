@@ -345,6 +345,13 @@ def _run_file_read(args: dict) -> dict:
         return {"ok": False, "error": (
             "Jarvis does not open this file: it is in a place that holds keys, "
             "saved passwords, browser data or Jarvis's own private data.")}
+    # Protected from Jarvis (2026-10-31): a blocked file is never opened,
+    # and a read-only one may be read (this tool only reads).
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(real)
+        if _said:
+            return {"ok": False, "error": _said}
     path = real
     try:
         # Binary, capped by actual bytes read, then decoded - not text mode
@@ -898,6 +905,29 @@ FILES_TOOL = "my_files"
 #: jarvis_documents.PART_TOKENS (1,200), and the 8 GB card's whole working
 #: memory is about 8,000 tokens (docs/feasibility-2026-09-26/hardware.md).
 FILES_PARTS_PER_TURN = 2
+
+#: "Protected from Jarvis" (jarvis_protection.py, 2026-10-31): the tool
+#: the owner asks in chat to protect a folder, a file or a program, and the
+#: two gate actions the add and the removal are asked under. The store
+#: write happens only after the ordinary card; the model never writes it.
+PROTECT_TOOL = "protect_from_jarvis"
+PROTECT_ACTION = "protect_item"
+UNPROTECT_ACTION = "unprotect_item"
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
 FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of documents, which "
                        "is as much as fits in Jarvis's working memory at once. Nothing more "
                        "was read. Answer from what you have, and tell the owner they can ask "
@@ -906,6 +936,14 @@ FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of docum
 
 def _prepare_my_files(args: dict):
     action = str(args.get("action") or "").strip().lower()
+    # A protected path is refused BEFORE any card (2026-10-31): the gate
+    # action for reading files is "auto" by default, so the refusal must
+    # happen here, not after a card nobody would see.
+    _P = _protection()
+    if _P is not None and action == "read":
+        _said = _P.path_refusal(args.get("path"))
+        if _said:
+            raise ValueError(_said)
     if action == "read_media":
         # The one media read (F5 S1). Decided under file_read's action like
         # every other read here; it stores nothing and marks the result as
@@ -1483,10 +1521,21 @@ def _prepare_note(kind: str):
             return None, (f"File a note: {json.dumps(args, ensure_ascii=False)} "
                           f"(unavailable: {exc})")
         if kind == "logseq":
-            return NC.prepare_logseq_tool(args)
-        if kind == "obsidian":
-            return NC.prepare_obsidian_tool(args)
-        return NC.prepare_joplin_tool(args)
+            got = NC.prepare_logseq_tool(args)
+        elif kind == "obsidian":
+            got = NC.prepare_obsidian_tool(args)
+        else:
+            got = NC.prepare_joplin_tool(args)
+        # Protected from Jarvis (2026-10-31): the note's own file is refused
+        # BEFORE the card, so no card is raised for a file that is blocked.
+        _P = _protection()
+        _plan = got[0] if isinstance(got, tuple) and got else None
+        _file = str(getattr(_plan, "file", "") or "")
+        if _P is not None and _file:
+            _said = _P.path_refusal(_file, write=True)
+            if _said:
+                raise ValueError(_said)
+        return got
     return prepare
 
 
@@ -1495,6 +1544,53 @@ def _run_note(args: dict, plan_obj, **_) -> dict:
         return {"ok": False, "error": "note filing is not available here"}
     import jarvis_note_capture as NC
     return NC.run(plan_obj, approved=True)
+
+
+def _prepare_protect(args: dict):
+    """prepare() for `protect_from_jarvis`: validate, then the card's words.
+
+    Everything a protected item must satisfy is checked HERE, before the
+    gate: a bad kind, a target that does not exist, a relative path and an
+    already-protected target are refusals with no card (jarvis_protection,
+    2026-10-31). The card is the ordinary one, raised by _one_call's gate.
+    """
+    try:
+        import jarvis_protection as P
+    except Exception as exc:                            # noqa: BLE001
+        return None, f"Protect something from Jarvis (unavailable: {type(exc).__name__})"
+    kind = str(args.get("kind") or "").strip().lower()
+    target = args.get("target")
+    mode = str(args.get("mode") or "").strip().lower()
+    norm, why = P.validate_request(kind, target, mode,
+                                   known_programs=P._running_program_names())
+    if why:
+        raise ValueError(why)
+    other = P._duplicate(kind, norm)
+    if other:
+        raise ValueError(P._duplicate_sentence(other))
+    return ({"kind": kind, "target": norm, "mode": mode},
+            P.describe_for_tool(kind, norm, mode))
+
+
+def _run_protect(args: dict, plan_obj, **_) -> dict:
+    """execute() for `protect_from_jarvis`: store it - only after the card.
+
+    `_one_call` runs execute() only on an allowed verdict, and the store
+    write is the whole of it; the model never writes the list itself.
+    """
+    try:
+        import jarvis_protection as P
+    except Exception as exc:                            # noqa: BLE001
+        return {"ok": False, "error": "the protection list is not available "
+                                      f"here ({type(exc).__name__})"}
+    state = plan_obj if isinstance(plan_obj, dict) else {}
+    kind = str(state.get("kind") or args.get("kind") or "")
+    target = state.get("target") or args.get("target")
+    mode = str(state.get("mode") or args.get("mode") or "")
+    try:
+        return P.tool_add(kind, target, mode)
+    except P.Refused as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 class Tool:
@@ -1620,6 +1716,11 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
 _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
+                                  # The protection tool raises its own ONE card and
+                                  # writes the store after it; a plan step would put
+                                  # a second mechanism around it, so ask for it
+                                  # directly instead (jarvis_protection.py, 2026-10-31).
+                                  PROTECT_TOOL,
                                   # "connect_account" (CONNECT_TOOL, 2026-10-28): raising
                                   # the connect card is one deliberate act with its own
                                   # host path, never a step of a plan. Written as the
@@ -2601,6 +2702,20 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "file_read",
         instead={"notes_search": "For Obsidian or Joplin notes, use notes_search.",
                  "file_read": "For a PDF or Word file, use this, not file_read."}),
+    PROTECT_TOOL: Tool(
+        PROTECT_TOOL,
+        "Protect a folder, file or program on the owner's PC from Jarvis. "
+        "mode blocked = no access at all; readonly = reads allowed, "
+        "writes/actions refused. Use when the owner asks Jarvis not to touch "
+        "something.",
+        {"type": "object", "properties": {
+            "kind": {"type": "string", "enum": ["folder", "file", "program"]},
+            "target": {"type": "string", "description":
+                       "the whole path for a folder or file, or the program's "
+                       "executable name like notepad.exe"},
+            "mode": {"type": "string", "enum": ["blocked", "readonly"]}},
+         "required": ["kind", "target", "mode"]},
+        _prepare_protect, _run_protect),
     # Spending from a bank export (jarvis_spending.py). Decided under
     # file_read's action - see SPENDING_TOOL.
     "my_spending": Tool(
@@ -3141,6 +3256,9 @@ NEEDS_A_PERSON = {
                     "anything the tools inside it can do",
     "rea_investigate": "starts a local reverse-engineering program and reads a program's "
                        "own files",
+    # Protected from Jarvis: adding to the list changes what Jarvis may
+    # touch, and removing is loosening; both need a person every time.
+    PROTECT_TOOL: "changes what Jarvis may touch, so it needs your yes every time",
 }
 
 #: The same rule for every tool from a plug-in program (jarvis_mcp.py): a
@@ -6817,7 +6935,7 @@ TOOL_GROUPS = (
     ("documents", "find and read files in the listed folders",
      ("my_files", "my_spending")),
     ("files", "read a file or run a command or small script",
-     ("file_read", "shell_exec", SANDBOX_TOOL, REA_TOOL)),
+     ("file_read", "shell_exec", SANDBOX_TOOL, REA_TOOL, PROTECT_TOOL)),
     # Its own group: my_spending's group is dropped while no folder is listed,
     # and this needs no folder.
     ("retirement", "a retirement what-if", ("retirement_whatif",)),
@@ -7006,6 +7124,9 @@ TOOL_HINTS = {
                      r"\bjott", r"\bwrote\b", r"\bwritten\b", r"\bnoted\b"),
     "my_files": (r"\bfiles?\b", r"\bdocuments?\b", r"\bfolder\b", r"\bfind\b",
                  r"\binvoice\b", r"\bpdf\b", r"\blease\b", r"\bagreement\b", r"where is"),
+    "protect_from_jarvis": (r"\bprotect", r"\bexclude\b", r"\bkeep out\b",
+                            r"\bread[- ]only\b", r"\bdon.t (let|allow)\b",
+                            r"\bblock\b.*\b(jarvis|from)\b"),
     "my_spending": (r"\bspending\b", r"\bspend\b", r"\bbank\b", r"\bbills?\b", r"\bmoney\b",
                     r"\btransactions?\b", r"\bexpenses?\b"),
     "retirement_whatif": (r"\bretirement\b", r"\bpension\b", r"\bretire\b", r"what-if"),
@@ -11790,6 +11911,56 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
            "error": "" if ok else (said or "that setting could not be changed.")})
 
 
+#: Tools whose args are a pure READ: a read-only protected path may be named.
+_PROTECTION_READ_ONLY_TOOLS = frozenset({
+    "file_read", "my_files", "notes_search", "memory_search", "read_media",
+    "search_media", "web_search", "feature_guide", "calculator", "read_screen",
+})
+
+
+def _protection_arg_paths(value, out: list, depth: int = 0) -> None:
+    if depth > 6:
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _protection_arg_paths(item, out, depth + 1)
+    elif isinstance(value, (list, tuple)):
+        for item in value[:32]:
+            _protection_arg_paths(item, out, depth + 1)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text or chr(0) in text:
+            return
+        if text[1:2] == ":" and text[2:3] in (chr(92), chr(47)):
+            out.append(text)
+        elif text[:2] == chr(92) * 2 or text[:1] == chr(47):
+            out.append(text)
+
+
+def _protection_path_args(name: str, args: dict) -> str:
+    """The plain sentence refusing a tool call whose ARGUMENTS name a path.
+
+    Gemini Q2 #5: launcher/reminder calls carry a path (the file to open, the
+    folder to search); every one is checked before the gate, so a blocked path
+    is refused plainly and no card is raised for it. A tool not known to be a
+    pure read is treated as a possible WRITE and asks the write question.
+    """
+    try:
+        import jarvis_protection as P
+    except Exception:                                       # noqa: BLE001
+        return ""
+    if name == PROTECT_TOOL:
+        return ""                 # its `target` is what the owner adds, not an action
+    paths: list = []
+    _protection_arg_paths(args or {}, paths)
+    write = name not in _PROTECTION_READ_ONLY_TOOLS
+    for text in paths:
+        said = P.path_refusal(text, write=write)
+        if said:
+            return said
+    return ""
+
+
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,
               announce, out: "_Out", say_step, *, watch: Optional[_TurnWatch] = None,
               tell_owner: Optional[Callable[[str], None]] = None,
@@ -11953,6 +12124,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             say_step("tool_refused", name)
             return
         watch.file_parts += 1
+    _said = _protection_path_args(name, args)
+    if _said:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content({"ok": False, "error": _said})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return
     lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
     action_name = lookup_name
     if not outside_program:
@@ -11965,6 +12143,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         except Exception:
             pass
     action_name = _sandbox_action_for(name, action_name, args)
+    if name == PROTECT_TOOL:
+        # The chat ability asks under its OWN action name (jarvis_protection.py,
+        # 2026-10-31): the gate forces an unclassified action to "ask", so the
+        # ONE card is the ordinary one, and no second mechanism exists.
+        action_name = PROTECT_ACTION
     if name == "send_email":
         action_name = SEND_EMAIL_ACTION
     if name == "draft_email":
