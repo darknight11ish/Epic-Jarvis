@@ -375,6 +375,59 @@ await check("the locked read keeps the days and takes every word away", async ()
   assert.doesNotMatch(card, /Dentist|Trip/, card);
 });
 
+/* DEF-026 (the desktop twin of the phone's DEF-025, field test 2026-10-31
+ * pass 9 P8): a calendar WRITE's confirmation is the PC's own sentence,
+ * `jarvis_local_calendar._said()`'s "<title>, Saturday 31 October at
+ * 09:00." - it names the event. The banner drew it BEFORE the locked-read
+ * sentence, so with App lock / "Hide memory lists" on the very title the grid
+ * had just hidden appeared under the calendar. The guard is bannerSaid(): while
+ * wordsHidden() it returns one fixed title-free line per kind (an unknown kind
+ * fails closed to the Saved line); visible titles still get the PC's sentence.
+ * The two states below are the same `state.said`/`state.saidKind` the real
+ * write handlers set, drawn by the real paint(). */
+const DEF_026_TITLE = "ZZ field test delete me, Saturday 31 October at 09:00.";
+
+await check("DEF-026: a write's confirmation never names a title while titles are hidden", async () => {
+  const locked = await settle(runCalendar({
+    body: {
+      ...READ_BODY,
+      hidden: true,
+      hidden_count: 2,
+      events: READ_BODY.events.map((ev) => ({ ...ev, title: "", place: "", notes: "" })),
+    },
+  }));
+  locked.api.open();
+  locked.api.state.said = DEF_026_TITLE;
+  locked.api.state.saidAt = Date.now();
+  locked.api.state.saidKind = "saved";
+  locked.api.paint();
+  const hiddenSave = words(locked.nodes.get("cal-banner"));
+  assert.equal(hiddenSave,
+    "Saved. Its words stay hidden while your memory lists are hidden.");
+  assert.doesNotMatch(hiddenSave, /ZZ field test|Saturday 31 October/,
+    "the PC's title-bearing sentence still reached the banner");
+  // The helper itself is the one place that decides, and it fails closed.
+  assert.equal(locked.api.bannerSaid(), locked.api.hiddenSaid.saved);
+  // A delete says Deleted; an unknown kind must NOT fall back to the PC's words.
+  locked.api.state.saidKind = "deleted";
+  locked.api.paint();
+  assert.equal(words(locked.nodes.get("cal-banner")),
+    "Deleted. Its words stay hidden while your memory lists are hidden.");
+  locked.api.state.saidKind = "";
+  locked.api.paint();
+  assert.equal(words(locked.nodes.get("cal-banner")),
+    "Saved. Its words stay hidden while your memory lists are hidden.",
+    "an unknown write kind fell back to the PC's title-bearing sentence");
+  // Visible titles: the PC's sentence, unchanged.
+  locked.api.state.read.hidden = false;
+  locked.api.state.saidKind = "saved";
+  locked.api.paint();
+  assert.equal(words(locked.nodes.get("cal-banner")), DEF_026_TITLE);
+  // The old unconditional draw is gone; bannerSaid is the one guard.
+  assert.doesNotMatch(BLOCK, /banner\.textContent = state\.said/);
+  assert.match(BLOCK, /banner\.textContent = bannerSaid\(\)/);
+});
+
 await check("the drawn card lists today's events by time, and never a countdown", () => {
   const card = live.card();
   assert.ok(card.includes(SOON_TIME), `the card does not list ${SOON_TIME}: ${card}`);

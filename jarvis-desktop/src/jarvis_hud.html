@@ -10661,6 +10661,9 @@ subscribe();
       busy: false,
       said: "",
       saidAt: 0,
+      // DEF-026: which write the fresh `said` belongs to ("saved" or "deleted"),
+      // so the redacted banner can say the right fixed line.
+      saidKind: "",
       lastRead: 0,
       door: null,
       armedAt: 0
@@ -10808,6 +10811,29 @@ subscribe();
     }
     function events() { return state.read ? state.read.events : []; }
     function wordsHidden() { return Boolean(state.read && state.read.hidden); }
+
+    /** DEF-026 (field-test pass 9 P8's desktop twin): what the banner may say
+     *  about a calendar write.
+     *
+     *  The PC's own success sentence is `jarvis_local_calendar._said()`'s
+     *  `"<title>, Saturday 31 October at 09:00."` - it NAMES the event. While
+     *  the read is redacted (App lock or "Hide memory lists" on, the same
+     *  `wordsHidden()` every other calendar surface already uses) drawing it
+     *  would echo the very title this panel has just hidden. One fixed,
+     *  title-free line per kind instead - worded like the phone's
+     *  (`jarvis-client` net/Calendar.kt `displaySaid`) - and an unknown kind
+     *  FAILS CLOSED to the Saved line rather than falling back to the PC's
+     *  words. Visible titles: the PC's sentence, unchanged. */
+    var HIDDEN_SAID = {
+      saved: "Saved. Its words stay hidden while your memory lists are hidden.",
+      deleted: "Deleted. Its words stay hidden while your memory lists are hidden."
+    };
+    function bannerSaid() {
+      if (state.said && wordsHidden()) {
+        return HIDDEN_SAID[state.saidKind] || HIDDEN_SAID.saved;
+      }
+      return state.said;
+    }
     function byId(id) {
       var found = null;
       events().forEach(function (ev) { if (ev.id === id) found = ev; });
@@ -11025,7 +11051,9 @@ subscribe();
       if (loading) {
         banner.textContent = "Loading your calendar\u2026";
       } else if (state.said && Date.now() - state.saidAt < 8000) {
-        banner.textContent = state.said;
+        // DEF-026: never the PC's title-bearing sentence while words are
+        // hidden - bannerSaid() returns the fixed title-free line then.
+        banner.textContent = bannerSaid();
       } else if (!read.on) {
         // The switch, said plainly. Nothing is deleted, so the sentence says
         // so, and nothing on this panel pretends a day is empty.
@@ -11572,6 +11600,7 @@ subscribe();
         }
         state.said = txt(reply.said) || (editing ? "Event changed." : "Event added.");
         state.saidAt = Date.now();
+        state.saidKind = "saved";
         state.editId = null;
         $("cal-form").hidden = true;
         return refresh(true);
@@ -11611,6 +11640,7 @@ subscribe();
         }
         state.said = txt(reply.said) || "Event deleted.";
         state.saidAt = Date.now();
+        state.saidKind = "deleted";
         state.editId = null;
         $("cal-form").hidden = true;
         return refresh(true);
@@ -11733,6 +11763,7 @@ subscribe();
           call.then(function (reply) {
             state.said = txt(reply && reply.said) || "Event deleted.";
             state.saidAt = Date.now();
+            state.saidKind = "deleted";
             return refresh(true);
           }).catch(function (e) {
             showError(String((e && e.message) || e));
@@ -11849,6 +11880,8 @@ subscribe();
       replyError: replyError,
       submit: submit,
       removeEvent: removeEvent,
+      bannerSaid: bannerSaid,
+      hiddenSaid: HIDDEN_SAID,
       words: { off: OFF_NOTE, offHint: OFF_HINT, offBanner: OFF_BANNER,
                unknown: UNKNOWN_NOTE, repeat: REPEAT_WORDS }
     };
