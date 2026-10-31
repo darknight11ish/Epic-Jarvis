@@ -57,6 +57,10 @@ NO_PATCH = {
     # added to `jarvis_hud.py`.
     "android-builder",
     "jarvis-calendar",
+    # "Protected from Jarvis" (2026-10-31): its five routes come from its
+    # own install(), called by the drop-in loader; the folder is the whole
+    # of its wiring and no patch is added to jarvis_hud.py.
+    "protected-items",
     "auto-router",
     "media-index",
     "notion-obsidian",

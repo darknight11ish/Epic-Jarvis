@@ -3356,6 +3356,23 @@ def _url_problem(url) -> str:
     return ""
 
 
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def _path_problem(path) -> str:
     """'' when this file may be opened by a reminder, else one sentence.
 
@@ -3375,6 +3392,13 @@ def _path_problem(path) -> str:
     ext = os.path.splitext(path)[1].lower()
     if ext not in ACTION_FILE_EXTS:
         return NOT_A_FILE
+    # Protected from Jarvis (2026-10-31): opening a blocked file is a read
+    # and is refused; a read-only file may still be opened.
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(path)
+        if _said:
+            return _said
     docs = _documents()
     if docs is None:
         return NOT_IN_FOLDERS

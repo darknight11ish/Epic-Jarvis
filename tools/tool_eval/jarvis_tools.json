@@ -529,6 +529,42 @@
  {
   "type": "function",
   "function": {
+   "name": "protect_from_jarvis",
+   "description": "Protect a folder, file or program on the owner's PC from Jarvis. mode blocked = no access at all; readonly = reads allowed, writes/actions refused. Use when the owner asks Jarvis not to touch something.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "folder",
+       "file",
+       "program"
+      ]
+     },
+     "target": {
+      "type": "string",
+      "description": "the whole path for a folder or file, or the program's executable name like notepad.exe"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "blocked",
+       "readonly"
+      ]
+     }
+    },
+    "required": [
+     "kind",
+     "target",
+     "mode"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "my_spending",
    "description": "Add up or audit spending from a bank file in listed folders. summary: a table on screen, then ONE short sentence, only figures from the result. files: list them. suggest: uncategorised shops. subscriptions: recurring charges, price rises, double charges. To read what a file says, use my_files.",
    "parameters": {

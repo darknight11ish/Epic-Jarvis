@@ -200,6 +200,23 @@ _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _MB = 1000 * 1000
 
 
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def said_size(n: int) -> str:
     """A size in the words the owner reads: "1.2 MB", "640 KB", "12 bytes"."""
     try:
@@ -477,6 +494,15 @@ def read(attachment, *, limit: int = MAX_CHARS,
         return refuse(WHY_NOT_A_DICT)
     name = safe_name(attachment.get("name"))
     out["name_said"] = name
+    # A file attached to a chat is BYTES, not a PC path, so there is no
+    # path to match here (named limitation in the docs). If a client ever
+    # attaches a PC file by reference, its path is checked (2026-10-31).
+    _P = _protection()
+    if _P is not None:
+        for _ref in ("path", "source_path", "file_path"):
+            _said = _P.path_refusal(attachment.get(_ref))
+            if _said:
+                return refuse(_said)
     ext = extension_of(attachment.get("name")) or extension_of(attachment.get("mime"))
     out["kind"] = KINDS.get(ext, "")
 

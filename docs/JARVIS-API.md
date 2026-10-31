@@ -28737,3 +28737,143 @@ absence is load-bearing and is not the same fact as an empty list.
   The phone half is compiled and unit-tested here but has NOT been driven on the
   owner's phone against the live backend: that is the field check, and it is
   his - start one job, watch it park, answer it, on either app.
+
+## 170. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
+
+The owner's request, in their own words: *"add a list of file folders, and
+programs that i can manually add to (or ask jarvis to exclude in chat and get a
+card) that blocks jarvis from having any access (read or write) or the ability
+to make certain files or folders or programs read only"*. Two answers came with
+it: **build it now**, in parallel lanes; and for a protected **program**,
+"read only" means **"see it, never act"** - its window title or a screenshot
+may be read; clicking, typing, opening, closing or controlling it is refused.
+Backend lane: `jarvis_protection.py` (shipped; base twin byte-identical), its
+drop-in folder `plugins/ready/protected-items/` (install(); no patch), suite
+`backend/test_protection.py`, and this section.
+
+### 170.1 The store
+
+`protected-items.json` in the PC's Jarvis settings folder
+(`%USERPROFILE%\.openjarvis`, `jarvis_framework.CONFIG_DIR`), human-readable and
+versioned:
+
+```json
+{"version": 1,
+ "items": [
+   {"id": "prot_ab12cd34", "kind": "folder", "target": "C:\\...\\Taxes",
+    "mode": "blocked", "added": "2026-10-31T08:00:00Z", "added_by": "owner"}
+ ]}
+```
+
+`kind` is `folder` | `file` | `program`. A folder target protects its WHOLE
+subtree after links and junctions are resolved; a file target covers that file.
+Program targets are lowercase executable names (`notepad.exe`) - the name the
+desktop's own open/app-control code already resolves. Matching is
+case-insensitive, normalises `..` and separators, and resolves the candidate
+before comparing, so a symlink that leads into a protected folder is protected
+too. A damaged or missing store is **empty and safe**: no crash, no accidental
+protection, never "protect everything".
+
+### 170.2 The routes
+
+| route | who | card |
+|---|---|---|
+| `GET /api/protection` | both apps | none - the list, in the PC's own words (`count`, `items`, `modes`, `change_card`) |
+| `POST /api/protection/add` | desktop Settings only | none - the owner's own direct act; audit line. 403 from any other device (`from_this_pc`), 400 for a bad kind/mode/target/path, 409 when already protected |
+| `POST /api/protection/remove` | either app | **ONE** card, action `unprotect_item`; 202 `waiting`, 404 unknown id |
+| `POST /api/protection/propose` | the chat path | **ONE** card, action `protect_item`; 202 `waiting` and a job id; 400/409 before any card |
+| `GET /api/protection/propose?id=` | either app | the proposal's end: `waiting` / `added` / `denied` / `failed` |
+
+The chat ability is the model tool **`protect_from_jarvis`** (`{kind, target,
+mode}`): the model proposes, the owner decides on ONE ordinary approval card,
+and the store is written only after that verdict, with `added_by: "chat"`. The
+model never writes the list itself and never claims it happened until the PC
+says so. A removal is loosening and always raises one card, whichever app asks.
+Both actions ship as `"ask"` in both copies of `jarvis-framework.toml`; the gate
+has no `_RISK` row for them yet (a drop-in module adds no patch, and risk rows
+are written by patches), so they are unclassified: the gate forces them to
+"ask" whatever the setting says and shows its generic worst-case warning. A
+follow-up patch can classify them.
+
+### 170.3 The two modes, exactly
+
+- **`blocked` - no access at all.** Folder/file: no read, no search hit, no
+  snippet, no document read, no write, no delete, no rename, no File-Guardian
+  restore into it, no note-capture write into it, no generated picture written
+  into it. Program: no opening, closing or controlling it, and no screen
+  reading of its windows (its window is masked out of a capture; a front-window
+  look is paused).
+- **`readonly` - reading allowed, changing refused.** Folder/file: reading and
+  search results allowed; every write, delete, rename and restore refused.
+  Program: **see it, never act** - window title/screenshot allowed; opening,
+  clicking, typing, closing or controlling refused.
+
+Protection **wins** over every allow-list ("Folders Jarvis may look in",
+app-control's list), over a chat request, and over any default tier (an
+`auto`-tier read is still refused). A refusal is a plain sentence and raises no
+card.
+
+### 170.4 Where the check is enforced (v1)
+
+One central pair of functions, `jarvis_protection.path_refusal(path, write=)`
+and `program_refusal(name, act=)`, is called BEFORE the action by:
+
+| point | module | what it covers |
+|---|---|---|
+| folders allow-list door | `jarvis_documents.allowed_path` (+ `find`, `search`, `read` via it) | blocked paths never read, listed or indexed; read-only files still readable; `read` returns the plain sentence |
+| Notion import | `jarvis_documents.import_notion` | a write into a blocked/read-only folder is refused before unzipping |
+| file tools | `jarvis_agent` `file_read`, `my_files` read preflight, note-tool prepare | blocked path refused before any card; read-only files still read |
+| daily notes | `jarvis_note_capture.plan` (+ `run` belt) | a write into a protected note/file is refused before the card |
+| notes vault | `jarvis_notes.snapshot_vault_before_write` | the vault's guarded write door refuses a blocked/read-only file |
+| chat attachments | `jarvis_attached_file.read` | an attachment is bytes; if a client ever sends a PC path by reference it is checked (named limitation below) |
+| File Guardian restore | `jarvis_file_guardian._restore_path` | a restore into a protected path is a write and is refused |
+| opening a program | `jarvis_open.resolve` | blocked and read-only programs are both refused ("opening" is an act) |
+| looking at / acting in a program's window | `jarvis_ui_control.jarvis_target_refusal` (+ `deliver`) | blocked: never looked at; read-only: looked at, never acted in |
+| screen capture / OCR | `jarvis_screen.pause_reason`, `jarvis_screen_win.must_hide` | a blocked program's window is masked out of every picture; a front-window look is paused with its own plain words |
+| reminder "open a file" | `jarvis_schedule._path_problem` | opening a blocked file is refused; read-only may be opened (a read) |
+| generated pictures | `jarvis_pictures.save_picture` / `file_answer` | no picture written into, or read from, a protected folder |
+
+Each point has its own test in `backend/test_protection.py`, including the
+no-card proof (the refusal happens with a stub gate whose `check()` is never
+called).
+
+### 170.5 Named gaps (v1), said plainly rather than left silent
+
+- `shell_exec`, `run_data_script` (the data sandbox) and `rea_investigate` run
+  a program or a script that can read any file by itself; there is no path to
+  check before the run. They are not blocked by this list in v1 (their own
+  cards say what they will run).
+- `jarvis_app_control` acts in the PHONE's Android apps (package names), not in
+  PC programs, so a protected PC executable has no name to match there.
+- `jarvis_browser_control` drives its own bundled Playwright Chromium, not the
+  owner's installed browser; there is no link between a protected executable
+  and that bundled one.
+- `jarvis_media` uses Windows' GLOBAL media session: whatever program is
+  playing, including a protected one.
+- A full-screen capture can include a blocked program's window when
+  `jarvis_front` cannot identify that window; identified windows are masked.
+- Backup/model installs write inside Jarvis's own folders, not the owner's
+  listed folders; the File Guardian restore point above still covers a restore
+  path.
+- The Obsidian notes-editor lane (its own PR) walks the vault itself; when it
+  merges it must call `jarvis_protection.path_refusal` too (it already calls
+  `jarvis_notes.snapshot_vault_before_write` before a write). Owed.
+
+### 170.6 The apps and honest limits
+
+Desktop Settings has the full surface in its own lane (list, the three native
+pickers, mode choice, Remove, and plain sentences for refusals); the phone lane
+shows the list, the mode, Remove (which asks the PC for one card) and one line
+saying the pickers are on the PC. Both apps list it either way; there is no
+phone file browser. `POST /api/protection/add` is PC-only and raises no card;
+the chat add and every removal are one card each.
+
+**Implemented and proved in this repository, NOT deployed to the owner's live
+PC by this change** - the live deploy is its own pass, so the owner's apps do
+not show it until then. The two new documented routes are not called by either
+app until the desktop and phone lanes merge, so `tools/check_parity.py` reports
+them as documented-but-uncalled in the meantime (reported, not hidden). The
+card words and "What asks first" rows are in this change; the app-side contract
+fixtures are owed by the app lanes, and a follow-up patch can give the two
+actions `_RISK` rows so their cards show classified words instead of the gate's
+generic unclassified warning.
