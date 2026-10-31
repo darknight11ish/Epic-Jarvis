@@ -3760,6 +3760,10 @@ class MainActivity : FragmentActivity() {
                             inboxTidyBusy = inboxTidyBusy,
                             memoryHidden = privateHidden,
                             swipeDecides = security.swipeDecides,
+                            // The same settings, for the one line a card draws
+                            // about what its Approve will ask (the owner's
+                            // ruling of 2026-10-30; SecurityRules.approveCheckWords).
+                            security = security,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
                             lockdown = lockdown,

@@ -574,6 +574,18 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # nothing devices.patch wrote - and the
                                 # later_rewriting() half below proves it.
                                 "reminder-actions.patch",
+                                # unknown-risk-approvable.patch (2026-10-30,
+                                # Gemini's Q2 ruling) is appended last of the
+                                # code patches, immediately before
+                                # plugin-loader.patch: five hunks, every one in
+                                # jarvis_gate.py (eight rows at the TOP of
+                                # `_RISK`, the UNCLASSIFIED_WARNING sentence at
+                                # its end, risk_for's docstring, notice_for's
+                                # body and check()'s tier read). None of them is
+                                # a line devices.patch wrote or anchors on, and
+                                # it removes no line at all, so it cannot rewrite
+                                # the three card lines devices.patch adds.
+                                "unknown-risk-approvable.patch",
                                 # update-in-chat.patch (2026-10-26): ONE hunk in
                                 # jarvis_gate.py that appends `desktop_update` to
                                 # the END of _NO_RULE_FROM_DENIAL, after

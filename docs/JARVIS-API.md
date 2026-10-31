@@ -348,6 +348,45 @@ row with no action "Jarvis is asking for your approval". A row with **no
 fallback in both apps. `backend/test_card_words.py` fails when an action the
 gate knows has no phrase.
 
+**`risk.classified: false` - an action the gate has no row for (2026-10-30).**
+The `risk` object is `{"reversible", "reach", "swipe_ok", "why", "classified"}`
+and it is DERIVED at read time from `jarvis_gate._RISK`; `classified` is false
+when that table has no row for the row's action. Since Gemini's Q2 ruling
+(`backend/unknown-risk-approvable.patch`) such a card is **approvable with
+maximum friction**, not refused:
+
+- `reversible` is `"no"`, `reach` is `"outbound"`, so `swipe_ok` is `false` -
+  the worst case the table has. Nothing on any screen may let a swipe or a
+  single tap decide it.
+- `risk.why` is the warning, word for word: **`Unclassified action - treated as
+  permanent and able to leave this PC`**, and `notice.body` begins with the
+  same sentence and adds why ("nobody has written down what it does, so it is
+  given the worst case"). Both come from `jarvis_gate.UNCLASSIFIED_WARNING`, so
+  they cannot drift apart. **No new field**: the three clients already draw
+  `risk.why` (the desktop's `riskLine`, the HUD's `apprRiskLine`, the phone's
+  `ApprovalCard`), so the warning appears with no client change, and the phone
+  already shows its `UNCLASSIFIED` pill for `classified: false`.
+- `notice.weight` is `"heavy"` (it leaves the machine and cannot be undone), a
+  `deny_ok: true` and the usual `approve_ok: false`.
+- The action is also forced to tier `"ask"` by `jarvis_gate.check()` whatever
+  `[autonomy.tiers]` says, so an unclassified action can never run with nobody
+  asked. `"never"` is stricter and is untouched.
+- **Approval needs a person.** Such a card takes the ordinary risky path -
+  Windows Hello on this PC, or the phone's own lock and signature from another
+  device - and nothing else. `POST /api/approve` on the PC reaches the Windows
+  Hello prompt instead of the 403 `unlabelled` below (the gate's warning line is
+  the written title the prompt needs), and an approval that did NOT come through
+  that check is refused by the gate itself, so no other client can record a yes
+  that runs. `jarvis_asks_first.request_tier` refuses to loosen one (409,
+  `not_classified: true`, nothing written), and its page offers no switch.
+- The eight actions that had an `auto` line and no row (`calendar_read`,
+  `email_read`, `notes_search`, `home_read`, `news_read`, `page_read`,
+  `github_read`, `docker_service_stop`) were given their own rows by the same
+  patch, so **no action that runs unattended is unclassified** any more. (The
+  ninth of that shape, `lower_api_limit`, already had a row from
+  `chatbot-limits.patch`.) `backend/test_gate_unknown_risk.py` fails a tree
+  where one is.
+
 **One card on every screen.** The Jarvis bar, the widget, the HUD page, the
 phone's card and its home-screen widget all show the label "Needs your OK",
 then the title, then the rest of the card, with **Deny on the left and
@@ -550,7 +589,7 @@ a client:
   | 403 | `{"ok": false, "owner_check": "not_set_up", "error": "Windows Hello is not set up on this PC, ..."}` | No Windows Hello on the PC: "no lock, no risky approval". |
   | 403 | `{"ok": false, "owner_check": "cancelled", "error": "..."}` | The owner dismissed the prompt. |
   | 403 | `{"ok": false, "owner_check": "failed", "error": "..."}` | The prompt could not be shown just now. |
-  | 403 | `{"ok": false, "owner_check": "unlabelled", "error": "Jarvis has no written words for this action yet, ..."}` | The action has no written title (`jarvis_card_words.has_written_title`), so a prompt could only quote a name back. Refused before any prompt is shown; nothing is approved. |
+  | 403 | `{"ok": false, "owner_check": "unlabelled", "error": "Jarvis has no written words for this action yet, ..."}` | The action has no written title (`jarvis_card_words.has_written_title`), so a prompt could only quote a name back. Refused before any prompt is shown; nothing is approved. **ONE EXCEPTION since 2026-10-30 (Gemini's Q2 ruling):** a card whose `risk.classified` is false is NOT refused here - the gate's own warning line is the written title the prompt needs, so it reaches Windows Hello like any other risky card (see "`risk.classified: false`" above). The refusal still holds for a classified action with no written words. |
   | 409 | `{"ok": false, "owner_check": "gone", "error": "This request stopped waiting while Windows Hello was open ..."}` | It ran out of time or was answered while the prompt was open, the prompt was closed because the card had stopped waiting (the watcher), or it had already run out when its turn for the prompt came. Both apps read a 409 as "no longer waiting". |
   | 503 | `{"ok": false, "owner_check": "unreadable", "error": "..."}` | The queue could not be read, so nothing was approved. |
 
@@ -570,8 +609,70 @@ a client:
   Hello prompt for a risky card (`lock/rules.rs`
   `approval_needs_local_check`) and waits up to the card's time left plus a
   few seconds (`approval_wait`), after letting the backend's prompt come to
-  the front. The phone does not read it: its approvals are not checked on
-  the PC (step 2 is the phone's half).
+  the front. The phone does not read it, and needs none of it: what the phone
+  sends is checked on the PC by the signed-approval contract (§91) instead -
+  `capabilities.pairing.signed_approvals`, which the phone does read. The
+  sentence that used to stand here ("its approvals are not checked on the PC")
+  was true before 2026-09-29 and is not any more.
+
+### Which cards ask, on both apps - one rule, two checks (2026-10-30)
+
+**The owner's ruling, 2026-10-30:** *"if there is anything that needs approval
+for Jarvis on desktop with the Windows Hello PIN as well, make the Android app
+require a fingerprint to approve the same card - but I can approve the same
+level of card on Android as well."* No route, no field and no backend change
+was needed to grant it - the rule already covered both apps, and this section
+is the one place that says so. The record is
+`decisions.d/2026-10-30-phone-approves-the-same-cards-with-its-fingerprint.md`.
+
+**Which cards ask.** Exactly `jarvis_owner_check.is_risky`'s set: the gate did
+not classify it, its `reach` is `outbound`, its `reversible` is `no`, or it
+carries `raised` (a missing or unreadable field is the risky reading). The same
+rule exists three times - `backend/jarvis_owner_check.py` `is_risky`, the
+desktop's `lock/rules.rs` `is_risky`, the phone's `SecurityRules.riskyByToday`
+(`data/Security.kt`) - and `tools/gen_risky_approval_cases.py` writes the cases
+all three are tested against (`jarvis-desktop/tests/fixtures/` and the phone's
+`contract/risky-approval-cases.json`, holding the PC's own answers). A card
+cannot be risky on one app and safe on the other.
+
+**What the check is, per app.**
+
+| | The PC | The phone |
+|---|---|---|
+| Who runs it | the backend, before it records the yes (`approve_check`) | the app, before it sends anything (`MainActivity.approveItem`) |
+| What it is | Windows Hello - PIN, fingerprint or face | Android's `BiometricPrompt`: a strong fingerprint, or the phone's PIN - the same check App lock uses. "Fingerprint only" in Security drops the PIN. |
+| Cancelled | `403 owner_check: "cancelled"`, nothing approved | nothing is sent and the card stays, untouched |
+| Could not be shown | `403 owner_check: "failed"` | nothing is sent, one sentence |
+| Nothing set up | `403 owner_check: "not_set_up"` ("no lock, no risky approval") | refused, with the button that opens Android's screen-lock settings |
+| A yes | stamped, and only then does the gate act | a fresh signature over the card when signed approvals are on (§91); without one, a device that holds its own key is refused (`no_signature`), and the old shared key still works until the owner retires it (§90.5) |
+
+**The same level, not a lower one.** Nothing about a card's *risk level*
+weakens the phone's check, and nothing about it stops the owner answering
+there: every risky card the phone draws an Approve on is answered after a
+confirmed check. The only cards with no Approve at all are the PC's own
+ceremonies (`jarvis_owner_check.PC_ONLY_ACTIONS`, refused `pc_only` - a decision
+about WHERE a thing can happen, not about how much checking) and a proposal that
+needs a named plan (`needsChoice`, which the decide route cannot carry yet).
+The phone's Security screen can only make the rule stricter ("Every approval");
+its loosest choice is the rule above.
+
+**What the person sees.** The buttons keep the shared words on both apps
+(`CardWords.BUTTONS`: "Deny", "Approve"), and under them one line says what the
+press will ask - "Approve asks for your fingerprint or PIN.", or "Approve asks
+for your fingerprint." under "Fingerprint only". It is worked out from the same
+two things the check is (`SecurityRules.approvalNeedsCheck` and
+`Security.method`), so it cannot promise a check that will not run;
+`ApproveAsksFingerprintTest` in the required `phone-unit-tests` job holds the
+two together.
+
+**One difference between the apps, said plainly.** An action with no written
+words of its own - a plug-in's tool the PC has no phrase for, say - is refused
+on the PC before any prompt appears (`403 owner_check: "unlabelled"`: a dialog
+built on the fallback title would ask the owner to confirm a blank). The phone
+has no field on the row that says so and draws that same fallback title itself,
+so it would still ask. Both apps' *risk* answers are identical (above); this is
+the one place the PC is the stricter of the two, and it is the PC's own table
+(`jarvis_card_words.has_written_title`) that decides it.
 
 ---
 
@@ -27548,7 +27649,7 @@ nothing leaves the PC, so there is no egress to approve.
 **This section is the backend's contract.** The phone's plate and home-screen
 widget, and the desktop's HUD card, are the slices that build on exactly these
 answer shapes; both landed (the phone's in its own slice, the desktop's in
-§166), so all four routes are now `ported` in `tools/check_parity.py` rather
+§168), so all four routes are now `ported` in `tools/check_parity.py` rather
 than `planned`.
 
 ### 164.1 Where the data lives, and the switch
@@ -27643,8 +27744,8 @@ newest event.
 All four are behind the server's own origin check and `X-Jarvis-Token`, the same
 rules as every other host route; there is **no new permission model**. Reads are
 safe. The three writes are host-only writes: the desktop's two go through the
-HUD's own commands (`hud_calendar_add` / `hud_calendar_act`, §166.4) and its
-switch through `calendar_settings` (§166.5), and each answers in words, never
+HUD's own commands (`hud_calendar_add` / `hud_calendar_act`, §168.4) and its
+switch through `calendar_settings` (§168.5), and each answers in words, never
 with a silent no-op.
 
 ```
@@ -27693,7 +27794,7 @@ and no model call.
 ### 164.5 Honest limits, and what the later slices own
 
 - **Both apps draw it now.** The desktop's HUD card, month/week/day sheet, one
-  form and Settings switch are §166; the phone's plate, day list and
+  form and Settings switch are §168; the phone's plate, day list and
   home-screen widget are this section's phone half. Settings' entry for the
   feature names the switch in both apps, and the feature row says `enforced`.
 - **Google and iCal are not on this route.** `sources` says
@@ -27968,7 +28069,7 @@ That was **not** run in this checkout (no live call is made by any test or by
 CI), so "the real services answer" is NOT-TESTABLE here and is the owner's
 field check.
 
-## 166. Building an Android app from chat, and putting it on your phone (added 2026-10-30)
+## 166. Building an Android app and putting it on your phone: four routes, no entry point yet (added 2026-10-30)
 
 **Why this section number.** The last section on `main` when this was written
 was 162, and four in-flight branches had already claimed 163-167 (the numbers
@@ -27983,8 +28084,13 @@ section was **no**: milestones C (run a command), F (native Android projects)
 and G (install the debug APK) of `docs/APP-BUILDER-DESIGN.md` were unbuilt,
 and nothing in the backend had ever started a program that was not git.
 
-**What is built.** The narrowest full path from a chat description to an app
-on the phone, in three steps, of which TWO COST A CARD:
+**What is built.** The four routes below are the narrowest full path from an
+app description to an app on the phone, in three steps, of which TWO COST A
+CARD. **What is not built is the way in.** No chat sentence, no model tool and
+no button in either app calls these routes yet; only this module's own tests
+call them, and the tests drive the module's handlers directly. So the path is
+complete for a caller and there is no caller: an entry point still has to be
+written, and these contracts are what it would be built against.
 
 The four routes, exactly as they are answered:
 
@@ -28057,7 +28163,7 @@ two defaults, and gets a **working** page, which is what makes a first build
 possible without a single model call.
 
 * **200** `{"ok": true, "template": {"ok", "files", "package", "title"},
-  "status": {…168.4…}}`
+  "status": {…166.5…}}`
 * **400** a plain sentence: not an Android project, a title with a quote in
   it, a colour that is not `#rrggbb`, a fourth web file, one larger than
   96 KB, one that is not text, or a task that already has a project (a second

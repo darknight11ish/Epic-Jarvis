@@ -1,7 +1,7 @@
 # android-builder - build an app and sideload it onto your phone
 
 This folder is the whole wiring for the app builder's last two steps
-(`jarvis_android_builder.py`, 2026-10-30, `docs/JARVIS-API.md` section 168).
+(`jarvis_android_builder.py`, 2026-10-30, `docs/JARVIS-API.md` section 166).
 There is no patch: the loader finds this folder, imports the module it names
 and calls that module's own `install()`, exactly as the patch would have.
 

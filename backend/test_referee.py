@@ -685,6 +685,13 @@ def t_the_patch_and_the_lists():
              # `_RISK` row). It removes no line at all, so it rewrites nothing
              # referee.patch wrote.
              "reminder-actions.patch",
+             # unknown-risk-approvable.patch (2026-10-30, Gemini's ruling Q2) is
+             # appended last of the code patches, immediately before
+             # plugin-loader.patch: nine rows at the END of `_RISK`, the
+             # UNCLASSIFIED_WARNING sentence beside them, `risk_for`'s docstring,
+             # `notice_for`'s body and check()'s tier read. None of them is a
+             # line referee.patch wrote or anchors on.
+             "unknown-risk-approvable.patch",
              # update-in-chat.patch (2026-10-26): ONE hunk in jarvis_gate.py
              # that appends `desktop_update` to the END of _NO_RULE_FROM_DENIAL,
              # after uncensored-optins.patch's own last entry - it adds no tier

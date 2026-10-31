@@ -190,6 +190,7 @@ on a throwaway copy instead.
 | `apps-in-projects.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **An app inside a Jarvis project: its tasks and the merge card** (the owner's decisions of 2026-09-28 and 2026-09-29; `docs/APPS-IN-PROJECTS-DESIGN.md`, `docs/JARVIS-API.md` section 92). One block in `jarvis_hud.py` right after `projects.patch`'s own: `jarvis_apps.install(...)` adds `GET /api/projects/<id>/app/tasks/<task>` and `POST .../app/tasks`, `.../files` (a change pasted in - PC only), `.../merge` (ONE risky approval card) and `.../discard`. Two lines in `jarvis_gate.py`: `app_merge_change` joins `_NO_RULE_FROM_DENIAL` (a no is never a standing rule) and `_RISK` as `("no", "local", ...)` - it cannot be undone yet, so it is a RISKY card (Windows Hello on the PC, the screen lock on the phone), approved on either device. Last in the list: its context is `projects.patch`'s, `forget-range.patch`'s and `devices.patch`'s lines. Needs `jarvis_apps.py` (with `jarvis_projects.py` and `jarvis_app_workspace.py`); without it, or on any error, the banner says "apps NOT ON" and the app routes are simply not there. See "Apps in Projects", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 | `model-lanes.patch` | `jarvis_hud.py` | **"Start the local model"** (the owner's decision of 2026-10-13, after both of his Ollama lanes were dead for about five hours and the standing warning deliberately did nothing). `GET /api/model-lanes` and `POST /api/model-lanes/start`, behind the same origin and token checks as `/api/status`. The one action runs **HIS OWN Windows logon task**, found on that PC with `schtasks` and matched by the half of its name a rename does not touch - never `ollama serve`, never a name typed from memory - and then watches that lane's own `/api/tags` every 3 s for up to 90 s, so "starting" is never reported as "up": a lane that does not come up settles as `down` with a plain sentence and leaves the warning standing. One lane, the one Jarvis talks to (`OLLAMA_URL`'s port - 11436 on his PC), never both; nothing is started twice (answering, already watched, or the Task Scheduler says it is running). No gate file: the same task his own logon already runs unattended, so a card would only be stricter than the thing it duplicates. One `install()` block, appended to the chain `pictures.patch` writes and immediately before `plugin-loader.patch`, whose hunk was re-anchored onto this block's last two printed lines (`tools/check_plugins.py` checks that). Needs `jarvis_model_lanes.py`, in both shipped lists and in the base. See "Start the local model", at the very end. |
+| `unknown-risk-approvable.patch` | `jarvis_gate.py` | **An action the gate has no risk row for is approvable, with maximum friction** (Gemini's Q2 ruling of 2026-10-30; `.dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md`, `docs/JARVIS-API.md`'s pending/risk contract). On 2026-10-30 the owner's PC showed the app builder's build card, he pressed Approve, and nothing happened: a risky card needs a Windows Hello prompt, a prompt may only ask about something Jarvis can NAME, and an action with no risk row and no written words was refused outright by `jarvis_owner_check` (`UNLABELLED`, 403) - a dead end that looked alive. Five hunks: (1) the end of `_RISK` gains the EIGHT actions that had an `auto` line and no row (`calendar_read`, `email_read`, `notes_search`, `home_read`, `news_read`, `page_read`, `github_read`, `docker_service_stop`), each with the sentence its tier line already implies, so the rule below changes nothing the owner uses today - the NINTH of that shape, `lower_api_limit`, is left to `chatbot-limits.patch`, because a second row would be dead code (the LAST one wins) and `test_gate_risk_words.py` fails exactly that; (2) `UNCLASSIFIED_WARNING` and `_UNKNOWN_RISK`'s new words - **"Unclassified action - treated as permanent and able to leave this PC"**; (3) `risk_for`'s docstring says what `classified: false` now means; (4) `notice_for` puts the warning line on the card and says why the worst case was chosen; (5) `check()` forces every unclassified action to tier `"ask"` - whatever `[autonomy.tiers]` or `unknown_action_tier` says, `"never"` still stricter and untouched - except the tool literals `action_for_tool()` sets directly ("calculator" -> auto, "memory_store" -> notify), which are not actions the risk table classifies. **The owner approves only through the human check**: `jarvis_owner_check.approve_check()` lets an unclassified card reach the Windows Hello prompt (or the phone's own lock/signature) instead of refusing it, and a yes recorded WITHOUT that check is refused by the gate (`_unstamped_approval`), so nothing auto-approves, nothing bulk-approves. **CI stays strict**: `backend/test_gate_unknown_risk.py` fails a tree where an action that can run unattended has no row, and names it. Its `jarvis_owner_check.py` and `jarvis_asks_first.py` halves are SHIPPED modules (no patch), so their changes ship by the `$SHIPPED` copy; `jarvis_asks_first.request_tier` now refuses to loosen an unclassified action (409, "not classified", nothing written) and the page offers no switch for it. Last in the list, and measured rather than chosen: no patch after it writes `jarvis_gate.py`, and its eight rows sit at the table's TOP because the table's END is different on a PC whose stack has run (`chatbot-limits.patch` writes rows there) and on one where it has not, while the opening is the same in both. Its own suite reverses and re-applies it byte for byte. See "An unclassified action is approvable, with maximum friction", at the very end. |
 
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
@@ -20188,3 +20189,88 @@ only the END is kept. Success needs exit 0 **and** the APK. Routes:
 `python -B backend/test_android_builder.py` (no Gradle, no adb, no network: a
 fake `_run` records the command and makes the APK, a fake gate records the
 card). The real build above was a manual measurement, not a test.
+## An unclassified action is approvable, with maximum friction
+
+**`unknown-risk-approvable.patch`, 2026-10-30.** The owner's own PC showed the
+app builder's build card, he pressed Approve, and nothing happened. The card
+looked alive and was a dead end: `jarvis_owner_check.approve_check()` refuses a
+risky card whose action has no written words (`UNLABELLED`, 403), because a
+prompt that cannot NAME what it is asking about asks the owner to confirm a
+blank. An action with no `_RISK` row is exactly that on a fresh install, so
+nothing could approve it - not the PC, not the phone. Gemini's Q2 ruling
+(`Downloads\gemini_response_to_12h_review_and_next_plans_2026_10_30.md`,
+section 3) made it a dual rule: **strict in CI, approvable at runtime, with the
+strongest words and the human check.**
+
+What changes, in plain words, when `risk_for(action)["classified"]` is False:
+
+- **The worst case the gate has.** `reversible` "no", `reach` "outbound", so
+  `swipe_ok` is False on every screen (no swipe, no one-tap gesture).
+- **The warning line, on the card.** `risk.why` and the first sentence of
+  `notice.body` are now `Unclassified action - treated as permanent and able to
+  leave this PC` (one constant, `UNCLASSIFIED_WARNING`, so the risk line and
+  the body cannot drift apart), and the body adds why: nobody has written down
+  what it does, so it is given the worst case.
+- **Tier "ask", forced.** `check()` forces an unclassified action to "ask"
+  whatever `[autonomy.tiers]` or `unknown_action_tier` says, so it can never
+  run with nobody asked. `"never"` is stricter and is untouched. The tool
+  literals `action_for_tool()` sets directly ("calculator" -> auto,
+  "memory_store" -> notify, "git_commit" -> ask) are NOT actions the risk table
+  classifies - forcing those would card every calculation - so they are exempt
+  by name, from the gate's own table.
+- **Approved only by a person.** The card reaches the ordinary risky path:
+  Windows Hello on this PC, the phone's own lock and signature from another
+  device. `approve_check()` no longer refuses an unclassified card for having
+  no written title - the gate's warning line IS the written title it needs - and
+  a yes recorded without that check is still refused by the gate
+  (`_unstamped_approval`). Nothing auto-approves, nothing approves in bulk, and
+  no new route exists.
+- **Nothing may loosen it.** `jarvis_asks_first.request_tier` refuses to loosen
+  an unclassified action (409, "not classified", the settings file untouched),
+  and the "What asks first" page offers no switch for it.
+
+**Why the forced "ask" changes nothing he uses today.** Eight actions had an
+`auto` line in `[autonomy.tiers]` and no risk row - the only actions that ran
+with nobody asked while the gate called them unclassified: `calendar_read`,
+`email_read`, `notes_search`, `home_read`, `news_read`, `page_read`,
+`github_read` and `docker_service_stop`. The patch gives each its own row, with
+the sentence its tier line already implies ("a read, changes nothing"), so **no
+action that runs unattended today is unclassified** and the rule bites only on
+actions nobody has written down at all. The NINTH of that shape,
+`lower_api_limit`, is deliberately left to `chatbot-limits.patch`, which gives
+it a row: at runtime it was never unclassified, and a second row would be dead
+code (the LAST one wins) - which `test_gate_risk_words.py` fails, and did catch
+while this patch was being written. That is also
+the CI half: `backend/test_gate_unknown_risk.py` fails, by name, whenever an
+action the shipped settings file lets run unattended has no row.
+
+**What it does not fix, said plainly.** Nineteen actions that only ever run on
+a tier "ask" line still have no risk row (`home_control`, `undo_action`,
+`sandbox_file_run` and others). Nothing changes for them except their card's
+words - they already said "not classified, so treated as irreversible and
+outbound", and now say the plainer warning - and they were already approvable,
+because every action with a tier line has a written card title
+(`test_card_words.py` holds that). Giving them rows is a separate, per-action
+job with real judgement in it.
+
+**Test it.** `backend/test_gate_unknown_risk.py` - 101 checks. It builds the
+patched gate the way this repository tests a gate patch (reverse
+`unknown-risk-approvable.patch` out of the published base, apply it forwards,
+compare byte for byte), then proves: the risk fields and the exact warning; the
+forced "ask" from "auto", from "notify" and from a loosened
+`unknown_action_tier`, with "never" still never and a tool literal untouched; a
+classified action's card unchanged; the eight rows and the missing-row check
+(bitten on a mutated copy); and the whole approval path - the real card row, the
+real `approve_check`, the real gate waiting - including that a yes recorded
+without the human check is refused and the action does not run, and that a
+classified action with no written words is STILL refused. It also runs
+`test_gate_risk_rows.py` unchanged, so nobody can say this change loosened it.
+
+**Deploy.** Two halves, and the second is why the Lead must read this one:
+`jarvis_gate.py` is a patched base file, so it arrives through
+`apply-patches.ps1` or `tools/reconcile_live_backend.py` (its DELTA_TABLE
+entry); `jarvis_owner_check.py`, `jarvis_asks_first.py` and
+`jarvis_card_words.py` are SHIPPED modules, so `$SHIPPED` carries them. On the
+owner's drifted install the patcher refuses, and the honest route is the one
+`#997` used plus a reconcile delta - see
+`.dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md` section 6.

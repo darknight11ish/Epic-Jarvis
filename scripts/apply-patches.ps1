@@ -1894,6 +1894,37 @@ $PATCHES = @(
     # copied in (the $SHIPPED list above does it); without it every attachment
     # is refused in plain words and nothing is read.
     'attached-file.patch'
+
+    # unknown-risk-approvable.patch (2026-10-30, Gemini's Q2 ruling:
+    # .dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md). An action the gate has
+    # no risk row for is no longer a dead end: it is given the worst case
+    # (permanent, outbound), forced to tier "ask", and its card carries the
+    # warning line "Unclassified action - treated as permanent and able to
+    # leave this PC"; the owner may still approve it with the human check every
+    # risky card already needs (Windows Hello here, the phone's own lock). It
+    # also gives the EIGHT actions that had an "auto" line and no row their rows
+    # (calendar_read, email_read, notes_search, home_read, news_read,
+    # page_read, github_read, docker_service_stop), so the forced "ask" changes
+    # nothing anybody uses today. The NINTH of that shape, `lower_api_limit`,
+    # is deliberately left alone: chatbot-limits.patch already gives it a row,
+    # so it was never unclassified at runtime and a second row would be dead
+    # code (the LAST one wins) - which test_gate_risk_words.py fails.
+    # FIVE hunks in jarvis_gate.py: the eight rows at the TOP of `_RISK` (with
+    # the other reads), the UNCLASSIFIED_WARNING sentence and the new
+    # _UNKNOWN_RISK at the table's end, risk_for()'s docstring, notice_for()'s
+    # body, and check()'s tier resolution.
+    # IT IS APPENDED LAST among the patches that write jarvis_gate.py, and that
+    # is measured rather than chosen. The rows go at the TOP of the table
+    # because the table's END is different on a PC whose stack has run
+    # (chatbot-limits.patch writes rows there) and on one where it has not,
+    # while the table's opening is the same in both - so the hunk carries the
+    # opening line and `# reading anything` and nothing else. Placed last, it
+    # breaks no other patch: no patch after it writes jarvis_gate.py at all,
+    # and `backend/test_gate_unknown_risk.py` pins both facts.
+    # A branch that adds a patch after no-deadline-cards.patch (show-card-timer)
+    # and this one do not meet in the list at all: no conflict, and the order
+    # between the two is irrelevant.
+    'unknown-risk-approvable.patch'
     'plugin-loader.patch'
 )
 

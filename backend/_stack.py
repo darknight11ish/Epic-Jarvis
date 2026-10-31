@@ -507,12 +507,41 @@ RATCHET = {
     #: `no-expiry-cards.patch` is pinned at 9 hunks for the same region. Its
     #: other two hunks rewrite docstrings `no-deadline-cards.patch` writes and
     #: cost nothing. Honest rather than drift, measured with
-    #: `materialised("jarvis_gate.py", patches)` - the walk reads 50 and names
-    #: it at 1 in `by_patch` - and checked the other way by
+    #: `materialised("jarvis_gate.py", patches)` on that patch alone - the walk
+    #: read 50 and named it at 1 in `by_patch` - and checked the other way by
     #: backend/test_gate_card_timer.py, which applies the whole three-patch
     #: stack to the published base with `git apply` (no fuzz) and imports the
-    #: result. A ratchet: it may still only go down.
-    "jarvis_gate.py": 50,
+    #: result.
+    #:
+    #: RAISED AGAIN the same day, 49 -> 53, for
+    #: `unknown-risk-approvable.patch` (Gemini's Q2 ruling: an action with no
+    #: risk row is approvable with maximum friction). FOUR of its five hunks
+    #: are honest rather than drift - the patch is in `by_patch` at 4, 20
+    #: lines, and the walk read 53 on that patch alone:
+    #:
+    #:   * the `_RISK` table's OPENING line and `# reading anything`, where the
+    #:     eight rows are added. They are added at the TOP on purpose: the
+    #:     table's END is different on a PC whose stack has run
+    #:     (`chatbot-limits.patch` writes its own rows there) and on one where
+    #:     it has not, and a hunk anchored there would apply to one and not the
+    #:     other. The opening is the same in both, and no earlier patch writes
+    #:     it, so the walk cannot rebuild it and invents those two lines;
+    #:   * `_UNKNOWN_RISK`'s two lines at the table's end, beside the new
+    #:     `UNCLASSIFIED_WARNING` sentence - the owner's text, which no patch
+    #:     writes;
+    #:   * `risk_for()`'s docstring and `check()`'s `tier = tiers.get(...)`
+    #:     line, both the owner's own file.
+    #:
+    #: The fifth hunk (`notice_for()`'s body) anchors on approval-notice.patch's
+    #: own block and costs nothing. Checked the other way by
+    #: backend/test_gate_unknown_risk.py, which reverses the patch out of the
+    #: published base and applies it forwards again byte for byte.
+    #:
+    #: MERGED ON THIS BRANCH: both patches write `jarvis_gate.py`, at different
+    #: points, and both are in the stack here, so the two raises add up -
+    #: 49 + 1 + 4 = 54, measured with `materialised("jarvis_gate.py", patches)`
+    #: on the merged stack. A ratchet: it may still only go down.
+    "jarvis_gate.py": 54,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

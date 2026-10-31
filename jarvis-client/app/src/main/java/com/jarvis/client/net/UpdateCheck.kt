@@ -70,9 +70,11 @@ object UpdateCheck {
      * restored), so it is not a secret - it is in every APK. It IS the one
      * thing a swapped file cannot fake.
      *
-     * ROTATION (owner-approved 2026-10-18). The release key is being replaced
-     * by a dedicated release keystore, so this pin changes once. The full
-     * runbook is `.dsh-scratch/ANDROID-SIGNING-ROTATION.md`; follow it with the
+     * ROTATION (deferred by the owner's 2026-10-30 ruling: the shared debug key
+     * is KEPT while the app is sideloaded onto his own phone only, and rotated
+     * only when he chooses the re-pair ceremony). When that happens, the
+     * runbook is `docs/DEPLOY.md` section 5 and the key half is
+     * `scripts/rotate-android-signing-key.ps1 -Rotate`; follow it with the
      * owner at the PC, never from memory. There are exactly TWO code places to
      * change, in the same commit as the Gradle/CI key change:
      *   - ROTATION STEP 1 of 2: this constant, below;
