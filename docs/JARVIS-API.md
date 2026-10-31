@@ -28816,7 +28816,14 @@ card.
 ### 170.4 Where the check is enforced (v1)
 
 One central pair of functions, `jarvis_protection.path_refusal(path, write=)`
-and `program_refusal(name, act=)`, is called BEFORE the action by:
+and `program_refusal(name, act=)`, is called BEFORE the action by the points
+below. Every path is compared in BOTH its lexical form
+(`normcase(abspath(p))`) and its resolved form (`normcase(realpath(p))`), so a
+link that lives inside a protected folder AND a link elsewhere that resolves
+into it are both caught; the list's own store file (and its `.bak`/`.tmp`
+siblings) is refused unconditionally and does not need an entry. A `program`
+entry matches by bare executable name, with or without `.exe` (`notepad` and
+`notepad.exe` are one key).
 
 | point | module | what it covers |
 |---|---|---|
@@ -28829,13 +28836,33 @@ and `program_refusal(name, act=)`, is called BEFORE the action by:
 | File Guardian restore | `jarvis_file_guardian._restore_path` | a restore into a protected path is a write and is refused |
 | opening a program | `jarvis_open.resolve` | blocked and read-only programs are both refused ("opening" is an act) |
 | looking at / acting in a program's window | `jarvis_ui_control.jarvis_target_refusal` (+ `deliver`) | blocked: never looked at; read-only: looked at, never acted in |
-| screen capture / OCR | `jarvis_screen.pause_reason`, `jarvis_screen_win.must_hide` | a blocked program's window is masked out of every picture; a front-window look is paused with its own plain words |
-| reminder "open a file" | `jarvis_schedule._path_problem` | opening a blocked file is refused; read-only may be opened (a read) |
+| screen capture / OCR | `jarvis_screen.pause_reason`, `jarvis_screen_win.protected_capture_problem` / `whole_screen_protection_problem` / `must_hide` | a blocked program that OWNS the target window refuses the look before the picture; a blocked program VISIBLE on a monitor being captured refuses the whole-screen capture before a pixel is read; identified windows are also masked, and the capture fails closed |
+| reminder "open a file" | `jarvis_schedule._path_problem` (+ `_path_problem` is the reminder module's door; there is no `jarvis_reminders.py` on the base) | opening a blocked file is refused; read-only may be opened (a read) |
+| launcher / chat tool arguments | `jarvis_open.resolve`, `jarvis_agent._protection_path_args` (before the gate) | a protected program is never started; every absolute PC path in a tool's arguments is checked before any card |
+| notes list / read / search | `jarvis_notes._search_vault`, `jarvis_note_capture.plan`/`capture` | a blocked note is not read, searched or listed, and `#obs` capture into a protected place refuses before its card |
+| Obsidian wiki | `jarvis_wiki.read_source`, `_shown_pages`, `_existing_pages`, `check_pages`, `_checked`, `ingest` | a blocked source is never read; a blocked page is not shown or listed; ingest refuses blocked and read-only sources before a job/card; every planned/actual page/index/log/cache write asks the WRITE question in `plan()` and again in `run()` |
+| background jobs / plans | `jarvis_jobs.create`, `_plan_step`, `_plan_handler` | every PC path anywhere in a job's params is checked when the job is created (fails before it exists) and again per step at the tick: a read-only step asks the read question, a mutating one the write question |
+| the list's own store | `jarvis_protection._is_self_path` (inside `path_refusal`/`blocked_path`) | `protected-items.json`, its `.bak`/`.tmp`/atomic siblings are refused to every caller, listed or not; only the module's own `save()` writes it |
 | generated pictures | `jarvis_pictures.save_picture` / `file_answer` | no picture written into, or read from, a protected folder |
 
 Each point has its own test in `backend/test_protection.py`, including the
 no-card proof (the refusal happens with a stub gate whose `check()` is never
 called).
+
+#### The seven mandatory bypass paths (Gemini Q2, 2026-10-31)
+
+The ruling named seven ways a "block access" feature can be bypassed. Each one
+is now COVERED, FIXED, or named as a v1 deferral - never silent:
+
+| # | bypass path | verdict | what is in the tree |
+|---|---|---|---|
+| 1 | Windows Path Canonicalization: both `normcase(abspath(p))` (lexical) and `normcase(realpath(p))` (resolved) | **FIXED** (was realpath-only; the lexical half was missing) | `jarvis_protection._path_forms`; both halves compared for folder subtrees and file equality; test `t_p1_canonicalisation_checks_both_forms` proves each half separately (and a real symlink where the OS allows one) |
+| 2 | Self-protection of `protected-items.json` and its `.bak`/temp siblings | **FIXED** (was not hard-coded; the store could be read through a model/file tool) | `jarvis_protection._is_self_path`/`SELF_SENTENCE`; unconditionally refused to every caller (read AND write), only `save()` writes it; tests point a file tool, a document read and an attachment path at it, and prove a same-named file elsewhere is NOT blocked |
+| 3 | Obsidian notes editor and wiki: list omits blocked; read refuses blocked; save/`#obs`/wiki ingest refuse blocked AND read-only BEFORE the card | **FIXED for `jarvis_notes` / `jarvis_note_capture` / `jarvis_wiki`** (the notes EDITOR module is not on this branch: it merges before the list does and gets its own hook commit, `8de06098f0`, cherry-picked after #1017 - not duplicated here) | `jarvis_notes._search_vault` skips blocked folders/notes; `jarvis_wiki.read_source`/`_shown_pages`/`_existing_pages` omit & refuse; `check_pages` asks the write question before a wiki card; `_checked` asks again in `run()`; `ingest` refuses a read-only source before a job exists; `#obs` `capture()` already refused before its card via `plan()`; tests drive each with a fake gate whose `calls` must stay empty |
+| 4 | Screen capture/OCR: a blocked program owning the target window, or visible on the captured monitor, refuses before pixels/titles | **FIXED** (the earlier hooks only paused a foreground look and masked identified windows; a whole-monitor capture still read pixels) | `jarvis_screen_win.protected_capture_problem` (target window) and `whole_screen_protection_problem` (window list ∩ monitor rect, blocked only), `jarvis_screen._grab` refuses `protection_visible` before the grab, `take_picture` is a second fail-closed belt; tests prove the grabbing call is never made |
+| 5 | Subprocess / launcher / reminders: normalise the executable name and check all path arguments | **FIXED** for the launcher and the chat tools' path arguments; reminders use `jarvis_schedule._path_problem` (there is no `jarvis_reminders.py`) | `jarvis_protection.program_keys` (bare name, with/without `.exe`); `jarvis_open.resolve` refused both spellings; `jarvis_agent._protection_path_args` checks every absolute PC path in every tool's arguments before the gate; tests cover `notepad`/`Notepad.EXE`/full-path spellings and read-vs-write questions |
+| 6 | Background jobs and file watchers: ticks must not read blocked or write read-only paths | **FIXED for `jarvis_jobs`; `jarvis_watch` NAMED (no owner-file door)** | `jarvis_jobs._protection_params_refusal` at `create()`, at `_plan_step()` and again per step in `_plan_handler()` (read-only step = read question, mutating = write question); a fake job naming a blocked/read-only path is refused before it exists. `jarvis_watch` only reads GitHub over the network and its own SQLite DB - it never opens an owner path, so there is nothing to check there (named, not silently skipped) |
+| 7 | Phone scope: `program` entries govern PC programs (`*.exe`); phone apps stay governed by `AppControlPlate` (deny-by-default) | **FIXED in the docs** (the phone plate's own wording is the phone lane's) | §170.6 states it in plain words; the phone AppControlPlate remains deny-by-default for Android package names |
 
 ### 170.5 Named gaps (v1), said plainly rather than left silent
 
@@ -28850,14 +28877,24 @@ called).
   and that bundled one.
 - `jarvis_media` uses Windows' GLOBAL media session: whatever program is
   playing, including a protected one.
-- A full-screen capture can include a blocked program's window when
-  `jarvis_front` cannot identify that window; identified windows are masked.
+- A full-screen capture is now refused outright when the window list names a
+  BLOCKED program visible on that monitor (Q2 #4). What remains: a window whose
+  process cannot be identified at all is painted black (fail closed), and a
+  window list that cannot be read makes the capture fail closed with no picture
+  - a blocked program is then never shown, but the capture is refused rather
+  than tailored.
+- `jarvis_watch` has no owner-file door in v1 (network + its own SQLite only),
+  so Q2 #6's watcher half is named here rather than hooked; `jarvis_jobs`
+  handlers are checked centrally (see the table).
 - Backup/model installs write inside Jarvis's own folders, not the owner's
   listed folders; the File Guardian restore point above still covers a restore
   path.
-- The Obsidian notes-editor lane (its own PR) walks the vault itself; when it
-  merges it must call `jarvis_protection.path_refusal` too (it already calls
-  `jarvis_notes.snapshot_vault_before_write` before a write). Owed.
+- The Obsidian notes-editor lane is NOT on this branch: it merges before the
+  list does, and its protection hook is its own small commit (`8de06098f0`,
+  based on `a87e6656b`) that the Lead cherry-picks after #1017. It lists/reads/
+  saves through `jarvis_protection.path_refusal` with the same two modes; it is
+  deliberately not duplicated here. Until that cherry-pick lands, the notes
+  EDITOR routes are not covered (the vault search/capture doors above are).
 
 ### 170.6 The apps and honest limits
 
@@ -28865,6 +28902,13 @@ Desktop Settings has the full surface (list, the three native pickers, mode
 choice, Remove, and plain sentences for refusals); the phone shows the list, the
 mode, Remove (which asks the PC for one card) and one line saying the pickers
 are on the PC. Both apps list it either way; there is no phone file browser.
+
+**What a `program` entry governs.** A `program` entry is a PC executable
+(`*.exe`) - it governs opening, closing, controlling and screen-reading THAT
+program on this PC. It does not govern phone apps: those stay governed by the
+phone's own `AppControlPlate` allow-list, which is deny-by-default, and a phone
+package name is never matched against this list. Likewise a `folder`/`file`
+entry is a PC path.
 `POST /api/protection/add` is PC-only and raises no card; the chat add and every
 removal are one card each. Adding from the phone is not missing, only one step
 slower: the owner asks in chat and the same `protect_item` card waits.

@@ -226,6 +226,8 @@ PAUSE_WORDS = {
     "never_look": "something on your Never look at list",
     "protected": "a window that asks not to be captured",
     "protection": "a program on your Protected from Jarvis list",
+    "protection_visible": ("a program on your Protected from Jarvis list is "
+                           "visible on this screen"),
     "private_window": "a private browser window",
     "jarvis": "one of Jarvis's own windows",
     "lock_screen": "the lock screen",
@@ -247,6 +249,8 @@ PAUSE_SAID = {
     "protected": "That window asks not to be captured, so I'm not looking.",
     "protection": ("That program is on your Protected from Jarvis list, so I'm "
                    "not looking."),
+    "protection_visible": ("A program on your Protected from Jarvis list is "
+                           "visible on this screen, so I'm not looking."),
     "jarvis": "That's one of Jarvis's own windows, so I'm not looking.",
     "lock_screen": "That's the lock screen, so I'm not looking.",
     "admin_prompt": "That's a Windows permission window, so I'm not looking.",
@@ -1442,6 +1446,17 @@ class Screen:
         why = pause_reason(before, self.never)
         if why:
             return None, why
+        if whole:
+            # "Protected from Jarvis" (2026-10-31): a whole-monitor capture
+            # is refused BEFORE the grab when a blocked program is visible on
+            # that monitor - masking would still have read its pixels.
+            try:
+                import jarvis_screen_win as _W
+                _said = _W.whole_screen_protection_problem(before)
+            except Exception:                           # noqa: BLE001
+                _said = ""
+            if _said:
+                return None, "protection_visible"
         try:
             picture = self.capture(before, whole)
         except Exception:

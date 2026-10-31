@@ -174,6 +174,21 @@ _LOOPBACK = ("127.0.0.1", "localhost", "::1")
 #   Things the tests replace
 # --------------------------------------------------------------------------
 
+def _protection():
+    """jarvis_protection, or None when that module is not on this backend.
+
+    The "Protected from Jarvis" list (2026-10-31) is a separate drop-in module;
+    on a backend that has it, `path_refusal` is the ONE keep-out check asked
+    before anything is read or written. A missing module means the feature is
+    absent (an older install), never a guess. Plain sentence, no card.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def _big():
     """jarvis_big_model, or None when it is not installed here."""
     try:
@@ -393,9 +408,12 @@ def _existing_pages(w: Where) -> dict:
     d = w.sub(PAGES_DIR)
     if not d.is_dir():
         return out
+    _P = _protection()
     for entry in sorted(os.listdir(d)):
         if entry.startswith(".") or not entry.lower().endswith(".md"):
             continue
+        if _P is not None and _P.blocked_path(str(d / entry)):
+            continue          # a blocked page is not listed either
         out[entry[:-3].casefold()] = entry
     return out
 
@@ -476,6 +494,14 @@ def read_source(w: Where, name: str, *, num_ctx: int, index_tokens: int,
     if not os.path.isfile(real):
         s.state, s.why = "unreadable", "there is no such file in Sources"
         return s
+    # "Protected from Jarvis" (2026-10-31): a blocked source is never read,
+    # and the refusal is the file's own plain sentence, before any card.
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(real)
+        if _said:
+            s.state, s.why = "unreadable", _said
+            return s
     ext = os.path.splitext(name)[1].lower()
     if ext not in READABLE:
         s.state = "unreadable"
@@ -1039,6 +1065,9 @@ def _shown_pages(w: Where, names: list, budget_tokens: int) -> dict:
         p = w.sub(PAGES_DIR, have[key])
         if os.path.islink(p) or not _inside(w.wiki, os.path.realpath(str(p))):
             continue
+        _P = _protection()
+        if _P is not None and _P.blocked_path(str(p)):
+            continue          # blocked: not read into the model, not shown
         text = _read_text(p, MAX_PAGE_CHARS * 4)
         cost = estimate_tokens(text) + 20
         if used + cost > budget_tokens:
@@ -1086,6 +1115,13 @@ def check_pages(raw: dict, w: Where, source: str, shown: dict) -> list:
             raise Refused(f'"{PAGES_DIR}/{name}.md" is a link, not a plain file')
         if not _inside(w.wiki, os.path.realpath(str(target))):
             raise Refused(f'"{PAGES_DIR}/{name}.md" would be outside the wiki folder')
+        _P = _protection()
+        if _P is not None:
+            # A create/update is a WRITE: blocked AND read-only are refused
+            # here, inside plan(), so no wiki card is raised for them.
+            _said = _P.path_refusal(str(target), write=True)
+            if _said:
+                raise Refused(_said)
         body = _clean(item["body"], MAX_PAGE_CHARS * 2)
         _, body = split_frontmatter(body.lstrip("\n"))
         body = body.strip()
@@ -1112,6 +1148,9 @@ def check_pages(raw: dict, w: Where, source: str, shown: dict) -> list:
                               f"shown it")
             real_name, old = shown[key]
             p = w.sub(PAGES_DIR, existing[key])
+            _P = _protection()
+            if _P is not None and _P.blocked_path(str(p)):
+                raise Refused(_P.path_refusal(str(p)))
             try:
                 old_bytes = p.read_bytes()
             except OSError as exc:
@@ -1246,6 +1285,11 @@ def _checked(w: Where, rel: str) -> Path:
     p = w.sub(*rel.split("/"))
     if os.path.islink(p) or not _inside(w.wiki, os.path.realpath(str(p))):
         raise Refused(f'"{rel}" is not inside the wiki folder any more')
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(p), write=True)
+        if _said:
+            raise Refused(_said)
     return p
 
 
@@ -1604,6 +1648,14 @@ def ingest(source, *, lane_for: Optional[Callable] = None, call: Optional[Callab
         return 409, {"ok": False, "state": "refused", "error": f'"{source}" is already in the wiki, unchanged.'}
     if s.state in ("too_big", "unreadable"):
         return 400, {"ok": False, "state": "refused", "error": f'"{source}" cannot be added: {s.why}'}
+    # "Protected from Jarvis": ingesting is an ACT on the source. A blocked
+    # source was already refused above; a READ-ONLY one is refused here, with
+    # its own sentence, before a job or a wiki card exists.
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(w.sub(SOURCES_DIR, source)), write=True)
+        if _said:
+            return 400, {"ok": False, "state": "refused", "error": _said}
     with _lock:
         busy = next((j for j in _jobs.values() if j["state"] in _ACTIVE), None)
         if busy:

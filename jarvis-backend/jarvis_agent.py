@@ -11911,6 +11911,56 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
            "error": "" if ok else (said or "that setting could not be changed.")})
 
 
+#: Tools whose args are a pure READ: a read-only protected path may be named.
+_PROTECTION_READ_ONLY_TOOLS = frozenset({
+    "file_read", "my_files", "notes_search", "memory_search", "read_media",
+    "search_media", "web_search", "feature_guide", "calculator", "read_screen",
+})
+
+
+def _protection_arg_paths(value, out: list, depth: int = 0) -> None:
+    if depth > 6:
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _protection_arg_paths(item, out, depth + 1)
+    elif isinstance(value, (list, tuple)):
+        for item in value[:32]:
+            _protection_arg_paths(item, out, depth + 1)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text or chr(0) in text:
+            return
+        if text[1:2] == ":" and text[2:3] in (chr(92), chr(47)):
+            out.append(text)
+        elif text[:2] == chr(92) * 2 or text[:1] == chr(47):
+            out.append(text)
+
+
+def _protection_path_args(name: str, args: dict) -> str:
+    """The plain sentence refusing a tool call whose ARGUMENTS name a path.
+
+    Gemini Q2 #5: launcher/reminder calls carry a path (the file to open, the
+    folder to search); every one is checked before the gate, so a blocked path
+    is refused plainly and no card is raised for it. A tool not known to be a
+    pure read is treated as a possible WRITE and asks the write question.
+    """
+    try:
+        import jarvis_protection as P
+    except Exception:                                       # noqa: BLE001
+        return ""
+    if name == PROTECT_TOOL:
+        return ""                 # its `target` is what the owner adds, not an action
+    paths: list = []
+    _protection_arg_paths(args or {}, paths)
+    write = name not in _PROTECTION_READ_ONLY_TOOLS
+    for text in paths:
+        said = P.path_refusal(text, write=write)
+        if said:
+            return said
+    return ""
+
+
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,
               announce, out: "_Out", say_step, *, watch: Optional[_TurnWatch] = None,
               tell_owner: Optional[Callable[[str], None]] = None,
@@ -12074,6 +12124,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             say_step("tool_refused", name)
             return
         watch.file_parts += 1
+    _said = _protection_path_args(name, args)
+    if _said:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content({"ok": False, "error": _said})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return
     lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
     action_name = lookup_name
     if not outside_program:

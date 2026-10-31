@@ -738,12 +738,409 @@ def t_records():
           '"jarvis_protection.py"' in twin)
 
 
+
+# ===========================================================================
+#   Gemini Q2 (2026-10-31): the seven mandatory bypass paths, one test each
+# ===========================================================================
+
+
+def _patched_attr(obj, name, fn):
+    """Patch one attribute for a `with` block, restoring it whatever happens."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def _cm():
+        old = getattr(obj, name)
+        setattr(obj, name, fn)
+        try:
+            yield
+        finally:
+            setattr(obj, name, old)
+    return _cm()
+
+
+def t_p1_canonicalisation_checks_both_forms():
+    """Q2 #1: BOTH normcase(abspath(p)) and normcase(realpath(p)) are compared."""
+    reset_store()
+    add("folder", str(PROTECT_ROOT), "blocked")
+    inside = PROTECT_ROOT / "linkish.md"
+    inside.write_text("inside\n", encoding="utf-8")
+    outside = _TMP / "outside"
+    outside.mkdir(exist_ok=True)
+    real = os.path.realpath
+
+    # The LEXICAL half: a path that SITS INSIDE the protected folder but whose
+    # resolved target is somewhere else. Realpath-only matching would allow it.
+    def resolves_out(p, *a, **k):
+        try:
+            if os.path.normcase(os.path.abspath(str(p))) == os.path.normcase(str(inside)):
+                return str(outside / "elsewhere.md")
+        except Exception:
+            pass
+        return real(p, *a, **k)
+    with _patched_attr(os.path, "realpath", resolves_out):
+        said = P.path_refusal(str(inside))
+    check("P1 lexical form: a path inside a protected folder is refused even "
+          "when it resolves outside", "Blocked" in said, said)
+
+    # The RESOLVED half: a path OUTSIDE that resolves INTO the protected folder.
+    def resolves_in(p, *a, **k):
+        try:
+            if os.path.normcase(os.path.abspath(str(p))) == os.path.normcase(
+                    str(outside / "decoy.md")):
+                return str(PROTECT_ROOT / "inside.md")
+        except Exception:
+            pass
+        return real(p, *a, **k)
+    with _patched_attr(os.path, "realpath", resolves_in):
+        said = P.path_refusal(str(outside / "decoy.md"))
+    check("P1 resolved form: a path outside that resolves into a protected "
+          "folder is refused", "Blocked" in said, said)
+
+    # And a real link, when this machine lets one be made. A skipped check is
+    # never a pass: it prints its own line and is counted apart.
+    import jarvis_protection as P2
+    real_dir = PROTECT_ROOT / "real-link-dir"
+    real_dir.mkdir(exist_ok=True)
+    target = real_dir / "target.md"
+    target.write_text("t\n", encoding="utf-8")
+    link = PROTECT_ROOT / "made-link.md"
+    try:
+        if link.exists() or link.is_symlink():
+            link.unlink()
+        os.symlink(str(target), str(link))
+        made = True
+    except (OSError, NotImplementedError, AttributeError):
+        made = False
+    if made:
+        said = P2.path_refusal(str(link))
+        check("P1 a real symlink inside the protected folder is refused by the "
+              "lexical form", "Blocked" in said, said)
+    else:
+        print("skip  P1 a real symlink: this machine would not make one "
+              "(Windows needs Developer Mode or an admin shell) - the "
+              "monkeypatched pair above is the proof, this line is not a pass")
+    reset_store()
+
+
+def t_p2_the_list_protects_its_own_file():
+    """Q2 #2: protected-items.json + .bak/.tmp are blocked, listed or not."""
+    reset_store()
+    store = P.store_path()
+    P.save([])
+    check("P2 the store itself is refused read and write, with the self sentence",
+          P.path_refusal(str(store)) == P.SELF_SENTENCE
+          and P.path_refusal(str(store), write=True) == P.SELF_SENTENCE,
+          P.path_refusal(str(store)))
+    for sibling in (store.with_name(store.name + ".bak"),
+                    store.with_name(store.name + ".tmp"),
+                    store.with_name("." + store.name + ".atomic.tmp")):
+        check(f"P2 its sibling {sibling.name!r} is refused too",
+              P.path_refusal(str(sibling)) == P.SELF_SENTENCE
+              and P.is_store_file(sibling), P.path_refusal(str(sibling)))
+    import jarvis_documents as DOC
+    got = DOC.read(str(store))
+    check("P2 a document read pointed at the store is refused with the sentence",
+          got.get("ok") is False and P.SELF_SENTENCE in str(got.get("error", "")), got)
+    import jarvis_agent as AG
+    got = AG._run_file_read({"path": str(store)})
+    check("P2 a file tool pointed at the store is refused and reads nothing",
+          got.get("ok") is False and bool(got.get("error")), got)
+    import jarvis_attached_file as ATT
+    payload = base64.b64encode(b"{}").decode("ascii")
+    got = ATT.read({"name": "x.json", "mime": "application/json", "data": payload,
+                    "path": str(store)})
+    check("P2 an attachment that references the store by path is refused",
+          got.get("ok") is False and P.SELF_SENTENCE in str(got.get("why", "")), got)
+    # Scope: only the list's OWN file is hard-coded, not every file so named.
+    unrelated = _TMP / "mine" / "protected-items.json"
+    unrelated.parent.mkdir(exist_ok=True)
+    check("P2 a same-named file in another folder is NOT hard-blocked",
+          P.path_refusal(str(unrelated)) == "", P.path_refusal(str(unrelated)))
+
+
+def t_p3_notes_and_wiki_doors():
+    """Q2 #3: notes search omits blocked; #obs and wiki ingest refuse before a card."""
+    reset_store()
+    vault = _TMP / "vault"
+    (vault / ".obsidian").mkdir(parents=True, exist_ok=True)
+    blocked_note = vault / "private" / "secret.md"
+    blocked_note.parent.mkdir(exist_ok=True)
+    blocked_note.write_text("the needle is hidden here\n", encoding="utf-8")
+    open_note = vault / "public.md"
+    open_note.write_text("the needle is public here\n", encoding="utf-8")
+    add("folder", str(vault / "private"), "blocked")
+
+    import types as _types
+    import jarvis_notes as NOTES
+    plan = _types.SimpleNamespace(folder=str(vault), query="needle", limit=10,
+                                  backend="vault")
+    got = NOTES._search_vault(plan)
+    refs = [r.get("ref") for r in got.get("results", [])]
+    check("P3 the vault search omits a BLOCKED note and keeps the open one",
+          "private/secret.md" not in refs and "public.md" in refs, (refs, got))
+    reset_store()
+
+    import jarvis_note_capture as NC
+    add("folder", str(vault), "blocked")
+    gate = fake_gate()
+    code, out = NC.capture("obsidian", "the owner's words", gate_check=gate,
+                           wait_s=0.2)
+    check("P3 #obs capture into a BLOCKED vault refuses before any card",
+          out.get("ok") is False and "Blocked" in str(out.get("error", ""))
+          and not gate.calls, (code, out, gate.calls))
+    reset_store()
+    add("folder", str(vault), "readonly")
+    gate = fake_gate()
+    code, out = NC.capture("obsidian", "the owner's words", gate_check=gate,
+                           wait_s=0.2)
+    check("P3 #obs capture into a READ-ONLY vault refuses before any card",
+          out.get("ok") is False and "Read-only" in str(out.get("error", ""))
+          and not gate.calls, (code, out, gate.calls))
+    reset_store()
+
+    import jarvis_wiki as WIKI
+    wiki = _TMP / "wiki"
+    (wiki / "Sources").mkdir(parents=True, exist_ok=True)
+    (wiki / "Pages").mkdir(exist_ok=True)
+    source = wiki / "Sources" / "note.md"
+    source.write_text("source words\n", encoding="utf-8")
+
+    class StubWhere:
+        def __init__(self, root):
+            self.wiki = str(Path(root))       # the real Where.wiki is a str
+            self.why = ""
+
+        def sub(self, *parts):
+            return Path(self.wiki).joinpath(*parts)
+
+    lane = _types.SimpleNamespace(num_ctx=32768, url="http://127.0.0.1:1", model="m")
+    spawned, gate3 = [], fake_gate()
+    saved_where = WIKI.where
+    WIKI.where = lambda: StubWhere(wiki)
+    try:
+        add("file", str(source), "blocked")
+        code, out = WIKI.ingest("note.md", lane_for=lambda: lane,
+                                gate_check=gate3, spawn=spawned.append)
+        check("P3 /api/wiki/ingest refuses a BLOCKED source before any card/job",
+              code == 400 and "Blocked" in str(out.get("error", ""))
+              and not spawned and not gate3.calls, (code, out, spawned, gate3.calls))
+        reset_store()
+        add("file", str(source), "readonly")
+        code, out = WIKI.ingest("note.md", lane_for=lambda: lane,
+                                gate_check=gate3, spawn=spawned.append)
+        check("P3 /api/wiki/ingest refuses a READ-ONLY source before any card/job",
+              code == 400 and "Read-only" in str(out.get("error", ""))
+              and not spawned and not gate3.calls, (code, out, spawned, gate3.calls))
+        reset_store()
+        page = wiki / "Pages" / "secretpage.md"
+        page.write_text("old page\n", encoding="utf-8")
+        add("file", str(page), "readonly")
+        raised = ""
+        try:
+            WIKI._checked(StubWhere(wiki), "Pages/secretpage.md")
+        except WIKI.Refused as exc:
+            raised = str(exc)
+        check("P3 a wiki write target that is READ-ONLY is refused before writing",
+              "Read-only" in raised, raised)
+        # A blocked page is never read into the model either.
+        (wiki / "Pages" / "gone.md").write_text("hidden page\n", encoding="utf-8")
+        add("file", str(wiki / "Pages" / "gone.md"), "blocked")
+        shown = WIKI._shown_pages(StubWhere(wiki), ["gone"], 10000)
+        check("P3 a BLOCKED existing page is not read into the model's context",
+              "gone" not in shown and not shown, shown)
+    finally:
+        WIKI.where = saved_where
+    reset_store()
+
+
+def t_p4_screen_capture_refuses_before_pixels():
+    """Q2 #4: target window OR any blocked program visible on the monitor."""
+    import jarvis_screen_win as SW
+
+    reset_store()
+    add("program", "notepad.exe", "blocked")
+    check("P4 the window being captured is checked by its program name",
+          "Blocked" in SW.protected_capture_problem({"exe": "notepad.exe"}),
+          SW.protected_capture_problem({"exe": "notepad.exe"}))
+    check("P4 an unrelated program is allowed",
+          SW.protected_capture_problem({"exe": "explorer.exe"}) == "")
+    saved_rect, saved_list = SW._rect_of, SW._list_windows
+    SW._rect_of = lambda hwnd, whole: (0, 0, 100, 100)
+    try:
+        SW._list_windows = lambda: [
+            {"hwnd": 2, "exe": "notepad.exe", "title": "", "rect": (50, 50, 150, 150),
+             "opaque": True}]
+        said = SW.whole_screen_protection_problem({"hwnd": 1, "exe": "explorer.exe"})
+        check("P4 a BLOCKED program visible on the captured monitor refuses the "
+              "whole-screen capture", "Blocked" in said, said)
+        SW._list_windows = lambda: [
+            {"hwnd": 2, "exe": "explorer.exe", "title": "", "rect": (50, 50, 150, 150),
+             "opaque": True}]
+        check("P4 an unrelated visible window does not refuse it",
+              SW.whole_screen_protection_problem({"hwnd": 1}) == "")
+        SW._list_windows = lambda: [
+            {"hwnd": 2, "exe": "notepad.exe", "title": "", "rect": (500, 500, 600, 600),
+             "opaque": True}]
+        check("P4 a blocked program on ANOTHER monitor does not refuse this one",
+              SW.whole_screen_protection_problem({"hwnd": 1}) == "")
+    finally:
+        SW._rect_of, SW._list_windows = saved_rect, saved_list
+
+    class Never:
+        broken = False
+
+        def entries(self):
+            return []
+
+        def has_program(self, exe):
+            return False
+
+        def has_site(self, site):
+            return False
+
+        def holds_sites(self):
+            return False
+
+    grabbed = []
+
+    def grab(rect):
+        grabbed.append(rect)
+        return (b"\x00" * 4, 2, 2)
+
+    png = SW.take_picture({"hwnd": 1, "exe": "notepad.exe"}, False, Never(),
+                          rect_of=lambda hwnd, whole: (0, 0, 10, 10),
+                          grab=grab, list_windows=lambda: [],
+                          address_of=lambda w: "")
+    check("P4 the capture door returns no picture for a blocked target, and the "
+          "grabbing call is never made", png is None and grabbed == [],
+          (png, grabbed))
+    png = SW.take_picture({"hwnd": 1, "exe": "explorer.exe"}, True, Never(),
+                          rect_of=lambda hwnd, whole: (0, 0, 10, 10),
+                          grab=grab, list_windows=lambda: [
+                              {"hwnd": 2, "exe": "notepad.exe", "title": "",
+                               "rect": (1, 1, 9, 9), "opaque": True}],
+                          address_of=lambda w: "")
+    check("P4 a whole-monitor capture with a blocked program visible grabs nothing",
+          png is None and grabbed == [], (png, grabbed))
+    reset_store()
+
+
+def t_p5_launcher_program_names_and_path_arguments():
+    """Q2 #5: `notepad` and `notepad.exe` are one key; path args are checked."""
+    reset_store()
+    add("program", "notepad.exe", "blocked")
+    for spelling in ("notepad", "Notepad.EXE", "C:\\Windows\\NOTEPAD.EXE"):
+        check(f"P5 {spelling!r} matches the stored notepad.exe (blocked)",
+              "Blocked" in P.program_refusal(spelling), P.program_refusal(spelling))
+    check("P5 the two keys are the same set",
+          P.program_keys("notepad") == P.program_keys("notepad.exe"))
+    import jarvis_agent as AG
+    add("folder", str(BLOCK_DIR), "blocked")
+    add("file", str(RO_FILE), "readonly")
+    check("P5 an agent tool argument naming a BLOCKED path is refused plainly",
+          "Blocked" in AG._protection_path_args("my_files", {"path": str(BLOCK_FILE)}),
+          AG._protection_path_args("my_files", {"path": str(BLOCK_FILE)}))
+    check("P5 a READ tool may name a READ-ONLY path (a read)",
+          AG._protection_path_args("my_files", {"path": str(RO_FILE)}) == "")
+    check("P5 a tool that may WRITE refuses the READ-ONLY path",
+          "Read-only" in AG._protection_path_args("run_data_script",
+                                                  {"path": str(RO_FILE)}))
+    import jarvis_open as OPEN
+    reset_store()
+    add("program", "notepad.exe", "blocked")
+    opened = OPEN.resolve("notepad")
+    check("P5 the launcher refuses a blocked program by either spelling",
+          getattr(opened, "kind", "") == "refused"
+          and "Protected from Jarvis" in str(getattr(opened, "said", "")),
+          getattr(opened, "kind", None))
+    reset_store()
+
+
+def t_p6_background_jobs_cannot_bypass_the_list():
+    """Q2 #6: a job's params are checked at create and again per plan step."""
+    import jarvis_jobs as JOBS
+
+    reset_store()
+    add("folder", str(BLOCK_DIR), "blocked")
+    add("file", str(RO_FILE), "readonly")
+    check("P6 a job param naming a BLOCKED path is refused with the sentence",
+          "Blocked" in JOBS._protection_params_refusal(
+              {"path": str(BLOCK_FILE)}, write=False),
+          JOBS._protection_params_refusal({"path": str(BLOCK_FILE)}, write=False))
+    check("P6 a read-only path is allowed for a read-only handler",
+          JOBS._protection_params_refusal({"path": str(RO_FILE)}, write=False) == "")
+    check("P6 ... and refused when the handler may write it",
+          "Read-only" in JOBS._protection_params_refusal(
+              {"path": str(RO_FILE)}, write=True))
+    saved_init = JOBS._init
+    JOBS._init = lambda: None
+    try:
+        raised = ""
+        try:
+            JOBS.create("fake_handler", {"path": str(BLOCK_FILE)})
+        except ValueError as exc:
+            raised = str(exc)
+        check("P6 a fake job that tries a blocked path is refused BEFORE it exists",
+              "Blocked" in raised, raised)
+        raised = ""
+        try:
+            JOBS.create("fake_handler", {"path": str(RO_FILE)})
+        except ValueError as exc:
+            raised = str(exc)
+        check("P6 a fake write-capable job that tries a read-only path is refused too",
+              "Read-only" in raised, raised)
+    finally:
+        JOBS._init = saved_init
+    reset_store()
+
+
+def t_p7_phone_scope_is_written_down_and_every_path_is_documented():
+    """Q2 #7 + the docs must name each of the seven as covered or a v1 gap."""
+    repo = HERE.parent
+    docs = (repo / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
+    check("P7 the docs say `program` entries govern PC programs (*.exe)",
+          "PC programs" in docs and "*.exe" in docs and "AppControlPlate" in docs,
+          "the PC-programs/AppControlPlate sentence is missing")
+    lowered = docs.lower()
+    for phrase in ("Windows Path Canonicalization", "self-protection",
+                   "jarvis_jobs.py", "jarvis_watch.py", "jarvis_open.py",
+                   "jarvis_screen.py", "jarvis_wiki.py"):
+        check(f"P7 the docs name {phrase!r} in the hardening rows",
+              phrase.lower() in lowered)
+    source_pins = {
+        "jarvis_protection.py": ["_path_forms", "_is_self_path", "program_keys",
+                                 "visible_program_refusal"],
+        "jarvis_notes.py": ["_P.blocked_path(real)"],
+        "jarvis_wiki.py": ["_P.path_refusal(str(w.sub(SOURCES_DIR, source)), write=True)",
+                           "_P.path_refusal(str(p), write=True)"],
+        "jarvis_screen.py": ["protection_visible"],
+        "jarvis_screen_win.py": ["visible_protected_sentence", "protected_capture_problem"],
+        "jarvis_jobs.py": ["_protection_params_refusal"],
+        "jarvis_agent.py": ["_protection_path_args"],
+    }
+    for module, markers in source_pins.items():
+        text = (HERE / module).read_text(encoding="utf-8")
+        check(f"P7 {module} carries its hardening hook",
+              all(marker in text for marker in markers),
+              [m for m in markers if m not in text])
+
+
+
 def main() -> int:
     for name, fn in (("store", t_store), ("matching", t_matching),
                      ("routes", t_routes), ("cards", t_cards),
                      ("enforcement", t_enforcement),
                      ("no-card and tool", t_no_card_and_tool),
-                     ("records", t_records)):
+                     ("records", t_records),
+                     # Gemini Q2 (2026-10-31): the seven mandatory bypass paths
+                     ("Q2 P1 canonicalisation", t_p1_canonicalisation_checks_both_forms),
+                     ("Q2 P2 self-protection", t_p2_the_list_protects_its_own_file),
+                     ("Q2 P3 notes/wiki", t_p3_notes_and_wiki_doors),
+                     ("Q2 P4 screen capture", t_p4_screen_capture_refuses_before_pixels),
+                     ("Q2 P5 launcher names", t_p5_launcher_program_names_and_path_arguments),
+                     ("Q2 P6 jobs", t_p6_background_jobs_cannot_bypass_the_list),
+                     ("Q2 P7 scope/docs", t_p7_phone_scope_is_written_down_and_every_path_is_documented)):
         try:
             fn()
         except Exception:

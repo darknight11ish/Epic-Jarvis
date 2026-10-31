@@ -600,6 +600,67 @@ def _freeze_caps(caps) -> list[str]:
     return out
 
 
+def _looks_like_path(value) -> str:
+    """A value that is plainly a PC path (drive letter, UNC, or leading slash)."""
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    if len(text) < 3 or chr(0) in text:
+        return ""
+    if text[1:2] == ":" and text[2:3] in (chr(92), chr(47)):
+        return text
+    if text[:2] == chr(92) * 2 or text[:1] == chr(47):
+        return text
+    return ""
+
+
+_PROTECTION_PATH_KEYS = frozenset({
+    "path", "paths", "file", "files", "folder", "folders", "dir", "directory",
+    "source", "target", "destination", "dest", "output", "input", "zip_path",
+    "export_path", "vault", "attachment", "attachments",
+})
+
+
+def _params_paths(node, out: list, depth: int = 0) -> None:
+    """Every PC path anywhere in a job's params (keys and values), bounded."""
+    if depth > 8:
+        return
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if str(key).lower() in _PROTECTION_PATH_KEYS:
+                got = _looks_like_path(value)
+                if got:
+                    out.append(got)
+            _params_paths(value, out, depth + 1)
+    elif isinstance(node, (list, tuple)):
+        for value in node[:64]:
+            _params_paths(value, out, depth + 1)
+
+
+def _protection_params_refusal(params: dict, *, write: bool) -> str:
+    """The plain sentence refusing a job's params, or "" when allowed.
+
+    A background tick is the same actor as a chat tool: it must not read a
+    blocked path, and must not write a read-only one (Gemini Q2 #6). Every PC
+    path in the params is checked with the WRITE question when the handler is
+    not registered read-only (it may write anything it was given), and with
+    the READ question when it is. Applying it at CREATE means the job never
+    exists; `_plan_handler` asks again per step, where each step's own
+    `readonly` flag decides the question.
+    """
+    try:
+        import jarvis_protection as P
+    except Exception:                                       # noqa: BLE001
+        return ""
+    paths: list = []
+    _params_paths(params or {}, paths)
+    for text in paths:
+        said = P.path_refusal(text, write=write)
+        if said:
+            return said
+    return ""
+
+
 def create(handler: str, params: Optional[dict] = None, label: str = "",
            caps=(), when: Any = None, tainted: Optional[bool] = None) -> str:
     """Schedule a job and return its id.
@@ -625,6 +686,15 @@ def create(handler: str, params: Optional[dict] = None, label: str = "",
         blob = json.dumps(params)
     except (TypeError, ValueError) as exc:
         raise TypeError(f"job params must be JSON-serialisable: {exc}") from exc
+
+    # "Protected from Jarvis" (2026-10-31): a job whose params name a blocked
+    # path (or a read-only path, when its handler may write) is refused HERE,
+    # plainly and before it exists, so no background tick can be the bypass.
+    if handler != PLAN_HANDLER:
+        _said = _protection_params_refusal(
+            params, write=handler not in _READONLY_HANDLERS)
+        if _said:
+            raise ValueError(_said)
 
     frozen = _freeze_caps(caps)
 
@@ -723,6 +793,10 @@ def _plan_step(i: int, step: dict) -> dict:
                          f"{handler!r} has not been registered as read-only "
                          f"(register(..., readonly=True)); declaring a mutating "
                          f"handler read-only cannot make it safe")
+    _said = _protection_params_refusal(
+        params, write=step.get("readonly") is not True)
+    if _said:
+        raise ValueError(f"plan step {i}: {_said}")
     return {"name": str(step.get("name") or handler)[:80], "handler": handler,
             "params": dict(params), "readonly": bool(step.get("readonly") is True),
             "depends_on": clean_deps, "status": "pending", "card_id": "",
@@ -791,6 +865,16 @@ def _plan_handler(ctx: "JobContext", params: dict) -> dict:
                 fn = _HANDLERS.get(st.get("handler") or "")
             if fn is None:            # the row outlived its registration
                 raise ValueError(f"no handler named {st.get('handler')!r} is registered")
+            # "Protected from Jarvis", asked AGAIN where the step actually
+            # touches the disk: a step decided read-only asks the READ
+            # question, every other step asks the WRITE one.
+            _said = _protection_params_refusal(
+                dict(st.get("params") or {}), write=st.get("readonly") is not True)
+            if _said:
+                st["status"] = "failed"
+                st["error"] = _said
+                _save_plan_steps(ctx.job_id, params)
+                raise ValueError(_said)
             try:
                 result = fn(ctx, dict(st.get("params") or {}))
             except NeedsApproval as need:

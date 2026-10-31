@@ -720,6 +720,63 @@ def _address_of(w: dict) -> str:
         return front.site_of(front.host_of(front._address_box_value(w["hwnd"], family)))
 
 
+def _rects_intersect(a, b) -> bool:
+    """Two (left, top, right, bottom) rectangles overlap at all?"""
+    try:
+        return not (a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1])
+    except (TypeError, IndexError):
+        return False
+
+
+def visible_protected_sentence(windows, capture_rect=None) -> str:
+    """Plain sentence when a BLOCKED program is visible in `capture_rect`.
+
+    `windows` is the shape `_list_windows()` returns; a window without a
+    rectangle is treated as visible (fail closed). A read-only program may be
+    seen, so only the READ question is asked here.
+    """
+    P = _protection()
+    if P is None:
+        return ""
+    for w in windows or ():
+        if not isinstance(w, dict):
+            continue
+        exe = ntpath.basename(str(w.get("exe") or "")).lower()
+        if not exe:
+            continue
+        said = P.program_refusal(exe)
+        if not said:
+            continue
+        rect = w.get("rect")
+        if capture_rect is None or rect is None or _rects_intersect(rect, capture_rect):
+            return said
+    return ""
+
+
+def whole_screen_protection_problem(snap: dict) -> str:
+    """The refusal for a whole-monitor capture, or "" when it is allowed."""
+    if os.name != "nt" or not isinstance(snap, dict) or snap.get("hwnd") is None:
+        return ""
+    try:
+        rect = _rect_of(snap["hwnd"], True)
+        windows = _list_windows()
+    except Exception:                                       # noqa: BLE001
+        return ""
+    if rect is None or windows is None:
+        return ""             # take_picture fails closed on its own
+    return visible_protected_sentence(windows, rect)
+
+
+def protected_capture_problem(snap: dict) -> str:
+    """The refusal when the window being captured belongs to a blocked program."""
+    if not isinstance(snap, dict):
+        return ""
+    P = _protection()
+    if P is None:
+        return ""
+    return P.program_refusal(ntpath.basename(str(snap.get("exe") or "")).lower())
+
+
 def take_picture(snap: dict, whole: bool, never, *, rect_of: Callable, grab: Callable,
                  list_windows: Callable, address_of: Callable) -> Optional[bytes]:
     """The whole safe capture, with every Windows call handed in (so the
@@ -733,11 +790,18 @@ def take_picture(snap: dict, whole: bool, never, *, rect_of: Callable, grab: Cal
     cannot be had; anything in the masking raises."""
     if never is None or getattr(never, "broken", True):
         return None
+    # "Protected from Jarvis" (2026-10-31), belt: a direct caller of this
+    # capture door is refused before a pixel is read, for the target window
+    # and for any blocked program visible on a whole-monitor shot.
+    if protected_capture_problem(snap):
+        return None
     try:
         rect = rect_of(snap["hwnd"], whole)
         if rect is None:
             return None
         before = list_windows()
+        if before is not None and whole and visible_protected_sentence(before, rect):
+            return None
         got = grab(rect)
         after = list_windows()
         if got is None or before is None or after is None:

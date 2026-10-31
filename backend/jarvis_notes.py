@@ -732,12 +732,17 @@ def _search_vault(p: Plan, *, clock: Callable[[], float] = time.monotonic) -> di
     terms = [t.casefold() for t in p.query.split() if t.strip()]
     started = clock()
     hits, scanned, entries, stopped = [], 0, 0, ""
+    # "Protected from Jarvis" (2026-10-31): a blocked note is not read and
+    # its folder is not walked; a read-only note is still searched (a read).
+    _P = _protection()
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         # A hidden folder is never entered, and nor is one whose real place
         # (through a symlink or a junction) is outside the vault.
         dirnames[:] = sorted(
             d for d in dirnames if not d.startswith(".")
-            and _inside(root, os.path.realpath(os.path.join(dirpath, d))))
+            and _inside(root, os.path.realpath(os.path.join(dirpath, d)))
+            and not (_P is not None
+                     and _P.blocked_path(os.path.join(dirpath, d))))
         for name in sorted(filenames):
             entries += 1
             if entries > VAULT_MAX_ENTRIES:
@@ -751,6 +756,8 @@ def _search_vault(p: Plan, *, clock: Callable[[], float] = time.monotonic) -> di
             full = os.path.join(dirpath, name)
             real = os.path.realpath(full)
             if not _inside(root, real) or not os.path.isfile(real):
+                continue
+            if _P is not None and _P.blocked_path(real):
                 continue
             if scanned >= VAULT_MAX_FILES:
                 stopped = f"read {VAULT_MAX_FILES} files"

@@ -274,12 +274,42 @@ def _real(text: str) -> str:
         return str(text)
 
 
-def _same_or_inside(candidate_real: str, target_real: str) -> bool:
-    """True when the candidate IS the target folder or is inside it, after both
-    are resolved and folded. Uses commonpath so ``C:\\Taxes2`` is not inside
-    ``C:\\Taxes`` (a plain startswith would say it is)."""
-    c = normal_path(candidate_real)
-    t = normal_path(target_real).rstrip("\\")
+def _path_forms(path) -> tuple:
+    """The two forms a Windows path must ALWAYS be compared in (Gemini Q2 #1).
+
+    ``(lexical, resolved)``, both absolute and case-folded:
+
+      * **lexical** - ``normcase(abspath(p))``. ``..`` and separators are
+        folded but a link is NOT followed, so a path that SITS INSIDE a
+        protected folder through a symlink or junction is still caught;
+      * **resolved** - ``normcase(realpath(p))``. The link is followed, so a
+        path OUTSIDE a protected folder that resolves INTO it is caught too,
+        and a file reached through a junction is one key with its target.
+
+    Checking only one of the two leaves a real bypass: realpath-only misses a
+    link that lives inside the protected folder and points out (the link itself
+    is the protected entry), abspath-only misses a link outside that points in.
+    Both are cheap and neither reads the file.
+    """
+    text = str(path or "").strip()
+    if not text:
+        return ("", "")
+    text = text.replace("\x00", "")
+    try:
+        lexical = os.path.normcase(os.path.abspath(text))
+    except Exception:                                       # noqa: BLE001
+        lexical = normal_path(text)
+    try:
+        resolved = os.path.normcase(os.path.realpath(text))
+    except Exception:                                       # noqa: BLE001
+        resolved = lexical
+    return (lexical, resolved)
+
+
+def _form_inside(candidate: str, target: str) -> bool:
+    """True when folded `candidate` is `target` or under it (already absolute)."""
+    c = (candidate or "").rstrip("\\")
+    t = (target or "").rstrip("\\")
     if not c or not t:
         return False
     if c == t:
@@ -288,6 +318,79 @@ def _same_or_inside(candidate_real: str, target_real: str) -> bool:
         return os.path.commonpath([c, t]) == t
     except (ValueError, AttributeError):
         return c.startswith(t + "\\")
+
+
+def _forms_same_or_inside(candidates, targets) -> bool:
+    """True when ANY candidate form is, or is under, ANY target form."""
+    for c in candidates or ():
+        for t in targets or ():
+            if _form_inside(c, t):
+                return True
+    return False
+
+
+def _forms_same(candidates, targets) -> bool:
+    for c in candidates or ():
+        for t in targets or ():
+            if c and t and c == t:
+                return True
+    return False
+
+
+#: The file this list lives in, and every sibling name an atomic write can make
+#: (`.bak` by a backup tool, `.tmp` by `save()` itself): all are Jarvis's own
+#: keep-out record and are blocked against every caller, listed or not.
+SELF_SENTENCE = ("The file that holds your Protected from Jarvis list is Jarvis's "
+                 "own keep-out record, so Jarvis will not read or change it.")
+
+
+def _is_self_path(path) -> bool:
+    """Is this path the store itself, or a .bak/.tmp/atomic sibling of it?
+
+    Hard-coded rather than stored (Gemini Q2 #2): a list that could protect
+    itself only after being written could be edited by anything that can edit a
+    file, and removing the entry would silently un-protect the record. Only
+    `jarvis_protection.save()` writes it; every model/agent/notes/document
+    door that asks `path_refusal` is refused.
+    """
+    candidates = _path_forms(path)
+    if not any(candidates):
+        return False
+    store = store_path()
+    store_forms = _path_forms(str(store))
+    if _forms_same(candidates, store_forms):
+        return True
+    parent_forms = _path_forms(str(store.parent))
+    base = store.name.lower()
+    for c in candidates:
+        if not c:
+            continue
+        name = os.path.basename(c).lower()
+        if not (name.startswith(base) or name.startswith("." + base)):
+            continue
+        if os.path.dirname(c) in [f for f in parent_forms if f]:
+            return True
+    return False
+
+
+def is_store_file(path) -> bool:
+    """Public: the suite proves a file tool cannot read the list's own file."""
+    return _is_self_path(path)
+
+
+def program_keys(name) -> set:
+    """Every key a program name may be compared under.
+
+    `notepad`, `notepad.exe` and `C:\\Windows\\NOTEPAD.EXE` all answer the same
+    entry (Gemini Q2 #5): the bare name, and the same name with/without the
+    `.exe` suffix. An entry is stored as `notepad.exe` (validation requires the
+    suffix) but the matcher accepts either spelling from any caller.
+    """
+    base = normal_program(name)
+    if not base:
+        return set()
+    stem = base[:-4] if base.endswith(".exe") else base
+    return {base, stem, stem + ".exe"}
 
 
 # ---------------------------------------------------------------------------
@@ -365,28 +468,32 @@ def public_item(item: dict) -> dict:
 
 
 def matching_path_item(path) -> dict:
-    """The entry that covers this path, or {} - a folder entry covers its whole
-    subtree (links resolved first), a file entry covers that file."""
-    candidate = _real(str(path or ""))
-    if not candidate:
+    """The entry that covers this path, or {}.
+
+    Both path forms are compared against BOTH forms of every entry (P1): a
+    folder entry covers its whole subtree, a file entry covers that one file.
+    """
+    candidates = _path_forms(path)
+    if not any(candidates):
         return {}
     for item in items():
+        targets = _path_forms(item["target"])
         if item.get("kind") == "folder":
-            if _same_or_inside(candidate, _real(item["target"])):
+            if _forms_same_or_inside(candidates, targets):
                 return item
         elif item.get("kind") == "file":
-            if normal_path(candidate) == normal_path(_real(item["target"])):
+            if _forms_same(candidates, targets):
                 return item
     return {}
 
 
 def matching_program_item(name) -> dict:
     """The entry that covers this program, or {} - by bare executable name."""
-    wanted = normal_program(name)
+    wanted = program_keys(name)
     if not wanted:
         return {}
     for item in items():
-        if item.get("kind") == "program" and normal_program(item["target"]) == wanted:
+        if item.get("kind") == "program" and (wanted & program_keys(item["target"])):
             return item
     return {}
 
@@ -406,7 +513,10 @@ def path_refusal(path, *, write: bool = False, what: str = "") -> str:
     ``write`` asks the WRITE question: blocked refuses reads and writes,
     readonly refuses writes only. The caller passes ``what`` for its own action
     ("read it", "change it", "open it") so the sentence names what was refused.
+    The list's own store file is refused unconditionally (P2), read or write.
     """
+    if _is_self_path(path):
+        return SELF_SENTENCE
     item = matching_path_item(path)
     if not item:
         return ""
@@ -432,12 +542,33 @@ def program_refusal(name, *, act: bool = False, what: str = "") -> str:
 
 
 def blocked_path(path) -> bool:
+    if _is_self_path(path):
+        return True
     item = matching_path_item(path)
     return bool(item and item.get("mode") == "blocked")
 
 
 def protected_path(path) -> bool:
-    return bool(matching_path_item(path))
+    return _is_self_path(path) or bool(matching_path_item(path))
+
+
+def visible_program_refusal(windows, *, act: bool = False, what: str = "") -> str:
+    """The plain sentence if ANY visible window's program is protected, or "".
+
+    `windows` is any iterable of dicts like jarvis_screen_win's window list
+    ({"exe": ...}) or bare executable names. Used by the screen capture door
+    (P4): a blocked program visible on the monitor being captured refuses the
+    capture before a pixel is read.
+    """
+    for w in windows or ():
+        if isinstance(w, dict):
+            exe = w.get("exe") or w.get("process") or ""
+        else:
+            exe = w
+        said = program_refusal(exe, act=act, what=what)
+        if said:
+            return said
+    return ""
 
 
 def blocked_programs() -> list:
@@ -554,6 +685,9 @@ def validate_request(kind, target, mode, *, known_programs=None) -> tuple:
         else:
             if not os.path.isfile(real):
                 return "", f"There is no file at {text} on this PC."
+        if _is_self_path(real):
+            return "", ("That file is the Protected from Jarvis list itself; it is "
+                        "already kept out of Jarvis's reach and needs no entry.")
         return normal_path(real), ""
     name = normal_program(text)
     if not name:
