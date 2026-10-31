@@ -22732,6 +22732,7 @@ grammar learned the rest of the questions a person actually asks:
 | "make <switch> off" / "set <switch> to off" / "I want <switch> off" / "<switch> should be off" / "make sure it is off" | `feature_change_apply` (new, 2026-10-27) | ONE setting changed through its OWN setter, for the 27 switches on the allow-list: a card is the setter's own, and the reply names the old and the new value only after a re-read |
 | "change <switch>" / "toggle <switch>" (no state said) | `feature_change_ask` (new, 2026-10-27) | ONE question back ("Do you want prompt coach on or off?"), changing nothing and raising no card |
 | a password, a key, a token, deep config, or an ask that cannot be undone | `feature_change_refused` (new, 2026-10-27) | one plain sentence and nothing changed |
+| "how/where do I change <a setting's own name>" / "tell me about <a setting>" | `setting_explain` (new, 2026-10-26) | when NO feature title or alias matched: the settings registry's own name, its real Settings card and one real example phrase - or the page-only refusal. No model turn, no card, nothing changed |
 | "is <feature> on?" / "off" / "enabled" / "right now" / "what is the state of" | `feature_state` | the switch's real value, read from the module that owns it, or "I could not read it" |
 | "what features do you have?" / "list the features" | `features_list` | the 9 groups with real counts |
 | a group's name | `features_group` | that group's rows |
@@ -22760,6 +22761,21 @@ today (`second_card_*`) and the one whose card is PC-only (`lights_without_card`
 deliberately outside the list: they keep `feature_change`'s own explanation, word for word,
 and are never written from chat. `backend/test_ask_to_change.py` proves all of it,
 including a real end-to-end change in a throwaway config folder.
+
+**A SETTINGS NAME ANSWERS TOO (2026-10-26, ruling Q6 Step A).** Five names the owner uses are
+not catalogue titles: `personality`, `voice speed` and `focus preset` are
+`jarvis_settings_registry.CHOICE_SETTINGS` rows, and `theme` / `hud layout` are desktop-only
+controls inside the Appearance and "The big HUD window" Settings cards. "how do i change the
+personality?" therefore missed every fixed phrase and reached the local model (~2 s), which
+has no settings tool. When no feature title or alias matches, the same sentence is now tried
+against the registry's own names and answered on the same fast path (`setting_explain`): the
+`CHOICE_SETTINGS` three name their real card and one real `set ... to ...` phrase; the two
+desktop-only areas name their card and the `open ... settings` phrase and say plainly that
+they cannot be changed by asking. A page-only row still refuses FIRST, including hyphen,
+slash and filler forms and a sentence naming two of them - a page-only name is never a
+licence to change a switch whose words the sentence happens to contain. An unknown name
+still falls through to the model. `backend/test_setting_alias_phrasing.py` proves each of
+these, including that every example phrase the answer offers really routes.
 
 **The list learned two fields (2026-10-26).** `features/features.json` rows may carry
 `aliases` - the owner's other names for ONE feature, e.g. "customer support" for the row
