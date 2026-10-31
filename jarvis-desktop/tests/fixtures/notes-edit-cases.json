@@ -1,0 +1,171 @@
+{
+  "_comment": "The notes editor's answers, written from .dsh-scratch/NOTES-EDITOR-2026-10-31/CONTRACT.md (2026-10-31). The backend lane builds the same routes against that contract; this file pins the desktop's reading rules without a server, and CI is the authority on the real bytes once that lane lands.",
+  "cases": {
+    "list_ok": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "root": "C:\\Users\\owner\\Vault",
+        "count": 2,
+        "notes": [
+          { "path": "Inbox/idea.md", "title": "idea", "size": 812, "mtime": 1761900000.0 },
+          { "path": "Projects/plan.txt", "title": "plan", "size": 12, "mtime": 1761800000.0 }
+        ],
+        "truncated": false
+      }
+    },
+    "list_empty": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "root": "C:\\Users\\owner\\Vault",
+        "count": 0,
+        "notes": [],
+        "truncated": false
+      }
+    },
+    "list_truncated": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "root": "C:\\Users\\owner\\Vault",
+        "count": 2000,
+        "notes": [
+          { "path": "Inbox/two-thousand.md", "title": "two-thousand", "size": 4, "mtime": 1761900000.0 }
+        ],
+        "truncated": true
+      }
+    },
+    "read_ok": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "path": "Inbox/idea.md",
+        "text": "# idea\n\nA small idea about the notes editor.",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "size": 812,
+        "mtime": 1761900000.0
+      }
+    },
+    "read_missing": {
+      "status": 404,
+      "body": {
+        "ok": false,
+        "error": "there is no note at Inbox/gone.md in the vault"
+      }
+    },
+    "read_saved": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "path": "Inbox/idea.md",
+        "text": "# idea\n\nA small idea about the notes editor. Edited and saved.",
+        "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "size": 828,
+        "mtime": 1761900100.0
+      }
+    },
+    "read_outside": {
+      "status": 400,
+      "body": {
+        "ok": false,
+        "error": "that path is outside the Obsidian vault, so it is not opened"
+      }
+    },
+    "read_too_big": {
+      "status": 413,
+      "body": {
+        "ok": false,
+        "error": "that note is over 2 MiB, so it is not opened here"
+      }
+    },
+    "save_waiting": {
+      "status": 202,
+      "body": {
+        "ok": true,
+        "state": "waiting",
+        "id": "notes-save-1",
+        "path": "Inbox/idea.md"
+      }
+    },
+    "save_saved": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "state": "saved",
+        "path": "Inbox/idea.md",
+        "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      }
+    },
+    "save_conflict": {
+      "status": 409,
+      "body": {
+        "ok": false,
+        "state": "conflict",
+        "path": "Inbox/idea.md",
+        "current_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "save_no_vault": {
+      "status": 503,
+      "body": {
+        "ok": false,
+        "error": "no Obsidian vault is set up on this PC yet - set [notes.obsidian] vault_directory in jarvis-framework.toml"
+      }
+    },
+    "save_busy": {
+      "status": 429,
+      "body": {
+        "ok": false,
+        "error": "3 note saves are already waiting for approval; answer one of the cards first"
+      }
+    },
+    "status_waiting": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "state": "waiting",
+        "path": "Inbox/idea.md",
+        "sha256": null,
+        "message": "Approve the card in the Jarvis bar, on the widget, or on your phone's Home screen."
+      }
+    },
+    "status_saved": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "state": "saved",
+        "path": "Inbox/idea.md",
+        "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "message": "Saved Inbox/idea.md."
+      }
+    },
+    "status_denied": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "state": "denied",
+        "path": "Inbox/idea.md",
+        "sha256": null,
+        "message": "You said no, so nothing was written."
+      }
+    },
+    "status_failed": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "state": "failed",
+        "path": "Inbox/idea.md",
+        "sha256": null,
+        "message": "The save could not be written; the note is unchanged."
+      }
+    },
+    "status_unknown": {
+      "status": 404,
+      "body": {
+        "ok": false,
+        "error": "no save job with that id"
+      }
+    }
+  }
+}
