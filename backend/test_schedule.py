@@ -1156,9 +1156,21 @@ def t_the_models_tools():
               "told the next times", w.cards == [] and gated == [] and res.get("ok") is True
               and "Next: " in str(res.get("said")), (w.cards, gated, res))
         res, _ = call("todo_add", {"text": "buy stamps"}, clean)
-        res, _ = call("coming_up", {}, clean)
+        # C5 (security audit 2026-10-30): coming_up's stored text now goes
+        # through the same outside-text boundary as every other tool result, so
+        # it is labelled and recorded as a read. It gets its own watch here so
+        # that read mark does not change the schedule-write checks below - and
+        # the next two checks are what proves the mark is real.
+        look = AG._TurnWatch([{"role": "user", "content": "what's coming up",
+                               "provenance": "typed"}], tainted=False)
+        res, _ = call("coming_up", {}, look)
         check("coming_up lists the jobs and the to-do list", res.get("ok") is True
               and "buy stamps" in res.get("todo", []))
+        check("coming_up's stored text arrives labelled as outside data, not as the "
+              "owner's own words (C5)",
+              res.get(AG.OUTSIDE_FIELD) == AG.OUTSIDE_LABEL, res)
+        check("... and it is recorded as a read, so a note write after it waits for a "
+              "person", bool(look.note_needs_a_person()), look.note_needs_a_person())
         check("the sentence that asked is marked as a command for the learner",
               w.s.was_command("please sort this out"))
         n = len(w.s.listed())
