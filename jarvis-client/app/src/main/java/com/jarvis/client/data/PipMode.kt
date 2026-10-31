@@ -130,18 +130,27 @@ enum class PipLayout(val aspectW: Int, val aspectH: Int) {
     companion object {
         /**
          * Which layout a state draws. THE TRUTH TABLE (§6.1): every combination
-         * of the four inputs, and with [privateHidden] or [appLock] the answer
-         * is [HIDDEN] and NEVER an answer layout - that is the assertion the
-         * design asks a test to make, so it lives in this one function rather
-         * than in the composable.
+         * of the four inputs. It holds TWO promises, and their ORDER is part of
+         * the contract:
          *
-         * READ THE ORDER OF THE TWO RULES BELOW AS THE PRIVACY RULE. Hidden
-         * content outranks everything, including a running Live session: while
-         * the app is locked the window says why it is empty and shows nothing
-         * it could otherwise show (§4, §9.1). And a Live session that is
-         * running takes the window over whatever mode is set (§2.4, the owner's
-         * decision of 2026-10-11) - but only when the window is allowed to show
-         * content at all.
+         *  1. **The SETTING decides whether a window may exist at all.** Mode
+         *     [PipMode.OFF] means [OFF], whatever the phone's privacy state is.
+         *  2. **Then hidden content outranks everything the window would
+         *     otherwise show** - every non-Off mode, and a running Live session
+         *     with it - because while the lists are hidden or the app is locked
+         *     the window says why it is empty and shows nothing it could
+         *     otherwise show (§4, §9.1).
+         *
+         * THE ORDER IS THE F-13 FIX (2026-10-31). This function used to check
+         * privacy FIRST and map the mode second, so `mode = Off` with "Hide
+         * memory lists and chat history" on answered [HIDDEN] instead of [OFF];
+         * `MainActivity.buildPipParams` then armed auto-enter from that layout
+         * and a PiP window appeared after Home - and after a fresh process start
+         * - although the owner had chosen Off. With the two rules in this order,
+         * and auto-enter keyed on the stored mode rather than the layout, an Off
+         * mode can never produce a window. `PipTest` pins both halves in the
+         * source, so a future reorder fails the suite instead of the owner's
+         * phone.
          */
         fun fromState(
             mode: PipMode,
@@ -149,8 +158,13 @@ enum class PipLayout(val aspectW: Int, val aspectH: Int) {
             privateHidden: Boolean,
             appLock: Boolean,
         ): PipLayout {
+            // (1) The setting first: Off means there is no window, full stop.
+            if (mode == PipMode.OFF) return OFF
+            // (2) Then privacy: no answer, no conversation, no Live view.
             if (privateHidden || appLock) return HIDDEN
             return when (mode) {
+                // Unreachable (Off returned above). Kept so the `when` stays
+                // exhaustive and a future edit cannot drop the case silently.
                 PipMode.OFF -> OFF
                 // §2.4: while a Live session runs, the Live view takes the
                 // window and gives it back when Live ends - so "1 or 3" is ONE
