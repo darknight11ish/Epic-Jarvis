@@ -4,16 +4,17 @@ The tool puts back the base-file / patch-carried pieces this PC's install never
 received: the app builder's two `_RISK` rows and the card timer in
 `jarvis_gate.py`, the `/api/history/pin` + `/api/history/archive` POST routes in
 `jarvis_hud.py`, and the unclassified-action rule + the eight `_RISK` rows from
-`unknown-risk-approvable.patch` (five disjoint pieces, applied as ONE write).
+`unknown-risk-approvable.patch` (six disjoint pieces, applied as ONE write).
 
 Two repairs carry MORE than one edit in one file, and both are proved below to
 land as one write with one backup. The card timer is TWO hunks of
 `backend/show-card-timer.patch`: the block in `pending()` AND the SELECT line
 that gives it a `waited_until` column. A tool that inserts only the block is a
 silent no-op, so the tests prove both hunks land and that a half-applied file
-is REFUSED rather than written again. The unclassified-action rule is FIVE
-hunks of `unknown-risk-approvable.patch`, and the repaired file must equal the
-published gate byte for byte.
+is REFUSED rather than written again. The unclassified-action rule is SIX
+hunks of `unknown-risk-approvable.patch` (the sixth is DEF-021's file-wins
+tier fix with its revised forced-ask block, added 2026-10-31), and the
+repaired file must equal the published gate byte for byte.
 
 It writes into the LIVE backend folder, so every failure path matters more
 than the happy one: a missing or ambiguous anchor must refuse, an already
@@ -56,6 +57,23 @@ def a_live_folder(gate: str = None, hud: str = None) -> Path:
         "_RISK: dict[str, tuple[str, str, str]] = {\n"
         '    "web_research": ("yes", "outbound", "a public query leaves the machine"),\n'
         "}\n"
+        "\n"
+        'def _tiers(framework: Optional[dict] = None) -> dict:\n'
+        '    """The tier table, validated. An unrecognised tier string - "Never" with a\n'
+        '    capital, "aks", anything not in _VALID_TIERS - is treated as "never",\n'
+        '    because a typo in a security policy should lock, not unlock."""\n'
+        '    try:\n'
+        '        f = framework if framework is not None else fw.load_framework()\n'
+        '        raw = f.get("autonomy", {}).get("tiers", {}) or {}\n'
+        '    except Exception:\n'
+        '        return {}\n'
+        '    out = {}\n'
+        '    for k, v in raw.items():\n'
+        '        v = str(v).strip().lower()\n'
+        '        out[k] = v if v in _VALID_TIERS else "never"\n'
+        '    out.update(_SYNTH_TIERS)\n'
+        '    return out\n'
+        "\n"
         "\n"
         '_UNKNOWN_RISK = ("no", "outbound",\n'
         '                 "not classified, so treated as irreversible and outbound")\n'
@@ -141,7 +159,7 @@ def t_check_names_both_missing_then_apply_fixes_them():
           'd["expires_in"] = _whole' in gate and "_waited = d.pop" in gate)
     check("... including the timer's SELECT column",
           all(new in gate for _old, new in mod.REPAIRS["timer"].extra_edits))
-    check("the unknown-risk rule landed all five pieces",
+    check("the unknown-risk rule landed all six pieces",
           all(piece.replace_with in gate
               for piece in mod.REPAIRS["unknown-risk"].parts()))
     check("the anchor line was kept", '"/api/history/mark"' in hud)
@@ -331,8 +349,10 @@ def load_reconcile():
 def t_the_unknown_risk_repair_puts_the_published_gate_back_exactly():
     """A repaired install must EQUAL a fresh one, not merely get new text.
 
-    The published base already carries #1008's five hunks. Reverse them out of
-    it with the deploy tool's own parser (so the pre-image is the one the
+    The published base already carries the patch's six hunks (the fifth and
+    sixth are DEF-021's 2026-10-31 `_tiers()`/`_file_tier_names()` fix and its
+    revised forced-ask block). Reverse them out of it with the deploy tool's
+    own parser (so the pre-image is the one the
     deploy itself expects), apply the repair to that pre-image, and the result
     must be the published base BYTE FOR BYTE. This is the proof this repo uses
     for a patch-carried change; it does not trust the repair's probe list.
@@ -343,8 +363,11 @@ def t_the_unknown_risk_repair_puts_the_published_gate_back_exactly():
         encoding="utf-8")
     base = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
     hunks = R.patch_hunks(patch, "jarvis_gate.py")
-    check("the unknown-risk patch has the five hunks this repair carries",
-          len(hunks) == 5, len(hunks))
+    check("the unknown-risk patch has the six hunks this repair carries",
+          len(hunks) == 6, len(hunks))
+    check("... and the repair carries one piece per hunk, including DEF-021's",
+          len(mod.REPAIRS["unknown-risk"].parts()) == len(hunks),
+          len(mod.REPAIRS["unknown-risk"].parts()))
     pre = base
     reversed_ok = True
     for hunk in reversed(hunks):

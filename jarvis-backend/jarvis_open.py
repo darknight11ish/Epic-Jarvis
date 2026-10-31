@@ -322,6 +322,23 @@ _TAIL = re.compile(
 _KIND_NOUNS = re.compile(r"\s+(?:app|application|program|window|page|screen|panel|settings)$")
 
 
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def _without_kind_noun(name: str) -> str:
     """`name` with one trailing kind-noun taken off, or `name` unchanged.
 
@@ -449,7 +466,7 @@ def _applied(what: str) -> Opened:
     return Opened("app", what, False, what)
 
 
-def resolve(name: str, is_jarvis: bool = False) -> object:
+def _resolve_unprotected(name: str, is_jarvis: bool = False) -> object:
     """What to open for `name`, or a `Choice` when Jarvis must not guess.
 
     Never returns None for a name that got past `parse`: "I do not know what
@@ -712,3 +729,24 @@ def _panel_name(opened: Opened) -> str:
 #: lives only on the PC.
 ON_PC = ("Opening programs and Windows panels happens on your PC, not on this "
          "phone. Ask Jarvis on your PC.")
+
+def resolve(name: str, is_jarvis: bool = False) -> object:
+    """What to open for `name`, refused when the program is protected.
+
+    ``jarvis_protection`` (2026-10-31): a program the owner put on the
+    Protected from Jarvis list as blocked is never opened, and one they made
+    read-only may be seen but never started - so both kinds are refused here,
+    in this module's own words, before any client is told what to open.
+    """
+    got = _resolve_unprotected(name, is_jarvis)
+    _P = _protection()
+    if _P is not None and getattr(got, "kind", "") == "app":
+        _target = str(getattr(got, "target", "") or "")
+        _said = ""
+        if _target:
+            _said = _P.program_refusal(_target, act=True)
+        if not _said:
+            _said = _P.program_refusal(str(name or ""), act=True)
+        if _said:
+            return Opened("refused", "", False, _said)
+    return got

@@ -3531,19 +3531,20 @@ def git_reverse_oracle(text: str, patch: str, target: str) -> str:
         shutil.rmtree(root, ignore_errors=True)
 
 
-def t_the_unknown_risk_delta_carries_its_five_hunks_byte_for_byte():
+def t_the_unknown_risk_delta_carries_its_six_hunks_byte_for_byte():
     """#1008's unclassified-action change is carried by a DELTA_TABLE rule.
 
-    2026-10-30: `unknown-risk-approvable.patch` rewrites `jarvis_gate.py` in five
-    disjoint regions (eight `_RISK` rows, the worst-case warning, `risk_for`'s
-    docstring, `notice_for`'s body, and the forced "ask" in `check()`). One anchor
-    cannot carry that, so its entry says `"hunks": True` and the patch's own
-    hunks are the regions. This proves the rule carries the patch EXACTLY: the
-    pre-image is made by git applying the patch in REVERSE to the published base,
-    the plan runs against it, and the staged gate must equal BOTH git's own
-    forward application of the patch AND the published base, byte for byte. A
-    second plan against the base itself must be ALREADY_PRESENT and stage
-    nothing.
+    2026-10-30, extended 2026-10-31 by DEF-021: `unknown-risk-approvable.patch`
+    rewrites `jarvis_gate.py` in six disjoint regions (eight `_RISK` rows, the
+    worst-case warning, `risk_for`'s docstring, `notice_for`'s body, the
+    `_tiers()`/`_file_tier_names()` file-wins fix, and the forced "ask" in
+    `check()`). One anchor cannot carry that, so its entry says `"hunks": True`
+    and the patch's own hunks are the regions. This proves the rule carries the
+    patch EXACTLY: the pre-image is made by git applying the patch in REVERSE
+    to the published base, the plan runs against it, and the staged gate must
+    equal BOTH git's own forward application of the patch AND the published
+    base, byte for byte. A second plan against the base itself must be
+    ALREADY_PRESENT and stage nothing.
 
     NOTE (measured on the owner's PC, read-only dry run): hunk 1's two-line
     pre-image is GONE from that install - the earlier `gate` repair inserted the
@@ -3568,9 +3569,9 @@ def t_the_unknown_risk_delta_carries_its_five_hunks_byte_for_byte():
               == git_apply_oracle(pre, [name], "jarvis_gate.py"))
         check("... and the published base, byte for byte",
               staged.get("jarvis_gate.py") == base)
-        check("the delta is the patch's five hunks in one insert",
+        check("the delta is the patch's six hunks in one insert",
               [(d.patch, d.status, d.anchor) for d in deltas]
-              == [(name, "insert", "5 hunk(s)")], deltas)
+              == [(name, "insert", "6 hunk(s)")], deltas)
 
         live2 = make_base_live(root, "post", {"jarvis_gate.py": base})
         deltas2, staged2, refusals2 = R.plan_deltas(
@@ -3738,7 +3739,7 @@ def main():
                t_the_no_expiry_chain_carries_965_byte_for_byte,
                t_the_no_deadline_hunk_9_is_carried_from_the_live_shape,
                t_the_no_deadline_chain_keeps_the_earlier_entries_provable,
-               t_the_unknown_risk_delta_carries_its_five_hunks_byte_for_byte,
+               t_the_unknown_risk_delta_carries_its_six_hunks_byte_for_byte,
                t_the_jobs_routes_delta_carries_its_four_hunks_byte_for_byte,
                t_a_patch_whose_only_match_is_unchanged_context_is_refused,
                t_a_patch_with_no_distinctive_line_is_refused_by_name,

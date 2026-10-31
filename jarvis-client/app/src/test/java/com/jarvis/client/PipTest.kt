@@ -22,9 +22,12 @@ import java.io.File
  *
  *  1. the mode mapping and the persistence rule (`PipMode.fromWire`);
  *  2. THE WHOLE TRUTH TABLE - every combination of the four inputs to
- *     [PipLayout.fromState], and the assertion that with "Hide memory lists and
- *     chat history" or App lock the answer is [PipLayout.HIDDEN] and never an
- *     answer layout (§6.1);
+ *     [PipLayout.fromState]: the stored Off mode is [PipLayout.OFF] whatever the
+ *     privacy state, and with "Hide memory lists and chat history" or App lock
+ *     every OTHER mode is [PipLayout.HIDDEN] and never an answer layout (§6.1);
+ *  2b. THE F-13 REGRESSION PIN (2026-10-31, the field-test defect where Off
+ *     still produced a window): Off is decided BEFORE privacy in `fromState`,
+ *     and auto-enter is keyed on the stored mode rather than the layout;
  *  3. THE FORBIDDEN-WORDS TEST ON THE VALUES - the one that makes §4 real
  *     rather than stated (§6.2);
  *  4. the first line, and only the first line (§6.3);
@@ -96,7 +99,7 @@ class PipTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `the whole truth table, and privacy wins every time`() {
+    fun `the whole truth table - Off wins for Off, privacy wins for every other mode`() {
         var combinations = 0
         for (mode in PipMode.entries) {
             for (liveRunning in listOf(false, true)) {
@@ -106,17 +109,26 @@ class PipTest {
                         val got = PipLayout.fromState(mode, liveRunning, privateHidden, appLock)
                         val why = "mode=$mode live=$liveRunning privateHidden=$privateHidden " +
                             "appLock=$appLock"
-                        if (privateHidden || appLock) {
+                        if (mode == PipMode.OFF) {
+                            // The SETTING decides whether a window exists at
+                            // all - F-13 (2026-10-31): with hidden lists on,
+                            // Off used to fall through to HIDDEN and a window
+                            // appeared after Home and after a fresh start.
+                            assertEquals("$why must be OFF - the setting comes first", PipLayout.OFF, got)
+                            assertFalse("$why must not draw an answer", got.answerShown)
+                            assertFalse("$why must not draw the thread", got.threadShown)
+                            assertFalse("$why must not draw Live", got.liveShown)
+                        } else if (privateHidden || appLock) {
                             // §4 and §9.1: NEVER the answer, NEVER the
                             // conversation, NEVER Live - the dimmed face and
-                            // one sentence, whatever mode is chosen.
+                            // one sentence for every mode the owner chose.
                             assertEquals("$why must be HIDDEN", PipLayout.HIDDEN, got)
                             assertFalse("$why must not draw an answer", got.answerShown)
                             assertFalse("$why must not draw the thread", got.threadShown)
                             assertFalse("$why must not draw Live", got.liveShown)
                         } else {
                             val want = when (mode) {
-                                PipMode.OFF -> PipLayout.OFF
+                                PipMode.OFF -> PipLayout.OFF   // handled above
                                 // §2.4: while Live runs it takes the window;
                                 // it gives it back when Live ends.
                                 PipMode.FACE -> if (liveRunning) PipLayout.LIVE else PipLayout.FACE
@@ -130,6 +142,61 @@ class PipTest {
             }
         }
         assertEquals("the four inputs must be driven exhaustively", 32, combinations)
+    }
+
+    /**
+     * THE F-13 REGRESSION PIN (field test 2026-10-30/31, pass8 NOTES.md F-13;
+     * dumps `p8-pip-off.xml`, `pip-13-check.png`, `pip-13d-off-freshstart.png`):
+     * Off selected, yet a PiP window appeared after Home AND after a
+     * force-stop/fresh start. Two one-line causes, and this test pins the
+     * ORDER of both so neither can come back by a tidy-up:
+     *
+     *  1. `PipMode.fromState` must test the mode for Off BEFORE the privacy
+     *     check - otherwise an Off mode answers HIDDEN while the lists are
+     *     hidden (the owner's setting is on in the measured run).
+     *  2. `MainActivity.buildPipParams` must key auto-enter on the stored MODE,
+     *     never on the layout - HIDDEN != OFF, which armed the window.
+     *
+     * A source pin as well as a value test, because the bug was ordering and
+     * the value test alone would not stop a different order coming back.
+     */
+    @Test
+    fun `Off is decided before privacy, and auto-enter is keyed on the mode - F-13 cannot come back`() {
+        // 1. The ordering inside fromState, read from the real file.
+        val pipMode = file("jarvis-client/app/src/main/java/com/jarvis/client/data/PipMode.kt")
+        val body = pipMode.substringAfter("fun fromState(").substringBefore("\n        }\n")
+        val offAt = body.indexOf("if (mode == PipMode.OFF) return OFF")
+        val hiddenAt = body.indexOf("if (privateHidden || appLock) return HIDDEN")
+        assertTrue("fromState must still test the Off mode explicitly", offAt >= 0)
+        assertTrue("fromState must still test the privacy state", hiddenAt >= 0)
+        assertTrue(
+            "the Off test must come BEFORE the privacy test - F-13 was this order reversed " +
+                "(offAt=$offAt, hiddenAt=$hiddenAt)",
+            offAt < hiddenAt,
+        )
+        // ...and the measured case, as a value: hidden lists ON + Off stored.
+        assertEquals("F-13: Off with hidden lists on is still OFF",
+            PipLayout.OFF,
+            PipLayout.fromState(PipMode.OFF, liveRunning = false, privateHidden = true, appLock = false))
+        assertEquals("F-13: Off with hidden lists AND App lock on is still OFF",
+            PipLayout.OFF,
+            PipLayout.fromState(PipMode.OFF, liveRunning = true, privateHidden = true, appLock = true))
+        // The behaviour §7 step 9 needs is unchanged: a NON-Off mode that is
+        // hidden is HIDDEN (an enterable window that says why it is empty).
+        assertEquals("design §7 step 9: a hidden window is still enterable when the mode is on",
+            PipLayout.HIDDEN,
+            PipLayout.fromState(PipMode.FACE, liveRunning = false, privateHidden = true, appLock = true))
+
+        // 2. Auto-enter is keyed on the stored mode, in the params builder.
+        val main = file("jarvis-client/app/src/main/java/com/jarvis/client/MainActivity.kt")
+        val from = main.indexOf("private fun buildPipParams")
+        assertTrue("buildPipParams is the one place the params are built", from >= 0)
+        val block = main.substring(from, main.indexOf("\n    }", from))
+        assertTrue("auto-enter must be keyed on the stored mode",
+            block.contains("JarvisRuntime.settings.pipMode.value != PipMode.OFF"))
+        assertTrue("...and set from that value", block.contains(".setAutoEnterEnabled(enterable)"))
+        assertFalse("auto-enter must never be keyed on the layout again (F-13)",
+            block.contains("setAutoEnterEnabled(layout != PipLayout.OFF)"))
     }
 
     @Test
@@ -207,7 +274,11 @@ class PipTest {
                                         ChatHistory.Exchange("What is the weather?", chatAnswer),
                                     )).map { it.text },
                                 )
-                                PipLayout.OFF, PipLayout.FACE, PipLayout.LIVE_OFF ->
+                                // An Off mode draws no answer at all: no
+                                // window exists (F-13), and the fallback line
+                                // is the state word only.
+                                PipLayout.OFF -> add(PipWords.STANDING_BY)
+                                PipLayout.FACE, PipLayout.LIVE_OFF ->
                                     add(PipText.firstLine(chatAnswer))
                                 PipLayout.LIVE -> add(PipWords.LIVE_LISTENING)
                             }
@@ -284,8 +355,9 @@ class PipTest {
             block.contains("addAction("))
         assertTrue("the aspect ratio comes from the layout",
             block.contains("Rational(layout.aspectW, layout.aspectH)"))
-        assertTrue("auto-enter is armed from the setting, never unconditionally",
-            block.contains(".setAutoEnterEnabled(layout != PipLayout.OFF)"))
+        assertTrue("auto-enter is armed from the stored mode, never from the layout",
+            block.contains("JarvisRuntime.settings.pipMode.value != PipMode.OFF"))
+        assertTrue("...and set from that value", block.contains(".setAutoEnterEnabled(enterable)"))
     }
 
     // ------------------------------------------------------------------

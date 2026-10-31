@@ -859,6 +859,22 @@ fun BrainScreen(
                     }
                 }
 
+                // The notes editor (2026-10-31, .dsh-scratch/NOTES-EDITOR-
+                // 2026-10-31/CONTRACT.md; NotesPlate.kt): the WHOLE Obsidian
+                // vault from this phone - list, search, open one note into an
+                // editor, and Save, which raises the PC's existing
+                // `edit_vault_note` card and never approves it here. It has no
+                // menu id (the contract adds no menu), so it is drawn whenever
+                // the groups are open; the lists' Show gate still applies, as it
+                // does to the wiki's plate above - a pair for the same reason.
+                plate(if (plateDrawn("notes")) "notes" else "notes-hidden") {
+                    if (privateHidden) {
+                        HiddenSection("Notes", busy = showPrivateBusy, onShow = onShowPrivate)
+                    } else {
+                        NotesSection(canAct = canAct)
+                    }
+                }
+
             },
             log = { section, open, written, emitted ->
                 android.util.Log.i(

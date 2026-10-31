@@ -4867,8 +4867,16 @@ class MainActivity : FragmentActivity() {
      * here, which is the whole reason it is one small function.
      *
      * The aspect ratio is the layout's own: modes 1 and 3 are about 16:9, mode
-     * 2 is taller (9:16) because it is a short list (§3). Auto-enter is armed
-     * only when the setting is not Off, so Off really means no window.
+     * 2 is taller (9:16) because it is a short list (§3).
+     *
+     * AUTO-ENTER IS KEYED ON THE STORED MODE, never on the layout. That split
+     * is the F-13 fix (2026-10-31): the layout also answers the privacy
+     * question, so `layout != PipLayout.OFF` armed auto-enter for an Off mode
+     * whenever "Hide memory lists and chat history" was on (the layout was
+     * HIDDEN), and a window appeared after Home and after a fresh start. The
+     * setting decides whether a window may exist; the layout only decides what
+     * it draws - and [PipLayout.HIDDEN] must stay enterable when the mode IS on
+     * (design §7 step 9: the locked window says its one sentence).
      */
     private fun buildPipParams(layout: PipLayout): PictureInPictureParams {
         val expand = RemoteAction(
@@ -4883,10 +4891,15 @@ class MainActivity : FragmentActivity() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             ),
         )
+        // The ONE thing that may arm the window: the owner's setting, read at
+        // the moment the parameters are built. Never a layout, and never a
+        // default (F-13: a default is how an Off mode armed itself).
+        val enterable = JarvisRuntime.isInitialized &&
+            JarvisRuntime.settings.pipMode.value != PipMode.OFF
         return PictureInPictureParams.Builder()
             .setAspectRatio(Rational(layout.aspectW, layout.aspectH))
             .setActions(listOf(expand))
-            .setAutoEnterEnabled(layout != PipLayout.OFF)
+            .setAutoEnterEnabled(enterable)
             .build()
     }
 

@@ -541,7 +541,25 @@ GROUPS = (
                             # is NOT in MUST_ASK for the same reason (the module calls
                             # jarvis_gate.check and does not refuse a looser tier
                             # itself). The plan route raises NO card at all.
-                            "import_notion_export", "organize_obsidian_vault"]),
+                            # "Protected from Jarvis" (jarvis_protection.py,
+                            # 2026-10-31): adding changes what Jarvis may touch
+                            # and removing is loosening, so both are ONE card
+                            # every time. Their tier is the shipped "ask" line;
+                            # because the gate has no risk row for a drop-in
+                            # action it forces them to ask regardless. NOT in
+                            # MUST_ASK: the module's own keep-out check is the
+                            # refusal, and its card is the only yes.
+                            "import_notion_export", "organize_obsidian_vault",
+                            "protect_item", "unprotect_item",
+                            # The Obsidian notes editor (jarvis_notes_edit.py,
+                            # 2026-10-31; the owner's "the whole vault, both
+                            # apps"): one save replaces the WHOLE text of one
+                            # note in his own vault, so it is ONE card every
+                            # time. Its tier is the shipped "ask" line; because
+                            # the gate has no risk row for a drop-in action it
+                            # forces it to ask regardless. NOT in MUST_ASK: the
+                            # module does not refuse a looser tier itself.
+                            "edit_vault_note"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat",
                               # reminder-actions.patch (2026-10-27): a reminder

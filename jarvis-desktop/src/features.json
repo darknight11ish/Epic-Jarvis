@@ -2362,6 +2362,7 @@
     "covers": [
       "safety.approvals",
       "settings.approval-cards",
+      "settings.protection",
       "asks-first",
       "phone-approvals"
     ],

@@ -159,6 +159,10 @@
       "title": "Jarvis wants to change a page in Logseq"
     },
     {
+      "action": "edit_vault_note",
+      "title": "Jarvis wants to change a note in your Obsidian vault"
+    },
+    {
       "action": "email_read",
       "title": "Jarvis wants to read your email"
     },
@@ -285,6 +289,10 @@
     {
       "action": "power_manage",
       "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)"
+    },
+    {
+      "action": "protect_item",
+      "title": "Jarvis wants to protect a folder, file or program from Jarvis"
     },
     {
       "action": "quiz_cloud_grade",
@@ -429,6 +437,10 @@
     {
       "action": "undo_action",
       "title": "Jarvis wants to put back a change it made"
+    },
+    {
+      "action": "unprotect_item",
+      "title": "Jarvis wants to stop protecting something from Jarvis"
     },
     {
       "action": "unretire_shared_key",
@@ -901,6 +913,18 @@
       }
     },
     {
+      "action": "edit_vault_note",
+      "notice": {
+        "title": "Jarvis wants to change a note in your Obsidian vault",
+        "summary": "Jarvis wants to change a note in your Obsidian vault.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "email_read",
       "notice": {
         "title": "Jarvis wants to read your email",
@@ -1277,6 +1301,18 @@
       "notice": {
         "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)",
         "summary": "Jarvis wants to change its power mode.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "protect_item",
+      "notice": {
+        "title": "Jarvis wants to protect a folder, file or program from Jarvis",
+        "summary": "Jarvis wants to protect a folder, file or program from Jarvis.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
@@ -1709,6 +1745,18 @@
       "notice": {
         "title": "Jarvis wants to put back a change it made",
         "summary": "Jarvis wants to put back the change shown.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "unprotect_item",
+      "notice": {
+        "title": "Jarvis wants to stop protecting something from Jarvis",
+        "summary": "Jarvis wants to stop protecting a folder, file or program.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

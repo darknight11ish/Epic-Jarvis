@@ -1225,20 +1225,48 @@ _TOOL_PROMPT = re.compile(
 
 
 def _tiers(framework: Optional[dict] = None) -> dict:
-    """The tier table, validated. An unrecognised tier string - "Never" with a
-    capital, "aks", anything not in _VALID_TIERS - is treated as "never",
-    because a typo in a security policy should lock, not unlock."""
+    """The tier table, validated, with the owner's explicit line winning.
+
+    An unrecognised tier string - "Never" with a capital, "aks", anything not
+    in _VALID_TIERS - is treated as "never", because a typo in a security
+    policy should lock, not unlock.
+
+    THE FILE WINS OVER THE TOOL TABLE (DEF-021, 2026-10-31). `_SYNTH_TIERS`
+    holds the gate's own per-tool defaults for names that are not actions of
+    [autonomy.tiers] ("calculator" -> auto, "memory_store" -> notify). It used
+    to be applied AFTER the file, so an owner who wrote a line for one of
+    those names had it silently overwritten - and `check()`'s forced-ask
+    exemption then skipped exactly those names. The owner's file is the
+    policy: its validated line is laid over the synthesised table, so what the
+    What-asks-first page already showed is what the gate now does. A name with
+    no file line still takes its synthesised tier unchanged."""
     try:
         f = framework if framework is not None else fw.load_framework()
         raw = f.get("autonomy", {}).get("tiers", {}) or {}
     except Exception:
         return {}
-    out = {}
+    out = dict(_SYNTH_TIERS)
     for k, v in raw.items():
         v = str(v).strip().lower()
         out[k] = v if v in _VALID_TIERS else "never"
-    out.update(_SYNTH_TIERS)
     return out
+
+
+def _file_tier_names(framework: Optional[dict] = None) -> set:
+    """The actions with an EXPLICIT line in the file's [autonomy.tiers].
+
+    Used by `check()`'s forced-ask rule (DEF-021): the tool-table exemption
+    applies only when the owner has NOT written a line for that name. A name
+    the file names is the owner's own action and takes the ordinary rule, so
+    an unclassified one is still forced to "ask"; a name the file does not
+    name keeps the gate's per-tool default. Never raises; an unreadable file
+    answers an empty set, which is the stricter direction for every other rule
+    (the empty tier table itself refuses in `check()`)."""
+    try:
+        f = framework if framework is not None else fw.load_framework()
+        return set((f.get("autonomy", {}) or {}).get("tiers", {}) or {})
+    except Exception:
+        return set()
 
 
 def action_for_prompt(prompt: str,
@@ -1786,14 +1814,19 @@ def check(action: str,
         # not know is forced to "ask". "never" is stricter than ask and is left
         # exactly as it is. A risk table that cannot be read forces it too.
         #
-        # TWO NAMES ARE NOT "AN ACTION" for this rule, and they are named
-        # rather than left to chance: `_SYNTH_TIERS` holds the TOOLS whose tier
-        # `action_for_tool()` sets directly from `_TOOL_ACTIONS` ("calculator"
-        # -> auto, "memory_store" -> notify, "git_commit" -> ask). Those are
-        # the gate's own per-tool decisions, not actions the risk table
-        # classifies - forcing them to ask would card every calculation and
-        # every saved memory, which is not what this rule is for. Everything
-        # else is covered, including an action with no tier line at all (whose
+        # A TOOL-TABLE NAME IS EXEMPT ONLY WHEN THE FILE DOES NOT NAME IT.
+        # `_SYNTH_TIERS` holds the TOOLS whose tier `action_for_tool()` sets
+        # directly from `_TOOL_ACTIONS` ("calculator" -> auto, "memory_store"
+        # -> notify, "git_commit" -> ask). Those are the gate's own per-tool
+        # decisions, not actions the risk table classifies - forcing them to
+        # ask would card every calculation and every saved memory, which is
+        # not what this rule is for. But an owner who writes an explicit
+        # [autonomy.tiers] line for one of those names has made it their own
+        # action (DEF-021, 2026-10-31): the file wins over the tool table in
+        # `_tiers()`, and this rule must agree with that rather than silently
+        # skipping the name. So the exemption needs BOTH - the name is in the
+        # tool table AND the file has no line for it. Everything else is
+        # covered, including an action with no tier line at all (whose
         # fallback used to be loosened by `[autonomy] unknown_action_tier` in
         # the owner's file).
         #
@@ -1802,8 +1835,14 @@ def check(action: str,
         # not are added by this patch), so this closes the hole for the NEXT
         # action somebody adds without one.
         try:
+            _explicit = _file_tier_names(framework)
+        except Exception:
+            _explicit = set()
+        try:
             _forced = (tier != "never"
-                       and not (isinstance(action, str) and action in _SYNTH_TIERS)
+                       and not (isinstance(action, str)
+                                and action in _SYNTH_TIERS
+                                and action not in _explicit)
                        and not risk_for(action)["classified"])
         except Exception:
             _forced = tier != "never"

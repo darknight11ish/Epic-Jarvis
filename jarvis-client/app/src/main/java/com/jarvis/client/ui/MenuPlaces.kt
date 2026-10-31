@@ -40,6 +40,12 @@ object MenuPlaces {
         // otherwise be an undecided item key. MenuVisibilityTest checks both
         // halves, which is how the pair is kept in step.
         "approval-cards" to "settings.approval-cards",
+        // "Protected from Jarvis" (2026-10-31, the owner's own request): its own
+        // Settings row (SettingsScreen.kt, item "protection") that READS the list
+        // and asks the PC to remove one entry - so the finder must reach it, and
+        // hiding it would hide the row that reads a blocklist (the catalogue says
+        // never hideable, for the same reason).
+        "protection" to "settings.protection",
         "floating-avatar" to "settings.floating-avatar",
         // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md): its own
         // Settings row (SettingsScreen.kt, item "pip-mode") next to Floating

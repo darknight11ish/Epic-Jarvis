@@ -225,6 +225,9 @@ PAUSE_WORDS = {
     "password_box": "a password box",
     "never_look": "something on your Never look at list",
     "protected": "a window that asks not to be captured",
+    "protection": "a program on your Protected from Jarvis list",
+    "protection_visible": ("a program on your Protected from Jarvis list is "
+                           "visible on this screen"),
     "private_window": "a private browser window",
     "jarvis": "one of Jarvis's own windows",
     "lock_screen": "the lock screen",
@@ -244,6 +247,10 @@ PAUSE_SAID = {
     "private_window": "That's a private browser window, so I'm not looking.",
     "never_look": "That's on your Never look at list, so I'm not looking.",
     "protected": "That window asks not to be captured, so I'm not looking.",
+    "protection": ("That program is on your Protected from Jarvis list, so I'm "
+                   "not looking."),
+    "protection_visible": ("A program on your Protected from Jarvis list is "
+                           "visible on this screen, so I'm not looking."),
     "jarvis": "That's one of Jarvis's own windows, so I'm not looking.",
     "lock_screen": "That's the lock screen, so I'm not looking.",
     "admin_prompt": "That's a Windows permission window, so I'm not looking.",
@@ -354,6 +361,23 @@ def normal_program(value: str) -> str:
 def normal_site(value: str) -> str:
     """ "https://www.mybank.com/login" -> "mybank.com"; "" if not a site."""
     return front.site_of(front.host_of(value))
+
+
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
 
 
 def _config_dir() -> Path:
@@ -661,6 +685,11 @@ def pause_reason(snap, never: NeverLook) -> Optional[str]:
         return "list_unreadable"
     if not exe:
         return "cannot_read"
+    # Protected from Jarvis (2026-10-31): a blocked program's window is
+    # never in a screenshot or an OCR pass; a read-only one may be seen.
+    _P = _protection()
+    if _P is not None and _P.program_refusal(exe):
+        return "protection"
     # b. the owner's Never look at list: the program, then the site
     if never.has_program(exe):
         return "never_look"
@@ -1417,6 +1446,17 @@ class Screen:
         why = pause_reason(before, self.never)
         if why:
             return None, why
+        if whole:
+            # "Protected from Jarvis" (2026-10-31): a whole-monitor capture
+            # is refused BEFORE the grab when a blocked program is visible on
+            # that monitor - masking would still have read its pixels.
+            try:
+                import jarvis_screen_win as _W
+                _said = _W.whole_screen_protection_problem(before)
+            except Exception:                           # noqa: BLE001
+                _said = ""
+            if _said:
+                return None, "protection_visible"
         try:
             picture = self.capture(before, whole)
         except Exception:
