@@ -180,6 +180,23 @@ def _clip(rect: tuple, to: tuple) -> Optional[tuple]:
     return (l, t, r, b) if r > l and b > t else None
 
 
+
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def must_hide(w: dict, never, *, front_hwnd=None,
               address_of: Optional[Callable] = None) -> bool:
     """Is this window one Jarvis must never show in a picture?
@@ -193,13 +210,18 @@ def must_hide(w: dict, never, *, front_hwnd=None,
     `address_of(w)` gives that window's site ("" when it cannot be read)."""
     import jarvis_screen as S            # the lists and the words live there
     exe = ntpath.basename(str(w.get("exe") or "")).lower()
+    _P = _protection()
+    if _P is not None and exe and _P.program_refusal(exe):
+        return True
     if not exe:
         # The program is unknown, so it cannot be checked against the list:
         # when the owner has a list at all (or it cannot be read), a window
         # that cannot be identified is painted black rather than shown. It
         # was returned False here before - the one gap in "fail closed".
         try:
-            return bool(getattr(never, "broken", False)) or bool(never.entries())
+            return (bool(getattr(never, "broken", False))
+                    or bool(never.entries())
+                    or (_P is not None and _P.has_blocked_programs()))
         except Exception:
             return True
     if never.has_program(exe) or exe in S.LOCK_EXES or exe in S.ADMIN_EXES:

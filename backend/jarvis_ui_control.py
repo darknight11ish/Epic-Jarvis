@@ -822,6 +822,18 @@ def _is_jarvis_process(process) -> bool:
     return str(process or "").strip().lower() in JARVIS_PROCESSES
 
 
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it."""
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
+_WINDOW_PROCESS: dict = {}
+
+
 def jarvis_target_refusal(descriptor: dict) -> str:
     """Why this window of Jarvis's own is never touched, or "" if it is not
     one. Title first (the desktop app's own windows are titled "Jarvis...") and
@@ -829,6 +841,14 @@ def jarvis_target_refusal(descriptor: dict) -> str:
     title = str((descriptor or {}).get("title") or "")
     if is_jarvis_window(title) or _is_jarvis_process((descriptor or {}).get("process")):
         return own_window_refusal(title or "a Jarvis window")
+    # Protected from Jarvis (2026-10-31): a blocked program is never looked
+    # at or acted in; a read-only one may be looked at, never acted in.
+    _P = _protection()
+    _proc = str((descriptor or {}).get("process") or "")
+    if _P is not None and _proc:
+        _said = _P.program_refusal(_proc)
+        if _said:
+            return _said
     return ""
 
 
@@ -896,6 +916,10 @@ def get_window_state(pid, window_id=None, mode: str = "ax", *, windows=None, tre
                 "candidates": [{"window_id": d.get("window_id"), "title": d.get("title"),
                                 "class_name": d.get("class_name")} for d in found]}
     target = found[0]
+    try:
+        _WINDOW_PROCESS[str(target.get("window_id"))] = str(target.get("process") or "")
+    except Exception:                                   # noqa: BLE001
+        pass
     refusal = jarvis_target_refusal(target)
     if refusal:
         return {"ok": False, "code": "own_window", "reason": refusal}
@@ -1352,6 +1376,13 @@ def deliver(element_token: str, action: str, *, window_id=None, value=None,
     if delivery_mode not in ("background", "foreground"):
         return {"ok": False, "code": "bad_delivery_mode",
                 "reason": 'delivery_mode is "background" (default) or "foreground"'}
+    _P = _protection()
+    if _P is not None:
+        _proc = _WINDOW_PROCESS.get(str(window_id), "")
+        if _proc:
+            _said = _P.program_refusal(_proc, act=True)
+            if _said:
+                return {"ok": False, "code": "protected_item", "reason": _said}
     if window_id is None:
         # Without the window there is no way to look at the token at all - and
         # guessing one is exactly what get_window_state refuses to do.

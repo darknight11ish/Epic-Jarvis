@@ -169,6 +169,21 @@ try:
 except Exception:  # pragma: no cover - shipped beside it on the PC
     jarvis_sqlite = None  # type: ignore
 
+
+def _protection():
+    """jarvis_protection, or None when a half-deployed install lacks it.
+
+    The protection list is a shipped module, so on a normal backend this is
+    always the real one. A missing copy means the feature is not installed at
+    all (an older install): the caller then behaves exactly as it did before,
+    which is the same direction every other optional module here takes.
+    """
+    try:
+        import jarvis_protection
+        return jarvis_protection
+    except Exception:                                       # noqa: BLE001
+        return None
+
 PATH = "/api/folders"
 ADD_ROUTE = "/api/folders/add"
 REMOVE_ROUTE = "/api/folders/remove"
@@ -843,6 +858,11 @@ def allowed_path(path, roots: Optional[list] = None) -> Optional[tuple]:
     roots = folders() if roots is None else roots
     real = _real(path.strip())
     if _in_a_private_place(real):
+        return None
+    # "Protected from Jarvis" wins over this allow-list (2026-10-31):
+    # a blocked folder/file is never read, even when its folder is listed.
+    _P = _protection()
+    if _P is not None and _P.blocked_path(real):
         return None
     try:
         import jarvis_agent
@@ -2018,6 +2038,11 @@ def read(path: str, part=None, words: str = "", *, roots: Optional[list] = None,
          convert: Optional[Callable[[str, str], dict]] = None) -> dict:
     """ONE part of ONE file in a listed folder, with the list of its parts."""
     roots = folders() if roots is None else roots
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(path)
+        if _said:
+            return {"ok": False, "error": _said}
     got = allowed_path(path, roots)
     if got is None:
         return {"ok": False, "error": (
@@ -2245,6 +2270,11 @@ def import_notion(zip_path, into, *, roots: Optional[list] = None,
         raise ImportRefused("that is not a .zip file on this PC")
     if protected(zp):
         raise ImportRefused("Jarvis does not open files in that place")
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(zp)
+        if _said:
+            raise ImportRefused(_said)
     if os.path.getsize(zp) > IMPORT_MAX_ZIP:
         raise ImportRefused("that zip is larger than 2 GB")
     if not isinstance(into, str) or not into.strip():
@@ -2257,6 +2287,11 @@ def import_notion(zip_path, into, *, roots: Optional[list] = None,
         raise ImportRefused("it can only go into a folder on the list - add the folder first")
     if not os.path.isdir(target_root) or protected(target_root):
         raise ImportRefused("that folder is not there any more")
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(target_root, write=True)
+        if _said:
+            raise ImportRefused(_said)
     day = today or time.strftime("%Y-%m-%d")
     final = os.path.join(target_root, f"Notion export {day}")
     i = 2
