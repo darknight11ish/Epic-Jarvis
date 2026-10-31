@@ -1183,6 +1183,9 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _pair_phone(s)
     if got is not None:
         return got
+    got = _note_asking(s)
+    if got is not None:
+        return got
 
     # --- bulk is refused outright: one at a time ----------------------------
     if re.fullmatch(r"(?:cancel|delete|remove|clear|stop)\s+(?:all|every|both)\s+(?:(?:of\s+)?"
@@ -6750,6 +6753,90 @@ def _pair_phone(s: str) -> Optional[Intent]:
     return None
 
 
+# --------------------------------------------------------------------------
+#   Notes and the vault, asked in chat (2026-10-31 field test)
+# --------------------------------------------------------------------------
+# WHY THIS IS HERE. The owner asked the live HUD "make a note: ..." and "organize
+# my notes"; both were promises and neither happened. The machinery exists and
+# is good - `jarvis_note_capture.capture` appends to today's Obsidian daily
+# note after a File Guardian copy, with an undo receipt and the
+# `append_obsidian_daily` tier, and `jarvis_vault_organizer` is a read-only
+# planner behind a one-card switch - but neither had a chat door. These patterns
+# are the door: they decide which sentences are a note request and hand the
+# owner's own words to the EXISTING capture path (no re-implementation, no model,
+# no new tool). The organizer answer only reads its real state and plan.
+_NOTE_TEXT_COLON = re.compile(
+    r"(?:make|add|write)\s+(?:me\s+)?(?:a\s+|one\s+|another\s+)?(?:new\s+)?note"
+    r"\s*[:,-]\s*(?P<text>.+)$")
+_NOTE_TEXT_SPACE = re.compile(
+    r"(?:make|add|write)\s+(?:me\s+)?(?:a\s+|one\s+|another\s+)?(?:new\s+)?note"
+    r"\s+(?:that\s+|about\s+)?(?!called\b|titled\b|named\b)(?P<text>.+)$")
+_NOTE_THAT = re.compile(r"note\s+that\s+(?P<text>.+)$")
+_JOT_DOWN = re.compile(r"jot\s+down\s+(?P<text>.+)$")
+_DAILY_NOTE_ADD = re.compile(
+    r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+"
+    r"(?:my\s+|today'?s\s+|todays\s+|the\s+)?(?:obsidian\s+)?"
+    r"(?:daily\s+|today'?s\s+)?note\s*(?:[:,-]\s*|\s+)(?P<text>.+)$")
+#: Create/rename/delete of a note are NOT built (the notes editor's own honest
+#: limit, and the catalogue row says so). These shapes get one plain refusal
+#: instead of the model's promise.
+_NOTE_CREATE_REFUSED = re.compile(
+    r"(?:create|make|start|add)\s+(?:me\s+)?(?:a\s+|one\s+|another\s+)?"
+    r"(?:new\s+|brand\s+new\s+)?note\b"
+    r"|(?:a\s+|one\s+)?new\s+note\b"
+    r"|note\s+(?:called|titled|named)\b")
+_NOTE_RENAME_REFUSED = re.compile(
+    r"(?:rename|retitle|change\s+the\s+name\s+of)\s+(?:my\s+|the\s+|a\s+)?"
+    r"(?:\w+\s+)?note\b")
+_NOTE_DELETE_REFUSED = re.compile(
+    r"(?:delete|remove|trash)\s+(?:my\s+|the\s+|a\s+)?(?:\w+\s+)?note\b")
+#: The organizer, in the owner's words. It is a real, built, off-by-default
+#: planner; this path only reports its state or shows its read-only preview.
+_VAULT_TIDY = re.compile(
+    r"(?:organi[sz]e|tidy|sort|clean\s+up|declutter)\s+"
+    r"(?:my\s+|the\s+)?(?:obsidian\s+)?(?:vault|notes?)\b")
+_ORGANIZER_ON = re.compile(
+    r"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?vault\s+organi[sz]er"
+    r"|enable\s+(?:the\s+|my\s+)?vault\s+organi[sz]er")
+#: Obsidian's own theme/CSS/templates/plugins are not Jarvis's to change, and
+#: never were - asked about, the model used to invent them.
+_STYLE_WORD = re.compile(
+    r"\b(?:theme|themes|css|style|styles|stylesheet|stylesheets|template|templates|"
+    r"plugin|plugins|customi[sz](?:e|es|ed|ing|ation)?)\b")
+_STYLE_VERB = re.compile(
+    r"^(?:(?:can|could|would|will)\s+(?:i|you|we)\s+(?:please\s+)?|please\s+|"
+    r"i\s+(?:want|would\s+like)\s+(?:to\s+)?|let\s+(?:me|us)\s+)?"
+    r"(?:customi[sz]e|change|set|edit|make|use|apply|add|create|install|"
+    r"enable|update|modify)\b")
+
+
+def _obsidian_style_refused(s: str) -> bool:
+    """Is this a request to change Obsidian's own theme, CSS or templates?"""
+    return ("obsidian" in s and _STYLE_WORD.search(s) is not None
+            and _STYLE_VERB.match(s) is not None)
+
+
+def _note_asking(s: str) -> Optional[Intent]:
+    """The note/vault sentences above, or None (not ours)."""
+    for rx in (_DAILY_NOTE_ADD, _NOTE_TEXT_COLON, _JOT_DOWN, _NOTE_THAT,
+               _NOTE_TEXT_SPACE):
+        m = rx.fullmatch(s)
+        if m:
+            text = m.group("text").strip()
+            if text:
+                return Intent("note_make", {"text": text})
+    for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
+        if rx.match(s):
+            return Intent("note_change_refused")
+    if _VAULT_TIDY.match(s):
+        return Intent("vault_organizer_plan")
+    if _ORGANIZER_ON.fullmatch(s):
+        return Intent("vault_organizer_on")
+    if _obsidian_style_refused(s):
+        return Intent("obsidian_style_refused")
+    return None
+
+
 def _run_pair_phone() -> Result:
     """The two real screens, in their own words; the PC's Devices card opens as
     a cardless Settings jump (the same navigation `_run_calendar_setup` makes).
@@ -6761,6 +6848,154 @@ def _run_pair_phone() -> Result:
     except Exception:                       # noqa: BLE001 - module absent
         jump = None
     return Result(PAIR_PHONE_WORDS, "pair_phone", open_settings=jump)
+
+
+#: One plain refusal for the three note changes the notes editor deliberately
+#: does not have (its catalogue limit says the same in its own words).
+NOTE_CHANGE_REFUSAL = (
+    "The notes editor does not create, rename or delete notes. It can browse, "
+    "search and open any note, and save a change to an existing one. Nothing "
+    "was changed.")
+#: Obsidian's own theme, style sheets, templates and plugins belong to Obsidian.
+#: The hard sentence is the same one the catalogue answers use, so the two paths
+#: cannot say different things.
+OBSIDIAN_STYLE_REFUSAL = (
+    'That is not one of my features on this PC. Jarvis does not change your '
+    'Obsidian theme, styles or templates - only Obsidian does that. Open '
+    '"Everything Jarvis can do" - Brain, Tutorials and the FAQ - to read the '
+    'whole list.')
+#: The organizer's own sentence when it cannot be planned at all (module absent).
+ORGANIZER_MISSING = (
+    "The vault organizer is not installed on this PC, so I did not plan anything.")
+ORGANIZER_AWAITING = (
+    "One approval card is waiting for your yes. The vault organizer stays off "
+    "until you approve it; nothing is planned or changed before then.")
+#: The organizer's answer says how the WRITER would behave, in words the module
+#: itself uses ("never deletes", "one card"): one card for the whole batch, and
+#: no note is ever removed.
+ORGANIZER_APPLY_NOTE = ("Applying it asks for ONE approval card for the whole "
+                        "batch, and a note is never deleted.")
+
+
+def _note_make_gate(action: str, detail: dict, prompt: str):
+    """The note module's own fail-closed gate, plus the outside-text ask.
+
+    `jarvis_note_capture.capture` normally runs under `append_obsidian_daily`
+    (tier auto). The ask-after-outside-text rule is the agent's
+    `write_notes_after_outside_text` action, which this quick path bypasses by
+    design - so the same rule is applied here: when the conversation is latched
+    as having read outside text (`jarvis_gate.taint_active`), the card is asked
+    under `write_notes_after_outside_text`; when it cannot be read, it is asked
+    (the safe direction). The gate call itself stays the module's own
+    `_gate_check`, so there is ONE fail-closed wrapper, not a second one.
+    """
+    try:
+        import jarvis_gate as G
+        tainted = bool(G.taint_active())
+    except Exception:                       # noqa: BLE001 - cannot tell: ask
+        tainted = True
+    want = "write_notes_after_outside_text" if tainted else action
+    import jarvis_note_capture as NC
+    return NC._gate_check(want, detail, prompt)
+
+
+def _run_note_make(f: dict) -> Result:
+    """Write the owner's words into today's Obsidian daily note, through the
+    EXISTING capture path: its plan, its File Guardian copy first, its gate and
+    its own confirmation/refusal sentences (which name the file)."""
+    text = str(f.get("text") or "").strip()
+    if not text:
+        return Result('What should the note say? Say "make a note: ..." and I '
+                      "will add it to today's Obsidian daily note.",
+                      "note_make_refused")
+    try:
+        import jarvis_note_capture as NC
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result("The note capture is not installed on this PC, so I did "
+                      "not write anything.", "note_make_refused")
+    try:
+        _code, body = NC.capture("obsidian", text, by="chat",
+                                 gate_check=_note_make_gate, wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"The note could not be filed "
+                      f"({type(exc).__name__}), so nothing was written.",
+                      "note_make_refused")
+    body = body if isinstance(body, dict) else {}
+    said = str(body.get("message") or "").strip()
+    state = str(body.get("state") or "")
+    if state == "filed":
+        return Result(said or "Filed in Obsidian.", "note_made")
+    if state == "waiting":
+        return Result(said or "Waiting for your approval.", "note_make_waiting")
+    return Result(said or "Not filed, so nothing was written.", "note_make_refused")
+
+
+def _run_note_change_refused() -> Result:
+    """"create/rename/delete a note" - one plain refusal, nothing changed."""
+    return Result(NOTE_CHANGE_REFUSAL, "note_change_refused")
+
+
+def _run_obsidian_style_refused() -> Result:
+    """"customize my Obsidian theme/CSS/templates" - not a feature, never was."""
+    return Result(OBSIDIAN_STYLE_REFUSAL, "obsidian_style_refused")
+
+
+def _run_vault_organizer_plan(peer=None, local=None) -> Result:
+    """The organizer's real state or its READ-ONLY plan - never a promise.
+
+    Off: the module's own route answer (`why`) is quoted, plus that turning it
+    on is one card and the plan changes nothing. On: the module's own plan
+    description (scheme words and counts) plus how the writer would behave.
+    """
+    try:
+        import jarvis_vault_organizer as V
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(ORGANIZER_MISSING, "vault_organizer_plan")
+    try:
+        _code, body = V.handle_post(V.PLAN_PATH, {}, peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"The vault organizer could not make a plan "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "vault_organizer_plan")
+    body = body if isinstance(body, dict) else {}
+    if body.get("ok") and str(body.get("said") or "").strip():
+        return Result(str(body["said"]).strip() + "\n\n" + ORGANIZER_APPLY_NOTE,
+                      "vault_organizer_plan")
+    said = str(body.get("why") or body.get("error") or "").strip()
+    if not said:
+        said = "The vault organizer could not make a plan, so nothing was changed."
+    if body.get("enabled") is False:
+        # Its own words, unchanged, plus what the owner needs to know next.
+        return Result(said + "\n\nThe plan is a dry run: it changes nothing. Say "
+                      '"turn on the vault organizer" and I will raise that one '
+                      "approval card.", "vault_organizer_plan")
+    return Result(said + " Nothing was changed.", "vault_organizer_plan")
+
+
+def _run_vault_organizer_on(peer=None, local=None) -> Result:
+    """"turn on the vault organizer" - the module's existing change_own_config
+    card, one of them; the switch itself is applied only after the owner's yes."""
+    try:
+        import jarvis_vault_organizer as V
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(ORGANIZER_MISSING, "vault_organizer_on")
+    try:
+        _code, body = V.handle_post(V.SWITCH_PATH, {"enabled": True},
+                                    peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"The vault organizer's card could not be raised "
+                      f"({type(exc).__name__}), so nothing changed.",
+                      "vault_organizer_on")
+    body = body if isinstance(body, dict) else {}
+    if body.get("waiting"):
+        return Result(ORGANIZER_AWAITING, "vault_organizer_on")
+    if body.get("enabled") is True:
+        return Result(str(body.get("message") or "The vault organizer is already on."),
+                      "vault_organizer_on")
+    said = str(body.get("error") or "").strip()
+    if not said:
+        said = "The vault organizer could not be turned on."
+    return Result(said if said.endswith(".") else said + ".", "vault_organizer_on")
 
 
 def _open(s: str) -> Optional[Intent]:
@@ -8598,6 +8833,19 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_voice_ask()
     if n == "pair_phone":
         return _run_pair_phone()
+    # Notes and the vault (2026-10-31 field test): the note WRITE goes through
+    # jarvis_note_capture's existing capture path; the organizer answer and the
+    # refusals only read or refuse; turning the organizer on raises its one
+    # existing change_own_config card.
+    if n == "note_make":
+        return _run_note_make(f)
+    if n in ("note_change_refused", "obsidian_style_refused"):
+        return (_run_note_change_refused() if n == "note_change_refused"
+                else _run_obsidian_style_refused())
+    if n == "vault_organizer_plan":
+        return _run_vault_organizer_plan(peer, local)
+    if n == "vault_organizer_on":
+        return _run_vault_organizer_on(peer, local)
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
@@ -9165,6 +9413,14 @@ READ_ONLY_INTENTS = frozenset({
     # so none may clear "cancel that". ("change your voice to Ashby" is the
     # settings grammar's own bad-value answer, already listed below.)
     "accounts_connect", "voice_ask", "pair_phone",
+    # Notes and the vault, asked in chat (2026-10-31 field test). The organizer
+    # answer only reads the planner's own state/plan, and the two refusals write
+    # nothing - so none may clear what "cancel that" would take back. The note
+    # WRITE results (`note_made`, `note_make_waiting`) are deliberately NOT
+    # here: the daily note may have changed, so the old record goes; a note that
+    # was refused wrote nothing, so `note_make_refused` is read-only.
+    "vault_organizer_plan", "note_change_refused",
+    "obsidian_style_refused", "note_make_refused",
     "face_ask", "feature_change", "feature_change_ask", "feature_change_refused",
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",
