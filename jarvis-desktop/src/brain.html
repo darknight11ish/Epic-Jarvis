@@ -860,8 +860,11 @@
               <h2>Background jobs</h2>
               <p class="note">
                 Each job's capability set was frozen when it was created and
-                cannot grow. A finished job never makes a sound — it adds a
-                notch to the digest.
+                cannot grow. A job started here begins with no permissions at
+                all: if it needs one it stops and waits for your answer under
+                the job, and an "Allow once" is spent by that one use. A
+                finished job never makes a sound — it adds a notch to the
+                digest.
               </p>
               <div id="jobs"></div>
             </div>

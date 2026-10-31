@@ -1925,6 +1925,33 @@ $PATCHES = @(
     # and this one do not meet in the list at all: no conflict, and the order
     # between the two is irrelevant.
     'unknown-risk-approvable.patch'
+
+    # jobs-routes.patch (2026-10-30) - the way IN to Long Fuse and the way OUT
+    # of a parked grant: POST /api/jobs creates ONE job from the owner's own
+    # words (the capabilities he names are frozen onto the row; nothing is
+    # approved by it, so a job that needs more parks), and POST
+    # /api/jobs/answer answers ONE pending grant for ONE job (one shot, no
+    # standing rule, and a No stops that job at once). It also adds the two
+    # facts the Work pane needs to offer those - `grants` and `ticking` - to
+    # the GET /api/jobs body it already reads, and registers jarvis_watch's own
+    # job body at start-up, which had no caller at all. The logic lives in
+    # jarvis_jobs.py ($SHIPPED); the patch is the four lines that reach it.
+    #
+    # WHY IT IS LAST OF THE CORE PATCHES, immediately before plugin-loader.patch
+    # (which must stay last of all): it is the newest patch, and every patch
+    # that enumerates "the patches written after me" (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py) has had its name
+    # added there. It rewrites none of their lines: its four hunks are the
+    # /api/jobs read, the _desktop_action branch beside /api/jobs/cancel, the
+    # POST route TUPLE, and the initiative start-up block. Appending it rather
+    # than inserting it anywhere is also what keeps every other patch's own
+    # context untouched - measured, not assumed: backend/test_app_control.py
+    # pins that ITS hunk invents no pre-image, and an earlier draft of this
+    # change that sat in the middle of the list broke exactly that.
+    # backend/test_jobs.py rehearses this patch against
+    # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
+    'jobs-routes.patch'
     'plugin-loader.patch'
 )
 

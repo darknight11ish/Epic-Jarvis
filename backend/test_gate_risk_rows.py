@@ -90,6 +90,13 @@ def t_the_patch_is_registered_last():
              # request), appended after this patch and immediately before
              # plugin-loader.patch - it rewrites nothing this patch wrote.
              "attached-file.patch",
+             # jobs-routes.patch (2026-10-30, Long Fuse's way in and out): four
+             # hunks in jarvis_hud.py only (the GET /api/jobs body, the
+             # _desktop_action branch, the POST route list and the initiative
+             # start-up block), appended after this patch and immediately
+             # before plugin-loader.patch - jarvis_gate.py not at all, so it
+             # rewrites none of the stale rows this patch removes.
+             "jobs-routes.patch",
              # reminder-actions.patch (2026-10-27): two hunks in jarvis_gate.py
              # only - a `_NO_RULE_FROM_DENIAL` line and a `_RISK` row - both
              # ADDED after the rows this patch removes, and it rewrites neither.

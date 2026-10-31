@@ -12613,6 +12613,146 @@ function renderTaskList() {
   return block;
 }
 
+/**
+ * Long Fuse's way IN (2026-10-30, jobs-routes.patch; JARVIS-API section 21.10):
+ * start ONE job from the owner's own words.
+ *
+ * The select offers ONLY the job bodies this PC has registered - the server's
+ * own `status.handlers`, from the same GET this pane already reads - so a page
+ * cannot invent a kind, and the list cannot go stale in two places. `needs` is
+ * sent EMPTY on purpose: this window is not a capability picker, so a job that
+ * starts with nothing frozen PARKS the moment it needs something, which is
+ * what the answer buttons under the job are for. Starting a job approves
+ * nothing; it is the owner-present call `create()` has always needed, and the
+ * capabilities it writes are the empty set.
+ *
+ * `ticking === false` is the server saying the one heartbeat is off: a job
+ * started then would never run, so the form is replaced by that sentence
+ * rather than a button that quietly queues nothing.
+ */
+function renderJobStart(body) {
+  const status = body.status || {};
+  const kinds = Array.isArray(status.handlers) ? status.handlers.filter(Boolean) : [];
+  const wrap = el("div", "job-start");
+  wrap.append(el("h3", "job-start-head", "Start a background job"));
+  if (!kinds.length) {
+    wrap.append(el("p", "row-meta",
+      "No job kinds are registered on this PC yet, so there is nothing to start."));
+    return wrap;
+  }
+  if (body.ticking === false) {
+    wrap.append(el("p", "row-meta",
+      "The background heartbeat is off, so a job started now would never run. " +
+      "Turn [initiative] back on in jarvis-framework.toml first."));
+    return wrap;
+  }
+  const kind = el("select", "field");
+  kind.setAttribute("aria-label", "What the job should do");
+  for (const name of kinds) {
+    const option = el("option", "", fallbackTitle(name));
+    option.value = name;
+    kind.append(option);
+  }
+  const text = el("input", "field");
+  text.type = "text";
+  text.placeholder = "What is it? Your own words";
+  text.setAttribute("aria-label", "What is it?");
+  // `row`, not `row-actions`: that class is nowrap (it holds two buttons), and
+  // a select + a text box + a button in it would push the card wider than the
+  // window. `row` wraps.
+  const line = el("div", "row");
+  line.append(
+    kind,
+    text,
+    button(
+      "Start",
+      async () => {
+        try {
+          await invoke("brain_create_job", {
+            kind: kind.value,
+            text: text.value.trim(),
+            // Never a capability here: a job started from this window begins
+            // with nothing and parks on its first need, where the owner can
+            // answer one question at a time.
+            needs: [],
+          });
+          text.value = "";
+          toast(
+            "Started. It runs at the next background check, and waits for you if it needs anything.",
+            "ok"
+          );
+          await load(["jobs"], { quiet: true });
+          render("work");
+        } catch (error) {
+          toast(String((error && error.message) || error), "bad");
+        }
+      },
+      {
+        live: true,
+        title: "Starts one job with NO permissions. It parks and asks you the moment it needs one.",
+      }
+    )
+  );
+  wrap.append(line);
+  wrap.append(el("p", "row-meta",
+    "It starts with no permissions. If it needs one it stops there and waits for you, under the job."));
+  return wrap;
+}
+
+/**
+ * Long Fuse's way OUT (2026-10-30, jobs-routes.patch; JARVIS-API section
+ * 21.10): answer the ONE grant a parked job is waiting on.
+ *
+ * Two buttons and no third: `Allow once` and `No`. There is deliberately no
+ * "always allow" - a grant is one shot, spent by its next use, and a No leaves
+ * no rule behind for the next job. The action's own words come from
+ * card-words.js (the same [fallbackTitle] the approval history uses) rather
+ * than being printed raw, so the card reads like every other approval.
+ */
+function jobGrantActions(job, grants) {
+  if (String(job.state || "") !== "waiting_approval") return [];
+  const grant = grants.find((g) => String(g.job_id) === String(job.id));
+  if (!grant) return [];
+  const what = fallbackTitle(grant.action || "that");
+  return [
+    button(
+      `Allow once: ${what}`,
+      async () => {
+        try {
+          await invoke("brain_answer_job", { id: String(job.id), approved: true });
+          toast(
+            "Allowed once. It carries on at the next check, and that permission is spent by the one use.",
+            "ok"
+          );
+          await load(["jobs"], { quiet: true });
+          render("work");
+        } catch (error) {
+          toast(String((error && error.message) || error), "bad");
+        }
+      },
+      { live: true, title: "One use only. It is not remembered for the next job." }
+    ),
+    button(
+      "No",
+      async () => {
+        try {
+          await invoke("brain_answer_job", { id: String(job.id), approved: false });
+          toast("No. That job stops here, and the next one asks again.", "ok");
+          await load(["jobs"], { quiet: true });
+          render("work");
+        } catch (error) {
+          toast(String((error && error.message) || error), "bad");
+        }
+      },
+      {
+        danger: true,
+        live: true,
+        title: "Stops this job. It is not a rule about the action.",
+      }
+    ),
+  ];
+}
+
 function renderJobs() {
   const body = state.data.jobs || {};
   const why = unavailable("jobs");
@@ -12622,6 +12762,10 @@ function renderJobs() {
     return;
   }
   const list = Array.isArray(body.jobs) ? body.jobs : [];
+  // The grants a parked job is waiting on (jobs-routes.patch). They come from
+  // the same GET the list does, joined by job id here, so the pane never needs
+  // a second read to know what it is asking the owner to allow.
+  const grants = Array.isArray(body.grants) ? body.grants : [];
 
   rows(
     dom.jobs,
@@ -12629,17 +12773,55 @@ function renderJobs() {
     (j) => {
       const jobState = String(j.state || "queued");
       const live = jobState === "running" || jobState === "queued";
+      const grant = jobState === "waiting_approval"
+        ? grants.find((g) => String(g.job_id) === String(j.id))
+        : undefined;
+      // Waiting, with no grant left: the owner has answered and the job is
+      // waiting for the next background check to use (or act on) that answer.
+      const answered = jobState === "waiting_approval" && !grant;
       // Either set of names: this window's (caps, tainted, created) or the
       // phone's (capabilities, private, progress). jarvis_jobs.py is only on
       // the owner's PC, so both apps read both.
       const caps = Array.isArray(j.caps) && j.caps.length ? j.caps
         : Array.isArray(j.capabilities) ? j.capabilities : [];
       const progress = typeof j.progress === "number" ? `${Math.round(j.progress * 100)}% done` : "";
+      const actions = jobGrantActions(j, grants);
+      if (live) {
+        actions.push(
+          button(
+            "Cancel",
+            async () => {
+              if (
+                !confirm(
+                  `Cancel "${j.label || j.id}"?\n\n` +
+                    "Cancelling works mid-step and a cancelled job is not " +
+                    "resumable — it starts again from the beginning or not at all."
+                )
+              ) {
+                return;
+              }
+              try {
+                await invoke("brain_cancel_job", { id: String(j.id) });
+                toast("Cancelled.", "ok");
+                await load(["jobs"], { quiet: true });
+                render("work");
+              } catch (error) {
+                toast(String((error && error.message) || error), "bad");
+              }
+            },
+            { danger: true }
+          )
+        );
+      }
       return row({
-        tag: jobState,
+        // A parked job that is waiting on the owner says so in its tag; the
+        // raw state is what colours it.
+        tag: grant ? "waiting for you" : jobState,
         state: jobState,
         title: String(j.label || j.handler || j.id || "(job)"),
         meta: [
+          grant ? `wants: ${fallbackTitle(grant.action || "that")} — one answer, for this job only` : "",
+          answered ? "answered; it carries on at the next background check" : "",
           // The frozen capability set, shown because it is the promise: it was
           // fixed when the job was created and it cannot grow.
           caps.length ? `frozen capabilities: ${caps.join(", ")}` : "no capabilities",
@@ -12647,37 +12829,16 @@ function renderJobs() {
           j.private ? "private — the phone is not shown what this is working on" : "",
           [ago(j.created), j.result_summary || j.error || "", progress].filter(Boolean).join(" · "),
         ],
-        actions: live
-          ? [
-              button(
-                "Cancel",
-                async () => {
-                  if (
-                    !confirm(
-                      `Cancel "${j.label || j.id}"?\n\n` +
-                        "Cancelling works mid-step and a cancelled job is not " +
-                        "resumable — it starts again from the beginning or not at all."
-                    )
-                  ) {
-                    return;
-                  }
-                  try {
-                    await invoke("brain_cancel_job", { id: String(j.id) });
-                    toast("Cancelled.", "ok");
-                    await load(["jobs"], { quiet: true });
-                    render("work");
-                  } catch (error) {
-                    toast(String((error && error.message) || error), "bad");
-                  }
-                },
-                { danger: true }
-              ),
-            ]
-          : [],
+        actions,
       });
     },
     "No background jobs."
   );
+  // The way in sits above the list, so starting a job is not something the
+  // owner has to know to look for at the bottom. `rows()` clears the
+  // container, so this has to be re-added on every render - the same reason
+  // renderTaskList() is appended below.
+  dom.jobs.prepend(renderJobStart(body));
   // Appended AFTER the Long Fuse list is painted, so this adds a section to
   // the same card without touching a line of the code above. `rows()` clears
   // the container, so the block has to be rebuilt on every render - which is

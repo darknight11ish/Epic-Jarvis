@@ -956,10 +956,21 @@ permissions = ["allow-brain-read"]
 # together and apart from the set below.
 [[set]]
 identifier = "brain-act"
-description = "Revert an undo entry, cancel a Long Fuse job, steer the job list, stop a message inside its send window, and manage the GitHub watchlist. None of these approves anything: resuming or retrying a job only puts it back in the queue, where every step still raises its own approval card."
+description = "Start one Long Fuse job, answer one parked grant, revert an undo entry, cancel a Long Fuse job, steer the job list, stop a message inside its send window, and manage the GitHub watchlist. None of these approves anything it was not asked about: a started job carries no capabilities and parks when it needs one, a grant answer decides that one question and is spent on its next use, and resuming or retrying a job only puts it back in the queue, where every step still raises its own approval card."
 permissions = [
   "allow-brain-revert-undo",
   "allow-brain-cancel-job",
+  # Long Fuse's way in and out (2026-10-30, jobs-routes.patch; JARVIS-API
+  # section 21.10): start ONE job from the owner's own words, and answer ONE
+  # parked grant for ONE job. Same shape as the two above it - what is created
+  # or answered is the owner's own work - and neither approves anything beyond
+  # the single question it names: a created job runs with an EMPTY frozen set
+  # and parks on its first need, and an answer is spent by its next use, with a
+  # No leaving no rule behind. There is no list form and no "allow all", and
+  # the read allowlist in brain/routes.rs asserts from the other side that
+  # neither route can be reached with a read grant.
+  "allow-brain-create-job",
+  "allow-brain-answer-job",
   # The job list (2026-10-08, JARVIS-API section 118): pause, resume, cancel,
   # retry, and answer a question a job stopped on. It sits in this set rather
   # than one of its own because it has the same shape as the two above it -
