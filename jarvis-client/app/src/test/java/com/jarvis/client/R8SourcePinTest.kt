@@ -186,4 +186,46 @@ class R8SourcePinTest {
         )
         assertTrue("the cached brush is gone", view.contains("tokamakWashBrush("))
     }
+
+    // --------------------- group 11: the 2026-10-30 home-screen widget repaint ---
+
+    /**
+     * R8 (the tool that shrinks the release APK) merged the home-screen widget
+     * classes into two, and the release build could no longer tell the cards
+     * apart: Glance finds a widget's ids by the widget class's canonical name
+     * (`GlanceAppWidgetManager.getGlanceIds`), so a merged class made every
+     * board card repaint with the last slot's widget - the owner's "Jarvis
+     * widget 2 still says No widget chosen" field-test finding. The mechanism,
+     * the dexdump evidence and the phone symptom are all in
+     * app/proguard-rules.pro under "A HOME-SCREEN WIDGET'S CLASS NAME IS ITS
+     * IDENTITY TO GLANCE".
+     *
+     * This is a source pin and not a runtime pass, deliberately: `updateAll`'s
+     * name lookup only goes wrong in the MINIFIED APK - the unit-test build is
+     * not minified, so these classes are already distinct here and no JUnit
+     * test can reproduce the merge. What this CAN do is go red the moment one of
+     * the keep rules is deleted, which is the whole fix.
+     */
+    @Test
+    fun everyHomeScreenWidgetClassKeepsItsOwnNameInReleaseBuilds() {
+        val rules = repoFile("jarvis-client/app/proguard-rules.pro").readText()
+        val classes = listOf(
+            "ApprovalWidget",
+            "QuickLinkWidget",
+            "CalendarWidget",
+            "JarvisBoardWidget",
+            "JarvisBoardWidgetOne",
+            "JarvisBoardWidgetTwo",
+            "JarvisBoardWidgetThree",
+        )
+        for (name in classes) {
+            val keep = Regex("(?m)^-keep class com\\.jarvis\\.client\\.widget\\.$name$")
+            assertTrue(
+                "R8 may merge com.jarvis.client.widget.$name again: Glance tells the " +
+                    "home-screen cards apart by canonical class name, and a merge made " +
+                    "every board card repaint with the last slot's widget",
+                keep.containsMatchIn(rules),
+            )
+        }
+    }
 }
