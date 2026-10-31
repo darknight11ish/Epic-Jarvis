@@ -536,6 +536,41 @@ def t_ruling_d_hard_sentence_only_on_zero_overlap_or_unsupported():
           and FG.capabilities("system permissions").get("kind") == "unknown")
 
 
+def t_settings_help_keeps_its_precedence_over_the_catalogue_path():
+    """Regression: the settings-help family must not be captured by the list.
+
+    CI on the pushed head (2026-10-31) failed `test_settings_help.py` on exactly
+    "what can I change in settings": the new catalogue capability path claimed
+    it because `settings` was one of the area nouns. The settings-help answer
+    owns that phrase (and the rest of its family), so the catalogue matcher no
+    longer names `settings` as an area; a real capability question is still
+    answered from the list.
+    """
+    got = ask("what can I change in settings")
+    check("'what can I change in settings' is still the settings-help answer",
+          got is not None and got.intent == "settings_help",
+          got.intent if got else "the model")
+    check("... and it says something, from the real switches",
+          got is not None and bool((got.reply or "").strip())
+          and "undo" in (got.reply or "").lower(), (got.reply or "")[:200])
+    for phrase in ("what settings can I change", "which settings can I change"):
+        got = ask(phrase)
+        check(f"the settings-help phrase {phrase!r} is still settings_help",
+              got is not None and got.intent == "settings_help",
+              got.intent if got else "the model")
+    # A nearby settings ITEM keeps its own answer (the feature guide's), not a
+    # capability one and not the model.
+    got = ask("how do I change the appearance?")
+    check("a nearby settings-item phrasing keeps its own answer",
+          got is not None and got.intent == "feature_explain",
+          got.intent if got else "the model")
+    # The catalogue path is untouched for non-settings questions.
+    got = ask("what can you do with the calendar?")
+    check("... while a real capability question is still answered from the list",
+          got is not None and got.intent == "feature_capabilities",
+          got.intent if got else "the model")
+
+
 def main() -> int:
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

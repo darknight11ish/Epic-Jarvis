@@ -4573,9 +4573,16 @@ _FEATURE_SWITCH = re.compile(
 # "what can you do with X" shapes always answer, with the guide's honest
 # "that is not one of my features" when X is not in the list.
 _CAP_AREA_NOUNS = (
+    # `settings`/`setting` are deliberately NOT here: "what can I change in
+    # settings" is a SETTINGS-HELP question that jarvis_settings_registry's
+    # own answer owns (`_SETTINGS_HELP`, checked later in match() on purpose -
+    # the help answer names a real Settings change and its card rule). Claiming
+    # the `what can I <verb> ... in settings` shape here captured it first and
+    # broke `test_settings_help.py` (CI 2026-10-31). The bare `what can you do
+    # with settings?` capability shape below still answers from the list.
     r"(?:calendar|notes?|reminders?|alarms?|timers?|emails?|mail|memory|"
     r"pictures?|photos?|phone|folders?|files?|documents?|weather|news|"
-    r"models?|settings?|updates?|tasks?|lists?)")
+    r"models?|updates?|tasks?|lists?)")
 _CAPS_WHAT = re.compile(
     r"(?:what|which)\s+(?:can|could)\s+(?:you|jarvis)\s+do\s+"
     r"(?:with|about|for|in|on)\s+(?:the\s+|my\s+|your\s+)?(.+)"
