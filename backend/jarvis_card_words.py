@@ -272,6 +272,10 @@ TITLES = {
     # --- the Phase-2 Obsidian vault organizer (2026-10-20): ONE card for the
     # whole batch, after a plan the owner has already seen.
     "organize_obsidian_vault": "organize your Obsidian vault with tags and Maps of Content",
+    # The Obsidian notes editor (jarvis_notes_edit.py, 2026-10-31; the owner's
+    # "the whole vault, both apps"): one save replaces the WHOLE text of one
+    # note in his own vault, so it asks every time.
+    "edit_vault_note": "change a note in your Obsidian vault",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -443,6 +447,8 @@ SUMMARY = {
     "import_notion_export": "bring your Notion export in",
     # --- the Phase-2 Obsidian vault organizer (2026-10-20)
     "organize_obsidian_vault": "organize your Obsidian vault",
+    # --- the Obsidian notes editor (2026-10-31): one save, one card
+    "edit_vault_note": "change a note in your Obsidian vault",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
