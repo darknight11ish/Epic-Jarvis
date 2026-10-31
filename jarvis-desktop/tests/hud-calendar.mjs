@@ -252,12 +252,13 @@ const plus = (days) => {
  *  a fixed "14:30 today" is in the past for anyone running it in the evening,
  *  and the card's whole job is to show what is still to come. */
 /* "Soon" must be TODAY and still ahead - the card lists today's remaining
-   events. The first version of this fixture was NOW + 90 min, which is the
-   wrong date for anyone running it in the last 90 minutes of the day: CI hit
-   exactly that at 22:00 UTC, the event landed on tomorrow, and the drawn card
-   (correctly) did not list it. Clamp the moment to today, with a minute to
-   spare, and prove the clamp over every hour of a fake day so this cannot come
-   back at one particular hour of the clock. */
+   events. The first version was `NOW + 90 min` with its 45-minute END on
+   today's date too, and it broke twice over: from 21:45Z the end rolled to
+   00:xx while its date stayed today, so the card (correctly) read the event as
+   already ended and dropped it - and from 22:30Z the start itself was on
+   tomorrow. Both are fixed: the start is clamped to today with a minute to
+   spare, the end carries the END's own date, and the clamp is proved over every
+   hour of a fake day so this cannot come back at one particular hour. */
 const endOfToday = midnight.getTime() + 24 * 60 * 60000;
 const SOON_MS = Math.min(NOW.getTime() + 90 * 60000, endOfToday - 60000);
 const SOON = new Date(SOON_MS);
@@ -265,6 +266,10 @@ const SOON_DATE = iso(SOON);
 const SOON_TIME = `${pad(SOON.getHours())}:${pad(SOON.getMinutes())}`;
 const SOON_END = `${pad(new Date(SOON.getTime() + 45 * 60000).getHours())}:`
   + `${pad(new Date(SOON.getTime() + 45 * 60000).getMinutes())}`;
+/* The END's own date, not the start's: an event that starts near midnight ends
+   on the NEXT day, and the fixture has to say so - otherwise the card rightly
+   reads its 00:xx end on today's date as already past and drops the event. */
+const SOON_END_DATE = iso(new Date(SOON.getTime() + 45 * 60000));
 for (let hour = 0; hour < 24; hour += 1) {
   const fakeNow = new Date(midnight.getTime() + hour * 60 * 60000 + 30 * 60000);
   const fakeMidnight = new Date(fakeNow.getFullYear(), fakeNow.getMonth(), fakeNow.getDate());
@@ -290,7 +295,7 @@ const READ_BODY = {
   events: [
     {
       id: "c0123456789", title: "Dentist", date: SOON_DATE, time: SOON_TIME,
-      end_date: SOON_DATE, end_time: SOON_END, all_day: false,
+      end_date: SOON_END_DATE, end_time: SOON_END, all_day: false,
       place: "High Street", notes: "Bring the form", remind_minutes: 30,
       recurrence: "none", tz: "America/Los_Angeles", source: "local",
     },
