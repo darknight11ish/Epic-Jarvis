@@ -152,7 +152,7 @@ ACTING_TOOLS = frozenset({
     "append_logseq_journal", "append_obsidian_daily", "browser_control",
     "change_setting", "connect_account", "control_computer", "control_phone",
     "create_joplin_note",
-    "draft_email", "home_control", "run_data_script", "send_email",
+    "draft_email", "home_control", "protect_from_jarvis", "run_data_script", "send_email",
     "set_reminder", "set_timer", "shell_exec", "tidy_inbox", "todo_add",
     "todo_done",
 })

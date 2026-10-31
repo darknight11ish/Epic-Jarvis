@@ -704,18 +704,19 @@ def t_records():
           '"protected-items"' in catalogue)
     docs = (repo / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     check("the docs section documents the routes and the store",
-          "## 170. \"Protected from Jarvis\"" in docs
+          "## 171. \"Protected from Jarvis\"" in docs
           and "POST /api/protection/propose" in docs
           and "protected-items.json" in docs)
     for gap in ("shell_exec", "run_data_script", "rea_investigate",
                 "jarvis_app_control", "jarvis_browser_control", "jarvis_media",
-                "full-screen capture", "notes-editor lane"):
+                "full-screen capture"):
         check(f"the named gap {gap!r} is written down", gap in docs)
     covered = {
         "jarvis_documents.py": ["_protection()"],
         "jarvis_agent.py": ["_protection()", "PROTECT_TOOL"],
         "jarvis_note_capture.py": ["_protection()"],
         "jarvis_notes.py": ["_protection()"],
+        "jarvis_notes_edit.py": ["_protection()"],
         "jarvis_attached_file.py": ["_protection()"],
         "jarvis_file_guardian.py": ["_protection()"],
         "jarvis_open.py": ["_protection()"],
