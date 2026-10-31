@@ -760,7 +760,7 @@ def _job_make(what: str, detail: dict, prompt: str, action: str, *,
             _audit("failed", {"job": job_id, "why": "duplicate"})
         except Refused as exc:
             _job_finish(job_id, state="failed", message=str(exc))
-            _audit("failed", {"job": job_id, "why": "refused"})
+            _audit("failed", {"job": job_id, "why": "the change was refused"})
         except Exception as exc:                            # noqa: BLE001
             _job_finish(job_id, state="failed",
                         message=f"The change failed ({type(exc).__name__}), so "
