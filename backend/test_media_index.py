@@ -912,7 +912,14 @@ def t_the_route_reads_switches_and_deletes():
           # by one and the same hand-numbered block followed with it
           # (media-index 154 -> 155, `sandbox` 157 -> 158). PR #967 moved the two
           # manifests but not this pin, which is why the chain fixes it here.
-          and manifest["stack_order"] == 155, manifest.get("stack_order"))
+          # Moved up once more on 2026-10-30, with #1006's `show-card-timer.patch`
+          # inserted at stack position 38 (right after `no-deadline-cards.patch`):
+          # every GENERATED position after it moved up by one and the whole
+          # hand-numbered block followed again - media-index 155 -> 156,
+          # `sandbox` 158 -> 159 - and the manifest, its README, registry.json and
+          # the catalogue were regenerated together. This pin moves with them, so
+          # a numbers-only edit that forgets it goes red here.
+          and manifest["stack_order"] == 156, manifest.get("stack_order"))
     check("...and the README says it replaces no patch", "replaces NO patch"
           in (plugin_dir / "README.md").read_text(encoding="utf-8"))
 
