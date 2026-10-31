@@ -47,14 +47,37 @@ WHAT THIS PROVES:
    `jarvis-backend/jarvis_hud.py` (the published copy of the real program):
    apply, reverse, and the new key really in the applied text.
 
+6. **A job can be CREATED from the owner's words (2026-10-30).** Until this
+   landed `create()` had no production caller at all, so the queue was a
+   library nothing could reach. `jarvis_jobs.handle_create()` is the body
+   behind `POST /api/jobs` (`backend/jobs-routes.patch`): it validates the
+   kind, the time and the capability list in sentences a person can act on,
+   refuses to queue a job that nothing would ever run, passes the request
+   through `create()` so the frozen set is exactly what was named, and
+   approves NOTHING. A job created with no capabilities parks on its first
+   need - which is what makes the second route worth having.
+
+7. **A parked grant can be ANSWERED - for one job, one use, with no rule
+   left behind.** `handle_answer()` (behind `POST /api/jobs/answer`) decides
+   the single pending grant of the single job it names. A yes is spent the
+   next time the handler asks, so a second ask asks again; a no stops THAT
+   job at once and the next job needing the same action parks and asks
+   again. Nothing writes a capability onto a row or into the framework's tier
+   table, and the test proves the file really is unchanged rather than
+   trusting a comment. The whole slice is rehearsed against the real
+   `jarvis_hud.py`: `backend/jobs-routes.patch` applies, reverses, gives the
+   same bytes back, and the applied text carries both POST routes, the two
+   facts the Work pane needs (`grants`, `ticking`) and the start-up call that
+   registers the one production job body.
+
 WHAT THIS SUITE DOES NOT PROVE, said out loud rather than implied:
 
-  * **There is no route that creates a job**, so no test can drive one through
-    it. Measured in this tree: `GET /api/jobs` lists (jarvis_hud.py:2396) and
-    `POST /api/jobs/cancel` cancels (:781); nothing POSTs a job, and
-    `create()` has no caller anywhere. The job in test 1 is therefore created
-    with `jarvis_jobs.create()` - the same call any future route would make -
-    and what is under test is the CALLER of `run_due()`, not the function.
+  * **Nothing here drives HTTP.** The two route bodies are module functions
+    (`handle_create`, `handle_answer`), and the test calls those - the same
+    functions the patched route calls. The patch rehearsal proves the route
+    reaches them; it does not open a socket, and it never runs on the owner's
+    PC. What IS proven end to end is the queue's own state machine: create,
+    park, answer, spend, run.
   * Nothing here proves the patch reaches a backend that is already installed:
     that is the installer's job, and the patch is not in `$PATCHES` until the
     Lead registers it (`backend/initiative-payload.patch` says so at the top
@@ -70,7 +93,14 @@ WHAT THIS SUITE DOES NOT PROVE, said out loud rather than implied:
     HIS file, beside his backend; this one was added here on 2026-10-15 and is
     a different file with different content. If the two are ever confused,
     renaming this one is the fix.
+  * **Only one production job body exists** (2026-10-30): `watch_github`,
+    registered at start-up by `jobs-routes.patch` calling the
+    `jarvis_watch.register_job()` that had no caller. The other handlers in
+    this file are the suite's own. So the route is no longer a library with no
+    way in, but "what a job can DO" is still one kind until another module
+    registers one - said in ARCHITECTURE.md section 10 rather than implied.
 """
+import ast
 import os
 import shutil
 import subprocess
@@ -494,6 +524,366 @@ def t_the_checks_key_patch_applies_to_the_real_backend_and_sends_checks():
                   "len(_ENGINE.watchers)" in body and "if _ENGINE else 0" in body)
             check("the rest of the body is untouched: `available` and `items` are still sent",
                   '"available": bool(_ENGINE)' in body and '"items": items' in body)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------
+#   6. Creating a job: the owner's words, validated, and nothing approved
+# --------------------------------------------------------------------------
+
+def t_creating_a_job_validates_the_request_and_creates_exactly_one_row():
+    """POST /api/jobs, through the function the route calls.
+
+    BITE: remove the `kind not in known` branch from `handle_create` and the
+    first check below fails - an unknown kind would become a row that fails on
+    its first tick instead of a sentence while the owner is still there. The
+    `needs` refusal is the other one that matters: a `never` action must not
+    be frozen onto a row at all, because the frozen set is trusted at
+    execution, so catching it here is the only place it can be caught.
+    """
+    fresh()
+    J.register("route_probe", lambda ctx, params: {"ok": True})
+    before = len(J.jobs())
+
+    code, out = J.handle_create("not an object")
+    check("a body that is not an object is refused", code == 400 and not out["ok"], (code, out))
+
+    code, out = J.handle_create({})
+    check("a job with no kind is refused, in words", code == 400 and "kind" in out["error"],
+          (code, out))
+
+    code, out = J.handle_create({"kind": "no_such_kind"})
+    check("an unknown kind is refused AND names what this PC has",
+          code == 400 and "no_such_kind" in out["error"]
+          and "route_probe" in out["error"], (code, out))
+
+    code, out = J.handle_create({"kind": J.PLAN_HANDLER})
+    check("a plan is refused: it needs steps this route does not take",
+          code == 400 and "steps" in out["error"], (code, out))
+
+    code, out = J.handle_create({"kind": "route_probe", "when": "half past never"})
+    check("a time that cannot be read is refused, not guessed",
+          code == 400 and "time" in out["error"], (code, out))
+
+    code, out = J.handle_create({"kind": "route_probe", "needs": {"a": 1}})
+    check("needs must be a list of action names",
+          code == 400 and "list" in out["error"], (code, out))
+
+    check("the shipped policy really does forbid post_to_external_service",
+          J._tier_of("post_to_external_service") == "never")
+    code, out = J.handle_create({"kind": "route_probe",
+                                 "needs": ["post_to_external_service"]})
+    check("a 'never' action can never be frozen onto a job",
+          code == 400 and "never" in out["error"], (code, out))
+
+    code, out = J.handle_create({"kind": "route_probe"}, ticking=False)
+    check("with the heartbeat off, a job is refused rather than stranded",
+          code == 503 and "heartbeat" in out["error"], (code, out))
+
+    check("not one of those refusals created a row", len(J.jobs()) == before,
+          [j["id"] for j in J.jobs()])
+
+    code, out = J.handle_create({"kind": "route_probe",
+                                 "text": "check the thing", "when": 0})
+    row = J.get(out.get("id", "")) or {}
+    check("a good request makes ONE job, nameable by its id",
+          code == 200 and out.get("ok") and row.get("id") == out.get("id"),
+          (code, out))
+    check("the owner's words are the label, and nothing is approved by creating it",
+          row.get("label") == "check the thing" and row.get("caps") == [],
+          {"label": row.get("label"), "caps": row.get("caps")})
+    check("it starts queued and due now",
+          row.get("state") == "queued" and row.get("due", 0) <= time.time() + 1,
+          {"state": row.get("state"), "due": row.get("due")})
+    check("its taint is copied from the gate, never chosen by the caller",
+          isinstance(row.get("tainted"), bool), row.get("tainted"))
+
+    code, out = J.handle_create({"kind": "route_probe", "text": "with a yes",
+                                 "needs": [PROBE_ACTION]})
+    row = J.get(out.get("id", "")) or {}
+    check("the capabilities the request names are the frozen set - his yes",
+          code == 200 and row.get("caps") == [PROBE_ACTION], row.get("caps"))
+    check("and that is exactly two rows after the two good requests",
+          len(J.jobs()) == before + 2, [j["label"] for j in J.jobs()])
+
+
+# --------------------------------------------------------------------------
+#   7. Answering one: one job, one use, no rule left behind
+# --------------------------------------------------------------------------
+
+def t_a_parked_job_is_exactly_what_the_work_pane_already_reads():
+    """The GET /api/jobs body the Work pane reads, after a job parks.
+
+    `jobs-routes.patch` adds two keys to that body (`grants`, `ticking`) and
+    changes nothing else. This proves the parked state the pane draws is the
+    queue's own: the row says `waiting_approval`, the grant says which job and
+    which action, and neither invents a second vocabulary.
+    """
+    fresh()
+    J.register("route_asks", lambda ctx, params: ctx.require(PROBE_ACTION))
+    code, out = J.handle_create({"kind": "route_asks", "text": "needs a yes"})
+    jid = out.get("id", "")
+    check("the job was created", code == 200 and bool(jid), (code, out))
+    J.run_due()
+
+    body = {"jobs": J.jobs(), "grants": J.pending_grants(), "status": J.status()}
+    row = next((j for j in body["jobs"] if j["id"] == jid), None)
+    check("the Work pane's own read shows the job parked",
+          bool(row) and row["state"] == "waiting_approval", row)
+    check("under the owner's own words",
+          bool(row) and row["label"] == "needs a yes", row and row["label"])
+    grant = [g for g in body["grants"] if g["job_id"] == jid]
+    check("and the grant says which job and which action, and nothing else",
+          len(grant) == 1 and grant[0]["action"] == PROBE_ACTION
+          and grant[0]["state"] == "pending", grant)
+    check("the status half still counts it",
+          body["status"]["pending_grants"] == 1
+          and "route_asks" in body["status"]["handlers"], body["status"])
+
+
+def t_answering_a_parked_grant_decides_one_job_and_nothing_else():
+    """ONE job's ONE grant, spent once, with the other job untouched.
+
+    BITE: make `answer()` answer every pending grant it can find (drop the
+    `len(waiting) > 1` guard and loop) and the second job's grant flips too;
+    make it write the capability onto the job row and the frozen-set check
+    below fails.
+    """
+    fresh()
+    J.register("route_ask_a", lambda ctx, params: ctx.require(PROBE_ACTION))
+    J.register("route_ask_b", lambda ctx, params: ctx.require(PROBE_ACTION))
+    a = J.handle_create({"kind": "route_ask_a", "text": "job a"})[1]["id"]
+    b = J.handle_create({"kind": "route_ask_b", "text": "job b"})[1]["id"]
+    J.run_due()
+    check("both jobs parked",
+          (J.get(a) or {}).get("state") == "waiting_approval"
+          and (J.get(b) or {}).get("state") == "waiting_approval",
+          ((J.get(a) or {}).get("state"), (J.get(b) or {}).get("state")))
+    grants_a = J.pending_grants(a)
+    grants_b = J.pending_grants(b)
+
+    code, out = J.handle_answer({"id": a, "approved": True, "by": "test"})
+    check("the answer is accepted, for the action that was asked about",
+          code == 200 and out["ok"] and out["grant"]["state"] == "granted"
+          and out["grant"]["action"] == PROBE_ACTION, out)
+    check("job A's grant is granted and job B's is still PENDING",
+          not J.pending_grants(a) and len(J.pending_grants(b)) == 1,
+          {"a": J.pending_grants(a), "b": J.pending_grants(b)})
+    check("job A was not run inside the HTTP call - it waits for the heartbeat",
+          (J.get(a) or {}).get("state") == "waiting_approval",
+          (J.get(a) or {}).get("state"))
+    check("job B did not move at all",
+          (J.get(b) or {}).get("state") == "waiting_approval"
+          and (J.get(b) or {}).get("attempts") == 1,
+          {"state": (J.get(b) or {}).get("state"),
+           "attempts": (J.get(b) or {}).get("attempts")})
+    check("neither job's frozen set was widened by answering",
+          (J.get(a) or {}).get("caps") == [] and (J.get(b) or {}).get("caps") == [],
+          ((J.get(a) or {}).get("caps"), (J.get(b) or {}).get("caps")))
+
+    J.run_due(now=time.time() + 7200)
+    check("the granted job ran to the end",
+          (J.get(a) or {}).get("state") == "done", (J.get(a) or {}).get("state"))
+    check("job B parked again instead",
+          (J.get(b) or {}).get("state") == "waiting_approval",
+          (J.get(b) or {}).get("state"))
+    check("the grant was SPENT by its one use, so a later ask asks again",
+          not J.pending_grants(a) and len(J.pending_grants(b)) == 1
+          and J.pending_grants(b)[0]["id"] == grants_b[0]["id"],
+          {"a": J.pending_grants(a), "b": J.pending_grants(b)})
+
+    code, out = J.handle_answer({"id": a, "approved": True})
+    check("a second tap on a spent grant changes nothing (409)",
+          code == 409 and out.get("reason") == "nothing_waiting", (code, out))
+    code, out = J.handle_answer({"id": "nope-not-a-job", "approved": True})
+    check("an unknown job is a 404, in words",
+          code == 404 and out.get("reason") == "no_such_job", (code, out))
+    code, out = J.handle_answer({})
+    check("no job id is a 400", code == 400, (code, out))
+    for bad in ("yes", 1, None):
+        code, out = J.handle_answer({"id": b, "approved": bad})
+        check(f"approved={bad!r} is refused rather than read as a yes",
+              code == 400 and "true or false" in out["error"], (code, out))
+    check("and none of those refusals spent job B's grant",
+          len(J.pending_grants(b)) == 1, J.pending_grants(b))
+
+
+def t_a_denial_stops_that_one_job_and_never_becomes_a_rule():
+    """A No is final for that job and means nothing for the next one.
+
+    This is the rule the gate already follows, applied to a parked job: a
+    refusal authorises nothing, remembers nothing, and is not written into the
+    policy file. BITE: write the action into the framework's tier table (or
+    into the job row's caps) on a denial and the two checks that read the
+    bytes and the caps fail; keep the row in `waiting_approval` and the pane
+    goes on asking a question already answered.
+    """
+    fresh()
+    risky = "send_email"
+    if J._tier_of(risky) != "ask":
+        skip(f"this PC's policy does not put {risky} at 'ask', so the risky-action "
+             "denial was not checked")
+        return
+    J.register("route_needs_email", lambda ctx, params: ctx.require(risky))
+    framework = Path(os.environ.get("JARVIS_FRAMEWORK_TOML") or "")
+    before = framework.read_bytes() if framework.is_file() else None
+    if before is None:
+        skip("this run has no framework file to prove unchanged, so the "
+             "no-standing-rule check read only the row and the grants")
+    a = J.handle_create({"kind": "route_needs_email", "text": "send it"})[1]["id"]
+    J.run_due()
+    grant_a = J.pending_grants(a)
+    check("the risky job parked, waiting for a person",
+          (J.get(a) or {}).get("state") == "waiting_approval"
+          and len(grant_a) == 1 and grant_a[0]["action"] == risky, grant_a)
+
+    code, out = J.handle_answer({"id": a, "approved": False, "by": "test"})
+    check("No is accepted and says it stopped that job",
+          code == 200 and out["ok"] and out["stopped"] is True
+          and out["grant"]["state"] == "denied", out)
+    row = J.get(a) or {}
+    check("the job is stopped now, not left asking an answered question",
+          row.get("state") == "failed" and "you said no" in (row.get("error") or ""),
+          {"state": row.get("state"), "error": row.get("error")})
+    check("nothing is pending for it any more", not J.pending_grants(a))
+    check("its frozen set is unchanged - a denial widens nothing",
+          row.get("caps") == [], row.get("caps"))
+    if before is not None:
+        check("the policy file was not rewritten by a denial",
+              framework.read_bytes() == before, str(framework))
+
+    b = J.handle_create({"kind": "route_needs_email", "text": "send it again"})[1]["id"]
+    J.run_due()
+    grants_b = J.pending_grants(b)
+    check("a NEW job needing the same risky action parks and asks again",
+          (J.get(b) or {}).get("state") == "waiting_approval"
+          and len(grants_b) == 1 and grants_b[0]["state"] == "pending",
+          {"state": (J.get(b) or {}).get("state"), "grants": grants_b})
+    check("so the No was not remembered as a rule for that action",
+          bool(grants_b) and grants_b[0]["id"] != grant_a[0]["id"],
+          {"old": grant_a[0]["id"], "new": grants_b and grants_b[0]["id"]})
+
+
+def t_the_jobs_routes_patch_applies_to_the_real_backend_and_wires_both_routes():
+    """`backend/jobs-routes.patch` against the REAL `jarvis_hud.py`.
+
+    WHY A PATCH AT ALL: `jarvis_hud.py` is NOT in `$SHIPPED` - it is one of the
+    files the patch stack delivers - so an edit to `jarvis-backend/jarvis_hud.py`
+    would never reach the owner's install. This is the same rehearsal
+    `initiative-payload.patch` gets: apply, check, reverse, byte for byte, and
+    then the one thing the patch is FOR - both POST routes really wired, the
+    GET still the read it was, and the file still compiles.
+    """
+    real = REPO / "jarvis-backend" / "jarvis_hud.py"
+    patch = HERE / "jobs-routes.patch"
+    body = ""
+    check("the patch file is in backend/", patch.is_file(), patch)
+    if not real.exists():
+        skip("this checkout has no jarvis-backend/ copy of the program to rehearse against")
+        return
+    if not patch.is_file():
+        return
+    git = shutil.which("git")
+    if not git:
+        skip("git is not installed, so the patch could not be rehearsed")
+        return
+    cmd = [git, "-c", "core.autocrlf=false", "-c", "core.eol=lf"]
+    tmp = Path(tempfile.mkdtemp(dir=str(_BASE), prefix="real-patch-"))
+    try:
+        original = real.read_bytes()
+        (tmp / "jarvis_hud.py").write_bytes(original)
+        (tmp / patch.name).write_bytes(patch.read_bytes())
+        subprocess.run([git, "init", "-q", "."], cwd=tmp, capture_output=True)
+        ok = True
+        for args in (["apply", "--check", patch.name], ["apply", patch.name]):
+            r = subprocess.run(cmd + args, cwd=tmp, capture_output=True, text=True)
+            if r.returncode != 0:
+                ok = False
+                check(f"the real jarvis_hud.py accepts {patch.name} ({' '.join(args)})",
+                      False, r.stderr.strip())
+                break
+        if ok:
+            body = (tmp / "jarvis_hud.py").read_text(encoding="utf-8")
+            r = subprocess.run(cmd + ["apply", "--reverse", patch.name], cwd=tmp,
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                ok = False
+                check("and the reverse applies", False, r.stderr.strip())
+        if ok:
+            check(f"the real jarvis_hud.py accepts {patch.name}, applies it and reverses it",
+                  True)
+            check("and reversing gives the file back byte for byte",
+                  (tmp / "jarvis_hud.py").read_bytes() == original)
+            try:
+                compile(body, "jarvis_hud.py (with jobs-routes.patch)", "exec")
+                check("the applied file still compiles", True)
+            except SyntaxError as exc:
+                check("the applied file still compiles", False, str(exc))
+            # STRUCTURE, NOT TEXT. Every check below walks the applied file's
+            # AST and asserts that a real call or a real dict key is there, so a
+            # reworded comment or a renamed local cannot make it pass or fail:
+            # tools/check_no_source_pins.py exists because `"x" in source_text`
+            # stays green when the behaviour is wrong. This module's own pin
+            # ceiling is 3 and the initiative rehearsal above uses them; these
+            # checks add none.
+            tree = ast.parse(body)
+
+            def _fn(name):
+                return next((n for n in ast.walk(tree)
+                             if isinstance(n, ast.FunctionDef) and n.name == name), None)
+
+            desktop, post, get, main_fn = (_fn("_desktop_action"), _fn("do_POST"),
+                                           _fn("do_GET"), _fn("main"))
+            check("the four functions this patch edits are all in the file",
+                  all(x is not None for x in (desktop, post, get, main_fn)),
+                  [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                   and n.name in ("_desktop_action", "do_POST", "do_GET", "main")])
+
+            calls = [n for n in ast.walk(desktop or ast.Module(body=[], type_ignores=[]))
+                     if isinstance(n, ast.Call)]
+            jars = {c.func.attr for c in calls
+                    if isinstance(c.func, ast.Attribute) and c.func.attr in
+                    ("handle_create", "handle_answer")}
+            check("the write branch reaches handle_create AND handle_answer",
+                  jars == {"handle_create", "handle_answer"}, sorted(jars))
+
+            creator = next((c for c in calls
+                            if isinstance(c.func, ast.Attribute)
+                            and c.func.attr == "handle_create"), None)
+            check("creating passes the REAL heartbeat state, so a job cannot be stranded",
+                  creator is not None
+                  and any(k.arg == "ticking" for k in creator.keywords),
+                  creator and [k.arg for k in creator.keywords])
+
+            route_lists = [
+                t for t in ast.walk(post or ast.Module(body=[], type_ignores=[]))
+                if isinstance(t, (ast.Tuple, ast.List)) and t.elts
+                and all(isinstance(e, ast.Constant) and isinstance(e.value, str)
+                        for e in t.elts)
+                and "/api/jobs/cancel" in [e.value for e in t.elts]]
+            check("both POST routes are in the server's own write list",
+                  any({"/api/jobs", "/api/jobs/answer"} <= {e.value for e in t.elts}
+                      for t in route_lists),
+                  [[e.value for e in t.elts] for t in route_lists])
+
+            jobs_dicts = [
+                d for d in ast.walk(get or ast.Module(body=[], type_ignores=[]))
+                if isinstance(d, ast.Dict)
+                and any(isinstance(k, ast.Constant) and k.value == "jobs"
+                        for k in d.keys)]
+            keys = {k.value for d in jobs_dicts for k in d.keys
+                    if isinstance(k, ast.Constant)}
+            check("the GET the Work pane already reads now carries grants and ticking",
+                  {"grants", "ticking"} <= keys, sorted(keys))
+            check("and it still carries the jobs and status it always did",
+                  {"jobs", "status", "available"} <= keys, sorted(keys))
+
+            watch_calls = [c for c in ast.walk(main_fn or ast.Module(body=[], type_ignores=[]))
+                           if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                           and c.func.attr == "register_job"]
+            check("the one production job body is registered at start-up",
+                  bool(watch_calls), watch_calls)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

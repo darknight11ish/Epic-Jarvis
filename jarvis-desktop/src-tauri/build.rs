@@ -231,6 +231,16 @@ fn main() {
             "brain_read",
             "brain_revert_undo",
             "brain_cancel_job",
+            // Long Fuse's two writes (2026-10-30, jobs-routes.patch): create
+            // ONE job from the owner's words, and answer ONE parked grant.
+            // They sit beside brain_cancel_job because they are the same
+            // power shape - starting, stopping and answering work the owner
+            // already owns - and neither approves anything beyond the single
+            // question it names. Listed here as well as in lib.rs's
+            // generate_handler!; tools/check_command_acl.py is what catches a
+            // command in one and not the other.
+            "brain_create_job",
+            "brain_answer_job",
             // The job list's steering command (2026-10-08, JARVIS-API section
             // 118). Listed here as well as in lib.rs's generate_handler! - a
             // command in one and not the other is refused by the ACL from every

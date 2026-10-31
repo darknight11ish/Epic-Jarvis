@@ -1685,6 +1685,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "brain_watch_seen":
           case "brain_revert_undo":
           case "brain_cancel_job":
+          // Long Fuse's way in and out (2026-10-30): start one job, answer one
+          // parked grant. Both are ordinary writes from this UI's point of
+          // view; what they may say is pinned in tests/job-list.mjs.
+          case "brain_create_job":
+          case "brain_answer_job":
           case "brain_cancel_hold":
           case "brain_remove_skill":
           case "brain_model":

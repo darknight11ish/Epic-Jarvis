@@ -344,6 +344,21 @@ CLASSIFICATION = {
     "/api/initiative": ("ported", "Brain screen, read-only."),
     "/api/jobs": ("ported", ""),
     "/api/jobs/cancel": ("ported", ""),
+    # Long Fuse's way in and out (2026-10-30, jobs-routes.patch; JARVIS-API
+    # section 21.10). POST /api/jobs starts ONE job from the owner's own words
+    # with no capabilities frozen, so it parks the moment it needs one; its
+    # route is the same path as the ported GET, which is why the method is in
+    # the reason rather than a second classification. POST /api/jobs/answer
+    # answers ONE grant for ONE job - one use, no standing rule, and a No stops
+    # that job at once. Desktop: the Work pane's "Start a background job" form
+    # and the "Allow once" / "No" buttons under a parked job (brain.rs
+    # brain_create_job/brain_answer_job, src/brain.js renderJobStart and
+    # jobGrantActions, tests/job-list.mjs). Phone: the loop is NOT built yet -
+    # its Work pane is a read-only job list that shows the frozen set and
+    # nothing else, and its JobRecord drops the `grants` and `status.handlers`
+    # this needs. That is the named follow-up, and ARCHITECTURE.md section 8
+    # records it; when it is built the classification becomes "ported".
+    "/api/jobs/answer": ("todo", "Answers the ONE grant a parked Long Fuse job is waiting on (2026-10-30, jobs-routes.patch; JARVIS-API section 21.10). ONE job, ONE use, and a No stops that job and leaves no rule behind - there is no list form and no 'allow all'. The desktop has it in the Work pane (brain_answer_job, src/brain.js jobGrantActions). The phone's Work pane is still a read-only job list, and its JobRecord drops the grants this needs: the phone half is the named follow-up (ARCHITECTURE.md section 8)."),
     "/api/ledger": ("ported", "Brain screen, read-only."),
     # The limits and frequencies the owner can change (2026-10-08): ONE table
     # on the PC (backend/jarvis_limits.py) behind one read route and one write

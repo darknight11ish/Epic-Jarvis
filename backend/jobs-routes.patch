@@ -1,0 +1,80 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+index 30ce3f4..a19369e 100644
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -786,6 +786,25 @@ def _desktop_action(route: str, body: dict):
+         ok = jarvis_jobs.cancel(job, by=str(body.get("by") or "hud"))
+         return (200 if ok else 409), {"ok": ok, "id": job}
+ 
++    if route in ("/api/jobs", "/api/jobs/answer"):
++        # jobs-routes.patch: the way IN to Long Fuse, and the way OUT of a
++        # parked grant. /api/jobs is a POST because it creates a row; the GET
++        # of the same path stays the read it always was.
++        #
++        # Creating is an owner-present call, which is what create() needs: the
++        # capabilities the request names become the row's frozen set - his yes -
++        # and nothing else is approved by it. Answering decides ONE grant for
++        # ONE job; a grant is one shot and a denial leaves no rule behind (see
++        # jarvis_jobs.answer). Neither branch can widen a capability set, and
++        # neither is reachable through the Brain's read allow-list.
++        import jarvis_jobs
++        if route == "/api/jobs":
++            code, out = jarvis_jobs.handle_create(
++                body, ticking=bool(_ENGINE and getattr(_ENGINE, "running", False)))
++        else:
++            code, out = jarvis_jobs.handle_answer(body)
++        return code, out
++
+     if route == "/api/holds/cancel":
+         # Stopping a message inside its window. This is why the hold queue is
+         # in SQLite rather than in memory: the send happens in one process and
+@@ -2642,8 +2661,19 @@ class Handler(BaseHTTPRequestHandler):
+                                             **jarvis_arbiter.digest()})
+                 if path == "/api/jobs":
+                     import jarvis_jobs
++                    # jobs-routes.patch: the pane can create a job and answer a
++                    # parked grant now, so the read it already makes carries
++                    # the two facts those need - whether anything is ticking
++                    # (a job created with the heartbeat off would never run)
++                    # and the grants a parked job is waiting on (what the
++                    # owner is being asked to allow, and for which job). Both
++                    # are material the list above already carries: an action
++                    # name and a job id, never a param and never a result.
+                     return self._send(200, {"available": True,
+                                             "jobs": jarvis_jobs.jobs(),
++                                            "grants": jarvis_jobs.pending_grants(),
++                                            "ticking": bool(_ENGINE and getattr(
++                                                _ENGINE, "running", False)),
+                                             "status": jarvis_jobs.status()})
+                 if path == "/api/undo":
+                     import jarvis_undo
+@@ -3764,7 +3794,8 @@ class Handler(BaseHTTPRequestHandler):
+         if route in ("/api/models/install", "/api/models/switch",
+                      "/api/models/rollback", "/api/config", "/api/skills/decide",
+                      "/api/appearance",
+-                     "/api/undo/revert", "/api/jobs/cancel", "/api/holds/cancel",
++                     "/api/undo/revert", "/api/jobs/cancel",
++                     "/api/jobs", "/api/jobs/answer", "/api/holds/cancel",
+                      "/api/attention/mute", "/api/attention/unmute",
+                      "/api/digest/seen", "/api/watch/add", "/api/watch/remove",
+                      "/api/watch/seen", "/api/voice/wake"):
+@@ -6297,6 +6328,19 @@ def main() -> None:
+                 _ENGINE.start()
+                 print(f"  initiative heartbeat every {_ENGINE.heartbeat_minutes:g} min, "
+                       f"{len(_ENGINE.watchers)} watcher(s)")
++                # jobs-routes.patch: Long Fuse's job bodies register by NAME, so
++                # the create route can only offer a kind that something
++                # registered. jarvis_watch has carried its own register_job()
++                # with no caller at all, which left the ONE production body a
++                # job could run unavailable to every route; this is the caller
++                # it was written for. It approves nothing: the job it registers
++                # checks the owner's GitHub topics and writes its own findings
++                # list, exactly as its own docstring says.
++                try:
++                    import jarvis_watch
++                    jarvis_watch.register_job()
++                except Exception:
++                    pass
+         except Exception as exc:
+             print(f"  memory     layer failed to start: {type(exc).__name__}: {exc}")
+     if ROUTING:

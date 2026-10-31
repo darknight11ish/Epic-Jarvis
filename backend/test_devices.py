@@ -558,6 +558,14 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # hunk to jarvis_hud.py (the chat attach line) and
                                 # leaves devices.patch's gate lines alone.
                                 "attached-file.patch",
+                                # jobs-routes.patch (2026-10-30, Long Fuse's way
+                                # in and out) appends four hunks to jarvis_hud.py
+                                # (the GET /api/jobs body, the _desktop_action
+                                # branch, the POST route list and the initiative
+                                # start-up block) and has no hunk in jarvis_gate.py
+                                # at all, so it leaves devices.patch's gate lines
+                                # alone.
+                                "jobs-routes.patch",
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",

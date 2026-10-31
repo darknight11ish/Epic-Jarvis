@@ -1904,7 +1904,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. A failed read falls back to the phone's own last successful one, cached on disk and clearly marked as old - see the note below the table. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
 | `/api/skills` | GET | `routes.rs:19` | via `probe` | |
-| `/api/jobs` | GET | `routes.rs:20` | `JarvisApi.kt:286` | List key: `jobs`. |
+| `/api/jobs` | GET | `routes.rs:20` | `JarvisApi.kt:286` | List key: `jobs`. Since 2026-10-30 (section 169) the body also carries **`grants`** - the one-shot capability grants parked jobs are waiting for, `[{id, job_id, action, state, created, label, handler}]` - and **`ticking`** (a boolean: is the one background heartbeat running). The same path is a **POST** that creates a job; that half is in Writes, below. |
 | `/api/undo` | GET | `routes.rs:21` | `JarvisApi.kt:283` | List key: **`shelf`**. |
 | `/api/ledger` | GET | `routes.rs:22` | via `probe` | Audit chain. |
 | `/api/content-risk` | GET | `routes.rs:23` | **no** | Read-only by design. |
@@ -2123,6 +2123,8 @@ neither app says it would.
 |---|---|---|---|---|---|
 | `/api/undo/revert` | POST | `{"id": …}` | `brain.rs:158` | `JarvisApi.kt:403` | "The one state-changing thing a phone may drive" — it only moves toward a state the owner already had. |
 | `/api/jobs/cancel` | POST | `{"id": …}` | `brain.rs:169` | `JarvisApi.kt:450` | |
+| `/api/jobs` | POST | `{"kind", "text"?, "when"?, "needs"?}` | `brain.rs` `brain_create_job` | **no** (section 169) | Starts ONE job from the owner's words. `needs` is the capability set frozen onto the row - **the desktop sends `[]`**, so a job started from the Work pane runs with nothing and parks on its first need. Approves nothing. |
+| `/api/jobs/answer` | POST | `{"id", "approved": true\|false}` | `brain.rs` `brain_answer_job` | **no** (section 169) | Answers the ONE grant a parked job is waiting on: one job, one use, and a No stops that job with no rule left behind. There is no list form and no "allow all". |
 | `/api/holds/cancel` | POST | `{"handle": …}` | `brain.rs` `brain_cancel_hold` | `JarvisRuntime.cancelHold` | Both clients take the handle from the undo shelf (`GET /api/undo`): an entry with `category: "hold"` and `detail.handle` - the desktop's reading of that shape, which the phone now shares (2026-09-23). **Unconfirmed against the backend's `jarvis_undo.py`**, which is not in this repo; a shelf without those fields shows no Stop button. |
 | `/api/watch/add` | POST | object | `brain.rs:219` | **no** | |
 | `/api/watch/remove` | POST | object | `brain.rs:228` | **no** | |
@@ -28570,3 +28572,142 @@ this bit was wrong before it shipped (2026-10-30):
   rebuilt and installed desktop is the field check, and the geometry of the
   sheet in the real window is the owner's eye rather than a test.
 
+
+## 169. Long Fuse: starting a job and answering a parked grant (added 2026-10-30)
+
+**What this section is for.** Until 2026-10-30 the background job queue
+(`jarvis_jobs.py`, "Long Fuse"; ARCHITECTURE.md section 10) had a read and a
+cancel and nothing else: `POST /api/jobs/cancel` existed, `GET /api/jobs`
+existed, and **no route created a job and no route answered a parked one**. A
+job could only be created by code calling `create()`, and a grant request sat
+`pending` for ever. This section is the two missing routes. `backend/jobs-routes.patch`
+delivers them; the logic is in `jarvis_jobs.py` (`handle_create` and
+`handle_answer`), which this repository ships whole.
+
+### 169.1 `POST /api/jobs`: start ONE job
+
+Request:
+
+    {"kind": "<a registered job body>",   required
+     "text": "<the owner's own words>",   optional; becomes the label
+     "when": <seconds | epoch | ISO-8601>, optional; default "now"
+     "needs": ["<action>", ...]}          optional; the frozen capability set
+
+Answers:
+
+| Status | Body | When |
+|---|---|---|
+| 200 | `{"ok": true, "id", "job": <row>}` | the job is queued |
+| 400 | `{"ok": false, "error": "<a sentence>"}` | no `kind`; a `kind` this PC has not registered; a `kind` that is a plan (`duet_plan_steps`, which needs steps this route does not take); `when` that cannot be read; `needs` that is not a list of names; an action the policy sets to `never` |
+| 401 / 403 | the usual words | missing token / cross-origin |
+| 503 | `{"ok": false, "available": false, "error": "<a sentence>"}` | `jarvis_jobs.py` is not installed, the jobs database cannot be opened, the tier table cannot be read, **or the background heartbeat is off** - a job created then would never run, so nothing is created |
+
+**What it does NOT do.** It approves nothing. It does not consult the tier table
+for a pass (only for `never`, to refuse it), it does not widen a capability set,
+and it never creates a second job. The capabilities in `needs` are written onto
+the row and frozen there for the job's life - that is the owner-present yes
+`create()` has always required. **An empty or missing `needs` is the safe
+default**: the job runs with no capabilities and parks the moment it needs one.
+The desktop's Work pane sends `[]`, so every job it starts parks on its first
+need and asks there.
+
+**`kind` is a name, not code.** It must be one of `GET /api/jobs`'s
+`status.handlers`, which is `jarvis_jobs.handlers()` - the bodies this process
+registered at start-up. There is no path, module, pickle or eval anywhere in a
+job row (jarvis_jobs.py's own "HANDLERS" note says why). At the time of writing
+there is **one production body**: `watch_github`, registered by the start-up call
+this patch adds to `jarvis_watch.register_job()` - that function existed with no
+caller, which is why the queue had nothing useful to run. The suite's own test
+handlers are the only others.
+
+### 169.2 `POST /api/jobs/answer`: answer the ONE grant
+
+Request: `{"id": "<job id>", "approved": true | false}`. `by` is an optional
+audit label only (the `/api/jobs/cancel` convention), never a permission.
+
+Answers:
+
+| Status | Body | When |
+|---|---|---|
+| 200 | `{"ok": true, "grant": {"id", "action", "state": "granted"\|"denied", "decided_by"}, "waiting": [...], "stopped": bool, "job": <row>}` | one grant was decided. `stopped` is true when a No ended that job at once. |
+| 400 | `{"ok": false, "error": "<a sentence>"}` | no `id`; **`approved` is missing or is not a real boolean** (a string `"false"` is refused rather than read as a yes) |
+| 404 | `{"ok": false, "reason": "no_such_job", "error": "<a sentence>"}` | no job with that id |
+| 409 | `{"ok": false, "reason": "nothing_waiting"\|"more_than_one"\|"already_answered", "error"}` | the job is not parked; or it is somehow waiting on more than one grant (refused, never guessed); or another tap got there first |
+| 503 | as above | the queue cannot be reached |
+
+**One job, one use, no rule.** The grant is flipped `granted`/`denied` and
+spent by `_grant_step` the next time the handler asks, so a yes authorises that
+one use and the next time it needs the action it asks again. A **No** fails that
+job (`_stop_denied`) and writes nothing else - no capability on any row, no entry
+in `jarvis-framework.toml`, no memory of the refusal. The next job needing the
+same action parks and asks again. There is deliberately no list form, no
+"allow all" and no "always allow": that would be a standing rule, and the whole
+permission model is one card per action.
+
+**A Yes does not run the job inside the request.** It marks the grant and
+returns; the one heartbeat picks the job up (`[jobs] approval_retry_seconds`
+after it parked). The desktop says so in its toast rather than pretending the
+work already happened. **A No does stop it immediately**, because leaving a row
+saying "waiting for you" about a question already answered, for up to a
+heartbeat (thirty minutes as shipped), would make No look like it did nothing.
+
+### 169.3 The read the Work pane already makes
+
+`GET /api/jobs` gains two keys and changes nothing else:
+
+- **`grants`**: `jarvis_jobs.pending_grants()` - every unspent `pending` grant,
+  each with `id`, `job_id`, `action`, `state`, `created` and the job's own
+  `label` and `handler`. It is what the pane needs to draw "wants: Send an
+  email" under the right job. An action name and a job id - the same class of
+  fact the job list already carries, never a param or a result.
+- **`ticking`**: a boolean, whether the one background heartbeat is running. It
+  is read from the HUD's own engine (`_ENGINE.running`), and `false` is what
+  makes the pane say a job started now would never run - and what makes the
+  create route answer 503.
+
+### 169.4 In the apps
+
+- **Desktop (built).** The Brain's Work tab → "Start a background job": a select
+  of `status.handlers` (nothing else can be chosen) and a text box for the
+  owner's words. Under a parked job it draws `wants: <action>` and exactly two
+  buttons, "Allow once: <action>" and "No". `brain.rs`'s `brain_create_job` and
+  `brain_answer_job` are the only way the page can reach either route; both are
+  held on a stale event stream (`require_link_live`, the rule-4 gate), both sit
+  in the `brain-act` permission set beside `brain_cancel_job`, and neither is in
+  the Brain's read allow-list. `jarvis-desktop/tests/job-list.mjs` holds the
+  contracts.
+- **Phone (not built, deliberately named).** Its Work pane is a read-only job
+  list (`JobPlate`): it shows the frozen set and a state word, and it has never
+  had a create, cancel or answer control for Long Fuse. Its `JobRecord` drops
+  `grants` and `status.handlers`, so reaching these routes needs a model change
+  first, not just a button. `tools/check_parity.py` records `/api/jobs/answer` as
+  `todo` with that reason, and ARCHITECTURE.md section 8 records the one-sided
+  slice; the phone half is the next slice, and when it lands the classification
+  becomes `ported`.
+
+### 169.5 What is proven, and what is not
+
+- `backend/test_jobs.py` (95 checks, 12 test functions): creating validates
+  every field and refuses a `never` action, an unknown kind, a plan, a bad time,
+  a bad `needs` and a stopped heartbeat; the created row carries the owner's
+  words and an empty frozen set; a parked job is exactly what `jobs()` and
+  `pending_grants()` say it is; an answer decides ONE job's ONE grant and leaves
+  a second job's untouched; the grant is spent by its one use; a second tap is
+  409; a denial stops that job at once, leaves the policy file byte-identical,
+  and a new job needing the same risky action (`send_email`, tier `ask`) parks
+  and asks again; and `backend/jobs-routes.patch` applies to the published
+  `jarvis-backend/jarvis_hud.py`, reverses byte for byte, and carries the two
+  POST routes, the two GET keys and the start-up registration.
+- `jarvis-desktop/tests/job-list.mjs` (25 checks browser-free): the read
+  allow-list cannot reach either write, the two commands are registered in
+  `lib.rs` and `build.rs`, each has its own generated permission and its place
+  in `brain-act`, the create command sends the owner's words and no
+  capabilities, the form offers only the server's handlers and says what
+  starting with no permissions means, the two answer buttons are matched to
+  their own job, and the backend patch sends the keys the pane reads. The DOM
+  half (a parked job's two buttons, and the exact `{approved, id}` the click
+  sends) needs Playwright and runs in CI.
+- **NOT proven here:** the real WebView2 window on the owner's PC, and
+  `watch_github` against GitHub from a job. This desk has no Playwright, and the
+  queue has never been ticked on the owner's machine by a route-created job.
+  The field check is his: start one job, watch it park, answer it.

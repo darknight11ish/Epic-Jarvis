@@ -52,6 +52,27 @@ decides it:
     a grant, so nothing NEW begins while he is away. Anything that does need
     a fresh yes waits for him.
 
+THE TWO ROUTES, AND WHO ANSWERS A PARKED JOB (2026-10-30)
+Until this landed the queue had no way in and no way out: `create()` had no
+production caller, and a parked grant had no route that could answer it, so a
+job that asked for anything waited for ever. `handle_create()` and
+`handle_answer()` are the whole of the HTTP side, and `jobs-routes.patch`
+carries the four lines in `jarvis_hud.py` that reach them
+(POST /api/jobs and POST /api/jobs/answer).
+
+  * `handle_create()` is an OWNER-PRESENT call, which is exactly the property
+    `create()` needs: the capabilities written on the row are the ones the
+    request named, and nothing else. It never approves anything, never widens
+    a set and never touches the tier table for a pass; a job that needs
+    something it was not given parks.
+  * `handle_answer()` answers ONE grant for ONE job. It is the owner's own
+    answer arriving over HTTP - the card's button, not a policy change. A
+    grant is one shot (`_grant_step` spends it), so a yes authorises that one
+    use and the next time the handler asks it asks again; a no fails that job
+    and leaves NO rule behind, the next job that needs the same action parks
+    and asks again. There is deliberately no list form, no "allow all", and no
+    route that writes a capability onto a row.
+
 ARCHITECTURE.md section 10, "The background job queue and what ticks it",
 says the same in the place a reader looks first.
 
@@ -1025,6 +1046,102 @@ def decide_grant(grant_id: str, approved: bool, by: str = "hud") -> bool:
     return ok
 
 
+def answer(job_id: str, approved: bool, by: str = "hud") -> dict:
+    """Answer the ONE grant a parked job is waiting on.
+
+    This is a person's decision arriving over HTTP, not a policy change: it
+    names a job, it decides that job's one pending grant, and it writes
+    nothing else. The three limits are the point of the function:
+
+    * ONE JOB. A job with no pending grant has nothing to answer (409), and a
+      job that somehow has more than one is refused rather than guessed at
+      (409) - one tap must never decide two questions. `_grant_step` keeps at
+      most one pending grant per job, so the second branch is a belt-and-
+      braces refusal, not a path the shipped code can take.
+    * ONE USE. `decide_grant()` flips that grant to granted/denied, and
+      `_grant_step` spends it the next time the handler asks. A second tap gets
+      409 `already_answered`, so a spent grant cannot be revived.
+    * NO STANDING RULE. Nothing here writes a capability onto a row or into the
+      framework's tier table. A denial fails this job (see `_stop_denied`) and
+      the next job that needs the same action parks and asks again - the
+      refusal is remembered by nobody.
+
+    Returns a dict with a `status` key the route maps straight onto HTTP, so
+    the refusals are tested without an HTTP server.
+    """
+    _init()
+    job_id = str(job_id or "").strip()
+    row = get(job_id) if job_id else None
+    if row is None:
+        return {"ok": False, "status": 404, "reason": "no_such_job",
+                "error": f"there is no job {job_id!r} on this PC"}
+    waiting = pending_grants(job_id)
+    if not waiting:
+        return {"ok": False, "status": 409, "reason": "nothing_waiting",
+                "error": ("this job is not waiting for an answer - nothing was "
+                          "asked, or it has already been answered"),
+                "job": row}
+    if len(waiting) > 1:
+        return {"ok": False, "status": 409, "reason": "more_than_one",
+                "error": ("this job is waiting on more than one grant and this "
+                          "route answers one at a time; nothing was decided"),
+                "grants": [g.get("id") for g in waiting], "job": row}
+    grant = waiting[0]
+    if not decide_grant(grant.get("id"), approved, by=by):
+        # Another tap, a cancel, or the tick spent it between the read and the
+        # write. Never a second decision - the owner's answer already stands.
+        return {"ok": False, "status": 409, "reason": "already_answered",
+                "error": "that grant has already been answered; nothing changed",
+                "job": (get(job_id) or row)}
+    out = {"ok": True, "status": 200,
+           "grant": {"id": grant.get("id"), "action": grant.get("action"),
+                     "state": "granted" if approved else "denied",
+                     "decided_by": str(by or "hud")[:64]},
+           "waiting": pending_grants(job_id)}
+    if not approved:
+        out["stopped"] = _stop_denied(job_id, str(grant.get("action") or ""))
+    out["job"] = get(job_id) or row
+    if approved and out["job"]:
+        # Tell every client the grant is spent, so a second app showing the
+        # same parked job stops offering the two buttons at once. A denial is
+        # already published by _stop_denied; a no-op one (the job was caught
+        # running) leaves the event to the handler's own next write.
+        _emit(out["job"], note="allowed once; it continues at the next check")
+    return out
+
+
+def _stop_denied(job_id: str, action: str) -> bool:
+    """A refused grant ends that job now, exactly as the next tick would.
+
+    `run_due()` fails a job whose `require()` finds its grant denied. Leaving
+    the row in `waiting_approval` until the heartbeat next beats - thirty
+    minutes as shipped - would keep saying "waiting for you" about a question
+    the owner has already answered, and would make "No" look like it did
+    nothing. Only a PARKED row is touched: a job caught running in the gap
+    raises at its own next `require()` and fails there, and a cancelled job
+    stays cancelled (`cancel=0` in the guard, the same rule every other write
+    in this module follows).
+    """
+    reason = f"you said no to {action}".strip()[:2000]
+
+    def _go(c: sqlite3.Connection) -> bool:
+        cur = c.execute(
+            "UPDATE jobs SET state='failed', finished=?, error=?, note=? "
+            "WHERE id=? AND state='waiting_approval' AND cancel=0",
+            (time.time(), reason, f"denied {action}".strip()[:200], job_id))
+        return cur.rowcount > 0
+
+    stopped = _write(_go)
+    if stopped:
+        row = get(job_id)
+        _audit("jobs.finished", {"id": job_id, "state": "failed",
+                                 "handler": (row or {}).get("handler"),
+                                 "why": "grant_denied"})
+        if row:
+            _emit(row, note=reason[:120])
+    return stopped
+
+
 # --------------------------------------------------------------------------
 #   Running
 # --------------------------------------------------------------------------
@@ -1436,6 +1553,108 @@ def status() -> dict:
                        "stale_running_seconds": _stale_seconds(),
                        "max_attempts": _max_attempts(),
                        "approval_retry_seconds": _cfg("approval_retry_seconds", 30)}}
+
+
+# --------------------------------------------------------------------------
+#   The two routes: what a client may ask for
+# --------------------------------------------------------------------------
+# Both return (http_status, payload), which is the shape jarvis_hud.py's
+# _desktop_action already returns and the shape jarvis_schedule.handle_add /
+# handle_act use. So the route in the patch is a call and a return, and every
+# refusal below is tested without an HTTP server: the sentence the owner reads
+# is this module's own, not the route's.
+
+def handle_create(body: Any, ticking: Optional[bool] = None):
+    """POST /api/jobs - create ONE job from the owner's own words.
+
+    Body: {"kind": <a registered job body>, "text": <the owner's words>,
+    "when": <seconds | epoch | ISO string>, "needs": [<action>, ...]}.
+    Only `kind` is required. `needs` is the capability set frozen onto the
+    row - it is what the owner is agreeing to NOW, and it is passed to
+    `create()` unchanged, which is what makes the frozen set his yes. An
+    empty or missing `needs` is the safe default: the job runs with no
+    capabilities frozen and parks the moment it needs one.
+
+    `ticking` is whether anything will actually run the queue (the HUD's one
+    heartbeat). False refuses with 503 rather than queueing a job that can
+    never run; None means this caller does not know, and is not treated as a
+    refusal. Nothing here ever approves, widens or decides.
+    """
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "the body must be an object"}
+    kind = str(body.get("kind") or "").strip()
+    known = handlers()
+    if not kind:
+        return 400, {"ok": False, "error": (
+            "a job needs a kind - the name of a job body this PC has "
+            "registered" + (f"; it has: {', '.join(known)}" if known else
+                            "; none is registered on this PC yet, so there is "
+                            "nothing a job could do"))}
+    if kind == PLAN_HANDLER:
+        # A plan is created by `create_plan()` with its steps; one body named
+        # on its own has no steps and would fail on its first tick. Saying so
+        # here is the difference between a refusal and a job that cannot work.
+        return 400, {"ok": False, "error": (
+            "that kind is a plan and needs its steps, which this route does "
+            "not take; nothing was created")}
+    if kind not in known:
+        return 400, {"ok": False, "error": (
+            f"{kind!r} is not a job body this PC has (known: "
+            f"{', '.join(known) or 'none'})")}
+    if ticking is False:
+        return 503, {"ok": False, "available": False, "error": (
+            "the background heartbeat is off, so a job created now would "
+            "never run - nothing was created. Turn it back on first "
+            "([initiative] enabled in jarvis-framework.toml)")}
+    text = str(body.get("text") or "").strip()
+    needs = body.get("needs")
+    if needs is None:
+        needs = ()
+    elif isinstance(needs, str):
+        needs = [needs]
+    elif not isinstance(needs, (list, tuple)) or any(
+            not isinstance(n, str) for n in needs):
+        return 400, {"ok": False, "error": (
+            "needs must be a list of action names - what this job may do "
+            "while you are away")}
+    try:
+        jid = create(kind, params={}, label=text, caps=needs,
+                     when=body.get("when"))
+    except (ValueError, TypeError) as exc:
+        # Both are the caller's mistake and both already carry a sentence
+        # meant for a person ("cannot read a time out of ...", "these actions
+        # are set to 'never' ..."). The owner reads them word for word.
+        return 400, {"ok": False, "error": str(exc)}
+    except JobsUnavailable as exc:
+        return 503, {"ok": False, "available": False, "error": str(exc)}
+    return 200, {"ok": True, "id": jid, "job": get(jid) or {}}
+
+
+def handle_answer(body: Any):
+    """POST /api/jobs/answer - answer the ONE grant a parked job waits on.
+
+    Body: {"id": <job id>, "approved": true|false}. `by` is an audit label
+    only (the same convention /api/jobs/cancel and the gate's own routes
+    follow), never a permission.
+    """
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "the body must be an object"}
+    job_id = str(body.get("id") or "").strip()
+    if not job_id:
+        return 400, {"ok": False, "error": "need a job id"}
+    approved = body.get("approved")
+    if not isinstance(approved, bool):
+        # Deliberately not truthiness: "approved": "false" is a string and
+        # would read as a yes, and this is the one route where a wrong guess
+        # is an approval. Only the two real answers are accepted.
+        return 400, {"ok": False, "error": (
+            "approved must be true or false - this route answers one grant, "
+            "and it will not guess which answer you meant")}
+    try:
+        out = answer(job_id, approved, by=str(body.get("by") or "hud"))
+    except JobsUnavailable as exc:
+        return 503, {"ok": False, "available": False, "error": str(exc)}
+    return int(out.pop("status", 200)), out
 
 
 # --------------------------------------------------------------------------
