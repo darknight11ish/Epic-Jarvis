@@ -3510,6 +3510,79 @@ def t_the_no_deadline_chain_keeps_the_earlier_entries_provable():
               old_probe)
 
 
+def git_reverse_oracle(text: str, patch: str, target: str) -> str:
+    """The pre-image `patch` was cut against, made by git's own applier in REVERSE.
+
+    The twin of `git_apply_oracle`: same throwaway `git init` folder, same one file,
+    but `git apply -R` - so the pre-image is git's reading of the patch, not ours."""
+    root = tmpdir("reconcile-git-reverse-")
+    try:
+        (root / target).write_bytes(text.encode("utf-8"))
+        _git(root, "init", "-q")
+        (root / patch).write_bytes(patch_text(patch))
+        proc = subprocess.run(["git", "apply", "-R", "--whitespace=nowarn", patch],
+                              cwd=str(root), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+        if proc.returncode != 0:
+            raise AssertionError(f"git apply -R {patch} failed: "
+                                 f"{(proc.stderr or '').strip()}")
+        return (root / target).read_text(encoding="utf-8")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_unknown_risk_delta_carries_its_five_hunks_byte_for_byte():
+    """#1008's unclassified-action change is carried by a DELTA_TABLE rule.
+
+    2026-10-30: `unknown-risk-approvable.patch` rewrites `jarvis_gate.py` in five
+    disjoint regions (eight `_RISK` rows, the worst-case warning, `risk_for`'s
+    docstring, `notice_for`'s body, and the forced "ask" in `check()`). One anchor
+    cannot carry that, so its entry says `"hunks": True` and the patch's own
+    hunks are the regions. This proves the rule carries the patch EXACTLY: the
+    pre-image is made by git applying the patch in REVERSE to the published base,
+    the plan runs against it, and the staged gate must equal BOTH git's own
+    forward application of the patch AND the published base, byte for byte. A
+    second plan against the base itself must be ALREADY_PRESENT and stage
+    nothing.
+
+    NOTE (measured on the owner's PC, read-only dry run): hunk 1's two-line
+    pre-image is GONE from that install - the earlier `gate` repair inserted the
+    app-builder rows right after the table's opening brace - so a deploy must
+    run `tools/repair_live_backend_gaps.py`'s `unknown-risk` repair FIRST there.
+    After it, every probe below is present and this entry reports already.
+    """
+    name = "unknown-risk-approvable.patch"
+    base = BASE_GATE.read_text(encoding="utf-8")
+    pre = git_reverse_oracle(base, name, "jarvis_gate.py")
+    check("the unknown-risk patch reverses out of the published base", pre != base)
+    root = tmpdir("reconcile-unknown-risk-")
+    try:
+        live = make_base_live(root, "pre", {"jarvis_gate.py": pre})
+        deltas, staged, refusals = R.plan_deltas(
+            live, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("the unknown-risk delta plans cleanly against the patch's pre-image",
+              refusals == [] and staged.get("jarvis_gate.py") is not None,
+              (refusals, sorted(staged)))
+        check("the staged gate is the patch applied by git, byte for byte",
+              staged.get("jarvis_gate.py")
+              == git_apply_oracle(pre, [name], "jarvis_gate.py"))
+        check("... and the published base, byte for byte",
+              staged.get("jarvis_gate.py") == base)
+        check("the delta is the patch's five hunks in one insert",
+              [(d.patch, d.status, d.anchor) for d in deltas]
+              == [(name, "insert", "5 hunk(s)")], deltas)
+
+        live2 = make_base_live(root, "post", {"jarvis_gate.py": base})
+        deltas2, staged2, refusals2 = R.plan_deltas(
+            live2, [name], show=show_patches(name), repo=REPO, state_patches=[])
+        check("a gate that already carries the change plans nothing and refuses nothing",
+              refusals2 == [] and staged2 == {}, (refusals2, sorted(staged2)))
+        check("... and the patch is reported ALREADY_PRESENT",
+              [(d.patch, d.status) for d in deltas2] == [(name, "already")], deltas2)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -3536,6 +3609,7 @@ def main():
                t_the_no_expiry_chain_carries_965_byte_for_byte,
                t_the_no_deadline_hunk_9_is_carried_from_the_live_shape,
                t_the_no_deadline_chain_keeps_the_earlier_entries_provable,
+               t_the_unknown_risk_delta_carries_its_five_hunks_byte_for_byte,
                t_a_patch_whose_only_match_is_unchanged_context_is_refused,
                t_a_patch_with_no_distinctive_line_is_refused_by_name,
                t_the_dry_run_prints_every_refusal_and_writes_nothing,

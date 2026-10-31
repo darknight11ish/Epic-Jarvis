@@ -925,6 +925,40 @@ DELTA_TABLE = {
             "hunks": True,
         },
     },
+    # unknown-risk-approvable.patch (2026-10-30, Gemini's Q2 ruling): an action
+    # with no `_RISK` row is given the worst case, APPROVABLE through the human
+    # check, and forced to tier "ask"; the eight reads that ran unattended get
+    # their own rows, so the rule changes nothing the owner uses today. FIVE
+    # hunks in jarvis_gate.py and nothing else, so `hunks: True` carries them in
+    # file order with no hand-written anchor. The probes are one ADDED line from
+    # each hunk - across all five regions - so only a fully applied file counts
+    # as present and a partly applied one is completed hunk by hunk.
+    #
+    # MEASURED ON THE OWNER'S PC (2026-10-30, read-only dry run): hunks 2-5 each
+    # find their pre-image exactly once, but hunk 1 does NOT - the earlier
+    # `gate` repair inserted the app-builder rows immediately after the table's
+    # opening brace, so hunk 1's two-line pre-image (`_RISK...{` then
+    # `    # reading anything`) is gone. So on THIS PC the change reaches the
+    # file through `tools/repair_live_backend_gaps.py`'s `unknown-risk` repair
+    # FIRST; after that every probe is present and this entry reports
+    # ALREADY_PRESENT. Run the other way round (reconcile first), the tool
+    # refuses hunk 1 by name and writes nothing - loud, never half applied. On a
+    # folder where the patch is genuinely absent and hunk 1's pre-image is
+    # intact, this entry carries the whole patch itself (proved byte for byte in
+    # backend/test_reconcile_live_backend.py).
+    "unknown-risk-approvable.patch": {
+        "jarvis_gate.py": {
+            "probes": (
+                '"calendar_read": ("yes", "local"',
+                'UNCLASSIFIED_WARNING = ("Unclassified action - treated as '
+                'permanent and able "',
+                "`classified` is False when the table above has no row for `action`.",
+                "nobody has written down what it does, so it is given the ",
+                "gate.unclassified_forced_ask",
+            ),
+            "hunks": True,
+        },
+    },
 }
 
 #: Live-HUD deltas that are RECORDED BUT DELIBERATELY NOT APPLIED. They are kept

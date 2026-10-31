@@ -1,13 +1,19 @@
 """test_repair_live_backend_gaps.py - proves the repair tool behaves safely.
 
-The tool fixes three base-file pieces this PC's install never received:
-the app builder's two `_RISK` rows in `jarvis_gate.py`, the
-`/api/history/pin` + `/api/history/archive` POST routes in `jarvis_hud.py`,
-and the owner's card timer (`expires_in`). The timer is TWO hunks of
+The tool puts back the base-file / patch-carried pieces this PC's install never
+received: the app builder's two `_RISK` rows and the card timer in
+`jarvis_gate.py`, the `/api/history/pin` + `/api/history/archive` POST routes in
+`jarvis_hud.py`, and the unclassified-action rule + the eight `_RISK` rows from
+`unknown-risk-approvable.patch` (five disjoint pieces, applied as ONE write).
+
+Two repairs carry MORE than one edit in one file, and both are proved below to
+land as one write with one backup. The card timer is TWO hunks of
 `backend/show-card-timer.patch`: the block in `pending()` AND the SELECT line
 that gives it a `waited_until` column. A tool that inserts only the block is a
-silent no-op, so the tests below prove both hunks land and that a half-applied
-file is REFUSED rather than written again.
+silent no-op, so the tests prove both hunks land and that a half-applied file
+is REFUSED rather than written again. The unclassified-action rule is FIVE
+hunks of `unknown-risk-approvable.patch`, and the repaired file must equal the
+published gate byte for byte.
 
 It writes into the LIVE backend folder, so every failure path matters more
 than the happy one: a missing or ambiguous anchor must refuse, an already
@@ -50,6 +56,35 @@ def a_live_folder(gate: str = None, hud: str = None) -> Path:
         "_RISK: dict[str, tuple[str, str, str]] = {\n"
         '    "web_research": ("yes", "outbound", "a public query leaves the machine"),\n'
         "}\n"
+        "\n"
+        '_UNKNOWN_RISK = ("no", "outbound",\n'
+        '                 "not classified, so treated as irreversible and outbound")\n'
+        "\n"
+        "\n"
+        "def risk_for(action: str) -> dict:\n"
+        '    """Why this action is allowed, and what it costs.\n'
+        "\n"
+        "    decisions. The rest is there so a UI can EXPLAIN the decision rather than\n"
+        '    just enforce it - a card that says "no undo: there is no unsend" teaches\n'
+        "    the rule, and a card that silently refuses a swipe does not.\n"
+        '    """\n'
+        '    rev, reach, why = _RISK.get(action or "", _UNKNOWN_RISK)\n'
+        "    return {}\n"
+        "\n"
+        "\n"
+        "def notice_for(item: dict) -> dict:\n"
+        '    r = item["risk"]\n'
+        "    raised = False\n"
+        '    heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised\n'
+        "\n"
+        '    bits = [r["why"]]\n'
+        "    if raised:\n"
+        "        # Said, never quoted. That something tried to rush you is the fact that\n"
+        "        # changes your decision; its actual words are not needed to convey it,\n"
+        "        pass\n"
+        "    return {}\n"
+        "\n"
+        "\n"
         "def pending():\n"
         "    d = {}\n"
         "    sql = (\n"
@@ -58,7 +93,19 @@ def a_live_folder(gate: str = None, hud: str = None) -> Path:
         "    if d:\n"
         "        # Why this is being asked about at all, when the table said otherwise.\n"
         "        pass\n"
-        "    return d\n",
+        "    return d\n"
+        "\n"
+        "\n"
+        'def check(action: str, detail=None, prompt="") -> str:\n'
+        "    try:\n"
+        "        if not LAYERS:\n"
+        '            # is no reading of "no policy" under which a tool call is safe.\n'
+        '            raise RuntimeError("autonomy tier table is empty")\n'
+        "        tier = tiers.get(action, UNKNOWN_TIER)\n"
+        "    except Exception as exc:\n"
+        "        # Cannot read the policy -> cannot claim the action is permitted.\n"
+        '        _audit("gate.policy_unreadable", {"action": action, "error": str(exc)})\n'
+        "    return tier\n",
         encoding="utf-8", newline="\n")
     (d / "jarvis_hud.py").write_text(
         hud if hud is not None else
@@ -74,6 +121,7 @@ def a_live_folder(gate: str = None, hud: str = None) -> Path:
 def t_check_names_both_missing_then_apply_fixes_them():
     mod = load_tool()
     live = a_live_folder()
+    original_gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
     for repair in mod.REPAIRS.values():
         check(f"{repair.name}: a fresh live file is reported missing",
               mod.check_one(live, repair) == "missing")
@@ -91,15 +139,23 @@ def t_check_names_both_missing_then_apply_fixes_them():
           and '"/api/history/archive"' in hud)
     check("the card timer landed in pending()",
           'd["expires_in"] = _whole' in gate and "_waited = d.pop" in gate)
+    check("... including the timer's SELECT column",
+          all(new in gate for _old, new in mod.REPAIRS["timer"].extra_edits))
+    check("the unknown-risk rule landed all five pieces",
+          all(piece.replace_with in gate
+              for piece in mod.REPAIRS["unknown-risk"].parts()))
     check("the anchor line was kept", '"/api/history/mark"' in hud)
     check("a backup of each written file exists",
           any(live.glob("jarvis_gate.py.before-repair-*"))
           and any(live.glob("jarvis_hud.py.before-repair-*")))
+    gate_backup = next(live.glob("jarvis_gate.py.before-repair-*"))
+    hud_backup = next(live.glob("jarvis_hud.py.before-repair-*"))
+    check("the one gate backup holds the file as it was BEFORE the run",
+          gate_backup.read_text(encoding="utf-8") == original_gate,
+          "three repairs write jarvis_gate.py; a later one must not overwrite the backup")
     check("nothing else was touched", sorted(p.name for p in live.iterdir()
                                               if not p.name.startswith("__pycache__")) ==
-          sorted(["jarvis_gate.py", "jarvis_hud.py",
-                  next(p.name for p in live.glob("jarvis_gate.py.before-repair-*")),
-                  next(p.name for p in live.glob("jarvis_hud.py.before-repair-*"))]))
+          sorted(["jarvis_gate.py", "jarvis_hud.py", gate_backup.name, hud_backup.name]))
 
 
 def t_a_missing_anchor_refuses_and_writes_nothing():
@@ -260,6 +316,59 @@ def t_the_real_bases_carry_both_pieces():
     patch = (REPO / "backend" / "chat-history.patch").read_text(encoding="utf-8")
     check("chat-history.patch names both routes", "/api/history/pin" in patch
           and "/api/history/archive" in patch)
+
+
+def load_reconcile():
+    """The deploy tool, for its own patch-hunk parser - the parser a deploy uses."""
+    spec = importlib.util.spec_from_file_location(
+        "reconcile_for_repair_test", REPO / "tools" / "reconcile_live_backend.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["reconcile_for_repair_test"] = mod  # dataclasses looks it up by name
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def t_the_unknown_risk_repair_puts_the_published_gate_back_exactly():
+    """A repaired install must EQUAL a fresh one, not merely get new text.
+
+    The published base already carries #1008's five hunks. Reverse them out of
+    it with the deploy tool's own parser (so the pre-image is the one the
+    deploy itself expects), apply the repair to that pre-image, and the result
+    must be the published base BYTE FOR BYTE. This is the proof this repo uses
+    for a patch-carried change; it does not trust the repair's probe list.
+    """
+    mod = load_tool()
+    R = load_reconcile()
+    patch = (REPO / "backend" / "unknown-risk-approvable.patch").read_text(
+        encoding="utf-8")
+    base = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    hunks = R.patch_hunks(patch, "jarvis_gate.py")
+    check("the unknown-risk patch has the five hunks this repair carries",
+          len(hunks) == 5, len(hunks))
+    pre = base
+    reversed_ok = True
+    for hunk in reversed(hunks):
+        new = "\n".join(hunk["new"])
+        if pre.count(new) != 1:
+            reversed_ok = False
+            break
+        pre = pre.replace(new, "\n".join(hunk["old"]), 1)
+    check("the patch reverses out of the published base exactly once per hunk",
+          reversed_ok)
+    live = a_live_folder(gate=pre)
+    check("the repair reports the patch's pre-image missing",
+          mod.check_one(live, mod.REPAIRS["unknown-risk"]) == "missing")
+    check("the repair applies to the pre-image",
+          mod.apply_one(live, mod.REPAIRS["unknown-risk"], stamp="test") == "applied")
+    restored = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+    check("the repaired gate equals the published base BYTE FOR BYTE",
+          restored == base,
+          f"repaired {len(restored)} B vs base {len(base)} B")
+    check("every probe the repair checks for is a line the patch ADDS",
+          all(probe in patch for probe in mod.REPAIRS["unknown-risk"].probes))
+    fresh = a_live_folder(gate=base)
+    check("a gate that already carries the change is a no-op",
+          mod.apply_one(fresh, mod.REPAIRS["unknown-risk"], stamp="test") == "already")
 
 
 def main():
