@@ -67,7 +67,7 @@
     "id": "read-aloud",
     "group": "Talking",
     "title": "Jarvis reads its answers aloud",
-    "what": "Jarvis reads its answers aloud, in the voice you chose.",
+    "what": "Jarvis reads its answers aloud, in the voice you chose; a finished answer can be read out again from its own speaker button.",
     "where": "On by default: a question asked by voice gets a spoken answer, and no switch turns that off. Settings, Voice, \"Answers that use what Jarvis remembers\" and \"Answers that use sensitive saved facts\" choose whether those answers are read aloud or kept on screen. Settings, HUD, \"Read-aloud buttons on answers\" adds the speaker to each finished answer - it does not turn read-aloud on or off.",
     "asks": "No card to read aloud; an answer that used a sensitive fact stays on screen unless you allow it in Settings.",
     "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",

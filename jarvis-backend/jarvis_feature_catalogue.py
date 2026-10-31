@@ -3,7 +3,7 @@
 The owner's feature list, as data: 167 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 d3a23fc8f7c5e803dd9116ec21f407567b11b467fe2516b2a46595398a4e689a); the apps' Features pages read their own
+`features/features.json` (sha256 fe5407a58fae1507ac1831301e9b5e01bcd03fad5711b958b261c8b57a006df7); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "d3a23fc8f7c5e803dd9116ec21f407567b11b467fe2516b2a46595398a4e689a"
+SOURCE_SHA256 = "fe5407a58fae1507ac1831301e9b5e01bcd03fad5711b958b261c8b57a006df7"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -69,7 +69,7 @@ FEATURES = (
         "id": "read-aloud",
         "group": "Talking",
         "title": "Jarvis reads its answers aloud",
-        "what": "Jarvis reads its answers aloud, in the voice you chose.",
+        "what": "Jarvis reads its answers aloud, in the voice you chose; a finished answer can be read out again from its own speaker button.",
         "where": "On by default: a question asked by voice gets a spoken answer, and no switch turns that off. Settings, Voice, \"Answers that use what Jarvis remembers\" and \"Answers that use sensitive saved facts\" choose whether those answers are read aloud or kept on screen. Settings, HUD, \"Read-aloud buttons on answers\" adds the speaker to each finished answer - it does not turn read-aloud on or off.",
         "asks": "No card to read aloud; an answer that used a sensitive fact stays on screen unless you allow it in Settings.",
         "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
