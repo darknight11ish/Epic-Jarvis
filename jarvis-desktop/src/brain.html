@@ -514,29 +514,6 @@
               </p>
               <div id="wiki"></div>
             </div>
-            <!-- The notes editor (contract 2026-10-31; notes.js): every .md and
-                 .txt note in the Obsidian vault, found, opened and edited. Every
-                 Save asks the PC, which raises ONE ordinary approval card; this
-                 window never approves it and never writes without one. The
-                 search box stays put across repaints, so typing is never lost.
-                 Deliberately no data-menu-id yet: the menu catalogue is
-                 generated from backend/jarvis_menus.py, and the Notes row is
-                 owed with that generator's own lane, not hand-added here. -->
-            <div class="card card-wide" id="notes-card">
-              <h2>Notes</h2>
-              <p class="note">
-                Your whole Obsidian vault: search every note, open one and edit
-                it. Every Save raises one approval card on this PC - nothing is
-                written until you answer it, and the card can be denied. If the
-                note changed since you opened it, the save is refused and
-                nothing is overwritten. No note is created, renamed or deleted
-                here.
-              </p>
-              <input class="field search" id="notes-search" type="search"
-                     placeholder="Search your notes…" spellcheck="false"
-                     autocomplete="off" aria-label="Search your notes" />
-              <div id="notes"></div>
-            </div>
             <!-- Deep questions (backend/big-model.patch; deep.js). The box
                  stays put across repaints so typing is never lost; only the
                  line above it and the list below are redrawn. -->
@@ -562,6 +539,29 @@
                 <p class="deep-said" id="deep-said" role="status"></p>
               </div>
               <div id="deep-jobs"></div>
+            </div>
+            <!-- The notes editor (contract 2026-10-31; notes.js): every .md and
+                 .txt note in the Obsidian vault, found, opened and edited. Every
+                 Save asks the PC, which raises ONE ordinary approval card; this
+                 window never approves it and never writes without one. The
+                 search box stays put across repaints, so typing is never lost.
+                 Deliberately no data-menu-id yet: the menu catalogue is
+                 generated from backend/jarvis_menus.py, and the Notes row is
+                 owed with that generator's own lane, not hand-added here. -->
+            <div class="card card-wide" id="notes-card">
+              <h2>Notes</h2>
+              <p class="note">
+                Your whole Obsidian vault: search every note, open one and edit
+                it. Every Save raises one approval card on this PC - nothing is
+                written until you answer it, and the card can be denied. If the
+                note changed since you opened it, the save is refused and
+                nothing is overwritten. No note is created, renamed or deleted
+                here.
+              </p>
+              <input class="field search" id="notes-search" type="search"
+                     placeholder="Search your notes…" spellcheck="false"
+                     autocomplete="off" aria-label="Search your notes" />
+              <div id="notes"></div>
             </div>
           </div>
         </section>

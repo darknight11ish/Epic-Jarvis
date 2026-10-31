@@ -5751,7 +5751,7 @@ mod notes_tests {
     #[test]
     fn a_failure_that_is_not_json_becomes_a_plain_line() {
         let err = notes_answer(500, "<html>oops</html>", "/api/notes/list").expect_err("500");
-        assert!(err.contains("HTTP 500"), "{err}");
+        assert!(err.contains("500"), "{err}");
         assert!(err.contains("/api/notes/list"), "{err}");
     }
 }

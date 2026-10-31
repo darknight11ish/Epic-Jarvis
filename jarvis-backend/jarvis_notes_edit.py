@@ -478,7 +478,7 @@ def _snapshot(full: Path, rel: str) -> dict:
         return N.snapshot_vault_before_write(
             str(full), reason="notes editor: overwrite before an approved save")
     except Exception as exc:                                # noqa: BLE001
-        return {"ok": False, "error": f"guardian_failed ({type(exc).__name__})",
+        return {"ok": False, "error": f"the copy of the note could not be saved ({type(exc).__name__})",
                 "words": "The copy of the note could not be saved."}
 
 
