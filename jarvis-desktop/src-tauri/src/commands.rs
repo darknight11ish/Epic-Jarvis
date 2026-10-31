@@ -3799,18 +3799,21 @@ pub fn get_floating(app: AppHandle) -> windows::FloatingPrefs {
 }
 
 /// Turns the floating face on or off, and - with `click_through` - whether
-/// clicks on it go to whatever is behind it instead. Both are off by default,
-/// like every new surface in this app; both apply at once with no approval
-/// card — neither changes anything Jarvis does, asks or remembers, only how
-/// its own state is shown on screen, so `asks_first.rs`'s list of things that
-/// ask first does not apply here.
+/// clicks on it go to whatever is behind it instead; with `size` (one of
+/// [`windows::FLOATING_SIZES`]) it also sets and remembers the face's size.
+/// All three are off/default/down-by-default choices, like every new surface in
+/// this app; all apply at once with no approval card — none changes anything
+/// Jarvis does, asks or remembers, only how its own state is shown on screen,
+/// so `asks_first.rs`'s list of things that ask first does not apply here.
 ///
-/// ONE command for the two, rather than a second `set_floating_click_through`:
-/// a new command means the whole ACL path (a line in `build.rs`, a set in
-/// `permissions/surfaces.toml`, a grant in `capabilities/settings.json` and
-/// the generated permission file), and what this buys is a second checkbox on
-/// the row below the first one. `click_through` is `Option`, so the existing
-/// callers and tests that send only `enabled` keep working.
+/// ONE command for the three, rather than a second `set_floating_click_through`
+/// or `set_floating_size`: a new command means the whole ACL path (a line in
+/// `build.rs`, a set in `permissions/surfaces.toml`, a grant in
+/// `capabilities/settings.json` and the generated permission file), and what
+/// this buys is another box on the same row. Each new argument is `Option`, so
+/// the existing callers and tests that send only `enabled` keep working.
+/// (The tray's own "Floating face: bigger / smaller" rows call
+/// `windows::step_floating_size` directly, because they are not this window.)
 ///
 /// `async`, not a plain command: the first time it turns the face on,
 /// `show_floating` builds a window, and Tauri 2.11.5's own docs say that
@@ -3822,7 +3825,14 @@ pub async fn set_floating(
     app: AppHandle,
     enabled: bool,
     click_through: Option<bool>,
+    size: Option<f64>,
 ) -> Result<bool, String> {
+    // Size first: `show_floating` builds the window at the remembered size, so
+    // a caller that turns the face on with a new size must have it stored
+    // before the window is built.
+    if let Some(size) = size {
+        windows::set_floating_size(&app, size)?;
+    }
     if let Some(click_through) = click_through {
         // Only the preference: the window itself is dealt with by the
         // pointer watcher (`windows::start_floating_hit_watch`), which reads

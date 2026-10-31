@@ -12092,8 +12092,11 @@ do?" and "who are you?" (§54).
 ### 57.1 The window: local only, nothing here to document as a route
 
 `jarvis-desktop/src-tauri/src/windows.rs`'s `show_floating`/`hide_floating`/
-`toggle_floating`, a 200×200 borderless always-on-top window at a new page,
-`floating.html` - not `faces.html` itself. That page embeds the SAME
+`toggle_floating`/`step_floating_size`, a borderless always-on-top window at a
+new page, 200×200 by default and one of **four remembered sizes** (160, 200,
+240, 300 logical px) chosen with the tray's "Floating face: bigger / smaller"
+rows (2026-10-30; each click resizes it at once), `floating.html` - not
+`faces.html` itself. That page embeds the SAME
 `faces.html?mode=display&feed=parent` frame the desktop widget's tray
 already runs, driven by postMessage exactly as `widget.js`'s `postFace`
 drives it (`floating.js` mirrors that function): `faces.html` is the
@@ -12106,10 +12109,17 @@ the (read-only) permission instead. Off by default, turned on from
 Settings → Appearance ("Floating face"), the tray ("Show or hide the
 floating face") or a rebindable hotkey (`Alt+Shift+F` by default,
 Settings → Shortcuts). Two purely local Tauri commands, never HTTP: `get_
-floating` (`{x, y, enabled}`) and `set_floating({enabled})`. Not behind the
-app lock - see `windows.rs`'s own doc comment on `show_floating` for why:
-it shows strictly less than the widget's own status row, which lock.rs
-already leaves uncovered.
+floating` (`{x, y, enabled, clickThrough, size}`) and `set_floating({enabled,
+clickThrough?, size?})`. **Where it opens** (2026-10-30) is chosen once and
+then remembered: with a saved position the window is clamped fully inside the
+monitor it overlaps most, so a monitor that has been unplugged (or a saved
+position from a mixed-DPI desktop) cannot leave part of the face off-screen;
+with no saved position it opens centred on the monitor **under the cursor**
+rather than always on the primary display. That placement, the size and the
+click-through switch are all cosmetic, local, and ask for no approval card.
+Not behind the app lock - see `windows.rs`'s own doc comment on
+`show_floating` for why: it shows strictly less than the widget's own status
+row, which lock.rs already leaves uncovered.
 
 ### 57.2 "Open a chat" - the fast path, and how it reaches the window
 
