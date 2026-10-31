@@ -1693,7 +1693,7 @@ permissions = [
 ]
 
 # ---------------------------------------------------------------------------
-# The Jarvis Calendar's switch for Settings (2026-10-30; JARVIS-API section 166;
+# The Jarvis Calendar's switch for Settings (2026-10-30; JARVIS-API section 168;
 # `calendar_settings.rs`, `backend/jarvis_local_calendar.py`'s
 # POST /api/calendar/settings). The phone has drawn this switch since its own
 # slice; the desktop's calendar lives in the HUD, which has no Settings page, so

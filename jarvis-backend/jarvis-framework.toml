@@ -628,7 +628,7 @@ app_merge_change          = "ask"
 # The app builder's last two steps (jarvis_android_builder.py, 2026-10-30; the
 # owner's question "can jarvis build android apps? that i can sideload into my
 # phone?"; docs/APP-BUILDER-DESIGN.md milestones C, F and G; JARVIS-API
-# section 168). TWO actions, because they are two different risks and the
+# section 166). TWO actions, because they are two different risks and the
 # owner may say yes to one and no to the other.
 #
 # app_build_android runs `gradlew.bat assembleDebug`, exactly, inside ONE

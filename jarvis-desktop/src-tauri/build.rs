@@ -1045,7 +1045,7 @@ fn main() {
             "big_coder",
             "history_settings",
             // The Jarvis Calendar's switch (calendar_settings.rs; 2026-10-30;
-            // JARVIS-API section 166): read the switch and set it, one field
+            // JARVIS-API section 168): read the switch and set it, one field
             // per request, no card either way. Settings only, and it never
             // returns an event.
             "calendar_settings",
