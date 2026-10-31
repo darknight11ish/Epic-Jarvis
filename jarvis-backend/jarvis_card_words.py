@@ -276,6 +276,10 @@ TITLES = {
     # entry, and removing one (which is loosening, so it asks too).
     "protect_item": "protect a folder, file or program from Jarvis",
     "unprotect_item": "stop protecting something from Jarvis",
+    # The Obsidian notes editor (jarvis_notes_edit.py, 2026-10-31; the owner's
+    # "the whole vault, both apps"): one save replaces the WHOLE text of one
+    # note in his own vault, so it asks every time.
+    "edit_vault_note": "change a note in your Obsidian vault",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -450,6 +454,8 @@ SUMMARY = {
     # "Protected from Jarvis" (2026-10-31): one card each way
     "protect_item": "protect a folder, file or program from Jarvis",
     "unprotect_item": "stop protecting a folder, file or program",
+    # --- the Obsidian notes editor (2026-10-31): one save, one card
+    "edit_vault_note": "change a note in your Obsidian vault",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

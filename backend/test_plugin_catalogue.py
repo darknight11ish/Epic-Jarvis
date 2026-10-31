@@ -61,6 +61,10 @@ NO_PATCH = {
     # own install(), called by the drop-in loader; the folder is the whole
     # of its wiring and no patch is added to jarvis_hud.py.
     "protected-items",
+    # The Obsidian notes editor (2026-10-31): its four routes come from its own
+    # install(), called by the drop-in loader; the folder is the whole of its
+    # wiring and no patch is added to `jarvis_hud.py`.
+    "notes-edit",
     "auto-router",
     "media-index",
     "notion-obsidian",

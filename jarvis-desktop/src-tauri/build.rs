@@ -791,6 +791,16 @@ fn main() {
             "wiki_ingest",
             "wiki_ingest_status",
             "wiki_open_folder",
+            // The notes editor (the owner's choice of 2026-10-31: "the whole
+            // vault, both apps"; contract
+            // `.dsh-scratch/NOTES-EDITOR-2026-10-31/CONTRACT.md`): read the
+            // list and one note, then save one note - which raises ONE
+            // ordinary approval card (`edit_vault_note`), held on a stale link.
+            // Brain window only.
+            "notes_list",
+            "notes_read",
+            "notes_save",
+            "notes_save_status",
             // Deep questions (backend/big-model.patch): read the recent ones
             // and their answers, and ask one. No card per question - the
             // switch was approved - and asking is held on a stale link.

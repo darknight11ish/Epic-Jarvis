@@ -28738,7 +28738,164 @@ absence is load-bearing and is not the same fact as an empty list.
   owner's phone against the live backend: that is the field check, and it is
   his - start one job, watch it park, answer it, on either app.
 
-## 170. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
+## 170. The Obsidian notes editor: browse, open and save any note in the vault (added 2026-10-31)
+
+**What this section is for.** The owner's decision of 2026-10-31, in his own
+words: **"The whole vault, both apps."** Every note in the Obsidian vault can
+be listed, searched, opened and edited — from the desktop program and from the
+phone. Until this landed the backend could SEARCH the vault (read-only,
+`jarvis_notes.py`) and APPEND to today's daily note (`jarvis_note_capture.py`);
+it could not browse the vault and it could not change an existing note.
+
+The logic lives in the drop-in module `jarvis_notes_edit.py` (a shipped
+module; `plugins/ready/notes-edit/plugin.json` names it and the plugin loader
+calls its `install()`, so there is **no patch and no edit to
+`jarvis_hud.py`**). The four routes are served after the core's own origin and
+token checks, like every other route, and every request sends
+`X-Jarvis-Client: hud` from either app. The routes are local only: no model,
+no network, no token in a log, and no byte of a note's text in a card, an
+audit line or a log.
+
+### 170.1 `GET /api/notes/list`
+
+Request: `?q=<text>` optional. `q` is case-insensitive, matched against the
+note's title and its vault-relative path, and bounded at 200 characters.
+
+    GET  /api/notes/list?q=<text>
+
+Answer 200:
+
+    {"ok": true, "root": "<absolute vault path, for display only>",
+     "count": 123,
+     "notes": [{"path": "Inbox/idea.md", "title": "idea", "size": 812,
+                "mtime": 1761900000.0}],
+     "truncated": false}
+
+Only `.md` and `.txt` files inside the vault are listed. Hidden folders —
+`.obsidian`, `.trash`, anything whose name starts with a dot — are skipped,
+and so is any file or folder that is a symlink or a junction. Sorted newest
+first by `mtime`. At most **2,000** notes are returned and `truncated: true`
+says more exist. **`count` is the number of rows in THIS answer, not the
+vault's total** — `truncated` is what says the vault holds more. **It never
+returns note text.**
+
+### 170.2 `GET /api/notes/read?path=<vault-relative path>`
+
+    GET  /api/notes/read?path=<vault-relative path>
+
+Answer 200:
+
+    {"ok": true, "path": "Inbox/idea.md", "text": "...",
+     "sha256": "<hex of the BYTES on disk>", "size": 812,
+     "mtime": 1761900000.0}
+
+`text` is decoded as UTF-8; invalid bytes become replacement characters (a
+note written by another editor in another encoding is still readable, and
+saving it writes valid UTF-8). The sha256 is always of the bytes.
+
+Errors, each in a plain sentence in `error`:
+
+| Status | When |
+|---|---|
+| 400 | the path is empty, absolute (drive letter, leading `/`, UNC), climbs out with `..`, names a hidden component, contains a character a filename cannot hold, or is not a `.md`/`.txt` file; a path through a symlink or junction |
+| 404 | there is no note at that path in the vault |
+| 413 | the note is over **2 MiB** |
+| 503 | no Obsidian vault is configured, or the vault cannot be read — the sentence names `[notes.obsidian] vault_directory` and `JARVIS_OBSIDIAN_VAULT` |
+
+### 170.3 `POST /api/notes/save`
+
+    POST /api/notes/save
+
+Request body: `{"path": "...", "text": "...", "expected_sha256": "<hex>"}`,
+all three required. `expected_sha256` is the `sha256` from a
+`GET /api/notes/read` of the version the edit started from.
+
+Answers:
+
+| Status | Body | When |
+|---|---|---|
+| 202 | `{"ok": true, "state": "waiting", "id": "<job id>", "path": "..."}` | the approval card is up; the write happens only after Approve |
+| 200 | `{"ok": true, "state": "saved", "path": "...", "sha256": "<new hex>"}` | a save that needed no card (a future config with the action at tier `auto`; not the shipped default) |
+| 409 | `{"ok": false, "state": "conflict", "path": "...", "current_sha256": "<hex>"}` | `expected_sha256` no longer matches; **nothing written, no card raised** |
+| 400 | `{"ok": false, "state": "refused", "error": "<a sentence>"}` | bad/absolute/outside/link path, non-text path, missing `expected_sha256`, missing text, or body not an object |
+| 413 | same shape | the new text is over 2 MiB |
+| 429 | same shape | `4` saves are already waiting for their cards — the sentence names the limit |
+| 503 | same shape | no Obsidian vault is configured; the sentence names the setting |
+
+The POST waits a short moment (1.5 s) for a fast answer; a save that is still
+waiting answers `202` with its id, and `GET /api/notes/save?id=` reports how
+it ended. A Deny, an expired card or a refused card **leaves the file byte
+for byte as it was**.
+
+### 170.4 `GET /api/notes/save?id=<job id>`
+
+    GET  /api/notes/save?id=<job id>
+
+Answer 200:
+
+    {"ok": true, "state": "waiting"|"saved"|"denied"|"failed",
+     "path": "...", "sha256": "<hex or null>",
+     "message": "<plain sentence>"}
+
+`ok` is true only while waiting or after a save. `sha256` is the NEW hash
+after a save and `null` otherwise. `message` is the PC's own sentence ("You
+said no, so the note was not changed.", "Saved Inbox/idea.md into your
+Obsidian vault.", and so on). A note that changed while the card was up ends
+as `failed` with `current_sha256` set and nothing written. An unknown id is
+**404** with `{"ok": false, "error": "<plain sentence>"}` — the PC's own words,
+so a client shows that instead of inventing its own.
+
+### 170.5 The card, the File Guardian and the limits
+
+- **Every save is ONE approval card.** The gate action is
+  **`edit_vault_note`** and its tier is **`"ask"`** in the shipped
+  `jarvis-framework.toml` (`[autonomy.tiers]`, in both copies the repository
+  ships). The app never approves anything; the owner does, on the existing
+  Approve / Deny card.
+- **It is unclassified until a patch says otherwise.** Drop-in modules add no
+  patch and no gate-table row, and a `_RISK` row is written by patches, so the
+  gate has no risk line for `edit_vault_note` yet: it therefore **forces the
+  action to ask** whatever the settings file says, and the card carries the
+  gate's generic worst-case warning line. That is the safe side — the save can
+  never run unattended. A small follow-up patch can classify it properly.
+- **The File Guardian copies the note first.** Immediately after the owner's
+  yes, and BEFORE the write, the module calls the existing
+  `jarvis_notes.snapshot_vault_before_write()` — which is
+  `jarvis_file_guardian.snapshot_before_write()` with the configured vault as
+  the allowed root. If that copy cannot be made, **nothing is written** and the
+  save ends as `failed` with the reason.
+- **No clobbering.** The edit carries the sha256 it started from; a mismatch
+  is `409 conflict` with the current hash before any card, and the same check
+  runs again after the card, in case another editor wrote while it waited.
+- **The vault is the world.** A path is vault-relative and normalised; it is
+  refused if it is absolute, climbs out with `..`, goes through a symlink or
+  junction, is hidden, or is not a `.md`/`.txt` file — all **before any card**.
+- **Bounds.** 2 MiB per note; 2,000 notes per list; at most 4 saves waiting at
+  once. No create, delete or rename in this slice.
+- **The hidden/locked state is unchanged.** This module serves the note text;
+  both apps keep their existing Show gate and hidden-list guard in front of it,
+  and this module adds no bypass.
+
+### 170.6 What is proven, and what is not
+
+- `backend/test_notes_edit.py` proves: the four route answers above (status
+  codes and bodies) against a temporary Obsidian vault; the path sandbox
+  (absolute, `..`, hidden, non-text, symlink); the sha256 conflict (no card, no
+  write); a Deny writes nothing and takes no snapshot; an approved save takes
+  the File Guardian copy, writes the new bytes and reports the new hash; the
+  TOCTOU case (the note changed while the card waited) writes nothing; the
+  2 MiB bound, the 429 waiting limit, the no-vault 503, the unknown-id 404; the
+  `install()` wrapping (origin and token refused, other paths reach the core,
+  a second install does not double-wrap); and that `edit_vault_note` resolves
+  to tier `"ask"` through the published gate's own tier reader for BOTH shipped
+  copies of the settings file.
+- **NOT proven here:** the live PC. These routes are built and proved in this
+  repository; they are **not deployed by this change** (the live backend
+  deploy is its own pass), so the owner's live apps do not show the editor
+  until that deploy. The desktop and phone surfaces are the other two lanes of
+  the same feature; this section documents the contract they build against.
+
+## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and
 programs that i can manually add to (or ask jarvis to exclude in chat and get a
@@ -28751,7 +28908,7 @@ Backend lane: `jarvis_protection.py` (shipped; base twin byte-identical), its
 drop-in folder `plugins/ready/protected-items/` (install(); no patch), suite
 `backend/test_protection.py`, and this section.
 
-### 170.1 The store
+### 171.1 The store
 
 `protected-items.json` in the PC's Jarvis settings folder
 (`%USERPROFILE%\.openjarvis`, `jarvis_framework.CONFIG_DIR`), human-readable and
@@ -28774,7 +28931,7 @@ before comparing, so a symlink that leads into a protected folder is protected
 too. A damaged or missing store is **empty and safe**: no crash, no accidental
 protection, never "protect everything".
 
-### 170.2 The routes
+### 171.2 The routes
 
 | route | who | card |
 |---|---|---|
@@ -28795,7 +28952,7 @@ are written by patches), so they are unclassified: the gate forces them to
 "ask" whatever the setting says and shows its generic worst-case warning. A
 follow-up patch can classify them.
 
-### 170.3 The two modes, exactly
+### 171.3 The two modes, exactly
 
 - **`blocked` - no access at all.** Folder/file: no read, no search hit, no
   snippet, no document read, no write, no delete, no rename, no File-Guardian
@@ -28813,7 +28970,7 @@ app-control's list), over a chat request, and over any default tier (an
 `auto`-tier read is still refused). A refusal is a plain sentence and raises no
 card.
 
-### 170.4 Where the check is enforced (v1)
+### 171.4 Where the check is enforced (v1)
 
 One central pair of functions, `jarvis_protection.path_refusal(path, write=)`
 and `program_refusal(name, act=)`, is called BEFORE the action by the points
@@ -28832,6 +28989,7 @@ entry matches by bare executable name, with or without `.exe` (`notepad` and
 | file tools | `jarvis_agent` `file_read`, `my_files` read preflight, note-tool prepare | blocked path refused before any card; read-only files still read |
 | daily notes | `jarvis_note_capture.plan` (+ `run` belt) | a write into a protected note/file is refused before the card |
 | notes vault | `jarvis_notes.snapshot_vault_before_write` | the vault's guarded write door refuses a blocked/read-only file |
+| Obsidian notes editor | `jarvis_notes_edit._protection` (`handle_list`, `handle_read`, `handle_save`) | a blocked vault folder refuses the whole list; blocked notes/folders are hidden and the walk never descends into them; a blocked read is refused before any bytes; a save asks the WRITE question before the current bytes are read, so blocked AND read-only refuse with no card; a read-only note still lists and reads; the File Guardian snapshot still runs after the card |
 | chat attachments | `jarvis_attached_file.read` | an attachment is bytes; if a client ever sends a PC path by reference it is checked (named limitation below) |
 | File Guardian restore | `jarvis_file_guardian._restore_path` | a restore into a protected path is a write and is refused |
 | opening a program | `jarvis_open.resolve` | blocked and read-only programs are both refused ("opening" is an act) |
@@ -28858,13 +29016,13 @@ is now COVERED, FIXED, or named as a v1 deferral - never silent:
 |---|---|---|---|
 | 1 | Windows Path Canonicalization: both `normcase(abspath(p))` (lexical) and `normcase(realpath(p))` (resolved) | **FIXED** (was realpath-only; the lexical half was missing) | `jarvis_protection._path_forms`; both halves compared for folder subtrees and file equality; test `t_p1_canonicalisation_checks_both_forms` proves each half separately (and a real symlink where the OS allows one) |
 | 2 | Self-protection of `protected-items.json` and its `.bak`/temp siblings | **FIXED** (was not hard-coded; the store could be read through a model/file tool) | `jarvis_protection._is_self_path`/`SELF_SENTENCE`; unconditionally refused to every caller (read AND write), only `save()` writes it; tests point a file tool, a document read and an attachment path at it, and prove a same-named file elsewhere is NOT blocked |
-| 3 | Obsidian notes editor and wiki: list omits blocked; read refuses blocked; save/`#obs`/wiki ingest refuse blocked AND read-only BEFORE the card | **FIXED for `jarvis_notes` / `jarvis_note_capture` / `jarvis_wiki`** (the notes EDITOR module is not on this branch: it merges before the list does and gets its own hook commit, `8de06098f0`, cherry-picked after #1017 - not duplicated here) | `jarvis_notes._search_vault` skips blocked folders/notes; `jarvis_wiki.read_source`/`_shown_pages`/`_existing_pages` omit & refuse; `check_pages` asks the write question before a wiki card; `_checked` asks again in `run()`; `ingest` refuses a read-only source before a job exists; `#obs` `capture()` already refused before its card via `plan()`; tests drive each with a fake gate whose `calls` must stay empty |
+| 3 | Obsidian notes editor and wiki: list omits blocked; read refuses blocked; save/`#obs`/wiki ingest refuse blocked AND read-only BEFORE the card | **FIXED** for `jarvis_notes` / `jarvis_note_capture` / `jarvis_wiki` AND for the notes EDITOR (`jarvis_notes_edit`, via its own hook commit `8de06098f0` cherry-picked on top of PR #1017: list hides blocked entries, read refuses blocked, save asks the WRITE question before the job or card) | `jarvis_notes._search_vault` skips blocked folders/notes; `jarvis_wiki.read_source`/`_shown_pages`/`_existing_pages` omit & refuse; `check_pages` asks the write question before a wiki card; `_checked` asks again in `run()`; `ingest` refuses a read-only source before a job exists; `#obs` `capture()` already refused before its card via `plan()`; tests drive each with a fake gate whose `calls` must stay empty |
 | 4 | Screen capture/OCR: a blocked program owning the target window, or visible on the captured monitor, refuses before pixels/titles | **FIXED** (the earlier hooks only paused a foreground look and masked identified windows; a whole-monitor capture still read pixels) | `jarvis_screen_win.protected_capture_problem` (target window) and `whole_screen_protection_problem` (window list ∩ monitor rect, blocked only), `jarvis_screen._grab` refuses `protection_visible` before the grab, `take_picture` is a second fail-closed belt; tests prove the grabbing call is never made |
 | 5 | Subprocess / launcher / reminders: normalise the executable name and check all path arguments | **FIXED** for the launcher and the chat tools' path arguments; reminders use `jarvis_schedule._path_problem` (there is no `jarvis_reminders.py`) | `jarvis_protection.program_keys` (bare name, with/without `.exe`); `jarvis_open.resolve` refused both spellings; `jarvis_agent._protection_path_args` checks every absolute PC path in every tool's arguments before the gate; tests cover `notepad`/`Notepad.EXE`/full-path spellings and read-vs-write questions |
 | 6 | Background jobs and file watchers: ticks must not read blocked or write read-only paths | **FIXED for `jarvis_jobs`; `jarvis_watch` NAMED (no owner-file door)** | `jarvis_jobs._protection_params_refusal` at `create()`, at `_plan_step()` and again per step in `_plan_handler()` (read-only step = read question, mutating = write question); a fake job naming a blocked/read-only path is refused before it exists. `jarvis_watch` only reads GitHub over the network and its own SQLite DB - it never opens an owner path, so there is nothing to check there (named, not silently skipped) |
-| 7 | Phone scope: `program` entries govern PC programs (`*.exe`); phone apps stay governed by `AppControlPlate` (deny-by-default) | **FIXED in the docs** (the phone plate's own wording is the phone lane's) | §170.6 states it in plain words; the phone AppControlPlate remains deny-by-default for Android package names |
+| 7 | Phone scope: `program` entries govern PC programs (`*.exe`); phone apps stay governed by `AppControlPlate` (deny-by-default) | **FIXED in the docs** (the phone plate's own wording is the phone lane's) | §171.6 states it in plain words; the phone AppControlPlate remains deny-by-default for Android package names |
 
-### 170.5 Named gaps (v1), said plainly rather than left silent
+### 171.5 Named gaps (v1), said plainly rather than left silent
 
 - `shell_exec`, `run_data_script` (the data sandbox) and `rea_investigate` run
   a program or a script that can read any file by itself; there is no path to
@@ -28889,14 +29047,16 @@ is now COVERED, FIXED, or named as a v1 deferral - never silent:
 - Backup/model installs write inside Jarvis's own folders, not the owner's
   listed folders; the File Guardian restore point above still covers a restore
   path.
-- The Obsidian notes-editor lane is NOT on this branch: it merges before the
-  list does, and its protection hook is its own small commit (`8de06098f0`,
-  based on `a87e6656b`) that the Lead cherry-picks after #1017. It lists/reads/
-  saves through `jarvis_protection.path_refusal` with the same two modes; it is
-  deliberately not duplicated here. Until that cherry-pick lands, the notes
-  EDITOR routes are not covered (the vault search/capture doors above are).
+- The Obsidian notes editor (`jarvis_notes_edit.py`) is covered by its own
+  small hook commit (`8de06098f0`, cherry-picked on top of PR #1017 before this
+  list merges): a blocked vault folder refuses the whole list, blocked notes and
+  folders are hidden and the walk never descends into them, a blocked read is
+  refused before any bytes are read, and a save asks the WRITE question before
+  the old bytes are read - so blocked AND read-only refuse with no card, while a
+  read-only note still lists and reads and an unprotected note still saves after
+  its own one card. Nothing in that lane is left uncovered.
 
-### 170.6 The apps and honest limits
+### 171.6 The apps and honest limits
 
 Desktop Settings has the full surface (list, the three native pickers, mode
 choice, Remove, and plain sentences for refusals); the phone shows the list, the

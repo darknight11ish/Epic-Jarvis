@@ -159,6 +159,10 @@
       "title": "Jarvis wants to change a page in Logseq"
     },
     {
+      "action": "edit_vault_note",
+      "title": "Jarvis wants to change a note in your Obsidian vault"
+    },
+    {
       "action": "email_read",
       "title": "Jarvis wants to read your email"
     },
@@ -901,6 +905,18 @@
       "notice": {
         "title": "Jarvis wants to change a page in Logseq",
         "summary": "Jarvis wants to change a Logseq page.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "edit_vault_note",
+      "notice": {
+        "title": "Jarvis wants to change a note in your Obsidian vault",
+        "summary": "Jarvis wants to change a note in your Obsidian vault.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

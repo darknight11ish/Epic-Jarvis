@@ -267,6 +267,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -1595,6 +1604,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -2920,6 +2938,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -4238,6 +4265,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -5556,6 +5592,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -6886,6 +6931,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -8211,6 +8265,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"

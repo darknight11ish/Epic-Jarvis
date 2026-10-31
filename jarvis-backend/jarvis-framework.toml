@@ -344,6 +344,16 @@ write_notes_after_outside_text = "ask"
 # "ask" - that is the one card.
 protect_item              = "ask"
 unprotect_item            = "ask"
+# The notes editor (jarvis_notes_edit.py, 2026-10-31; the owner's "the whole
+# vault, both apps"): one save replaces the WHOLE text of one note in the
+# owner's own Obsidian vault. ONE card per save; a denied or expired card
+# changes nothing, and the File Guardian keeps a copy of the old bytes first.
+# The gate has no _RISK row for this name yet (drop-in modules add no patch,
+# and risk rows are written by patches), so the action is unclassified: the
+# gate forces it to "ask" whatever this line says, and the card carries the
+# gate's generic worst-case warning until a patch classifies it. Keep it "ask"
+# - that is the one card per save.
+edit_vault_note           = "ask"
 
 # --- Models: three separate decisions, deliberately not bundled --------
 # Reading public catalogues says nothing about you (see the privacy note in

@@ -1,0 +1,7 @@
+{
+  "name": "notes-edit",
+  "summary": "browse, open and edit any note in your Obsidian vault, from the desktop or the phone: one approval card per save, a File Guardian copy first, and the sha256 the edit started from so two editors cannot clobber each other.",
+  "module": "jarvis_notes_edit",
+  "install": "handler",
+  "stack_order": 169
+}

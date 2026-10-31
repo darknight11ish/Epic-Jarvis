@@ -5272,6 +5272,100 @@ object JarvisRuntime {
         return true
     }
 
+
+    // ------------------------------------------------------------ notes ----
+    // The notes editor (2026-10-31, .dsh-scratch/NOTES-EDITOR-2026-10-31/
+    // CONTRACT.md): the whole Obsidian vault, from this phone. The four routes
+    // and their shapes are com.jarvis.client.net.Notes' - here are the two
+    // reads it draws from and the ONE save, which raises the PC's existing
+    // approval card. Nothing on this phone approves, and nothing is drawn
+    // until the PC says what happened.
+
+    private val _notesJob =
+        MutableStateFlow<Pair<String, com.jarvis.client.net.Notes.Said>?>(null)
+
+    /**
+     * The note last asked to be saved (its vault path), and how that is going,
+     * in the PC's own words - null until something is saved. The plate shows
+     * it only for the note it is on ([Pair.first]), so a save followed while
+     * the owner looks at another note cannot put its answer on the wrong one.
+     */
+    val notesJob: StateFlow<Pair<String, com.jarvis.client.net.Notes.Said>?> =
+        _notesJob.asStateFlow()
+
+    /** `GET /api/notes/list` - the vault's notes; never their text. */
+    suspend fun notesList(query: String): ApiResult<JsonObject> = api.notesList(query)
+
+    /** `GET /api/notes/read` - one note, and the sha256 an edit must start from. */
+    suspend fun notesRead(path: String): ApiResult<JsonObject> = api.notesRead(path)
+
+    /**
+     * Save one note's text. The PC raises ONE `edit_vault_note` approval card
+     * (tier `ask`, the owner's own card) and answers `waiting`; the file is
+     * written only after that card is approved. A stale `expected_sha256`
+     * answers `conflict` and writes nothing. This phone never approves the card
+     * and never writes the file itself.
+     *
+     * Held on a stale or dropped link ([actionBlocker], rule 4): a card raised
+     * from a queue nobody can trust is not a save anyone asked for. The job is
+     * followed on the runtime's own scope, so leaving the screen does not lose
+     * the answer, and [notesJob] never says "saved" before the PC does.
+     *
+     * @return true when the PC took the save request (waiting or already
+     *   saved); false when it was refused before any card was raised, with the
+     *   sentence in [notesJob].
+     */
+    suspend fun saveNote(path: String, text: String, expectedSha256: String): Boolean {
+        actionBlocker()?.let {
+            _notesJob.value = path to com.jarvis.client.net.Notes.Said(it, final = true, saved = false)
+            return false
+        }
+        val first = when (val r = api.notesSave(path, text, expectedSha256)) {
+            is ApiResult.Failed -> {
+                val why = com.jarvis.client.net.Notes.failure(r.error) ?: describe(r.error)
+                _notesJob.value = path to com.jarvis.client.net.Notes.Said(
+                    why, final = true, saved = false,
+                )
+                return false
+            }
+            is ApiResult.Ok -> r.value
+        }
+        val said = com.jarvis.client.net.Notes.describe(first)
+        _notesJob.value = path to said
+        if (said.final) return said.saved
+        val id = com.jarvis.client.net.Notes.jobId(first) ?: return true
+        scope.launch {
+            val started = SystemClock.elapsedRealtime()
+            // Survives a dropped link and a failed poll or two - see JobFollow.
+            val follow = com.jarvis.client.net.JobFollow()
+            while (true) {
+                delay(com.jarvis.client.net.Notes.POLL_MS)
+                if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Notes.GIVE_UP_MS) {
+                    _notesJob.value = path to com.jarvis.client.net.Notes.Said(
+                        com.jarvis.client.net.Notes.GAVE_UP, final = true, saved = false,
+                    )
+                    break
+                }
+                if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
+                val next = api.notesSaveStatus(id)
+                if (next is ApiResult.Failed) {
+                    if (!follow.failed()) continue
+                    _notesJob.value = path to com.jarvis.client.net.Notes.Said(
+                        "Lost track of it (${describe(next.error)}). Check the approval card " +
+                            "on your PC and the note itself.",
+                        final = true, saved = false,
+                    )
+                    break
+                }
+                follow.answered()
+                val now = com.jarvis.client.net.Notes.describe((next as ApiResult.Ok).value)
+                _notesJob.value = path to now
+                if (now.final) break
+            }
+        }
+        return true
+    }
+
     // ------------------------------------------------------------ watch ----
 
     private val _watchTick = MutableStateFlow(0)
