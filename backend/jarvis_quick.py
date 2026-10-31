@@ -4700,6 +4700,39 @@ _FEATURE_OVERVIEW = re.compile(
 _FEATURE_OVERVIEW_ABOUT = re.compile(
     r"what\s+can\s+(?:you|jarvis)\s+do\s+about\s+(?:the\s+|my\s+)?(.+)")
 
+# ---- detail shapes (2026-10-31, the owner's "talk about all features in
+# detail" ask) ---------------------------------------------------------------
+# These are DEEPER than explain: the guide's detail() quotes every own field
+# (what, where, example, asks, limit, state, surface, needs) and the state read
+# at answer time. Each pattern resolves the SAME row the explain shapes resolve;
+# an unknown name falls through to the model (or the honest answer when the
+# sentence explicitly says Jarvis/a feature), exactly like the discussion shapes.
+_FEAT_DETAIL = re.compile(
+    r"(?:explain|describe)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+in\s+detail"
+    r"|tell\s+me\s+(?:everything|all)\s+about\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEAT_HOW_USE = re.compile(
+    r"how\s+(?:do|can|should|would)\s+i\s+"
+    r"(?:set\s+(?P<setup>.+?)\s+up"
+    r"|(?:use|try|start\s+using|get\s+started\s+with|set\s+up)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(?P<use>.+))")
+_FEAT_EXAMPLE = re.compile(
+    r"(?:give\s+me\s+an?\s+example\s+of|what\s+do\s+i\s+say\s+to\s+use)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEAT_PRIVATE = re.compile(
+    r"is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+private")
+_FEAT_NEEDS = re.compile(
+    r"what\s+(?:does|do)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+"
+    r"(?:need|require)")
+_FEAT_WHY_STATE = re.compile(
+    r"why\s+is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+"
+    r"(?:on|off|enabled|disabled|switched\s+(?:on|off))")
+_FEAT_WRONG = re.compile(
+    r"what\s+can\s+go\s+wrong\s+with\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEAT_CAN_DO = re.compile(
+    r"can\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+do\s+(.+)")
+_FEAT_LIKE = re.compile(
+    r"what\s+is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+like")
+
 
 def _feature_capabilities(s: str) -> Optional[Intent]:
     """Capability questions the feature list can answer, or None (2026-10-31)."""
@@ -4823,6 +4856,32 @@ def _feature_difference_intent(raw, first: str, second: str):
     return Intent("feature_difference",
                   {"first": row_a["id"] if row_a is not None else first,
                    "second": row_b["id"] if row_b is not None else second})
+
+
+def _feature_detail_row(raw, target: str):
+    """The row a detail shape names, with the SAME gate as explain."""
+    return _feature_discussion_row(raw, target)
+
+
+def _feature_detail_intent(raw, target: str, mode: str):
+    row = _feature_detail_row(raw, target)
+    if row is not None:
+        return Intent("feature_detail", {"id": row["id"], "mode": mode})
+    if _feature_context_ok(raw) and _feature_explicit(_feature_target(target)):
+        return Intent("feature_unknown",
+                      {"words": _feature_target(_feature_without_context(target))})
+    return None
+
+
+def _feature_can_do_intent(raw, target: str, capability: str):
+    row = _feature_detail_row(raw, target)
+    if row is not None:
+        return Intent("feature_can_do",
+                      {"id": row["id"], "capability": str(capability or "").strip()})
+    if _feature_context_ok(raw):
+        return Intent("feature_unknown",
+                      {"words": f"{target} {capability}".strip()})
+    return None
 
 
 def _feature_overview_about_intent(raw, area: str):
@@ -6576,6 +6635,53 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
     m = _FEATURES_GROUP.fullmatch(s)
     if m:
         return Intent("features_group", {"group": (m.group(1) or m.group(2) or "").strip()})
+    # ---- detail shapes (2026-10-31, the owner's depth ask) -----------------
+    m = _FEAT_DETAIL.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1) or m.group(2) or "", "detail")
+        if got is not None:
+            return got
+    m = _FEAT_HOW_USE.fullmatch(s)
+    if m:
+        target = m.group("setup") or m.group("use") or ""
+        got = _feature_detail_intent(raw, target, "detail")
+        if got is not None:
+            return got
+    m = _FEAT_EXAMPLE.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "example")
+        if got is not None:
+            return got
+    m = _FEAT_PRIVATE.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "private")
+        if got is not None:
+            return got
+    m = _FEAT_NEEDS.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "needs")
+        if got is not None:
+            return got
+    m = _FEAT_WHY_STATE.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "why_state")
+        if got is not None:
+            return got
+    m = _FEAT_WRONG.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "goes_wrong")
+        if got is not None:
+            return got
+    m = _FEAT_CAN_DO.fullmatch(s)
+    if m:
+        got = _feature_can_do_intent(raw, m.group(1), m.group(2))
+        if got is not None:
+            return got
+    m = _FEAT_LIKE.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "like")
+        if got is not None:
+            return got
     m = _FEATURE_TRAIN.fullmatch(s)
     if m:
         # "how do I train you to write like me?" - explain the feature named
@@ -10123,6 +10229,31 @@ def _run_feature_overview(f: dict) -> Result:
     return Result(str(out.get("words") or ""), "feature_overview")
 
 
+def _run_feature_detail(f: dict) -> Result:
+    """"Explain X in detail" and the detail family - every own field + state."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_detail")
+    mode = str(f.get("mode") or "detail")
+    target = f.get("id") or f.get("words") or ""
+    fn = {"detail": FG.detail, "example": FG.example,
+          "private": FG.is_private, "needs": FG.needs,
+          "why_state": FG.why_state, "goes_wrong": FG.goes_wrong,
+          "like": FG.is_like}.get(mode, FG.detail)
+    out = fn(target)
+    return Result(str(out.get("words") or ""), "feature_detail")
+
+
+def _run_feature_can_do(f: dict) -> Result:
+    """"Can X do Y?" - only from X's own row text."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_can_do")
+    out = FG.can_do(f.get("id") or f.get("words") or "",
+                    f.get("capability") or "")
+    return Result(str(out.get("words") or ""), "feature_can_do")
+
+
 def _run_feature_state(f: dict) -> Result:
     FG = _guide()
     if FG is None:
@@ -10457,6 +10588,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_feature_difference(f)
     if n == "feature_overview":
         return _run_feature_overview(f)
+    if n == "feature_detail":
+        return _run_feature_detail(f)
+    if n == "feature_can_do":
+        return _run_feature_can_do(f)
     if n == "feature_explain":
         return _run_feature_explain(f)
     if n == "feature_unknown":
@@ -10981,6 +11116,9 @@ READ_ONLY_INTENTS = frozenset({
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_limits", "feature_asks", "feature_app", "feature_why",
     "feature_difference", "feature_overview",
+    # Detail shapes (2026-10-31): they only read the catalogue row and the
+    # guide's state, and change nothing.
+    "feature_detail", "feature_can_do",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown", "setting_explain",
     # The local calendar read and the honest off / app-only / unbuilt
