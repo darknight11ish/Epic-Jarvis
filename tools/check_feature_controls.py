@@ -440,15 +440,18 @@ def main(argv=None):
     # 2026-10-30: picture-in-picture joined as PC-Only Setting (a phone-only
     # display setting saved on the phone, no backend route), so 15 -> 16 and
     # 143 -> 144 features. Measured from the contract, not chosen.
+    # 2026-10-31: the notes editor and Protected from Jarvis joined as
+    # Command-Only rows, so 71 -> 73 and 144 -> 146 features; 2026-10-31 send-file added one more Command-Only row, so 73 -> 74 and 146 -> 147. Measured
+    # from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
-        LAB_COMMAND: 71, LAB_ALWAYS: 12,
+        LAB_COMMAND: 74, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/71/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/16/74/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/16/71/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 43/2/16/74/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.
