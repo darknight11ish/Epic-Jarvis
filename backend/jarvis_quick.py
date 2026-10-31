@@ -5064,7 +5064,12 @@ def _notes_tool_clause() -> str:
 # hiding, this answer counts events and never prints a title, using the
 # module's own withheld sentence - the same rule the calendar card follows.
 
-_CAL_TODAY = re.compile(r"what(?:'s| is)? on (?P<w>today|tomorrow)")
+#: "what's on tomorrow" is a calendar READ; "what's on today" is NOT claimed
+#: here on purpose - `jarvis_intake.schedule_command()` treats every fast-path
+#: match as a command, so a broad "what's on today" would stop the intake
+#: learner from reading that ordinary turn (caught 2026-10-31 in the
+#: integration tree by `test_memory_intake.py`, which expects the turn kept).
+_CAL_TODAY = re.compile(r"what(?:'s| is)? on (?P<w>tomorrow)")
 _CAL_READ_PATTERNS = (
     (re.compile(r"what(?:'s| is)? on (?:my|the) calendar"
                 r"(?: (?P<w>today|tomorrow|this week|next week))?"), None),
@@ -7439,10 +7444,23 @@ def _update_tier(action: str) -> str:
         return "ask"
 
 
+def _gate_module():
+    """The ONE lazy import of `jarvis_gate` in this file.
+
+    `test_ask_to_change.py` requires exactly one gate import in this module, so
+    the change lane cannot grow a second gate door. The update card's own gate
+    and the note-capture taint read both reach the gate through this accessor;
+    a second `import jarvis_gate` anywhere fails that guard (2026-10-31: the
+    integration tree's CI found two imports, at the update gate and the note
+    gate).
+    """
+    import jarvis_gate
+    return jarvis_gate
+
+
 def _update_gate(action: str, detail: dict, prompt: str):
     """`jarvis_gate.check` - the one gate every card goes through."""
-    import jarvis_gate
-    return jarvis_gate.check(action, detail, prompt=prompt)
+    return _gate_module().check(action, detail, prompt=prompt)
 
 
 def _update_spawn(fn) -> None:
@@ -8460,8 +8478,7 @@ def _note_make_gate(action: str, detail: dict, prompt: str):
     `_gate_check`, so there is ONE fail-closed wrapper, not a second one.
     """
     try:
-        import jarvis_gate as G
-        tainted = bool(G.taint_active())
+        tainted = bool(_gate_module().taint_active())
     except Exception:                       # noqa: BLE001 - cannot tell: ask
         tainted = True
     want = "write_notes_after_outside_text" if tainted else action
