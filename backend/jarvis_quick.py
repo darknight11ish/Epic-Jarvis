@@ -1161,6 +1161,17 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- the stateful read doors and OFF-state sentences (2026-10-31, the
+    # chat audit's second half). They run BEFORE the feature/settings grammars
+    # because those answered some of these wrongly: a light command raised the
+    # "lights without a card" SETTING card, quiet hours was explained with its
+    # internal key, and "can you turn on the lights?" never reached the real
+    # home-control state. Specific shapes only - a generic feature question
+    # still belongs to the feature list (#1030).
+    got = _honest_early(text, s)
+    if got is not None:
+        return got
+
     # --- the voice reflex (2026-10-21, Live/Voice audit V4) -----------------
     # Before everything else, because it is a whole short sentence: "speak
     # faster". It routes into an action that already exists
@@ -1522,6 +1533,18 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- "what's my next reminder?" (the scheduler's own list, 2026-10-31) -------------
     got = _next_up(s)
+    if got is not None:
+        return got
+
+    # --- the LOCAL calendar's own read, and the honest answers for abilities
+    # that are off, built only in the apps, or not built at all (2026-10-31,
+    # pass 11: "what's on my calendar today?" answered with Google setup steps
+    # while the local calendar was readable; "make a note"/"organize my notes"
+    # were model promises). Fixed sentences, real state read at answer time.
+    got = _local_calendar_prompt(s)
+    if got is not None:
+        return got
+    got = _honest_chat_prompt(s)
     if got is not None:
         return got
 
@@ -4664,6 +4687,1039 @@ def _feature_capability_question(raw) -> Optional[Intent]:
         return None
     return _feature_capabilities(text)
 
+
+# ---------------------------------------------------------------------------
+#   Honest answers for abilities that are OFF, built only in the apps, or not
+#   built at all - and the local calendar's own read (2026-10-31, pass 11)
+# ---------------------------------------------------------------------------
+#
+# THE MEASURED BUGS (the owner's chat audit of the Obsidian features, live HUD
+# on 0.2.378/0.2.379, recorded in
+# `.dsh-scratch/FIELD-TEST-2026-10-31/pass11/obsidian/NOTES-OBSIDIAN.md`):
+#   * "make a note: ..." answered "I shall record ..." and NOTHING was
+#     written: the note-writing tools are not in the owner's `[tools].enabled`
+#     list, and no fixed sentence said so, so the model promised a write it
+#     could not make.
+#   * "organize my notes" answered with a promise; the vault organizer exists,
+#     is OFF by default, and has no chat door yet.
+#   * "create a new note called Shopping", "rename my note ...", and "customize
+#     my Obsidian theme" invented features that are not built (creating,
+#     renaming, deleting, themes/CSS/templates are all absent by design).
+#   * "what does my Welcome note say?" answered "I have no access to your
+#     files" - wrong: the Notes plate reads every note in the vault.
+#   * "what's on my calendar today?" answered with the Google connect steps
+#     alone, ignoring the LOCAL Jarvis Calendar that exists, works and holds
+#     the owner's own events.
+#
+# FIXED SENTENCES ONLY: no model, no new tool, no new route, no new card. Every
+# state is READ at answer time from the module that owns it -
+# `jarvis_agent.enabled_tools_for_turn()` for `[tools].enabled`,
+# `jarvis_asks_first` for the real switch words and their Windows Hello rule,
+# `jarvis_feature_guide`'s own rows for where/how/how-many-cards, and
+# `jarvis_local_calendar` for the calendar - so no sentence can drift from the
+# code. A private chat keeps its own rule (its fast path stays off there).
+#
+# The note/organizer ACTION lanes are separate work; nothing here writes a note,
+# organizes a vault, or changes a switch. These sentences only say what is true.
+
+#: The tools `jarvis_agent` offers the model for writing / reading notes. The
+#: owner's list is read at ANSWER time, never remembered.
+_NOTE_WRITE_TOOLS = ("append_obsidian_daily", "append_logseq_journal",
+                     "create_joplin_note", "create_logseq_page")
+_NOTE_READ_TOOLS = ("notes_search", "read_files_readonly")
+
+
+def _enabled_tools_turn() -> set:
+    """`[tools].enabled` as the live turn reads it - the REAL switch state."""
+    try:
+        import jarvis_agent as A
+        return set(A.enabled_tools_for_turn())
+    except Exception:
+        return set()
+
+
+def _asks_first_module():
+    try:
+        import jarvis_asks_first as AF
+        return AF
+    except Exception:
+        return None
+
+
+def _read_switch(row_id: str):
+    """(row, [{"key","label","state"}]) from the feature list, or (None, [])."""
+    FG = _guide()
+    if FG is None:
+        return None, []
+    try:
+        row = FG.row_by_id(row_id)
+        if row is None:
+            return None, []
+        return row, FG.feature_switches(row)
+    except Exception:
+        return None, []
+
+
+def _switch_is_off(row_id: str) -> Optional[bool]:
+    """True/False from the real reader, or None when it cannot be read."""
+    _, switches = _read_switch(row_id)
+    if not switches:
+        return None
+    states = []
+    for switch in switches:
+        try:
+            states.append(_guide().read_state(switch.get("key")))
+        except Exception:
+            states.append(None)
+    if states and all(state is False for state in states):
+        return True
+    if any(state is True for state in states):
+        return False
+    return None
+
+
+def _tool_off_words(subject: str, action: str) -> str:
+    """The real switch words for a tool-backed ability that is not offered."""
+    AF = _asks_first_module()
+    if AF is None:
+        return (f"{subject} is switched off on this PC because the tool behind "
+                f"it is not offered to me.")
+    switchable = tuple(getattr(AF, "TOOLS_SWITCHABLE", ()) or ())
+    if action in switchable:
+        pc_only = str(getattr(AF, "TOOLS_PC_ONLY", "") or "").strip()
+        if pc_only:
+            return f"{subject} is switched off on this PC. {pc_only}"
+    not_listed = str(getattr(AF, "TOOLS_NOT_ON_LIST", "") or "").strip()
+    head = (f"{subject} is switched off on this PC because the tool behind it "
+            f"is not offered to me.")
+    return f"{head} {not_listed}".strip()
+
+
+def _notes_door_words(prefix: str) -> str:
+    """The true door to the notes, in the feature list's own words."""
+    row, _ = _read_switch("notes-editor")
+    where = str((row or {}).get("where") or "").strip()
+    asks = str((row or {}).get("asks") or "").strip()
+    limit = str((row or {}).get("limit") or "").strip()
+    out = prefix
+    if where:
+        out += f" Where: {where}"
+    if asks:
+        out += f" {asks}"
+    if limit and "create" in limit.lower():
+        out += " Creating, renaming and deleting a note is not built - that is done in Obsidian itself."
+    return out.strip()
+
+
+def _notes_tool_clause() -> str:
+    """One sentence about whether a note READ/SEARCH can run in chat today."""
+    tools = _enabled_tools_turn()
+    if any(name in tools for name in _NOTE_READ_TOOLS):
+        return ("The notes tool is switched on in Settings, What asks first, so a "
+                "search can also run in chat.")
+    AF = _asks_first_module()
+    where = "Settings, What asks first"
+    group = ""
+    try:
+        groups = getattr(AF, "GROUPS", ()) if AF is not None else ()
+        if groups:
+            group = str(groups[0][0] or "")
+    except Exception:
+        group = ""
+    if group:
+        where += ", " + group
+    return f"Searching note text from chat is switched off here ({where})."
+
+
+# ---- the local calendar's own read (2026-10-31, pass 11) -------------------
+#
+# THE MEASURED BUG: "what's on my calendar today?" was answered with the Google
+# connect steps alone. The LOCAL calendar exists (jarvis_local_calendar.py), is
+# ON by default, holds the owner's own events, and its GET /api/calendar answer
+# is what the desktop card and the phone draw. A read must never be answered
+# with setup instructions while a real store is readable. So this path calls
+# the module the card calls - list_events()/settings() - and reports what is
+# really there. It reads only: no card, no write, no network.
+#
+# TITLES AND THE HIDING RULES: the app's own hidden-lists / App-lock state is
+# read from jarvis_private_view (the backend's one read-only hook). While it is
+# hiding, this answer counts events and never prints a title, using the
+# module's own withheld sentence - the same rule the calendar card follows.
+
+_CAL_TODAY = re.compile(r"what(?:'s| is)? on (?P<w>today|tomorrow)")
+_CAL_READ_PATTERNS = (
+    (re.compile(r"what(?:'s| is)? on (?:my|the) calendar"
+                r"(?: (?P<w>today|tomorrow|this week|next week))?"), None),
+    (re.compile(r"what do i have (?P<w>today|tomorrow|this week)"
+                r"(?: on (?:my|the) calendar)?"), None),
+    (re.compile(r"what(?:'s| is)? my next (?P<what>event|appointment|calendar event)"),
+     "next"),
+    (re.compile(r"when(?:'s| is)? my next (?P<what>event|appointment)"), "next"),
+    (re.compile(r"am i free (?:at|on) (?P<at>.+)"), "free"),
+    (re.compile(r"do i have anything(?: on)?(?: my calendar)? "
+                r"(?P<w>today|tomorrow|this week)"), None),
+    (_CAL_TODAY, None),
+)
+_CAL_DAYS = {"today": 1, "tomorrow": 2, "this week": 7, "next week": 7,
+             "week": 7, "next": 30, "free": 1}
+
+
+def _local_calendar_module():
+    try:
+        import jarvis_local_calendar as LC
+        return LC
+    except Exception:
+        return None
+
+
+def _calendar_hidden():
+    """(hidden, withheld words) from the backend's one hiding hook."""
+    try:
+        import jarvis_private_view as PV
+        state = PV.effective()
+        hidden = bool(state.get("app_locked") or state.get("hide_memory_lists"))
+        words = PV.withheld_words(app_locked=state.get("app_locked"),
+                                  hide_memory_lists=state.get("hide_memory_lists"))
+        return hidden, words
+    except Exception:
+        return False, ""
+
+
+def _calendar_google_note() -> str:
+    """The honest Google/state clause, only when it can really be read."""
+    try:
+        import jarvis_google_calendar as G
+        state = G.status()
+    except Exception:
+        return ""
+    if state.get("connected"):
+        return ""
+    return "Google Calendar is not connected on this PC."
+
+
+def _calendar_when_words(ev: dict, LC) -> str:
+    """"Saturday 31 October at 09:00", from the module's own name lists."""
+    try:
+        import datetime
+        day = datetime.date.fromisoformat(str(ev.get("date") or ""))
+        weekdays = getattr(LC, "WEEKDAY_NAMES", ())
+        months = getattr(LC, "MONTH_NAMES", ())
+        named = f"{weekdays[day.weekday()]} {day.day} {months[day.month - 1]}"
+        if ev.get("all_day") or not ev.get("time"):
+            return f"all day on {named}"
+        return f"{named} at {ev['time']}"
+    except Exception:
+        return str(ev.get("date") or "")
+
+
+def _calendar_event_words(ev: dict, LC) -> str:
+    return f"{ev.get('title') or 'An event'}, {_calendar_when_words(ev, LC)}."
+
+
+def _calendar_counted(words_when: str, count: int, withheld: str) -> str:
+    noun = "event" if count == 1 else "events"
+    out = f"You have {count} {noun} {words_when}."
+    return f"{out} {withheld}".strip()
+
+
+def _at_words(display: str) -> str:
+    """"3" / "3pm" / "15:00" -> "3 this afternoon", or "" when unreadable."""
+    import re as _re
+    m = _re.fullmatch(r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ap>am|pm)?",
+                      str(display or "").strip().lower())
+    if not m:
+        return ""
+    hour, minute = int(m.group("h")), int(m.group("m") or 0)
+    if hour > 23 or minute > 59:
+        return ""
+    ap = m.group("ap")
+    if ap == "pm" and hour < 12:
+        hour += 12
+    elif ap == "am" and hour == 12:
+        hour = 0
+    elif not ap and 1 <= hour <= 6:
+        hour += 12                     # "am I free at 3" is the afternoon
+    if hour < 12:
+        part = "in the morning"
+    elif hour < 18:
+        part = "this afternoon"
+    else:
+        part = "this evening"
+    shown = hour % 12 or 12
+    if minute:
+        return f"{shown}:{minute:02d} {part}"
+    return f"{shown} {part}"
+
+
+def _local_calendar_prompt(s: str) -> Optional[Intent]:
+    """The local-calendar READ sentences this PC can answer, or None."""
+    for rx, window in _CAL_READ_PATTERNS:
+        m = rx.fullmatch(s)
+        if not m:
+            continue
+        named = (m.groupdict().get("w") or "").strip()
+        at = (m.groupdict().get("at") or "").strip()
+        if at:
+            return Intent("local_calendar_read", {"window": "free", "at": at})
+        if window:
+            return Intent("local_calendar_read", {"window": window})
+        if named:
+            return Intent("local_calendar_read", {"window": named})
+        return Intent("local_calendar_read", {"window": "week"})
+    return None
+
+
+def _run_local_calendar_read(f: dict, now: float) -> Optional[Result]:
+    """A calendar READ, from the store the calendar card itself reads."""
+    LC = _local_calendar_module()
+    if LC is None:
+        return None                    # no module: keep the old road
+    try:
+        settings = LC.settings()
+    except Exception:
+        return None
+    if not settings.get("on"):
+        why = str(settings.get("why") or "").strip()
+        head = ("The Jarvis calendar is off on this PC, so I cannot read it. "
+                "Turning it back on is instant - Settings, Jarvis Calendar - "
+                "and needs no approval card.")
+        return Result(f"{head} {why}".strip(), "local_calendar_read")
+    window = str(f.get("window") or "week")
+    days = _CAL_DAYS.get(window, 7)
+    try:
+        data = LC.list_events(days)
+    except Exception:
+        return Result("The calendar could not be read on this PC, so nothing "
+                      "was shown. Nothing was changed.", "local_calendar_read")
+    if not data.get("available", True):
+        return Result(str(data.get("why") or "The calendar could not be read on "
+                      "this PC, so nothing was shown."), "local_calendar_read")
+    import datetime
+    start = datetime.date.fromisoformat(str(data["window"]["start"]))
+    events = list(data.get("events") or [])
+    hidden, withheld = _calendar_hidden()
+    print_start = start.isoformat()
+
+    def shown(ev):
+        return ("An event" if hidden else str(ev.get("title") or "An event"))
+
+    def one(ev):
+        return f"{shown(ev)}, {_calendar_when_words(ev, LC)}."
+
+    def list_words(evs):
+        return " ".join(one(ev) for ev in evs[:8])
+
+    empty = ""
+    if window == "today":
+        same = [ev for ev in events if ev.get("date") == print_start]
+        if hidden:
+            words = (_calendar_counted("today", len(same), withheld)
+                     if same else "Nothing on your calendar today.")
+        elif not same:
+            words = "Nothing on your calendar today."
+        else:
+            words = f"On your calendar today: {list_words(same)}"
+        empty = "" if same else "Nothing on your calendar today."
+    elif window == "tomorrow":
+        tomorrow = (start + datetime.timedelta(days=1)).isoformat()
+        same = [ev for ev in events if ev.get("date") == tomorrow]
+        if hidden:
+            words = (_calendar_counted("tomorrow", len(same), withheld)
+                     if same else "Nothing on your calendar tomorrow.")
+        elif not same:
+            words = "Nothing on your calendar tomorrow."
+        else:
+            words = f"On your calendar tomorrow: {list_words(same)}"
+        empty = "" if same else "Nothing on your calendar tomorrow."
+    elif window == "free":
+        at_text = str(f.get("at") or "").strip().lower()
+        display = _at_words(at_text)
+        hh = mm = None
+        hit = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", at_text)
+        if hit:
+            hh, mm = int(hit.group(1)), int(hit.group(2) or 0)
+            ap = hit.group(3)
+            if ap == "pm" and hh < 12:
+                hh += 12
+            elif ap == "am" and hh == 12:
+                hh = 0
+            elif not ap and 1 <= hh <= 6:
+                hh += 12
+        wanted = (f"{hh:02d}:{mm:02d}" if hh is not None and hh <= 23
+                  and mm is not None and mm <= 59 else "")
+        same = [ev for ev in events if ev.get("date") == print_start
+                and (ev.get("time") or "") == wanted] if wanted else []
+        if not display or not wanted:
+            words = ("Tell me a time, like \"am I free at 3\", and I will check "
+                     "your calendar.")
+        elif same and hidden:
+            noun = "event" if len(same) == 1 else "events"
+            words = (f"You have {len(same)} {noun} at {display}. {withheld}".strip())
+        elif same:
+            words = f"You have {one(same[0])[:-1]} at {display}."
+        else:
+            words = f"You are free at {display}."
+    elif window == "next":
+        upcoming = []
+        for ev in events:
+            date = str(ev.get("date") or "")
+            if date > print_start:
+                upcoming.append(ev)
+            elif date == print_start:
+                when = ev.get("time") or ""
+                if ev.get("all_day") or not when:
+                    upcoming.append(ev)
+                else:
+                    try:
+                        hour, minute = (int(x) for x in when.split(":"))
+                    except Exception:
+                        continue
+                    now_dt = datetime.datetime.fromtimestamp(now)
+                    if (hour, minute) >= (now_dt.hour, now_dt.minute):
+                        upcoming.append(ev)
+        if not upcoming:
+            words = "You have nothing on your calendar in the next 30 days."
+        elif hidden:
+            words = (f"Your next event is on "
+                     f"{_calendar_when_words(upcoming[0], LC)}; its title is "
+                     f"hidden. {withheld}".strip())
+        else:
+            words = f"Your next event is {one(upcoming[0])}"
+    else:
+        if hidden:
+            words = (_calendar_counted("in the next 7 days", len(events), withheld)
+                     if events else "Nothing on your calendar this week.")
+        elif not events:
+            words = "Nothing on your calendar this week."
+        else:
+            words = f"On your calendar this week: {list_words(events)}"
+        empty = "" if events else "Nothing on your calendar this week."
+    if empty:
+        note = _calendar_google_note()
+        if note:
+            words = f"{words} {note}"
+    return Result(words, "local_calendar_read")
+
+
+# ---- the honest action sentences ------------------------------------------
+
+_NOTE_WRITE = re.compile(
+    r"(?:make|write|add|jot down|note down|start)\s+(?:me\s+)?(?:a\s+|an\s+)?"
+    r"(?:quick\s+|new\s+)?note\b.*"
+    r"|note\s+(?:this|that)\b.*")
+_NOTE_CREATE = re.compile(
+    r"(?:create|make|add)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?note\s+"
+    r"(?:called|named|titled)\b.*"
+    r"|(?:create|add)\s+(?:me\s+)?(?:a\s+|an\s+)?new\s+note\b.*")
+_NOTE_RENAME = re.compile(r"rename\s+(?:my\s+|the\s+)?note\b.*")
+_NOTE_DELETE = re.compile(r"(?:delete|remove|erase)\s+(?:my\s+|the\s+)?note\b.*")
+_NOTE_READ = re.compile(
+    r"what(?:'s| is)?\s+(?:in|inside)\s+my\s+(?P<name>[a-z0-9' -]{1,60}?)\s+note\b.*"
+    r"|what\s+does\s+my\s+(?P<name2>[a-z0-9' -]{1,60}?)\s+note\s+say\b.*"
+    r"|read\s+(?:me\s+)?my\s+(?P<name3>[a-z0-9' -]{1,60}?)\s+note\b.*"
+    r"|read\s+my\s+notes?\b.*"
+    r"|what\s+do\s+my\s+notes\s+say\b.*")
+_NOTE_SEARCH = re.compile(
+    r"(?:search|look|find|check)\s+(?:through\s+|in\s+|for\s+)?(?:my|the)\s+"
+    r"notes?\b.*"
+    r"|find\s+.*\s+in\s+my\s+notes\b.*"
+    r"|do\s+i\s+have\s+(?:a\s+)?note\s+(?:about|on|called|named)\b.*"
+    r"|what\s+notes\s+do\s+i\s+have\b.*")
+_NOTE_EDIT = re.compile(
+    r"edit\s+(?:my\s+|the\s+)?note\b.*"
+    r"|open\s+my\s+note\b.*in\s+a\s+window\b.*")
+_ORGANIZE = re.compile(
+    r"(?:organize|organise|tidy|sort|clean up)\s+(?:my|the|our)\s+"
+    r"(?:obsidian\s+)?(?:notes|vault|vaults)\b.*"
+    r"|(?:organize|organise)\s+(?:my|the)\s+obsidian\b.*")
+_CUSTOMISE = re.compile(
+    r"(?:change|customi[sz]e|set|use|install|add|make|create)\s+"
+    r"(?:my|the|a|an)?\s*(?:obsidian|vault|note|notes)?\s*"
+    r"(?:theme|themes|css|stylesheet|template|templates|plugin|plugins|"
+    r"community plugins|appearance)\b.*"
+    r"|(?:obsidian|vault)\s+(?:theme|themes|css|template|templates|plugin|"
+    r"plugins|appearance)\b.*"
+    r"|customi[sz]e\s+(?:my|the)?\s*(?:obsidian|vault)\b.*")
+_EMAIL_READ = re.compile(
+    r"(?:read|check|open|look at|scan)\s+(?:my\s+)?(?:email|e-mail|mail|inbox)\b.*"
+    r"|(?:any|new)\s+(?:email|e-mail|mail)\b.*"
+    r"|what(?:'s| is)?\s+in\s+my\s+(?:email|inbox|mail)\b.*")
+_HOME_READ = re.compile(
+    r"is\s+the\s+(?:garage\s+|front\s+|back\s+|kitchen\s+)?door\s+"
+    r"(?:open|locked|closed|unlocked)\b.*"
+    r"|is\s+(?:the\s+)?(?:light|lights|lamp|heat|heating|thermostat|air)"
+    r"\s+(?:on|off)\b.*"
+    r"|what(?:'s| is)\s+the\s+(?:temperature|thermostat)\s+(?:inside|in\s+the\s+house|"
+    r"at\s+home)\b.*")
+_PHONE_CONTROL = re.compile(
+    r"(?:tap|swipe|control|unlock|use)\s+(?:on\s+)?my\s+phone\b.*"
+    r"|(?:send|write|type)\s+(?:a\s+|an\s+)?(?:text|message|sms)\s+(?:on|from|with)\s+"
+    r"my\s+phone\b.*")
+_JOBS_DOOR = re.compile(
+    r"(?:start|create|make|begin|run|queue)\s+(?:me\s+)?(?:a\s+|an\s+)?"
+    r"(?:background\s+|long\s+)?job\b.*"
+    r"|(?:start|create)\s+(?:a\s+)?(?:background\s+)?(?:job|long job)\b.*")
+_SPENDING = re.compile(
+    r"how\s+much\s+(?:did|have|do)\s+i\s+spend\b.*"
+    r"|(?:my\s+)?spending\s+(?:summary|summaries|report|total)\b.*"
+    r"|what\s+did\s+i\s+spend\b.*")
+_SCREEN_LOOK = re.compile(
+    r"look\s+at\s+(?:my|the)\s+(?:screen|window|desktop)\b.*")
+_PICTURES = re.compile(
+    r"(?:make|draw|create|generate|paint)\s+(?:me\s+)?(?:a\s+|an\s+)?"
+    r"(?:picture|image|drawing)\b.*")
+_NOTE_NAMES = "notes, the Notes plate, or Obsidian itself"
+
+
+def _honest_chat_prompt(s: str) -> Optional[Intent]:
+    """One fixed, honest intent for off / app-only / unbuilt abilities."""
+    # -- app-only: the vault organizer (built, OFF by default, no chat door) --
+    if _ORGANIZE.fullmatch(s):
+        return Intent("honest_chat", {"shape": "organizer"})
+    # -- never built: Obsidian themes, CSS, templates, plugins --------------
+    if _CUSTOMISE.fullmatch(s):
+        return Intent("honest_chat", {"shape": "never_built"})
+    # -- app-only: creating / renaming / deleting a note --------------------
+    if _NOTE_CREATE.fullmatch(s):
+        return Intent("honest_chat", {"shape": "note_unbuilt", "op": "create"})
+    if _NOTE_RENAME.fullmatch(s):
+        return Intent("honest_chat", {"shape": "note_unbuilt", "op": "rename"})
+    if _NOTE_DELETE.fullmatch(s):
+        return Intent("honest_chat", {"shape": "note_unbuilt", "op": "delete"})
+    # -- off: writing a note needs a tool the model is not offered ----------
+    if _NOTE_WRITE.fullmatch(s):
+        tools = _enabled_tools_turn()
+        if any(name in tools for name in _NOTE_WRITE_TOOLS):
+            return None                # a real note path owns it (other lane)
+        return Intent("honest_chat", {"shape": "note_write"})
+    # -- read/search/edit a note: the true door, never a promise ------------
+    if _NOTE_READ.fullmatch(s) or _NOTE_SEARCH.fullmatch(s) or _NOTE_EDIT.fullmatch(s):
+        mode = "search" if _NOTE_SEARCH.fullmatch(s) else "read"
+        return Intent("honest_chat", {"shape": "note_door", "mode": mode})
+    # -- off: email / home / phone-control tools ----------------------------
+    tools = _enabled_tools_turn()
+    if _EMAIL_READ.fullmatch(s):
+        if "email_check" in tools or "email_read" in tools:
+            return None
+        return Intent("honest_chat", {"shape": "capability_off",
+                                      "subject": "Reading your email from chat",
+                                      "action": "email_read"})
+    if _HOME_READ.fullmatch(s):
+        if "home_read" in tools:
+            return None
+        return Intent("honest_chat", {"shape": "capability_off",
+                                      "subject": "Asking how the house is from chat",
+                                      "action": "home_read"})
+    if _PHONE_CONTROL.fullmatch(s):
+        if "control_phone" in tools:
+            return None
+        return Intent("honest_chat", {"shape": "capability_off",
+                                      "subject": "Tapping or controlling your phone from chat",
+                                      "action": "control_phone"})
+    # -- app-only doors: jobs and spending are read in the apps -------------
+    if _JOBS_DOOR.fullmatch(s):
+        return Intent("honest_chat", {"shape": "feature_door", "row": "jobs"})
+    if _SPENDING.fullmatch(s):
+        return Intent("honest_chat", {"shape": "feature_door", "row": "spending"})
+    # -- settings-backed abilities: only when the real switch reads OFF -----
+    # (The screen look is asked only when the OWNER phrased it as a question -
+    # "can you look at my screen?" - because the plain "look at my screen"
+    # belongs to PR #691's Live read, which this fast path must not intercept.)
+    if _PICTURES.fullmatch(s) and _switch_is_off("pictures") is True:
+        return Intent("honest_chat", {"shape": "setting_off", "row": "pictures"})
+    return None
+
+
+def _run_honest_chat(f: dict) -> Result:
+    """The one fixed sentence for an off / app-only / unbuilt ability."""
+    shape = str(f.get("shape") or "")
+    if shape == "note_write":
+        return Result(
+            _tool_off_words("Writing a note from chat", "append_obsidian_daily")
+            + " You can write the note in Obsidian itself; a note that exists "
+              "opens and edits in the Brain's Notes plate, with one approval "
+              "card per save.",
+            "honest_chat")
+    if shape == "note_door":
+        mode = str(f.get("mode") or "read")
+        if mode == "search":
+            head = "I cannot search note text in chat here."
+        else:
+            head = "I cannot read note text in chat here."
+        return Result(_notes_door_words(head) + " " + _notes_tool_clause(),
+                      "honest_chat")
+    if shape == "note_unbuilt":
+        op = str(f.get("op") or "create")
+        verb = {"create": "Creating", "rename": "Renaming",
+                "delete": "Deleting"}.get(op, "Changing")
+        tail = {"create": "Create it in Obsidian itself.",
+                "rename": "Rename it in Obsidian itself.",
+                "delete": "Delete it in Obsidian itself."}.get(op, "")
+        return Result(_notes_door_words(f"{verb} a note is not built in Jarvis.")
+                      + f" {tail}".strip(), "honest_chat")
+    if shape == "organizer":
+        try:
+            import jarvis_vault_organizer as O
+        except Exception:
+            O = None
+        if O is not None and O.enabled():
+            words = (str(getattr(O, "SWITCH_ON_WORDS", "") or "").strip()
+                     + " It shows you a read-only plan first and changes "
+                       "nothing until you approve the plan.")
+        else:
+            off = (str(getattr(O, "_OFF_WHY", "") or "").strip() if O is not None
+                   else "The vault organizer is off on this PC.")
+            words = (f"{off} After that it shows you a read-only plan and "
+                     f"changes nothing until you approve the plan.")
+        return Result(words.strip(), "honest_chat")
+    if shape == "never_built":
+        FG = _guide()
+        not_feature = str(getattr(FG, "CAPABILITY_NOT_A_FEATURE", "") or
+                          "That is not one of my features on this PC.")
+        tail = str(getattr(FG, "CAPABILITY_TAIL", "") or "").strip()
+        nearest = (" What is built is browsing, searching and editing your "
+                   "notes in the Brain's Notes plate - a save there raises one "
+                   "card - and Obsidian itself owns themes, CSS and templates.")
+        return Result(f"{not_feature}{nearest} {tail}".strip(), "honest_chat")
+    if shape == "capability_off":
+        subject = str(f.get("subject") or "That")
+        action = str(f.get("action") or "")
+        return Result(_tool_off_words(subject, action), "honest_chat")
+    if shape == "feature_door":
+        row_id = str(f.get("row") or "")
+        row, _ = _read_switch(row_id)
+        where = str((row or {}).get("where") or "").strip()
+        what = str((row or {}).get("what") or "").strip()
+        title = str((row or {}).get("title") or "").strip()
+        if row_id == "jobs":
+            words = (f"{title or 'Background jobs'} are not started from chat. "
+                     + (f"Where: {where}" if where else "")
+                     + " The jobs already running are listed there.")
+        else:
+            words = ("I cannot start that from chat here. "
+                     + (f"{what} " if what else "")
+                     + (f"Where: {where}" if where else ""))
+        return Result(words.strip(), "honest_chat")
+    if shape == "setting_off":
+        row_id = str(f.get("row") or "")
+        row, _ = _read_switch(row_id)
+        FG = _guide()
+        title = str((row or {}).get("title") or "That")
+        if row is not None and FG is not None:
+            try:
+                out = FG.how_to(str(row.get("id") or ""), on=True)
+                words = str(out.get("words") or "").strip()
+                if words.startswith(title):
+                    words = words[len(title):].lstrip(" .")
+            except Exception:
+                words = ""
+            if words:
+                return Result(f"{title} is switched off on this PC. {words}",
+                              "honest_chat")
+        return Result(f"{title} is switched off on this PC.", "honest_chat")
+    extra = _run_honest_chat_extra(f)
+    if extra is not None:
+        return extra
+    return Result("That is not something I can do from chat here.", "honest_chat")
+
+
+# ---- the stateful read doors (2026-10-31, the chat audit's second half) ----
+#
+# THE MEASURED BUGS (`.dsh-scratch/FIELD-TEST-2026-10-31/pass11/chat-audit/
+# AUDIT-CHAT.md`, rows 21, 22, 40, 42, 47, 49, 50, 52, 53 and the doors audit):
+#   * "what is protected from Jarvis right now?" - no chat read of the list,
+#     and the model said it could not check; "remove protection from a folder"
+#     was refused outright, while the catalogue says it raises one card.
+#   * "how do I turn off quiet hours?" - the feature guide answered with the
+#     internal key "pc_quiet_hours" instead of the owner's own words.
+#   * "what asks first?" - no answer; the model asked a clarifying question.
+#   * "what timer is on my phone" / "set a timer on my phone" - the model said
+#     it was not connected, while the phone is connected.
+#   * "what jobs are running?" - the model pointed at Task Manager.
+#   * "can you watch a PR for me?" / "tell me when a PR changes" - the model
+#     did not know the watch door.
+#   * "can you switch models?" / "switch models from my phone" - the model
+#     said it could not, while the model-switch card and the phone switch exist.
+#   * "can you read this picture?" - the model said it cannot read pictures,
+#     while picture mode is a real switch (off by default).
+#   * "can you turn on the lights?" - a feature switch card was raised for the
+#     "lights without a card" SETTING, though the real home-control tool is off.
+#
+# Each answer below reads the REAL store/state at answer time and says it in
+# the owning module's own words: `jarvis_protection.handle_get()` and its
+# CHANGE_CARD, `jarvis_jobs.jobs()`, `jarvis_devices.paired_status()`,
+# `jarvis_limits`'s own row titles, `jarvis_asks_first`'s switch words and
+# `jarvis_feature_guide`'s rows. Reads only: no card, no write, no model.
+
+_PROTECT_READ = re.compile(
+    r"(?:what(?:'s| is)|show me|list|tell me|see)\s+(?:what(?:'s| is)\s+)?"
+    r"(?:currently\s+)?protected\b.*"
+    r"|what(?:'s| is)\s+on\s+my\s+protected\s+(?:list|items)\b.*"
+    r"|is\s+anything\s+protected\b.*")
+_PROTECT_REMOVE = re.compile(
+    r"(?:remove|take|clear|undo)\s+(?:the\s+)?protection\s+(?:from|on)\s+(?P<target>.+)"
+    r"|unprotect\s+(?P<target2>.+)"
+    r"|stop\s+jarvis\s+from\s+(?:touching|reading|opening|using)\s+(?P<target3>.+)"
+    r"|(?:remove|take)\s+(?P<target4>.+?)\s+(?:from|off)\s+(?:the\s+)?protected\b.*")
+_PROTECT_ADD = re.compile(
+    r"(?:protect|exclude)\s+(?:my|the|this|these|those)\s+(?P<target>.+)"
+    r"|add\s+(?P<target2>.+?)\s+to\s+(?:the\s+)?protected\b.*")
+_LIGHTS = re.compile(
+    r"turn\s+(?:on|off)\s+(?:the\s+|my\s+|a\s+)?(?:living\s+room|kitchen|bedroom|"
+    r"office|hall|front\s+room|lounge|dining\s+room|bathroom)?\s*"
+    r"(?:light|lights|lamp|lamps|plug|plugs|fan|fans)\b.*")
+_PHONE_TIMER = re.compile(
+    r"(?:what|which)\s+(?:timer|timers|alarm|alarms)\s+(?:is|are)\s+(?:on|set\s+on)\s+"
+    r"my\s+phone\b.*"
+    r"|(?:what|which)\s+(?:timer|timers)\s+do\s+i\s+have\s+on\s+my\s+phone\b.*"
+    r"|(?:what|which)\s+(?:timer|timers)\s+(?:is|are)\s+(?:on|set\s+on)\s+my\s+phone\b.*"
+    r"|timers?\s+on\s+my\s+phone\b.*"
+    r"|(?:can\s+you|could\s+you|please)?\s*set\s+(?:a\s+)?(?:timer|alarm)\s+on\s+"
+    r"my\s+phone\b.*")
+_MODEL_SWITCH = re.compile(
+    r"(?:can\s+you|could\s+you|how\s+do\s+i|how\s+can\s+i|how\s+to|where\s+do\s+i)?\s*"
+    r"switch\s+(?:the\s+|my\s+)?models?\b.*"
+    r"|switch\s+models?\s+from\s+(?:my\s+)?phone\b.*")
+_WATCH_DOOR = re.compile(
+    r"(?:can\s+you|could\s+you|please)?\s*watch\s+(?:a\s+|this\s+|my\s+|the\s+)?"
+    r"(?:pr|pull\s+request|repo|repository|issue)\b.*"
+    r"|how\s+do\s+i\s+get\s+you\s+to\s+(?:watch|tell\s+me\s+when)\s+(?:a\s+|the\s+)?"
+    r"(?:pr|pull\s+request|repo|repository)\b.*")
+_JOBS_READ = re.compile(
+    r"what\s+(?:background\s+)?jobs?\s+(?:are\s+)?(?:running|going|active|queued)\b.*"
+    r"|what\s+jobs?\s+do\s+i\s+have\b.*"
+    r"|(?:are|is)\s+there\s+(?:any\s+)?(?:background\s+)?jobs?\s+running\b.*"
+    r"|what(?:'s| is)\s+running\s+in\s+the\s+background\b.*")
+_ASKS_FIRST = re.compile(
+    r"(?:what(?:'s| is)?\s+)?what\s+asks\s+first\b.*"
+    r"|(?:explain|tell\s+me\s+about|describe)\s+what\s+asks\s+first\b.*")
+_QUIET_HOURS = re.compile(
+    r"(?:how\s+(?:do|can)\s+i|how\s+to|where\s+(?:is|are)|what\s+(?:is|are)|"
+    r"tell\s+me\s+about|explain)\b.*quiet\s+hours\b.*"
+    r"|quiet\s+hours\b.*(?:work|setting|where|change|turn)\b.*")
+_WHAT_OFF = re.compile(
+    r"what\s+(?:is|are|s)?\s+(?:switched\s+)?off\s+on\s+this\s+(?:pc|computer)\b.*"
+    r"|which\s+(?:features|things|abilities)\s+are\s+(?:switched\s+)?off\b.*"
+    r"|which\s+of\s+your\s+features\s+are\s+(?:switched\s+)?off\b.*")
+_PICTURE_READ = re.compile(
+    r"(?:can\s+you|could\s+you)?\s*read\s+(?:this|the|a)\s+"
+    r"(?:picture|image|screenshot|photo)\b.*"
+    r"|what(?:'s| is)\s+(?:in|on)\s+this\s+(?:picture|image|screenshot)\b.*")
+
+
+def _protection_module():
+    try:
+        import jarvis_protection as P
+        return P
+    except Exception:
+        return None
+
+
+def _protection_mode_words(P, mode) -> str:
+    words = getattr(P, "MODE_WORDS", {}) or {}
+    return str(words.get(mode) or mode or "")
+
+
+def _phone_state_words(devices_state: dict) -> str:
+    """One sentence about the owner's phone, from /api/devices' own rows."""
+    devices = list((devices_state or {}).get("devices") or [])
+    phones = []
+    for dev in devices:
+        name = str(dev.get("name") or "")
+        kind = str(dev.get("kind") or "").lower()
+        if kind == "phone" or "phone" in name.lower():
+            phones.append(dev)
+    if not (devices_state or {}).get("readable", True):
+        why = str((devices_state or {}).get("why") or "").strip()
+        return ("I cannot read the paired devices on this PC right now."
+                + (f" {why}" if why else ""))
+    if not phones:
+        return ("No phone is paired with Jarvis on this PC yet. Timers set on the "
+                "phone stay on the phone; pair it first and the phone's own Clock "
+                "shows them.")
+    parts = []
+    for dev in phones:
+        name = str(dev.get("name") or "your phone")
+        seen = dev.get("last_seen")
+        if isinstance(seen, (int, float)) and seen > 0:
+            import datetime
+            age = max(0, int(time.time() - float(seen)))
+            if age < 120:
+                when = "just now"
+            elif age < 3600:
+                when = f"{age // 60} minutes ago"
+            elif age < 86400:
+                when = f"{age // 3600} hours ago"
+            else:
+                when = datetime.datetime.fromtimestamp(
+                    float(seen)).strftime("%d %B")
+            parts.append(f"{name}, last heard from {when}")
+        else:
+            parts.append(f"{name}, not heard from since it was paired")
+    return ("Your phone is connected to Jarvis right now (" + "; ".join(parts)
+            + "). Timers set on the phone stay on the phone - I cannot read or "
+              "set them from this PC's chat; open the phone's Clock, or ask "
+              "Jarvis on the phone.")
+
+
+def _quiet_hours_words() -> str:
+    """The owner's own words for the quiet-hours rows, from jarvis_limits."""
+    rows = ()
+    try:
+        import jarvis_limits as L
+        rows = tuple(getattr(L, "_NOTIFY_ROWS", ()) or ())
+    except Exception:
+        rows = ()
+    titles = []
+    for row in rows:
+        try:
+            key, _kind, title = row[0], row[1], row[2]
+        except Exception:
+            continue
+        if "quiet" in str(key).lower():
+            titles.append(str(title))
+    if not titles:
+        titles = ["Be quiet during quiet hours (on your PC)",
+                  "Quiet hours start (on your PC)",
+                  "Quiet hours end (on your PC)"]
+    quoted = ", ".join(f'"{t}"' for t in titles)
+    return ("Quiet hours are the times your PC stays quiet. They are in Settings, "
+            f"Limits and frequency - the rows {quoted}. Say \"turn off quiet "
+            "hours\" (or on) and Jarvis changes that switch.")
+
+    # ---- the matcher, run BEFORE the feature/settings grammars ----------------
+
+
+def _honest_early(_text: str, s: str) -> Optional[Intent]:
+    """Off-state / state-read sentences that must beat the feature grammar."""
+    # The protection list, and the one-card rule for changing it.
+    if _PROTECT_READ.fullmatch(s):
+        return Intent("honest_state", {"shape": "protection_read"})
+    m = _PROTECT_REMOVE.fullmatch(s)
+    if m:
+        target = next((g for g in m.groups() if g), "")
+        return Intent("honest_state", {"shape": "protection_change",
+                                       "op": "remove",
+                                       "target": target.strip()})
+    m = _PROTECT_ADD.fullmatch(s)
+    if m:
+        target = next((g for g in m.groups() if g), "")
+        return Intent("honest_state", {"shape": "protection_change",
+                                       "op": "add",
+                                       "target": target.strip()})
+    # A real light/plug/fan command: the home-control tool, not the setting.
+    # The feature guide's own displayed control phrase ("turn on lights without
+    # asking") must keep reaching the SETTING, so it is left alone here.
+    if _LIGHTS.fullmatch(s):
+        if any(phrase in s for phrase in ("without asking", "without a card",
+                                         "no card", "without cards")):
+            return None
+        if "home_control" not in _enabled_tools_turn():
+            return Intent("honest_chat", {"shape": "lights_off"})
+        return None
+    # The phone's own timers: real paired-device state, never "not connected".
+    if _PHONE_TIMER.fullmatch(s):
+        return Intent("honest_state", {"shape": "phone_state"})
+    # Model switching is real; point at its own place and card.
+    if _MODEL_SWITCH.fullmatch(s):
+        return Intent("honest_chat", {"shape": "model_door"})
+    # A watch is set up by the owner's words; the feature list names the place.
+    if _WATCH_DOOR.fullmatch(s):
+        return Intent("honest_chat", {"shape": "watch_door"})
+    # The job list is really readable.
+    if _JOBS_READ.fullmatch(s):
+        return Intent("honest_state", {"shape": "jobs_read"})
+    # The Settings answers whose words the feature grammar leaked or lost.
+    # Only the bare page question: "tell me about what asks first" and the
+    # other explain shapes belong to the feature list, which has the row.
+    if s == "what asks first":
+        return Intent("honest_chat", {"shape": "asks_first"})
+    if _QUIET_HOURS.fullmatch(s):
+        return Intent("honest_chat", {"shape": "quiet_hours"})
+    if _WHAT_OFF.fullmatch(s):
+        return Intent("honest_chat", {"shape": "general_off"})
+    # Reading a picture is picture mode's question, not an invented refusal.
+    if _PICTURE_READ.fullmatch(s) and _switch_is_off("look-at-this") is True:
+        return Intent("honest_chat", {"shape": "setting_off", "row": "look-at-this"})
+    # "Can you look at my screen?" is a QUESTION about the switch; the plain
+    # "look at my screen" is PR #691's own Live read and is left to it.
+    if (_SCREEN_LOOK.fullmatch(s) and _switch_is_off("look-at-this") is True
+            and any(ask in str(_text or "").lower()
+                    for ask in ("can you", "could you", "can i", "may i",
+                                "please look", "would you"))):
+        return Intent("honest_chat", {"shape": "setting_off", "row": "look-at-this"})
+    return None
+
+
+def _run_honest_state(f: dict) -> Result:
+    """The stateful reads: the protection list, the job list, the phone state."""
+    shape = str(f.get("shape") or "")
+    if shape == "protection_read":
+        P = _protection_module()
+        if P is None:
+            return Result("I cannot read the Protected from Jarvis list on this "
+                          "PC right now.", "honest_state")
+        try:
+            code, body = P.handle_get()
+        except Exception:
+            code, body = 500, {}
+        if not isinstance(body, dict) or not body.get("ok"):
+            return Result("This PC could not read the Protected from Jarvis list, "
+                          "so nothing is shown. Nothing was changed.",
+                          "honest_state")
+        items = list(body.get("items") or [])
+        change = str(body.get("change_card") or "").strip()
+        if not items:
+            words = "Nothing is protected from Jarvis right now."
+        else:
+            parts = []
+            for item in items[:8]:
+                kind = str(item.get("kind") or "item")
+                target = str(item.get("target") or "")
+                mode = _protection_mode_words(P, item.get("mode"))
+                parts.append(f"{kind} {target} ({mode})")
+            extra = "" if len(items) <= 8 else f" and {len(items) - 8} more"
+            noun = "thing" if len(items) == 1 else "things"
+            verb = "is" if len(items) == 1 else "are"
+            words = (f"{len(items)} {noun} {verb} protected from Jarvis: "
+                     + "; ".join(parts) + extra + ".")
+        return Result(f"{words} {change}".strip(), "honest_state")
+    if shape == "protection_change":
+        P = _protection_module()
+        op = str(f.get("op") or "")
+        verb = "Removing protection" if op == "remove" else "Adding protection"
+        rule = (str(getattr(P, "CHANGE_CARD", "") or "") if P is not None else "")
+        offered = ("protect_item" in _enabled_tools_turn()
+                   or "unprotect_item" in _enabled_tools_turn())
+        if offered:
+            head = f"{verb} from chat raises one approval card."
+        else:
+            head = (f"{verb} from chat needs the protection tool, which is not "
+                    f"offered to me on this PC, so I cannot start its card here "
+                    f"in chat. Do it in Settings, Protected from Jarvis on the PC: "
+                    f"adding there is immediate.")
+        return Result(f"{head} {rule}".strip(), "honest_state")
+    if shape == "jobs_read":
+        try:
+            import jarvis_jobs as J
+            rows = J.jobs()
+        except Exception:
+            return Result("This PC could not read its background job list, so "
+                          "nothing is shown. Nothing was changed.", "honest_state")
+        running = [row for row in rows
+                   if str(row.get("state") or "") in
+                   ("queued", "running", "waiting_approval")]
+        if not running:
+            if not rows:
+                words = "No background jobs right now."
+            else:
+                words = "No background jobs are running right now."
+            return Result(words, "honest_state")
+        state_words = {"queued": "waiting to start", "running": "running",
+                       "waiting_approval": "waiting for your approval"}
+        parts = []
+        for row in running[:6]:
+            label = str(row.get("label") or row.get("handler") or "a job")
+            state = state_words.get(str(row.get("state")), str(row.get("state")))
+            parts.append(f"{label} ({state})")
+        noun = "job" if len(running) == 1 else "jobs"
+        return Result(f"{len(running)} background {noun}: " + "; ".join(parts) + ".",
+                      "honest_state")
+    if shape == "phone_state":
+        try:
+            import jarvis_devices as D
+            state = D.paired_status()
+        except Exception:
+            state = {}
+        return Result(_phone_state_words(state), "honest_state")
+    return Result("That is not something I can read from chat here.", "honest_state")
+
+
+def _general_off_items() -> list:
+    """What is really switched off for chat, from the real switches."""
+    items = []
+    tools = _enabled_tools_turn()
+    if not any(name in tools for name in _NOTE_WRITE_TOOLS):
+        items.append("writing a note from chat")
+    if "email_check" not in tools and "email_read" not in tools:
+        items.append("reading your email")
+    if "home_read" not in tools:
+        items.append("asking how the house is")
+    if "home_control" not in tools:
+        items.append("switching your lights")
+    if not any(name in tools for name in _NOTE_READ_TOOLS):
+        items.append("searching your notes")
+    if _switch_is_off("look-at-this") is True:
+        items.append("looking at your screen")
+    if _switch_is_off("pictures") is True:
+        items.append("making pictures")
+    LC = _local_calendar_module()
+    try:
+        if LC is not None and not LC.settings().get("on"):
+            items.append("the Jarvis calendar")
+    except Exception:
+        pass
+    return items
+
+
+def _run_honest_chat_extra(f: dict) -> Optional[Result]:
+    """The non-store shapes added with the stateful read doors."""
+    shape = str(f.get("shape") or "")
+    if shape == "lights_off":
+        return Result(_tool_off_words("Switching your lights from chat",
+                                      "home_control"), "honest_chat")
+    if shape == "model_door":
+        row, _ = _read_switch("models")
+        title = str((row or {}).get("title") or "Models")
+        what = str((row or {}).get("what") or "").strip()
+        where = str((row or {}).get("where") or "").strip()
+        if row is None:
+            return Result("Models are switched in the Brain's Model page on this "
+                          "PC, and a switch raises one approval card.",
+                          "honest_chat")
+        return Result(f"{title}: {what} Where: {where} A switch between the "
+                      f"models already on the PC raises one approval card; it is "
+                      f"not something this chat box changes by asking.",
+                      "honest_chat")
+    if shape == "watch_door":
+        row, _ = _read_switch("github-watchlist")
+        where = str((row or {}).get("where") or "").strip()
+        what = str((row or {}).get("what") or "").strip()
+        head = (f"{what} " if what else "") + (f"Where: {where} " if where else "")
+        tail = ("To be told when a page changes, say \"tell me when <the page> "
+                "changes\" - setting a watch up raises one approval card.")
+        return Result((head + tail).strip(), "honest_chat")
+    if shape == "asks_first":
+        AF = _asks_first_module()
+        label = str(getattr(AF, "TOOLS_LABEL", "") or "Let the AI use this")
+        titles = []
+        try:
+            items = (AF.tools_status() or {}).get("items") or []
+            titles = [str(item.get("title") or "") for item in items
+                      if item.get("title")]
+        except Exception:
+            titles = []
+        names = ", ".join(titles[:4]) or "calendar, email, notes and home status"
+        return Result(
+            "What asks first is Settings, What asks first. There you decide what "
+            "Jarvis may do without asking, and under \"" + label + "\" whether "
+            "the AI is offered each reading tool at all (" + names + "). Turning "
+            "one on is one approval card plus Windows Hello on this PC; turning "
+            "it off is instant.", "honest_chat")
+    if shape == "quiet_hours":
+        return Result(_quiet_hours_words(), "honest_chat")
+    if shape == "general_off":
+        items = _general_off_items()
+        if not items:
+            return Result("Nothing that chat can read is switched off on this PC "
+                          "right now.", "honest_chat")
+        return Result(
+            "On this PC these are switched off right now: " + "; ".join(items[:8])
+            + ". The four reading tools (calendar, email, notes and home status) "
+              "are turned on in Settings, What asks first under \"Let the AI use "
+              "this\" - one approval card plus Windows Hello. The other tools "
+              "change only in your settings file.", "honest_chat")
+    return None
 
 
 def _feature_target(words) -> str:
@@ -8758,6 +9814,17 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     device asked (2026-10-30, the parking answer's two lengths); otherwise
     `_client_surface` infers it from `peer`/`local`."""
     n, f = intent.name, intent.f
+    # The local calendar's own read, and the honest answers for abilities that
+    # are off, built only in the apps, or not built at all (2026-10-31, pass
+    # 11). Both are fixed sentences that read the real state: no model, no
+    # card, no write. They are listed in READ_ONLY_INTENTS, so a private chat's
+    # own rule (fast path off, model instead) still applies.
+    if n == "local_calendar_read":
+        return _run_local_calendar_read(f, now)
+    if n == "honest_chat":
+        return _run_honest_chat(f)
+    if n == "honest_state":
+        return _run_honest_state(f)
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
     if n in ("update_ask", "update_notes"):
@@ -9369,6 +10436,10 @@ READ_ONLY_INTENTS = frozenset({
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown", "setting_explain",
+    # The local calendar read and the honest off / app-only / unbuilt
+    # sentences (2026-10-31, pass 11): they read the real state and say it,
+    # change nothing, so they must not take away what "cancel that" would undo.
+    "honest_chat", "local_calendar_read", "honest_state",
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
     "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",

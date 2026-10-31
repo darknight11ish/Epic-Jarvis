@@ -188,8 +188,13 @@ UNCHANGED = (
     "half an hour",
     "an hour and a half",
     "what about tomorrow",
-    "read my notes",
+    "read my emails",
 )
+
+#: "read my notes" was in UNCHANGED until 2026-10-31 (the owner's chat audit):
+#: a note READ now has its own fixed, honest answer from the chat-honesty lane
+#: (chat cannot read note text; the door is the Brain's Notes plate), so it is
+#: deliberately no longer "left to the model". See backend/test_chat_honesty.py.
 
 #: The reads PR #691 owns (Live turns, the same primitives). This fast path
 #: must NOT match them, or it would intercept the phrase before that path can
@@ -284,6 +289,12 @@ def t_the_safe_number_rule_never_hijacks_ordinary_words():
             continue        # not questions; the normaliser test above covers them
         got = Q.match(phrase)
         check(f"ordinary words stay chat: {phrase!r}", got is None, got)
+    # 2026-10-31 (the owner's chat audit): a note READ is the chat-honesty lane's
+    # fixed answer now - chat cannot read note text, and the door is the Brain's
+    # Notes plate - so it is deliberately NOT ordinary chat any more.
+    check("a note read is the honesty lane's fixed answer now",
+          getattr(Q.match("read my notes"), "name", None) == "honest_chat",
+          Q.match("read my notes"))
     check("'one of the files' is left byte-for-byte alone",
           Q.normalize_spoken_command("one of the files needs sorting")
           == "one of the files needs sorting")

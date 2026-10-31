@@ -1011,9 +1011,16 @@ def t_turn_on_a_setting_in_the_owners_own_words():
           == ["background_learning", "learn_sensitive_topics"])
     for said in ("turn off the kitchen light", "turn on graphics card",
                  "turn off the turbo setting"):
-        check(f"{said!r} changes nothing (no card, no guess)", Q.match(said) is None
-              or Q.match(said).name in ("settings_unknown", "feature_switch_refused"),
-              Q.match(said))
+        got = Q.match(said)
+        ok = got is None or got.name in ("settings_unknown", "feature_switch_refused")
+        # 2026-10-31 (chat audit): a REAL light command is answered honestly -
+        # the home-control tool is off - instead of raising the "lights without
+        # a card" SETTING card. That answer is a fixed read-only sentence, so
+        # it still changes nothing and guesses nothing.
+        if got is not None and got.name == "honest_chat":
+            ok = (got.f.get("shape") == "lights_off"
+                  and got.name in Q.READ_ONLY_INTENTS)
+        check(f"{said!r} changes nothing (no card, no guess)", ok, got)
 
 
 def t_the_briefing_does_not_say_the_same_line_twice():
