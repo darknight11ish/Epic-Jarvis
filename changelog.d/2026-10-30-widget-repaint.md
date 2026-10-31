@@ -1,4 +1,4 @@
-- **A home-screen Jarvis widget keeps showing the widget its slot was given (2026-10-31).** On the release
+- **A home-screen Jarvis widget keeps showing the widget its slot was given (2026-10-30).** On the release
   APK the shrinker merged the seven widget classes into two, and Glance tells the cards apart by class
   name - so "Jarvis widget 2" kept reading "No widget chosen" after the owner picked a widget for it, and
   the approval, quick-link and calendar cards could each repaint with another's content. The build now
