@@ -308,6 +308,29 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.protection",
+    "title": "Protected from Jarvis",
+    "about": "The folders, files and programs Jarvis may not touch, and what it may do with them.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": true,
+    "why": "Removing an entry always needs this row; hiding it would hide the list itself.",
+    "names": [
+      "protected from jarvis",
+      "the protected list",
+      "protection",
+      "what jarvis may not touch"
+    ]
+  },
+  {
     "id": "settings.appearance-card",
     "title": "Appearance",
     "about": "Theme, faces and how it all looks.",
@@ -2814,6 +2837,7 @@ export const NEVER_HIDE = [
   "settings.all-features",
   "settings.calendar",
   "settings.devices",
+  "settings.protection",
   "settings.animal-options",
   "settings.security",
   "settings.focus-presets",
@@ -3033,6 +3057,9 @@ export const ALIASES = {
   "projects": "brain.tab.projects",
   "projects and goals": "group.goals-projects",
   "prompt coach": "settings.prompt-coach",
+  "protected from jarvis": "settings.protection",
+  "protected list": "settings.protection",
+  "protection": "settings.protection",
   "python sandbox": "settings.sandbox",
   "quick settings tiles": "settings.quick-tiles",
   "quick tiles": "settings.quick-tiles",
@@ -3131,6 +3158,7 @@ export const ALIASES = {
   "what jarvis can reach": "settings.reach",
   "what jarvis is doing": "brain.now.trace",
   "what jarvis knows about you": "brain.memory.known",
+  "what jarvis may not touch": "settings.protection",
   "what this backend supports": "settings.backend-supports",
   "when a captcha stops jarvis": "settings.handoff-front",
   "when the phone does not answer": "settings.handoff",

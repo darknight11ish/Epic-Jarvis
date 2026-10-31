@@ -755,7 +755,7 @@ def visible_protected_sentence(windows, capture_rect=None) -> str:
 
 def whole_screen_protection_problem(snap: dict) -> str:
     """The refusal for a whole-monitor capture, or "" when it is allowed."""
-    if os.name != "nt" or not isinstance(snap, dict) or snap.get("hwnd") is None:
+    if not isinstance(snap, dict) or snap.get("hwnd") is None:
         return ""
     try:
         rect = _rect_of(snap["hwnd"], True)

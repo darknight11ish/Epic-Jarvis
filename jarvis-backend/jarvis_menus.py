@@ -207,6 +207,17 @@ MENUS: tuple = (
     _m("settings.devices", "Devices", "Every paired device with its own key.",
        hide=False, kind="card", names=("devices", "paired devices"),
        why="Removing a lost phone must stay reachable."),
+    # "Protected from Jarvis" (2026-10-31, the owner's own request): the list of
+    # folders, files and programs Jarvis may not touch. A card on the desktop and
+    # the same row on the phone. Never hideable matters here more than anywhere:
+    # hiding the row that READS the list would leave a blocklist the owner could
+    # not see, and removing an entry is the only way to loosen it.
+    _m("settings.protection", "Protected from Jarvis",
+       "The folders, files and programs Jarvis may not touch, and what it may do with them.",
+       hide=False, kind="card",
+       names=("protected from jarvis", "the protected list", "protection",
+              "what jarvis may not touch"),
+       why="Removing an entry always needs this row; hiding it would hide the list itself."),
     # "settings.faq" ("Help and FAQ") lived here until 2026-10-08. It was NOT a
     # duplicate way in - it held the fifteen questions only the desktop answers
     # (Quiet against Standby, Alt+Space, "I closed the window but Jarvis is
