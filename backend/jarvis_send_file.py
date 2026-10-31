@@ -500,8 +500,7 @@ def handle_get(path: str, query: str = "") -> tuple:
         except Exception:                                   # noqa: BLE001
             ident = ""
         if not ident:
-            return 400, {"ok": False, "error": ("Say which file: ?id=<file_id>. This route "
-                                                "never takes a path.")}
+            return 400, {"ok": False, "error": ("Say which file it is - no path is needed.")}
         return download(ident)
     return 404, {"ok": False, "error": "no such route"}
 

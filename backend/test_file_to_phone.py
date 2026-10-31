@@ -323,10 +323,10 @@ def t_the_two_routes_never_take_a_path():
     code, out = _req(Handler, "/api/files/download",
                      "path=" + INVOICE.as_posix())
     check("a path= parameter is refused: the route takes only an id",
-          code == 400 and "never takes a path" in out.get("error", ""), (code, out))
+          code == 400 and "no path is needed" in out.get("error", ""), (code, out))
     code, out = _req(Handler, "/api/files/download")
     check("a bare download request asks for the id in plain words",
-          code == 400 and "?id=" in out.get("error", ""), (code, out))
+          code == 400 and "Say which file" in out.get("error", ""), (code, out))
 
 
 # ---------------------------------------------------------------------------
@@ -359,8 +359,8 @@ def t_the_records_agree():
         rows = path.read_text(encoding="utf-8")
         check(f"the tier row lives in {label}'s shipped settings",
               'send_file_to_phone       = "ask"' in rows)
-        check(f"the tool is offered in {label}'s shipped settings",
-              '"send_file_to_phone"]' in rows)
+        check(f"the tool is NOT a fresh-install default in {label}'s shipped settings",
+              '"send_file_to_phone"]' not in rows)
     words = (repo / "backend" / "jarvis_card_words.py").read_text(encoding="utf-8")
     check("card words name the action", '"send_file_to_phone"' in words)
     asks = (repo / "backend" / "jarvis_asks_first.py").read_text(encoding="utf-8")

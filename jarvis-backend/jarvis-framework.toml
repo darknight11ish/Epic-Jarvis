@@ -1903,7 +1903,7 @@ star_floor = 25        # ...but never fewer than this many
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "calculator", "memory_search", "my_files", "send_file_to_phone"]
+enabled = ["web_search", "change_setting", "feature_guide", "calculator", "memory_search", "my_files"]
 
 # ------------------------------------------------------------------------
 # ENERGY - what one answer cost the graphics card (jarvis_energy.py)

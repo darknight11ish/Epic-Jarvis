@@ -218,6 +218,17 @@ MENUS: tuple = (
        names=("protected from jarvis", "the protected list", "protection",
               "what jarvis may not touch"),
        why="Removing an entry always needs this row; hiding it would hide the list itself."),
+    # "File from your PC" (2026-10-31, the owner's ask; Gemini Q7; docs/JARVIS-API.md
+    # section 172): the ONE file Jarvis sent to this phone after its own approval
+    # card, with View and Save to Downloads. PHONE ONLY on purpose - a Windows PC
+    # has no reason to fetch a file it already has, and the desktop's half is the
+    # chat request and the same card (docs/ARCHITECTURE.md section 8). Never
+    # hideable: it is the only place the sent file is listed and downloaded.
+    _m("settings.files", "File from your PC",
+       "The one file Jarvis sent to this phone, with View and Save to Downloads.",
+       (PHONE,), kind="row", collapse=False, hide=False,
+       why="Never hideable: this row is the only place the sent file is listed, viewed or saved.",
+       names=("file from your pc", "files from your pc", "the file jarvis sent")),
     # "settings.faq" ("Help and FAQ") lived here until 2026-10-08. It was NOT a
     # duplicate way in - it held the fifteen questions only the desktop answers
     # (Quiet against Standby, Alt+Space, "I closed the window but Jarvis is

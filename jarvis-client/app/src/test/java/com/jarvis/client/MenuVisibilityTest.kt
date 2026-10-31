@@ -465,10 +465,11 @@ class MenuVisibilityTest {
         // so it now has `settings.calendar` in the catalogue (`hide = false`)
         // and its place is the row itself in MenuPlaces.SETTINGS.
         // "files" and "protection" joined them on 2026-10-31 (SendFilePlate.kt,
-        // the owner's ask and Gemini Q7; ProtectedPlate.kt): neither has a menu
-        // id in the catalogue yet - the backend lane owns the settings-registry
-        // rows - so both rows are always drawn, like "app-control", and must be
-        // declared here.
+        // the owner's ask and Gemini Q7; ProtectedPlate.kt). Both now have a
+        // catalogue menu id and a real place in MenuPlaces.SETTINGS, and both are
+        // marked never hideable (`hide = false`), so both rows are always drawn,
+        // like "app-control"; the two keys below are kept because their rows
+        // still have no hide switch of their own.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
                 "files", "protection")
