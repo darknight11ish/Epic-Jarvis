@@ -1036,6 +1036,10 @@
           // This answer's route, for the spoken-reply gate (2e): the same
           // header the page reads the lane and the gate from.
           noteAnswerRoute(frame.route);
+          // The answer's own open door (2026-10-31): "open settings", "open
+          // the second brain", "open history", "open tutorials" ... - acted
+          // on once per answer, from the same route the page draws.
+          actOnOpenRoute(frame.route);
           resolve(
             new Response(stream, {
               status: okStatus(frame.status),
@@ -1069,6 +1073,76 @@
         }
       );
     });
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 2c-bis. The answer's own open door (2026-10-31)
+   *
+   * THE BUG THIS FIXES (the owner's own words, reproduced in the HUD):
+   * typing "open settings" here answered "Opening Jarvis settings on this PC."
+   * and no window opened; "open the second brain" was answered as if "second
+   * brain" were a program on this PC, and nothing opened either. The backend
+   * was telling the truth about a door THIS window never walked through: the
+   * route line already names the place (`open_app_kind: "jarvis"` with
+   * `open_place`, the settings section id; `open_settings` for "open web
+   * search"; `open_brain` for the Brain window and its own places), and the
+   * bar's chat acts on the same line (`main.js openSettingsFromRoute /
+   * openBrainFromRoute`). The HUD page is vendored and has no app commands,
+   * so nothing here acted on it.
+   *
+   * WHAT IT IS NOT. It is the SAME navigation-only door the Settings gear
+   * beside this box already calls: `open_fix_place`, which builds/focuses the
+   * window and changes nothing. It approves nothing, writes no setting, adds
+   * no permission (the HUD window already holds `open-fix-place`), and it
+   * only ever opens the fixed places `plain_errors.rs` accepts: Settings
+   * (with a section from the PC's own registry) and the Brain's `brain`,
+   * `history`, `tutorials`. Programs are NOT opened here - the shell's own
+   * `hud_chat` starts those in Rust, the same call the bar's chat makes.
+   *
+   * The settings place is left under the key `settings.js` already reads
+   * (`plain-errors.js SETTINGS_PLACE_KEY`, "jarvis.settings.place"): same
+   * shape `{place, at}`, and the page's own freshness/format check decides
+   * whether it is used. A section id the page does not have simply lands at
+   * the top - never an error.
+   * ---------------------------------------------------------------- */
+  var SETTINGS_PLACE_KEY = "jarvis.settings.place";
+
+  function actOnOpenRoute(raw) {
+    var route = null;
+    try {
+      route = JSON.parse(raw);
+    } catch (err) {
+      return;
+    }
+    if (!route || typeof route !== "object") return;
+    // Settings: a section named by the settings grammar (`open_settings`), or
+    // the `jarvis` kind of "open settings" (`open_place`, where "" is the top
+    // of the window - a real answer, not a missing one).
+    var settingsPlace = null;
+    if (typeof route.open_settings === "string") settingsPlace = route.open_settings;
+    if (route.open_app_kind === "jarvis") {
+      settingsPlace = typeof route.open_place === "string" ? route.open_place : "";
+    }
+    if (settingsPlace !== null) {
+      if (settingsPlace) {
+        try {
+          localStorage.setItem(
+            SETTINGS_PLACE_KEY,
+            JSON.stringify({ place: settingsPlace, at: Date.now() })
+          );
+        } catch (err) {
+          /* no storage: Settings opens at the top, and the answer says where */
+        }
+      }
+      shellInvoke("open_fix_place", { place: "settings" }).catch(function () {});
+      return;
+    }
+    // The Brain window and its own places: `open_brain` is the field the apps
+    // already read for "Earlier chats" and "Forget a time frame".
+    var brain = route.open_brain;
+    if (brain === "brain" || brain === "history" || brain === "tutorials") {
+      shellInvoke("open_fix_place", { place: brain }).catch(function () {});
+    }
   }
 
   if (realFetch && shellInvoke && ShellChannel) {
