@@ -100,7 +100,7 @@ enum class PipLayout(val aspectW: Int, val aspectH: Int) {
      */
     HIDDEN(16, 9),
 
-    /** The face, the state word and the first line of the newest answer. */
+    /** The face, filling the window (2026-10-31: no state word, no answer line). */
     FACE(16, 9),
 
     /** The last few messages, newest at the bottom, scrollable. */
@@ -112,14 +112,29 @@ enum class PipLayout(val aspectW: Int, val aspectH: Int) {
     /**
      * The setting is Live but no Live session is running: the window does NOT
      * close (it is the owner's window, and closing it would look like a crash).
-     * It shows the face, the state word, and one plain line above the answer
-     * slot - [PipWords.LIVE_OFF] (§2.4).
+     * It shows the face, filling the window, and ONE short fixed line at the
+     * bottom - [PipWords.LIVE_OFF] (§2.4; the owner's 2026-10-31 revision).
      */
     LIVE_OFF(16, 9),
     ;
 
-    /** Whether this layout draws the conversation at all. */
-    val answerShown: Boolean get() = this == FACE || this == LIVE_OFF
+    /**
+     * Whether this layout draws the owner's CHAT TEXT at all.
+     *
+     * It is `false` for every layout since the owner's revision of 2026-10-31
+     * (the two screenshots: the face was drawn small beside "Standing by" and a
+     * cut-off answer sentence). Mode 1 is now the face alone, and mode 3's
+     * fallback carries only its own one fixed line - so no layout may put the
+     * answer into the window. Kept as a property because the privacy test reads
+     * it, and because it names the promise in the type rather than in a comment.
+     */
+    val answerShown: Boolean get() = false
+
+    /** Whether this layout draws the same face, filling the window. */
+    val faceShown: Boolean get() = this == FACE || this == LIVE_OFF || this == HIDDEN
+
+    /** Whether this layout draws one short fixed line under its face. */
+    val oneLineShown: Boolean get() = this == LIVE_OFF
 
     /** Whether this layout draws the last few messages. */
     val threadShown: Boolean get() = this == THREAD
