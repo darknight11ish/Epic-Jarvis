@@ -166,9 +166,11 @@ private fun optionSanitised(o: JsonObject): JsonObject {
  *   unreadable one must fail toward caution.
  * - `risk`, `notice`, `options`: kept only in the shape they are declared in.
  * - `expires_at_ms`: kept if sent (the old WebSocket server), else computed
- *   from `expires_in` (seconds left, sent by approval-expiry.patch) against
+ *   from `expires_in` (seconds left, sent by `show-card-timer.patch` since
+ *   2026-10-30 for a routine card whose REQUEST is still waiting) against
  *   this phone's clock at the moment of the read - so the two machines'
- *   clocks never have to agree.
+ *   clocks never have to agree. No `expires_in` means no timer at all, never a
+ *   zero: a ceremony card and a request that has already ended send none.
  */
 internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
     val obj = row as? JsonObject ?: return null

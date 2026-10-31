@@ -1510,7 +1510,8 @@ function paintApprovalClock() {
  * its window was on screen. Measured at 61 runs a simulated minute by
  * `tests/timers.mjs`.
  *
- * The widget's line only has the "M:SS left to decide" clock (no heavy-approve
+ * The widget's line only has the shared countdown words ("14m 59s left", the
+ * 2026-10-30 wording every desktop surface prints) - no heavy-approve
  * countdown here - the widget cannot approve a heavy card at all, see
  * `decide`), so the wait is a second exactly while that clock is on screen and
  * a minute when it is not. `clock-timer.js` adds the align step.

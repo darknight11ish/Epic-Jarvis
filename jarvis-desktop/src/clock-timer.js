@@ -14,14 +14,16 @@
  * 1. A flat one-second interval wakes whether or not the shown words can have
  *    changed. So the wait is computed per wake instead: ask `delay` how long
  *    the line is worth, then sleep exactly that. Idle (no card, or no clock
- *    on it) the answer is a minute; while the card's own "3:59 left to decide"
+ *    on it) the answer is a minute; while the card's own clock ("3m 59s left")
  *    and the heavy-approve "Approve unlocks in 2s" are counting down, the
  *    answer is only the remainder of the second being shown - a self-aligning
  *    tick, so the digits change on the second and never later.
  *
  *    A minute boundary is NOT the right wait for this clock, however tempting
  *    it looks from the audit's summary. `expiryWords` (jarvis-link.js) prints
- *    "M:SS left to decide", and `HeavyGate.secondsLeft` (heavy-approve.js)
+ *    the shared countdown words ("14m 59s left" - `countdownWords` in
+ *    card-words.js, one wording for every desktop surface since the owner's
+ *    2026-10-30 ruling), and `HeavyGate.secondsLeft` (heavy-approve.js)
  *    prints whole seconds; both change every second they are on screen. This
  *    is written down here because the audit's "something that changes 60
  *    times an hour" is true of an hour-and-minute clock and not of this one.

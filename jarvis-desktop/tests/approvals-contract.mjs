@@ -89,9 +89,10 @@ check("no card carries a deadline since 2026-10-28, so no countdown is drawn", (
   assert.equal(normaliseApproval({ id: "x", expires_at_ms: 5, expires_in: 150 }).expiresAt, 5);
 });
 
-check("the countdown reads as words, and says when the gate gave up", () => {
-  assert.equal(expiryWords(10_000 + 133_000, 10_000),
-               "2:13 left to decide, then Jarvis refuses it by itself.");
+check("the countdown reads as words, and says when the request gave up", () => {
+  assert.equal(expiryWords(10_000 + 133_000, 10_000), "2m 13s left");
+  assert.equal(expiryWords(10_000 + 42_000, 10_000),
+               "42s left \u2014 under a minute to decide.");
   // "Timed out", not "Expired": one word for this on every screen (settings
   // audit 2026-10-05, wording disagreement 1).
   assert.match(expiryWords(10_000, 20_000), /^Timed out/);

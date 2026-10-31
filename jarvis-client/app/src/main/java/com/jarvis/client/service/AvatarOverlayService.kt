@@ -28,6 +28,7 @@ import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.data.FloatingAvatarMode
+import com.jarvis.client.data.PipPresence
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.floatingAvatarShowsContent
 import kotlin.math.abs
@@ -118,8 +119,17 @@ class AvatarOverlayService : Service() {
                 JarvisRuntime.link,
                 JarvisRuntime.settings.security,
                 WakeWordService.state,
-            ) { link, security, listening -> Triple(link, security, listening) }
-                .collect { (link, security, listening) -> updateAvatar(link, security, listening) }
+                // "Floating Jarvis" yields to Android's picture-in-picture
+                // window (2026-10-30, docs/PIP-DESIGN.md §2.2): while that
+                // window is up this overlay hides its own view - GONE, not a
+                // stop, so the setting is untouched - and comes back when the
+                // window ends. One Jarvis on screen, and the one showing real
+                // content is the one that stays.
+                PipPresence.up,
+            ) { link, security, listening, pipUp -> Facts(link, security, listening, pipUp) }
+                .collect { facts ->
+                    updateAvatar(facts.link, facts.security, facts.listening, facts.pipUp)
+                }
         }
     }
 
@@ -229,11 +239,28 @@ class AvatarOverlayService : Service() {
      * say so plainly ... rather than floating uselessly", applies just as
      * much to "Listen on this phone" being off: with nothing recording,
      * "open a chat" or anything else said to it can never be heard.
+     *
+     * And [pipUp]: while Android's picture-in-picture window is up, this
+     * overlay YIELDS (2026-10-30, `docs/PIP-DESIGN.md` §2.2) - the whole view
+     * goes [View.GONE], not stopped, so the setting and the permission are
+     * untouched and the face is shown again the moment the window ends. One
+     * Jarvis on screen, and the one showing the owner real content - the small
+     * window with the answer or the conversation - is the one that stays.
      */
-    private fun updateAvatar(link: LinkState, security: Security, listening: WakeListen) {
+    private fun updateAvatar(
+        link: LinkState,
+        security: Security,
+        listening: WakeListen,
+        pipUp: Boolean,
+    ) {
         val view = avatarView
         val badge = dot
         val bg = badge?.background as? GradientDrawable
+        if (pipUp) {
+            view?.visibility = View.GONE
+            return
+        }
+        view?.visibility = View.VISIBLE
         val showsContent = floatingAvatarShowsContent(security.appLock)
         view?.alpha = if (showsContent && listening.on) FULL_ALPHA else DIM_ALPHA
         if (badge == null || bg == null) return
@@ -254,6 +281,18 @@ class AvatarOverlayService : Service() {
             }
         }
     }
+
+    /**
+     * One broadcast of everything the overlay's own view depends on - the four
+     * flows [onCreate] combines, named rather than a growing `Triple`/array so
+     * the picture-in-picture half cannot be mistaken for the wrong slot.
+     */
+    private data class Facts(
+        val link: LinkState,
+        val security: Security,
+        val listening: WakeListen,
+        val pipUp: Boolean,
+    )
 
     /**
      * Drag to move the window; a short, near-still touch is a tap instead,

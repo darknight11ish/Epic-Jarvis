@@ -1,0 +1,121 @@
+diff --git a/jarvis_gate.py b/jarvis_gate.py
+index bc3dd93..43e0756 100644
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -28,10 +28,19 @@ Every path that is not an explicit approval denies:
+ That last one matters. A gate that opens when it breaks is not a gate, so if
+ this module cannot do its job it refuses rather than waving things through.
+ 
+-NO TIMER IS DRAWN ON A CARD, AND A CARD WHOSE REQUEST HAS FINISHED LEAVES
+-(the owner's ruling of 2026-10-28: "if there doesn't need to be a time limit
+-don't have one"). No screen counts a card down any more: while its request is
+-still waiting the card offers Approve and Deny and no clock. What is still
++A TIMER IS DRAWN, AND IT COUNTS THE REQUEST (the owner's ruling of 2026-10-30:
++"if there is a card with a limited time of any kind, be sure to put the timer
++on it"). The ruling below still holds for the CARD - no card carries a
++deadline of its own and nothing is refused because a clock reached zero - but
++a card whose REQUEST has a limited life now says so, in plain words, on every
++screen: `pending()` sends `expires_in` (whole seconds left until the row's own
++`waited_until`) while that request is still waiting, and both apps count it
++down. It is DISPLAY ONLY: the sweep, the refusal of a late tap and the 409 are
++exactly the ones the 2026-10-28 ruling left in place.
++
++NO TIMER WAS DRAWN ON THE CARD ITSELF, AND A CARD WHOSE REQUEST HAS FINISHED
++LEAVES (2026-10-28: "if there doesn't need to be a time limit don't have
++one"). The card offers Approve and Deny and no deadline of its own. What is
+ bounded is the REQUEST: the thread that raised the card waits
+ `approval_timeout_seconds` and then stops, because a thread held for ever is
+ not a permission, and when it stops there is nothing left to carry out a
+@@ -151,13 +160,14 @@ def timeout_for(action: Any) -> Optional[float]:
+     the suites do.
+ 
+     SINCE 2026-10-28 THIS IS THE REQUEST'S PATIENCE, NOT THE CARD'S LIFETIME.
+-    Neither app draws a countdown any more, and no card is refused because a
+-    clock reached zero. The number returned here is written on the row as
+-    `waited_until`, and once it (plus the same 60-second grace) has passed
+-    `_expire_overdue()` takes the card off the queue on the next read - see
+-    `_wait_open()` for the decision itself. The four ceremonies below answer
+-    None here because their rows carry no `waited_until` and only their own
+-    flow's withdraw() settles them.
++    No card is refused because a clock reached zero. The number returned here
++    is written on the row as `waited_until`, and once it (plus the same
++    60-second grace) has passed `_expire_overdue()` takes the card off the
++    queue on the next read - see `_wait_open()` for the decision itself. Since
++    2026-10-30 `pending()` also shows that same moment to the screens, as
++    `expires_in`, in plain words, so a card with a limited life cannot run out
++    silently. The four ceremonies below answer None here because their rows
++    carry no `waited_until` and only their own flow's withdraw() settles them.
+     """
+     try:
+         name = str(action) if action is not None else ""
+@@ -2488,7 +2498,8 @@ def pending() -> list[dict]:
+         # finished still takes its card off the queue on the next read.
+         _expire_overdue(c)
+         rows = c.execute(
+-            "SELECT id,action,tier,detail,prompt,created,raised FROM approvals"
++            "SELECT id,action,tier,detail,prompt,created,raised,waited_until"
++            " FROM approvals"
+             " WHERE state='pending' ORDER BY created").fetchall()
+     out = []
+     for r in rows:
+@@ -2510,15 +2521,51 @@ def pending() -> list[dict]:
+         d["replaces_kind"] = _kinds.get("kind")
+         d["replaces_heading"] = _kinds.get("heading", "")
+         d["replaces_note"] = _kinds.get("note", "")
+-        # NO `expires_in`, EVER (2026-10-28). No card is drawn with a
+-        # countdown any more, so a countdown would promise a refusal that
+-        # never comes; the field is left OFF - never 0 (which both apps read
+-        # as "expired now") and never a huge number (which draws a countdown
+-        # ending in nothing). Both clients already treat an absent field as
+-        # "no countdown": they have done so for the four ceremonies since
+-        # 2026-10-23, so every surface draws this card with its buttons and no
+-        # clock. The routine card's own row still carries `waited_until`; the
+-        # sweep uses it and the clients are never shown it.
++        # THE TIMER ON A CARD WITH A LIMITED TIME (2026-10-30). The owner's
++        # ruling: "if there is a card with a limited time of any kind, be sure
++        # to put the timer on it". So a routine card whose REQUEST is still
++        # waiting is sent the seconds it has left, and every screen counts
++        # them down in plain words - the app-builder card that ran out on him
++        # twice without a clock is exactly the case this closes.
++        #
++        # WHAT IT COUNTS, AND WHY IT IS `waited_until` AND NOT A CARD DEADLINE.
++        # The 2026-10-28 ruling is not weakened: the card still has no time
++        # limit of its own, and nothing is refused because a countdown reached
++        # zero. The number is the request's own last moment, the one the
++        # read-time sweep and the late-approval 409 already use, so the clock on
++        # the screen and the refusal behind it are the same moment - a timer
++        # that promised longer than the gate honours would be worse than none.
++        #
++        # THE 60-SECOND GRACE IS NOT SHOWN. The row survives `waited_until` by
++        # up to a minute before the next read settles it, but no request can act
++        # on it any more, and a countdown that reached zero and then kept
++        # counting would say the opposite of what the gate does. So the field is
++        # sent only while `waited_until` is still in the future: past it the
++        # clients draw the same card with no clock, as they already do for a
++        # ceremony card - approval-expiry.patch's own "0 means expired now"
++        # reason is the same one.
++        #
++        # NEVER 0 and NEVER NEGATIVE: both apps read 0 as "expired now". The
++        # remainder is rounded UP, so a fraction of a second left reads "1s
++        # left" rather than making the field vanish a second early.
++        #
++        # NOTHING FOR A CEREMONY CARD (`waited_until` NULL: pairing a device, an
++        # approval key, a restore) and nothing for a row whose request has
++        # already stopped waiting - an absent field is "no timer", which both
++        # clients have drawn that way since 2026-10-23. `waited_until` itself is
++        # dropped before the row is returned: the screens are told how long is
++        # left, never the PC's own clock reading.
++        _waited = d.pop("waited_until", None)
++        if _waited is not None:
++            try:
++                _secs_left = float(_waited) - time.time()
++            except (TypeError, ValueError):
++                _secs_left = 0.0
++            _whole = int(_secs_left)
++            if _secs_left > _whole:
++                _whole += 1
++            if _whole >= 1:
++                d["expires_in"] = _whole
+         # Why this is being asked about at all, when the table said otherwise.
+         # A card shows this instead of a coloured dot: the reason is the thing
+         # that changes the decision.

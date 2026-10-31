@@ -242,12 +242,21 @@ immediate to turn off, and neither raises a card that something else answers:
 No approval card is ever answered for the owner, and no control approves
 more than one card.
 
-**No card shows a time limit, and a card whose request has finished leaves the
-queue** (the owner's ruling of 2026-10-28: "if there doesn't need to be a time
-limit don't have one"; `backend/no-deadline-cards.patch`, applied after
+**No card shows a time limit of its own, and a card whose request has finished
+leaves the queue** (the owner's ruling of 2026-10-28: "if there doesn't need to
+be a time limit don't have one"; `backend/no-deadline-cards.patch`, applied after
 `no-expiry-cards.patch`). While its request is genuinely waiting, the card stays
-on every screen with Approve and Deny and NO countdown: `pending()` sends no
-`expires_in` for any card. **Waiting is still not approving:** nothing runs until
+on every screen with Approve and Deny. **The card has no deadline; the REQUEST
+does, and since 2026-10-30 every screen counts that down** (the owner's ruling:
+"if there is a card with a limited time of any kind, be sure to put the timer on
+it"; `backend/show-card-timer.patch`, applied after `no-deadline-cards.patch`):
+`pending()` sends `expires_in` - whole seconds left until the row's own
+`waited_until`, never 0 and never negative - for a routine card whose request is
+still waiting, and sends nothing at all for the four ceremonies below (their rows
+carry no `waited_until`) or for a request that has already ended. It is display
+only: the sweep, the refusal of a late yes and the 409 are unchanged, and the
+60-second grace is not counted down because no request can act on the card in it.
+**Waiting is still not approving:** nothing runs until
 a person answers, a denial is still a denial, and a card whose work is gone (a
 cancelled or replaced pairing) is withdrawn. **The request's own patience is
 what is bounded**, because the thread that waits is the thread that runs the
@@ -783,9 +792,11 @@ places between screens. Presentation only - no approval logic changed.
   all three desktop surfaces and `expired` in `ApprovalCard.kt` on the phone -
   and **hiding the buttons is only the drawing**: `decideApproval`, the
   widget's `decide` and the page's `apprDecide` refuse an expired card too,
-  because a hidden button is not a refusal. Nothing about the gate changed: it
-  still stops waiting at the deadline and refuses the card by itself
-  (`approval-expiry.patch`, `no-expiry-cards.patch`), and a card with **no**
+  because a hidden button is not a refusal. The gate half has moved under it
+  since: 2026-10-28 stopped refusing a routine card at a deadline (its REQUEST
+  stops waiting and `pending()`'s read-time sweep records the lapse), and
+  2026-10-30 gave a still-waiting request its countdown back (`expires_in`).
+  A card with **no**
   deadline (pairing, a key registration, a restore -
   `jarvis_gate.APPROVAL_NEVER_EXPIRES`) shows no countdown and no expiry on
   either app. The words are one sentence from `jarvis_card_words.TIMED_OUT`,
@@ -859,8 +870,9 @@ places between screens. Presentation only - no approval logic changed.
      transaction (`jarvis_gate.check()`, `backend/gate-touches.patch` - the
      file is patch-carried, not shipped whole).
      **A card whose request has stopped waiting is not reused, and leaves on
-     the next read (2026-10-28).** The card draws no countdown, but its row
-     records the request's last moment (`waited_until`); `pending()` runs
+     the next read (2026-10-28).** Its row records the request's last moment
+     (`waited_until`), and since 2026-10-30 the screens count that moment down
+     (`expires_in`, `backend/show-card-timer.patch`); `pending()` runs
      #965's read-time sweep before it builds the list, so a routine row past
      that moment plus the same 60-second grace is marked `expired` and not
      served. That is what stops a live Approve that could only answer 409.
@@ -3932,6 +3944,8 @@ half, so `tools/check_parity.py` classifies nothing new.
 **The Jarvis Calendar's home-screen widget is Android's alone, and the platform is why** (2026-10-30; JARVIS-API §164.5 and §168). Both apps have the feature and both draw it: the desktop's is the HUD's Calendar card with its month/week/day sheet, the phone's is the Calendar screen. What the desktop has no equivalent of is the **home-screen widget** (`widget/CalendarWidget.kt`, `widget_calendar_info.xml`): a Windows desktop has no launcher surface an app may publish a card onto - the closest thing is the widget panel this project already has, which is its own window and its own board, not the OS launcher. The widget adds **no route**: every read it makes is `GET /api/calendar`, the same one read both apps make, so nothing about it is a second idea of the calendar. `tools/check_parity.py` therefore has nothing to classify here, and no half of this feature is missing.
 **Notification styles are the phone's, and the desktop deliberately has none** (2026-10-30, the owner's ask: *"does jarvis android have custom animated notifications? ... i want them customizable and buildable by just chatting to jarvis"*; JARVIS-API §167). The thing a style changes is the *layout inside a notification*, and only Android has one that an app may draw: a RemoteViews content view, inflated by SystemUI from a fixed class list. A Windows toast is drawn by Windows from its own template; there is no layout an app supplies, so "style the desktop's notifications" is not a smaller version of this feature, it is a different one that does not exist. The PC is still part of it on both apps: it keeps and validates the styles (`jarvis_notification_styles.py`) and its chat makes the same preview from the owner's words, so asking Jarvis on the desktop produces the style the phone then applies. `tools/check_parity.py` classifies the five routes as phone-only with that reason. No desktop code was added, so nothing on the desktop can disagree with the phone about a style.
 **The parking answer's two lengths are one-sided by device, and the calendar half stops at the PC's own words** (2026-10-30, JARVIS-API §165). "find cheap parking near Pike Place from 4 pm to 9 pm" is answered by `jarvis_quick.py`'s grammar with no model and no tool slot, and the SAME quote is written two ways: the PC gets the full breakdown (up to three legal options, each with its minute-by-minute maths and walk time), a phone gets two thumb-sized options with a `geo:` link each and not one desktop-only phrase. That difference is on purpose - a rate table is a thing to read at a desk, and a `geo:` URI is the one navigation affordance Android has that a Windows webview does not. What is one-sided for a reason rather than for taste: (a) **the device is inferred, not read from a header** - `/api/chat`'s body carries no client kind and this path never sees `X-Jarvis-Client`, so the short form is chosen for a request that plainly did not come from this PC (`jarvis_owner_check.from_this_pc`, the same function every PC-only action uses) and the full form otherwise; a caller that knows better passes `answer_turn(client_surface=...)`; (b) **the calendar bridge deliberately does not perform the lookup** when the event's location is words - a calendar entry is private even when the venue in it is public, so `jarvis_parking.py` quotes the venue back locally with the padded window and the exact sentence to say ("parking near Pike Place Market"), and the lookup runs from the owner's own words. A location that is already a coordinate pair has nothing to send and is looked up in one step. Neither app has a settings card or a route for this feature, so `tools/check_parity.py` classifies nothing new - and it is the reason the phone is NOT missing a feature here: the phone gets the same answer, shorter.
+
+**Picture-in-picture is the phone's, and the platform is why** (2026-10-30, the owner's settled design of 2026-10-11: *"can you add a picture in picture mode to jarvis that's similar to Google maps"*; `docs/PIP-DESIGN.md`). Android's own PiP - a small Jarvis window that stays on screen while other apps are in front - is the activity itself, resized by the OS: `MainActivity` declares `supportsPictureInPicture`, draws its own compact layout while `isInPictureInPictureMode` is true, and shows the face and the first line of the answer, the last few messages, or Jarvis Live (`data/PipMode.kt`, `ui/PipWindow.kt`). **The PC has no such window**: its nearest equivalent is the floating face over other windows (`docs/JARVIS-API.md` §57), which is a window of Jarvis's own and not an OS-managed miniature of the whole activity, so there is no desktop PiP layout to build and no desktop Settings row of the same name - the mode is saved on that phone only (`ClientSettings.pipMode`, key `pip_mode`), like every other display setting. It adds **no route and no permission**: the window is fed by the existing chat and Live flows, and its only system action is Expand. Two rules are the reason it is a design rather than a shrunken screen: it never approves anything (`JarvisRuntime.decide` is not reachable from that surface at all), and while "Hide memory lists and chat history" or App lock hides content it draws a dimmed face and the owner's own sentence - "Hidden while Jarvis is locked." - never the answer or the conversation (`docs/PIP-DESIGN.md` §4, §5, §9.1). `tools/check_parity.py` has nothing to classify here.
 
 ## 9. Where the backend lives
 

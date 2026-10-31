@@ -191,6 +191,29 @@ class ClientSettings(context: Context) {
         _floatingAvatar.value = mode
     }
 
+    private val _pipMode = MutableStateFlow(
+        PipMode.fromWire(prefs.getString(KEY_PIP_MODE, null)),
+    )
+
+    /**
+     * "Picture-in-picture" (Settings -> This app, [PipMode], `docs/PIP-DESIGN.md`):
+     * the small Jarvis window that stays on screen while the owner uses other
+     * apps - Off, the face and the answer, the conversation, or Jarvis Live.
+     *
+     * Saved on this phone only, like [floatingAvatar] and every other display
+     * setting - nothing about it reaches the PC. The design's default is the
+     * face and the answer (`PipMode.DEFAULT`), not Off: the owner asked for
+     * "1 or 3 by default" and the lead's recorded call is 1. "Off" is one of the
+     * four values, so a phone that has never chosen is not the same as a phone
+     * that chose Off - that is what `fromWire`'s missing-value fallback is for.
+     */
+    val pipMode: StateFlow<PipMode> = _pipMode.asStateFlow()
+
+    fun setPipMode(mode: PipMode) {
+        prefs.edit { putString(KEY_PIP_MODE, mode.wire) }
+        _pipMode.value = mode
+    }
+
     private val _idleNewChoice = MutableStateFlow(
         runCatching { prefs.getString(ChatHistory.IDLE_NEW_KEY, null) }
             .fold({ ChatHistory.idleNewChoice(it) }, { ChatHistory.IDLE_NEW_DEFAULT }),
@@ -395,6 +418,7 @@ class ClientSettings(context: Context) {
         const val KEY_KEEP_ALIVE_OFFERED = "keep_alive_offered"
         const val KEY_KEEP_ALIVE_PENDING = "keep_alive_pending"
         const val KEY_FLOATING_AVATAR = "floating_avatar"
+        const val KEY_PIP_MODE = "pip_mode"
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
         const val KEY_UPDATE_NEWER = "update_newer_line"

@@ -330,8 +330,9 @@ decide-with-option route exists on the server (see §8's own note on this).
 ### What one pending row carries
 
 `id`, `action`, `tier`, `detail`, `prompt`, `created`, `raised` (stored by
-`jarvis_gate`), plus `risk`, `notice` and - with `approval-expiry.patch` -
-`expires_in` (added when the list is read). There is **no `title` and no
+`jarvis_gate`), plus `risk`, `notice` and - while a routine card's request is
+still waiting - `expires_in` (added when the list is read; see below). There is
+**no `title` and no
 `summary`**: a client makes its title from `notice.title` (else the PC's
 fallback, below) and never from `prompt` or `detail`, because a title also
 ends up on a lock screen.
@@ -415,22 +416,42 @@ A tool card's `detail.text` may end with a "What shaped this request:" block
 came from that text rather than from the owner (§4, "Tool calls and outside
 text"). It is part of the text; show it the way the rest is shown.
 
-**`expires_in` IS NOT SENT AT ALL SINCE 2026-10-28** (the owner's ruling: "if
-there doesn't need to be a time limit don't have one";
-`backend/no-deadline-cards.patch`). No screen is handed a countdown: while a
-request is genuinely waiting, its card shows Approve and Deny and no clock. The
-field is left OFF, never `0` (which both apps read as "expired now") and never a
-very large number (which would draw a countdown that ends in a refusal that
-never comes). Both clients already treat an absent field as "no countdown" —
-they have done so for the four ceremonies below since 2026-10-23 — so no client
-change was needed for the card to draw correctly. The field is still
-UNDERSTOOD: a backend older than this patch sends it (seconds left before it
-stops waiting, `approval_timeout_seconds`, 900 in the shipped config since
-2026-10-14, changeable in Settings), and the phone, desktop and HUD still count
-down from it. `backend/test_approval_contract.py` no longer builds `expires_in`
-into `jarvis-client/app/src/test/resources/contract/pending-rows.json`, and
-both clients' contract tests keep a check that an older backend's field is
-still read.
+**`expires_in` IS BACK, AND IT COUNTS THE REQUEST (2026-10-30).** The owner's
+ruling: *"if there is a card with a limited time of any kind, be sure to put the
+timer on it."* So a **routine** card whose request is still waiting carries
+`expires_in`, the whole seconds left until the row's own `waited_until` - the
+moment the request stops waiting, which is the moment a late Approve is refused.
+Both clients count it down in plain words. Nothing else about the card changed:
+the 2026-10-28 ruling still holds, so **the card has no deadline of its own**,
+nothing is refused because a countdown reached zero, and the countdown is the
+same moment the read-time sweep and the 409 use, never a longer one.
+
+- **Never `0`, never negative.** Both apps read `0` as "expired now". The
+  remainder is rounded **up**, so a fraction of a second left reads `1`. A row
+  whose `waited_until` is not a number gets no field, and the client then draws
+  no countdown rather than a wrong one.
+- **Nothing for a ceremony card**, and nothing for a request that has already
+  ended: `pair_device`, `unretire_shared_key`, `register_approval_key` and
+  `restore_backup` have `waited_until = NULL`, so the field is absent and their
+  cards have no timer. An absent field is "no timer" on both clients, which they
+  have drawn that way since 2026-10-23.
+- **The 60-second grace is NOT counted down.** A row survives its request by up
+  to a minute before the next read settles it, but no request can act on it in
+  that minute, so a countdown there would promise what the gate refuses. The
+  field stops being sent at `waited_until`; the card keeps its buttons and loses
+  its clock.
+- **Display only.** The field adds no route, changes no decision and grants no
+  time: the read-time sweep, `still_waiting()`, the 409 and the Windows Hello
+  bound are exactly as the 2026-10-28 ruling left them. `waited_until` itself is
+  never sent - a client is told how long is left, never the PC's clock reading.
+
+`backend/test_gate_card_timer.py` proves the field and its three absences, that
+it decreases with the request, that nothing expires because of it, and that a
+Deny still works and a late Approve still 409s. `backend/test_approval_contract.py`
+still builds no `expires_in` into
+`jarvis-client/app/src/test/resources/contract/pending-rows.json`, because that
+fixture is about the notice's own words; both clients' contract tests keep a
+check that a row carrying the field is still read.
 
 **The four ceremonies of the 2026-10-23 ruling are not narrowed** (Q1;
 `backend/no-expiry-cards.patch`): pairing a device (`pair_device`,
@@ -484,8 +505,9 @@ named in `ARCHITECTURE.md` §6.
 
 **A routine card whose request has finished is swept on the next read, so no
 live Approve is left; the 409 is the race guard** (2026-10-28, Gemini F3 /
-ruling f). The card has no countdown, but the request that raised it does, and
-that last moment is on the row (`waited_until`). `GET /api/pending` runs the
+ruling f). The card has no deadline of its own, but the request that raised it
+does, and that last moment is on the row (`waited_until`) - and since 2026-10-30
+the card counts it down (see "`expires_in` IS BACK" above). `GET /api/pending` runs the
 gate's own `_expire_overdue()` before it builds the list: a routine row past
 `waited_until` plus the same 60-second grace is marked `expired` and **not
 served**, so no screen is handed a card whose Approve is guaranteed to answer
@@ -22742,6 +22764,7 @@ grammar learned the rest of the questions a person actually asks:
 | "make <switch> off" / "set <switch> to off" / "I want <switch> off" / "<switch> should be off" / "make sure it is off" | `feature_change_apply` (new, 2026-10-27) | ONE setting changed through its OWN setter, for the 27 switches on the allow-list: a card is the setter's own, and the reply names the old and the new value only after a re-read |
 | "change <switch>" / "toggle <switch>" (no state said) | `feature_change_ask` (new, 2026-10-27) | ONE question back ("Do you want prompt coach on or off?"), changing nothing and raising no card |
 | a password, a key, a token, deep config, or an ask that cannot be undone | `feature_change_refused` (new, 2026-10-27) | one plain sentence and nothing changed |
+| "how/where do I change <a setting's own name>" / "tell me about <a setting>" | `setting_explain` (new, 2026-10-26) | when NO feature title or alias matched: the settings registry's own name, its real Settings card and one real example phrase - or the page-only refusal. No model turn, no card, nothing changed |
 | "is <feature> on?" / "off" / "enabled" / "right now" / "what is the state of" | `feature_state` | the switch's real value, read from the module that owns it, or "I could not read it" |
 | "what features do you have?" / "list the features" | `features_list` | the 9 groups with real counts |
 | a group's name | `features_group` | that group's rows |
@@ -22770,6 +22793,21 @@ today (`second_card_*`) and the one whose card is PC-only (`lights_without_card`
 deliberately outside the list: they keep `feature_change`'s own explanation, word for word,
 and are never written from chat. `backend/test_ask_to_change.py` proves all of it,
 including a real end-to-end change in a throwaway config folder.
+
+**A SETTINGS NAME ANSWERS TOO (2026-10-26, ruling Q6 Step A).** Five names the owner uses are
+not catalogue titles: `personality`, `voice speed` and `focus preset` are
+`jarvis_settings_registry.CHOICE_SETTINGS` rows, and `theme` / `hud layout` are desktop-only
+controls inside the Appearance and "The big HUD window" Settings cards. "how do i change the
+personality?" therefore missed every fixed phrase and reached the local model (~2 s), which
+has no settings tool. When no feature title or alias matches, the same sentence is now tried
+against the registry's own names and answered on the same fast path (`setting_explain`): the
+`CHOICE_SETTINGS` three name their real card and one real `set ... to ...` phrase; the two
+desktop-only areas name their card and the `open ... settings` phrase and say plainly that
+they cannot be changed by asking. A page-only row still refuses FIRST, including hyphen,
+slash and filler forms and a sentence naming two of them - a page-only name is never a
+licence to change a switch whose words the sentence happens to contain. An unknown name
+still falls through to the model. `backend/test_setting_alias_phrasing.py` proves each of
+these, including that every example phrase the answer offers really routes.
 
 **The list learned two fields (2026-10-26).** `features/features.json` rows may carry
 `aliases` - the owner's other names for ONE feature, e.g. "customer support" for the row
@@ -22982,8 +23020,8 @@ Handler after its own origin and token checks, exactly as `jarvis_news.py`,
 `jarvis_sources.py` and `jarvis_goals.py` do it. **No patch is involved:**
 `plugins/ready/receipts/plugin.json` names `jarvis_receipts` with
 `"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
-have made. `stack_order` is 147 - after every folder the old patch stack had
-(the highest is `model-lanes` at 144).
+have made. `stack_order` is 149 - after every folder the old patch stack had
+(the highest is `model-lanes` at 146).
 
 The list answers `{"ok", "receipts", "count", "limit", "undo_action",
 "undo_tier", "waiting", "last", "words"}`. Each receipt carries its own
@@ -23407,8 +23445,8 @@ core's Handler after its own origin and token checks, exactly as
 `jarvis_receipts.py` (§132.5) does it. **No patch is involved:**
 `plugins/ready/skill-hub/plugin.json` names `jarvis_skill_hub` with
 `"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
-have made. `stack_order` is 145 - after every folder the old patch stack had
-(the highest of those is `model-lanes` at 144).
+have made. `stack_order` is 147 - after every folder the old patch stack had
+(the highest of those is `model-lanes` at 146).
 
 The first route answers twice, on the same path, and the two forms report
 failure differently - one HTTP status, one payload - which a client has to know.

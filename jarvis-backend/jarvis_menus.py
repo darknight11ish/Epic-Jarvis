@@ -538,6 +538,24 @@ MENUS: tuple = (
     # settings.animal-options, which is the phone's row inside Appearance.
     _m("settings.floating-avatar", "Floating Jarvis", "The floating face or bubble.", (PHONE,),
        names=("floating jarvis", "floating face", "the bubble")),
+    # "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md; the owner's choice of
+    # 2026-10-11, §9.3): Android's own PiP window - a small Jarvis that stays on
+    # screen while other apps are in front, showing the face and the answer, the
+    # conversation, or Jarvis Live. It is its OWN Settings row next to Floating
+    # Jarvis, and the two may both be on (§2.2).
+    #
+    # PHONE ONLY, and the reason is the platform's: picture-in-picture is an
+    # Android window over other APPS. The desktop's nearest equivalent is the
+    # floating face over other windows (`docs/JARVIS-API.md` §57), which is not
+    # an OS-managed miniature of the app and has no Settings row of the same
+    # name - docs/ARCHITECTURE.md §8's one-sided table says so. No route, no
+    # command, no capability: the mode is saved on that phone only, so a
+    # desktop menu row would offer to hide a card neither app draws.
+    _m("settings.pip-mode", "Picture-in-picture",
+       "A small Jarvis window that stays on screen over other apps: the face and the answer, "
+       "the conversation, or Jarvis Live.", (PHONE,),
+       names=("picture in picture", "picture-in-picture", "pip", "the small window",
+              "the little window over other apps", "the floating window")),
     _m("settings.quick-tiles", "Quick Settings tiles", "The tiles in the phone's quick panel.",
        (PHONE,), names=("quick settings tiles", "quick tiles")),
     # "Screen refresh rate" (2026-10-09): what the PANEL is asked to run at
