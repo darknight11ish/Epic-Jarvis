@@ -37,6 +37,16 @@ THE LICENCE IS A FIRST-CLASS FIELD, not a footnote. This build is
 non-commercial and its whole dependency policy is "state the licence", so an
 entry without one says so in the list rather than being quietly listed as
 though it were fine.
+
+THE ONE ASKING STEP (DEF-024, 2026-10-31). `register_job()` is the ONE
+production job body on this PC, and its handler ASKS before it searches:
+`ctx.require("github_read")` - the same action name `jarvis_tellme.py`'s own
+GitHub look uses. A job scheduled with `needs: []` (which both Work panes send
+on purpose) therefore parks in `waiting_approval` with ONE one-shot grant, and
+the Work pane offers "No" and "Allow once". No fails the job without a search;
+Allow once spends the grant and the search runs on the retry tick. Nothing
+here widens the frozen set or leaves a standing rule - the park/answer/spend
+loop is the queue's own (`docs/ARCHITECTURE.md` section 10).
 """
 from __future__ import annotations
 
@@ -552,9 +562,23 @@ def register_job() -> bool:
         return False
 
     def handler(ctx, params):
+        # DEF-024 (2026-10-31): searching GitHub is a real capability, and the
+        # framework's name for it is `github_read` - the action jarvis_tellme.py
+        # already asks under for its own GitHub look. The frozen set on the row
+        # is the owner's yes from when he scheduled this job; if it does not
+        # carry `github_read`, require() parks the job in `waiting_approval`
+        # with ONE one-shot grant, where the Work pane offers "No" / "Allow
+        # once". No fails this job before anything is fetched; Allow once spends
+        # the grant and this line passes on the retry tick. Nothing here widens
+        # the set or writes a standing rule.
+        #
+        # This is the one production body that asks, so the park -> answer ->
+        # spend loop is reachable on this PC and not only in the suite.
+        ctx.require("github_read")
         # The frozen capability set is what makes this safe to leave running:
-        # the job may search and it may write its own database, and there is
-        # no path by which it can widen that while it runs.
+        # the job may search (now asked for explicitly above) and it may write
+        # its own database, and there is no path by which it can widen that
+        # while it runs.
         topic = (params or {}).get("topic")
         out = check(topic, fetcher=(params or {}).get("fetcher"))
         ctx.progress(f"checked {out['checked']} topic(s)")
