@@ -6765,7 +6765,9 @@ def _run_pair_phone() -> Result:
 
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
-    the owner's request of 2026-10-10).
+    the owner's request of 2026-10-10), and Jarvis's own windows and places
+    ("open the second brain", "open history", "open tutorials", "open my
+    notes", 2026-10-31).
 
     The grammar lives in that module and this only asks it - one place decides
     what the owner's words name, so the desktop and the phone cannot drift
@@ -7823,6 +7825,10 @@ class Result:
     # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the place in
     # Brain both apps open - "forget-range" - after "forget what you learned
     # last week" filled in its list. Navigation only; nothing is removed.
+    # The "open ..." sentences of 2026-10-31 use the SAME field for Jarvis's
+    # own windows: "brain" (the Brain itself), "history" and "tutorials" -
+    # places the apps already open through `open_fix_place`. No new field and
+    # no new kind of route, so a client that does not know a value ignores it.
     open_brain: Optional[str] = None
     # "Label my chat about the boiler as Home" (chat tags, 2026-09-30): the tag
     # id History should offer to file a tapped chat under, and the words it
@@ -8803,12 +8809,27 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
             return Result("I could not tell what to open.", n)
         if opened.kind == "refused":
             return Result(opened.said, n)
+        if opened.kind == "answer":
+            # The honest fallback (2026-10-31): the words named a place this
+            # PC has no door to ("open settings, sound" - no such Jarvis
+            # section), so the sentence says so and NO route field rides with
+            # it. Nothing is opened, so nothing may be claimed.
+            return Result(opened.said, n)
         here = True
         try:
             import jarvis_owner_check as OC
             here = bool(OC.from_this_pc(peer, local))
         except Exception:
             here = True
+        if opened.kind == "brain":
+            # Jarvis's own window (2026-10-31): "open the second brain",
+            # "open history", "open tutorials", "open my notes". The route's
+            # EXISTING `open_brain` field carries the place the desktop
+            # already opens (main.js openBrainFromRoute, the HUD's injected
+            # bootstrap, plain_errors.rs open_fix_place) - no new field, no
+            # new command, and no route change.
+            return Result(OPEN.words(opened, this_pc=here), n,
+                          open_brain=opened.target)
         return Result(OPEN.words(opened, this_pc=here), n,
                       open_app=(None if opened.kind == "jarvis" else opened.target),
                       open_app_kind=opened.kind,
@@ -9938,6 +9959,9 @@ def route_fields(res: Result) -> dict:
     if res.open_brain:
         # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the
         # Brain place both apps open, with the list already filled in.
+        # "open the second brain" / "open history" / "open tutorials" /
+        # "open my notes" (2026-10-31) use the same field for the window and
+        # its own places - the apps already open those through open_fix_place.
         # Additive, like open_settings.
         out["open_brain"] = res.open_brain
     if res.topic_id is not None:
