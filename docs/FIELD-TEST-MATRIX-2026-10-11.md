@@ -166,41 +166,51 @@ The owner asked: *"are there any features that haven't been field tested on the 
 > the F5 ruling of 2026-10-30, and the two owner screenshots relayed in words
 > (OWNER-VISUAL, rendering only).
 >
-> ### UPDATED 2026-10-30, pass 7 (19:57–20:05 PDT): eleven more rows settled
+> ### UPDATED 2026-10-30, pass 6 + pass 7: thirteen more rows settled
 >
-> The same day's second read-only phone drive settled the rows that
+> The same day's two read-only phone drives settled the rows that
 > `.dsh-scratch/AUDIT-2026-10-30/TESTABLE-NOW.md` listed as drivable without the
-> owner, using the phone's **Help -> `Find anything`** place index (a search that
-> takes you to the place: `compute` -> `1 match` -> the COMPUTE plate) and the
-> **Settings -> SEARCH SETTINGS** filter. **Nothing was written:** a PASS below is
-> a *read-only readout that was operated*; a PARTIAL row names the write it did
-> not make; a NOT-REACHABLE row says exactly why there is nothing to read **and
-> keeps its matrix state**, because NOT-REACHABLE is a record verdict, not one of
-> this document's states - the same rule the 2026-10-30 entry above uses for
-> PARTIAL. **PARTIAL and NOT-REACHABLE are never passes.**
+> owner. **Pass 6 (19:46–19:52 PDT)** operated two phone-local settings controls
+> and restored both exactly, and read the tutorials catalogue's missing half;
+> **pass 7 (19:57–20:05 PDT)** used the phone's **Help -> `Find anything`** place
+> index (a search that takes you to the place: `compute` -> `1 match` -> the
+> COMPUTE plate) and the **Settings -> SEARCH SETTINGS** filter. **PARTIAL and
+> NOT-REACHABLE are record verdicts, not matrix states:** such a row keeps its
+> matrix state and carries a dated note in the evidence column - the same rule the
+> 2026-10-30 entry above uses for PARTIAL. No new state was invented, and
+> **PARTIAL and NOT-REACHABLE are never passes.**
 >
-> * **3 rows moved to DRIVEN** (`compute` 96, `skills` 97,
+> * **3 rows moved to DRIVEN by pass 6** (`phone-tiles` 83, `phone-screen-rate` 84,
+>   `tutorials` 53): the Quick Settings tile action and the screen refresh-rate
+>   choice were each operated, observed and restored to their exact pre-test
+>   values, and the TUTORIALS catalogue (36 lessons, per-lesson progress) was read
+>   - completing row 53's missing half, so its earlier PARTIAL is superseded.
+> * **3 rows moved to DRIVEN by pass 7** (`compute` 96, `skills` 97,
 >   `backend-supports` 109): read-only readout screens, opened and read with real
 >   PC/backend data.
-> * **3 rows carry a dated PARTIAL note, state unchanged (SCREEN)** (`undo` 115,
->   `limits` 117, `stop-everything` 123): the setting or control was read, and the
->   write an effect would need was named and not performed (the undo-window and
->   approval-wait changes ask on the PC; Stop everything is a quick-tile action and
->   operating it is a write).
-> * **4 rows carry a dated NOT-REACHABLE note, state unchanged (SCREEN)**
->   (`shortcuts` 94, `job-list` 102, `updates` 106, `tool-updates` 107): measured
->   reasons - both search routes answer `Nothing here matches …` / `Nothing matches
->   that.` (`94`, `106`); the Background jobs plate is indexed but **not drawn while
->   the queue is empty** (`BrainSections.kt:259`) and the opened section contains no
->   such node (`102`); `check for tool updates` is PC-only on the phone by design
->   (`FeatureDirectory.kt:151`) and has no phone row (`107`).
+> * **3 rows carry a dated PARTIAL note from pass 7, state unchanged (SCREEN)**
+>   (`undo` 115, `limits` 117, `stop-everything` 123): the setting or control was
+>   read, and the write an effect would need was named and not performed (the
+>   undo-window and approval-wait changes ask on the PC; Stop everything is a
+>   quick-tile action and operating it is a write).
+> * **4 rows carry a dated NOT-REACHABLE note from pass 7, state unchanged
+>   (SCREEN)** (`shortcuts` 94, `job-list` 102, `updates` 106, `tool-updates`
+>   107): measured reasons - both search routes answer `Nothing here matches …` /
+>   `Nothing matches that.` (`94`, `106`); the Background jobs plate is indexed but
+>   **not drawn while the queue is empty** (`BrainSections.kt:259`) and the opened
+>   section contains no such node (`102`); `check for tool updates` is PC-only on
+>   the phone by design (`FeatureDirectory.kt:151`) and has no phone row (`107`).
+> * **1 row deliberately not moved** (`first-run` 92: still not found on the
+>   visited surfaces in either pass). No verdict is claimed for it.
 >
 > Counted over all 136 rows: **20 DRIVEN / 84 SCREEN / 19 BLOCKED /
-> 13 NOT-TESTABLE** before this pass, **23 DRIVEN / 81 SCREEN / 19 BLOCKED /
-> 13 NOT-TESTABLE** after it.
+> 13 NOT-TESTABLE** before this update, **26 DRIVEN / 78 SCREEN / 19 BLOCKED /
+> 13 NOT-TESTABLE** after both passes (3 + 3 rows moved from SCREEN to DRIVEN;
+> 20 + 3 + 3 = 26 and 84 - 3 - 3 = 78, and the four totals still sum to 136).
 >
-> Dated evidence: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md` ("AUDIT pass 7 -
-> 2026-10-30 19:57–20:05 PDT"; 31 raw dumps in `pass7\`) and
+> Dated evidence: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md` ("AUDIT pass 6 -
+> 2026-10-30 19:46–19:52 PDT" and "AUDIT pass 7 - 2026-10-30 19:57–20:05 PDT";
+> 20 raw dumps in `pass6\`, 31 in `pass7\`) and
 > `.dsh-scratch/AUDIT-2026-10-30/TESTABLE-NOW.md` (the ledger this settles).
 
 ## The counts
@@ -509,7 +519,7 @@ See the table at the end: every entry there says whether the **preflight** cover
 | 50 | Write a note for you (`notes-write`) | Notes and files | both | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
 | 51 | Folders Jarvis may look in (`folders`) | Notes and files | both | **DRIVEN** <br>was `SCREEN`; `FIELD-TESTED` before that | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:13 <br>**Measured 2026-10-30 18:05–18:10 PDT — PASS:** Settings -> `Folders Jarvis may look in` read the real folder list `Documents — C:\Users\pcadmin\Documents — Remove`, `Folders are added on the PC: Settings, Folders Jarvis may look in.`, `PDF, Word, Excel and PowerPoint files can be read.` A read-only list, opened and read on the phone. Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:539` (`pass3/p3-folders.xml`). |
 | 52 | Ask about a PDF, a Word file or a Notion page (`documents`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:40 |
-| 53 | Tutorials and the FAQ (`tutorials`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:40 <br>**Measured 2026-10-30 18:05–18:10 PDT — PARTIAL: the FAQ half was driven; the tutorials catalogue half was not reached on this screen.** Help tab read the FAQ index (`Do I need Tailscale for this to work?`, `Does this app run any AI on my phone?`, `How do I teach Jarvis my voice? …`, `Why can't I approve everything waiting for me in one tap?`, …), then opened `How do I update Jarvis?` and read its full answer (*"Most of it in one command… scripts/update-jarvis.ps1… This app: install the newest file from the release page over the old one; it stays paired."*). Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:540` (`pass3/p3-help.xml`, `p3-faq-answer.xml`). |
+| 53 | Tutorials and the FAQ (`tutorials`) | Notes and files | both | **DRIVEN** <br>was `SCREEN`; `FIELD-TESTED` before that | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:40 <br>**Measured 2026-10-30 18:05–18:10 PDT — PARTIAL (superseded below): the FAQ half was driven; the tutorials catalogue half was not reached on that screen.** Help tab read the FAQ index (`Do I need Tailscale for this to work?`, `Does this app run any AI on my phone?`, `How do I teach Jarvis my voice? …`, `Why can't I approve everything waiting for me in one tap?`, …), then opened `How do I update Jarvis?` and read its full answer (*"Most of it in one command… scripts/update-jarvis.ps1… This app: install the newest file from the release page over the old one; it stays paired."*). Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:540` (`pass3/p3-help.xml`, `p3-faq-answer.xml`). <br>**Measured 2026-10-30 19:46–19:52 PDT — PASS: the tutorials half was then reached and read, so both halves are now driven.** Brain -> `Jarvis on your PC` -> **TUTORIALS** plate read `You have met 0 of the 36 lessons here. 36 to go.`, `ON THIS PC`, and the lesson rows `What Jarvis is`, `Talking to it`, `What asks first`, `What Jarvis remembers`, `Records, history and what is kept`, `When something is wrong`, each with `Not started` / `Start again`. Nothing was started (starting a lesson writes progress); the catalogue is a read-only readout and it was operated and read. The earlier PARTIAL is superseded by this pass-6 completion. Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:800` (`pass6/p6-onpc-scroll3.xml`, `p6-onpc*.xml`). |
 | 54 | PC help (`pc-help`) | Notes and files | phone | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_pc_help.py, test_pc_help.py, gen_pc_help_cases.py |
 | 55 | Web search (`web-search`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:26 |
 | 56 | A browser without a window (`browser-engine`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:187 <br>**Measured 2026-10-30 18:05–18:10 PDT — PARTIAL: state read; the behaviour needs Obscura installed on the PC (a PC-side install, not done).** Settings -> `Browser without a window (Obscura)` read `Off. Jarvis uses the visible browser only.`, `Obscura is not installed on this PC yet.`, plus the full explanation. Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:541` (`pass3/p3-browser.xml`). |
@@ -539,8 +549,8 @@ See the table at the end: every entry there says whether the **preflight** cover
 | 80 | Let Jarvis read phone notifications (`phone-notifications`) | Phone | phone | **SCREEN** <br>was `TEST-VERIFIED ONLY` | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | jarvis_phone_notifications.py, test_phone_notifications.py <br>**Measured 2026-10-30 18:05–18:10 PDT — PARTIAL: state read, granting notification access is an OS write (not done).** Settings -> `Phone notifications` read `Jarvis never sees a phone notification.`, `Notification access: not granted yet.`, `No apps added yet.`, `No captured notifications are kept on this phone.` Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:544` (`pass3/p3-phone-notifications.xml`). |
 | 81 | Smartwatch notifications (`phone-watch`) | Phone | phone | **SCREEN** <br>was `NOT FOUND` | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | no evidence either way: no pass record, no suite and no review names it <br>**Measured 2026-10-30 18:05–18:10 PDT — PARTIAL: row label read only; no paired watch exists, so the behaviour is not observable.** Settings -> `Smartwatch notifications` section read `NOTIFICATIONS`, `Show notifications on a compatible watch`. Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:545` (`pass3/p3-watch.xml`). |
 | 82 | Floating Jarvis (`phone-floating`) | Phone | phone | **SCREEN** <br>was `NEVER TESTED` | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:22 <br>**Measured 2026-10-30 18:05–18:10 PDT — PARTIAL: choices/state read; switching is a write (not done).** Settings -> `Floating Jarvis` read `Off / Bubble / Overlay`, `Off. Nothing floats over other apps.` Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:546` (`pass3/p3-floating.xml`). |
-| 83 | Quick Settings tiles (`phone-tiles`) | Phone | phone | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/docs/RESEARCH-AUDIT-2026-09-28.md:320 |
-| 84 | Screen refresh rate (`phone-screen-rate`) | Phone | phone | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:35<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:171 |
+| 83 | Quick Settings tiles (`phone-tiles`) | Phone | phone | **DRIVEN** <br>was `SCREEN`; `NEVER TESTED` before that | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | only a review mentions it: /.dsh-scratch/device-tour/docs/RESEARCH-AUDIT-2026-09-28.md:320 <br>**Measured 2026-10-30 19:46–19:52 PDT — PASS (control operated, state changed, exact pre-test state restored):** Settings -> SEARCH SETTINGS -> `tiles` -> `1 setting matches.` -> **QUICK SETTINGS TILES** section read (*"Up to three Jarvis tiles for the panel you pull down from the top of the screen…"*) with `Tile 1 - 10-min timer` and its choices `Nothing / Focus session / 10-min timer / Stop everything / Play/pause PC`. Tapped `Focus session` -> the heading became `Tile 1 - Focus session`; tapped `10-min timer` -> the heading returned to `Tile 1 - 10-min timer`, i.e. the pre-test assignment was restored. Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:782` (`pass6/p6-search-tiles.xml`, `p6-tiles-changed.xml`, `p6-tiles-restored.xml`). |
+| 84 | Screen refresh rate (`phone-screen-rate`) | Phone | phone | **DRIVEN** <br>was `SCREEN`; `FIELD-TESTED` before that | phone 0.2.3261, versionCode 1000003261, built from main `21add9d53`, installed 2026-10-30 12:01:36 | /.dsh-scratch/phone-pass-2026-10-11/README.md:35<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:171 <br>**Measured 2026-10-30 19:46–19:52 PDT — PASS (a control changed the readout, then the pre-test state was restored):** Settings -> SEARCH SETTINGS -> `refresh` -> **SCREEN REFRESH RATE** read (*"While Jarvis is on screen, Jarvis asks the screen for this rate. It cannot change your phone's own display setting…"*), `Now: the phone decides.`, choices `Follow the phone / 60 Hz · now / 90 Hz / 120 Hz`, `This screen offers 60, 90, 120 Hz.`, the battery note, and the note that this is not the animal's frame rate. Tapped `90 Hz` -> the readout became **`Now: asking for 90 Hz.`**; tapped `Follow the phone` -> `Now: the phone decides.` restored. Source: `.dsh-scratch/FIELD-TEST-2026-10-30/REPORT.md:791` (`pass6/p6-search-refresh.xml`, `p6-rate-changed.xml`, `p6-rate-restored.xml`). |
 | 85 | Also on my phone (`also-on-phone`) | Phone | both | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
 | 86 | Ring my phone (`find-phone`) | Phone | both | **DRIVEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_find_phone.py, test_find_phone.py |
 | 87 | What the phone deliberately does not do (`phone-limits`) | Phone | phone | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:78 |
