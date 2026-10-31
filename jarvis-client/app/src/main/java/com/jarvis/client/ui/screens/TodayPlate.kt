@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
@@ -25,6 +26,7 @@ import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Briefing
 import com.jarvis.client.net.Schedule
 import com.jarvis.client.net.Today
+import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -57,8 +59,10 @@ internal fun TodaySection(
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val tick by JarvisRuntime.scheduleTick.collectAsState()
     val briefTick by JarvisRuntime.briefingTick.collectAsState()
+    val switchSaid by JarvisRuntime.todaySwitch.collectAsState()
     var reads by remember { mutableIntStateOf(0) }
     var schedule by remember { mutableStateOf<Schedule.View?>(null) }
     var missing by remember { mutableStateOf(false) }
@@ -69,6 +73,10 @@ internal fun TodaySection(
     var text by remember { mutableStateOf("") }
     var at by remember { mutableStateOf("07:00") }
     var days by remember { mutableStateOf(setOf(0, 1, 2, 3, 4)) }
+    // ---- The Today board (GTD-2): the same route the desktop reads --------
+    var board by remember { mutableStateOf<Today.Cockpit?>(null) }
+    var boardMissing by remember { mutableStateOf(false) }
+    var boardError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.schedule()) {
@@ -93,6 +101,25 @@ internal fun TodaySection(
         when (val r = JarvisRuntime.briefing()) {
             is ApiResult.Ok -> brief = Briefing.parse(r.value)
             is ApiResult.Failed -> Unit
+        }
+    }
+    // The Today board (GTD-2). It is a READ, so a stale link never blanks it;
+    // with the private lists hidden it asks with ?hidden=1 and the PC withholds
+    // every word. A PC with no board at all draws nothing (an older install);
+    // a board that could not be READ says so - never an empty day.
+    LaunchedEffect(reads, tick, privateHidden) {
+        when (val r = JarvisRuntime.todayCockpit(privateHidden)) {
+            is ApiResult.Ok -> {
+                board = Today.cockpit(r.value)
+                boardMissing = false
+                boardError = null
+            }
+            is ApiResult.Failed -> {
+                board = null
+                val why = Today.boardFailure(r.error)
+                boardMissing = why == null
+                boardError = why
+            }
         }
     }
 
@@ -120,6 +147,32 @@ internal fun TodaySection(
             } finally {
                 busy = false
             }
+        }
+    }
+
+    /** The board's copy actions: a PRIVATE clipboard write, never a send. */
+    fun copyPrompt(prompt: String, confirmation: String) {
+        PrivateClipboard.copy(context, prompt)
+        said = confirmation
+    }
+
+    /** A due reminder's Snooze - the phone's own 10 minutes, the same action. */
+    fun snooze(due: Today.Due) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                said = JarvisRuntime.scheduleAct(due.id, "snooze").second
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    /** The said-I'd-do switch: OFF at once, ON asks the PC for one card. */
+    fun setUnspoken(on: Boolean) {
+        scope.launch {
+            said = JarvisRuntime.setTodayUnspoken(on, privateHidden).second
         }
     }
 
@@ -157,6 +210,113 @@ internal fun TodaySection(
                                 modifier = Modifier.weight(1f))
                             Quiet(if (showPrivateBusy) "Checking…" else "Show",
                                 enabled = !showPrivateBusy, onClick = onShowPrivate)
+                        }
+                    }
+                }
+            }
+
+            // ---- The Today board (GTD-2, 2026-10-18) ------------------------
+            // Due reminders, the first open step of each goal/work list, and
+            // the said-I'd-do proposals with their own opt-in: the same three
+            // sections, in the same order and the same words as the desktop's
+            // Today page (jarvis-desktop/src/today.js's board section). A tap
+            // here only copies a prompt or snoozes; nothing is created.
+            if (!boardMissing) {
+                val b = board
+                val unreadable = boardError
+                when {
+                    b == null && unreadable != null -> {
+                        Gap(14)
+                        Text(
+                            unreadable,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.warnInk,
+                            modifier = Modifier.liveStatus(),
+                        )
+                        Quiet("Retry", onClick = { reads += 1 })
+                    }
+                    b == null -> Unit
+                    b.hidden -> Unit  // the words are withheld; the line above says why
+                    else -> {
+                        if (b.due.isNotEmpty()) {
+                            Gap(14)
+                            Text(Today.DUE_TITLE, style = MaterialTheme.typography.labelMedium,
+                                color = chrome.textMid)
+                            b.due.forEach { due ->
+                                BoardRow(
+                                    tag = due.tag,
+                                    title = due.title,
+                                    meta = due.meta,
+                                ) {
+                                    Quiet(Today.DO_THIS_LABEL, enabled = canAct) {
+                                        copyPrompt(due.prompt(), Today.DO_THIS_COPIED)
+                                    }
+                                    due.breakPrompt()?.let { prompt ->
+                                        Quiet(Today.BREAK_LABEL, enabled = canAct) {
+                                            copyPrompt(prompt, Today.BREAK_COPIED)
+                                        }
+                                    }
+                                    if (!due.hidden && due.wentOff &&
+                                        due.kind in setOf("reminder", "alarm", "timer")) {
+                                        Quiet(Schedule.SNOOZE, enabled = canAct && !busy) {
+                                            snooze(due)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (b.steps.isNotEmpty()) {
+                            Gap(14)
+                            Text(Today.NEXT_TITLE, style = MaterialTheme.typography.labelMedium,
+                                color = chrome.textMid)
+                            b.steps.forEach { step ->
+                                BoardRow(tag = step.tag, title = step.title, meta = step.meta)
+                            }
+                        }
+                        Gap(14)
+                        Text(Today.PROPOSALS_TITLE, style = MaterialTheme.typography.labelMedium,
+                            color = chrome.textMid)
+                        if (b.unspokenEnabled) {
+                            val rows = Today.proposalRows(b)
+                            if (rows.isEmpty()) {
+                                Text(Today.PROPOSALS_EMPTY,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.textMid)
+                            } else {
+                                rows.forEach { proposal ->
+                                    BoardRow(
+                                        tag = "you said",
+                                        title = proposal.text,
+                                        meta = proposal.meta,
+                                    ) {
+                                        Quiet(Today.REMIND_LABEL, enabled = canAct) {
+                                            copyPrompt(proposal.prompt(), Today.DO_THIS_COPIED)
+                                        }
+                                    }
+                                }
+                            }
+                            Text(Today.PROPOSALS_DETAIL,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textLo)
+                            Quiet(Today.PROPOSALS_OFF_LABEL, enabled = canAct) {
+                                setUnspoken(false)
+                            }
+                        } else {
+                            Text(Today.PROPOSALS_OFF,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid)
+                            Quiet(Today.PROPOSALS_ON_LABEL, enabled = canAct) {
+                                setUnspoken(true)
+                            }
+                        }
+                        switchSaid?.let {
+                            Text(it.text, style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textMid, modifier = Modifier.liveStatus())
+                            if (it.waiting) {
+                                Text(Today.PROPOSALS_WAITING,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = chrome.textLo)
+                            }
                         }
                     }
                 }
@@ -245,5 +405,27 @@ private fun CardRow(card: Today.Card, enabled: Boolean, onDelete: () -> Unit) {
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
         Quiet(Today.DELETE_LABEL, color = chrome.badInk, enabled = enabled, onClick = onDelete)
+    }
+}
+
+/**
+ * One row of the Today board: a tag, its words, what the PC said about it, and
+ * (for a due reminder or a proposal) the row's own buttons. The desktop's
+ * `row()` in brain.js, in this app's parts.
+ */
+@Composable
+private fun BoardRow(
+    tag: String,
+    title: String,
+    meta: List<String>,
+    actions: @Composable () -> Unit = {},
+) {
+    val chrome = LocalChrome.current
+    Column(Modifier.fillMaxWidth()) {
+        Text(tag, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Text(title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        meta.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid) }
+        actions()
+        Gap(8)
     }
 }
