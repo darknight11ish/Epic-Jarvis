@@ -14,11 +14,13 @@ What it proves:
     no setting and no card (it is fixed text, like jarvis_manner.py and
     jarvis_wellbeing.py - not something the owner can change or that raises
     a card either way);
-  - "what can you do?" and close phrasings are answered by jarvis_quick.py
-    from the same list, without the model; a near miss and pasted text go
-    to the model instead;
-  - without jarvis_sayable.py, the fast path says to run apply-patches.ps1,
-    the same shape as jarvis_reach.py's own fallback;
+  - the capability question is the feature catalogue's by-group OVERVIEW
+    (`feature_overview`, 2026-10-31 integration: the owner asked to be told
+    about the features in detail), and the sayable list keeps its own doors
+    ("what can I say?" / "help", `sayable_help`); both are fixed, no-model
+    answers; a near miss and pasted text go to the model instead;
+  - without jarvis_sayable.py, the sayable door says to run
+    apply-patches.ps1, the same shape as jarvis_reach.py's own fallback;
   - sayable.patch applies to what the earlier patches wrote, reverses,
     checks the origin and the token, and its block runs;
   - both apps carry the PC's words, held to the generated contract fixture.
@@ -139,17 +141,26 @@ def t_answer_turn_end_to_end():
                               "provenance": "typed"}], "stream": True}
         res = Q.answer_turn(body, sched=sched, now=time.time())
         check("\"what can you do?\" answers end to end, no model",
-              res is not None and res.intent == "sayable_help", res)
-        for one in S.SENTENCES:
-            check(f"the answer names {one!r}", one in res.reply, res.reply)
-        check("the answer names the footer line", S.FOOTER in res.reply, res.reply)
-        # B4, phone field test 2026-10-29: the phone reads this very answer and
-        # has no tray icon to right-click, so the line has to say where the
-        # action lives. Both halves below are the fix: the PC is named, and the
-        # bare desktop-only wording ("... by the clock.") is gone.
-        check("the answer says the right-click is on the PC", "on the PC" in res.reply, res.reply)
-        check("the old PC-only wording is gone",
-              "right-click the Jarvis icon by the clock." not in res.reply, res.reply)
+              res is not None and res.intent == "feature_overview", res)
+        reply = res.reply if res is not None else ""
+        # 2026-10-31 (integrated in the chat-gaps tree): the owner asked for
+        # Jarvis to talk about its features in detail, so the bare "what can
+        # you do?" is now the by-group catalogue OVERVIEW (feature-discussion
+        # lane) instead of the sayable list. It is still a fixed, no-model
+        # answer; the sayable list keeps its own door ("what can I say?" /
+        # "help"), and its served view is checked in t_view_is_fixed_text.
+        check("the overview is a fixed no-model answer, not the model's",
+              "Jarvis has " in reply and " features in " in reply
+              and "groups:" in reply, reply)
+        for group in ("Talking (", "Memory (", "Notes and files (",
+                      "Phone (", "Safety ("):
+            check(f"the overview names the real {group.split()[0]} group",
+                  group in reply, reply)
+        check("the overview points at the whole list, in the owner's words",
+              'Everything Jarvis can do' in reply
+              and "Brain, Tutorials and the FAQ" in reply, reply)
+        check("the overview is capped, not the whole 147-row list",
+              "and 22 more." in reply or "more." in reply, reply)
     finally:
         sched.close()
 
@@ -179,24 +190,31 @@ def t_view_is_fixed_text_no_card_no_secret():
 
 def t_the_quick_answer_and_near_misses():
     now = time.time()
-    for text in ("what can you do?", "What can I say?", "what can jarvis do", "help",
-                 "help me", "What should I say?", "What are your commands?",
-                 "show me what I can say", "What can I ask?"):
+    # 2026-10-31 (integrated in the chat-gaps tree): the capability question is
+    # the catalogue OVERVIEW; the sayable list keeps the "what can I say" /
+    # "help" shapes. Both are fixed, no-model answers.
+    for text in ("what can you do?", "what can jarvis do"):
         intent = Q.match(text, now=now)
-        check(f"answered here, no model: {text!r}", intent is not None
-              and intent.name == "sayable_help", intent)
+        check(f"answered by the feature overview, no model: {text!r}",
+              intent is not None and intent.name == "feature_overview", intent)
+    for text in ("What can I say?", "help", "help me", "What should I say?",
+                 "What are your commands?", "show me what I can say",
+                 "What can I ask?"):
+        intent = Q.match(text, now=now)
+        check(f"answered by the sayable list, no model: {text!r}",
+              intent is not None and intent.name == "sayable_help", intent)
     for text in ("what can you do about the weather", "help me move this table",
                  "what can you do for a living", "help me understand quantum physics"):
         intent = Q.match(text, now=now)
         check(f"a near miss goes to the model: {text!r}", intent is None
-              or intent.name != "sayable_help", intent)
+              or intent.name not in ("sayable_help", "feature_overview"), intent)
     body = {"messages": [{"role": "user", "content": "what can you do?",
                           "provenance": "pasted"}]}
     check("pasted text goes to the model", Q.answer_turn(body, sched=_Sched()) is None)
     saved = sys.modules.get("jarvis_sayable")
     sys.modules["jarvis_sayable"] = None
     try:
-        r = Q.answer("what can you do?", sched=_Sched())
+        r = Q.answer("what can I say?", sched=_Sched())
     finally:
         sys.modules["jarvis_sayable"] = saved
     check("without jarvis_sayable.py it says to run apply-patches.ps1",

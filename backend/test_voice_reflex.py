@@ -289,12 +289,16 @@ def t_the_safe_number_rule_never_hijacks_ordinary_words():
             continue        # not questions; the normaliser test above covers them
         got = Q.match(phrase)
         check(f"ordinary words stay chat: {phrase!r}", got is None, got)
-    # 2026-10-31 (the owner's chat audit): a note READ is the chat-honesty lane's
-    # fixed answer now - chat cannot read note text, and the door is the Brain's
-    # Notes plate - so it is deliberately NOT ordinary chat any more.
-    check("a note read is the honesty lane's fixed answer now",
-          getattr(Q.match("read my notes"), "name", None) == "honest_chat",
-          Q.match("read my notes"))
+    # 2026-10-31 (the owner's chat audit; integrated in the chat-gaps tree):
+    # a note READ is the note lane's fixed answer now - `note_read_honest`,
+    # read-only and no card - because chat cannot read note text and the door
+    # is the Brain's Notes plate. This suite pinned the freshness lane's own
+    # intent name before the merge; the integrated truth is the note lane's.
+    got = Q.match("read my notes")
+    check("a note read is the note lane's fixed answer now",
+          getattr(got, "name", None) == "note_read_honest", got)
+    check("... and that answer is read-only, so no 'cancel that' is lost",
+          getattr(got, "name", None) in Q.READ_ONLY_INTENTS, got)
     check("'one of the files' is left byte-for-byte alone",
           Q.normalize_spoken_command("one of the files needs sorting")
           == "one of the files needs sorting")
