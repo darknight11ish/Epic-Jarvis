@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -157,15 +158,23 @@ internal fun CalendarScreen(
         }
     }
 
-    /** One write, with the busy flag and the PC's own sentence - Coming up's own shape. */
-    fun write(block: suspend () -> Pair<Boolean, String>) {
+    /**
+     * One write, with the busy flag and the sentence to show.
+     *
+     * The PC's own sentence is used ONLY while titles are visible: its success
+     * form names the event (`"<title>, Saturday 31 October at 09:00."`), so
+     * while App lock or "Hide memory lists and chat history" is on the screen
+     * shows a fixed title-free line instead ([Calendar.displaySaid]) and never
+     * attaches the PC's words to a node (DEF-025, field-test pass 9 section P8).
+     */
+    fun write(deleted: Boolean = false, block: suspend () -> Pair<Boolean, String>) {
         if (busy) return
         busy = true
         said = null
         scope.launch {
             try {
-                val (_, sentence) = block()
-                said = sentence
+                val (ok, sentence) = block()
+                said = Calendar.displaySaid(ok, deleted, privateHidden, sentence)
             } finally {
                 busy = false
             }
@@ -447,10 +456,19 @@ internal fun CalendarScreen(
                     }
                     said?.let {
                         Gap(6)
+                        // DEF-025: while titles are hidden this line is a fixed
+                        // title-free sentence ([Calendar.displaySaid]); its
+                        // semantics are cleared to that same sentence, so no
+                        // PC word can reach the accessibility tree through it.
                         Text(
                             it,
                             style = MaterialTheme.typography.labelSmall,
                             color = chrome.textMid,
+                            modifier = if (privateHidden) {
+                                Modifier.clearAndSetSemantics { contentDescription = it }
+                            } else {
+                                Modifier
+                            },
                         )
                     }
                     if (!canAct && v != null && !missing) {
@@ -524,7 +542,9 @@ internal fun CalendarScreen(
                     enabled = canAct && !busy,
                     onClick = {
                         confirmDelete = null
-                        write { JarvisRuntime.calendarDelete(victim.id) }
+                        // deleted = true, so the hidden-lists sentence says
+                        // "Deleted." instead of "Saved." (DEF-025).
+                        write(deleted = true) { JarvisRuntime.calendarDelete(victim.id) }
                     },
                 )
             },
@@ -562,6 +582,14 @@ private fun CalendarEventRow(
             if (hidden) Calendar.HIDDEN_TITLE else event.title,
             style = MaterialTheme.typography.bodyMedium,
             color = chrome.textHi,
+            // DEF-025: while hidden the node carries ONLY the withholding
+            // word - the title is never a property of any semantic node, so
+            // TalkBack (and any accessibility client) cannot read it.
+            modifier = if (hidden) {
+                Modifier.clearAndSetSemantics { contentDescription = Calendar.HIDDEN_TITLE }
+            } else {
+                Modifier
+            },
         )
         if (!hidden) {
             event.place.trim().takeIf { it.isNotEmpty() }?.let {
