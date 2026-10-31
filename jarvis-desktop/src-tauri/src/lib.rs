@@ -1413,6 +1413,13 @@ pub fn run() {
             commands::wiki_ingest,
             commands::wiki_ingest_status,
             commands::wiki_open_folder,
+            // The notes editor - the whole Obsidian vault, both apps (contract
+            // 2026-10-31). Every save raises the ordinary `edit_vault_note`
+            // card; this program never approves anything.
+            commands::notes_list,
+            commands::notes_read,
+            commands::notes_save,
+            commands::notes_save_status,
             commands::get_deep,
             commands::ask_deep,
             commands::check_server_health,

@@ -39,6 +39,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
+import { readNote, readNotesList, renderNotes, saveNote } from "./notes.js";
 import { dossierBody, dossierTitle } from "./people-dossier.js";
 import { mountCardLink } from "./card-link.js";
 import { createMenuManager, WORDS } from "./menu-visibility.js";
@@ -1319,6 +1320,7 @@ function render(name) {
       renderProposals();
       renderFacts();
       renderWikiPlate();
+      renderNotesPlate();
       renderDeepPlate();
       break;
     case "history":
@@ -4774,6 +4776,147 @@ async function openWikiFolder() {
     await invoke("wiki_open_folder");
   } catch (error) {
     toast(String((error && error.message) || error), "bad");
+  }
+}
+
+/* ==========================================================================
+   Notes - the whole Obsidian vault, both apps (contract 2026-10-31). Its own
+   plate on the Memory tab, read through its own four commands (not
+   brain_read); the plate itself is notes.js. Every Save raises the ordinary
+   approval card on the PC and follows it here; this window never approves
+   anything and never writes without the card.
+   ========================================================================== */
+
+const notes = { view: null, listError: "", open: null, openError: "", said: null,
+  saving: false, at: 0, loading: false };
+/** The Memory tab repaints often; the list is re-read at most this often. */
+const NOTES_READ_MS = 15000;
+/** How long the search box rests before it asks the PC again. */
+const NOTES_SEARCH_MS = 300;
+
+/** The search box's words, as the PC's `?q=`. */
+function notesQuery() {
+  const box = $("notes-search");
+  return box ? box.value.trim() : "";
+}
+
+async function loadNotes() {
+  if (notes.loading) return;
+  notes.loading = true;
+  const q = notesQuery();
+  try {
+    notes.view = readNotesList(await invoke("notes_list", q ? { q } : {}));
+    notes.listError = "";
+  } catch (error) {
+    notes.listError = String((error && error.message) || error);
+  } finally {
+    notes.loading = false;
+    notes.at = Date.now();
+  }
+  paintNotes();
+}
+
+function paintNotes() {
+  const box = $("notes");
+  if (!box) return;
+  renderNotes(box, {
+    ...notes,
+    onOpen: openNotesNote,
+    onSave: saveNotesNote,
+    onReload: reloadNotesNote,
+    onClose: closeNotesNote,
+  }, { el, row, button });
+  wireNotesSearch();
+}
+
+/** The search box is static (outside the repainted plate): wire it once. */
+function wireNotesSearch() {
+  const box = $("notes-search");
+  if (!box || box.dataset.wired === "true") return;
+  box.dataset.wired = "true";
+  let timer = null;
+  box.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      notes.at = 0;
+      loadNotes();
+    }, NOTES_SEARCH_MS);
+  });
+}
+
+function renderNotesPlate() {
+  paintNotes();
+  if (IS_TAURI && !notes.loading && Date.now() - notes.at > NOTES_READ_MS) loadNotes();
+}
+
+/** Open one note into the editor. Opening only reads. */
+async function openNotesNote(path) {
+  notes.openError = "";
+  notes.said = null;
+  try {
+    notes.open = readNote(await invoke("notes_read", { path }));
+    if (!notes.open.path) notes.open.path = path;
+  } catch (error) {
+    notes.openError = String((error && error.message) || error);
+  }
+  paintNotes();
+}
+
+/** Read the open note from disk again, throwing away the box's unsaved words. */
+async function reloadNotesNote() {
+  const path = notes.open && notes.open.path;
+  if (!path) return;
+  notes.open = null;
+  await openNotesNote(path);
+}
+
+function closeNotesNote() {
+  notes.open = null;
+  notes.openError = "";
+  notes.said = null;
+  paintNotes();
+}
+
+/**
+ * Save the box's words. One card on the PC, then this follows it: waiting,
+ * saved, denied or conflict. The words stay in the box while the card waits
+ * and after a conflict; only a `saved` re-reads the note from disk.
+ */
+async function saveNotesNote() {
+  const open = notes.open;
+  const box = $("notes-text");
+  if (!open || !box || notes.saving) return;
+  notes.saving = true;
+  // The box's words are the draft from this moment; a repaint must not put
+  // the old words back over them.
+  notes.open = { ...open, text: box.value };
+  notes.said = { text: "Asking the PC…", tone: null, final: false, state: "" };
+  paintNotes();
+  const last = await saveNote(invoke,
+    { path: open.path, text: box.value, expectedSha256: open.sha256 },
+    (said) => {
+      // A poll that says the same thing again is not worth a repaint.
+      if (notes.said && notes.said.text === said.text && notes.said.final === said.final) return;
+      notes.said = said;
+      paintNotes();
+    },
+    { linkDown: () => !currentLink().connected });
+  notes.saving = false;
+  announce(`${open.path}: ${last.text}`, last.tone === "bad" ? "assertive" : "polite");
+  if (last.state === "saved") {
+    // The file really changed: read it back, so the words and the hash on
+    // screen are the file's, then read the list again for its new mtime. The
+    // "Saved" sentence survives both reads.
+    await openNotesNote(open.path);
+    notes.said = last;
+    notes.at = 0;
+    await loadNotes();
+  } else if (last.state === "denied" || last.state === "failed") {
+    // Nothing was written; the open note's own words are still true.
+    notes.at = 0;
+    await loadNotes();
+  } else {
+    paintNotes();
   }
 }
 
