@@ -28620,6 +28620,15 @@ this patch adds to `jarvis_watch.register_job()` - that function existed with no
 caller, which is why the queue had nothing useful to run. The suite's own test
 handlers are the only others.
 
+**Since 2026-10-31 that one body ASKS (DEF-024, closed).** `jarvis_watch`'s
+handler calls `ctx.require("github_read")` before it searches - the same action
+`jarvis_tellme.py`'s own GitHub look uses - so a job created with `needs: []`
+parks at that line in `waiting_approval` with one unspent `pending` grant, and
+`POST /api/jobs/answer` above is its way back. **No** fails it before anything
+is fetched; **Allow once** spends the one-use grant and the search runs on the
+retry tick; a second ask does not inherit the spent grant. It widens no frozen
+set and leaves no standing rule.
+
 ### 169.2 `POST /api/jobs/answer`: answer the ONE grant
 
 Request: `{"id": "<job id>", "approved": true | false}`. `by` is an optional
@@ -28701,7 +28710,7 @@ absence is load-bearing and is not the same fact as an empty list.
 
 ### 169.5 What is proven, and what is not
 
-- `backend/test_jobs.py` (95 checks, 12 test functions): creating validates
+- `backend/test_jobs.py` (126 checks, 16 test functions): creating validates
   every field and refuses a `never` action, an unknown kind, a plan, a bad time,
   a bad `needs` and a stopped heartbeat; the created row carries the owner's
   words and an empty frozen set; a parked job is exactly what `jobs()` and
@@ -28711,7 +28720,14 @@ absence is load-bearing and is not the same fact as an empty list.
   and a new job needing the same risky action (`send_email`, tier `ask`) parks
   and asks again; and `backend/jobs-routes.patch` applies to the published
   `jarvis-backend/jarvis_hud.py`, reverses byte for byte, and carries the two
-  POST routes, the two GET keys and the start-up registration.
+  POST routes, the two GET keys and the start-up registration. **Since
+  2026-10-31 it also proves the ONE production body asks (DEF-024):**
+  `watch_github` calls `ctx.require("github_read")`; a route-created job with
+  `needs: []` parks with one unspent grant and no GitHub request made; `No`
+  fails it before the search and leaves no rule; `Allow once` spends the grant
+  and the search runs exactly once on the retry tick; a second ask does not
+  inherit it; and the queue's own `jobs.waiting` / `jobs.grant_decided` /
+  `jobs.capability_granted` lines are the ones written, no new verb invented.
 - `jarvis-desktop/tests/job-list.mjs` (25 checks browser-free): the read
   allow-list cannot reach either write, the two commands are registered in
   `lib.rs` and `build.rs`, each has its own generated permission and its place

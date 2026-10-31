@@ -4344,6 +4344,21 @@ they landed):
   can DO" grows one registration at a time, and a kind that is not registered
   is refused in words rather than queued.
 
+  **2026-10-31: that one production body now ASKS (DEF-024, closed).**
+  `jarvis_watch`'s handler calls `ctx.require("github_read")` before its GitHub
+  search - the same action `jarvis_tellme.py`'s own GitHub look uses. With the
+  Work panes' `needs: []`, a route-created job parks at that line in
+  `waiting_approval` with ONE unspent `pending` grant: **No** fails it before
+  anything is fetched, **Allow once** spends the one-use grant and the search
+  runs on the retry tick, and a second ask does not inherit it. So the park /
+  No / Allow once / one-use-grant loop described above is reachable on the
+  owner's PC and not only in the suite; `backend/test_jobs.py` proves it
+  through the real `handle_create` / `handle_answer` bodies and the real
+  registration, including the queue's own audit verbs (`jobs.waiting`,
+  `jobs.grant_decided`, `jobs.capability_granted`). The field test still has to
+  drive it on the deployed PC - the queue has not been ticked there by a
+  route-created job yet - so it is built and proven here, not field-PASSed.
+
   **Two payload mismatches on `/api/initiative` were fixed the same day**, in
   the backend, and neither app changed: `jarvis_initiative.drain()` now mirrors
   `level`, `check` and `message` FLAT onto each row it hands out - which is
