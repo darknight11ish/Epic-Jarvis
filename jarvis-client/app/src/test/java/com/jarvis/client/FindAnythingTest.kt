@@ -330,8 +330,14 @@ class FindAnythingTest {
             // in the catalogue (`hide = false` - it must stay visible, because
             // it is the switch that turns the feature back ON) and its place is
             // the row itself in MenuPlaces.SETTINGS.
+            // "Protected from Jarvis" (2026-10-31): the PC's protected-items
+            // list. It has no menu id in the catalogue yet - that row belongs to
+            // the backend lane's settings-registry change, which this lane may
+            // not touch - so the row is always drawn, like "App control", and
+            // this list is where a no-menu Settings row must be declared.
             listOf(
                 "settings-row.app-control",
+                "settings-row.protected",
                 "settings-row.jarvis-notify",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },

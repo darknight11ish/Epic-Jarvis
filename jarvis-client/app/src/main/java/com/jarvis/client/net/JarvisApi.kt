@@ -676,6 +676,30 @@ class JarvisApi(
     /** How one "Add to wiki" is going. Never carries a page's text. */
     suspend fun wikiJob(id: String): ApiResult<JsonObject> = probe(Wiki.statusPath(id))
 
+    // --------------------------------------------------------- protection ----
+    // "Protected from Jarvis" (2026-10-31; the contract is
+    // .dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md, the shapes are
+    // [Protected]): the PC's owner-editable list of folders, files and programs
+    // Jarvis may not touch. The phone may LIST it and ASK for one entry to be
+    // removed. Adding happens on the PC (its own pickers) or through a chat
+    // request, which raises a card - there is no phone add route and no phone
+    // file browser, by the contract.
+
+    /** `GET /api/protection` - the entries, the two modes and the PC's own words. */
+    suspend fun protection(): ApiResult<JsonObject> = probe(Protected.PATH)
+
+    /**
+     * Ask the PC to remove one protected entry. Removal is LOOSENING, so the
+     * PC always raises ONE approval card and answers `waiting` (202); the entry
+     * stays until the owner approves it. A refusal the PC explained (unknown
+     * id, bad body) is its own sentence, through [postExplained].
+     */
+    suspend fun protectionRemove(id: String): ApiResult<JsonObject> {
+        val body = Protected.removeBody(id)
+            ?: return ApiResult.Failed(ApiError.Malformed("no entry named"))
+        return postExplained(Protected.REMOVE_PATH, body)
+    }
+
     // ------------------------------------------------------------ watch ----
 
     /** `GET /api/watch` - the topics being watched ([Watch.read]). */
