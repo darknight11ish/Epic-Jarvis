@@ -22,13 +22,13 @@ import org.junit.Test
  *
  * The rows come from `src/test/resources/contract/pending-rows.json`, which
  * backend/test_approval_contract.py generates from the real `notice_for`
- * (approval-notice.patch) and checks is still what the gate produces. Since
- * 2026-10-28 the shipped stack sends NO `expires_in` for any card
- * (no-deadline-cards.patch), so the fixture carries no deadline; the older
- * backend that still sends one is checked against a row built in the test
- * below. Nothing in the fixture was typed to suit this client - which is how
- * the old tests missed that the server sends no `title`, so every card said
- * "Approval required".
+ * (approval-notice.patch) and checks is still what the gate produces. The
+ * fixture is about the notice's own words, so it carries no `expires_in`; the
+ * rows that DO carry one - a routine card whose request is still waiting since
+ * `show-card-timer.patch` (2026-10-30) - are built in the tests below, and
+ * `CardTimerTest` drives that timer. Nothing in the fixture was typed to suit
+ * this client - which is how the old tests missed that the server sends no
+ * `title`, so every card said "Approval required".
  */
 class PendingRowsContractTest {
 
@@ -99,19 +99,19 @@ class PendingRowsContractTest {
     }
 
     @Test
-    fun `no card carries a deadline since 2026-10-28, and an older backend still does`() {
-        // The shipped stack sends no expires_in for any card: expiresAtMs is
-        // null, so no countdown and no "Timed out" branch can be reached and
-        // both buttons are drawn until the owner answers (or the PC refuses a
-        // late yes with the reason).
-        read.items.forEach { assertNull("${it.id} still carries a deadline", it.expiresAtMs) }
-        // An OLDER backend still sends the field, and it still means seconds
-        // left on this phone's clock - the client is not broken by the removal.
-        val old = decodePendingRows(
+    fun `the fixture carries no deadline, and a waiting routine card still does`() {
+        // This fixture is about the NOTICE's own words, and its rows carry no
+        // `expires_in`, so none of them has a deadline. Since 2026-10-30 the
+        // shipped backend DOES send the field for a routine card whose request
+        // is still waiting (`show-card-timer.patch`), so the second half below
+        // is the shape the phone actually reads in the owner's hand - and
+        // `CardTimerTest` drives that timer end to end.
+        read.items.forEach { assertNull("${it.id} was given a deadline it did not carry", it.expiresAtMs) }
+        val waiting = decodePendingRows(
             listOf(
                 JsonObject(
                     mapOf(
-                        "id" to JsonPrimitive("old"),
+                        "id" to JsonPrimitive("waiting"),
                         "action" to JsonPrimitive("send_email"),
                         "tier" to JsonPrimitive("ask"),
                         "created" to JsonPrimitive(1.0),
@@ -121,7 +121,7 @@ class PendingRowsContractTest {
             ),
             nowMs,
         )
-        assertEquals(nowMs + 120_000L, old.items.single().expiresAtMs!!)
+        assertEquals(nowMs + 120_000L, waiting.items.single().expiresAtMs!!)
         // A row whose `created` is not a number gets no deadline, never a wrong one.
         assertNull(byId("t5").expiresAtMs)
     }

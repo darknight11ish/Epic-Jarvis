@@ -13,8 +13,8 @@ folder (or run `scripts\add-plugin.ps1 -Name antislop`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_antislop.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: 159, after every folder that has one
-  (`sandbox` is the highest at 158), so its three paths are checked in the order
+- Position in the loader's order: 160, after every folder that has one
+  (`sandbox` is the highest at 159), so its three paths are checked in the order
   they were added rather than in the middle of somebody else's
 
 The module itself is one of the ones this repository already ships

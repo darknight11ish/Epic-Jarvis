@@ -306,6 +306,21 @@ $PATCHES = @(
     # earlier patch writes. Its jarvis_owner_check.py half is the shipped
     # module.
     'no-deadline-cards.patch'
+    # THE TIMER ON EVERY CARD WITH A LIMITED TIME (the owner's ruling of
+    # 2026-10-30: "if there is a card with a limited time of any kind, be sure
+    # to put the timer on it"). It puts `expires_in` back on `/api/pending` for
+    # a routine card whose REQUEST is still waiting, as the whole seconds left
+    # until the row's own `waited_until` - never 0, never negative, and absent
+    # for a ceremony card (no `waited_until`) and for a request that has
+    # stopped waiting. DISPLAY ONLY: the 2026-10-28 no-deadline ruling is not
+    # weakened, no card gains a deadline of its own, nothing auto-approves, a
+    # Deny always works, and the read-time sweep and the late-approval 409 are
+    # untouched. The 60-second grace is NOT counted down (see the patch's own
+    # note): a clock that outlived the request would promise what the gate
+    # refuses. Its context is no-deadline-cards' output - pending()'s SELECT and
+    # the comment block where `expires_in` used to be - so it MUST come after
+    # that patch; nothing else in the list writes those lines.
+    'show-card-timer.patch'
     # Refuses every spelling of "every network interface" ("0", "0x0", ...)
     # as the bind address. Its context is loopback-too's output (the
     # _loopback_companion function and its call in main()), so it goes

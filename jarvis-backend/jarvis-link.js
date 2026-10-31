@@ -15,7 +15,7 @@
  * @module jarvis-link
  */
 
-import { fallbackTitle, CARD_TIMED_OUT } from "./card-words.js";
+import { fallbackTitle, CARD_TIMED_OUT, countdownWords } from "./card-words.js";
 import { isReplaceCard } from "./replace-confirm.js";
 import { markMigrated, migrated, storeAnimal } from "./animal-shared.js";
 import { loadFaceTuning } from "./face-tuning.js";
@@ -318,13 +318,19 @@ function expiryOf(row) {
 }
 
 /**
- * How long a card has left, in words: "2:13 left", or "Timed out", or "" when
- * nobody said. The gate refuses the card by itself at the deadline, so this
- * is the difference between a decision and a card that silently vanishes.
+ * How long a card's request has left, in words: "14m 59s left", or "42s left —
+ * under a minute to decide.", or "Timed out", or "" when nobody said.
  *
- * "Timed out" is the one word for this on every screen (settings audit
- * 2026-10-05, wording disagreement 1): the phone's card said "Expired" while
- * its own list and this one said "Timed out".
+ * SINCE 2026-10-30 THIS IS THE TIMER THE OWNER ASKED FOR ("if there is a card
+ * with a limited time of any kind, be sure to put the timer on it"). It counts
+ * the REQUEST's wait - the moment the backend sends as `expires_in` while it is
+ * still true - so the number and the refusal behind it are the same moment.
+ * The words themselves live in ONE place, `countdownWords` in card-words.js,
+ * shared with the HUD page's own copy and (same layout, same rule) the phone.
+ *
+ * "Timed out" is the one word for a card that is past it on every screen
+ * (settings audit 2026-10-05, wording disagreement 1): the phone's card said
+ * "Expired" while its own list and this one said "Timed out".
  *
  * The sentence itself is `CARD_TIMED_OUT` from card-words.js (2026-10-28): the
  * phone draws the same words from `jarvis_card_words.TIMED_OUT`, and the two
@@ -335,9 +341,7 @@ export function expiryWords(expiresAt, now = Date.now()) {
   if (expiresAt === null || expiresAt === undefined || !Number.isFinite(expiresAt)) return "";
   const left = Math.ceil((expiresAt - now) / 1000);
   if (left <= 0) return CARD_TIMED_OUT;
-  const m = Math.floor(left / 60);
-  const sec = String(left % 60).padStart(2, "0");
-  return `${m}:${sec} left to decide, then Jarvis refuses it by itself.`;
+  return countdownWords(left);
 }
 
 /**

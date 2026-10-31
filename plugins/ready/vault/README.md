@@ -12,8 +12,8 @@ folder and restart Jarvis.
 
 - Module the loader calls: `jarvis_vault.install()` (takes the core's Handler)
 - Routes: `GET /api/vault/handles`, `POST /api/vault/put`
-- Position in the loader's order: 150, after `auto-router` at 149 and `receipts`
-  at 148, so its two paths are checked in the order they were added rather than
+- Position in the loader's order: 151, after `auto-router` at 150 and `receipts`
+  at 149, so its two paths are checked in the order they were added rather than
   in the middle of somebody else's. **144 was taken while this branch was open**:
   `plugins/ready/auto-router` (already on `main`, and 144 in a published folder)
   claimed it first, so this branch's own folder takes the next free number rather
@@ -21,8 +21,8 @@ folder and restart Jarvis.
   when `model-lanes` took 142 (2026-10-16), again on 2026-10-23 when
   `no-expiry-cards.patch` shifted every generated position by one, a third time on
   2026-10-26 when `update-in-chat.patch` did the same, and a fourth on 2026-10-28
-  when `no-deadline-cards.patch` did - see `voiceprint` at 147, `skill-hub` at
-  146 - and this folder keeps its place in the sequence.
+  when `no-deadline-cards.patch` did - see `voiceprint` at 148, `skill-hub` at
+  147 - and this folder keeps its place in the sequence.
 - The patch this replaces: none - this is not a feature that used to be a patch
 
 ## Why `scripts\add-plugin.ps1 -Name vault` says "not a drop-in module"

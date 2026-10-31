@@ -171,7 +171,8 @@ PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so not
            "approved")
 
 #: The shipped approval_timeout_seconds, used when a row carries no
-#: `expires_in` (a backend without approval-expiry.patch).
+#: `expires_in` (a backend older than approval-expiry.patch, or no field because
+#: the card has no request-side window at all).
 DEFAULT_TIME_LEFT = 900.0
 
 #: The longest a Windows Hello prompt may stay up, however much time its card
@@ -1402,10 +1403,11 @@ def _time_left(row: dict) -> Optional[float]:
     None is not a very large number. A card whose action's request waits for
     its own flow (`jarvis_gate.APPROVAL_NEVER_EXPIRES`: pairing a phone,
     registering its approval key and restoring a backup) has no moment to be
-    late for. Since 2026-10-28 the CARD of every other action draws no
-    countdown either, but its REQUEST does, and that is the number this
-    returns - from the row's own `expires_in` when an older backend sent one,
-    otherwise from `created` plus the shipped wait. A caller that treated None
+    late for. Every other action's REQUEST has one, and that is the number this
+    returns - from the row's own `expires_in` when the gate sent one (since
+    2026-10-30 it does, for a routine card whose request is still waiting:
+    `show-card-timer.patch`), otherwise from `created` plus the shipped wait.
+    A caller that treated None
     as "0 seconds left" would refuse the four ceremonies; one that treated it
     as a number of seconds would invent a deadline the gate does not have - so
     both branches below test it explicitly.
@@ -1764,10 +1766,13 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
             again = _find(pending(), request_id)
         except Exception:
             return 503, {"ok": False, "error": QUEUE_UNREADABLE, "owner_check": "unreadable"}
-        # For a card with NO deadline, `expires_in <= 0` cannot happen: the
-        # gate never sends the field, so there is no moment it could have
-        # passed. What still holds here, and must, is the re-read itself - the
-        # card has to still be THE live card. Answered elsewhere, withdrawn, or
+        # A card with NO deadline cannot reach `expires_in <= 0`: the gate sends
+        # no field for a ceremony card, and since 2026-10-30 the field it sends
+        # for a routine card is the request's own seconds left, rounded UP and
+        # never 0 or negative (`show-card-timer.patch`), so a row that carries
+        # one is still waiting. What still holds here, and must, is the re-read
+        # itself - the card has to still be THE live card. Answered elsewhere,
+        # withdrawn, or
         # replaced by a newer card of the same kind (a second /api/pair/start
         # cancels the first card): each of those takes the row out of pending
         # while the Hello prompt was up, and this is what catches it.
