@@ -464,8 +464,13 @@ class MenuVisibilityTest {
         // registry's own checker requires every registry Section to be a menu,
         // so it now has `settings.calendar` in the catalogue (`hide = false`)
         // and its place is the row itself in MenuPlaces.SETTINGS.
+        // "files" joined them on 2026-10-31 (SendFilePlate.kt, the owner's ask
+        // and Gemini Q7): "File from your PC" has no menu id in the catalogue
+        // yet - the backend lane owns the settings-registry row - so the row is
+        // always drawn, like "app-control", and must be declared here.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
-            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control")
+            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
+                "files")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

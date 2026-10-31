@@ -303,6 +303,13 @@ object SettingsSearch {
             source = JUMP + listOf(PLATES + "FoldersPlate.kt"),
         ),
         Row(
+            key = "files", title = "File from your PC",
+            label = "A file Jarvis sent to this phone; view it; save it to Downloads; " +
+                "ten minutes; one download",
+            quotes = listOf("File from your PC"),
+            source = JUMP + listOf(PLATES + "SendFilePlate.kt"),
+        ),
+        Row(
             key = "backup", title = "Backups",
             label = "Back up Jarvis; locked backup file; recovery code; restore",
             quotes = listOf("Backups"),

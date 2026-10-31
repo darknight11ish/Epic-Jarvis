@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one file the owner approved for this phone, being handed to Android's
+     own viewer by "View" in ui/screens/SendFilePlate.kt (docs/JARVIS-API.md
+     section 172). `cache-path` is app-private storage, so no other app can
+     write there and swap the bytes after the PC's own sha256 was checked.
+     Read-only, granted per intent, for that one file. -->
+<paths>
+    <cache-path name="received" path="received/" />
+</paths>

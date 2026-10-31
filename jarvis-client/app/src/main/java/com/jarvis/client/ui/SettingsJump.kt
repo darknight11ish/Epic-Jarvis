@@ -69,6 +69,9 @@ object SettingsJump {
         Entry("What Jarvis can reach", "reach"),
         Entry("Sending email", "email-sending"),
         Entry("Folders Jarvis may look in", "folders"),
+        // "File from your PC" (2026-10-31, the owner's ask; docs/JARVIS-API.md
+        // section 172): ONE file Jarvis sent after its own approval card.
+        Entry("File from your PC", "files"),
         Entry("Backups", "backup"),
         Entry("Smartwatch notifications", "watch-notify"),
         Entry("Phone notifications", "phone-notify"),

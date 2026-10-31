@@ -3447,6 +3447,12 @@ class MainActivity : FragmentActivity() {
                         stale = stale,
                         onBack = { nav.back() },
                         modifier = root,
+                        // "File from your PC" (2026-10-31, docs/JARVIS-API.md
+                        // section 172) is the one Settings row that draws the
+                        // owner's own file names, so it gets the same
+                        // hidden-lists state the Brain's plates do: while it is
+                        // on, no name is asked for or shown.
+                        privateHidden = privateHidden,
                         // Room under the last card for the fixed "Needs your
                         // OK" line, which is drawn over this screen and used to
                         // sit on top of Devices' "Unpair & clear the token" at
