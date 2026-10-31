@@ -1213,6 +1213,32 @@ def t_parking_is_answered_here_and_needs_no_model():
               Q.match(said))
 
 
+def t_phone_state_sentences_keep_their_own_owners():
+    """2026-10-31 (post-deploy audit): the new phone-STATE read must not take
+    the pairing how-to, the ring-my-phone action, or the account-connection
+    path. Quick-wins is where one sentence's owner is pinned, so the guard
+    lives here too (the answer itself is proved in test_chat_honesty.py)."""
+    for said in ("pair my phone", "connect my phone", "how do I pair my phone?",
+                 "pair a new phone", "connect my phone to jarvis"):
+        got = Q.match(said)
+        check(f"{said!r} is still the pairing how-to",
+              got is not None and got.name == "pair_phone", got)
+    for said in ("ring my phone", "find my phone"):
+        got = Q.match(said)
+        check(f"{said!r} is still the ring-my-phone action",
+              got is not None and got.name == "phone_ring", got)
+    got = Q.match("is my phone connected?")
+    check("'is my phone connected?' is the state read, not an account path",
+          got is not None and got.name == "honest_state"
+          and (got.f or {}).get("shape") == "phone_state", got)
+    check("... and it is not the account-connection path (S6 rule)",
+          got is not None and got.name != "connect_account", got)
+    got = Q.match("connect my phone to the wifi")
+    check("a different 'connect my phone' sentence is not the state read",
+          got is None or (got.name, (got.f or {}).get("topic")) !=
+          ("honest_state", "state"), got)
+
+
 def main():
     orig_tz = os.environ.get("TZ")
     try:

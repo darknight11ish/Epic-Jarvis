@@ -5510,6 +5510,37 @@ _PHONE_TIMER = re.compile(
     r"|timers?\s+on\s+my\s+phone\b.*"
     r"|(?:can\s+you|could\s+you|please)?\s*set\s+(?:a\s+)?(?:timer|alarm)\s+on\s+"
     r"my\s+phone\b.*")
+#: "is my phone connected / paired / linked / online / set up?", "can you see my
+#: phone?", "what phone is paired?", "my phone isn't connecting" - the phone's
+#: own STATE question (2026-10-31, post-deploy audit: the model answered "I am
+#: not sure ... allow me to look at the Settings app or Device Manager for
+#: Bluetooth and USB", which is not a place this state lives). It reads the
+#: same paired-device store as the phone-timer answer and writes nothing. Only
+#: WHOLE state sentences: pairing actions keep their own `pair_phone`/ring
+#: paths, so "pair my phone", "connect my phone" and "ring my phone" never
+#: reach this one.
+_PHONE_STATE = re.compile(
+    # "is my phone connected / paired / linked / online / set up / working?"
+    r"(?:is|are|was|were|does|do|did|has|have)\s+(?:my|the|your)\s+"
+    r"(?:phone|android(?:\s+phone)?|mobile(?:\s+phone)?|device)\b[^.]{0,14}?"
+    r"(?:connected|linked|paired|online|set\s+up|working|reachable|"
+    r"recognis\w*|recogniz\w*)"
+    r"(?:\s+(?:to|with)\s*(?:you|jarvis|the\s+pc|this\s+pc)?)?.*"
+    # "can you see / do you see / can you reach my phone?"
+    r"|(?:can|could|do|does)\s+(?:you|jarvis)\s+(?:see|reach|find|detect|"
+    r"recognise|recognize)\s+(?:my|the)\s+(?:phone|android|mobile)\b.*"
+    # the normaliser strips the "can you", so "see my phone" is the same ask
+    r"|(?:see|reach)\s+(?:my|the)\s+(?:phone|android|mobile)\b.*"
+    # "what / which phone is paired / connected?"
+    r"|(?:what|which)\s+(?:phone|android|mobile)\s+(?:is|are)\s+"
+    r"(?:paired|connected|linked)\b.*"
+    # "my phone is not connecting / won't connect / isn't paired"
+    r"|my\s+phone\s+(?:is\s+not|isn't|isnt|isn\s+t|won't|wont|won\s+t|"
+    r"does\s+not|doesn't|doesnt|doesn\s+t|can't|cant|can\s+t|cannot)\s+"
+    r"(?:connect|connecting|connected|pair|pairing|paired|link|linked|reach|"
+    r"reaching|work|working|see|show|online|set\s+up)\b.*"
+    # "phone connection status"
+    r"|(?:phone|android)\s+(?:connection\s+)?status\b.*")
 _MODEL_SWITCH = re.compile(
     r"(?:can\s+you|could\s+you|how\s+do\s+i|how\s+can\s+i|how\s+to|where\s+do\s+i)?\s*"
     r"switch\s+(?:the\s+|my\s+)?models?\b.*"
@@ -5560,8 +5591,38 @@ def _protection_mode_words(P, mode) -> str:
     return str(words.get(mode) or mode or "")
 
 
-def _phone_state_words(devices_state: dict) -> str:
-    """One sentence about the owner's phone, from /api/devices' own rows."""
+#: How recent a paired phone's own check-in must be before this PC calls it
+#: "connected" rather than "paired, but not heard from". A phone writes
+#: last_seen on its requests, so five minutes is longer than any normal gap and
+#: short enough that a phone left in a drawer is not called connected. It is
+#: only a wording line: the row itself is never changed by this read.
+_PHONE_CONNECTED_S = 300
+
+
+def _phone_when_words(age: int, seen: float) -> str:
+    """How long ago the phone was last heard from, in the phone answer's words."""
+    import datetime
+    if age < 120:
+        return "just now"
+    if age < 3600:
+        return f"{age // 60} minutes ago"
+    if age < 86400:
+        return f"{age // 3600} hours ago"
+    return datetime.datetime.fromtimestamp(float(seen)).strftime("%d %B")
+
+
+def _phone_state_words(devices_state: dict, topic: str = "timer") -> str:
+    """What this PC really knows about the owner's phone, from /api/devices.
+
+    Two shapes share one store read: `topic="timer"` ("what timer is on my
+    phone") also says timers live on the phone; any other topic is the phone's
+    STATE ("is my phone connected / paired?") and answers one of four honest
+    facts - connected, paired but not heard from, no phone paired, or the store
+    unreadable. Read-only: nothing is paired, connected, changed or promised,
+    and no answer sends the owner to Settings, Bluetooth or Device Manager to
+    check a state this PC already holds.
+    """
+    timer = str(topic or "timer") == "timer"
     devices = list((devices_state or {}).get("devices") or [])
     phones = []
     for dev in devices:
@@ -5571,35 +5632,57 @@ def _phone_state_words(devices_state: dict) -> str:
             phones.append(dev)
     if not (devices_state or {}).get("readable", True):
         why = str((devices_state or {}).get("why") or "").strip()
-        return ("I cannot read the paired devices on this PC right now."
-                + (f" {why}" if why else ""))
+        head = ("I cannot read the paired devices on this PC right now, so I "
+                "cannot say whether your phone is connected.")
+        if why:
+            if why[0].islower():
+                why = why[0].upper() + why[1:]
+            if not why.endswith((".", "!", "?")):
+                why += "."
+            return f"{head} {why}"
+        return head
     if not phones:
+        if not timer:
+            return ("No phone is paired with Jarvis on this PC yet. On the PC: "
+                    "Settings, Devices, then \"Pair a phone\"; on the phone: "
+                    "Jarvis, Settings, Devices, then \"Pair with your PC\".")
         return ("No phone is paired with Jarvis on this PC yet. Timers set on the "
                 "phone stay on the phone; pair it first and the phone's own Clock "
                 "shows them.")
-    parts = []
-    for dev in phones:
-        name = str(dev.get("name") or "your phone")
-        seen = dev.get("last_seen")
-        if isinstance(seen, (int, float)) and seen > 0:
-            import datetime
-            age = max(0, int(time.time() - float(seen)))
-            if age < 120:
-                when = "just now"
-            elif age < 3600:
-                when = f"{age // 60} minutes ago"
-            elif age < 86400:
-                when = f"{age // 3600} hours ago"
+
+    def _seen(dev) -> float:
+        value = dev.get("last_seen")
+        return float(value) if isinstance(value, (int, float)) and value > 0 else 0.0
+
+    primary = max(phones, key=_seen)
+    name = str(primary.get("name") or "your phone")
+    seen = _seen(primary)
+    when = _phone_when_words(max(0, int(time.time() - seen)), seen) if seen else ""
+    if timer:
+        parts = []
+        for dev in phones:
+            label = str(dev.get("name") or "your phone")
+            stamp = _seen(dev)
+            if stamp:
+                parts.append(f"{label}, last heard from "
+                             f"{_phone_when_words(max(0, int(time.time() - stamp)), stamp)}")
             else:
-                when = datetime.datetime.fromtimestamp(
-                    float(seen)).strftime("%d %B")
-            parts.append(f"{name}, last heard from {when}")
-        else:
-            parts.append(f"{name}, not heard from since it was paired")
-    return ("Your phone is connected to Jarvis right now (" + "; ".join(parts)
-            + "). Timers set on the phone stay on the phone - I cannot read or "
-              "set them from this PC's chat; open the phone's Clock, or ask "
-              "Jarvis on the phone.")
+                parts.append(f"{label}, not heard from since it was paired")
+        return ("Your phone is connected to Jarvis right now (" + "; ".join(parts)
+                + "). Timers set on the phone stay on the phone - I cannot read or "
+                  "set them from this PC's chat; open the phone's Clock, or ask "
+                  "Jarvis on the phone.")
+    if not seen:
+        return (f"Your phone is paired with Jarvis ({name}), but it has not been "
+                f"heard from since it was paired. Open the Jarvis app on the "
+                f"phone and check it can reach this PC.")
+    age = max(0, int(time.time() - seen))
+    if age <= _PHONE_CONNECTED_S:
+        return (f"Your phone is connected to Jarvis right now ({name}, last "
+                f"heard from {when}).")
+    return (f"Your phone is paired with Jarvis ({name}), but I have not heard "
+            f"from it since {when}. Open the Jarvis app on the phone and check "
+            f"it can reach this PC.")
 
 
 def _quiet_hours_words() -> str:
@@ -5657,9 +5740,15 @@ def _honest_early(_text: str, s: str) -> Optional[Intent]:
         if "home_control" not in _enabled_tools_turn():
             return Intent("honest_chat", {"shape": "lights_off"})
         return None
+    # The phone's own STATE ("is my phone connected/paired?"): the same real
+    # paired-device store the timer answer reads, and never a promise to go and
+    # look at Settings, Bluetooth or Device Manager (2026-10-31, post-deploy
+    # audit: the model invented exactly that search).
+    if _PHONE_STATE.fullmatch(s):
+        return Intent("honest_state", {"shape": "phone_state", "topic": "state"})
     # The phone's own timers: real paired-device state, never "not connected".
     if _PHONE_TIMER.fullmatch(s):
-        return Intent("honest_state", {"shape": "phone_state"})
+        return Intent("honest_state", {"shape": "phone_state", "topic": "timer"})
     # Model switching is real; point at its own place and card.
     if _MODEL_SWITCH.fullmatch(s):
         return Intent("honest_chat", {"shape": "model_door"})
@@ -5769,7 +5858,8 @@ def _run_honest_state(f: dict) -> Result:
             state = D.paired_status()
         except Exception:
             state = {}
-        return Result(_phone_state_words(state), "honest_state")
+        return Result(_phone_state_words(state, str(f.get("topic") or "timer")),
+                      "honest_state")
     return Result("That is not something I can read from chat here.", "honest_state")
 
 
