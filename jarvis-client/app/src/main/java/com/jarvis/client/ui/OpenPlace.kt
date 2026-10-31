@@ -63,6 +63,9 @@ object OpenPlace {
         // Settings screen, keyed "protection" like the desktop card's id, so
         // "open protected from jarvis" lands on the row that reads the list.
         "protection" to Where.Go(Screen.SETTINGS, "protection"),
+        // "The local model" (2026-10-31): the automatic-restart sentence and
+        // switch moved off Home into this Settings card.
+        "model-lane" to Where.Go(Screen.SETTINGS, "model-lane"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
         // The prompt coach's master switch (docs/PROMPT-COACH-DESIGN.md,

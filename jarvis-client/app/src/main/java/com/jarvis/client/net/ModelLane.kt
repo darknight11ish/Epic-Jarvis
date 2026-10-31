@@ -67,6 +67,18 @@ object ModelLane {
     const val AUTO_SWITCH_ON = "Restart it automatically again"
 
     /**
+     * The one line that explains the moved switch in Settings ("The local
+     * model", `ModelLaneSection.kt`), 2026-10-31. The owner asked for the
+     * automatic-restart paragraph and button to leave Home's permanent status
+     * wording and live in Settings; a switch with no sentence would be unclear,
+     * and this says exactly what the switch controls in plain words. It makes
+     * no claim about the current state - the PC's own `autoNote` still does
+     * that, drawn verbatim beside it.
+     */
+    const val SECTION_ABOUT =
+        "Whether your PC starts the local model again by itself when it dies."
+
+    /**
      * What a press on that switch did not manage to send. Plain, and never
      * softened into a change: the switch stays where it was.
      */
