@@ -190,6 +190,11 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "handoff-front" to 26,
     "devices" to 27,
     "quick-tiles" to 28,
+    // "The local model" (2026-10-31, the owner's screenshot): the
+    // automatic-restart sentence and switch moved here from the top of Home.
+    // It sits right after Quick Settings tiles and before the screen's own
+    // phone-display rows, so every number below it moved down by one.
+    "model-lane" to 29,
     // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
     // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
     // and it sits immediately above "Limits" on the screen - so Limits' own
@@ -198,41 +203,41 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // screen, item by item`, which reads this map against the screen's real row
     // order - and by backend/test_settings_registry.py, which does the same from
     // the Python side. Both moved down one more for "Approval cards" above.
-    "screen-rate" to 29,
+    "screen-rate" to 30,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 30,
+    "limits" to 31,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
     // limits row" pins 25). A row added at the end moves nothing.
-    "idle-new" to 31,
+    "idle-new" to 32,
     // "Data and maths sandbox" (LM-1C, 2026-10-18): whether the AI model is
     // offered the small read-only Python tool. A row added at the end moves no
     // other number; it sits under Idle new on the screen and in the jump list.
-    "sandbox" to 32,
+    "sandbox" to 33,
     // "Learning" (2026-10-28, the settings audit's G1): the two learning
     // switches, which had no Settings row on either app before this. It sits
     // after the sandbox and before First-time setup; every index below it
     // moved down by one.
-    "learning" to 33,
+    "learning" to 34,
     // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
     // fourteen questions and its READ-ONLY plan, drawn by
     // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
-    "setup-questionnaire" to 34,
+    "setup-questionnaire" to 35,
     // "All features and abilities" (2026-10-22): the searchable directory of
     // all 140 features. A row added at the end moves no other number.
-    "all-features" to 35,
+    "all-features" to 36,
     // "Jarvis Calendar" (2026-10-29, the owner's ask: a full calendar of
     // Jarvis's own, ON by default, and "disableable in Settings"). One switch:
     // the PC's own `calendar-settings.json`, read and written through
     // GET /api/calendar and POST /api/calendar/settings, so the phone and the
     // desktop can never disagree about whether it is on. A row added at the end
     // moves no other number.
-    "calendar" to 36,
+    "calendar" to 37,
 )
 
 /**
@@ -863,6 +868,17 @@ fun SettingsScreen(
                 MenuFrame(menus, "settings.quick-tiles") {
                     QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
                 }
+            }
+
+            // "The local model" (2026-10-31, the owner's screenshot): the
+            // automatic-restart sentence and its switch moved here from the top
+            // of Home, where they sat permanently under the connection line.
+            // The card reads and writes through JarvisRuntime directly
+            // (ModelLaneSection.kt), the same calls Home's switch made; the
+            // section is indexed in SettingsSearch and reachable from
+            // SettingsJump, so it stays discoverable now that Home is clean.
+            if (drawn("model-lane")) item(key = "model-lane") {
+                ModelLaneSection()
             }
 
             // "Screen refresh rate" (2026-10-09): what the PANEL is asked to run

@@ -2083,47 +2083,12 @@ private fun ModelLaneLines(
                 )
             }
         }
-        // And what JARVIS did about it by itself (the owner's decision of
-        // 2026-10-14: "Also restart the lane automatically when it dies").
-        // NOT gated on `modelDown`, which is the whole point: the PC sends
-        // this sentence while the lane is UP as well - "it went down and
-        // Jarvis started it again" is news about a lane that is working, and
-        // it is the one place the owner can turn the automatic restart off, or
-        // back on - because a dead process cannot say whether it crashed or
-        // was stopped on purpose.
-        //
-        // The sentence is the PC's own, drawn verbatim: this screen composes
-        // nothing, so the phone, the Jarvis bar and the widget cannot come to
-        // three ways of saying one fact.
-        val autoWords = state.laneAutoFailure
-            ?: com.jarvis.client.net.ModelLane.notice(state.modelLane)
-        if (autoWords.isNotEmpty()) {
-            Text(
-                autoWords,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (state.laneAutoFailure != null) {
-                    chrome.warnInk
-                } else {
-                    chrome.textMid
-                },
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        val autoSwitch = com.jarvis.client.net.ModelLane
-            .switchWords(state.modelLane)
-        if (autoSwitch.isNotEmpty()) {
-            Quiet(
-                text = autoSwitch,
-                enabled = !state.laneAutoBusy && state.laneAutoFailure == null,
-                color = chrome.textMid,
-                onClick = {
-                    com.jarvis.client.net.ModelLane
-                        .switchAsks(state.modelLane)
-                        ?.let(actions.onSetLaneAuto)
-                },
-            )
-        }
+        // The automatic-restart sentence and its switch moved to Settings
+        // ("The local model" card, ModelLaneSection.kt) on 2026-10-31, after
+        // the owner's screenshot: the paragraph and its button sat at the top
+        // of Home permanently, and he asked for them to live in Settings
+        // instead. Home keeps only the Start button above, which appears ONLY
+        // while the lane is really down - it is not permanent wording.
     }
 }
 

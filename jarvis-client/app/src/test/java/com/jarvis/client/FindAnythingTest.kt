@@ -350,6 +350,10 @@ class FindAnythingTest {
             listOf(
                 "settings-row.app-control",
                 "settings-row.jarvis-notify",
+                // "The local model" (2026-10-31): the automatic-restart card
+                // moved out of Home; it has no catalogue menu id (it is not a
+                // feature switch), so it is always drawn like the two above.
+                "settings-row.model-lane",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )

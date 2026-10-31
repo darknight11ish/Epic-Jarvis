@@ -1,6 +1,7 @@
 package com.jarvis.client.ui
 
 import com.jarvis.client.net.Calendar
+import com.jarvis.client.net.ModelLane
 
 /**
  * Search inside Settings - the phone's half of the desktop's search box
@@ -406,6 +407,18 @@ object SettingsSearch {
             label = "Android Quick Settings; tile; pull down the shade",
             quotes = listOf("Quick Settings tiles"),
             source = JUMP + listOf(PLATES + "QuickTilesPlate.kt"),
+        ),
+        // "The local model" (2026-10-31, the owner's screenshot): the
+        // automatic-restart sentence and switch moved here from the top of Home,
+        // so "The local model" must be findable by the names the card and the
+        // switch print. Its title and quote are net/ModelLane.kt's own words.
+        Row(
+            key = "model-lane", title = "The local model",
+            label = "Local model; model lane; Ollama; automatic restart; restart it automatically; " +
+                "start the model again; model not running; the model on your PC",
+            titles = listOf("Don't restart it for me", "Restart it automatically again"),
+            quotes = listOf(ModelLane.SECTION_ABOUT),
+            source = JUMP + listOf("ui/screens/ModelLaneSection.kt", "net/ModelLane.kt"),
         ),
         Row(
             // "Screen refresh rate" (2026-10-09): the rate the PANEL is asked to

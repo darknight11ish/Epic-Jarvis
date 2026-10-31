@@ -470,9 +470,12 @@ class MenuVisibilityTest {
         // marked never hideable (`hide = false`), so both rows are always drawn,
         // like "app-control"; the two keys below are kept because their rows
         // still have no hide switch of their own.
+        // "The local model" (2026-10-31) joined them: the automatic-restart
+        // sentence and switch moved out of Home into a Settings card, and there
+        // is no catalogue menu id for that card (it is not a feature switch).
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
-                "files", "protection")
+                "files", "protection", "model-lane")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 
