@@ -1574,6 +1574,25 @@ CATALOGUE = (
              "where": "the docs, section 171.5"},
         ),
     },
+    {
+        "id": "file-from-pc",
+        "version": 1,
+        "section": "both",
+        "title": "A file from your PC on your phone",
+        "why": "Send ONE file from the PC's listed folders to the phone, then view it or save it to Downloads.",
+        "minutes": 2,
+        "steps": (
+            {"title": "Ask for one file",
+             "body": "Ask in chat, on either app, to send a file from the folders Jarvis may look in. Jarvis searches that list and shows ONE approval card naming the exact filename, its folder and its size.",
+             "where": "Chat on the PC or the phone"},
+            {"title": "The phone has ten minutes and one download",
+             "body": "After you approve, the phone's File from your PC row lists the file. View it or save it to Downloads: the phone can fetch it once, within ten minutes, and a second try says it is gone.",
+             "where": "Phone: Settings -> File from your PC"},
+            {"title": "What it will not do",
+             "body": "It sends one file per card, at most 10 MiB, and only from Folders Jarvis may look in; it never takes a path from the phone, and nothing of the file is kept on the phone.",
+             "where": "The approval card"},
+        ),
+    },
 
 )
 

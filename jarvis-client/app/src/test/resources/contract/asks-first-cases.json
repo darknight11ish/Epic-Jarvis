@@ -251,6 +251,15 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "send_file_to_phone",
+       "fixed": false,
+       "id": "send_file_to_phone",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a file from your PC to your phone"
+      },
+      {
        "action": "protect_item",
        "fixed": false,
        "id": "protect_item",
@@ -1588,6 +1597,15 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "send_file_to_phone",
+       "fixed": false,
+       "id": "send_file_to_phone",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a file from your PC to your phone"
+      },
+      {
        "action": "protect_item",
        "fixed": false,
        "id": "protect_item",
@@ -2922,6 +2940,15 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "send_file_to_phone",
+       "fixed": false,
+       "id": "send_file_to_phone",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a file from your PC to your phone"
+      },
+      {
        "action": "protect_item",
        "fixed": false,
        "id": "protect_item",
@@ -4249,6 +4276,15 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "send_file_to_phone",
+       "fixed": false,
+       "id": "send_file_to_phone",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a file from your PC to your phone"
+      },
+      {
        "action": "protect_item",
        "fixed": false,
        "id": "protect_item",
@@ -5574,6 +5610,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Organize your Obsidian vault with tags and Maps of Content"
+      },
+      {
+       "action": "send_file_to_phone",
+       "fixed": false,
+       "id": "send_file_to_phone",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a file from your PC to your phone"
       },
       {
        "action": "protect_item",
@@ -6915,6 +6960,15 @@
        "title": "Organize your Obsidian vault with tags and Maps of Content"
       },
       {
+       "action": "send_file_to_phone",
+       "fixed": false,
+       "id": "send_file_to_phone",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a file from your PC to your phone"
+      },
+      {
        "action": "protect_item",
        "fixed": false,
        "id": "protect_item",
@@ -8247,6 +8301,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Organize your Obsidian vault with tags and Maps of Content"
+      },
+      {
+       "action": "send_file_to_phone",
+       "fixed": false,
+       "id": "send_file_to_phone",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a file from your PC to your phone"
       },
       {
        "action": "protect_item",

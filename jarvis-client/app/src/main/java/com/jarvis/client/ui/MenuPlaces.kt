@@ -46,6 +46,12 @@ object MenuPlaces {
         // hiding it would hide the row that reads a blocklist (the catalogue says
         // never hideable, for the same reason).
         "protection" to "settings.protection",
+        // "File from your PC" (2026-10-31, the owner's ask; Gemini Q7): its own
+        // Settings row (SettingsScreen.kt, item "files") that lists the one
+        // approved file and offers View / Save to Downloads - so the finder must
+        // reach it. The catalogue marks it never hideable for the same reason the
+        // row exists at all: it is the only place the sent file is listed.
+        "files" to "settings.files",
         "floating-avatar" to "settings.floating-avatar",
         // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md): its own
         // Settings row (SettingsScreen.kt, item "pip-mode") next to Floating

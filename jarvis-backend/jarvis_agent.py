@@ -933,6 +933,17 @@ FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of docum
                        "was read. Answer from what you have, and tell the owner they can ask "
                        "about the next part in a new message.")
 
+#: "Send a file to the phone" (2026-10-31, Gemini Q7): ONE file from the
+#: owner's listed folders, ONE card, an opaque id the phone fetches. The tier
+#: line `send_file_to_phone = "ask"` is in both shipped settings copies; a
+#: drop-in/shipped tool cannot add a `_RISK` row (a follow-up patch can), so
+#: the gate treats it as unclassified: FORCED to ask, with its own outbound
+#: worst-case line - never looser. `_gate_prompt` is replaced by the card's own
+#: words for this tool (see _one_call), so the card shows the exact filename,
+#: folder and byte size.
+SEND_FILE_TOOL = "send_file_to_phone"
+SEND_FILE_ACTION = "send_file_to_phone"
+
 
 def _prepare_my_files(args: dict):
     action = str(args.get("action") or "").strip().lower()
@@ -1546,6 +1557,37 @@ def _run_note(args: dict, plan_obj, **_) -> dict:
     return NC.run(plan_obj, approved=True)
 
 
+def _prepare_send_file(args: dict):
+    """prepare() for `send_file_to_phone` (jarvis_send_file.py, 2026-10-31).
+
+    Searches the owner's listed folders (the same allow-list `my_files` uses)
+    and returns the ONE candidate's state plus the card's own words. Raises
+    ValueError for no match / several matches / over-cap / outside the list -
+    a plain refusal BEFORE any card. The notification that a file becomes
+    fetchable is `execute()`, i.e. the approved verdict's run.
+    """
+    try:
+        import jarvis_send_file as SEND
+    except Exception as exc:                                # noqa: BLE001
+        return None, f"Send a file to your phone (unavailable: {type(exc).__name__})"
+    state, plan_text = SEND.prepare(args or {})
+    return state, plan_text
+
+
+def _run_send_file(args: dict, state, **_) -> dict:
+    """execute() for `send_file_to_phone`: the card said yes, so the id lives."""
+    try:
+        import jarvis_send_file as SEND
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": "the send-file module is not available here "
+                                      f"({type(exc).__name__})"}
+    try:
+        return SEND.approve(state or {})
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+
 def _prepare_protect(args: dict):
     """prepare() for `protect_from_jarvis`: validate, then the card's words.
 
@@ -1716,6 +1758,9 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
 _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
+                                  # One file and ONE card are a deliberate direct act:
+                                  # a plan step would put a second mechanism around it.
+                                  "send_file_to_phone",
                                   # The protection tool raises its own ONE card and
                                   # writes the store after it; a plan step would put
                                   # a second mechanism around it, so ask for it
@@ -2702,6 +2747,23 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "file_read",
         instead={"notes_search": "For Obsidian or Joplin notes, use notes_search.",
                  "file_read": "For a PDF or Word file, use this, not file_read."}),
+    # Send ONE file to the phone (jarvis_send_file.py, 2026-10-31, Gemini Q7).
+    # The owner's own words: ask Jarvis to search for a file and send it to the
+    # Jarvis Android app to view or download. ONE card, exact filename/folder/
+    # size, 10 MiB cap, ten-minute single-use opaque id - the route never takes
+    # a path. See SEND_FILE_TOOL and docs/JARVIS-API.md section 172.
+    SEND_FILE_TOOL: Tool(
+        SEND_FILE_TOOL,
+        "Send ONE file from the owner's own listed folders to their phone app. "
+        "Use when they ask to search for a file and send, view or download it on "
+        "the phone. Give query (a few words of the file's name) or path (the full "
+        "path, if known). ONE card, ONE file, at most 10 MiB; nothing is fetchable "
+        "until the owner approves.",
+        {"type": "object", "properties": {
+            "query": {"type": "string", "description": "a few words of the file's name"},
+            "path": {"type": "string", "description": "one file's full path, if known"}},
+         "required": []},
+        _prepare_send_file, _run_send_file),
     PROTECT_TOOL: Tool(
         PROTECT_TOOL,
         "Protect a folder, file or program on the owner's PC from Jarvis. "
@@ -3256,6 +3318,10 @@ NEEDS_A_PERSON = {
                     "anything the tools inside it can do",
     "rea_investigate": "starts a local reverse-engineering program and reads a program's "
                        "own files",
+    # Send one file to the phone: it leaves this PC's own folders for the
+    # phone's storage and the phone can keep a copy after it downloads it.
+    SEND_FILE_TOOL: "makes one of the owner's own files fetchable by the phone, which "
+                    "can keep a copy after it downloads it",
     # Protected from Jarvis: adding to the list changes what Jarvis may
     # touch, and removing is loosening; both need a person every time.
     PROTECT_TOOL: "changes what Jarvis may touch, so it needs your yes every time",
@@ -6935,7 +7001,7 @@ TOOL_GROUPS = (
     ("documents", "find and read files in the listed folders",
      ("my_files", "my_spending")),
     ("files", "read a file or run a command or small script",
-     ("file_read", "shell_exec", SANDBOX_TOOL, REA_TOOL, PROTECT_TOOL)),
+     ("file_read", "shell_exec", SANDBOX_TOOL, REA_TOOL, SEND_FILE_TOOL, PROTECT_TOOL)),
     # Its own group: my_spending's group is dropped while no folder is listed,
     # and this needs no folder.
     ("retirement", "a retirement what-if", ("retirement_whatif",)),
@@ -7124,6 +7190,9 @@ TOOL_HINTS = {
                      r"\bjott", r"\bwrote\b", r"\bwritten\b", r"\bnoted\b"),
     "my_files": (r"\bfiles?\b", r"\bdocuments?\b", r"\bfolder\b", r"\bfind\b",
                  r"\binvoice\b", r"\bpdf\b", r"\blease\b", r"\bagreement\b", r"where is"),
+    "send_file_to_phone": (r"\bsend\b.*\bfiles?\b", r"\bfiles?\b.*\bphone\b",
+                           r"\bdownload\b", r"\bview (it|the file)\b",
+                           r"\bto my phone\b"),
     "protect_from_jarvis": (r"\bprotect", r"\bexclude\b", r"\bkeep out\b",
                             r"\bread[- ]only\b", r"\bdon.t (let|allow)\b",
                             r"\bblock\b.*\b(jarvis|from)\b"),
@@ -12143,6 +12212,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         except Exception:
             pass
     action_name = _sandbox_action_for(name, action_name, args)
+    if name == SEND_FILE_TOOL:
+        # Its OWN action name (SEND_FILE_ACTION): the gate keeps an unknown
+        # action at "ask" with its outbound worst case, and the tier row in
+        # both shipped settings copies says "ask" too.
+        action_name = SEND_FILE_ACTION
     if name == PROTECT_TOOL:
         # The chat ability asks under its OWN action name (jarvis_protection.py,
         # 2026-10-31): the gate forces an unclassified action to "ask", so the
@@ -12369,7 +12443,10 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # The gate may wait minutes for a person. Say so to the app (after a
         # moment, so a tool the gate lets straight through never flashes it).
         out.set_status("approval")
-        verdict = checker(action_name, {"text": plan_text}, _gate_prompt(name, args))
+        # The send-file card shows the filename, folder, size and cap in its
+        # OWN words (prepare() built them), not the generic tool-call line.
+        prompt = plan_text if name == SEND_FILE_TOOL else _gate_prompt(name, args)
+        verdict = checker(action_name, {"text": plan_text}, prompt)
         out.card_answered(verdict)
         out.set_status("thinking")
         if _a_card_was_shown(verdict):

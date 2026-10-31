@@ -392,6 +392,19 @@ SECTIONS: tuple = (
     # The phone's Quick Settings tiles (SettingsScreen.kt item "quick-tiles").
     Section("quick-tiles", ("quick tiles", "quick settings tiles", "the quick tiles"),
             app="phone"),
+    # "File from your PC" (2026-10-31, the owner's ask; Gemini Q7;
+    # docs/JARVIS-API.md section 172; SettingsScreen.kt item "files",
+    # SettingsJump.kt "File from your PC", SendFilePlate.kt): the ONE file
+    # Jarvis sent to this phone after its own approval card, with View and
+    # Save to Downloads. PHONE ONLY on purpose (docs/ARCHITECTURE.md
+    # section 8): a Windows PC has no reason to fetch a file it already has,
+    # and the desktop's half of the feature is the CHAT REQUEST and the same
+    # approval card - it has no Settings card for this row, so the app field
+    # is "phone", never "both".
+    Section("files", ("file from your pc", "files from your pc",
+                      "a file from my pc", "the file jarvis sent",
+                      "downloads from jarvis"),
+            app="phone"),
     # "Screen refresh rate" (2026-10-09): the rate the PANEL is asked to run at
     # while Jarvis is on screen (jarvis-client's SettingsScreen.kt item
     # "screen-rate"; data/ScreenRate.kt, ui/screens/ScreenRatePlate.kt).

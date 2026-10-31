@@ -1260,6 +1260,10 @@
      "name": "Searching your notes"
     },
     {
+     "id": "send_file_to_phone",
+     "name": "Sending one file from your PC to your phone (one card each)"
+    },
+    {
      "id": "protect_from_jarvis",
      "name": "Protecting a folder, file or program from Jarvis (one card each)"
     },

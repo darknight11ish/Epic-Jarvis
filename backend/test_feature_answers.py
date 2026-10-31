@@ -468,8 +468,10 @@ def t_ruling_d_owner_words_map_to_catalogue_rows():
         "block": {"protected-items"},
         "exclude": {"protected-items"},
         "permissions": {"protected-items"},
-        "send file": {"documents"},
-        "download file": {"documents"},
+        # 2026-10-31: the send-file row joined the files rows, so these words
+        # mean it as well as the documents row; both are honest answers.
+        "send file": {"documents", "file-from-pc"},
+        "download file": {"documents", "file-from-pc"},
     }
     for words, expected in cases.items():
         out = FG.capabilities(words)

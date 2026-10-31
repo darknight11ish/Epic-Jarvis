@@ -152,7 +152,12 @@ ACTING_TOOLS = frozenset({
     "append_logseq_journal", "append_obsidian_daily", "browser_control",
     "change_setting", "connect_account", "control_computer", "control_phone",
     "create_joplin_note",
-    "draft_email", "home_control", "protect_from_jarvis", "run_data_script", "send_email",
+    "draft_email", "home_control", "protect_from_jarvis", "run_data_script",
+    "send_email",
+    # "send_file_to_phone" (2026-10-31, Gemini Q7): ONE file from the PC's
+    # folders is made fetchable by the phone, which can keep a copy - that is
+    # an ACT, so a claimed "nothing was done" must not be said after it.
+    "send_file_to_phone",
     "set_reminder", "set_timer", "shell_exec", "tidy_inbox", "todo_add",
     "todo_done",
 })

@@ -1783,6 +1783,61 @@ class JarvisApi(
         }
     }
 
+    // ------------------------------------------- send a file to the phone ----
+    // The owner's ask of 2026-10-31 and Gemini's Q7 slice (docs/JARVIS-API.md
+    // section 172; the shapes and the PC's sentences live in [SendFile]). Both
+    // are READS: this phone never approves a file and never names a path - the
+    // card was raised and answered on the PC, and the routes take an id.
+
+    /**
+     * ONE GET whose status AND body come back whole, so a route that answers a
+     * refusal with its own sentence keeps it: a 404 for a file whose ten minutes
+     * passed, a 409 for a file that changed, a 413 over the cap - each is the
+     * PC's words, not a bare code. 401/403 is the one failure named precisely.
+     * The same reading as [picturesCall], for the two file routes.
+     */
+    private suspend fun filesCall(path: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val req = Request.Builder().url(target).get().authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching {
+                        JarvisJson.parseToJsonElement(text) as? JsonObject
+                    }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(resp.code to obj)
+                    }
+                }
+            }.getOrElse {
+                ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it)))
+            }
+        }
+
+    /** `GET /api/files/send` - the files the owner approved for this phone. */
+    suspend fun sendFiles(): ApiResult<SendFile.ListReply> =
+        when (val r = filesCall(SendFile.LIST_PATH)) {
+            is ApiResult.Ok -> ApiResult.Ok(SendFile.readList(r.value.first, r.value.second))
+            is ApiResult.Failed -> r
+        }
+
+    /**
+     * `GET /api/files/download?id=` - ONE approved file's bytes. The id is
+     * checked against the PC's own shape first ([SendFile.downloadPath]), so
+     * this can never ask for a path. The bytes are decoded here and handed to
+     * the plate; this layer writes nothing to disk.
+     */
+    suspend fun downloadFile(id: String): ApiResult<SendFile.Fetched> {
+        val path = SendFile.downloadPath(id) ?: return ApiResult.Failed(ApiError.NotFound)
+        return when (val r = filesCall(path)) {
+            is ApiResult.Ok -> ApiResult.Ok(SendFile.readDownload(r.value.first, r.value.second))
+            is ApiResult.Failed -> r
+        }
+    }
+
     /**
      * Draws one picture (section 129): a POST of `/api/pictures` with the words
      * the owner typed. No card. A refusal comes back as its own status and

@@ -529,6 +529,27 @@
  {
   "type": "function",
   "function": {
+   "name": "send_file_to_phone",
+   "description": "Send ONE file from the owner's own listed folders to their phone app. Use when they ask to search for a file and send, view or download it on the phone. Give query (a few words of the file's name) or path (the full path, if known). ONE card, ONE file, at most 10 MiB; nothing is fetchable until the owner approves.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "a few words of the file's name"
+     },
+     "path": {
+      "type": "string",
+      "description": "one file's full path, if known"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "protect_from_jarvis",
    "description": "Protect a folder, file or program on the owner's PC from Jarvis. mode blocked = no access at all; readonly = reads allowed, writes/actions refused. Use when the owner asks Jarvis not to touch something.",
    "parameters": {

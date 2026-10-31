@@ -541,6 +541,8 @@ GROUPS = (
                             # is NOT in MUST_ASK for the same reason (the module calls
                             # jarvis_gate.check and does not refuse a looser tier
                             # itself). The plan route raises NO card at all.
+                            # "Send a file to the phone" (2026-10-31, Gemini Q7):
+                            # ONE file a card, ten minutes, one download.
                             # "Protected from Jarvis" (jarvis_protection.py,
                             # 2026-10-31): adding changes what Jarvis may touch
                             # and removing is loosening, so both are ONE card
@@ -549,8 +551,6 @@ GROUPS = (
                             # action it forces them to ask regardless. NOT in
                             # MUST_ASK: the module's own keep-out check is the
                             # refusal, and its card is the only yes.
-                            "import_notion_export", "organize_obsidian_vault",
-                            "protect_item", "unprotect_item",
                             # The Obsidian notes editor (jarvis_notes_edit.py,
                             # 2026-10-31; the owner's "the whole vault, both
                             # apps"): one save replaces the WHOLE text of one
@@ -559,6 +559,9 @@ GROUPS = (
                             # the gate has no risk row for a drop-in action it
                             # forces it to ask regardless. NOT in MUST_ASK: the
                             # module does not refuse a looser tier itself.
+                            "import_notion_export", "organize_obsidian_vault",
+                            "send_file_to_phone",
+                            "protect_item", "unprotect_item",
                             "edit_vault_note"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat",

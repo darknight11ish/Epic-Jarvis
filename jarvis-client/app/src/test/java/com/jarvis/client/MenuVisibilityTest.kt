@@ -464,16 +464,15 @@ class MenuVisibilityTest {
         // registry's own checker requires every registry Section to be a menu,
         // so it now has `settings.calendar` in the catalogue (`hide = false`)
         // and its place is the row itself in MenuPlaces.SETTINGS.
-        // "protection" joined them on 2026-10-31 (ProtectedPlate.kt): the PC's
-        // "Protected from Jarvis" list. Its catalogue menu id belongs to the
-        // backend lane's registry change (backend/jarvis_menus.py, which this
-        // lane may not touch and whose generated MenuCatalog.kt this lane cannot
-        // regenerate), so until that lands the row is always drawn - like
-        // "app-control" - and the moment the id exists this line and the row
-        // should gain a `menus.shows(...)` guard in the same change.
+        // "files" and "protection" joined them on 2026-10-31 (SendFilePlate.kt,
+        // the owner's ask and Gemini Q7; ProtectedPlate.kt). Both now have a
+        // catalogue menu id and a real place in MenuPlaces.SETTINGS, and both are
+        // marked never hideable (`hide = false`), so both rows are always drawn,
+        // like "app-control"; the two keys below are kept because their rows
+        // still have no hide switch of their own.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
-                "protection")
+                "files", "protection")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

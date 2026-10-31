@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 146 rows from features/features.json.
+The owner's feature list, as data: 147 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 4a58c71bb297c375631d89652bcb553bea637b80995785848ded8ff4231ec6bb); the apps' Features pages read their own
+`features/features.json` (sha256 a41b565eb1f920467f6847664b434fa3d73b90b6b69682535c88c3c64faad85d); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "4a58c71bb297c375631d89652bcb553bea637b80995785848ded8ff4231ec6bb"
+SOURCE_SHA256 = "a41b565eb1f920467f6847664b434fa3d73b90b6b69682535c88c3c64faad85d"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -799,6 +799,18 @@ FEATURES = (
         "limit": "The picture is taken out while the private lists are hidden or App lock is on.",
         "surface": "both",
         "covers": ["brain.projects.progress", "projects"],
+    },
+    {
+        "id": "file-from-pc",
+        "group": "Notes and files",
+        "title": "File from your PC",
+        "what": "Ask Jarvis to send ONE file from the folders it may look in to your phone, then view it or save it to Downloads.",
+        "where": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
+        "asks": "One approval card per file, naming the exact filename, folder and size. The phone can fetch it once, within ten minutes.",
+        "limit": "One file per card, at most 10 MiB, ten minutes and one download, and only inside Folders Jarvis may look in. Nothing about the file is kept on the phone.",
+        "surface": "both",
+        "aliases": ["send a file to my phone", "send file to phone", "file to phone", "send a file to the phone"],
+        "covers": ["file-from-pc", "files", "settings.files"],
     },
     {
         "id": "spending",

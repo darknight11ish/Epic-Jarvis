@@ -331,6 +331,27 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.files",
+    "title": "File from your PC",
+    "about": "The one file Jarvis sent to this phone, with View and Save to Downloads.",
+    "apps": [
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "row",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "Never hideable: this row is the only place the sent file is listed, viewed or saved.",
+    "names": [
+      "file from your pc",
+      "files from your pc",
+      "the file jarvis sent"
+    ]
+  },
+  {
     "id": "settings.appearance-card",
     "title": "Appearance",
     "about": "Theme, faces and how it all looks.",
@@ -2838,6 +2859,7 @@ export const NEVER_HIDE = [
   "settings.calendar",
   "settings.devices",
   "settings.protection",
+  "settings.files",
   "settings.animal-options",
   "settings.security",
   "settings.focus-presets",
@@ -2955,6 +2977,9 @@ export const ALIASES = {
   "faces": "settings.appearance-card",
   "faq": "brain.tab.tutorials",
   "feature directory": "settings.all-features",
+  "file from your pc": "settings.files",
+  "file jarvis sent": "settings.files",
+  "files from your pc": "settings.files",
   "finance": "group.finance",
   "finances": "group.finance",
   "findings": "brain.now.findings",

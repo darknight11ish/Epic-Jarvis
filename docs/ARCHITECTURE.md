@@ -3971,6 +3971,22 @@ half, so `tools/check_parity.py` classifies nothing new.
 **Protecting things from Jarvis is a list both apps read, and only the PC can add to it** (2026-10-31, the owner's ask: *"add a list of file folders, and programs that i can manually add to (or ask jarvis to exclude in chat and get a card) that blocks jarvis from having any access ... or the ability to make certain files or folders or programs read only"*; JARVIS-API §170). The store, the two modes (blocked, and read-only - the owner's *"see it, never act"* for programs) and every refusal sentence are the PC's, and both apps read them through `GET /api/protection`; Remove asks exactly ONE card on the PC from either app, so no app can loosen the list by itself. **What is the desktop's alone is `POST /api/protection/add`** - the immediate add with NO card, from Windows' own folder/file/program pickers, which only TIGHTENS what Jarvis may reach. The phone has no file browser to drive those dialogs, and adding from the phone is not missing, only one step slower: the owner asks in chat, which goes through `/api/protection/propose` and its ONE `protect_item` card, the same card and the same store (that chat door is backend-only, so `tools/check_parity.py` classifies the add route `deliberate` and the propose route under `BACKEND_ONLY`). No second list and no second mode exists on either side.
 
 
+**Sending ONE file from the PC to the phone: the request and the card are shared, the
+download is the phone's, and that is one-sided on purpose** (2026-10-31, the owner's
+own ask *"am i able to ask jarvis to search for a file for me and send it to the
+jarvis android app to view and or download directly?"*; Gemini ruling Q7;
+JARVIS-API section 172; `backend/jarvis_send_file.py`). Either app reaches the feature
+the same way - by chatting, which runs on the PC's own local model - and both apps can
+decide the ONE `send_file_to_phone` card (the phone decides it with its fingerprint).
+What is deliberately phone-only is the receiving half: View (`FileProvider` +
+`ACTION_VIEW`) and Save to Downloads (`MediaStore.Downloads`) exist on the phone
+because that is where the file is wanted, while a Windows PC has no reason to fetch a
+file it already holds. The phone lane calls both routes, so
+`tools/check_parity.py` classifies `/api/files/send` and `/api/files/download` as
+**`phone-only`** with that reason written beside each row - the desktop is not
+missing a half to be "fixed" later; it was never meant to have one.
+
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

@@ -150,6 +150,14 @@ CLASSIFICATION = {
     "/api/connect-account/cancel": ("deliberate", "Cancelling the connect-account card is PC-only, like the card itself: it exists only in the desktop HUD (ARCHITECTURE section 8)."),
 
     "/api/appearance": ("ported", ""),
+    # Send ONE file from the PC to the phone (2026-10-31, the owner's ask;
+    # Gemini Q7; JARVIS-API section 172). Backend: jarvis_send_file.py.
+    # The PHONE HALF is the follow-up lane: its View / Save to Downloads UI
+    # (FileProvider, ACTION_VIEW, MediaStore.Downloads) is not written yet, so
+    # no app calls either route today, so this tool's own word for it is
+    # `planned` - "built on the backend and neither app calls it yet" (a
+    # warning, not a failure: the slice that wires the first client removes its
+    # line here and reclassifies the route).
     # `/api/work/cloud-escalate` (the standing cloud-escalation switch, 2026-10-27):
     # PC-only. The desktop half is the `hud_cloud_escalate` command, which raises
     # the one change_own_config card; the phone reads `cloud.escalate` from
@@ -853,6 +861,18 @@ PHONE_ONLY = {
     "/api/notification-styles/add": ("phone-only", "Keep ONE preview exactly as shown, so the style becomes live for its kinds (JARVIS-API section 167). Phone: NotificationStylesPlate's Add, held on a stale link. No approval card: a style shows nothing new and grants nothing. Phone-only for the same reason as GET /api/notification-styles."),
     "/api/notification-styles/discard": ("phone-only", "Drop ONE style preview (JARVIS-API section 167). Not held on a stale link - it only drops. Phone-only for the same reason as GET /api/notification-styles."),
     "/api/notification-styles/delete": ("phone-only", "Delete ONE saved style, at once (JARVIS-API section 167). Phone: NotificationStylesPlate's Delete, held on a stale link. Phone-only for the same reason as GET /api/notification-styles."),
+    # Send ONE file from the PC to the phone (2026-10-31, the owner's ask of that
+    # day; Gemini Q7; backend/jarvis_send_file.py; docs/JARVIS-API.md section
+    # 172). PHONE-ONLY on purpose: the file leaves the PC for the phone's own
+    # storage, so the desktop has nothing to draw and needs no surface
+    # (docs/ARCHITECTURE.md section 8). Desktop caller: NONE by design. Phone:
+    # net/SendFile.kt (both routes and the PC's sentences),
+    # ui/screens/SendFilePlate.kt (the Settings row's View / Save to Downloads,
+    # and the small "File from your PC" block inside Coming up),
+    # JarvisRuntime.sendFiles / downloadFile - reads only; nothing on the phone
+    # can approve a file or extend its ten minutes.
+    "/api/files/send": ("phone-only", "The files the owner already approved for this phone (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172): name, folder, size, MIME type and seconds left, never a path. A file appears only after the PC's own ONE send_file_to_phone card was approved, and only the phone has any use for it - the file's destination is the phone. Phone: net/SendFile.kt and ui/screens/SendFilePlate.kt (the Settings row, and a small block inside Coming up so a waiting file is noticed), JarvisRuntime.sendFiles. Desktop: nothing to draw, by design - the bytes leave the PC for the phone (docs/ARCHITECTURE.md section 8)."),
+    "/api/files/download": ("phone-only", "ONE approved file's bytes, base64 in JSON, by opaque id only - never a path, and the answer carries none (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172). Ten minutes and one download; a second fetch is the PC's own 404 sentence. Phone: ui/screens/SendFilePlate.kt's View (FileProvider + ACTION_VIEW) and Save to Downloads (MediaStore.Downloads), JarvisRuntime.downloadFile. Desktop: nothing to draw - the phone is the destination (docs/ARCHITECTURE.md section 8)."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 
@@ -1235,6 +1255,10 @@ RETIRED = {
 #: checker reports as a warning in its own true words ("the phone calls it; the
 #: desktop does not yet"), and they become `ported` when the HUD card lands. The
 #: mechanism stays for the next backend-first route.
+# Empty since 2026-10-31: the last backend-first route (the two `/api/files/...`
+# routes the send-a-file slice built) got its phone client on that day, so its
+# lines were removed and the two routes moved to PHONE_ONLY below. The mechanism
+# stays for the next backend-first route.
 PENDING_CLIENTS = {}
 
 

@@ -333,6 +333,15 @@ append_obsidian_daily     = "auto"
 # than written unasked. A file without this line asks too (unknown_action_tier).
 write_notes_after_outside_text = "ask"
 
+# "Send a file to the phone" (2026-10-31, the owner's ask; Gemini Q7): ONE card
+# per file showing the exact filename, the folder and the byte size; nothing is
+# fetchable until the owner's yes, and the opaque id lasts ten minutes once.
+# Its reach is "outbound" in the gate's own words: the bytes leave this PC for
+# the phone, and the phone can keep a copy after it downloads them. A drop-in
+# tool cannot add a _RISK row, so the gate treats the action as unclassified -
+# FORCED to "ask", with its own outbound worst-case line (never looser). A
+# follow-up patch can classify it; keep this line at "ask".
+send_file_to_phone       = "ask"
 # "Protected from Jarvis" (jarvis_protection.py, 2026-10-31; the owner's
 # request: a list of folders, files and programs that blocks Jarvis, or makes
 # it read-only). ONE card for a chat add (the model proposes, the owner

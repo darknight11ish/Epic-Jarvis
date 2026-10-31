@@ -1734,6 +1734,9 @@ NO_COMMAND_REASON = {
     # of their own. Their cards and Settings row carry the real rules.
     "notes-editor": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "protected-items": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # Joined 2026-10-31 with the send-file row: a chat action plus a phone-side
+    # listing, not a stored setting - its own Settings row carries the rule.
+    "file-from-pc": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "voice-check": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "interrupt": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "live": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
@@ -2106,7 +2109,10 @@ def _quick_intent(phrase: str) -> Optional[str]:
 #: of 2026-10-22 reserves for accounts and restore-backup. So for the named row
 #: the section is NOT folded in: its covers still name both ids, its label stays
 #: Command-Only. Kept as an explicit, dated map rather than a heuristic.
-SETTINGS_ROW_IDS = {"protected-items": "protection"}
+SETTINGS_ROW_IDS = {"protected-items": "protection",
+                    # 2026-10-31: the same shape for the send-file feature - the
+                    # section is the surface its Settings row IS, not a setting inside it.
+                    "file-from-pc": "files"}
 
 
 def _sections_in(row: dict) -> list:

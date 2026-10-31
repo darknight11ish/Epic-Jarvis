@@ -246,8 +246,13 @@ class FindAnythingTest {
             // is the phone's own Settings row (SettingsScreen.kt item "protection")
             // with a real place in MenuPlaces.SETTINGS - it reads the blocklist and
             // asks the PC for one removal card, so the finder must reach it.
+            //
+            // 128 -> 129 (2026-10-31, "File from your PC"): `settings.files` is the
+            // phone's own Settings row (SettingsScreen.kt item "files") with a real
+            // place in MenuPlaces.SETTINGS - it lists the one approved file and
+            // offers View / Save to Downloads, so the finder must reach it too.
             "the catalogue must still carry the names at all",
-            128,
+            129,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
@@ -335,11 +340,13 @@ class FindAnythingTest {
             // in the catalogue (`hide = false` - it must stay visible, because
             // it is the switch that turns the feature back ON) and its place is
             // the row itself in MenuPlaces.SETTINGS.
-            // "Protected from Jarvis" (2026-10-31): the PC's protected-items
-            // list. It has no menu id in the catalogue yet - that row belongs to
-            // the backend lane's settings-registry change, which this lane may
-            // not touch - so the row is always drawn, like "App control", and
-            // this list is where a no-menu Settings row must be declared.
+            // "Protected from Jarvis" (2026-10-31) and "File from your PC"
+            // (2026-10-31) are NOT in this list any more: both have a catalogue
+            // menu id (`settings.protection`, `settings.files`, generated from
+            // backend/jarvis_menus.py) and a real place in MenuPlaces.SETTINGS,
+            // so they are menus - never hideable, but menus - and the finder
+            // reaches them through the normal path. Only the two phone-only rows
+            // below have no menu id at all.
             listOf(
                 "settings-row.app-control",
                 "settings-row.jarvis-notify",

@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **44 drop-in modules**, in [`ready/`](ready/) -
+- **45 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **28** replace a patch, and are generated from it;
-  - **16** replace no patch: they were born as folders, and
+  - **17** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **138 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -56,7 +56,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 16 were never patches. There is nothing in the core
+These 17 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -81,6 +81,7 @@ it is one `apply-patches.ps1` copies in.
 | 168 | `android-builder` | Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for the install. The card for the build names the exact command and says that a first build downloads Gradle and the Android Gradle plugin. |
 | 169 | `notes-edit` | browse, open and edit any note in your Obsidian vault, from the desktop or the phone: one approval card per save, a File Guardian copy first, and the sha256 the edit started from so two editors cannot clobber each other. |
 | 170 | `protected-items` | a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card for a chat add and one for every removal, and a Settings add that is the owner's own direct act. |
+| 171 | `send-file` | send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path. |
 
 ## What stays in the core
 

@@ -154,35 +154,42 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "reach" to 14,
     "email-sending" to 15,
     "folders" to 16,
+    // "File from your PC" (2026-10-31; docs/JARVIS-API.md section 172): ONE
+    // file Jarvis sent after its own approval card, waiting ten minutes. It sits
+    // right under the folder allow-list the search behind it reads, and every
+    // index below it moved down by one. No menu id in the catalogue yet (the
+    // backend lane owns the settings-registry row), so the row is always drawn -
+    // like "App control" above.
+    "files" to 17,
     // "Protected from Jarvis" (2026-10-31, .dsh-scratch/PROTECTED-ITEMS-2026-10-31/
     // CONTRACT.md): the PC's owner-editable list, right beside the folder
     // allow-list it outranks. It has no menu id in the catalogue yet (the
     // backend lane owns the settings-registry row), so the row is always drawn -
     // like "App control" above - and every index below it moved down by one.
-    "protection" to 17,
-    "backup" to 18,
-    "watch-notify" to 19,
-    "phone-notify" to 20,
+    "protection" to 18,
+    "backup" to 19,
+    "watch-notify" to 20,
+    "phone-notify" to 21,
     // "Notifications from Jarvis" (the owner's decision of 2026-10-09, after
     // docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): one row pointing at
     // Android's own per-app notification screen, not a second copy of the PC's
     // Notifications card. It sits with the two other notification rows, which
     // moved every index below it down by one on that day.
-    "jarvis-notify" to 21,
-    "screen-look" to 22,
-    "browser-engine" to 23,
+    "jarvis-notify" to 22,
+    "screen-look" to 23,
+    "browser-engine" to 24,
     // How long the captcha hand-off stays on offer (the owner's decision of
     // 2026-10-08). Sits with the browser it belongs to, so the two exposure
     // rows are together; every index below it moved down by one on that day,
     // and by one more when the search box landed above the jump list.
-    "handoff" to 24,
+    "handoff" to 25,
     // What a captcha does about the browser window it is blocking (the owner's
     // decision of 2026-10-09). Sits with the hand-off row above, so the two
     // captcha rows are together; every index below it moved down by one - and
     // by one more for "Notifications from Jarvis" above it.
-    "handoff-front" to 25,
-    "devices" to 26,
-    "quick-tiles" to 27,
+    "handoff-front" to 26,
+    "devices" to 27,
+    "quick-tiles" to 28,
     // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
     // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
     // and it sits immediately above "Limits" on the screen - so Limits' own
@@ -191,41 +198,41 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // screen, item by item`, which reads this map against the screen's real row
     // order - and by backend/test_settings_registry.py, which does the same from
     // the Python side. Both moved down one more for "Approval cards" above.
-    "screen-rate" to 28,
+    "screen-rate" to 29,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 29,
+    "limits" to 30,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
     // limits row" pins 25). A row added at the end moves nothing.
-    "idle-new" to 30,
+    "idle-new" to 31,
     // "Data and maths sandbox" (LM-1C, 2026-10-18): whether the AI model is
     // offered the small read-only Python tool. A row added at the end moves no
     // other number; it sits under Idle new on the screen and in the jump list.
-    "sandbox" to 31,
+    "sandbox" to 32,
     // "Learning" (2026-10-28, the settings audit's G1): the two learning
     // switches, which had no Settings row on either app before this. It sits
     // after the sandbox and before First-time setup; every index below it
     // moved down by one.
-    "learning" to 32,
+    "learning" to 33,
     // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
     // fourteen questions and its READ-ONLY plan, drawn by
     // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
-    "setup-questionnaire" to 33,
+    "setup-questionnaire" to 34,
     // "All features and abilities" (2026-10-22): the searchable directory of
     // all 140 features. A row added at the end moves no other number.
-    "all-features" to 34,
+    "all-features" to 35,
     // "Jarvis Calendar" (2026-10-29, the owner's ask: a full calendar of
     // Jarvis's own, ON by default, and "disableable in Settings"). One switch:
     // the PC's own `calendar-settings.json`, read and written through
     // GET /api/calendar and POST /api/calendar/settings, so the phone and the
     // desktop can never disagree about whether it is on. A row added at the end
     // moves no other number.
-    "calendar" to 35,
+    "calendar" to 36,
 )
 
 /**
@@ -262,6 +269,15 @@ fun SettingsScreen(
      * height rather than a guess, because the line wraps the PC's card title.
      */
     bottomReserve: Dp = 0.dp,
+    /**
+     * Whether "Hide memory lists and chat history" (or App lock) is on - the
+     * same value `MainActivity` hands the Brain and Inbox screens. Only one row
+     * here needs it: "File from your PC" (docs/JARVIS-API.md section 172), whose
+     * waiting filenames are the owner's own words. While it is true that row
+     * asks the PC for nothing and draws a withholding line instead, so a name
+     * can never arrive or be shown.
+     */
+    privateHidden: Boolean = false,
     /**
      * "Train my voice", "Voice check: how strict...", and "Jarvis's voice" -
      * null until a desktop is paired, the same rule
@@ -694,6 +710,17 @@ fun SettingsScreen(
             if (menus.shows("settings.reach")) if (drawn("reach")) if (menus.shows("settings.reach")) item(key = "reach") { MenuFrame(menus, "settings.reach") { ReachSection() } }
             if (menus.shows("settings.email-sending")) if (drawn("email-sending")) if (menus.shows("settings.email-sending")) item(key = "email-sending") { MenuFrame(menus, "settings.email-sending") { EmailSendingSection() } }
             if (menus.shows("settings.folders")) if (drawn("folders")) if (menus.shows("settings.folders")) item(key = "folders") { MenuFrame(menus, "settings.folders") { FoldersSection() } }
+            // "File from your PC" (2026-10-31, the owner's ask; Gemini Q7;
+            // docs/JARVIS-API.md section 172; SendFilePlate.kt): ONE file Jarvis
+            // sent after its own approval card, waiting ten minutes and working
+            // once. View/Save are this phone's steps; the card was the PC's.
+            // No menu id in the catalogue yet (the backend lane owns the
+            // settings-registry row), so the row is always drawn, like "App
+            // control" above - and it draws only a withholding line while the
+            // private lists are hidden.
+            if (drawn("files")) item(key = "files") {
+                SendFileSection(canAct = canAct, privateHidden = privateHidden)
+            }
             // "Protected from Jarvis" (2026-10-31, .dsh-scratch/PROTECTED-ITEMS-
             // 2026-10-31/CONTRACT.md; ProtectedPlate.kt): the PC's owner-editable
             // list of folders, files and programs Jarvis may not touch. The phone

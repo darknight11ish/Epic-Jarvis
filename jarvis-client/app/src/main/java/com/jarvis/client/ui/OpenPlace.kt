@@ -55,6 +55,10 @@ object OpenPlace {
         // (GET/POST /api/card-prefs) - so "open approval cards" lands on the
         // row that changes it.
         "approval-cards" to Where.Go(Screen.SETTINGS, "approval-cards"),
+        // "File from your PC" (2026-10-31): its own row on the phone's Settings
+        // screen, keyed "files" - so "open my files" / "what did Jarvis send me"
+        // lands on the row that lists the one approved file.
+        "files" to Where.Go(Screen.SETTINGS, "files"),
         // "Protected from Jarvis" (2026-10-31): its own row on the phone's
         // Settings screen, keyed "protection" like the desktop card's id, so
         // "open protected from jarvis" lands on the row that reads the list.

@@ -199,6 +199,27 @@
       ]
     },
     {
+      "id": "settings.files",
+      "title": "File from your PC",
+      "about": "The one file Jarvis sent to this phone, with View and Save to Downloads.",
+      "apps": [
+        "phone"
+      ],
+      "area": "settings",
+      "view": "",
+      "kind": "row",
+      "group": null,
+      "parent": null,
+      "hide": false,
+      "collapse": false,
+      "why": "Never hideable: this row is the only place the sent file is listed, viewed or saved.",
+      "names": [
+        "file from your pc",
+        "files from your pc",
+        "the file jarvis sent"
+      ]
+    },
+    {
       "id": "settings.appearance-card",
       "title": "Appearance",
       "about": "Theme, faces and how it all looks.",
@@ -2865,6 +2886,10 @@
       "why": "Removing an entry always needs this row; hiding it would hide the list itself."
     },
     {
+      "id": "settings.files",
+      "why": "Never hideable: this row is the only place the sent file is listed, viewed or saved."
+    },
+    {
       "id": "settings.animal-options",
       "why": "On the phone it is drawn inside Appearance; the Appearance menu is how it is hidden."
     },
@@ -3074,6 +3099,9 @@
     "faces": "settings.appearance-card",
     "faq": "brain.tab.tutorials",
     "feature directory": "settings.all-features",
+    "file from your pc": "settings.files",
+    "file jarvis sent": "settings.files",
+    "files from your pc": "settings.files",
     "finance": "group.finance",
     "finances": "group.finance",
     "findings": "brain.now.findings",
@@ -3571,6 +3599,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -3777,6 +3806,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -3979,6 +4009,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -5470,6 +5501,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -6305,6 +6337,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -6506,6 +6539,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -6911,6 +6945,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -7112,6 +7147,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -7319,6 +7355,7 @@
         "settings.calendar": false,
         "settings.devices": false,
         "settings.protection": false,
+        "settings.files": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,

@@ -99,6 +99,9 @@ FORBIDDEN = (
     "email_check", "shell_exec", "file_read", "run_data_script",
     "rea_investigate", "calendar_read", "notes_search", "home_read",
     "home_control", "my_spending", "retirement_whatif",
+    # send-file (2026-10-31): the bytes leave the PC for the phone, so it is
+    # outbound and must not be a fresh-install default - same rule as the rest.
+    "send_file_to_phone",
 )
 
 TEMPLATE = REPO / "backend" / "rebuilt" / "jarvis-framework.toml"

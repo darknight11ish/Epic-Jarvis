@@ -183,6 +183,13 @@ internal fun ComingUpSection(
                                 enabled = !showPrivateBusy, onClick = onShowPrivate)
                         }
                     }
+                    // "A file from your PC" (2026-10-31, the owner's ask;
+                    // docs/JARVIS-API.md section 172): a file Jarvis sent after
+                    // its own approval card is waiting for this phone for ten
+                    // minutes. It is drawn HERE - Coming up is the plate an
+                    // owner actually looks at - and draws nothing at all when
+                    // no file is waiting (SendFilePlate.kt).
+                    SendFileWaitingBlock(canAct = canAct, privateHidden = privateHidden)
                     // Just went off (the last hour): Snooze, ONE job per tap.
                     if (shown.wentOff.isNotEmpty()) {
                         Text(Schedule.WENT_OFF_TITLE, style = MaterialTheme.typography.labelMedium,

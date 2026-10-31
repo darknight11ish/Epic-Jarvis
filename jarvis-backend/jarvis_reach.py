@@ -140,6 +140,10 @@ TOOL_NAMES = {
     # on. Listed here because test_reach.py requires every tool to have plain
     # words for the "What can Jarvis reach" page.
     "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+    # Send one file to the phone (2026-10-31, the owner's ask; Gemini Q7): the
+    # reach page lists every tool the model can offer, so this one has plain
+    # words too. It SENDS (outbound) - one file, one card, ten minutes.
+    "send_file_to_phone": "Sending one file from your PC to your phone (one card each)",
     # REA (2026-10-20): the reverse-engineering tool ships OFF and asks a person
     # for every call; the page still needs plain words for it, like every tool
     # (test_reach.py).

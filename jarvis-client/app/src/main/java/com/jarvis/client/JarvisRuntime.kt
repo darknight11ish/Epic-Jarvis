@@ -9768,6 +9768,46 @@ object JarvisRuntime {
         return api.pictureBytes(id)
     }
 
+    // ------------------------------------------- send a file to the phone ----
+    // The owner's ask of 2026-10-31 and Gemini's bounded ruling Q7
+    // (docs/JARVIS-API.md section 172; the shapes are
+    // [com.jarvis.client.net.SendFile]). ONE file, ONE approval card on the PC,
+    // an opaque id that works once for ten minutes. The phone only LISTS and
+    // FETCHES: it never raises or answers that card, and no route here takes or
+    // returns a filesystem path.
+
+    /**
+     * The files the owner already approved for this phone. A READ: never held
+     * on a stale link. Refused while the private lists are hidden - a file's
+     * name is the owner's words, so the request is not even sent (the route has
+     * no `hidden=1`; withholding on this side is what the contract allows).
+     */
+    suspend fun sendFiles(): ApiResult<com.jarvis.client.net.SendFile.ListReply> {
+        if (privateListsHidden) {
+            return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.SendFile.HIDDEN_NAMES),
+            )
+        }
+        return api.sendFiles()
+    }
+
+    /**
+     * ONE approved file's bytes - the single use the PC's route allows. A read;
+     * never held. Refused while the private lists are hidden, for the same
+     * reason as [sendFiles], and the id is checked against the PC's own shape
+     * before anything is sent.
+     */
+    suspend fun downloadFile(id: String): ApiResult<com.jarvis.client.net.SendFile.Fetched> {
+        if (privateListsHidden) {
+            return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.SendFile.HIDDEN_NAMES),
+            )
+        }
+        com.jarvis.client.net.SendFile.downloadPath(id)
+            ?: return ApiResult.Failed(ApiError.Malformed(com.jarvis.client.net.SendFile.UNREADABLE))
+        return api.downloadFile(id)
+    }
+
     /**
      * Draws ONE picture from the owner's own words and keeps it on the PC.
      *

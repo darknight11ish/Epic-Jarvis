@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "9072fd1190fd929925907e7b14bc69166e4978bec6d676c3fa93841bd4a04a9c",
-  "feature_count": 146,
+  "source_sha256": "372e187a068c6729c28c250daf92428028305803d131413f1aeb86fc51d08c28",
+  "feature_count": 147,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
     "Settings-Only (By Design — Security Boundary)",
@@ -923,6 +923,22 @@
       "status": "not-a-setting",
       "label_note": "",
       "example": "turn on Browse and edit your notes",
+      "example_ok": true,
+      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
+      "where_desktop": "All features and abilities",
+      "where_phone": "All features and abilities",
+      "note": "",
+      "not_a_control": true
+    },
+    {
+      "id": "file-from-pc",
+      "title": "File from your PC",
+      "group": "Notes and files",
+      "surface": "both",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "status": "not-a-setting",
+      "label_note": "",
+      "example": "turn on File from your PC",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",

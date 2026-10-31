@@ -1198,6 +1198,32 @@
     ]
   },
   {
+    "id": "file-from-pc",
+    "group": "Notes and files",
+    "title": "File from your PC",
+    "what": "Ask Jarvis to send ONE file from the folders it may look in to your phone, then view it or save it to Downloads.",
+    "where": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
+    "asks": "One approval card per file, naming the exact filename, folder and size. The phone can fetch it once, within ten minutes.",
+    "limit": "One file per card, at most 10 MiB, ten minutes and one download, and only inside Folders Jarvis may look in. Nothing about the file is kept on the phone.",
+    "surface": "both",
+    "aliases": [
+      "send a file to my phone",
+      "send file to phone",
+      "file to phone",
+      "send a file to the phone"
+    ],
+    "covers": [
+      "file-from-pc",
+      "files",
+      "settings.files"
+    ],
+    "must_mention": [
+      "approval card",
+      "ten minutes",
+      "download"
+    ]
+  },
+  {
     "id": "spending",
     "group": "Money and health",
     "title": "Spending summaries",

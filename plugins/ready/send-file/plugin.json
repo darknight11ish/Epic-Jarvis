@@ -1,0 +1,7 @@
+{
+  "name": "send-file",
+  "summary": "send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path.",
+  "module": "jarvis_send_file",
+  "install": "handler",
+  "stack_order": 171
+}

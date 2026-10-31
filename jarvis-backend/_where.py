@@ -1407,6 +1407,15 @@ SHIPPED = (
     # grammar - no model tool, no route, no card, and no requirement beyond the
     # standard library, so requirements.lock does not move.
     "jarvis_parking.py",
+    # "Send a file to the phone" (2026-10-31, the owner's ask; Gemini Q7):
+    # ONE card per file, exact name/folder/size in its words, a ten-minute
+    # single-use opaque id the phone fetches, never a path. The two routes
+    # are installed by the drop-in folder plugins/ready/send-file; the model
+    # tool is SEND_FILE_TOOL in jarvis_agent.py. Reads only inside the
+    # "Folders Jarvis may look in" allow-list, minus anything the optional
+    # jarvis_protection check refuses. No new permission scheme and no
+    # network of its own.
+    "jarvis_send_file.py",
     # "Protected from Jarvis" (jarvis_protection.py, 2026-10-31; the owner's
     # request: a list of folders, files and programs that blocks Jarvis, or
     # makes it read-only). The drop-in folder plugins/ready/protected-items

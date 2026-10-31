@@ -96,7 +96,9 @@ PRIVATE_CHAT_ALLOWED = []
 
 #: What those enabled six become when a turn is built: `my_files` is dropped
 #: while no folder is listed (the model is never offered a tool that could
-#: read nothing), so a fresh PC offers five. Sorted.
+#: read nothing), so a fresh PC offers five. Sorted. `send_file_to_phone` is
+#: NOT a default (it leaves the PC for the phone, like the other outbound
+#: tools); the owner enables it in their own settings list.
 OFFERED_FRESH = [
     "calculator", "change_setting", "feature_guide", "memory_search",
     "web_search",
@@ -113,7 +115,8 @@ CATALOGUE = [
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
     "notes_search", "propose_plan", "protect_from_jarvis", "rea_investigate",
     "read_web_page",
-    "retirement_whatif", "run_data_script", "send_email", "set_reminder",
+    "retirement_whatif", "run_data_script", "send_email", "send_file_to_phone",
+    "set_reminder",
     "set_timer", "shell_exec", "tidy_inbox", "todo_add", "todo_done",
     "web_search",
 ]

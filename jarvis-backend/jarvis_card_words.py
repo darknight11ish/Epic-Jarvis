@@ -272,6 +272,8 @@ TITLES = {
     # --- the Phase-2 Obsidian vault organizer (2026-10-20): ONE card for the
     # whole batch, after a plan the owner has already seen.
     "organize_obsidian_vault": "organize your Obsidian vault with tags and Maps of Content",
+    # "Send a file to the phone" (2026-10-31, the owner's ask; Gemini Q7).
+    "send_file_to_phone": "send a file from your PC to your phone",
     # "Protected from Jarvis" (jarvis_protection.py, 2026-10-31): adding an
     # entry, and removing one (which is loosening, so it asks too).
     "protect_item": "protect a folder, file or program from Jarvis",
@@ -451,6 +453,8 @@ SUMMARY = {
     "import_notion_export": "bring your Notion export in",
     # --- the Phase-2 Obsidian vault organizer (2026-10-20)
     "organize_obsidian_vault": "organize your Obsidian vault",
+    # "Send a file to the phone" (2026-10-31): ONE file, one card
+    "send_file_to_phone": "send one file from your folders to your phone",
     # "Protected from Jarvis" (2026-10-31): one card each way
     "protect_item": "protect a folder, file or program from Jarvis",
     "unprotect_item": "stop protecting a folder, file or program",

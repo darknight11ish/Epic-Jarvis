@@ -615,5 +615,21 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/update_file_paths" />
         </provider>
+
+        <!-- "Send one file to the phone" (2026-10-31, docs/JARVIS-API.md section
+             172): the ONE file the owner approved for this phone, handed to
+             Android's own viewer by "View". Same reasoning as the provider
+             above - the file lives in this app's private cache, so no other app
+             can write there, and the content URI is granted read-only for that
+             one intent. Its own authority, so the two shares stay separate. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.sendfile"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/send_file_paths" />
+        </provider>
     </application>
 </manifest>
