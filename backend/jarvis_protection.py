@@ -255,7 +255,7 @@ def normal_path(path) -> str:
         text = os.path.normpath(text)
     except Exception:                                       # noqa: BLE001
         pass
-    return os.path.normcase(text)
+    return os.path.normcase(text).lower()
 
 
 def normal_program(name) -> str:
@@ -263,7 +263,9 @@ def normal_program(name) -> str:
     text = str(name or "").strip().strip('"')
     if not text:
         return ""
-    base = os.path.basename(text.replace("/", "\\"))
+    # Split on BOTH separators: a Windows path is checked on Linux CI too,
+    # and os.path.basename there does not treat "\\" as one.
+    base = text.replace("\\", "/").rsplit("/", 1)[-1]
     return base.lower()
 
 
@@ -296,11 +298,11 @@ def _path_forms(path) -> tuple:
         return ("", "")
     text = text.replace("\x00", "")
     try:
-        lexical = os.path.normcase(os.path.abspath(text))
+        lexical = normal_path(os.path.abspath(text))
     except Exception:                                       # noqa: BLE001
         lexical = normal_path(text)
     try:
-        resolved = os.path.normcase(os.path.realpath(text))
+        resolved = normal_path(os.path.realpath(text))
     except Exception:                                       # noqa: BLE001
         resolved = lexical
     return (lexical, resolved)
@@ -308,8 +310,8 @@ def _path_forms(path) -> tuple:
 
 def _form_inside(candidate: str, target: str) -> bool:
     """True when folded `candidate` is `target` or under it (already absolute)."""
-    c = (candidate or "").rstrip("\\")
-    t = (target or "").rstrip("\\")
+    c = (candidate or "").rstrip("\\/")
+    t = (target or "").rstrip("\\/")
     if not c or not t:
         return False
     if c == t:
