@@ -195,19 +195,11 @@ def t_off_app_only_and_unbuilt_sentences_have_their_shapes():
     fresh_calendar()
     cases = (
         # (what the owner typed, the shape, the extra field)
-        ("make a note: call the plumber tomorrow at 4pm", "note_write", None),
-        ("note this: the boiler service is due", "note_write", None),
-        ("organize my notes", "organizer", None),
-        ("organize my Obsidian vault with tags and Maps of Content", "organizer", None),
-        ("create a new note called Shopping", "note_unbuilt", "create"),
-        ("rename my note Welcome to Home", "note_unbuilt", "rename"),
-        ("delete my note Welcome", "note_unbuilt", "delete"),
-        ("customize my Obsidian theme", "never_built", None),
-        ("change my Obsidian theme to something dark", "never_built", None),
-        ("what does my Welcome note say?", "note_door", "read"),
-        ("read my notes", "note_door", "read"),
-        ("search my notes for the boiler", "note_door", "search"),
-        ("find the boiler in my notes", "note_door", "search"),
+        # NOTE: the note write, the note organizer, note read/search, create/
+        # rename/delete and Obsidian customisation are NOT this lane's any
+        # more (2026-10-31 integration, one door per job). The note lane's
+        # `test_note_and_vault_asking.py` owns those expectations; this suite
+        # keeps only the off / app-only / unbuilt abilities that lane does not.
         ("read my email", "capability_off", "email_read"),
         ("check my inbox", "capability_off", "email_read"),
         ("is the garage door open", "capability_off", "home_read"),
@@ -377,121 +369,23 @@ def t_the_calendar_switch_is_read_and_named():
 #   3. Off / app-only / unbuilt: the real state, the real door
 # --------------------------------------------------------------------------
 
-def t_writing_a_note_when_the_note_tools_are_off():
-    fresh_calendar()
-    got = ask("make a note: call the plumber tomorrow at 4pm about the boiler")
-    reply = got.reply if got is not None else ""
-    check("the write is answered by the fast path, not the model",
-          got is not None and got.intent == "honest_chat", got and got.intent)
-    check("... it says the note writing is switched off on this PC",
-          "switched off on this PC" in reply, reply)
-    check("... it names the real switch place",
-          "What asks first" in reply or "settings file" in reply, reply)
-    check("... it gives the true door instead",
-          "Obsidian" in reply and "Notes plate" in reply
-          and "one approval card per save" in reply, reply)
-    check("... and it makes no promise", no_promises(reply), reply)
-    old = Q._enabled_tools_turn
-    Q._enabled_tools_turn = lambda: {"append_obsidian_daily"}
-    try:
-        check("with the note tool ON, the capture lane owns the sentence",
-              Q.match("make a note: x") is None)
-    finally:
-        Q._enabled_tools_turn = old
-
-
-def t_reading_or_searching_notes_gives_the_true_door():
-    fresh_calendar()
-    read = ask("what does my Welcome note say?")
-    reply = read.reply if read is not None else ""
-    check("a note read is answered by the fast path",
-          read is not None and read.intent == "honest_chat", read and read.intent)
-    check("... chat says plain it cannot read note text",
-          "cannot read note text in chat" in reply, reply)
-    check("... the door is the Notes plate on the PC and the phone",
-          "Notes plate" in reply and "Mind" in reply, reply)
-    check("... with the real one-card-per-save rule",
-          "one approval card" in reply and "denying it changes nothing" in reply,
-          reply)
-    check("... and it never says it has no access",
-          "no access" not in reply.lower(), reply)
-    check("... and it makes no promise", no_promises(reply), reply)
-
-    search = ask("search my notes for the boiler")
-    sreply = search.reply if search is not None else ""
-    check("a note search is its own honest answer",
-          search is not None and "cannot search note text in chat" in sreply,
-          sreply)
-    check("... it names the switched-off note tool and its place",
-          "switched off here" in sreply and "What asks first" in sreply, sreply)
-    old = Q._enabled_tools_turn
-    Q._enabled_tools_turn = lambda: {"notes_search"}
-    try:
-        on = ask("search my notes for the boiler")
-        onreply = on.reply if on is not None else ""
-        check("with the notes tool ON, the answer says a search can run in chat",
-              "switched on in Settings, What asks first" in onreply, onreply)
-        check("... and still names the direct door",
-              "Notes plate" in onreply, onreply)
-    finally:
-        Q._enabled_tools_turn = old
-
-
-def t_app_only_note_operations_are_named_not_built():
-    fresh_calendar()
-    cases = (
-        ("create a new note called Shopping", "Creating a note is not built"),
-        ("rename my note Welcome to Home", "Renaming a note is not built"),
-        ("delete my note Welcome", "Deleting a note is not built"),
-    )
-    for said, head in cases:
-        got = ask(said)
-        reply = got.reply if got is not None else ""
-        check(f"{said!r} says the operation is not built", head in reply, reply)
-        check(f"... and points at the real door ({said!r})",
-              "Notes plate" in reply and "Obsidian itself" in reply, reply)
-        check(f"... and makes no promise ({said!r})", no_promises(reply), reply)
-
-
-def t_the_vault_organizers_real_state_is_read():
-    fresh_calendar()
-    O.set_enabled(False)
-    off = ask("organize my notes")
-    oreply = off.reply if off is not None else ""
-    check("the organizer answer is the fast path's",
-          off is not None and off.intent == "honest_chat", off and off.intent)
-    check("... its real state is off", "vault organizer is off" in oreply, oreply)
-    check("... turning it on is one approval card",
-          "one approval card" in oreply, oreply)
-    check("... and then it shows a read-only plan, changing nothing",
-          "read-only plan" in oreply and "until you approve" in oreply, oreply)
-    check("... and it makes no promise", no_promises(oreply), oreply)
-    O.set_enabled(True)
-    try:
-        on = ask("organize my Obsidian vault with tags and Maps of Content")
-        onreply = on.reply if on is not None else ""
-        check("with the organizer ON, its own ON words are quoted",
-              "vault organizer is ON" in onreply, onreply)
-        check("... and the plan-first rule is still said",
-              "read-only plan" in onreply, onreply)
-    finally:
-        O.set_enabled(False)
-
+# The note write, the organizer, note reading/searching, create/rename/delete
+# and Obsidian theme/CSS customisation used to be tested here; they are the note
+# lane's real/organizer-aware answers now and `test_note_and_vault_asking.py`
+# owns those assertions (2026-10-31 integration, one assertion per behaviour).
+# This lane keeps only the unbuilt GENERIC customisation it still answers.
 
 def t_unbuilt_customisation_is_not_a_feature():
     fresh_calendar()
-    for said in ("customize my Obsidian theme",
-                 "change my Obsidian theme to something dark",
-                 "create a template for my notes"):
-        got = ask(said)
-        reply = got.reply if got is not None else ""
-        check(f"{said!r} is answered honestly", "not one of my features" in reply,
-              reply)
-        check(f"... with the 'Everything Jarvis can do' pointer ({said!r})",
-              "Everything Jarvis can do" in reply, reply)
-        check(f"... and the nearest real row, not an invented one ({said!r})",
-              "Notes plate" in reply, reply)
-        check(f"... and no promise ({said!r})", no_promises(reply), reply)
+    got = ask("create a template for my notes")
+    reply = got.reply if got is not None else ""
+    check("a generic note-template request is answered honestly",
+          "not one of my features" in reply, reply)
+    check("... with the 'Everything Jarvis can do' pointer",
+          "Everything Jarvis can do" in reply, reply)
+    check("... and the nearest real row, not an invented one",
+          "Notes plate" in reply, reply)
+    check("... and no promise", no_promises(reply), reply)
 
 
 def t_off_tools_name_the_real_switch_and_gate():

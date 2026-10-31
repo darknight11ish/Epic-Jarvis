@@ -1161,7 +1161,19 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
-    # --- the stateful read doors and OFF-state sentences (2026-10-31, the
+    # --- (a) actionable quick paths FIRST (2026-10-31 integration) ----------
+    # A real action beats an "off" answer: the note writer, the organizer and
+    # the local-calendar read are owned here, before any honesty sentence.
+    # (The note lane's capture path really files even when the note TOOL is
+    # off; the honesty lane's old note_write off-answer is retired.)
+    got = _note_asking(s)
+    if got is not None:
+        return got
+    got = _local_calendar_prompt(s)
+    if got is not None:
+        return got
+
+    # --- (b) the stateful read doors and OFF-state sentences (2026-10-31, the
     # chat audit's second half). They run BEFORE the feature/settings grammars
     # because those answered some of these wrongly: a light command raised the
     # "lights without a card" SETTING card, quiet hours was explained with its
@@ -1201,9 +1213,6 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
     got = _pair_phone(s)
-    if got is not None:
-        return got
-    got = _note_asking(s)
     if got is not None:
         return got
 
@@ -1507,6 +1516,16 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _next_up(s)
     if got is not None:
         return got
+
+    # --- (b) the honest off / app-only / unbuilt sentences, BEFORE the
+    # feature DISCUSSION shapes (2026-10-31 integration order: actions, then
+    # honesty, then discussion). Only the settings ASK shapes live here now;
+    # "tell me about X" / "limits of X" fall through to the catalogue below.
+    got = _honest_chat_prompt(s)
+    if got is not None:
+        return got
+
+    # --- (c) the feature discussion/introspection shapes --------------------
     # "What is <feature>?", "is <feature> on?", "how do I turn it on/off?" and
     # "turn on <feature>" (2026-10-20). AFTER the settings block on purpose:
     # every setting already worded keeps its own path, card rule and words, and
@@ -1550,18 +1569,6 @@ def _match(text, now: float) -> Optional[Intent]:
     # --- "what's my next reminder?" (the scheduler's own list, 2026-10-31) -------------
     # (checked EARLIER, before the feature guide, so "what's coming up" is the
     # scheduler's list and not the "coming up" feature row.)
-
-    # --- the LOCAL calendar's own read, and the honest answers for abilities
-    # that are off, built only in the apps, or not built at all (2026-10-31,
-    # pass 11: "what's on my calendar today?" answered with Google setup steps
-    # while the local calendar was readable; "make a note"/"organize my notes"
-    # were model promises). Fixed sentences, real state read at answer time.
-    got = _local_calendar_prompt(s)
-    if got is not None:
-        return got
-    got = _honest_chat_prompt(s)
-    if got is not None:
-        return got
 
     # --- "watch with me" (jarvis_screen.py, 2026-09-29) --------------------------------
     got = _watch(s)
@@ -5245,36 +5252,19 @@ def _run_local_calendar_read(f: dict, now: float) -> Optional[Result]:
 
 
 # ---- the honest action sentences ------------------------------------------
+# NOTE / ORGANIZER / OBSIDIAN CUSTOMISATION ARE THE NOTE LANE'S (2026-10-31
+# integration). The note lane's actionable matchers run first and its real
+# capture/organizer paths own those sentences; the duplicate honesty matchers
+# that used to answer "the note tools are off", "the organizer has no chat
+# door", "creating a note is not built" and the Obsidian theme answer were
+# removed so there is ONE door per job. The honesty answers below own only the
+# off / app-only / unbuilt abilities the note lane does not (email, home,
+# phone control, jobs/spending doors, pictures, screen, settings-backed rows).
 
-_NOTE_WRITE = re.compile(
-    r"(?:make|write|add|jot down|note down|start)\s+(?:me\s+)?(?:a\s+|an\s+)?"
-    r"(?:quick\s+|new\s+)?note\b.*"
-    r"|note\s+(?:this|that)\b.*")
-_NOTE_CREATE = re.compile(
-    r"(?:create|make|add)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?note\s+"
-    r"(?:called|named|titled)\b.*"
-    r"|(?:create|add)\s+(?:me\s+)?(?:a\s+|an\s+)?new\s+note\b.*")
-_NOTE_RENAME = re.compile(r"rename\s+(?:my\s+|the\s+)?note\b.*")
-_NOTE_DELETE = re.compile(r"(?:delete|remove|erase)\s+(?:my\s+|the\s+)?note\b.*")
-_NOTE_READ = re.compile(
-    r"what(?:'s| is)?\s+(?:in|inside)\s+my\s+(?P<name>[a-z0-9' -]{1,60}?)\s+note\b.*"
-    r"|what\s+does\s+my\s+(?P<name2>[a-z0-9' -]{1,60}?)\s+note\s+say\b.*"
-    r"|read\s+(?:me\s+)?my\s+(?P<name3>[a-z0-9' -]{1,60}?)\s+note\b.*"
-    r"|read\s+my\s+notes?\b.*"
-    r"|what\s+do\s+my\s+notes\s+say\b.*")
-_NOTE_SEARCH = re.compile(
-    r"(?:search|look|find|check)\s+(?:through\s+|in\s+|for\s+)?(?:my|the)\s+"
-    r"notes?\b.*"
-    r"|find\s+.*\s+in\s+my\s+notes\b.*"
-    r"|do\s+i\s+have\s+(?:a\s+)?note\s+(?:about|on|called|named)\b.*"
-    r"|what\s+notes\s+do\s+i\s+have\b.*")
-_NOTE_EDIT = re.compile(
-    r"edit\s+(?:my\s+|the\s+)?note\b.*"
-    r"|open\s+my\s+note\b.*in\s+a\s+window\b.*")
-_ORGANIZE = re.compile(
-    r"(?:organize|organise|tidy|sort|clean up)\s+(?:my|the|our)\s+"
-    r"(?:obsidian\s+)?(?:notes|vault|vaults)\b.*"
-    r"|(?:organize|organise)\s+(?:my|the)\s+obsidian\b.*")
+#: Generic customisation the note lane does NOT own: it answers Obsidian
+#: theme/CSS/template asks itself (earlier, with its own sentence), so this
+#: regex is only a fallback for the generic "create a template for my notes"
+#: style request - one honest answer, not a model promise.
 _CUSTOMISE = re.compile(
     r"(?:change|customi[sz]e|set|use|install|add|make|create)\s+"
     r"(?:my|the|a|an)?\s*(?:obsidian|vault|note|notes)?\s*"
@@ -5283,6 +5273,7 @@ _CUSTOMISE = re.compile(
     r"|(?:obsidian|vault)\s+(?:theme|themes|css|template|templates|plugin|"
     r"plugins|appearance)\b.*"
     r"|customi[sz]e\s+(?:my|the)?\s*(?:obsidian|vault)\b.*")
+
 _EMAIL_READ = re.compile(
     r"(?:read|check|open|look at|scan)\s+(?:my\s+)?(?:email|e-mail|mail|inbox)\b.*"
     r"|(?:any|new)\s+(?:email|e-mail|mail)\b.*"
@@ -5315,30 +5306,17 @@ _NOTE_NAMES = "notes, the Notes plate, or Obsidian itself"
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
-    """One fixed, honest intent for off / app-only / unbuilt abilities."""
-    # -- app-only: the vault organizer (built, OFF by default, no chat door) --
-    if _ORGANIZE.fullmatch(s):
-        return Intent("honest_chat", {"shape": "organizer"})
-    # -- never built: Obsidian themes, CSS, templates, plugins --------------
+    """One fixed, honest intent for off / app-only / unbuilt abilities.
+
+    The note write, the note organizer, note read/search/edit, create/rename/
+    delete and Obsidian customisation are NOT here: the note lane's actionable
+    matchers run first and own them (2026-10-31 integration, one door per job).
+    """
+    # -- never built: GENERIC note/theme/template customisation --------------
+    # (Obsidian-specific asks never reach this: the note lane's
+    # obsidian_style_refused runs earlier and owns them.)
     if _CUSTOMISE.fullmatch(s):
         return Intent("honest_chat", {"shape": "never_built"})
-    # -- app-only: creating / renaming / deleting a note --------------------
-    if _NOTE_CREATE.fullmatch(s):
-        return Intent("honest_chat", {"shape": "note_unbuilt", "op": "create"})
-    if _NOTE_RENAME.fullmatch(s):
-        return Intent("honest_chat", {"shape": "note_unbuilt", "op": "rename"})
-    if _NOTE_DELETE.fullmatch(s):
-        return Intent("honest_chat", {"shape": "note_unbuilt", "op": "delete"})
-    # -- off: writing a note needs a tool the model is not offered ----------
-    if _NOTE_WRITE.fullmatch(s):
-        tools = _enabled_tools_turn()
-        if any(name in tools for name in _NOTE_WRITE_TOOLS):
-            return None                # a real note path owns it (other lane)
-        return Intent("honest_chat", {"shape": "note_write"})
-    # -- read/search/edit a note: the true door, never a promise ------------
-    if _NOTE_READ.fullmatch(s) or _NOTE_SEARCH.fullmatch(s) or _NOTE_EDIT.fullmatch(s):
-        mode = "search" if _NOTE_SEARCH.fullmatch(s) else "read"
-        return Intent("honest_chat", {"shape": "note_door", "mode": mode})
     # -- off: email / home / phone-control tools ----------------------------
     tools = _enabled_tools_turn()
     if _EMAIL_READ.fullmatch(s):
@@ -5370,6 +5348,14 @@ def _honest_chat_prompt(s: str) -> Optional[Intent]:
     # belongs to PR #691's Live read, which this fast path must not intercept.)
     if _PICTURES.fullmatch(s) and _switch_is_off("pictures") is True:
         return Intent("honest_chat", {"shape": "setting_off", "row": "pictures"})
+    # Quiet hours as a SETTINGS question: "how do I turn off quiet hours?",
+    # "where is the quiet hours setting?". This sits in the LATE honesty
+    # prompt (after the settings grammar) on purpose: the bare "turn on quiet
+    # hours" is settings_bool's own phrase (the checker pins that resolved
+    # flag); the HOW/WHERE question is the one the settings grammar leaked
+    # with its internal key on the live field test (2026-10-31 integration).
+    if _QUIET_HOURS.fullmatch(s):
+        return Intent("honest_chat", {"shape": "quiet_hours"})
     return None
 
 
@@ -5537,9 +5523,15 @@ _ASKS_FIRST = re.compile(
     r"(?:what(?:'s| is)?\s+)?what\s+asks\s+first\b.*"
     r"|(?:explain|tell\s+me\s+about|describe)\s+what\s+asks\s+first\b.*")
 _QUIET_HOURS = re.compile(
-    r"(?:how\s+(?:do|can)\s+i|how\s+to|where\s+(?:is|are)|what\s+(?:is|are)|"
-    r"tell\s+me\s+about|explain)\b.*quiet\s+hours\b.*"
-    r"|quiet\s+hours\b.*(?:work|setting|where|change|turn)\b.*")
+    # Only the HOW/WHERE settings question is the honesty lane's. The bare
+    # "turn on/off quiet hours" is settings_bool's own phrase (the owner's
+    # switch, its tier and its card rule), and "tell me about quiet hours" /
+    # "what are the limits of quiet hours" belong to the feature DISCUSSION
+    # lane. This used to be one broad regex that stopped both (2026-10-31
+    # integration precedence fix).
+    r"(?:how\s+(?:do|can)\s+i|how\s+to)\s+(?:turn|switch|change|set)\s+"
+    r"(?:off\s+|on\s+)?(?:the\s+)?quiet\s+hours\b.*"
+    r"|where\s+(?:is|are)\s+(?:the\s+)?quiet\s+hours\b.*")
 _WHAT_OFF = re.compile(
     r"what\s+(?:is|are|s)?\s+(?:switched\s+)?off\s+on\s+this\s+(?:pc|computer)\b.*"
     r"|which\s+(?:features|things|abilities)\s+are\s+(?:switched\s+)?off\b.*"
@@ -5677,8 +5669,6 @@ def _honest_early(_text: str, s: str) -> Optional[Intent]:
     # other explain shapes belong to the feature list, which has the row.
     if s == "what asks first":
         return Intent("honest_chat", {"shape": "asks_first"})
-    if _QUIET_HOURS.fullmatch(s):
-        return Intent("honest_chat", {"shape": "quiet_hours"})
     if _WHAT_OFF.fullmatch(s):
         return Intent("honest_chat", {"shape": "general_off"})
     # Reading a picture is picture mode's question, not an invented refusal.
@@ -8200,6 +8190,10 @@ _NOTE_TEXT_SPACE = re.compile(
     r"(?:make|add|write)\s+(?:me\s+)?(?:a\s+|one\s+|another\s+)?(?:new\s+)?note"
     r"\s+(?:that\s+|about\s+)?(?!called\b|titled\b|named\b)(?P<text>.+)$")
 _NOTE_THAT = re.compile(r"note\s+that\s+(?P<text>.+)$")
+#: "note this: the boiler service is due" - the honesty lane used to own this
+#: shape with an "off" answer; the real capture path owns it now (2026-10-31
+#: integration: a real action beats an off answer).
+_NOTE_THIS = re.compile(r"note\s+this\s*[:,-]?\s+(?P<text>.+)$")
 _JOT_DOWN = re.compile(r"jot\s+down\s+(?P<text>.+)$")
 _DAILY_NOTE_ADD = re.compile(
     r"(?:add|append|write)\s+(?:this\s+|that\s+)?to\s+"
@@ -8217,19 +8211,26 @@ _NOTE_RENAME_REFUSED = re.compile(
     r"(?:rename|retitle|change\s+the\s+name\s+of)\s+(?:my\s+|the\s+|a\s+)?"
     r"(?:\w+\s+)?note\b")
 _NOTE_DELETE_REFUSED = re.compile(
-    r"(?:delete|remove|trash)\s+(?:my\s+|the\s+|a\s+)?(?:\w+\s+)?note\b")
+    r"(?:delete|remove|erase|trash)\s+(?:my\s+|the\s+|a\s+)?(?:\w+\s+)?note\b")
 #: Asking chat to READ or SEARCH a note: chat does not read note text today.
 #: The audit measured the model claiming "I have located your notes" with no
 #: tool run. These shapes get the true door in plain words instead - the Notes
 #: plate can search/read/save, chat cannot - and it never names a note title, so
-#: the hidden-lists rule is kept too.
-_NOTE_READ = (
+#: the hidden-lists rule is kept too. (The honesty lane's own duplicate
+#: note_door matcher is retired; this is the one door for note reading.)
+_NOTE_READ_PATTERNS = (
     re.compile(r"what\s+(?:does|do)\s+(?:my\s+|the\s+|a\s+|an\s+)?"
-               r"(?P<name>.+?)\s+notes?\s+say"),
+               r"(?P<name>.+?)\s+notes?\s+say\b.*"),
     re.compile(r"what(?:'s|\s+is)\s+in\s+(?:my\s+|the\s+|a\s+|an\s+)?"
-               r"(?P<name>.+?)\s+notes?"),
+               r"(?P<name>.+?)\s+notes?\b.*"),
     re.compile(r"(?:read|show\s+me)\s+(?:the\s+|my\s+|a\s+|an\s+)?"
-               r"(?P<name>.+?)\s+notes?"),
+               r"(?P<name>.+?)\s+notes?\b.*"),
+    re.compile(r"read\s+(?:me\s+)?my\s+notes?\b.*"),
+    re.compile(r"(?:search|look(?:\s+through)?|check|find)\s+"
+               r"(?:through\s+|in\s+|for\s+)?(?:my|the)\s+notes?\b.*"),
+    re.compile(r"find\s+.*\s+in\s+my\s+notes\b.*"),
+    re.compile(r"do\s+i\s+have\s+(?:a\s+)?note\s+(?:about|on|called|named)\b.*"),
+    re.compile(r"what\s+notes\s+do\s+i\s+have\b.*"),
     re.compile(r"(?:find|search(?:\s+for)?)\s+(?:my\s+|the\s+)notes?\s+"
                r"(?:about|for|on)\s+(?P<query>.+)"),
     re.compile(r"what\s+do\s+(?:my\s+|the\s+)notes\s+say"
@@ -8239,7 +8240,8 @@ _NOTE_READ = (
 #: planner; this path only reports its state or shows its read-only preview.
 _VAULT_TIDY = re.compile(
     r"(?:organi[sz]e|tidy|sort|clean\s+up|declutter)\s+"
-    r"(?:my\s+|the\s+)?(?:obsidian\s+)?(?:vault|notes?)\b")
+    r"(?:my\s+|the\s+)?(?:obsidian\s+)?(?:vault|notes?)\b"
+    r"|(?:organi[sz]e)\s+(?:my\s+|the\s+)?obsidian\b")
 _ORGANIZER_ON = re.compile(
     r"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?vault\s+organi[sz]er"
     r"|enable\s+(?:the\s+|my\s+)?vault\s+organi[sz]er")
@@ -8263,8 +8265,8 @@ def _obsidian_style_refused(s: str) -> bool:
 
 def _note_asking(s: str) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours)."""
-    for rx in (_DAILY_NOTE_ADD, _NOTE_TEXT_COLON, _JOT_DOWN, _NOTE_THAT,
-               _NOTE_TEXT_SPACE):
+    for rx in (_DAILY_NOTE_ADD, _NOTE_TEXT_COLON, _NOTE_THIS, _JOT_DOWN,
+               _NOTE_THAT, _NOTE_TEXT_SPACE):
         m = rx.fullmatch(s)
         if m:
             text = m.group("text").strip()
@@ -8273,7 +8275,7 @@ def _note_asking(s: str) -> Optional[Intent]:
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
         if rx.match(s):
             return Intent("note_change_refused")
-    for rx in _NOTE_READ:
+    for rx in _NOTE_READ_PATTERNS:
         if rx.fullmatch(s):
             return Intent("note_read_honest")
     if _VAULT_TIDY.match(s):
