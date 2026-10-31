@@ -2611,14 +2611,37 @@ that keeps it:
   is the fix for the 2026-10-26 drift: `desktop_update` had been added on the
   PC, the phone never heard, and its own test could only prove the copy equalled
   itself.
-- **The phone warns that a check is coming; the PC lets Windows Hello arrive.**
-  The phone's card says "Fingerprint follows" when `SecurityRules.riskyByToday`
-  is true, because on Android the check may not be set up at all (no approval
-  key) and turning signing on is a step the owner has to take. On the PC the
-  same fact is a system prompt that appears at the moment of the decision, and
-  its refusal words ("Nothing was approved. Windows Hello is not set up ...")
-  are shown then. One fact, two moments, and neither app decides anything by
-  showing it.
+- **The phone says in words what its Approve will ask; the PC lets Windows
+  Hello arrive.** (Rewritten 2026-10-30, the owner's ruling that the phone needs
+  its fingerprint for the same cards the PC checks with Windows Hello - the line
+  used to read "Fingerprint follows", which named neither what the check is with
+  nor when it happens.) The phone's card now says **"Approve asks for your
+  fingerprint or PIN."**, or "Approve asks for your fingerprint." under
+  "Fingerprint only", from `SecurityRules.approveCheckWords` - which reads the
+  same two things the check itself reads (`approvalNeedsCheck` and
+  `Security.method`), so it cannot promise a check that will not run, and it is
+  drawn only where there is an Approve to press (never on a PC-only card, whose
+  Approve is not drawn at all, nor on a `needsChoice` one). It is the phone's
+  alone because the phone's check is the app's own prompt and the owner asked to
+  be told before he presses; on the PC the same fact is Windows Hello, a dialog
+  Windows itself draws at the moment of the decision, and its refusal words
+  ("Nothing was approved. Windows Hello is not set up ...") are shown then. One
+  fact, two moments, and neither app decides anything by showing it. The buttons
+  keep the shared `CardWords.BUTTONS` ("Deny", "Approve") on both apps.
+- **An action with no written words is refused on the PC before any prompt, and
+  the phone cannot repeat that refusal** (2026-10-30, written down with the line
+  above). `jarvis_owner_check.approve_check` answers `403 owner_check:
+  "unlabelled"` for a card whose action has no phrase in `jarvis_card_words`
+  (`has_written_title` - a plug-in's tool the PC has no words for, say), because
+  a Windows Hello dialog built on the fallback title would ask the owner to
+  confirm a blank. The phone has no field on the `/api/pending` row that says
+  which actions are labelled, and it draws that same fallback title itself, so
+  it would still ask - with its fingerprint, and with a title the PC could only
+  quote back. The *risk* answers are identical on both apps (the shared
+  `contract/risky-approval-cases.json`); this one is the PC being the stricter
+  of the two, decided by the PC's own words table, and it is a refusal to ASK
+  rather than a weaker check. Closing it would need a new field on the row and
+  both apps changed, so it is written down rather than half-built.
 - **The risk line is drawn in each app's own shape.** Both read `risk.why` from
   the PC and both say the same three facts (reversible, reach, why), but the
   desktop writes them as one sentence ("No undo · leaves this machine — there is

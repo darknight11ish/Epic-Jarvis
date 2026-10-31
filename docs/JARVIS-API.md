@@ -548,8 +548,70 @@ a client:
   Hello prompt for a risky card (`lock/rules.rs`
   `approval_needs_local_check`) and waits up to the card's time left plus a
   few seconds (`approval_wait`), after letting the backend's prompt come to
-  the front. The phone does not read it: its approvals are not checked on
-  the PC (step 2 is the phone's half).
+  the front. The phone does not read it, and needs none of it: what the phone
+  sends is checked on the PC by the signed-approval contract (§91) instead -
+  `capabilities.pairing.signed_approvals`, which the phone does read. The
+  sentence that used to stand here ("its approvals are not checked on the PC")
+  was true before 2026-09-29 and is not any more.
+
+### Which cards ask, on both apps - one rule, two checks (2026-10-30)
+
+**The owner's ruling, 2026-10-30:** *"if there is anything that needs approval
+for Jarvis on desktop with the Windows Hello PIN as well, make the Android app
+require a fingerprint to approve the same card - but I can approve the same
+level of card on Android as well."* No route, no field and no backend change
+was needed to grant it - the rule already covered both apps, and this section
+is the one place that says so. The record is
+`decisions.d/2026-10-30-phone-approves-the-same-cards-with-its-fingerprint.md`.
+
+**Which cards ask.** Exactly `jarvis_owner_check.is_risky`'s set: the gate did
+not classify it, its `reach` is `outbound`, its `reversible` is `no`, or it
+carries `raised` (a missing or unreadable field is the risky reading). The same
+rule exists three times - `backend/jarvis_owner_check.py` `is_risky`, the
+desktop's `lock/rules.rs` `is_risky`, the phone's `SecurityRules.riskyByToday`
+(`data/Security.kt`) - and `tools/gen_risky_approval_cases.py` writes the cases
+all three are tested against (`jarvis-desktop/tests/fixtures/` and the phone's
+`contract/risky-approval-cases.json`, holding the PC's own answers). A card
+cannot be risky on one app and safe on the other.
+
+**What the check is, per app.**
+
+| | The PC | The phone |
+|---|---|---|
+| Who runs it | the backend, before it records the yes (`approve_check`) | the app, before it sends anything (`MainActivity.approveItem`) |
+| What it is | Windows Hello - PIN, fingerprint or face | Android's `BiometricPrompt`: a strong fingerprint, or the phone's PIN - the same check App lock uses. "Fingerprint only" in Security drops the PIN. |
+| Cancelled | `403 owner_check: "cancelled"`, nothing approved | nothing is sent and the card stays, untouched |
+| Could not be shown | `403 owner_check: "failed"` | nothing is sent, one sentence |
+| Nothing set up | `403 owner_check: "not_set_up"` ("no lock, no risky approval") | refused, with the button that opens Android's screen-lock settings |
+| A yes | stamped, and only then does the gate act | a fresh signature over the card when signed approvals are on (§91); without one, a device that holds its own key is refused (`no_signature`), and the old shared key still works until the owner retires it (§90.5) |
+
+**The same level, not a lower one.** Nothing about a card's *risk level*
+weakens the phone's check, and nothing about it stops the owner answering
+there: every risky card the phone draws an Approve on is answered after a
+confirmed check. The only cards with no Approve at all are the PC's own
+ceremonies (`jarvis_owner_check.PC_ONLY_ACTIONS`, refused `pc_only` - a decision
+about WHERE a thing can happen, not about how much checking) and a proposal that
+needs a named plan (`needsChoice`, which the decide route cannot carry yet).
+The phone's Security screen can only make the rule stricter ("Every approval");
+its loosest choice is the rule above.
+
+**What the person sees.** The buttons keep the shared words on both apps
+(`CardWords.BUTTONS`: "Deny", "Approve"), and under them one line says what the
+press will ask - "Approve asks for your fingerprint or PIN.", or "Approve asks
+for your fingerprint." under "Fingerprint only". It is worked out from the same
+two things the check is (`SecurityRules.approvalNeedsCheck` and
+`Security.method`), so it cannot promise a check that will not run;
+`ApproveAsksFingerprintTest` in the required `phone-unit-tests` job holds the
+two together.
+
+**One difference between the apps, said plainly.** An action with no written
+words of its own - a plug-in's tool the PC has no phrase for, say - is refused
+on the PC before any prompt appears (`403 owner_check: "unlabelled"`: a dialog
+built on the fallback title would ask the owner to confirm a blank). The phone
+has no field on the row that says so and draws that same fallback title itself,
+so it would still ask. Both apps' *risk* answers are identical (above); this is
+the one place the PC is the stricter of the two, and it is the PC's own table
+(`jarvis_card_words.has_written_title`) that decides it.
 
 ---
 

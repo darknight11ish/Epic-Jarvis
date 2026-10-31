@@ -195,6 +195,50 @@ object SecurityRules {
     fun approvalNeedsCheck(s: Security, item: PendingItem): Boolean =
         riskyByToday(item) || s.approvals == ApprovalCheck.EVERY
 
+    /**
+     * THE OWNER'S RULING OF 2026-10-30, ON THE CARD ITSELF: *"if there is
+     * anything that needs approval for Jarvis on desktop with the Windows Hello
+     * PIN as well, make the Android app require a fingerprint to approve the
+     * same card - but I can approve the same level of card on Android as well."*
+     *
+     * What pressing Approve will ask for, in plain words, or null when it asks
+     * for nothing. Read ONLY from the same two things the check itself is read
+     * from - [approvalNeedsCheck] and [Security.method] - so this line cannot
+     * promise a check that will not happen, or stay silent about one that will.
+     *
+     * IT GATES NOTHING. [approvalNeedsCheck] and the `BiometricGate` prompt
+     * decide; this is the sentence under the buttons. A test
+     * (`ApproveAsksFingerprintTest`) holds the two together: every card that
+     * asks has words, and every card with words asks.
+     *
+     * WHY IT IS THE PHONE'S HALF OF ONE RULE. The desktop's cards that need
+     * Windows Hello are exactly `jarvis_owner_check.is_risky`'s - not
+     * classified, leaves the PC, cannot be undone, or was rushed - and that is
+     * the rule [riskyByToday] implements, held to the PC's own answers by the
+     * shared `contract/risky-approval-cases.json`. So the same card asks on
+     * both apps: Windows Hello on the PC, this phone's own check here, with a
+     * fresh key signature when signed approvals are on
+     * (`net/SignedApproval.kt`, PAIRING-DESIGN §11). Nothing in [Security]
+     * reaches the PC; the PC's gate is unchanged by any of it.
+     *
+     * The sentences name the fingerprint because that is what the owner asked
+     * to be told, and they say "or PIN" only when this phone's method really
+     * allows the PIN. They are the same family as the desktop's own
+     * "Asks Windows Hello - your PIN, fingerprint or face - then shows this
+     * list.", shortened for a card.
+     */
+    fun approveCheckWords(s: Security, item: PendingItem): String? = when {
+        !approvalNeedsCheck(s, item) -> null
+        s.method == CheckMethod.FINGERPRINT_ONLY -> APPROVE_ASKS_FINGERPRINT
+        else -> APPROVE_ASKS_FINGERPRINT_OR_PIN
+    }
+
+    /** A card's Approve asks for a strong fingerprint, and nothing else (Fingerprint only). */
+    const val APPROVE_ASKS_FINGERPRINT = "Approve asks for your fingerprint."
+
+    /** A card's Approve asks for the fingerprint or the phone's PIN - the default method. */
+    const val APPROVE_ASKS_FINGERPRINT_OR_PIN = "Approve asks for your fingerprint or PIN."
+
     /** Shown once, after the first pairing, when App lock is turned on by default. */
     const val SETUP_LOCK_ON =
         "App lock is on. Jarvis will ask for your fingerprint or PIN when it comes back."
