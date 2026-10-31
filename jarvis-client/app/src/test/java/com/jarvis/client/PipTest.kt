@@ -201,8 +201,14 @@ class PipTest {
 
     @Test
     fun `each layout draws exactly one thing, and the aspect ratios are the design's`() {
-        assertTrue(PipLayout.FACE.answerShown)
-        assertTrue("mode 3's fallback shows the answer slot", PipLayout.LIVE_OFF.answerShown)
+        // 2026-10-31: no layout puts the chat's answer into the window any more.
+        assertFalse("mode 1 is the face alone - no answer line", PipLayout.FACE.answerShown)
+        assertFalse("mode 3's fallback shows its own one line, not the answer",
+            PipLayout.LIVE_OFF.answerShown)
+        assertTrue("mode 1 draws the face", PipLayout.FACE.faceShown)
+        assertTrue("mode 3's fallback draws the face", PipLayout.LIVE_OFF.faceShown)
+        assertTrue("mode 3's fallback draws one short line", PipLayout.LIVE_OFF.oneLineShown)
+        assertFalse("mode 1 draws no line at all", PipLayout.FACE.oneLineShown)
         assertFalse(PipLayout.THREAD.answerShown)
         assertTrue(PipLayout.THREAD.threadShown)
         assertTrue(PipLayout.LIVE.liveShown)
@@ -278,8 +284,12 @@ class PipTest {
                                 // window exists (F-13), and the fallback line
                                 // is the state word only.
                                 PipLayout.OFF -> add(PipWords.STANDING_BY)
-                                PipLayout.FACE, PipLayout.LIVE_OFF ->
-                                    add(PipText.firstLine(chatAnswer))
+                                // 2026-10-31: the normal window is the face alone,
+                                // so it draws no answer text at all.
+                                PipLayout.FACE -> {}
+                                // Mode 3's fallback: one fixed short line, never
+                                // the answer.
+                                PipLayout.LIVE_OFF -> add(PipWords.LIVE_OFF)
                                 PipLayout.LIVE -> add(PipWords.LIVE_LISTENING)
                             }
                         }
@@ -300,9 +310,13 @@ class PipTest {
                                 rendered.contains(PipWords.LOCKED))
                             assertFalse("the hidden window must show no answer text",
                                 rendered.any { it.contains(PipText.firstLine(chatAnswer)) })
-                        } else if (layout == PipLayout.FACE) {
-                            assertTrue("the answer layout must still show the chat's first line",
-                                rendered.contains(PipText.firstLine(chatAnswer)))
+                        } else if (layout == PipLayout.FACE || layout == PipLayout.LIVE_OFF) {
+                            // The owner's revision (2026-10-31): the answer line
+                            // is gone from both, so neither may draw it.
+                            assertFalse("the face-first window must show no answer text",
+                                rendered.any { it.contains(PipText.firstLine(chatAnswer)) })
+                            assertTrue("it must still draw the face",
+                                layout.faceShown)
                         }
                         // The fixture's card/email halves are never rendered,
                         // because nothing in the PiP pipeline carries them.
@@ -508,6 +522,100 @@ class PipTest {
         assertNotEquals("an idle window and a running Live session must not draw the same thing",
             PipLayout.fromState(PipMode.FACE, liveRunning = false, privateHidden = false, appLock = false),
             PipLayout.fromState(PipMode.FACE, liveRunning = true, privateHidden = false, appLock = false))
+    }
+
+    // ------------------------------------------------------------------
+    //   7. The owner's revision of 2026-10-31: face-first, icon controls
+    // ------------------------------------------------------------------
+
+    private val windowPath =
+        "jarvis-client/app/src/main/java/com/jarvis/client/ui/PipWindow.kt"
+
+    @Test
+    fun `the normal window is the face alone - no state word and no answer line`() {
+        val window = stripComments(file(windowPath))
+        assertTrue("mode 1 must draw the face alone",
+            window.contains("PipLayout.FACE -> PipFaceOnly(face)"))
+        assertTrue("mode 3's fallback must draw the face with its one fixed line",
+            window.contains("PipLayout.LIVE_OFF -> PipFaceLine(face, PipWords.LIVE_OFF)"))
+        assertFalse("the old answer composable must be gone", window.contains("PipAnswer("))
+        assertFalse("no layout may draw the state word beside the face",
+            window.contains("PipWords.state("))
+        assertFalse("the cut-off answer line must not be drawn",
+            window.contains("PipText.firstLine"))
+        val faceOnly = window.substringAfter("private fun PipFaceOnly(")
+            .substringBefore("\n}")
+        assertTrue("the face must fill the window", faceOnly.contains("fillMaxSize"))
+        assertTrue("it is the app's ONE face", faceOnly.contains("PipFace(face)"))
+        val fallback = window.substringAfter("private fun PipFaceLine(")
+            .substringBefore("\n}")
+        assertTrue("the fallback draws the same face", fallback.contains("PipFace(face)"))
+        assertTrue("the fallback keeps its one short line", fallback.contains("PipLine("))
+        assertTrue("that line is the owner's own LIVE_OFF words",
+            window.contains("PipWords.LIVE_OFF"))
+    }
+
+    @Test
+    fun `the Live controls are icons that keep the exact same two calls`() {
+        val window = stripComments(file(windowPath))
+        val live = window.substringAfter("private fun PipLive(")
+        assertTrue("the Live view draws the face", live.contains("PipFace(face)"))
+        assertTrue("the face must fill the window", live.contains("fillMaxSize"))
+        assertTrue("End Live keeps its runtime call",
+            live.contains("JarvisRuntime.liveEndNow(\"owner\")"))
+        assertTrue("Mic keeps its runtime call", live.contains("JarvisRuntime.liveMute("))
+        assertTrue("the mic toggle still reads LiveRules.MIC_OFF",
+            live.contains("LiveRules.MIC_OFF"))
+        assertTrue("the end control is the end icon",
+            live.contains("R.drawable.ic_pip_end_live"))
+        assertTrue("the mic control chooses the mic-on icon",
+            live.contains("R.drawable.ic_pip_mic_on"))
+        assertTrue("the mic control chooses the mic-off icon",
+            live.contains("R.drawable.ic_pip_mic_off"))
+        assertTrue("the icons carry their words for accessibility",
+            live.contains("contentDescription = description"))
+        assertFalse("the old text-link controls must be gone", live.contains("Quiet("))
+        assertTrue("the status line is still drawn as small text", live.contains("PipLine("))
+        assertTrue("the listening word is still the status", live.contains("PipWords.LIVE_LISTENING"))
+        assertTrue("the status still shows the title when there is one",
+            live.contains("sign.title.isNotEmpty()"))
+    }
+
+    @Test
+    fun `the two Live icon drawables exist and are the ones referenced`() {
+        for (rel in listOf(
+            "jarvis-client/app/src/main/res/drawable/ic_pip_end_live.xml",
+            "jarvis-client/app/src/main/res/drawable/ic_pip_mic_off.xml",
+            "jarvis-client/app/src/main/res/drawable/ic_pip_mic_on.xml",
+        )) {
+            val drawable = file(rel)
+            assertTrue("$rel must be a vector", drawable.contains("<vector"))
+            assertTrue("$rel must be a solid silhouette", drawable.contains("android:fillColor"))
+        }
+        val window = stripComments(file(windowPath))
+        for (name in listOf("ic_pip_end_live", "ic_pip_mic_off", "ic_pip_mic_on")) {
+            assertTrue("$name is not referenced by the window", window.contains(name))
+        }
+    }
+
+    @Test
+    fun `the hidden window is untouched by the face-first revision`() {
+        val window = stripComments(file(windowPath))
+        assertTrue("the hidden layout still draws PipHidden",
+            window.contains("PipLayout.HIDDEN -> PipHidden(face)"))
+        val hidden = window.substringAfter("private fun PipHidden(")
+            .substringBefore("\n}")
+        assertTrue("the hidden face is still dimmed", hidden.contains("DIM_ALPHA"))
+        assertTrue("the hidden face is neutral", hidden.contains("FaceState.STANDBY"))
+        assertTrue("the hidden window still says why", hidden.contains("PipWords.LOCKED"))
+        assertFalse("the hidden window must not draw the conversation",
+            hidden.contains("PipText.threadRows"))
+        // The window's ONLY system action is still Expand, and nothing here
+        // decides anything (the same banned list as section 3's pin).
+        for (banned in listOf("JarvisRuntime.pending", "JarvisRuntime.decide(",
+                              "ApprovalNotifier", "PendingItem", "Approval(")) {
+            assertFalse("the PiP window must not reach $banned", window.contains(banned))
+        }
     }
 
     // ------------------------------------------------------------------
