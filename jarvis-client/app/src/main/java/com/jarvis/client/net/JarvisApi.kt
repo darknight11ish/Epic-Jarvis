@@ -372,10 +372,18 @@ class JarvisApi(
      * native client sends none. It is *not* authentication — §1 says so
      * plainly, and it proves nothing coming from an app with no CORS — but
      * without it the server answers 403 before it ever looks at the token.
+     *
+     * `X-Jarvis-Surface: phone` is the one header that tells the server WHICH
+     * app is asking, so its answers can name the phone's own routes (the owner's
+     * requirement of 2026-10-31). It is additive: `X-Jarvis-Client` stays
+     * exactly as it is, because the server's origin and cloud-escalation rules
+     * read that one. It is not a secret and grants nothing — it only chooses
+     * words — and the PC sends its own `desktop` value the same way.
      */
     fun Request.Builder.authed(): Request.Builder = apply {
         header(TOKEN_HEADER, headerSafe(tokens.token()))
         header(CLIENT_HEADER, CLIENT_VALUE)
+        header(SURFACE_HEADER, SURFACE_VALUE)
         header("Accept", "application/json")
     }
 
@@ -868,6 +876,7 @@ class JarvisApi(
                 .url(target)
                 .post(json.toRequestBody("application/json".toMediaType()))
                 .header(CLIENT_HEADER, CLIENT_VALUE)
+                .header(SURFACE_HEADER, SURFACE_VALUE)
                 .header("Accept", "application/json")
                 .build()
             runCatching {
@@ -4396,6 +4405,19 @@ class JarvisApi(
          * proves nothing. Sent to get past it, never relied on.
          */
         const val CLIENT_VALUE = "hud"
+
+        /**
+         * `X-Jarvis-Surface: phone` (2026-10-31, the owner's requirement that
+         * Jarvis knows which app he is talking from). Additive to
+         * [CLIENT_HEADER], which the server's origin check still reads; this
+         * one is not authentication and is never logged. The desktop sends
+         * `desktop` from its Rust `jarvis_headers` and its HUD page; a request
+         * with no header at all is "unknown" and behaves exactly as before.
+         */
+        const val SURFACE_HEADER = "X-Jarvis-Surface"
+
+        /** The Android app's value for [SURFACE_HEADER]. */
+        const val SURFACE_VALUE = "phone"
 
         /** JSON-quotes and escapes, so a message body cannot break out of its field. */
         fun quote(s: String): String = JarvisJson.encodeToString(String.serializer(), s)

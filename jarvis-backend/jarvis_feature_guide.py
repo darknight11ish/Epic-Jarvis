@@ -955,6 +955,49 @@ def status_label(row: dict) -> str:
     return label
 
 
+def surface_context(row: dict) -> str:
+    """What the CURRENT app adds to this row, or "" (unknown surface / no
+    one-sided fact to add).
+
+    The owner's requirement of 2026-10-31: Jarvis knows whether he is talking
+    from the Android app or the desktop program, so a feature answer says what
+    THIS app can do with that feature. The row's own `surface` and `where`
+    decide the facts - nothing is reworded or invented here:
+      * a PC-only feature asked from the phone says it is on the PC only and
+        where the PC door is;
+      * a phone-only feature asked from the PC says it is on the phone only and
+        where the phone door is;
+      * a both-apps feature adds only which app is asking (its `where` already
+        names both routes), so the answer says nothing new about the feature;
+      * with no header (an older client, a test, a script) this returns "" and
+        the answer is exactly what it was before.
+    A module that cannot load is the same as no header: no line."""
+    try:
+        import jarvis_surface as S
+        current = S.current()
+    except Exception:
+        return ""
+    if current not in ("phone", "desktop"):
+        return ""
+    surface = str(row.get("surface") or "")
+    where = str(row.get("where") or "").strip()
+    asking = ("You are asking from the phone." if current == "phone"
+              else "You are asking from the PC.")
+    if current == "phone":
+        if surface == "desktop":
+            return (asking + " This one is on the PC only - open it there: "
+                    + (where or "the desktop program."))
+        if surface == "phone":
+            return asking + " This one is in this phone app."
+        return asking
+    if surface == "phone":
+        return (asking + " This one is on the phone only - open it there: "
+                + (where or "the Android app."))
+    if surface == "desktop":
+        return asking + " This one is in the desktop program."
+    return asking
+
+
 def explain_words(row: dict) -> str:
     """The exact facts, in plain words, made only from the row and the switches."""
     parts = [f"{row['title']}.", str(row.get("what") or "").strip(),
@@ -970,6 +1013,9 @@ def explain_words(row: dict) -> str:
     if clause:
         parts.append(clause)
     parts.append(change_words(row))
+    context = surface_context(row)
+    if context:
+        parts.append(context)
     parts.append(f"(Feature list group: {row['group']}.)")
     return "\n\n".join(p for p in parts if p is not None and p != "").replace("\n\n\n", "\n\n")
 

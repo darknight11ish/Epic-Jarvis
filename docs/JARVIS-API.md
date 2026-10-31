@@ -29196,3 +29196,104 @@ routes as `ported`; `backend/test_file_to_phone.py` proves the backend half and
 the phone cannot fetch a file the owner did not approve. The action still
 raises its ONE card and the id still lasts ten minutes and works once.
 
+
+## 173. Which app is asking: the phone or the desktop program (added 2026-10-31)
+
+**It is always on. There is no setting, no opt-in and no first-run step.**
+
+Jarvis can now tell whether the owner is talking to it from the **Android app**
+or from the **desktop program**, and it uses that fact in the answers below. A
+request that says neither is `unknown` and behaves exactly as it did before this
+section existed - so an older client, a script or a test changes nothing.
+
+### 173.1 The header
+
+Both clients add one plain header on **every** request:
+
+    X-Jarvis-Surface: phone        -- the Android app (jarvis-client)
+    X-Jarvis-Surface: desktop      -- the desktop program (Rust + the HUD page)
+
+- It is **additive**. The existing `X-Jarvis-Client: hud` header is unchanged,
+  byte for byte, because the origin check and the cloud-escalation rules read
+  it; nothing here replaces it.
+- It is **not authentication and not a secret**. Access is still decided by the
+  origin check and the token, exactly as before. This header only chooses words,
+  it is never logged, and a request cannot gain anything by sending it.
+- Case does not matter (`Phone` is the phone), and anything that is not exactly
+  `phone` or `desktop` reads as `unknown` - over-capture is refused on purpose.
+- One place per client sends it: the phone's `JarvisApi.Request.Builder.authed()`
+  (and the two pairing posts, which are phone requests too), and the desktop's
+  Rust `jarvis_headers` (every Tauri command) plus the HUD page's one
+  `JARVIS.headers()` builder (every page fetch).
+
+### 173.2 Where the PC reads it
+
+The shipped origin gate - `jarvis_owner_check.origin_ok`, which every chat
+request already passes before anything answers - reads the header **once** for
+that request into `jarvis_surface` (a new shipped module). It is kept on the
+request's own thread, so two requests cannot mix surfaces. A missing module or
+odd headers are `unknown`, never a refusal.
+
+It is used by:
+
+- `jarvis_quick.py` - the deterministic quick answers;
+- `jarvis_feature_guide.py` - the feature/limits answers, through each row's
+  own `surface` and `where` fields;
+- `jarvis_agent.py` - one system sentence for the model:
+  "The owner is talking to you from the Android app." /
+  "... from the desktop program." (nothing when unknown).
+
+### 173.3 What changes in the answers
+
+- **Feature answers use the row's own fields with the app that is asking.** A
+  PC-only feature asked from the phone says it is on the PC only and where the
+  PC door is; a phone-only feature asked from the desktop says it is on the
+  phone only and where the phone door is; a both-apps feature keeps its facts
+  and adds only which app is asking. Nothing is reworded: `surface`, `where` and
+  `surface_reason` stay the feature list's own words.
+- **Room-specific quick asks name that app's doors.** "Open the second brain"
+  from the phone says the Brain is in the phone app (tap Brain on Home) and
+  where the PC's window opens; "open Jarvis settings" from the phone says the
+  phone's own Settings are in the app and the PC's settings window opens on the
+  PC. From the desktop the old sentences are unchanged ("Opening the Brain on
+  this PC."), and with no header the old words are returned.
+- **General conversation** gets the one system sentence above, so the model can
+  say "on your phone you can ..." without inventing a route.
+
+No route, no card, no tool and no setting is added or changed by any of this.
+The phone still cannot open a window on the PC, and a phone answer carries no
+route field that would pretend otherwise.
+
+### 173.4 One-sided? No.
+
+Both clients send the header and both apps' routes are named in the answers, so
+there is nothing to record in `docs/ARCHITECTURE.md` §8 as deliberately
+one-sided. `tools/check_parity.py` is unchanged (no route was added).
+
+### 173.5 What proves it
+
+- `backend/test_surface.py` - the header parses to exactly phone/desktop/unknown
+  (including over-capture traps), the origin gate still allows and refuses as
+  before, "open the second brain"/"open Jarvis settings" flip by surface, a
+  phone-only row asked from the desktop and a desktop-only row asked from the
+  phone flip wording using the rows' own `where`, the model's rules-first
+  system turn carries the sentence for a stub model, and with no header every
+  answer is exactly the old one.
+- `jarvis-client`'s `SurfaceHeaderTest` - the one authed builder and the pairing
+  posts send `X-Jarvis-Surface: phone` and still send `X-Jarvis-Client: hud`.
+- the Rust `commands::surface_header_tests` - the one `jarvis_headers` adds
+  `X-Jarvis-Surface: desktop` beside the unchanged client header.
+- `jarvis-backend/jarvis_surface.py` is the byte-identical published base of
+  `backend/jarvis_surface.py`; both `SHIPPED` lists name it.
+
+### 173.6 The HUD question on the phone
+
+The owner's screenshot also showed the phone answering "can I edit the HUD in the
+jarvis app?" with *"Jarvis does not currently offer a built-in method…"*, which is
+false about the product: the HUD's layout is edited on the PC. With the surface
+header, that question from the **phone** is now answered deterministically and
+truthfully - the HUD's layout is edited on the PC (Settings' "Edit HUD in the
+window", or the "Edit HUD" button in the HUD's own header), while this app's own
+look is in Appearance (theme, the face, face size, text size and spacing). No
+phone-side HUD editor is claimed, because there is none. With no header, or from
+the desktop, the old path is untouched; `backend/test_surface.py` pins both.

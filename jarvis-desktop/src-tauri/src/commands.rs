@@ -47,6 +47,27 @@ const CHAT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 /// Value of the `X-Jarvis-Client` header. The server accepts a request whose
 /// `Origin` is absent or unrecognised only when this marks it first-party.
 const JARVIS_CLIENT: &str = "hud";
+
+/// The header that tells the server WHICH app is asking (2026-10-31, the
+/// owner's requirement that Jarvis tailors answers to the phone or the desktop).
+/// Additive to [`JARVIS_CLIENT`], which the origin and cloud-escalation rules
+/// still read; this one chooses words only, is not authentication, and is never
+/// logged. The Android app sends `phone`; a request with no header at all is
+/// "unknown" and behaves exactly as before.
+const JARVIS_SURFACE_HEADER: &str = "X-Jarvis-Surface";
+
+/// The desktop program's value for [`JARVIS_SURFACE_HEADER`].
+const JARVIS_SURFACE: &str = "desktop";
+
+/// Adds the surface header to a header map. Separated from [`jarvis_headers`]
+/// so a test can prove the header is really inserted without an `AppHandle`
+/// (the rest of that function needs the app's saved address and token).
+fn insert_surface_header(headers: &mut reqwest::header::HeaderMap) {
+    headers.insert(
+        JARVIS_SURFACE_HEADER,
+        reqwest::header::HeaderValue::from_static(JARVIS_SURFACE),
+    );
+}
 /// Approval decisions are a single small round trip, so they do get a total
 /// timeout — unlike the chat stream.
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -2026,7 +2047,8 @@ pub(crate) fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::
         .map_err(|e| format!("unable to build the HTTP client: {e}"))
 }
 
-/// `X-Jarvis-Client` and, when configured, `X-Jarvis-Token`.
+/// `X-Jarvis-Client`, `X-Jarvis-Surface: desktop` and, when configured,
+/// `X-Jarvis-Token`.
 pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, String> {
     // Nothing goes anywhere while a refused address is saved - not to it,
     // and not to this PC instead (see `jarvis_base`).
@@ -2036,6 +2058,7 @@ pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, Str
         "X-Jarvis-Client",
         reqwest::header::HeaderValue::from_static(JARVIS_CLIENT),
     );
+    insert_surface_header(&mut headers);
     if let Some(token) = jarvis_token_for(app) {
         let value = reqwest::header::HeaderValue::from_str(&token).map_err(|_| {
             "JARVIS_TOKEN/HUD_TOKEN contains characters that cannot go in a header".to_string()
@@ -8180,5 +8203,49 @@ mod second_factor_tests {
             "changing the token must ask"
         );
         assert!(connection_change_needs_hello(true, true));
+    }
+}
+
+#[cfg(test)]
+mod surface_header_tests {
+    use super::*;
+
+    /// The owner's requirement of 2026-10-31: the desktop program says so, so
+    /// Jarvis can tailor its answers. The header itself is what the backend
+    /// reads; `X-Jarvis-Client` is unchanged beside it.
+    #[test]
+    fn the_desktop_sends_its_surface_header() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        insert_surface_header(&mut headers);
+        assert_eq!(
+            headers
+                .get(JARVIS_SURFACE_HEADER)
+                .and_then(|value| value.to_str().ok()),
+            Some(JARVIS_SURFACE),
+            "every desktop request must carry its surface"
+        );
+        assert_eq!(JARVIS_SURFACE_HEADER, "X-Jarvis-Surface");
+        assert_eq!(JARVIS_SURFACE, "desktop");
+        assert_eq!(
+            headers
+                .get("X-Jarvis-Client")
+                .and_then(|value| value.to_str().ok()),
+            None,
+            "the surface helper adds only its own header"
+        );
+    }
+
+    /// One place, and it is the function every desktop call already uses.
+    #[test]
+    fn the_one_headers_function_inserts_the_surface() {
+        let source = include_str!("commands.rs");
+        assert!(
+            source.contains("pub fn jarvis_headers(app: &AppHandle)"),
+            "jarvis_headers must still be the single headers builder"
+        );
+        assert!(
+            source.contains("insert_surface_header(&mut headers);"),
+            "jarvis_headers must insert the surface header"
+        );
     }
 }
