@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 144,
+  "feature_count": 146,
   "features": [
     {
       "id": "typing",
@@ -3033,6 +3033,57 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Write a note for you",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "notes-editor",
+      "name": "Browse and edit your notes",
+      "group": "Notes and files",
+      "surface": "both",
+      "where": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Browse and edit your notes",
+        "turn_off": "turn off Browse and edit your notes",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
+        "search": [
+          "Browse and edit your notes"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
+        "search": [
+          "browse and edit your notes"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Browse and edit your notes",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
@@ -7831,6 +7882,57 @@
       "label_note": ""
     },
     {
+      "id": "protected-items",
+      "name": "Protected from Jarvis",
+      "group": "Safety",
+      "surface": "both",
+      "where": "Settings, Protected from Jarvis - in both apps.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Protected from Jarvis",
+        "turn_off": "turn off Protected from Jarvis",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Settings, Protected from Jarvis - in both apps.",
+        "search": [
+          "Protected from Jarvis"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Settings, Protected from Jarvis - in both apps.",
+        "search": [
+          "protected from jarvis"
+        ],
+        "found": true
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Protected from Jarvis",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "reminder-actions",
       "name": "A reminder that opens something, or asks to do one task",
       "group": "The PC itself",
@@ -10737,6 +10839,20 @@
       "status": "planned",
       "owner": "setup-ui",
       "reason": "typed switch and four routes built; desktop and phone Settings rows are the calendar UI slice's"
+    },
+    {
+      "kind": "feature",
+      "id": "notes-editor",
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row."
+    },
+    {
+      "kind": "feature",
+      "id": "protected-items",
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row."
     }
   ],
   "settings_only": [
@@ -11913,7 +12029,7 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 71
+      "not-a-setting": 73
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 29,
@@ -11930,11 +12046,11 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 71,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 73,
     "Switchable / Adjustable (Typed & Settings)": 43,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2
   },
-  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real."
+  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features)."
 }

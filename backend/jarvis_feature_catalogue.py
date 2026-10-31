@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 144 rows from features/features.json.
+The owner's feature list, as data: 146 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 81cdef48cf1364acf4d0ac4068ca3f68e5f49c0a6a24161e149c254a5f4390a3); the apps' Features pages read their own
+`features/features.json` (sha256 4a58c71bb297c375631d89652bcb553bea637b80995785848ded8ff4231ec6bb); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "81cdef48cf1364acf4d0ac4068ca3f68e5f49c0a6a24161e149c254a5f4390a3"
+SOURCE_SHA256 = "4a58c71bb297c375631d89652bcb553bea637b80995785848ded8ff4231ec6bb"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -653,6 +653,18 @@ FEATURES = (
         "limit": "Only the note apps this PC is set up for. With App lock on, adding a note to a running task needs an unlock first.",
         "surface": "both",
         "covers": ["notes-and-wiki"],
+    },
+    {
+        "id": "notes-editor",
+        "group": "Notes and files",
+        "title": "Browse and edit your notes",
+        "what": "Browse and search every note in your Obsidian vault from the PC or the phone, open any note, and save a change.",
+        "where": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
+        "asks": "Reading and searching ask nothing. A save replaces the whole note, so it raises one approval card, and denying it changes nothing.",
+        "limit": "Obsidian vault only. This first slice does not create, delete or rename notes, and a note change waits while the turn has read outside text.",
+        "surface": "both",
+        "aliases": ["notes editor", "the notes editor", "vault editor"],
+        "covers": ["notes-editor"],
     },
     {
         "id": "folders",
@@ -1662,5 +1674,17 @@ FEATURES = (
         "surface": "both",
         "aliases": ["data sandbox", "python scripts"],
         "covers": ["settings.sandbox"],
+    },
+    {
+        "id": "protected-items",
+        "group": "Safety",
+        "title": "Protected from Jarvis",
+        "what": "A list of folders, files and programs Jarvis may not touch: blocked, or read-only meaning it may read but never act.",
+        "where": "Settings, Protected from Jarvis - in both apps.",
+        "asks": "Adding by hand on the PC is immediate because it only tightens. Adding by asking in chat raises one card, and removing an entry always raises one card.",
+        "limit": "A program is matched by its executable name. The v1 gaps are named in the docs, section 171.5.",
+        "surface": "both",
+        "aliases": ["protected from jarvis", "the protected list", "protected list", "protect a folder", "protect a file", "protect a program", "block a folder from jarvis"],
+        "covers": ["protected-items", "protection", "settings.protection"],
     },
 )

@@ -378,3 +378,98 @@ Three new rows, continuing the sequence: **139** `calendar-hud` (DRIVEN, A1-A8),
 - Environment boundary: `pass9/desktop-privilege-evidence.txt`.
 - Matrix: the "UPDATED 2026-10-31, pass 9" block and rows 139-141.
 - Defects: `docs/defect-register.tsv` (DEF-025) and `docs/DEFECT-REGISTER.md`.
+
+---
+
+## Pass 10 — the PiP Off fix confirmed on the new APK, the calendar's write half driven, the notes editor and Protected from Jarvis reached (2026-10-31 05:40–08:30 PDT)
+
+**What pass 10 was.** The morning pass after the 2026-10-31 deploy, in two halves with the same two
+instruments pass 9 used. **The phone half** (2026-10-31 07:54–08:30 PDT) ran on **0.2.3326 /
+versionCode 1000003326**: `lastUpdateTime 2026-10-31 06:19:17`, `firstInstallTime` unchanged at
+2026-10-09 22:14:29 (install-over, pairing kept), 1080×2412; the client release is "Jarvis for
+Android 0.2.3326 (main @ 8f7e165)", which includes #1017 (notes), #1018 (PiP Off) and #1019
+(Protected from Jarvis). It was driven by **field-test's own shell, Low Mandatory Level
+`S-1-16-4096`**, through `adb` (`am start`, `uiautomator dump`, `screencap`); Jarvis screens are
+FLAG_SECURE, so the accessibility dumps are the record. **The desktop half** was **the Lead's own HUD
+drive** on desktop **0.2.376** (installed 06:13 PDT) against the live backend from the deployed wave
+(`/api/protection` 200, `/api/notes/list` 200, vault configured), through **Windows UI Automation** -
+the app's real controls, not screenshots.
+
+### The PiP "Off" retest - PASS on 0.2.3326 (DEF-023/F-13's on-device retest is DONE)
+
+| step | what was driven | measured result | verdict |
+|---|---|---|---|
+| 1 | PiP plate, Off selected, press Home | plate reads the four choices plus **"Off. Leaving Jarvis just puts it in the background."**; `dumpsys activity` has **no `mode=pinned` task**, top task is the launcher, `p10-pip-off-home.png` is the launcher alone - **no window** | **PASS** |
+| 2 | force-stop + fresh start, Off still stored, press Home | `am force-stop com.jarvis.client` (pid gone), relaunch (new pid); Off still stored; Home → **no pinned task**, launcher top, `p10-pip-off-fresh-home.png` launcher alone - **no window** | **PASS** |
+| 3 | the three non-Off modes still enter PiP | "The face and the answer" → pinned task + window (`p10-pip-mode1.png`); "The conversation" → pinned task + window (`p10-pip-conv.png`); "Jarvis Live" → pinned task + window (`p10-pip-live.png`) | **PASS** |
+| 4 | restore the found state | Off re-selected (checked node `[90,792][301,936]`), Home → no pinned task, `p10-pip-off-restored.png` launcher alone | **PASS** |
+
+**So the pass-9 F-13 contradiction does not reproduce on 0.2.3326**: with Off stored, the window does
+what the plate says. DEF-023's on-device retest is **done and passes**; its register row is the
+owner's to close (this fold records the evidence and does not close it).
+
+### Phone pass 10 - what was reached, and what was not
+
+| step | what was driven | measured result | verdict |
+|---|---|---|---|
+| 2 | Protected from Jarvis, live | Settings search "protected" → "1 setting matches." → PROTECTED FROM JARVIS with the plate's own words (what may not be touched; Blocked / Read-only), the empty state ("Nothing is protected yet. Add folders, files and programs on your PC - or ask Jarvis in chat from here and it will raise a card… Removing one asks for one card too."), and **no Add/Remove control by design** - nothing added or removed (`p10-se-res.xml`) | **PASS (read only)** |
+| 3 | Notes editor, live | the plate exists (Brain → "What Jarvis knows about you" → NOTES) but drew **"Hidden. Tap Show and confirm it is you."** + a `Show` button; the owner's hidden-lists setting is ON and was not changed, so the content read needs the owner's fingerprint - **not tapped**. Settings search "notes" → WHAT JARVIS CAN REACH (no Notes settings row by design). The vault file itself is 205 B (`C:\Users\pcadmin\Documents\Obsidian Vault\Welcome.md`) | **PARTIAL / BLOCKED (owner Show)** |
+| 4 | DEF-025 evidence, live | one clearly-named test event **"ZZ pass10 def025"**, 2026-10-31 09:00, created through the phone's own Add; with hidden lists ON the drawn title is `(hidden)` (node `bounds=[36,1668][204,1721]`) and the **same accessibility tree holds the full title** as class `android.widget.TextView`, `text='ZZ pass10 def025, Saturday 31 October at 09:00.'`, `bounds=[36,1883][948,1922]`. Deleted through the app's own flow ("Deleted." / "Nothing on this day."); the live `calendar.db` was read back **`events` 0**, no titles | **PASS: reproduced (evidence for open DEF-025)** |
+| 5 | Calendar widget | long-press Home → Widgets worked; the picker lists **"Jarvis Calendar 4 × 2"** with the quick-link and board widgets; two adb placement attempts (`input swipe` long-press-drag, then `input draganddrop 726 899 540 1500 1500`) placed a Google "Collections Widget" instead and nothing from Jarvis. The accidental widget was removed via its own "Remove widget" and the launcher was verified clean (`p10-home-after-drag.xml`, `p10-editmenu.xml`, `p10-home-cleaned.xml`); net effect on the owner's launcher: none | **NOT-REACHABLE (placement)** |
+| 6 | Menus / settings search | "protected" landed right; "notes" → 1 match → WHAT JARVIS CAN REACH (by design); SHOW OR HIDE MENUS read ("This hides menus on this device only." / "Hiding a menu only tidies it away…" / always-visible list / "Nothing is hidden." / per-menu rows). **The hide → confirm → unhide loop was NOT completed** and no row was toggled, so nothing was left changed | **PARTIAL** |
+| 7 | Sanity | force-stop then launch: new pid 31002, home draws "Connected", no `FATAL EXCEPTION` / `AndroidRuntime` crash lines for `com.jarvis.client` since the launch; `versionName=0.2.3326`, `versionCode=1000003326`, 1080×2412; pairing intact | **PASS** |
+
+### Lead's desktop drive - what passed, what failed, what was blocked
+
+| part | measured result | verdict |
+|---|---|---|
+| Calendar write half (A9–A12) | add "ZZ deploy test delete me" (`/api/calendar` 1 event, `id c1df84ec7b8`), edit to "ZZ edit test EDITED" (the change stuck), two-step delete ("Press again to delete") → `/api/calendar` 0 events; every step read back live, 0 events left | **PASS** |
+| Protected from Jarvis card | heading + the PC's own sentence + empty state + the three pickers `Add a folder…` / `Add a file…` / `Add a program…`; `GET /api/protection` 200, `count: 0`, `modes: ["blocked","readonly"]`. Add/remove by hand NOT driven on purpose (an entry cannot be undone without the owner's removal card) | **PASS (read); add/remove BLOCKED (owner card)** |
+| Chat about its own features | 4 questions after the deploy: 0 of 4 accurate (pass 9: 2 of 8) - notes edit claimed impossible, protection invented a permissions workaround, calendar "smart features" unknown/generic, notes read/edit understated | **FAIL (quality defect; fix in progress)** |
+| "open settings" / "open the second brain" typed in the HUD | "Opening Jarvis settings on this PC." - no Settings window; "I have asked this PC to open brain." - nothing opened, "brain" treated as a program; a direct `POST /api/chat` returned a model answer with no open field (the HUD page sends the owner's message with provenance "typed"; the hand-made POST did not) | **FAIL (both fixed on branches for the next build)** |
+| Notes editor Brain card | NOT DRIVEN: the Brain window could not be opened from the HUD (tray "Open the Brain" unreachable through UIA; the typed phrase is the defect above). The editor is live at the API: list 200, read 200 (sha `add7b780…`), save → one `edit_vault_note` card, **denied**, bytes unchanged | **NOT-REACHABLE (this build)** |
+
+### What the matrix got from pass 10
+
+Six new rows, continuing the sequence: **142** the notes editor (SCREEN, with its PARTIAL/BLOCKED
+limits named and the API-level drive recorded), **143** Protected from Jarvis (DRIVEN, read-only),
+**144** the desktop calendar's write half (DRIVEN, A9–A12), **145** the notes editor's Brain card
+(BLOCKED, not-reachable this build), **146** the phone's home-screen calendar widget (BLOCKED,
+not-reachable placement), **147** show-or-hide menus (SCREEN, PARTIAL note). Rows **138**
+(`android-pip`) and **141** (`feature-qa`) are updated with dated notes; their states do not change.
+Inventory after the pass: **36 DRIVEN / 77 SCREEN / 21 BLOCKED / 13 NOT-TESTABLE = 147 rows** (was
+34 / 75 / 19 / 13 = 141; 2 new DRIVEN, 2 new SCREEN, 2 new BLOCKED).
+
+**Defects.** **DEF-025 is reproduced on 0.2.3326** and stays **OPEN** (fix PR #1026 awaits CI/merge
+and an on-device confirm); its register row carries the pass-10 sentence. **No new defect row came
+from pass 10** other than that reproduction - the two open-place FAILs already have fixes on branches
+and are recorded here for the next build's drive, not filed as new rows.
+
+### Honest limits of pass 10
+
+- **BLOCKED / PARTIAL / NOT-REACHABLE are never passes.** Step 3 (owner's Show), step 5 (launcher
+  placement), step 6 (hide/unhide loop), the Protected add/remove half, the notes Brain card and the
+  desktop calendar's owner-only A13 (outside calendars, credentials) are blocks, not failures.
+- **The phone's window is FLAG_SECURE**: screenshots of Jarvis content are black; the dumps are the
+  evidence, and that is also why DEF-025's pixels were not checked - the dump is the proof, the
+  owner's eyes still decide whether it is visible or TalkBack-only.
+- **Two deliberate side effects, both undone and verified:** one test event created then deleted
+  (live DB count 0) and one accidental launcher widget added then removed (home clean). No approval
+  card was approved or denied; the one card the desktop raised (the notes save) was denied.
+- **The desktop drive could not re-drive the notes Brain card or the open-place fixes** - the former
+  needed the HUD to open the Brain, which is the open-place defect; both are for the next build.
+- **"Open my calendar" was not credited from the typed-chat path** (the rail's calendar was verified
+  in pass 9; this pass did not re-drive the phrase) and the AI chat answers were not fixed by this
+  pass - only measured.
+
+### Evidence index for pass 10
+
+- The phone half, one line per step and the honest limits: `.dsh-scratch/FIELD-TEST-2026-10-31/pass10/NOTES.md`
+  (142 lines, 198 captures named).
+- The Lead's desktop drive: `.dsh-scratch/FIELD-TEST-2026-10-31/pass10/lead/DESKTOP-DRIVE.md`.
+- Phone dumps and screenshots: `.dsh-scratch/FIELD-TEST-2026-10-31/pass10/p10-*.xml/.png/.txt`
+  (`p10-pip-*`, `p10-se-res.xml`, `p10-knows3.xml`, `p10-sd-res.xml`, `p10-def-*.xml`,
+  `p10-widgets-jarvis.xml`, `p10-home-*.xml`, `p10-editmenu.xml`, `p10-menus*.xml`, `p10-s-res.xml`,
+  `p10-after-relaunch.xml`, `p10-cal-*.xml`).
+- Matrix: the "UPDATED 2026-10-31, pass 10" block and rows 138, 141, 142-147.
+- Defects: `docs/defect-register.tsv` (DEF-025, reproduced) and `docs/DEFECT-REGISTER.md`.
