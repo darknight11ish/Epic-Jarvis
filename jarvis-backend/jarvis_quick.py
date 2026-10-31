@@ -4607,11 +4607,11 @@ def _feature_capabilities(s: str) -> Optional[Intent]:
     """Capability questions the feature list can answer, or None (2026-10-31)."""
     m = _CAPS_PROTECT.fullmatch(s)
     if m:
-        # The verb is part of the SUBJECT here ("protect a folder"), so the
-        # guide keeps it: no row has it, and it says so, rather than answering
-        # with the allow-list row or inventing a workaround.
-        return Intent("feature_capabilities",
-                      {"words": "protect a folder from you", "strip_verbs": False})
+        # "can I protect a folder from you?" is the Protected from Jarvis row
+        # (the owner's list, 2026-10-31). The row's own title is the area, so
+        # the answer is that row's words - never a filesystem-permissions
+        # workaround.
+        return Intent("feature_capabilities", {"words": "protected from jarvis"})
     m = _CAPS_EDIT.fullmatch(s)
     if m:
         return Intent("feature_capabilities",

@@ -161,9 +161,8 @@ def t_the_eight_field_test_questions_are_answered_without_the_model():
 
 def t_the_calendar_answers_are_the_lists_own_rows():
     """"what can you do/smart features/add something to the calendar" - rows."""
-    for tag in ("Q1", "Q2", "Q3"):
+    for tag in ("Q1", "Q3"):
         got = ask({"Q1": "what can you do with the calendar?",
-                   "Q2": "can you add something to my calendar?",
                    "Q3": "what are the smart features of the calendar?"}[tag])
         check(f"{tag} answers from the fixed path", got is not None
               and got.intent == "feature_capabilities",
@@ -179,36 +178,56 @@ def t_the_calendar_answers_are_the_lists_own_rows():
               "Calendar card in the HUD (month, week and day views)" in reply, reply[:400])
         check(f"{tag} names the Add form's own rule",
               "Adding, changing or deleting an event is that card" in reply, reply[:400])
+    # The ADDING question is the adding row only: the read-only iCal row has
+    # nothing to do with adding, and the old answer listed it because "address"
+    # contained "add".
+    got = ask("can you add something to my calendar?")
+    check("Q2 answers from the fixed path", got is not None
+          and got.intent == "feature_capabilities", got.intent if got else "the model")
+    if got is not None:
+        reply = got.reply or ""
+        check("Q2 names Jarvis Calendar's own adding rule",
+              says_row(reply, "jarvis-calendar") and
+              "Adding, changing or deleting an event is that card" in reply, reply[:500])
+        check("... and not the read-only iCal row, which cannot add anything",
+              "Read your own calendar" not in reply, reply[:300])
 
 
-def t_the_notes_answer_says_editing_is_not_a_feature():
-    """"what can you edit in my notes?" - no invented editing, the note row."""
+def t_the_notes_answer_is_the_notes_editor_row():
+    """"what can you edit in my notes?" - the notes editor row, not a refusal."""
     got = ask("what can you edit in my notes?")
     check("the notes question is the fixed answer", got is not None
           and got.intent == "feature_capabilities", got.intent if got else "the model")
     if got is None:
         return
     reply = got.reply or ""
-    check("... and says plainly it is not one of my features",
-          "That is not one of my features on this PC." in reply, reply[:400])
-    check("... and answers with the list's own note row",
-          says_row(reply, "notes-write"), reply[:400])
-    check("... and does not invent note editing",
-          "edit" not in reply.lower().replace("i cannot edit", ""), reply[:400])
+    check("... it is NOT the old 'not one of my features' answer",
+          "That is not one of my features on this PC." not in reply, reply[:400])
+    check("... and it is the list's own notes-editor row",
+          says_row(reply, "notes-editor", ("title", "where", "asks", "limit")),
+          reply[:500])
+    check("... with its own limits named, not invented",
+          "does not create, delete or rename" in reply, reply[:500])
+    check("... and nothing from a different note feature",
+          "Write a note for you" not in reply, reply[:300])
 
 
-def t_the_protection_answer_says_not_a_feature_and_invents_nothing():
-    """"can I protect a folder from you?" - the list has no such row."""
+def t_the_protection_answer_is_the_protected_row_and_invents_nothing():
+    """"can I protect a folder from you?" - the Protected from Jarvis row."""
     got = ask("can I protect a folder from you?")
     check("the protection question is the fixed answer", got is not None
           and got.intent == "feature_capabilities", got.intent if got else "the model")
     if got is None:
         return
     reply = got.reply or ""
-    check("... says plainly it is not one of my features",
-          "That is not one of my features on this PC." in reply, reply[:400])
-    check("... and points at the whole list",
-          "Everything Jarvis can do" in reply, reply[:400])
+    check("... it is NOT the old 'not one of my features' answer",
+          "That is not one of my features on this PC." not in reply, reply[:400])
+    check("... and it is the list's own protected-items row",
+          says_row(reply, "protected-items", ("title", "where", "asks", "limit")),
+          reply[:500])
+    check("... naming both modes and the executable-name match",
+          "blocked" in reply.lower() and "read-only" in reply.lower()
+          and "executable name" in reply, reply[:500])
     for invented in ("system permissions", "permission", "filesystem", "move that folder"):
         check(f"... and never offers the invented {invented!r}",
               invented not in reply.lower(), reply[:400])
@@ -300,6 +319,46 @@ def t_an_ambiguous_area_asks_which_one_never_guesses():
           reply[:400])
     check("... and asks which one, never inventing one",
           "Say which one" in reply, reply[:400])
+
+
+def t_every_feature_row_in_the_list_is_answerable():
+    """No row can silently be non-answerable: each answers to its own name.
+
+    The 2026-10-31 rows made this worth pinning: a row that exists in
+    `features/features.json` but that `capabilities()` cannot reach would be a
+    feature the chat still cannot talk about. Titles must resolve to that one
+    row (its own words in the answer); ids must at least be named - either as
+    the row itself or in an honest "more than one feature" candidate list.
+    """
+    rows = __import__("json").loads(
+        (REPO / "features" / "features.json").read_text(encoding="utf-8"))
+    catalogue = {r["id"]: r for r in FG.features()}
+    check("the generated catalogue has every row the JSON has",
+          set(catalogue) == {r["id"] for r in rows}, len(catalogue))
+    bad_title, bad_id = [], []
+    for row in rows:
+        fid = row["id"]
+        if fid not in catalogue:
+            continue
+        by_title = FG.capabilities(row["title"])
+        named = [f["id"] for f in by_title.get("features", [])]
+        if (by_title.get("kind") not in ("rows", "feature") or fid not in named
+                or row["title"] not in by_title.get("words", "")):
+            bad_title.append((fid, by_title.get("kind"), named[:3]))
+        by_id = FG.capabilities(fid)
+        named = ([f["id"] for f in by_id.get("features", [])]
+                 + [c["id"] for c in by_id.get("candidates", [])])
+        if by_id.get("kind") == "unknown" or fid not in named:
+            bad_id.append((fid, by_id.get("kind"), named[:3]))
+    check(f"all {len(rows)} rows answer to their own TITLE with their own words",
+          not bad_title, bad_title[:10])
+    check(f"all {len(rows)} rows are reachable by their ID (or listed as a candidate)",
+          not bad_id, bad_id[:10])
+    for fid in ("notes-editor", "protected-items"):
+        got = FG.capabilities(fid)
+        check(f"the new 2026-10-31 row {fid!r} is answerable",
+              got.get("kind") != "unknown"
+              and fid in [f["id"] for f in got.get("features", [])], got.get("kind"))
 
 
 def t_a_non_feature_question_still_reaches_the_model():

@@ -78,6 +78,8 @@ has one exact sentence to reword and the fixed phrases have one to say as-is.
 """
 from __future__ import annotations
 
+import re
+
 from typing import Optional
 
 try:                                    # shipped beside this module
@@ -1215,14 +1217,36 @@ def _capability_title_tokens(row: dict) -> tuple:
 
 def _capability_rows(words, *, strip_verbs: bool = True) -> list:
     """The rows whose own names (or whose group's name) match the area words."""
+    rows = features()
+    raw = _norm(str(words or ""))
+    # A row's own TITLE or alias, said exactly, is that row - always. This is
+    # what makes every feature in the list answerable by its own name, even
+    # when its words would otherwise be eaten as filler ("About Jarvis").
+    for row in rows:
+        if raw and (raw == _norm(row["title"])
+                    or any(raw == _norm(alias) for alias in row.get("aliases") or ())):
+            return [row]
     query = _capability_query(words, strip_verbs=strip_verbs)
     if not query:
+        # An id made only of filler words ("now", "about") still names its own
+        # row: fall back to the exact id rather than answering "not a feature".
+        for row in rows:
+            if raw and raw == _norm(row["id"].replace("-", " ")):
+                return [row]
         return []
     tokens = tuple(sorted({w for w in _singular_all(query).split() if w not in _STOP}))
     if not tokens:
+        for row in rows:
+            if raw and raw == _norm(row["id"].replace("-", " ")):
+                return [row]
         return []
-    rows = features()
-    # A feature whose own name is the whole multi-word phrase wins first:
+    # A multi-word id said exactly ("phone-notifications") wins over the loose
+    # token hits, which would otherwise answer with a neighbouring feature.
+    if len(raw.split()) >= 2:
+        for row in rows:
+            if raw == _norm(row["id"].replace("-", " ")):
+                return [row]
+    # A feature whose own name is the whole multi-word phrase wins next:
     # "prompt coach" is one row, and it must not be diluted by the loose title
     # words of nearby rows.
     if strip_verbs and len(tokens) >= 2:
@@ -1259,13 +1283,22 @@ def _singular_all(text: str) -> str:
     return " ".join(_singular(w) for w in _norm(text).split())
 
 
+#: The suffix forms a verb stem may take in the catalogue's own prose, so the
+#: match is on a WHOLE word's beginning: "adding" is the verb add, "address" is
+#: not (the old plain-substring test called the read-only iCal row an adding
+#: feature because "address" contains "add").
+_VERB_SUFFIX = r"(?:s|e|es|ed|ing|ion|ions|er|ers|ment|ments)?"
+
+
 def _capability_verb_supported(verb: str, rows: list) -> bool:
     """Does any matching row's own words show it can do this asking verb?"""
     want = _CAP_VERB_WORDS.get(verb, (verb,))
+    patterns = [re.compile(r"(?<![a-z0-9])" + re.escape(word) + _VERB_SUFFIX
+                           + r"(?![a-z0-9])") for word in want]
     for row in rows:
         blob = " ".join(str(row.get(k) or "").lower()
                         for k in ("title", "what", "where", "asks", "limit"))
-        if any(word in blob for word in want):
+        if any(rx.search(blob) for rx in patterns):
             return True
     return False
 
@@ -1319,6 +1352,14 @@ def capabilities(words, *, verb: str = "", strip_verbs: bool = True) -> dict:
     if not rows:
         return {"ok": False, "kind": "unknown",
                 "words": CAPABILITY_NOT_A_FEATURE + " " + CAPABILITY_TAIL}
+    # An asking verb narrows an area to the rows that really do it: "what can
+    # you edit in my notes?" is the notes editor, not every note feature. When
+    # no matching row shows the verb, the rows stay as they are and the answer
+    # says plainly that the ability is not there.
+    if verb:
+        supporting = [r for r in rows if _capability_verb_supported(verb, [r])]
+        if supporting:
+            rows = supporting
     supported = not verb or _capability_verb_supported(verb, rows)
     if verb and not supported:
         head = (f"That is not one of my features on this PC. I cannot {verb} "
@@ -1578,6 +1619,11 @@ NO_COMMAND_REASON = {
     "typing": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "talk-button": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "voice-training": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # Added with the two 2026-10-31 rows: the notes editor and Protected from
+    # Jarvis are abilities/read-write actions, not stored settings with a switch
+    # of their own. Their cards and Settings row carry the real rules.
+    "notes-editor": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    "protected-items": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "voice-check": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "interrupt": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "live": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
