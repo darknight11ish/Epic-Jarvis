@@ -749,6 +749,20 @@ permissions = [
   "allow-add-folder",
   "allow-remove-folder",
   "allow-import-notion",
+  # "Protected from Jarvis" (the owner's request of 2026-10-31; contract
+  # `.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md`): the list (a read);
+  # a folder or file chosen through the Windows pickers - the pickers run in
+  # Rust, so this window gets only the chosen path; the programs running now
+  # (names only); adding ONE entry, the owner's direct act in Settings (the
+  # backend is still the one that refuses a relative or missing path, an
+  # unknown program or a duplicate, in its own sentence); and removing ONE
+  # entry, which is loosening and raises ONE approval card, held on a stale
+  # link. No raw JSON editing, no bulk import.
+  "allow-get-protection",
+  "allow-protection-pick",
+  "allow-protection-programs",
+  "allow-add-protection",
+  "allow-remove-protection",
   # "Backups" (backend/jarvis_backup.py, backup.patch, the owner's decision
   # of 2026-09-27): one locked backup file with a recovery code shown once.
   # Setting the folder reuses the Windows folder picker above and raises
