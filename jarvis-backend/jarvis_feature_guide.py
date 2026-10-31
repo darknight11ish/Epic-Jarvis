@@ -177,9 +177,30 @@ def _tokens(text) -> tuple:
     return tuple(_singular(w) for w in _norm(text).split())
 
 
+#: Owner names that mean one catalogue row but are NOT in the row's own
+#: `aliases` (which stay the list's data to keep). They are matched exactly,
+#: like an alias, so they can only ever resolve to that one row - never a
+#: guess from a shared word. "Today board" is the owner's name for the "Today"
+#: row (the live audit of 2026-10-31 asked about it); "quiet hours", "thinking
+#: level", "personality" and "memories" are the settings-shaped names the same
+#: audit found the model mis-describing.
+_OWNER_ALIASES = {
+    "today": ("today board",),
+    "notifications": ("quiet hours", "notification settings", "do not disturb"),
+    "attention-budget": ("thinking level", "interruption level"),
+    "memory-saved": ("memories", "saved memories"),
+    "memory-known": ("what you remember about me", "memory list"),
+}
+
+
+def _row_aliases(row: dict) -> tuple:
+    """The row's own aliases plus the owner names this module knows for it."""
+    return tuple(row.get("aliases") or ()) + tuple(_OWNER_ALIASES.get(row["id"], ()))
+
+
 def _name_tokens(row: dict) -> tuple:
     out = _tokens(row["id"].replace("-", " ")) + _tokens(row["title"])
-    for alias in row.get("aliases") or ():
+    for alias in _row_aliases(row):
         out += _tokens(alias)
     return out
 
@@ -192,7 +213,7 @@ def _extra_tokens(row: dict) -> tuple:
         for word in _tokens(row.get(key) or ""):
             if len(word) >= 4 and word not in _STOP:
                 out.append(word)
-    for alias in row.get("aliases") or ():
+    for alias in _row_aliases(row):
         for word in _tokens(alias):
             if len(word) >= 4 and word not in _STOP:
                 out.append(word)
@@ -219,7 +240,7 @@ def _exact(row: dict, query: str) -> bool:
     """
     if query in (_norm(row["id"].replace("-", " ")), _norm(row["title"])):
         return True
-    return any(query == _norm(alias) for alias in row.get("aliases") or ())
+    return any(query == _norm(alias) for alias in _row_aliases(row))
 
 
 def _contains_all(have: tuple, want: tuple) -> bool:
@@ -1487,6 +1508,200 @@ def capabilities(words, *, verb: str = "", strip_verbs: bool = True) -> dict:
     return {"ok": True, "kind": "rows",
             "features": [{"id": r["id"], "title": r["title"]} for r in rows],
             "words": _capability_rows_words(rows, display) + " " + CAPABILITY_TAIL}
+
+
+# --------------------------------------------------------------------------
+#   Discussion shapes: limits, asks-first, which app, why, difference,
+#   overview, and the owner's own exact names (2026-10-31, pass-11 audit)
+# --------------------------------------------------------------------------
+# The audit measured that `tell me about X` and `how does X work` were correct
+# for 25/25 features, `what are the limits of X` for 3/25 - the other 22 were
+# the model inventing limits or describing a different product - and that
+# "Today board", "quiet hours", "thinking level", "personality" and "memories"
+# did not resolve. These shapes quote the SAME row `explain()` quotes; they
+# never add a fact and never guess which row was meant.
+
+def _discussion_got(words):
+    """The row/group/ambiguity `find()` returns, without the cloud-sync side."""
+    if CATALOGUE is None:
+        return {"kind": "missing"}
+    return find(words, loose=True)
+
+
+def _discussion_ambiguous(rows: list) -> dict:
+    return {"ok": False, "kind": "ambiguous",
+            "candidates": [{"id": r["id"], "title": r["title"]} for r in rows],
+            "words": _ambiguous_words(rows) + " " + CAPABILITY_TAIL}
+
+
+def _discussion_unknown() -> dict:
+    # The same hard sentence the capability path uses, for the SAME reason:
+    # the question names nothing in the list. ("Zero overlap" - a word shared
+    # with a row's prose but not its name is handled by `find(loose=True)`
+    # only when the question itself asked about a feature; here the owner
+    # named a thing, so an unknown name gets the honest sentence.)
+    return {"ok": False, "kind": "unknown",
+            "words": CAPABILITY_NOT_A_FEATURE + " " + CAPABILITY_TAIL}
+
+
+def _discussion_row(words):
+    """(row, None) or (None, the ready answer dict) for a discussion shape."""
+    got = _discussion_got(words)
+    if got["kind"] == "feature":
+        return got["row"], None
+    if got["kind"] == "ambiguous":
+        return None, _discussion_ambiguous(got["rows"])
+    return None, _discussion_unknown()
+
+
+def _row_limit_words(row: dict) -> str:
+    limit = str(row.get("limit") or "").strip()
+    return limit or "The feature list records no limit for it."
+
+
+def limits(words) -> dict:
+    """"What are the limits of X?" - the row's own `limit` field, verbatim."""
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": "The feature list is not installed on this PC, so I cannot read it."}
+    row, bad = _discussion_row(words)
+    if bad is not None:
+        return bad
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": (f"{row['title']}. The honest limit: {_row_limit_words(row)} "
+                      f"Where: {str(row.get('where') or '').strip()}")}
+
+
+def asks_first(words) -> dict:
+    """"Does X ask first?" - the row's own `asks` field, verbatim."""
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": "The feature list is not installed on this PC, so I cannot read it."}
+    row, bad = _discussion_row(words)
+    if bad is not None:
+        return bad
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": (f"{row['title']}. Does it ask first? "
+                      f"{str(row.get('asks') or '').strip()}")}
+
+
+def which_app(words) -> dict:
+    """"Which app can use X?" - the row's own `surface` field, in its own words."""
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": "The feature list is not installed on this PC, so I cannot read it."}
+    row, bad = _discussion_row(words)
+    if bad is not None:
+        return bad
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": f"{row['title']}. {surface_words(row)}"}
+
+
+def why_use(words) -> dict:
+    """"Why would I use X?" - what the row says it does, plus where and its limit."""
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": "The feature list is not installed on this PC, so I cannot read it."}
+    row, bad = _discussion_row(words)
+    if bad is not None:
+        return bad
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": (f"{row['title']}. {str(row.get('what') or '').strip()} "
+                      f"Where: {str(row.get('where') or '').strip()} "
+                      f"The honest limit: {_row_limit_words(row)}")}
+
+
+def _comparison_block(row: dict) -> str:
+    return (f"{row['title']}. Where: {str(row.get('where') or '').strip()} "
+            f"Does it ask first? {str(row.get('asks') or '').strip()} "
+            f"The honest limit: {_row_limit_words(row)}")
+
+
+def difference(first, second) -> dict:
+    """"What's the difference between X and Y?" - both rows, side by side."""
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": "The feature list is not installed on this PC, so I cannot read it."}
+    got_a = _discussion_got(first)
+    got_b = _discussion_got(second)
+    row_a = got_a["row"] if got_a["kind"] == "feature" else None
+    row_b = got_b["row"] if got_b["kind"] == "feature" else None
+    if row_a is not None and row_b is not None and row_a["id"] == row_b["id"]:
+        # The audit's exact case: reminders and alarms are ONE scheduler row,
+        # not two features. Say that plainly rather than inventing a
+        # difference between them.
+        return {"ok": True, "kind": "feature", "feature": _feature_facts(row_a),
+                "features": [{"id": row_a["id"], "title": row_a["title"]}],
+                "words": (f"Both names are in the same feature row - "
+                          f"{_comparison_block(row_a)}")}
+    if row_a is not None and row_b is not None:
+        return {"ok": True, "kind": "feature",
+                "features": [{"id": row_a["id"], "title": row_a["title"]},
+                             {"id": row_b["id"], "title": row_b["title"]}],
+                "words": _comparison_block(row_a) + "\n\n" + _comparison_block(row_b)}
+    if row_a is not None or row_b is not None:
+        known = row_a or row_b
+        missing = str(second if row_a is not None else first).strip()
+        return {"ok": True, "kind": "feature", "feature": _feature_facts(known),
+                "features": [{"id": known["id"], "title": known["title"]}],
+                "words": (f"{_comparison_block(known)} The feature list has no "
+                          f"\"{missing}\" row, so there is nothing to compare it with.")}
+    if got_a["kind"] == "ambiguous":
+        return _discussion_ambiguous(got_a["rows"])
+    if got_b["kind"] == "ambiguous":
+        return _discussion_ambiguous(got_b["rows"])
+    return _discussion_unknown()
+
+
+#: How many feature names one group's overview answer names before it stops and
+#: points at the whole list. Short enough to read, and the pointer carries the
+#: rest honestly.
+_OVERVIEW_CAP = 6
+
+
+def _named_group(words):
+    """The catalogue group the owner's words name, or None (exact-ish only)."""
+    query = _norm(words)
+    if not query:
+        return None
+    words_in = query.split()
+    for group in groups():
+        name = _norm(group["group"])
+        name_words = name.split()
+        if query == name or all(w in name_words for w in words_in):
+            return group
+    return None
+
+
+def overview(words="") -> dict:
+    """"What can you do?" / "what can you do about notes?" - by group, capped."""
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": "The feature list is not installed on this PC, so I cannot read it."}
+    group = _named_group(words)
+    if group is not None:
+        rows = [r for r in features() if r["group"] == group["group"]]
+        shown = rows[:_OVERVIEW_CAP]
+        titles = "; ".join(r["title"] for r in shown)
+        more = (f" and {len(rows) - len(shown)} more" if len(rows) > len(shown) else "")
+        return {"ok": True, "kind": "group", "group": group["group"],
+                "features": [{"id": r["id"], "title": r["title"]} for r in shown],
+                "words": (f"The {group['group']} group has {len(rows)} features: "
+                          f"{titles}{more}. " + CAPABILITY_TAIL)}
+    got = groups()
+    if not got:
+        return _discussion_unknown()
+    lines = [f"Jarvis has {feature_count()} features in {len(got)} groups:"]
+    for group in got:
+        rows = [r for r in features() if r["group"] == group["group"]]
+        shown = rows[:_OVERVIEW_CAP]
+        titles = "; ".join(r["title"] for r in shown)
+        more = (f"; and {len(rows) - len(shown)} more"
+                if len(rows) > len(shown) else "")
+        lines.append(f"  {group['group']} ({group['count']}): {titles}{more}.")
+    lines.append(CAPABILITY_TAIL)
+    return {"ok": True, "kind": "groups", "groups": got,
+            "words": "\n".join(lines)}
 
 
 # --------------------------------------------------------------------------
