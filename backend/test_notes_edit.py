@@ -34,6 +34,13 @@ WHAT THIS SUITE PROVES, in plain words (the contract's own list):
    base twin is identical; the plugin.json is a complete no-patch manifest;
    the catalogue lists the folder; card words and "What asks first" name the
    action; the docs section documents the routes.
+10. THE PROTECTED FROM JARVIS LIST (2026-10-31). When that module is on the
+   backend, its ONE keep-out check is asked at each door: a BLOCKED note is
+   never listed, never read and never saved (a plain sentence, NO card, and
+   the bytes on disk are unchanged); a READ-ONLY note is read normally and
+   refused on save. A blocked vault folder refuses the whole list. If the
+   module is not on this tree yet, those checks print `skip` instead of
+   pretending - a skip is never a pass.
 
 No network, no real approval card, no owner's files: a temporary vault and a
 fake gate answer instead. `%TEMP%` is used with `mkdir` (not mkdtemp) so the
@@ -88,8 +95,25 @@ import jarvis_asks_first as AF  # noqa: E402
 sys.path.insert(0, str(REPO / "jarvis-backend"))       # the published gate
 import jarvis_gate as GATE  # noqa: E402
 
-FAILED, PASSED = [], []
+try:
+    import jarvis_protection as PROTECTION
+except Exception:                                           # noqa: BLE001
+    PROTECTION = None
+
+FAILED, PASSED, SKIPPED = [], [], []
 ANSWERS = {}
+
+def skip(name: str, why: str) -> None:
+    """One check this tree cannot run, printed as `skip`, never a pass."""
+    SKIPPED.append(name)
+    print(f"skip  {name}: {why}")
+
+
+def reset_protection(items=()) -> None:
+    if PROTECTION is None:
+        return
+    PROTECTION._reset_for_tests()
+    PROTECTION.save([dict(i) for i in items])
 
 
 def check(name, cond, detail=""):
@@ -696,6 +720,119 @@ def t_the_size_bound_and_the_waiting_limit_refuse_before_any_card():
 # ---------------------------------------------------------------------------
 
 
+
+
+# ---------------------------------------------------------------------------
+#   The "Protected from Jarvis" keep-out (2026-10-31; hooked here because this
+#   editor merges before the list does)
+# ---------------------------------------------------------------------------
+
+
+def t_a_blocked_note_is_hidden_refused_and_never_saved():
+    if PROTECTION is None:
+        skip("the vault editor asks the Protected from Jarvis list",
+             "backend/jarvis_protection.py is not on this branch yet "
+             "(it arrives with the protection PR this hook is cherry-picked into)")
+        return
+    reset_vault()
+    reset_protection()
+    write_note("public/ok.md", "public words\n")
+    secret = write_note("private/secret.md", "private words\n")
+    PROTECTION.add_item("folder", str(VAULT / "private"), "blocked")
+    code, out = E.handle_list("")
+    paths = [n.get("path") for n in out.get("notes", [])]
+    check("list leaves a BLOCKED note out of its answer",
+          code == 200 and "private/secret.md" not in paths
+          and "public/ok.md" in paths, (code, paths))
+    code, out = E.handle_read("?path=private/secret.md")
+    check("read refuses a BLOCKED note with a plain sentence",
+          code == 403 and "Blocked" in str(out.get("error", "")), (code, out))
+    code, out = E.handle_read("?path=public/ok.md")
+    check("read still reads a note the list does not cover",
+          code == 200 and str(out.get("text", "")).replace("\r\n", "\n") == "public words\n", (code, out))
+    gate = fake_gate()
+    code, out = do_save("private/secret.md", "changed\n", gate=gate)
+    check("save refuses a BLOCKED note BEFORE any card",
+          code == 403 and "Blocked" in str(out.get("error", ""))
+          and not gate.calls, (code, out, gate.calls))
+    check("... and the blocked note's bytes are unchanged",
+          secret.read_text(encoding="utf-8") == "private words\n")
+    check("... and no save job was created for it", len(E._jobs) == 0, dict(E._jobs))
+    reset_protection()
+    E._reset_for_tests()
+
+
+def t_a_blocked_vault_refuses_the_whole_list_and_its_reads():
+    if PROTECTION is None:
+        skip("a blocked vault folder refuses the list",
+             "backend/jarvis_protection.py is not on this branch yet")
+        return
+    reset_vault()
+    reset_protection()
+    write_note("in-vault.md", "inside\n")
+    PROTECTION.add_item("folder", str(VAULT), "blocked")
+    code, out = E.handle_list("")
+    check("a BLOCKED vault folder refuses the whole list with its sentence",
+          code == 403 and "Blocked" in str(out.get("error", "")), (code, out))
+    code, out = E.handle_read("?path=in-vault.md")
+    check("... and a read inside it is refused too",
+          code == 403 and "Blocked" in str(out.get("error", "")), (code, out))
+    reset_protection()
+    E._reset_for_tests()
+
+
+def t_a_read_only_note_is_read_but_never_saved():
+    if PROTECTION is None:
+        skip("a read-only note is read and refused on save",
+             "backend/jarvis_protection.py is not on this branch yet")
+        return
+    reset_vault()
+    reset_protection()
+    note = write_note("ro/note.md", "old words\n")
+    write_note("free.md", "free old\n")
+    PROTECTION.add_item("folder", str(VAULT / "ro"), "readonly")
+    code, out = E.handle_read("?path=ro/note.md")
+    check("a READ-ONLY note is read normally (reads are allowed)",
+          code == 200 and str(out.get("text", "")).replace("\r\n", "\n") == "old words\n", (code, out))
+    code, out = E.handle_list("")
+    check("a READ-ONLY note still appears in the list (a read)",
+          code == 200 and any(n.get("path") == "ro/note.md"
+                              for n in out.get("notes", [])), (code, out))
+    gate = fake_gate()
+    code, out = do_save("ro/note.md", "new words\n", gate=gate)
+    check("saving a READ-ONLY note is refused with its sentence BEFORE any card",
+          code == 403 and "Read-only" in str(out.get("error", ""))
+          and not gate.calls, (code, out, gate.calls))
+    check("... and the read-only note's bytes are unchanged",
+          note.read_text(encoding="utf-8") == "old words\n")
+    gate2 = fake_gate()
+    code, out = do_save("free.md", "free new\n", gate=gate2)
+    check("an unprotected note still saves after its own ONE card (not a blanket)",
+          code == 200 and out.get("state") == "saved"
+          and (VAULT / "free.md").read_text(encoding="utf-8") == "free new\n",
+          (code, out))
+    reset_protection()
+    E._reset_for_tests()
+
+
+def t_the_protection_check_is_at_every_door_in_the_source():
+    src = (HERE / "jarvis_notes_edit.py").read_text(encoding="utf-8")
+    check("the module carries the lazy jarvis_protection helper",
+          "def _protection()" in src
+          and "import_module(\"jarvis_protection\")" in src)
+    check("the list door asks it before the vault walk, and never descends "
+          "into a blocked folder",
+          "blocked_path(full)" in src and "_P.path_refusal(str(vault))" in src
+          and "_P.blocked_path(here / d)" in src)
+    check("the read door asks it before reading bytes",
+          src.count("_P.path_refusal(str(full))") >= 1
+          and src.count("_P = _protection()") >= 3)
+    check("the save door asks the WRITE question before the card",
+          "path_refusal(str(full), write=True)" in src)
+    check("the module docstring says what a protected note means here",
+          "Protected from Jarvis" in src and "raises NO card" in src)
+
+
 def t_install_wraps_the_handler_like_receipts_and_vault():
     reset_vault()
     write_note("Inbox/idea.md", "installed route")
@@ -881,6 +1018,10 @@ def main() -> int:
         t_a_file_that_changed_while_the_card_waited_is_not_overwritten,
         t_the_guardian_blocks_the_write_when_it_cannot_copy,
         t_the_size_bound_and_the_waiting_limit_refuse_before_any_card,
+        t_a_blocked_note_is_hidden_refused_and_never_saved,
+        t_a_blocked_vault_refuses_the_whole_list_and_its_reads,
+        t_a_read_only_note_is_read_but_never_saved,
+        t_the_protection_check_is_at_every_door_in_the_source,
         t_install_wraps_the_handler_like_receipts_and_vault,
         t_the_shared_contract_fixture_is_generated_and_true,
         t_print_the_measured_route_answers,
@@ -899,9 +1040,13 @@ def main() -> int:
         print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
         shutil.rmtree(_TMP, ignore_errors=True)
         return 1
-    print(f"{len(PASSED)} passed, 0 failed - the Obsidian notes editor answers "
-          "the contract, writes only after the one card, and copies the old "
-          "note through the File Guardian first")
+    tail = ""
+    if SKIPPED:
+        tail = (f"; {len(SKIPPED)} SKIPPED (not passed: jarvis_protection.py "
+                "is not on this branch yet)")
+    print(f"{len(PASSED)} passed, {len(FAILED)} failed - the Obsidian notes "
+          "editor answers the contract, writes only after the one card, and "
+          "copies the old note through the File Guardian first" + tail)
     shutil.rmtree(_TMP, ignore_errors=True)
     return 0
 
