@@ -235,14 +235,19 @@ class FindAnythingTest {
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 127 menus has all of its names searched for.
+            // of the 128 menus has all of its names searched for.
             //
             // 126 -> 127 (2026-10-30, docs/PIP-DESIGN.md): `settings.pip-mode`
             // is the phone's "Picture-in-picture" row (SettingsScreen.kt item
             // "pip-mode") with a real place in MenuPlaces.SETTINGS, so the
             // catalogue is one larger because a real place was added.
+            //
+            // 127 -> 128 (2026-10-31, "Protected from Jarvis"): `settings.protection`
+            // is the phone's own Settings row (SettingsScreen.kt item "protection")
+            // with a real place in MenuPlaces.SETTINGS - it reads the blocklist and
+            // asks the PC for one removal card, so the finder must reach it.
             "the catalogue must still carry the names at all",
-            127,
+            128,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
@@ -337,7 +342,6 @@ class FindAnythingTest {
             // this list is where a no-menu Settings row must be declared.
             listOf(
                 "settings-row.app-control",
-                "settings-row.protection",
                 "settings-row.jarvis-notify",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
