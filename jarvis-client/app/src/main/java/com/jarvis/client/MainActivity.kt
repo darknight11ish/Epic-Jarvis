@@ -1504,6 +1504,27 @@ class MainActivity : FragmentActivity() {
         // drawn, which reserves nothing and changes no layout.
         var waitingLinePx by remember { mutableIntStateOf(0) }
         val pending by JarvisRuntime.pending.collectAsState()
+        // DEF-022 (fixed 2026-10-31): what a card's line under the buttons may
+        // promise. For a RISKY card the signed-approval state decides between
+        // the fingerprint prompt and the offer notice, so it is read here and
+        // carried in HomeState. One read, only while Home is the screen AND a
+        // card that can take the signed path is actually waiting (rare); it is
+        // re-read when Home is entered or the queue changes, so turning signed
+        // approvals on or off in Settings is never shown stale. Null - not
+        // asked, the read failed, or not paired - is the prompt case, which is
+        // what the PLAIN path really does.
+        var signedApprovals by remember {
+            mutableStateOf<com.jarvis.client.net.SignedApproval.State?>(null)
+        }
+        LaunchedEffect(nav.current, pending, security, link) {
+            val riskyWaiting = nav.current == Screen.HOME && link == LinkState.CONNECTED &&
+                pending.any {
+                    !it.pcOnly && !it.needsChoice &&
+                        com.jarvis.client.data.SecurityRules.riskyByToday(it)
+                }
+            signedApprovals =
+                if (riskyWaiting) JarvisRuntime.signedApprovalRead()?.state else null
+        }
         // Collected here, and carried in HomeState below, for two reasons.
         //
         // The plain one: the approve and deny buttons must grey out while a
@@ -3843,6 +3864,10 @@ class MainActivity : FragmentActivity() {
                             // about what its Approve will ask (the owner's
                             // ruling of 2026-10-30; SecurityRules.approveCheckWords).
                             security = security,
+                            // ...and the signed-approval state, so a risky
+                            // card whose approve can only offer to turn signing
+                            // on says that instead (DEF-022).
+                            signedApprovals = signedApprovals,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
                             lockdown = lockdown,

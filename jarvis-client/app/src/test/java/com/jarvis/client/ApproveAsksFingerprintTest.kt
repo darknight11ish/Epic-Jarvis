@@ -7,6 +7,7 @@ import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.Risk
+import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.decodePendingRows
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -15,10 +16,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * THE OWNER'S RULING OF 2026-10-30, PINNED: *"if there is anything that needs
@@ -45,6 +48,14 @@ import org.junit.Test
  * The sentence itself is checked to be plain words: it names the fingerprint,
  * it says "or PIN" only when this phone's method really offers the PIN, and it
  * says nothing that only a developer would know.
+ *
+ * DEF-022 (fixed 2026-10-31) added the second half this file had been missing:
+ * a risky card's Approve does NOT always ask for the prompt. `SignedApproval
+ * .pathFor` sends it down the OFFER path when signed approvals are off, need
+ * turning on again, or are waiting for the PC's yes - and that path shows the
+ * offer notice instead. So `approveCheckWords` now takes the signed state, and
+ * the test below holds every state to what the press really does - and pins
+ * the card/screen/app wiring that carries that state to the sentence.
  */
 class ApproveAsksFingerprintTest {
 
@@ -162,11 +173,15 @@ class ApproveAsksFingerprintTest {
         for (words in listOf(
             SecurityRules.APPROVE_ASKS_FINGERPRINT,
             SecurityRules.APPROVE_ASKS_FINGERPRINT_OR_PIN,
+            SecurityRules.APPROVE_ASKS_SIGNED_OFF,
+            SecurityRules.APPROVE_ASKS_SIGNED_AGAIN,
+            SecurityRules.APPROVE_ASKS_SIGNED_WAITING,
         )) {
-            assertTrue(words, words.startsWith("Approve asks for your "))
+            assertTrue(words, words.startsWith("Approve asks"))
             assertTrue(words, words.endsWith("."))
-            // One short line under the buttons: it has to fit on a phone.
-            assertTrue(words, words.length <= 48)
+            // A line under the buttons, not an essay: the prompt lines are one
+            // short sentence, and the turn-signing-on ones carry their reason.
+            assertTrue(words, words.length <= 140)
             for (jargon in listOf(
                 "biometric", "BIOMETRIC", "authenticator", "CryptoObject",
                 "Keystore", "API", "null", "error",
@@ -174,5 +189,108 @@ class ApproveAsksFingerprintTest {
                 assertFalse("$words must not say \"$jargon\"", jargon in words)
             }
         }
+    }
+
+    // ------------------------------------------- the signed-approval states ----
+    // DEF-022: a risky card's Approve does not always ask for the prompt.
+    // [SignedApproval.pathFor] decides, and the sentence below the buttons must
+    // describe that same decision. This is the half the register's own test
+    // asked for: the three signed-approval states crossed with a risky item.
+    // It fails on the pre-fix code, where every risky state got the prompt line.
+
+    private fun riskyItem(): PendingItem = PendingItem(
+        id = "def022",
+        risk = Risk(reversible = "no", reach = "outbound", classified = true),
+    )
+
+    private fun assertPrompt(words: String?) {
+        assertEquals(SecurityRules.APPROVE_ASKS_FINGERPRINT_OR_PIN, words)
+    }
+
+    @Test
+    fun `the sentence matches what Approve really does, on every signed-approval state`() {
+        val item = riskyItem()
+        for (state in SignedApproval.State.entries.toList() + null) {
+            val path = SignedApproval.pathFor(risky = true, state = state)
+            val words = SecurityRules.approveCheckWords(Security(), item, state)
+            val why = "state=$state path=$path words=$words"
+            when (path) {
+                // The offer path shows NO fingerprint prompt: Approve's press
+                // answers from `SignedApproval.noticeFor` and sends nothing.
+                SignedApproval.Path.OFFER -> assertEquals(why, SecurityRules.APPROVE_ASKS_SIGNED_OFF, words)
+                SignedApproval.Path.OFFER_AGAIN -> assertEquals(why, SecurityRules.APPROVE_ASKS_SIGNED_AGAIN, words)
+                SignedApproval.Path.WAITING -> assertEquals(why, SecurityRules.APPROVE_ASKS_SIGNED_WAITING, words)
+                // These really do run this phone's check: the SIGNED path with
+                // the key, the PLAIN path through `confirmed()`.
+                SignedApproval.Path.SIGNED, SignedApproval.Path.PLAIN -> assertPrompt(words)
+            }
+            if (path == SignedApproval.Path.OFFER) {
+                assertNotEquals(why, SecurityRules.APPROVE_ASKS_FINGERPRINT_OR_PIN, words)
+                assertNotEquals(why, SecurityRules.APPROVE_ASKS_FINGERPRINT, words)
+                assertTrue("$why must say signing needs turning on once", words!!.contains("once they are on"))
+            }
+        }
+    }
+
+    @Test
+    fun `a signed-approval state only changes a risky card's line`() {
+        val safe = PendingItem(
+            id = "safe",
+            risk = Risk(reversible = "yes", reach = "local", classified = true),
+        )
+        // Not risky, and not "every card": no line at all, whatever the state.
+        for (state in SignedApproval.State.entries) {
+            assertNull(SecurityRules.approveCheckWords(Security(), safe, state))
+        }
+        // Risky, but the owner asked for EVERY card to be checked: the local
+        // check runs on the PLAIN path, so the state cannot change the sentence.
+        for (state in SignedApproval.State.entries) {
+            assertEquals(
+                SecurityRules.APPROVE_ASKS_FINGERPRINT_OR_PIN,
+                SecurityRules.approveCheckWords(
+                    Security(approvals = ApprovalCheck.EVERY),
+                    safe,
+                    state,
+                ),
+            )
+        }
+        // The method still decides which prompt is named, when a prompt runs.
+        assertEquals(
+            SecurityRules.APPROVE_ASKS_FINGERPRINT,
+            SecurityRules.approveCheckWords(
+                Security(method = CheckMethod.FINGERPRINT_ONLY),
+                riskyItem(),
+                SignedApproval.State.ON,
+            ),
+        )
+    }
+
+    @Test
+    fun `the signed-approval state really reaches the card's line`() {
+        // The rule above is only worth anything if the card is handed the
+        // state: pin the three links of the chain (read -> state -> card).
+        val main = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/MainActivity.kt")
+        assertTrue("the app does not read the signed-approval state for the card",
+            main.contains("signedApprovals = signedApprovals,"))
+        assertTrue(main.contains("JarvisRuntime.signedApprovalRead()?.state"))
+        val home = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt")
+        assertTrue("HomeState does not carry the signed-approval state",
+            home.contains("val signedApprovals: com.jarvis.client.net.SignedApproval.State? = null"))
+        assertTrue("a card is not handed the signed-approval state",
+            home.contains("signedApprovals = state.signedApprovals,"))
+        val card = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/approval/ApprovalCard.kt")
+        assertTrue("the card's sentence ignores the signed-approval state",
+            card.contains("SecurityRules.approveCheckWords(security, item, signedApprovals)"))
+    }
+
+    /** A repository file, from Gradle's working folder (`jarvis-client/app`). */
+    private fun repoFile(rel: String): String {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            val f = File(dir, rel)
+            if (f.isFile) return f.readText()
+            dir = dir.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
     }
 }
