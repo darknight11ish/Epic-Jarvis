@@ -485,10 +485,13 @@ def t_no_over_capture_of_reminders_desks_or_reading():
     check("'remind me ... to make a note' stays a reminder, not a note write",
           got is not None and got.intent == "reminder_set",
           got.intent if got else "the model")
-    for text in ("organize my desk", "what does my Welcome note say?"):
-        got = ask(text)
-        check(f"{text!r} is still the model's", got is None,
-              (got.intent if got else "")[:120])
+    got = ask("organize my desk")
+    check("'organize my desk' is still the model's", got is None,
+          (got.intent if got else "")[:120])
+    got = ask("what does my Welcome note say?")
+    check("a note-reading question is the honest door, not a write or a claim",
+          got is not None and got.intent == "note_read_honest",
+          got.intent if got else "the model")
     got = ask("what can I change in settings")
     check("the settings-help lane still wins for its own phrase",
           got is not None and got.intent == "settings_help",
@@ -519,6 +522,45 @@ def t_the_read_only_intents_are_registered_the_repo_way():
                       for name in tools), sorted(tools))
     except Exception:                       # noqa: BLE001 - module absent
         pass
+
+
+def t_note_reading_questions_say_the_real_door_and_never_claim_a_read():
+    """The audit's "I have located your notes" with no tool run: never again."""
+    reset_all()
+    before = tree(VAULT)
+    for phrase in ("what does my Welcome note say?",
+                   "find my notes about vault",
+                   "search my notes for the boiler",
+                   "read my Welcome note"):
+        got = ask(phrase)
+        check(f"{phrase!r} is the honest note-reading answer",
+              got is not None and got.intent == "note_read_honest",
+              got.intent if got else "the model")
+        reply = got.reply if got else ""
+        check("... saying chat does not read note text today",
+              "Chat does not read note text today." in reply, reply[:260])
+        check("... naming the real door, the Notes plate",
+              "Notes plate" in reply and "Brain window" in reply, reply[:300])
+        check("... never claiming it located or read the note",
+              "located" not in reply.lower() and "I read" not in reply,
+              reply[:260])
+    check("no card was raised and the vault is unchanged",
+          GATE["calls"] == [] and tree(VAULT) == before,
+          (GATE["calls"], tree(VAULT)))
+    # The merge must not have moved the working neighbours: the catalogue's
+    # capability answer, settings help and "open my notes" keep their lanes.
+    got = ask("what can you do with my notes?")
+    check("'what can you do with my notes?' keeps the catalogue answer",
+          got is not None and got.intent == "feature_capabilities",
+          got.intent if got else "the model")
+    got = ask("what can I change in settings")
+    check("the settings-help phrase keeps its own answer",
+          got is not None and got.intent == "settings_help",
+          got.intent if got else "the model")
+    got = ask("open my notes")
+    check("'open my notes' still opens the Brain's Notes plate",
+          got is not None and got.intent == "open_app",
+          got.intent if got else "the model")
 
 
 def main() -> int:

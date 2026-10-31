@@ -6975,6 +6975,23 @@ _NOTE_RENAME_REFUSED = re.compile(
     r"(?:\w+\s+)?note\b")
 _NOTE_DELETE_REFUSED = re.compile(
     r"(?:delete|remove|trash)\s+(?:my\s+|the\s+|a\s+)?(?:\w+\s+)?note\b")
+#: Asking chat to READ or SEARCH a note: chat does not read note text today.
+#: The audit measured the model claiming "I have located your notes" with no
+#: tool run. These shapes get the true door in plain words instead - the Notes
+#: plate can search/read/save, chat cannot - and it never names a note title, so
+#: the hidden-lists rule is kept too.
+_NOTE_READ = (
+    re.compile(r"what\s+(?:does|do)\s+(?:my\s+|the\s+|a\s+|an\s+)?"
+               r"(?P<name>.+?)\s+notes?\s+say"),
+    re.compile(r"what(?:'s|\s+is)\s+in\s+(?:my\s+|the\s+|a\s+|an\s+)?"
+               r"(?P<name>.+?)\s+notes?"),
+    re.compile(r"(?:read|show\s+me)\s+(?:the\s+|my\s+|a\s+|an\s+)?"
+               r"(?P<name>.+?)\s+notes?"),
+    re.compile(r"(?:find|search(?:\s+for)?)\s+(?:my\s+|the\s+)notes?\s+"
+               r"(?:about|for|on)\s+(?P<query>.+)"),
+    re.compile(r"what\s+do\s+(?:my\s+|the\s+)notes\s+say"
+               r"(?:\s+about\s+(?P<query>.+))?"),
+)
 #: The organizer, in the owner's words. It is a real, built, off-by-default
 #: planner; this path only reports its state or shows its read-only preview.
 _VAULT_TIDY = re.compile(
@@ -7013,6 +7030,9 @@ def _note_asking(s: str) -> Optional[Intent]:
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
         if rx.match(s):
             return Intent("note_change_refused")
+    for rx in _NOTE_READ:
+        if rx.fullmatch(s):
+            return Intent("note_read_honest")
     if _VAULT_TIDY.match(s):
         return Intent("vault_organizer_plan")
     if _ORGANIZER_ON.fullmatch(s):
@@ -7041,6 +7061,11 @@ NOTE_CHANGE_REFUSAL = (
     "The notes editor does not create, rename or delete notes. It can browse, "
     "search and open any note, and save a change to an existing one. Nothing "
     "was changed.")
+#: Chat does not read note text today; the Notes plate is the real door.
+NOTE_READ_HONEST = (
+    "Chat does not read note text today. The Notes plate in the Brain window "
+    "can search, read and open any note, and saving a change there takes one "
+    "approval card. Nothing was read or changed.")
 #: Obsidian's own theme, style sheets, templates and plugins belong to Obsidian.
 #: The hard sentence is the same one the catalogue answers use, so the two paths
 #: cannot say different things.
@@ -7118,6 +7143,11 @@ def _run_note_make(f: dict) -> Result:
 def _run_note_change_refused() -> Result:
     """"create/rename/delete a note" - one plain refusal, nothing changed."""
     return Result(NOTE_CHANGE_REFUSAL, "note_change_refused")
+
+
+def _run_note_read_honest() -> Result:
+    """"what does my note say?" - chat does not read note text; say the door."""
+    return Result(NOTE_READ_HONEST, "note_read_honest")
 
 
 def _run_obsidian_style_refused() -> Result:
@@ -9034,6 +9064,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # existing change_own_config card.
     if n == "note_make":
         return _run_note_make(f)
+    if n == "note_read_honest":
+        return _run_note_read_honest()
     if n in ("note_change_refused", "obsidian_style_refused"):
         return (_run_note_change_refused() if n == "note_change_refused"
                 else _run_obsidian_style_refused())
@@ -9619,7 +9651,7 @@ READ_ONLY_INTENTS = frozenset({
     # here: the daily note may have changed, so the old record goes; a note that
     # was refused wrote nothing, so `note_make_refused` is read-only.
     "vault_organizer_plan", "note_change_refused",
-    "obsidian_style_refused", "note_make_refused",
+    "obsidian_style_refused", "note_make_refused", "note_read_honest",
     # main's feature answers (2026-10-31, #1030): the capability answer reads
     # the catalogue and changes nothing, so it must not clear "cancel that".
     "face_ask", "feature_capabilities", "feature_change", "feature_change_ask",
