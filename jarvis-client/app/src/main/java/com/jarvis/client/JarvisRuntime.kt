@@ -7584,6 +7584,91 @@ object JarvisRuntime {
         }
     }
 
+    // ── The Today board (GTD-2, 2026-10-18; ported 2026-10-31) ─────────────
+    // The desktop's `brain_schedule` adds the board to its Coming up answer and
+    // `today.js`/`brain.js` draw it at the bottom of the Today page; the phone
+    // reads the same route directly ([com.jarvis.client.net.Today]) and draws
+    // the same three sections plus the switch. The board's words are withheld
+    // by the PC while the private lists are hidden ([hidden]).
+
+    private val _todaySwitch =
+        MutableStateFlow<com.jarvis.client.net.Today.SwitchSaid?>(null)
+
+    /**
+     * The last said-I'd-do switch answer, in the PC's own words - null until
+     * the board is used. It is what the switch's one line shows; the STATE of
+     * the switch is the board answer's `unspoken_commitments_enabled`, never
+     * this guess.
+     */
+    val todaySwitch: StateFlow<com.jarvis.client.net.Today.SwitchSaid?> =
+        _todaySwitch.asStateFlow()
+
+    /** `GET /api/today/cockpit` - the board (a read: never held on a stale link). */
+    suspend fun todayCockpit(hidden: Boolean): ApiResult<JsonObject> = api.todayCockpit(hidden)
+
+    /**
+     * The board's said-I'd-do switch. Held on a stale link (rule 4): turning
+     * it ON lets Jarvis read the owner's own words from recent kept chats, so
+     * it is a change like every other - and the PC answers it with ONE
+     * `change_own_config` approval card, which this phone NEVER decides.
+     *
+     * OFF is immediate. ON is `waiting`; while it waits (and only when the
+     * private lists are shown - a hidden app never asks for words) the board is
+     * re-read until it says the switch is on, so the line becomes the PC's
+     * "on" sentence when a person approves it elsewhere. [hidden] is the
+     * plate's own private-lists state.
+     *
+     * @return whether the PC took it (or the card is up), and the sentence to show.
+     */
+    suspend fun setTodayUnspoken(enabled: Boolean, hidden: Boolean): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val answer = when (val r = api.setTodayUnspoken(enabled)) {
+            is ApiResult.Failed -> {
+                val said = com.jarvis.client.net.Today.SwitchSaid(
+                    com.jarvis.client.net.Today.boardFailure(r.error) ?: describe(r.error),
+                    waiting = false,
+                    enabled = false,
+                )
+                _todaySwitch.value = said
+                return false to said.text
+            }
+            is ApiResult.Ok -> r.value
+        }
+        val said = com.jarvis.client.net.Today.switchSaid(answer)
+        _todaySwitch.value = said
+        _scheduleTick.update { n -> n + 1 }   // the board's own state may have moved
+        if (said.waiting && enabled && !hidden) {
+            scope.launch {
+                val started = SystemClock.elapsedRealtime()
+                val follow = com.jarvis.client.net.JobFollow()
+                while (true) {
+                    delay(com.jarvis.client.net.Today.POLL_MS)
+                    if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Today.GIVE_UP_MS) {
+                        break
+                    }
+                    if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
+                    val next = api.todayCockpit(hidden = false)
+                    if (next is ApiResult.Failed) {
+                        if (!follow.failed()) continue
+                        break
+                    }
+                    follow.answered()
+                    val board = com.jarvis.client.net.Today.cockpit((next as ApiResult.Ok).value)
+                    if (board != null && board.unspokenEnabled) {
+                        _todaySwitch.value = com.jarvis.client.net.Today.SwitchSaid(
+                            com.jarvis.client.net.Today.PROPOSALS_TURNED_ON,
+                            waiting = false,
+                            enabled = true,
+                        )
+                        _scheduleTick.update { n -> n + 1 }
+                        break
+                    }
+                }
+            }
+        }
+        return true to said.text
+    }
+
     private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?, eventId: String? = null) {
         _scheduleTick.update { it + 1 }
         val obj = data as? JsonObject
