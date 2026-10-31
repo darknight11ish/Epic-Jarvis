@@ -235,14 +235,19 @@ class FindAnythingTest {
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 127 menus has all of its names searched for.
+            // of the 128 menus has all of its names searched for.
             //
             // 126 -> 127 (2026-10-30, docs/PIP-DESIGN.md): `settings.pip-mode`
             // is the phone's "Picture-in-picture" row (SettingsScreen.kt item
             // "pip-mode") with a real place in MenuPlaces.SETTINGS, so the
             // catalogue is one larger because a real place was added.
+            //
+            // 127 -> 128 (2026-10-31, "Protected from Jarvis"): `settings.protection`
+            // is the phone's own Settings row (SettingsScreen.kt item "protection")
+            // with a real place in MenuPlaces.SETTINGS - it reads the blocklist and
+            // asks the PC for one removal card, so the finder must reach it.
             "the catalogue must still carry the names at all",
-            127,
+            128,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
@@ -330,6 +335,11 @@ class FindAnythingTest {
             // in the catalogue (`hide = false` - it must stay visible, because
             // it is the switch that turns the feature back ON) and its place is
             // the row itself in MenuPlaces.SETTINGS.
+            // "Protected from Jarvis" (2026-10-31): the PC's protected-items
+            // list. It has no menu id in the catalogue yet - that row belongs to
+            // the backend lane's settings-registry change, which this lane may
+            // not touch - so the row is always drawn, like "App control", and
+            // this list is where a no-menu Settings row must be declared.
             listOf(
                 "settings-row.app-control",
                 // "File from your PC" (2026-10-31): no menu id in the catalogue

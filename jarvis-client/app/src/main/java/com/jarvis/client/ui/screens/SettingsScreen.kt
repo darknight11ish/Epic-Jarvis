@@ -161,29 +161,35 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // backend lane owns the settings-registry row), so the row is always drawn -
     // like "App control" above.
     "files" to 17,
-    "backup" to 18,
-    "watch-notify" to 19,
-    "phone-notify" to 20,
+    // "Protected from Jarvis" (2026-10-31, .dsh-scratch/PROTECTED-ITEMS-2026-10-31/
+    // CONTRACT.md): the PC's owner-editable list, right beside the folder
+    // allow-list it outranks. It has no menu id in the catalogue yet (the
+    // backend lane owns the settings-registry row), so the row is always drawn -
+    // like "App control" above - and every index below it moved down by one.
+    "protection" to 18,
+    "backup" to 19,
+    "watch-notify" to 20,
+    "phone-notify" to 21,
     // "Notifications from Jarvis" (the owner's decision of 2026-10-09, after
     // docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): one row pointing at
     // Android's own per-app notification screen, not a second copy of the PC's
     // Notifications card. It sits with the two other notification rows, which
     // moved every index below it down by one on that day.
-    "jarvis-notify" to 21,
-    "screen-look" to 22,
-    "browser-engine" to 23,
+    "jarvis-notify" to 22,
+    "screen-look" to 23,
+    "browser-engine" to 24,
     // How long the captcha hand-off stays on offer (the owner's decision of
     // 2026-10-08). Sits with the browser it belongs to, so the two exposure
     // rows are together; every index below it moved down by one on that day,
     // and by one more when the search box landed above the jump list.
-    "handoff" to 24,
+    "handoff" to 25,
     // What a captcha does about the browser window it is blocking (the owner's
     // decision of 2026-10-09). Sits with the hand-off row above, so the two
     // captcha rows are together; every index below it moved down by one - and
     // by one more for "Notifications from Jarvis" above it.
-    "handoff-front" to 25,
-    "devices" to 26,
-    "quick-tiles" to 27,
+    "handoff-front" to 26,
+    "devices" to 27,
+    "quick-tiles" to 28,
     // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
     // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
     // and it sits immediately above "Limits" on the screen - so Limits' own
@@ -192,41 +198,41 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // screen, item by item`, which reads this map against the screen's real row
     // order - and by backend/test_settings_registry.py, which does the same from
     // the Python side. Both moved down one more for "Approval cards" above.
-    "screen-rate" to 28,
+    "screen-rate" to 29,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 29,
+    "limits" to 30,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
     // limits row" pins 25). A row added at the end moves nothing.
-    "idle-new" to 30,
+    "idle-new" to 31,
     // "Data and maths sandbox" (LM-1C, 2026-10-18): whether the AI model is
     // offered the small read-only Python tool. A row added at the end moves no
     // other number; it sits under Idle new on the screen and in the jump list.
-    "sandbox" to 31,
+    "sandbox" to 32,
     // "Learning" (2026-10-28, the settings audit's G1): the two learning
     // switches, which had no Settings row on either app before this. It sits
     // after the sandbox and before First-time setup; every index below it
     // moved down by one.
-    "learning" to 32,
+    "learning" to 33,
     // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
     // fourteen questions and its READ-ONLY plan, drawn by
     // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
-    "setup-questionnaire" to 33,
+    "setup-questionnaire" to 34,
     // "All features and abilities" (2026-10-22): the searchable directory of
     // all 140 features. A row added at the end moves no other number.
-    "all-features" to 34,
+    "all-features" to 35,
     // "Jarvis Calendar" (2026-10-29, the owner's ask: a full calendar of
     // Jarvis's own, ON by default, and "disableable in Settings"). One switch:
     // the PC's own `calendar-settings.json`, read and written through
     // GET /api/calendar and POST /api/calendar/settings, so the phone and the
     // desktop can never disagree about whether it is on. A row added at the end
     // moves no other number.
-    "calendar" to 35,
+    "calendar" to 36,
 )
 
 /**
@@ -715,6 +721,13 @@ fun SettingsScreen(
             if (drawn("files")) item(key = "files") {
                 SendFileSection(canAct = canAct, privateHidden = privateHidden)
             }
+            // "Protected from Jarvis" (2026-10-31, .dsh-scratch/PROTECTED-ITEMS-
+            // 2026-10-31/CONTRACT.md; ProtectedPlate.kt): the PC's owner-editable
+            // list of folders, files and programs Jarvis may not touch. The phone
+            // lists it and can ASK for one entry to be removed (one approval card,
+            // never decided here); the pickers are on the PC. No menu id in the
+            // catalogue yet, so it is always drawn, like "App control" above.
+            if (drawn("protection")) item(key = "protection") { ProtectedSection(canAct = canAct) }
             if (menus.shows("settings.backup")) if (drawn("backup")) if (menus.shows("settings.backup")) item(key = "backup") { MenuFrame(menus, "settings.backup") { BackupSection(canAct = canAct) } }
             if (menus.shows("settings.watch-notify")) if (drawn("watch-notify")) if (menus.shows("settings.watch-notify")) item(key = "watch-notify") { MenuFrame(menus, "settings.watch-notify") { WatchNotifySection(canAct = canAct) } }
             if (menus.shows("settings.phone-notify")) if (drawn("phone-notify")) if (menus.shows("settings.phone-notify")) item(key = "phone-notify") {

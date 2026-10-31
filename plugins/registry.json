@@ -7,8 +7,8 @@
     "core": 138,
     "missing": 0
   },
-  "folder_count": 15,
-  "ready_count": 43,
+  "folder_count": 17,
+  "ready_count": 45,
   "folders": [
     {
       "name": "skill-hub",
@@ -123,11 +123,27 @@
       "why": "born as a folder: it replaces no patch"
     },
     {
+      "name": "notes-edit",
+      "module": "jarvis_notes_edit",
+      "install": "handler",
+      "stack_order": 169,
+      "summary": "browse, open and edit any note in your Obsidian vault, from the desktop or the phone: one approval card per save, a File Guardian copy first, and the sha256 the edit started from so two editors cannot clobber each other.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
       "name": "send-file",
       "module": "jarvis_send_file",
       "install": "handler",
       "stack_order": 169,
       "summary": "send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "protected-items",
+      "module": "jarvis_protection",
+      "install": "handler",
+      "stack_order": 170,
+      "summary": "a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card for a chat add and one for every removal, and a Settings add that is the owner's own direct act.",
       "why": "born as a folder: it replaces no patch"
     }
   ],

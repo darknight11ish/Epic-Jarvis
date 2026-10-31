@@ -360,13 +360,14 @@ def prepare(args: dict):
     query = args.get("query")
     raw_path = args.get("path")
     if raw_path:
+        why = _protection_refusal(str(raw_path))
+        if why:
+            raise ValueError(why)
         got = _allowed(str(raw_path))
         if got is None:
             raise ValueError("That file is not in a folder on your "
                              "\"Folders Jarvis may look in\" list, so it cannot be sent.")
         real, root = got
-        if _protection_refusal(real):
-            raise ValueError(_protection_refusal(real))
         probe = {"path": real, "folder": str(root),
                  "name": os.path.basename(real), "size": os.path.getsize(real),
                  "mtime": os.path.getmtime(real)}

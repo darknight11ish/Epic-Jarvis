@@ -580,6 +580,20 @@ fn main() {
             "add_folder",
             "remove_folder",
             "import_notion",
+            // Settings' "Protected from Jarvis" (protected.rs; the owner's
+            // request of 2026-10-31, contract
+            // `.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md`). The list
+            // (a read); the Windows folder and file pickers - run in Rust, so
+            // the window gets only the chosen path and never a file system of
+            // its own; the programs running now (names only); one add, the
+            // owner's direct act in Settings, immediate and tightening; one
+            // remove, which raises ONE approval card on the PC and is held on a
+            // stale link. Settings window only, and never a raw JSON editor.
+            "get_protection",
+            "protection_pick",
+            "protection_programs",
+            "add_protection",
+            "remove_protection",
             // "Spending summaries" (backend/spending.patch; JARVIS-API section
             // 100; the owner's decision of 2026-09-30). The chat table: read
             // by id once the stream announced it (the Jarvis bar only; not
@@ -777,6 +791,16 @@ fn main() {
             "wiki_ingest",
             "wiki_ingest_status",
             "wiki_open_folder",
+            // The notes editor (the owner's choice of 2026-10-31: "the whole
+            // vault, both apps"; contract
+            // `.dsh-scratch/NOTES-EDITOR-2026-10-31/CONTRACT.md`): read the
+            // list and one note, then save one note - which raises ONE
+            // ordinary approval card (`edit_vault_note`), held on a stale link.
+            // Brain window only.
+            "notes_list",
+            "notes_read",
+            "notes_save",
+            "notes_save_status",
             // Deep questions (backend/big-model.patch): read the recent ones
             // and their answers, and ask one. No card per question - the
             // switch was approved - and asking is held on a stale link.

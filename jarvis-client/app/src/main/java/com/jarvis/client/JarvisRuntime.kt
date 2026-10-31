@@ -5185,6 +5185,187 @@ object JarvisRuntime {
         return ApiResult.Ok(Unit)
     }
 
+    // --------------------------------------------------------- protection ----
+    // "Protected from Jarvis" (2026-10-31, .dsh-scratch/PROTECTED-ITEMS-2026-10-31/
+    // CONTRACT.md): the PC's owner-editable list of what Jarvis may not touch.
+    // The phone lists it and can ASK for one entry to be removed; removal is
+    // loosening, so the PC raises ONE approval card and this phone never decides
+    // it. There is no add path here - adding is the PC's pickers or a chat
+    // request that raises the same kind of card.
+
+    private val _protectionLine =
+        MutableStateFlow<Pair<String, com.jarvis.client.net.Protected.Said>?>(null)
+
+    /**
+     * The entry last asked to be removed (its id), and the PC's answer, in the
+     * PC's own words - null until something is removed. The plate shows it only
+     * for the entry it belongs to ([Pair.first]) and re-reads the list when it
+     * becomes final.
+     */
+    val protectionLine: StateFlow<Pair<String, com.jarvis.client.net.Protected.Said>?> =
+        _protectionLine.asStateFlow()
+
+    /** `GET /api/protection` - what is protected, in the PC's own words. */
+    suspend fun protection(): ApiResult<JsonObject> = api.protection()
+
+    /**
+     * Ask the PC to remove one protected entry. Held on a stale or dropped link
+     * ([actionBlocker], rule 4) - a card raised from a queue nobody can trust is
+     * not a decision anyone asked for. The PC raises ONE approval card and the
+     * entry stays until it is approved; the phone watches the LIST to see it
+     * disappear (the list is the truth - there is no remove-status route in the
+     * contract, so a `GET /api/protection` poll is what can be proved).
+     *
+     * @return true when the request left the phone (the card is up); false when
+     *   it was refused before any card, with the sentence in [protectionLine].
+     */
+    suspend fun removeProtected(id: String): Boolean {
+        actionBlocker()?.let {
+            _protectionLine.value = id to com.jarvis.client.net.Protected.Said(it, removing = false)
+            return false
+        }
+        val answer = when (val r = api.protectionRemove(id)) {
+            is ApiResult.Failed -> {
+                val why = com.jarvis.client.net.Protected.failure(r.error) ?: describe(r.error)
+                _protectionLine.value = id to com.jarvis.client.net.Protected.Said(why, removing = false)
+                return false
+            }
+            is ApiResult.Ok -> r.value
+        }
+        val said = com.jarvis.client.net.Protected.describe(answer)
+        _protectionLine.value = id to said
+        if (!said.removing) return false
+        scope.launch {
+            val started = SystemClock.elapsedRealtime()
+            // The same retry rules as every other followed job: skip while the
+            // link is down, tolerate a failed poll or two.
+            val follow = com.jarvis.client.net.JobFollow()
+            while (true) {
+                delay(com.jarvis.client.net.Protected.POLL_MS)
+                if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Protected.GIVE_UP_MS) {
+                    _protectionLine.value = id to com.jarvis.client.net.Protected.Said(
+                        com.jarvis.client.net.Protected.STILL_THERE, removing = false,
+                    )
+                    break
+                }
+                if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
+                val next = api.protection()
+                if (next is ApiResult.Failed) {
+                    if (!follow.failed()) continue
+                    _protectionLine.value = id to com.jarvis.client.net.Protected.Said(
+                        "Lost track of the list (${describe(next.error)}). Refresh it in a moment.",
+                        removing = false,
+                    )
+                    break
+                }
+                follow.answered()
+                val still = com.jarvis.client.net.Protected.view((next as ApiResult.Ok).value)
+                    .items.any { it.id == id }
+                if (!still) {
+                    _protectionLine.value = id to com.jarvis.client.net.Protected.Said(
+                        com.jarvis.client.net.Protected.REMOVED, removing = false,
+                    )
+                    break
+                }
+            }
+        }
+        return true
+    }
+
+
+    // ------------------------------------------------------------ notes ----
+    // The notes editor (2026-10-31, .dsh-scratch/NOTES-EDITOR-2026-10-31/
+    // CONTRACT.md): the whole Obsidian vault, from this phone. The four routes
+    // and their shapes are com.jarvis.client.net.Notes' - here are the two
+    // reads it draws from and the ONE save, which raises the PC's existing
+    // approval card. Nothing on this phone approves, and nothing is drawn
+    // until the PC says what happened.
+
+    private val _notesJob =
+        MutableStateFlow<Pair<String, com.jarvis.client.net.Notes.Said>?>(null)
+
+    /**
+     * The note last asked to be saved (its vault path), and how that is going,
+     * in the PC's own words - null until something is saved. The plate shows
+     * it only for the note it is on ([Pair.first]), so a save followed while
+     * the owner looks at another note cannot put its answer on the wrong one.
+     */
+    val notesJob: StateFlow<Pair<String, com.jarvis.client.net.Notes.Said>?> =
+        _notesJob.asStateFlow()
+
+    /** `GET /api/notes/list` - the vault's notes; never their text. */
+    suspend fun notesList(query: String): ApiResult<JsonObject> = api.notesList(query)
+
+    /** `GET /api/notes/read` - one note, and the sha256 an edit must start from. */
+    suspend fun notesRead(path: String): ApiResult<JsonObject> = api.notesRead(path)
+
+    /**
+     * Save one note's text. The PC raises ONE `edit_vault_note` approval card
+     * (tier `ask`, the owner's own card) and answers `waiting`; the file is
+     * written only after that card is approved. A stale `expected_sha256`
+     * answers `conflict` and writes nothing. This phone never approves the card
+     * and never writes the file itself.
+     *
+     * Held on a stale or dropped link ([actionBlocker], rule 4): a card raised
+     * from a queue nobody can trust is not a save anyone asked for. The job is
+     * followed on the runtime's own scope, so leaving the screen does not lose
+     * the answer, and [notesJob] never says "saved" before the PC does.
+     *
+     * @return true when the PC took the save request (waiting or already
+     *   saved); false when it was refused before any card was raised, with the
+     *   sentence in [notesJob].
+     */
+    suspend fun saveNote(path: String, text: String, expectedSha256: String): Boolean {
+        actionBlocker()?.let {
+            _notesJob.value = path to com.jarvis.client.net.Notes.Said(it, final = true, saved = false)
+            return false
+        }
+        val first = when (val r = api.notesSave(path, text, expectedSha256)) {
+            is ApiResult.Failed -> {
+                val why = com.jarvis.client.net.Notes.failure(r.error) ?: describe(r.error)
+                _notesJob.value = path to com.jarvis.client.net.Notes.Said(
+                    why, final = true, saved = false,
+                )
+                return false
+            }
+            is ApiResult.Ok -> r.value
+        }
+        val said = com.jarvis.client.net.Notes.describe(first)
+        _notesJob.value = path to said
+        if (said.final) return said.saved
+        val id = com.jarvis.client.net.Notes.jobId(first) ?: return true
+        scope.launch {
+            val started = SystemClock.elapsedRealtime()
+            // Survives a dropped link and a failed poll or two - see JobFollow.
+            val follow = com.jarvis.client.net.JobFollow()
+            while (true) {
+                delay(com.jarvis.client.net.Notes.POLL_MS)
+                if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Notes.GIVE_UP_MS) {
+                    _notesJob.value = path to com.jarvis.client.net.Notes.Said(
+                        com.jarvis.client.net.Notes.GAVE_UP, final = true, saved = false,
+                    )
+                    break
+                }
+                if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
+                val next = api.notesSaveStatus(id)
+                if (next is ApiResult.Failed) {
+                    if (!follow.failed()) continue
+                    _notesJob.value = path to com.jarvis.client.net.Notes.Said(
+                        "Lost track of it (${describe(next.error)}). Check the approval card " +
+                            "on your PC and the note itself.",
+                        final = true, saved = false,
+                    )
+                    break
+                }
+                follow.answered()
+                val now = com.jarvis.client.net.Notes.describe((next as ApiResult.Ok).value)
+                _notesJob.value = path to now
+                if (now.final) break
+            }
+        }
+        return true
+    }
+
     // ------------------------------------------------------------ watch ----
 
     private val _watchTick = MutableStateFlow(0)

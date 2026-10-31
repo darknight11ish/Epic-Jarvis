@@ -79,6 +79,7 @@ pub mod open_app;
 pub mod plain_errors;
 pub mod proctree;
 pub mod prompt_coach;
+pub mod protected;
 pub mod pyfind;
 pub mod reach;
 // A reminder's own action (2026-10-27): the ONE command that opens what a
@@ -1321,6 +1322,17 @@ pub fn run() {
             folders::add_folder,
             folders::remove_folder,
             folders::import_notion,
+            // Settings' "Protected from Jarvis" (protected.rs; the owner's
+            // request of 2026-10-31, contract
+            // `.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md`): the list
+            // (a read), the two Windows pickers, the programs running now, and
+            // one add (the owner's direct act, immediate and tightening) or one
+            // remove (ONE approval card on the PC). Settings window only.
+            protected::get_protection,
+            protected::protection_pick,
+            protected::protection_programs,
+            protected::add_protection,
+            protected::remove_protection,
             // "Spending summaries" (spending.rs): the chat table (Jarvis bar) and
             // the Settings box.
             spending::chat_table,
@@ -1413,6 +1425,13 @@ pub fn run() {
             commands::wiki_ingest,
             commands::wiki_ingest_status,
             commands::wiki_open_folder,
+            // The notes editor - the whole Obsidian vault, both apps (contract
+            // 2026-10-31). Every save raises the ordinary `edit_vault_note`
+            // card; this program never approves anything.
+            commands::notes_list,
+            commands::notes_read,
+            commands::notes_save,
+            commands::notes_save_status,
             commands::get_deep,
             commands::ask_deep,
             commands::check_server_health,

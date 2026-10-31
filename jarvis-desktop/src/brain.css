@@ -1599,6 +1599,76 @@ body {
   color: var(--text-faint);
 }
 
+/* ---- Notes editor (contract 2026-10-31; notes.js) ----------------------- */
+
+.notes-root {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+.notes-job {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--border-accent);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.notes-job[data-tone="ok"] {
+  border-left-color: var(--ok);
+}
+
+.notes-job[data-tone="bad"] {
+  border-left-color: var(--bad);
+}
+
+.notes-editor {
+  margin: 10px 0;
+}
+
+.notes-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.notes-path {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.notes-meta {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.notes-text {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.notes-actions {
+  margin-top: 8px;
+}
+
+.notes-truncated {
+  margin-top: 8px;
+}
+
 /* ---- Deep questions (backend/big-model.patch; deep.js) ------------------ */
 
 .deep-state {

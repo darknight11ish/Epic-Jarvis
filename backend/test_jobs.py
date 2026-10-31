@@ -70,6 +70,17 @@ WHAT THIS PROVES:
    facts the Work pane needs (`grants`, `ticking`) and the start-up call that
    registers the one production job body.
 
+8. **The ONE production body ASKS (2026-10-31, DEF-024).** `watch_github`'s
+   handler calls `ctx.require("github_read")` before it searches, so a job
+   created through the live route with the Work panes' `needs: []` parks in
+   `waiting_approval` with one one-shot grant. The tests below drive that
+   parked row through `handle_answer`: No fails the job before any search,
+   Allow once spends the grant and the search runs on the retry tick, the
+   grant is used up rather than inherited, and the queue's own audit verbs
+   (`jobs.waiting`, `jobs.grant_decided`, `jobs.capability_granted`) are the
+   ones written - no new verb is invented. This is the first production path
+   that can park, which is what closes DEF-024 (field-test Matrix Row 22).
+
 WHAT THIS SUITE DOES NOT PROVE, said out loud rather than implied:
 
   * **Nothing here drives HTTP.** The two route bodies are module functions
@@ -99,8 +110,13 @@ WHAT THIS SUITE DOES NOT PROVE, said out loud rather than implied:
     this file are the suite's own. So the route is no longer a library with no
     way in, but "what a job can DO" is still one kind until another module
     registers one - said in ARCHITECTURE.md section 10 rather than implied.
+    Since 2026-10-31 that body ASKS for its `github_read` capability
+    (DEF-024), so a route-created job with `needs: []` parks and the answer
+    route above is its way back; before that no production body called
+    `ctx.require()`, which is why the loop was unreachable on the owner's PC.
 """
 import ast
+import json
 import os
 import shutil
 import subprocess
@@ -886,6 +902,278 @@ def t_the_jobs_routes_patch_applies_to_the_real_backend_and_wires_both_routes():
                   bool(watch_calls), watch_calls)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------
+#   9. The ONE production body asks: DEF-024, closed 2026-10-31
+# --------------------------------------------------------------------------
+#: The real gate action a background GitHub search asks under - the same name
+#: jarvis_tellme.py's own GitHub look uses (jarvis_tellme.py's GITHUB_ACTION).
+#: Not the suite's PROBE_ACTION: this is the production capability, and the
+#: policy's tier for it is not what decides a job (the frozen row is).
+GITHUB_ACTION = "github_read"
+
+
+def _job_result(row):
+    """A finished job's result dict, whether the row holds it decoded or as JSON."""
+    got = (row or {}).get("result")
+    if isinstance(got, str):
+        try:
+            got = json.loads(got)
+        except ValueError:
+            return {}
+    return got if isinstance(got, dict) else {}
+
+
+def _production_watch():
+    """The SHIPPED watch module, with its own database and a fake GitHub.
+
+    `jarvis_watch.DB_PATH` and `jarvis_watch._get` are both read at call time
+    (the same documented hooks `fresh()` uses for jarvis_jobs, and check()'s
+    own docstring says why `_get` is resolved there rather than bound), so
+    pointing them at scratch objects cannot touch the owner's watch.db and
+    cannot open a socket. Returns (module, fetcher calls, restore).
+    """
+    import jarvis_watch as W
+    scratch = Path(tempfile.mkdtemp(dir=str(_BASE), prefix="watch-"))
+    W.DB_PATH = scratch / "watch.db"
+    # `_init()` is once per process on purpose, so a moved DB_PATH needs the
+    # same reset the module's own tests do - otherwise the second case reads
+    # tables the first case's file has.
+    W._inited = False
+    calls = []
+
+    def fake_get(url, timeout=12.0, headers=None):
+        calls.append(url)
+        return json.dumps({"items": []})
+
+    real_get = W._get
+    W._get = fake_get
+    W.add("def024", "python")
+    W.register_job()          # the SAME registration the route's start-up makes
+    return W, calls, (lambda: setattr(W, "_get", real_get))
+
+
+def _capture_audit():
+    """Capture every audit line the modules write, without touching a real log.
+
+    `jarvis_jobs` and `jarvis_watch` both call `fw.audit_log`, and `fw` is the
+    same imported module object in this process, so one replacement catches
+    both. Returns (events, restore); the caller restores in a finally.
+    """
+    if getattr(J, "fw", None) is None:
+        return None, (lambda: None)
+    events = []
+
+    def recorder(event, detail=None):
+        events.append((event, detail if isinstance(detail, dict) else {}))
+        return True
+
+    real = J.fw.audit_log
+    J.fw.audit_log = recorder
+    return events, (lambda: setattr(J.fw, "audit_log", real))
+
+
+def _created_watch_job(text="watch python"):
+    """Create the one production kind through the route body, and return its id."""
+    code, out = J.handle_create({"kind": "watch_github", "text": text})
+    return code, out, (out or {}).get("id", "")
+
+
+def t_the_one_production_job_body_parks_and_asks_for_github_read():
+    """DEF-024: the body that production actually registers calls ctx.require().
+
+    Before 2026-10-31 the one production handler only reported progress, so no
+    route-created job could ever park. This drives a job created through
+    `POST /api/jobs`' body with the Work panes' `needs: []`, runs the tick the
+    heartbeat runs, and requires the park: `waiting_approval`, ONE unspent
+    pending grant for the real `github_read` action, no GitHub request made,
+    the frozen set unchanged, and the queue's own `jobs.waiting` line written.
+
+    BITE: delete the `ctx.require("github_read")` line from jarvis_watch's
+    handler and the job runs straight to `done` - the first check fails.
+    """
+    fresh()
+    W, calls, restore_get = _production_watch()
+    events, restore_audit = _capture_audit()
+    try:
+        if events is None:
+            skip("jarvis_framework is not importable here, so the audit lines "
+                 "could not be captured")
+            return
+        code, out, jid = _created_watch_job()
+        check("the live route body creates the one production kind",
+              code == 200 and bool(jid), (code, out))
+        J.run_due()
+        row = J.get(jid) or {}
+        check("its handler PARKS the job instead of searching",
+              row.get("state") == "waiting_approval", row.get("state"))
+        check("no GitHub request was made before the owner answered",
+              calls == [], calls)
+        grants = J.pending_grants(jid)
+        check("ONE one-shot grant waits, for the REAL action github_read",
+              len(grants) == 1 and grants[0]["action"] == GITHUB_ACTION
+              and grants[0]["state"] == "pending" and grants[0]["used"] is None,
+              grants)
+        check("the frozen set was not widened by asking",
+              row.get("caps") == [], row.get("caps"))
+        waiting = [(e, d) for e, d in events if e == "jobs.waiting"]
+        check("the queue's own jobs.waiting line names the action",
+              len(waiting) == 1 and waiting[0][1].get("action") == GITHUB_ACTION,
+              waiting)
+        check("nothing was granted by parking",
+              not [e for e, _ in events if e == "jobs.capability_granted"], events)
+    finally:
+        restore_audit()
+        restore_get()
+
+
+def t_allow_once_spends_the_production_grant_and_the_search_runs_exactly_once():
+    """Allow once: the parked production job continues and works exactly once.
+
+    Answers the parked grant the way the Work pane's button does
+    (`handle_answer`), then drives the retry tick by hand. The grant is spent
+    by `ctx.require()` on that tick, the GitHub search really runs (the fake
+    fetcher is counted), the job finishes, and `jobs.capability_granted` is
+    written once - the queue's existing verb, not a new one.
+    """
+    fresh()
+    W, calls, restore_get = _production_watch()
+    events, restore_audit = _capture_audit()
+    try:
+        if events is None:
+            skip("jarvis_framework is not importable here, so the audit lines "
+                 "could not be captured")
+            return
+        _code, _out, jid = _created_watch_job()
+        J.run_due()
+        check("the production job parked first", len(J.pending_grants(jid)) == 1,
+              J.pending_grants(jid))
+        code, out = J.handle_answer({"id": jid, "approved": True, "by": "test"})
+        check("the Work pane's Allow once is accepted",
+              code == 200 and out.get("ok") and out["grant"]["state"] == "granted",
+              (code, out))
+        check("answering does not run it inside the request",
+              (J.get(jid) or {}).get("state") == "waiting_approval",
+              (J.get(jid) or {}).get("state"))
+        decided = [(e, d) for e, d in events if e == "jobs.grant_decided"]
+        check("deciding wrote jobs.grant_decided with the owner's yes",
+              len(decided) == 1 and decided[0][1].get("approved") is True, decided)
+
+        J.run_due(now=time.time() + 7200)
+        row = J.get(jid) or {}
+        check("the retry tick spends the grant and finishes the job",
+              row.get("state") == "done", row.get("state"))
+        check("the GitHub search really ran, exactly once",
+              len(calls) == 1, calls)
+        check("and its count is on the job's result",
+              _job_result(row).get("checked") == 1, _job_result(row))
+        granted = [(e, d) for e, d in events if e == "jobs.capability_granted"]
+        check("the queue's jobs.capability_granted line was written once",
+              len(granted) == 1 and granted[0][1].get("action") == GITHUB_ACTION,
+              granted)
+        spent = J._read("SELECT state, used FROM job_grants WHERE job_id=?", (jid,))
+        check("the grant is USED UP - granted, and its one use stamped",
+              len(spent) == 1 and spent[0]["state"] == "granted"
+              and spent[0]["used"] is not None, spent)
+        check("nothing is left pending for the job", not J.pending_grants(jid),
+              J.pending_grants(jid))
+    finally:
+        restore_audit()
+        restore_get()
+
+
+def t_no_stops_the_production_job_without_the_search_and_leaves_no_rule():
+    """No: that job ends before anything is fetched, and the next one asks again.
+
+    The denial path is `handle_answer(..., approved=False)` ->
+    `_stop_denied`, and the proof that it is not a policy change is the second
+    job: created the same way, it parks and asks for the same action again.
+    """
+    fresh()
+    W, calls, restore_get = _production_watch()
+    events, restore_audit = _capture_audit()
+    try:
+        if events is None:
+            skip("jarvis_framework is not importable here, so the audit lines "
+                 "could not be captured")
+            return
+        _code, _out, jid = _created_watch_job()
+        J.run_due()
+        first_grant = J.pending_grants(jid)
+        check("the production job parked first", len(first_grant) == 1, first_grant)
+        code, out = J.handle_answer({"id": jid, "approved": False, "by": "test"})
+        check("No is accepted and says it stopped that job",
+              code == 200 and out.get("ok") and out.get("stopped") is True,
+              (code, out))
+        row = J.get(jid) or {}
+        check("the job is failed with the owner's answer as its reason",
+              row.get("state") == "failed"
+              and "you said no" in (row.get("error") or ""),
+              {"state": row.get("state"), "error": row.get("error")})
+        check("no GitHub request was made", calls == [], calls)
+        decided = [(e, d) for e, d in events if e == "jobs.grant_decided"]
+        check("jobs.grant_decided recorded the No",
+              len(decided) == 1 and decided[0][1].get("approved") is False, decided)
+        check("its frozen set is unchanged - a No widens nothing",
+              row.get("caps") == [], row.get("caps"))
+
+        _code, _out, jid2 = _created_watch_job("watch python again")
+        J.run_due()
+        second = J.pending_grants(jid2)
+        check("a NEW job asks again - the No left no rule",
+              (J.get(jid2) or {}).get("state") == "waiting_approval"
+              and len(second) == 1 and second[0]["action"] == GITHUB_ACTION
+              and second[0]["state"] == "pending", second)
+        check("and the new grant is a different one",
+              bool(second) and bool(first_grant)
+              and second[0]["id"] != first_grant[0]["id"],
+              {"old": first_grant and first_grant[0]["id"],
+               "new": second and second[0]["id"]})
+        check("still no GitHub request from either job", calls == [], calls)
+    finally:
+        restore_audit()
+        restore_get()
+
+
+def t_a_second_require_does_not_inherit_a_spent_grant():
+    """One Allow once authorises ONE use, so a second ask in the same run parks.
+
+    A handler that asks twice is the shape this proves: the first ask spends
+    the answered grant and passes; the second finds no grant it may use, so it
+    records a NEW pending one and parks the job again. BITE: make
+    `_grant_step()` treat a spent grant as still granted and the second ask
+    passes too - the parked check fails.
+    """
+    fresh()
+    asks = {"passed": 0}
+
+    def body(ctx, params):
+        ctx.require(PROBE_ACTION)      # spends the owner's one use
+        asks["passed"] += 1
+        ctx.require(PROBE_ACTION)      # must ask again, not inherit
+        asks["passed"] += 1
+        return {"ok": True}
+
+    J.register("asks_twice", body)
+    code, out = J.handle_create({"kind": "asks_twice", "text": "two questions"})
+    check("the live route body created the two-question job", code == 200, (code, out))
+    jid = (out or {}).get("id", "")
+    J.run_due()
+    first = J.pending_grants(jid)
+    check("the first question parks it",
+          len(first) == 1 and asks["passed"] == 0, {"grants": first, "asks": asks})
+    J.handle_answer({"id": jid, "approved": True, "by": "test"})
+    J.run_due(now=time.time() + 7200)
+    second = J.pending_grants(jid)
+    check("the spent grant lets the first ask through",
+          asks["passed"] == 1, asks)
+    check("the SECOND require parks it again with a NEW pending grant",
+          (J.get(jid) or {}).get("state") == "waiting_approval"
+          and len(second) == 1 and second[0]["state"] == "pending"
+          and second[0]["id"] != first[0]["id"],
+          {"state": (J.get(jid) or {}).get("state"), "grants": second})
+    check("and it did not run past the second question", asks["passed"] == 1, asks)
 
 
 # --------------------------------------------------------------------------

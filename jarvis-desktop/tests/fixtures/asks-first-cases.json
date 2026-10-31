@@ -258,6 +258,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a file from your PC to your phone"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -1577,6 +1604,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a file from your PC to your phone"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -2893,6 +2947,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a file from your PC to your phone"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -4202,6 +4283,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a file from your PC to your phone"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -5511,6 +5619,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a file from your PC to your phone"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -6832,6 +6967,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a file from your PC to your phone"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"
@@ -8148,6 +8310,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a file from your PC to your phone"
+      },
+      {
+       "action": "protect_item",
+       "fixed": false,
+       "id": "protect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Protect a folder, file or program from Jarvis"
+      },
+      {
+       "action": "unprotect_item",
+       "fixed": false,
+       "id": "unprotect_item",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop protecting something from Jarvis"
+      },
+      {
+       "action": "edit_vault_note",
+       "fixed": false,
+       "id": "edit_vault_note",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in your Obsidian vault"
       }
      ],
      "title": "Writing your notes"

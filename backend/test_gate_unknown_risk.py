@@ -369,8 +369,9 @@ def t_the_patch_is_the_base_plus_this_change():
           _patch_targets(PATCH.name) == {"jarvis_gate.py"}, _patch_targets(PATCH.name))
     heads = re.findall(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@", PATCH.read_text(
         encoding="utf-8"), re.M)
-    check("five hunks: the rows, the table end, risk_for, notice_for, check()",
-          len(heads) == 5, len(heads))
+    check("six hunks: the rows, the table end, risk_for, notice_for, the "
+          "file-wins tier table (DEF-021), and check()",
+          len(heads) == 6, len(heads))
 
 
 def t_the_patch_is_registered_and_its_place_is_measured():
@@ -485,14 +486,78 @@ def t_an_unclassified_action_can_never_run_without_a_person():
     v = _verdict(G, "some_new_action")
     check("an unclassified action already at ask is unchanged", v.tier == "ask", v.tier)
     # A tool literal is the gate's own per-tool decision, not an unclassified
-    # action: forcing it would card every calculation.
-    set_policy({"calculator": "auto"})
+    # action: forcing it would card every calculation. Since DEF-021 the
+    # exemption needs the owner's file to have NO line for the name; with no
+    # line it is unchanged and still runs.
+    set_policy({"send_email": "ask"})
     G.action_for_tool("calculator")
     v = _verdict(G, "calculator")
-    check("a tool the gate maps straight to 'auto' still runs (calculator)",
+    check("a tool the gate maps straight to 'auto' still runs when the file has no line",
           v.allowed is True and v.tier == "auto", v)
     check("... and that exemption is by name, from the gate's own table",
           "calculator" in G._SYNTH_TIERS)
+
+
+# ---------------------------------------------------------------------------
+# 3b. DEF-021: an explicit file line wins over the tool table, and the
+#     forced-ask exemption needs the file to say nothing
+# ---------------------------------------------------------------------------
+
+def t_an_explicit_file_line_beats_the_tool_table():
+    """DEF-021, 2026-10-31 (Gemini: the #1 code priority of Round 3).
+
+    `_tiers()` used to apply `_SYNTH_TIERS` OVER the file's own
+    `[autonomy.tiers]` line, and the #1008 forced-ask exemption then skipped
+    exactly those names - so `calculator = "never"` in the owner's file ran
+    auto. Proved by running the published gate before the fix:
+    `_tiers({"calculator": "never"})` -> auto and
+    `check("calculator", framework=...)` -> allowed=True, tier="auto".
+    """
+    G, OC, AF, why = modules()
+    check("the patched gate imports for the DEF-021 checks", G is not None, why)
+    if G is None:
+        return
+    # The owner's explicit "never" wins, and the action is refused.
+    set_policy({"calculator": "never"})
+    G.action_for_tool("calculator")
+    tiers = G._tiers()
+    check("the file's 'never' wins over the tool table in _tiers()",
+          tiers.get("calculator") == "never", tiers.get("calculator"))
+    v = _verdict(G, "calculator")
+    check("calculator = never is REFUSED, not run", v.tier == "never"
+          and v.allowed is False, v)
+    check("... with no card and no approval path", v.outcome == "refused", v.outcome)
+    # The owner's explicit "ask" raises a card.
+    set_policy({"calculator": "ask"})
+    v = _verdict(G, "calculator")
+    check("calculator = ask raises a card", v.tier == "ask", v.tier)
+    check("... and it did NOT run", v.allowed is False, v)
+    check("... and the outcome is an ask, never auto", v.outcome != "auto", v.outcome)
+    # An explicit "auto" line is the owner's own ACTION now, so the
+    # unclassified-action rule applies to it: forced ask, never unattended.
+    set_policy({"calculator": "auto"})
+    v = _verdict(G, "calculator")
+    check("an explicit calculator = auto is still forced to ask (unclassified action)",
+          v.tier == "ask", v.tier)
+    check("... and it did not run with nobody asked", v.allowed is False, v)
+    # The What asks first page and the gate agree for the name.
+    set_policy({"calculator": "never"})
+    page = AF.view(here=True)
+    rows = {r["id"]: r for group in page["groups"] for r in group["rows"]}
+    check("the What asks first page names calculator", "calculator" in rows,
+          sorted(rows)[:8])
+    check("... with the file's own tier", rows.get("calculator", {}).get("tier") == "never",
+          rows.get("calculator"))
+    check("... and the page, the file reader and _tiers() agree",
+          rows.get("calculator", {}).get("tier") == AF._file_tiers().get("calculator")
+          == G._tiers().get("calculator") == "never",
+          (rows.get("calculator", {}).get("tier"),
+           AF._file_tiers().get("calculator"), G._tiers().get("calculator")))
+    # A name with NO file line still gets the forced ask: the #1008 rule.
+    set_policy({})
+    v = _verdict(G, "some_new_action")
+    check("a name with NO file line still gets the forced ask",
+          v.tier == "ask" and v.allowed is False, v)
 
 
 # ---------------------------------------------------------------------------

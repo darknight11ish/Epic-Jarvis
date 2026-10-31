@@ -227,6 +227,11 @@ pub(crate) mod picker {
         /// A ChatGPT, Claude, Gemini or DeepSeek export (`.zip` or `.json`), for the
         /// Brain's "Bring in chats" (brain/history_import.rs).
         ChatExport,
+        /// One folder the owner protects from Jarvis (Settings' "Protected from
+        /// Jarvis", protected.rs).
+        ProtectFolder,
+        /// One file the owner protects from Jarvis (the same card).
+        ProtectFile,
     }
 
     /// `Ok(None)` when the owner cancelled.
@@ -258,6 +263,24 @@ pub(crate) mod picker {
                     .map_err(fail)?;
                 dialog
                     .SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST)
+                    .map_err(fail)?;
+            }
+            What::ProtectFolder => {
+                dialog
+                    .SetTitle(w!("Choose a folder Jarvis must leave alone"))
+                    .map_err(fail)?;
+                dialog
+                    .SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST)
+                    .map_err(fail)?;
+            }
+            What::ProtectFile => {
+                dialog
+                    .SetTitle(w!("Choose a file Jarvis must leave alone"))
+                    .map_err(fail)?;
+                dialog
+                    .SetOptions(
+                        options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST,
+                    )
                     .map_err(fail)?;
             }
             What::ChatExport => {
@@ -316,10 +339,17 @@ pub(crate) mod picker {
         /// A ChatGPT, Claude, Gemini or DeepSeek export (`.zip` or `.json`), for the
         /// Brain's "Bring in chats" (brain/history_import.rs).
         ChatExport,
+        /// One folder the owner protects from Jarvis (protected.rs).
+        ProtectFolder,
+        /// One file the owner protects from Jarvis (protected.rs).
+        ProtectFile,
     }
 
     pub fn pick(what: What) -> Result<Option<String>, String> {
-        let _ = matches!(what, What::Folder | What::Zip | What::ChatExport);
+        let _ = matches!(
+            what,
+            What::Folder | What::Zip | What::ChatExport | What::ProtectFolder | What::ProtectFile
+        );
         Err("choosing a folder or a file needs the Windows dialog".to_string())
     }
 }

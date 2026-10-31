@@ -579,6 +579,17 @@ SECTIONS: tuple = (
     Section("calendar", ("the calendar", "jarvis calendar", "my calendar",
                          "appointments"),
             app="both", openable=False),
+    # "Protected from Jarvis" (2026-10-31, the owner's request): the list
+    # of folders, files and programs Jarvis may not touch. A card on the
+    # desktop (settings.html id="protection", src/protected-settings.js)
+    # and a row on the phone with the SAME item key (SettingsScreen.kt) -
+    # the ids match because SettingsScreen.kt's own item(key = ...) is the
+    # phone id, so one Section names both. Opening it is pure navigation
+    # on both apps; adding is the PC's pickers or a chat request with ONE
+    # card, and removing asks ONE card whichever app asks.
+    Section("protection", ("protected from jarvis", "the protected list",
+                           "protected items", "what jarvis may not touch"),
+            app="both"),
     # "Limits and how often Jarvis does things" (2026-10-08): the limits and
 )
 

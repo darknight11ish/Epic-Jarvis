@@ -178,6 +178,7 @@
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">The tools Jarvis uses</span>
             <a href="#folders">Folders Jarvis may look in</a>
+            <a href="#protection">Protected from Jarvis</a>
             <a href="#spending">Spending</a>
             <a href="#screen-look">Look at this and Watch with me</a>
             <a href="#browser-engine">Browser without a window</a>
@@ -2543,6 +2544,64 @@
         </div>
       </section>
 
+      <!-- ── Protected from Jarvis ─────────────────────────────────────────
+           The owner's request of 2026-10-31: folders, files and programs he
+           adds himself that Jarvis must leave alone, in one of two modes
+           (Blocked - no access, or Read-only). Contract
+           `.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md`;
+           protected-settings.js, protected.js; src-tauri/src/protected.rs
+           get_protection, protection_pick, protection_programs,
+           add_protection, remove_protection. Adding is the owner's direct act
+           in this window (immediate, tightening); removing raises ONE
+           approval card on the PC, whichever app asks. The pickers run in
+           Rust: this window gets only the chosen path, never a file system of
+           its own. No raw JSON editing, no bulk import. -->
+      <section class="card" id="protection">
+        <h2>Protected from Jarvis</h2>
+        <p class="note" id="pr-detail">
+          Folders, files and programs Jarvis must leave alone. Each one is
+          either <strong>Blocked — no access</strong> (no reading, writing,
+          searching or acting, and for a program no screen reading of its
+          windows) or <strong>Read-only</strong> (reading and search results
+          are allowed; every write, delete, rename or action is refused - for
+          a program that means "see it, never act"). Adding here is your own
+          direct act; removing asks for one approval card on this PC.
+        </p>
+        <p class="state" id="pr-state" role="status">Asking Jarvis…</p>
+        <div id="pr-body" hidden>
+          <p class="note" id="pr-change"></p>
+          <ul class="sc-cards" id="pr-list"></ul>
+          <p class="note" id="pr-empty" hidden></p>
+          <div class="row">
+            <button class="btn small" id="pr-add-folder" type="button">Add a folder…</button>
+            <button class="btn small" id="pr-add-file" type="button">Add a file…</button>
+            <button class="btn small" id="pr-add-program" type="button">Add a program…</button>
+          </div>
+          <div id="pr-choice" hidden>
+            <h3 class="subhead" id="pr-choice-title" tabindex="-1">Add</h3>
+            <p class="note" id="pr-choice-target"></p>
+            <div id="pr-programs" hidden></div>
+            <fieldset class="pr-modes" id="pr-modes">
+              <legend>Mode</legend>
+              <label class="pr-option">
+                <input type="radio" name="pr-mode" id="pr-mode-blocked" value="blocked" checked />
+                <span>Blocked — no access</span>
+              </label>
+              <label class="pr-option">
+                <input type="radio" name="pr-mode" id="pr-mode-readonly" value="readonly" />
+                <span>Read-only</span>
+              </label>
+              <p class="note" id="pr-mode-hint"></p>
+            </fieldset>
+            <div class="row">
+              <button class="btn small" id="pr-add-confirm" type="button">Add</button>
+              <button class="btn small" id="pr-choice-cancel" type="button">Cancel</button>
+            </div>
+          </div>
+          <span class="status" id="pr-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── Spending ──────────────────────────────────────────────────────
            "Spending summaries" (the owner's decision of 2026-09-30;
            spending-settings.js, spending.js; spending.rs get_spending,
@@ -3594,6 +3653,7 @@
     <script type="module" src="animal-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
+    <script type="module" src="protected-settings.js"></script>
     <script type="module" src="spending-settings.js"></script>
     <script type="module" src="look-settings.js"></script>
     <script type="module" src="browser-engine.js"></script>

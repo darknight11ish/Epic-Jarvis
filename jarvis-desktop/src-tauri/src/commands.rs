@@ -5446,6 +5446,317 @@ mod wiki_tests {
 }
 
 // ---------------------------------------------------------------------------
+// The notes editor - the whole Obsidian vault, both apps
+//
+// The contract is .dsh-scratch/NOTES-EDITOR-2026-10-31/CONTRACT.md: list,
+// read and SAVE any .md/.txt note in the owner's vault. Every save raises the
+// ordinary gate card (`edit_vault_note`, tier `ask` on this PC); this program
+// never approves anything, and the note is not written until the owner's card
+// is answered. The backend lane adds the routes; these are the four commands
+// the desktop's plate uses, built like the wiki builder's and the note
+// capture's above.
+// ---------------------------------------------------------------------------
+
+/// How long one notes request may take. A 2 MiB note over loopback is quick;
+/// this bounds a PC that has stopped answering, not the normal pace.
+const NOTES_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// What a backend without the notes-editor routes is told to do about it.
+pub(crate) const NOTES_NOT_INSTALLED: &str =
+    "this PC's Jarvis has no notes editor yet - copy the new backend \
+     files in (run apply-patches.ps1)";
+
+/// Every `.md` or `.txt` note in the Obsidian vault, newest first:
+/// `GET /api/notes/list`, with the optional `?q=` search the PC matches
+/// against the title and path (case-insensitive, bounded there). The answer
+/// never carries note text - only `path`, `title`, `size` and `mtime`.
+#[tauri::command]
+pub async fn notes_list(app: AppHandle, q: Option<String>) -> Result<serde_json::Value, String> {
+    let query = q.map(|q| q.trim().to_string()).filter(|q| !q.is_empty());
+    let mut request = jarvis_client(Some(NOTES_TIMEOUT))?
+        .get(format!("{}/api/notes/list", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?);
+    if let Some(query) = query.as_deref() {
+        request = request.query(&[("q", query)]);
+    }
+    let response = request.send().await.map_err(|e| {
+        if e.is_connect() {
+            format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+        } else {
+            format!("unable to reach `/api/notes/list`: {e}")
+        }
+    })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    notes_answer(status, &body, "/api/notes/list")
+}
+
+/// One note's words: `GET /api/notes/read?path=`. The answer carries the text,
+/// its SHA-256 and its size; the SHA-256 is what the save is checked against.
+#[tauri::command]
+pub async fn notes_read(app: AppHandle, path: String) -> Result<serde_json::Value, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("say which note to open".to_string());
+    }
+    let response = jarvis_client(Some(NOTES_TIMEOUT))?
+        .get(format!("{}/api/notes/read", jarvis_base(&app)))
+        .query(&[("path", path)])
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/notes/read`: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    notes_answer(status, &body, "/api/notes/read")
+}
+
+/// Saves one note: `POST /api/notes/save`. The card it raises is the ordi-
+/// nary gate card for the action `edit_vault_note`; the default answer is
+/// `202` with a job id and `state: "waiting"`, and nothing is written before
+/// the owner answers. A `409` means the expected hash no longer matches: the
+/// answer names the current hash and nothing is overwritten.
+///
+/// Held while the event stream is stale (rule 4), like the wiki builder's
+/// add: the card it raises should be answered by someone looking at a live
+/// queue. The page greys Save for the same reason, but any window holding the
+/// capability reaches this command directly, whatever its button shows.
+#[tauri::command]
+pub async fn notes_save(
+    app: AppHandle,
+    path: String,
+    text: String,
+    expected_sha256: String,
+) -> Result<serde_json::Value, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("say which note to save".to_string());
+    }
+    let expected_sha256 = expected_sha256.trim();
+    if expected_sha256.is_empty() {
+        return Err(
+            "open the note before saving it, so the PC can check it has not changed".to_string(),
+        );
+    }
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "the event stream is stale, so a save cannot be asked for until it reconnects"
+                .to_string(),
+        );
+    }
+    let payload = serde_json::json!({
+        "path": path,
+        "text": text,
+        "expected_sha256": expected_sha256,
+    });
+    let response = jarvis_client(Some(NOTES_TIMEOUT))?
+        .post(format!("{}/api/notes/save", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("the save could not be sent: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    notes_answer(status, &body, "/api/notes/save")
+}
+
+/// How one save is going: `GET /api/notes/save?id=`. `state` is `waiting`
+/// (the card is up), `saved`, `denied` or `failed`, with the backend's own
+/// sentence in `message`; `sha256` is the new hash once it is saved.
+#[tauri::command]
+pub async fn notes_save_status(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("that save has no id to look up".to_string());
+    }
+    let query = format!("/api/notes/save?id={}", encode_path_segment(id));
+    let response = jarvis_client(Some(NOTES_TIMEOUT))?
+        .get(format!("{}{query}", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/notes/save`: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    notes_answer(status, &body, "/api/notes/save")
+}
+
+/// Reads one of the notes routes' answers.
+///
+/// * `200`/`202` with a JSON object is the answer: the list, the note, or the
+///   save job.
+/// * `409` with a JSON object is the **conflict** answer - the page shows its
+///   own sentence and the current hash; it is not a transport failure.
+/// * anything else becomes the backend's own `error`/`message` sentence (first
+///   letter raised, words unchanged, [`server_sentence`]'s rule), or a plain
+///   line with the status code.
+pub(crate) fn notes_answer(
+    status: u16,
+    body: &str,
+    route: &str,
+) -> Result<serde_json::Value, String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .filter(|v| v.is_object());
+    if let Some(v) = parsed.as_ref() {
+        if status == 409 || (200..300).contains(&status) {
+            return Ok(v.clone());
+        }
+    }
+    if let Some(said) = body_sentence(body) {
+        return Err(said);
+    }
+    if status == 404 {
+        return Err(NOTES_NOT_INSTALLED.to_string());
+    }
+    if (200..300).contains(&status) {
+        return Err("the server's answer about the notes could not be read".to_string());
+    }
+    Err(server_sentence(status, route, body))
+}
+
+/// The backend's own sentence in a failed notes answer: `error` (a string or
+/// Ollama's `{"message": ...}` shape) first, then `message`. The first letter
+/// is raised and the words are left alone, exactly like [`server_sentence`].
+fn body_sentence(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let said = ["error", "message"].iter().find_map(|key| {
+        let field = value.get(*key)?;
+        field
+            .as_str()
+            .or_else(|| field.get("message").and_then(|m| m.as_str()))
+    })?;
+    let said = said.trim();
+    if said.is_empty() {
+        return None;
+    }
+    let mut out = said.to_string();
+    if let Some(first) = out.get(0..1) {
+        let upper = first.to_uppercase();
+        out.replace_range(0..1, &upper);
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+mod notes_tests {
+    use super::notes_answer;
+
+    /// The notes editor's answers, written from CONTRACT.md: the backend lane
+    /// builds the routes against the same file, and CI is the authority on the
+    /// real bytes once that lane lands. Kept here so the reading rules are
+    /// pinned without a server.
+    const FIXTURE: &str = include_str!("../../tests/fixtures/notes-edit-cases.json");
+
+    fn case(name: &str) -> (u16, String) {
+        let all: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture parses");
+        let c = &all["cases"][name];
+        (
+            c["status"].as_u64().expect("status") as u16,
+            c["body"].to_string(),
+        )
+    }
+
+    #[test]
+    fn the_real_answers_are_read_as_answers() {
+        let (status, body) = case("list_ok");
+        let v = notes_answer(status, &body, "/api/notes/list").expect("a list");
+        assert_eq!(v["ok"], serde_json::json!(true));
+        assert_eq!(v["notes"].as_array().map(|a| a.len()), Some(2));
+        assert_eq!(v["notes"][0]["path"], serde_json::json!("Inbox/idea.md"));
+
+        let (status, body) = case("read_ok");
+        let v = notes_answer(status, &body, "/api/notes/read").expect("a note");
+        assert!(v["text"].as_str().is_some_and(|t| t.contains("idea")));
+        assert!(v["sha256"].as_str().is_some_and(|h| h.len() == 64));
+
+        let (status, body) = case("save_waiting");
+        assert_eq!(status, 202);
+        let v = notes_answer(status, &body, "/api/notes/save").expect("a job");
+        assert_eq!(v["state"], serde_json::json!("waiting"));
+
+        let (status, body) = case("status_saved");
+        let v = notes_answer(status, &body, "/api/notes/save").expect("a saved job");
+        assert_eq!(v["state"], serde_json::json!("saved"));
+        assert!(v["sha256"].as_str().is_some_and(|h| !h.is_empty()));
+    }
+
+    /// A conflict is an ANSWER the page draws (state + current hash), not a
+    /// transport error: turning it into `Err` would lose the current hash.
+    #[test]
+    fn a_conflict_is_an_answer_the_page_shows() {
+        let (status, body) = case("save_conflict");
+        assert_eq!(status, 409);
+        let v = notes_answer(status, &body, "/api/notes/save").expect("a conflict answer");
+        assert_eq!(v["state"], serde_json::json!("conflict"));
+        assert!(v["current_sha256"].as_str().is_some_and(|h| !h.is_empty()));
+    }
+
+    /// Refusals carry the backend's own sentence, first letter raised.
+    #[test]
+    fn refusals_carry_the_backends_sentence() {
+        for name in [
+            "read_outside",
+            "read_missing",
+            "read_too_big",
+            "save_no_vault",
+        ] {
+            let (status, body) = case(name);
+            let err = notes_answer(status, &body, "/api/notes/read").expect_err(name);
+            assert!(!err.trim().is_empty(), "{name}");
+            assert!(
+                err.chars().next().is_some_and(char::is_uppercase),
+                "{name}: {err}"
+            );
+        }
+        let (status, body) = case("save_busy");
+        let err = notes_answer(status, &body, "/api/notes/save").expect_err("busy");
+        assert!(err.contains("waiting"), "{err}");
+        let (status, body) = case("read_too_big");
+        let err = notes_answer(status, &body, "/api/notes/read").expect_err("too big");
+        assert!(err.contains("2 MiB"), "{err}");
+    }
+
+    #[test]
+    fn an_older_backend_and_a_lost_job_say_so() {
+        let err = notes_answer(404, "", "/api/notes/list").expect_err("no route");
+        assert!(err.contains("apply-patches"), "{err}");
+        let (status, body) = case("status_unknown");
+        let err = notes_answer(status, &body, "/api/notes/save").expect_err("lost");
+        // The backend's own sentence, first letter raised like every refusal.
+        assert!(err.to_lowercase().contains("no save job"), "{err}");
+    }
+
+    /// A non-JSON failure is a plain line naming the code and the path, exactly
+    /// like [`super::server_sentence`] (which does quote the body it was given).
+    #[test]
+    fn a_failure_that_is_not_json_becomes_a_plain_line() {
+        let err = notes_answer(500, "<html>oops</html>", "/api/notes/list").expect_err("500");
+        assert!(err.contains("500"), "{err}");
+        assert!(err.contains("/api/notes/list"), "{err}");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The big model, slow - backend/big-model.patch, backend/jarvis_big_model.py,
 // docs/BIG-MODEL.md, JARVIS-API.md section 14
 // ---------------------------------------------------------------------------

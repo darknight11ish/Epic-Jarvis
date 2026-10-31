@@ -401,10 +401,13 @@ class LimitsTest {
         // (SettingsScreen.kt, item "pip-mode"; docs/PIP-DESIGN.md) sits under
         // Floating Jarvis above it, so every number below that row moved down
         // by one - and SettingsJumpTest holds the whole map to the real order.
-        // 29, not 28, since 2026-10-31: "File from your PC"
-        // (docs/JARVIS-API.md section 172) sits directly under the folder
-        // allow-list above it, so every number below that row moved down by one.
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 29"))
+        // 30, not 28, since 2026-10-31: TWO rows joined between the folder
+        // allow-list and Backups - "File from your PC" (docs/JARVIS-API.md
+        // section 172) at 17 and "Protected from Jarvis"
+        // (.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md) at 18 - so
+        // every number below them moved down by two, and SettingsJumpTest holds
+        // the whole map to the row the screen really draws.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 30"))
     }
 
     // ------------------------------------------- a time of day, and the PC's

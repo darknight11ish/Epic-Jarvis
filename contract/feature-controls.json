@@ -9546,6 +9546,33 @@
       "where": "settings",
       "in_desktop_settings": false,
       "in_phone_settings": true
+    },
+    {
+      "id": "protection",
+      "names": [
+        "protected from jarvis",
+        "the protected list",
+        "protected items",
+        "what jarvis may not touch"
+      ],
+      "app": "both",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": true
+    },
+    {
+      "id": "files",
+      "names": [
+        "file from your pc",
+        "files from your pc",
+        "a file from my pc",
+        "the file jarvis sent",
+        "downloads from jarvis"
+      ],
+      "app": "phone",
+      "where": "settings",
+      "in_desktop_settings": false,
+      "in_phone_settings": true
     }
   ],
   "known_gaps": [

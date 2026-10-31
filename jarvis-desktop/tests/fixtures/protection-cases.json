@@ -1,0 +1,136 @@
+{
+  "_comment": "The PC's answers for Settings' \"Protected from Jarvis\", written from .dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md (2026-10-31). The backend lane builds the same routes against that contract; this file pins the desktop's reading rules without a server, and CI is the authority on the real bytes once that lane lands.",
+  "cases": {
+    "view_list": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "count": 3,
+        "items": [
+          {
+            "id": "prot_ab12cd34",
+            "kind": "folder",
+            "target": "C:\\Users\\pcadmin\\Documents\\Taxes",
+            "mode": "blocked",
+            "added": "2026-10-31T08:00:00Z",
+            "added_by": "owner"
+          },
+          {
+            "id": "prot_ef56gh78",
+            "kind": "file",
+            "target": "C:\\Users\\pcadmin\\notes\\budget.md",
+            "mode": "readonly",
+            "added": "2026-10-31T08:01:00Z",
+            "added_by": "chat"
+          },
+          {
+            "id": "prot_ij90kl12",
+            "kind": "program",
+            "target": "notepad.exe",
+            "mode": "readonly",
+            "added": "2026-10-31T08:02:00Z",
+            "added_by": "owner"
+          }
+        ],
+        "modes": ["blocked", "readonly"],
+        "change_card": "Removing protection raises one approval card; adding in Settings is immediate; asking in chat raises one card."
+      }
+    },
+    "view_empty": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "count": 0,
+        "items": [],
+        "modes": ["blocked", "readonly"],
+        "change_card": "Removing protection raises one approval card; adding in Settings is immediate; asking in chat raises one card."
+      }
+    },
+    "view_program_readonly": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "count": 1,
+        "items": [
+          {
+            "id": "prot_pq34rs56",
+            "kind": "program",
+            "target": "notepad.exe",
+            "mode": "readonly",
+            "added": "2026-10-31T08:02:00Z",
+            "added_by": "owner"
+          }
+        ],
+        "modes": ["blocked", "readonly"],
+        "change_card": "Removing protection raises one approval card; adding in Settings is immediate; asking in chat raises one card."
+      }
+    },
+    "add_ok": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "item": {
+          "id": "prot_zz99yy88",
+          "kind": "folder",
+          "target": "C:\\Users\\pcadmin\\Documents\\Taxes",
+          "mode": "blocked",
+          "added": "2026-10-31T08:10:00Z",
+          "added_by": "owner"
+        },
+        "message": "Protected C:\\Users\\pcadmin\\Documents\\Taxes - Blocked, no access."
+      }
+    },
+    "add_relative": {
+      "status": 400,
+      "body": {
+        "ok": false,
+        "error": "that path is relative - choose the whole path from this PC, starting with the drive"
+      }
+    },
+    "add_missing": {
+      "status": 400,
+      "body": {
+        "ok": false,
+        "error": "there is nothing at C:\\Users\\pcadmin\\Documents\\Gone"
+      }
+    },
+    "add_no_program": {
+      "status": 400,
+      "body": {
+        "ok": false,
+        "error": "no program called notepad2.exe is running or known on this PC"
+      }
+    },
+    "add_duplicate": {
+      "status": 409,
+      "body": {
+        "ok": false,
+        "state": "already",
+        "target": "C:\\Users\\pcadmin\\Documents\\Taxes",
+        "error": "C:\\Users\\pcadmin\\Documents\\Taxes is already protected (Blocked, no access)"
+      }
+    },
+    "add_from_phone": {
+      "status": 403,
+      "body": {
+        "ok": false,
+        "error": "only this PC may add to the protected list - ask Jarvis on the PC, or in chat for a card"
+      }
+    },
+    "remove_waiting": {
+      "status": 202,
+      "body": {
+        "ok": true,
+        "state": "waiting",
+        "id": "prot-remove-1"
+      }
+    },
+    "remove_unknown": {
+      "status": 404,
+      "body": {
+        "ok": false,
+        "error": "there is no protected item with that id any more"
+      }
+    }
+  }
+}

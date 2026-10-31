@@ -190,6 +190,14 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_progress.py": 2,
     "backend/test_projects.py": 9,
     "backend/test_prompt_coach.py": 11,
+    # 2026-10-31: the protection suite pins the source markers of the 13
+    # modules it hooks (four pins, also measured by the enforcement table
+    # check). Recorded debt, not an approval; the ratchet only turns DOWN.
+    "backend/test_protection.py": 4,
+    # 2026-10-31: the notes editor hook's four protection probes pin the
+    # markers of the door they hook (eight pins measured). Recorded debt,
+    # not an approval; the ratchet only turns DOWN.
+    "backend/test_notes_edit.py": 8,
     "backend/test_quiz_cloud.py": 1,
     "backend/test_reach.py": 2,
     "backend/test_reader_promises.py": 11,  # +1 (2026-10-17): the caption-quiz pin now also proves the injection arguments start_outside receives

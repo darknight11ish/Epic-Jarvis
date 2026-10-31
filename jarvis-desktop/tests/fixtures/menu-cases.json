@@ -176,6 +176,29 @@
       ]
     },
     {
+      "id": "settings.protection",
+      "title": "Protected from Jarvis",
+      "about": "The folders, files and programs Jarvis may not touch, and what it may do with them.",
+      "apps": [
+        "desktop",
+        "phone"
+      ],
+      "area": "settings",
+      "view": "",
+      "kind": "card",
+      "group": null,
+      "parent": null,
+      "hide": false,
+      "collapse": true,
+      "why": "Removing an entry always needs this row; hiding it would hide the list itself.",
+      "names": [
+        "protected from jarvis",
+        "the protected list",
+        "protection",
+        "what jarvis may not touch"
+      ]
+    },
+    {
       "id": "settings.appearance-card",
       "title": "Appearance",
       "about": "Theme, faces and how it all looks.",
@@ -2838,6 +2861,10 @@
       "why": "Removing a lost phone must stay reachable."
     },
     {
+      "id": "settings.protection",
+      "why": "Removing an entry always needs this row; hiding it would hide the list itself."
+    },
+    {
       "id": "settings.animal-options",
       "why": "On the phone it is drawn inside Appearance; the Appearance menu is how it is hidden."
     },
@@ -3149,6 +3176,9 @@
     "projects": "brain.tab.projects",
     "projects and goals": "group.goals-projects",
     "prompt coach": "settings.prompt-coach",
+    "protected from jarvis": "settings.protection",
+    "protected list": "settings.protection",
+    "protection": "settings.protection",
     "python sandbox": "settings.sandbox",
     "quick settings tiles": "settings.quick-tiles",
     "quick tiles": "settings.quick-tiles",
@@ -3247,6 +3277,7 @@
     "what jarvis can reach": "settings.reach",
     "what jarvis is doing": "brain.now.trace",
     "what jarvis knows about you": "brain.memory.known",
+    "what jarvis may not touch": "settings.protection",
     "what this backend supports": "settings.backend-supports",
     "when a captcha stops jarvis": "settings.handoff-front",
     "when the phone does not answer": "settings.handoff",
@@ -3332,6 +3363,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -3438,6 +3470,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -3537,6 +3570,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -3637,6 +3671,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,
@@ -3741,6 +3776,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -3841,6 +3877,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,
@@ -3941,6 +3978,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -4041,6 +4079,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,
@@ -4144,6 +4183,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -4250,6 +4290,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -4362,6 +4403,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -4468,6 +4510,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -4572,6 +4615,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -4678,6 +4722,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -4789,6 +4834,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -4895,6 +4941,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -5001,6 +5048,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -5107,6 +5155,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -5203,6 +5252,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -5309,6 +5359,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -5418,6 +5469,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -5518,6 +5570,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,
@@ -5624,6 +5677,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -5730,6 +5784,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -5829,6 +5884,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -5935,6 +5991,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -6037,6 +6094,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -6143,6 +6201,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -6245,6 +6304,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -6345,6 +6405,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,
@@ -6444,6 +6505,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -6544,6 +6606,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,
@@ -6640,6 +6703,7 @@
         "settings.first-run": false,
         "settings.setup-questionnaire": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.voice": false,
@@ -6746,6 +6810,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.voice": false,
         "settings.manner": false,
@@ -6845,6 +6910,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -6945,6 +7011,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,
@@ -7044,6 +7111,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -7144,6 +7212,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,
@@ -7249,6 +7318,7 @@
         "settings.all-features": false,
         "settings.calendar": false,
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.animal-options": false,
         "settings.approval-cards": false,
@@ -7349,6 +7419,7 @@
       },
       "collapsed": {
         "settings.devices": false,
+        "settings.protection": false,
         "settings.appearance-card": false,
         "settings.approval-cards": false,
         "settings.voice": false,

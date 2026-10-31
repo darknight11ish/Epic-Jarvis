@@ -310,6 +310,13 @@ object SettingsSearch {
             source = JUMP + listOf(PLATES + "SendFilePlate.kt"),
         ),
         Row(
+            key = "protection", title = "Protected from Jarvis",
+            label = "What Jarvis may not touch; blocked; read-only; protected folders, files " +
+                "and programs; remove protection",
+            quotes = listOf("Protected from Jarvis"),
+            source = JUMP + listOf(PLATES + "ProtectedPlate.kt"),
+        ),
+        Row(
             key = "backup", title = "Backups",
             label = "Back up Jarvis; locked backup file; recovery code; restore",
             quotes = listOf("Backups"),

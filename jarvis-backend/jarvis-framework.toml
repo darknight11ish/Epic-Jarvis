@@ -342,6 +342,27 @@ write_notes_after_outside_text = "ask"
 # FORCED to "ask", with its own outbound worst-case line (never looser). A
 # follow-up patch can classify it; keep this line at "ask".
 send_file_to_phone       = "ask"
+# "Protected from Jarvis" (jarvis_protection.py, 2026-10-31; the owner's
+# request: a list of folders, files and programs that blocks Jarvis, or makes
+# it read-only). ONE card for a chat add (the model proposes, the owner
+# decides) and ONE card for every removal, whichever app asks; a Settings add
+# is the owner's own direct act and raises none. The gate has no _RISK row for
+# these names yet (a drop-in module adds no patch, and risk rows are written
+# by patches), so both are unclassified: the gate forces them to "ask"
+# whatever this line says and shows its generic worst-case warning. Keep both
+# "ask" - that is the one card.
+protect_item              = "ask"
+unprotect_item            = "ask"
+# The notes editor (jarvis_notes_edit.py, 2026-10-31; the owner's "the whole
+# vault, both apps"): one save replaces the WHOLE text of one note in the
+# owner's own Obsidian vault. ONE card per save; a denied or expired card
+# changes nothing, and the File Guardian keeps a copy of the old bytes first.
+# The gate has no _RISK row for this name yet (drop-in modules add no patch,
+# and risk rows are written by patches), so the action is unclassified: the
+# gate forces it to "ask" whatever this line says, and the card carries the
+# gate's generic worst-case warning until a patch classifies it. Keep it "ask"
+# - that is the one card per save.
+edit_vault_note           = "ask"
 
 # --- Models: three separate decisions, deliberately not bundled --------
 # Reading public catalogues says nothing about you (see the privacy note in

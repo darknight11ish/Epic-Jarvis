@@ -72,6 +72,10 @@ object SettingsJump {
         // "File from your PC" (2026-10-31, the owner's ask; docs/JARVIS-API.md
         // section 172): ONE file Jarvis sent after its own approval card.
         Entry("File from your PC", "files"),
+        // "Protected from Jarvis" (2026-10-31, .dsh-scratch/PROTECTED-ITEMS-
+        // 2026-10-31/CONTRACT.md): the PC's owner-editable list of what Jarvis
+        // may not touch, right beside the folder allow-list it outranks.
+        Entry("Protected from Jarvis", "protection"),
         Entry("Backups", "backup"),
         Entry("Smartwatch notifications", "watch-notify"),
         Entry("Phone notifications", "phone-notify"),

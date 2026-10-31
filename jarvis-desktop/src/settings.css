@@ -1176,6 +1176,34 @@ select:focus-visible {
 
 .sc-gpu-name { font-size: var(--text-sm); color: var(--text); }
 .sc-gpu-role { font-size: var(--text-xs); color: var(--text-muted); }
+
+/* "Protected from Jarvis" (the owner's request of 2026-10-31;
+   protected-settings.js, protected.js). One row per entry: the target, its
+   kind and mode in words, then the mode's own sentence and Remove. */
+.pr-hint { display: block; margin-top: 2px; }
+.pr-modes { border: 0; margin: 12px 0 4px; padding: 0; }
+.pr-modes legend { padding: 0; font-size: var(--text-sm); color: var(--text); }
+/* The mode choice is its own kind of control, not a settings toggle: it is
+   inside the generated settings-toggle markers, and the catalogue test owns
+   `.toggle` rows. Same look, its own name. */
+.pr-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.pr-option input { accent-color: var(--cyan); width: 15px; height: 15px; }
+#pr-programs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  max-height: 220px;
+  overflow: auto;
+}
+.pr-program { font-family: var(--font-mono); }
 /* "Limits and frequency": a clock-time row (the quiet hours' two ends,
    2026-10-08) draws the browser's own time input - the same control the
    Notifications card has always used - never "−/+" over a clock string. */

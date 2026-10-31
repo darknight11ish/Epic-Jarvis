@@ -31,11 +31,13 @@ that patcher refuses 37 patches on this drifted install:
    row is given the worst case, shown with one plain warning line, approved
    only through the human check, and forced to tier "ask"; the eight reads
    that ran unattended get their own rows, so the rule changes nothing the
-   owner uses today. FIVE disjoint hunks. The first one CANNOT be replayed on
-   this PC by `tools/reconcile_live_backend.py`: the `gate` repair above put
-   the app-builder rows immediately after the table's opening brace, so that
+   owner uses today. SIX disjoint hunks (the fifth and sixth are DEF-021's
+   file-wins tier fix and its revised forced-ask block, 2026-10-31). The
+   first one CANNOT be replayed on this PC by
+   `tools/reconcile_live_backend.py`: the `gate` repair above put the
+   app-builder rows immediately after the table's opening brace, so that
    hunk's two-line pre-image no longer exists here. The change is therefore
-   carried as five exact pieces, applied as ONE write (one backup, one
+   carried as six exact pieces, applied as ONE write (one backup, one
    compile), so it cannot land half done.
 
 All four repairs are exact, anchored, idempotent edits. Nothing is guessed: if
@@ -52,16 +54,27 @@ carry `extra_edits`: further exact old/new pairs applied in the SAME write,
 with the same one backup and one compile. A file with only one of the hunks is
 REFUSED rather than re-applied, so this tool can never duplicate the block.
 
-THE UNCLASSIFIED-ACTION RULE IS FIVE PIECES, AND ITS FIRST ONE IS LIVE-SHAPED
-(measured 2026-10-30, read-only dry run). `unknown-risk-approvable.patch` adds
-the eight rows at the TOP of `_RISK`, changes the `_UNKNOWN_RISK` fallback, adds
-to `risk_for`'s docstring and `notice_for`'s body, and forces an unclassified
-action to "ask" in `check()`. Four of its hunk pre-images match the live gate
-exactly once; the first does not, because the `gate` repair above inserted the
-app-builder rows immediately after that opening brace. So a `Repair` may also
-carry ordered `pieces` - several exact old/new pairs, still one write, one
-backup, one compile - and this repair's first piece is anchored on the brace
-alone so it applies to the live shape AND to a fresh install.
+THE UNCLASSIFIED-ACTION RULE IS SIX PIECES, AND ITS FIRST ONE IS LIVE-SHAPED
+(measured 2026-10-30, read-only dry run; extended 2026-10-31 for DEF-021).
+`unknown-risk-approvable.patch` adds the eight rows at the TOP of `_RISK`,
+changes the `_UNKNOWN_RISK` fallback, adds to `risk_for`'s docstring and
+`notice_for`'s body, makes `_tiers()` let the owner's explicit
+`[autonomy.tiers]` line win over `_SYNTH_TIERS` (with `_file_tier_names()`
+for check()'s exemption), and forces an unclassified action to "ask" in
+`check()`. Every hunk pre-image except the first appears exactly once in the
+published gate; on the file measured 2026-10-30 (when the patch still had five
+hunks) the first did not, because the `gate` repair above inserted the
+app-builder rows immediately after that opening brace. So a `Repair` may also carry ordered `pieces` - several exact
+old/new pairs, still one write, one backup, one compile - and this repair's
+first piece is anchored on the brace alone so it applies to the live shape
+AND to a fresh install. The sixth piece is DEF-021's `_tiers()` /
+`_file_tier_names()` hunk; its pre-image is the owner's own `_tiers()` code,
+which no patch writes, and the `check()` piece's post-image is DEF-021's
+revised forced-ask block. A file that already carries the earlier five
+pieces and not this one is the half state the tool REFUSES rather than
+duplicating (the same rule the card timer's two hunks follow); changing a
+live install in that shape is a separate deploy decision, not something
+this repair may guess at.
 
 This is a REPAIR for drifted installs, not a new mechanism to prefer: once the
 patch stack can be applied again (`apply-patches.ps1` succeeds), the base files
@@ -228,7 +241,7 @@ UNKNOWN_RISK = Repair(
     name="unknown-risk",
     filename="jarvis_gate.py",
     probes=(
-        # One line from each of the five hunks; ALL must be present, so a half
+        # One line from each of the six hunks; ALL must be present, so a half
         # applied file is never mistaken for a repaired one. Each is an ADDED
         # line, so none can be present before the repair.
         '"calendar_read": ("yes", "local"',
@@ -236,6 +249,7 @@ UNKNOWN_RISK = Repair(
         'and able "',
         '`classified` is False when the table above has no row for `action`.',
         'nobody has written down what it does, so it is given the ',
+        'out = dict(_SYNTH_TIERS)',
         'gate.unclassified_forced_ask',
     ),
     why="an action with no risk row must be approvable, and forced to ask",
@@ -361,7 +375,82 @@ UNKNOWN_RISK = Repair(
             ),
         ),
         Piece(
+            # DEF-021 (2026-10-31): `_tiers()` lets the owner's explicit
+            # `[autonomy.tiers]` line win over `_SYNTH_TIERS`, and the new
+            # `_file_tier_names()` beside it is what check()'s forced-ask
+            # exemption reads. Its anchor is the owner's OLD function alone; the
+            # patch's context around it is dropped, so the same piece applies to
+            # the published pre-image, the live gate and the test's synthetic
+            # gate. This is the patch's SIXTH hunk (the hunk before the revised
+            # check() block below).
+            anchor=(
+                'def _tiers(framework: Optional[dict] = None) -> dict:\n'
+                '    """The tier table, validated. An unrecognised tier string - "Never" with a\n'
+                '    capital, "aks", anything not in _VALID_TIERS - is treated as "never",\n'
+                '    because a typo in a security policy should lock, not unlock."""\n'
+                '    try:\n'
+                '        f = framework if framework is not None else fw.load_framework()\n'
+                '        raw = f.get("autonomy", {}).get("tiers", {}) or {}\n'
+                '    except Exception:\n'
+                '        return {}\n'
+                '    out = {}\n'
+                '    for k, v in raw.items():\n'
+                '        v = str(v).strip().lower()\n'
+                '        out[k] = v if v in _VALID_TIERS else "never"\n'
+                '    out.update(_SYNTH_TIERS)\n'
+                '    return out'
+            ),
+            replace_with=(
+                'def _tiers(framework: Optional[dict] = None) -> dict:\n'
+                '    """The tier table, validated, with the owner\'s explicit line winning.\n'
+                '\n'
+                '    An unrecognised tier string - "Never" with a capital, "aks", anything not\n'
+                '    in _VALID_TIERS - is treated as "never", because a typo in a security\n'
+                '    policy should lock, not unlock.\n'
+                '\n'
+                '    THE FILE WINS OVER THE TOOL TABLE (DEF-021, 2026-10-31). `_SYNTH_TIERS`\n'
+                "    holds the gate's own per-tool defaults for names that are not actions of\n"
+                '    [autonomy.tiers] ("calculator" -> auto, "memory_store" -> notify). It used\n'
+                '    to be applied AFTER the file, so an owner who wrote a line for one of\n'
+                "    those names had it silently overwritten - and `check()`'s forced-ask\n"
+                "    exemption then skipped exactly those names. The owner's file is the\n"
+                '    policy: its validated line is laid over the synthesised table, so what the\n'
+                '    What-asks-first page already showed is what the gate now does. A name with\n'
+                '    no file line still takes its synthesised tier unchanged."""\n'
+                '    try:\n'
+                '        f = framework if framework is not None else fw.load_framework()\n'
+                '        raw = f.get("autonomy", {}).get("tiers", {}) or {}\n'
+                '    except Exception:\n'
+                '        return {}\n'
+                '    out = dict(_SYNTH_TIERS)\n'
+                '    for k, v in raw.items():\n'
+                '        v = str(v).strip().lower()\n'
+                '        out[k] = v if v in _VALID_TIERS else "never"\n'
+                '    return out\n'
+                '\n'
+                '\n'
+                'def _file_tier_names(framework: Optional[dict] = None) -> set:\n'
+                '    """The actions with an EXPLICIT line in the file\'s [autonomy.tiers].\n'
+                '\n'
+                "    Used by `check()`'s forced-ask rule (DEF-021): the tool-table exemption\n"
+                '    applies only when the owner has NOT written a line for that name. A name\n'
+                "    the file names is the owner's own action and takes the ordinary rule, so\n"
+                '    an unclassified one is still forced to "ask"; a name the file does not\n'
+                "    name keeps the gate's per-tool default. Never raises; an unreadable file\n"
+                '    answers an empty set, which is the stricter direction for every other rule\n'
+                '    (the empty tier table itself refuses in `check()`)."""\n'
+                '    try:\n'
+                '        f = framework if framework is not None else fw.load_framework()\n'
+                '        return set((f.get("autonomy", {}) or {}).get("tiers", {}) or {})\n'
+                '    except Exception:\n'
+                '        return set()'
+            ),
+        ),
+        Piece(
             # `check()`: an action with no row is forced to ask; never untouched.
+            # DEF-021 (2026-10-31) revised this block: the tool-table exemption
+            # now needs the owner's file to have NO line for the name too. The
+            # anchor and the replacement are the patch's own sixth hunk.
             anchor=(
                 '            # is no reading of "no policy" under which a tool call is safe.\n'
                 '            raise RuntimeError("autonomy tier table is empty")\n'
@@ -381,14 +470,19 @@ UNKNOWN_RISK = Repair(
                 '        # not know is forced to "ask". "never" is stricter than ask and is left\n'
                 '        # exactly as it is. A risk table that cannot be read forces it too.\n'
                 '        #\n'
-                '        # TWO NAMES ARE NOT "AN ACTION" for this rule, and they are named\n'
-                '        # rather than left to chance: `_SYNTH_TIERS` holds the TOOLS whose tier\n'
-                '        # `action_for_tool()` sets directly from `_TOOL_ACTIONS` ("calculator"\n'
-                '        # -> auto, "memory_store" -> notify, "git_commit" -> ask). Those are\n'
-                "        # the gate's own per-tool decisions, not actions the risk table\n"
-                '        # classifies - forcing them to ask would card every calculation and\n'
-                '        # every saved memory, which is not what this rule is for. Everything\n'
-                '        # else is covered, including an action with no tier line at all (whose\n'
+                '        # A TOOL-TABLE NAME IS EXEMPT ONLY WHEN THE FILE DOES NOT NAME IT.\n'
+                '        # `_SYNTH_TIERS` holds the TOOLS whose tier `action_for_tool()` sets\n'
+                '        # directly from `_TOOL_ACTIONS` ("calculator" -> auto, "memory_store"\n'
+                '        # -> notify, "git_commit" -> ask). Those are the gate\'s own per-tool\n'
+                '        # decisions, not actions the risk table classifies - forcing them to\n'
+                '        # ask would card every calculation and every saved memory, which is\n'
+                '        # not what this rule is for. But an owner who writes an explicit\n'
+                '        # [autonomy.tiers] line for one of those names has made it their own\n'
+                '        # action (DEF-021, 2026-10-31): the file wins over the tool table in\n'
+                '        # `_tiers()`, and this rule must agree with that rather than silently\n'
+                '        # skipping the name. So the exemption needs BOTH - the name is in the\n'
+                '        # tool table AND the file has no line for it. Everything else is\n'
+                '        # covered, including an action with no tier line at all (whose\n'
                 '        # fallback used to be loosened by `[autonomy] unknown_action_tier` in\n'
                 "        # the owner's file).\n"
                 '        #\n'
@@ -397,8 +491,14 @@ UNKNOWN_RISK = Repair(
                 '        # not are added by this patch), so this closes the hole for the NEXT\n'
                 '        # action somebody adds without one.\n'
                 '        try:\n'
+                '            _explicit = _file_tier_names(framework)\n'
+                '        except Exception:\n'
+                '            _explicit = set()\n'
+                '        try:\n'
                 '            _forced = (tier != "never"\n'
-                '                       and not (isinstance(action, str) and action in _SYNTH_TIERS)\n'
+                '                       and not (isinstance(action, str)\n'
+                '                                and action in _SYNTH_TIERS\n'
+                '                                and action not in _explicit)\n'
                 '                       and not risk_for(action)["classified"])\n'
                 '        except Exception:\n'
                 '            _forced = tier != "never"\n'
@@ -431,7 +531,7 @@ def _anchor_problem(repair: Repair, text: str) -> str:
     """'' when every anchor is there exactly once, else the refusal text.
 
     A repair can name several places: `pieces` (a multi-region change - the
-    unclassified-action rule's five hunks) and `extra_edits` (further exact
+    unclassified-action rule's six hunks) and `extra_edits` (further exact
     old/new pairs applied in the same write - the card timer's SELECT line). ALL
     of them are checked BEFORE anything is written, so drift in any one region
     refuses the whole repair instead of applying the parts it could find."""

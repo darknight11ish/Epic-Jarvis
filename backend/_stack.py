@@ -554,8 +554,20 @@ RATCHET = {
     #: MERGED ON THIS BRANCH: both patches write `jarvis_gate.py`, at different
     #: points, and both are in the stack here, so the two raises add up -
     #: 49 + 1 + 4 = 54, measured with `materialised("jarvis_gate.py", patches)`
-    #: on the merged stack. A ratchet: it may still only go down.
-    "jarvis_gate.py": 54,
+    #: on the merged stack.
+    #:
+    #: RAISED 2026-10-31, 54 -> 55, for DEF-021's own fix:
+    #: `unknown-risk-approvable.patch` gains a SIXTH hunk - `_tiers()` now
+    #: layers the owner's explicit `[autonomy.tiers]` line OVER `_SYNTH_TIERS`,
+    #: and a small `_file_tier_names()` sits beside it for `check()`'s
+    #: forced-ask exemption. Its pre-image is the owner's own `_tiers()` code,
+    #: which no earlier patch in this walk writes - the same honest reason the
+    #: four hunks above cost their four. Measured, not argued:
+    #: `materialised("jarvis_gate.py", patches)` reads 55 and `by_patch` names
+    #: `unknown-risk-approvable.patch: 5`; backend/test_gate_unknown_risk.py
+    #: proves the after-image is still the base, byte for byte. A ratchet: it
+    #: may still only go down.
+    "jarvis_gate.py": 55,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

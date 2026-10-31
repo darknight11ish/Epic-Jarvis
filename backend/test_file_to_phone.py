@@ -145,6 +145,7 @@ def t_protection_hook_is_asked_when_present():
         return ""
 
     stub.path_refusal = path_refusal
+    stub.blocked_path = lambda path: os.path.normcase(str(path)) == blocked
     saved = sys.modules.get("jarvis_protection")
     sys.modules["jarvis_protection"] = stub
     try:
