@@ -1422,6 +1422,13 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "what can you do?" is the feature OVERVIEW now (2026-10-31 audit) ----
+    # The sayable list is still the answer for "what can I say"/"help"; the
+    # capability question is answered by group from the catalogue, capped, and
+    # points at "Everything Jarvis can do".
+    if _FEATURE_OVERVIEW.fullmatch(s):
+        return Intent("feature_overview", {"words": ""})
+
     # --- "what can you do?" (jarvis_sayable.py) --------------------------------------
     if _SAYABLE.fullmatch(s):
         return Intent("sayable_help")
@@ -1480,6 +1487,12 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _update(s)
     if got is not None:
         return got
+    # "what's coming up" / "what's my next reminder" is the SCHEDULER's list,
+    # not a feature: the catalogue matches the "coming up" row's own id, so
+    # this must run BEFORE the feature guide (2026-10-31 audit ordering bug).
+    got = _next_up(s)
+    if got is not None:
+        return got
     # "What is <feature>?", "is <feature> on?", "how do I turn it on/off?" and
     # "turn on <feature>" (2026-10-20). AFTER the settings block on purpose:
     # every setting already worded keeps its own path, card rule and words, and
@@ -1521,9 +1534,8 @@ def _match(text, now: float) -> Optional[Intent]:
         return got
 
     # --- "what's my next reminder?" (the scheduler's own list, 2026-10-31) -------------
-    got = _next_up(s)
-    if got is not None:
-        return got
+    # (checked EARLIER, before the feature guide, so "what's coming up" is the
+    # scheduler's list and not the "coming up" feature row.)
 
     # --- "watch with me" (jarvis_screen.py, 2026-09-29) --------------------------------
     got = _watch(s)
@@ -4610,6 +4622,52 @@ _CAPS_PROTECT = re.compile(
     r"(?:folder|file|program)s?\s+from\s+(?:you|jarvis)\??")
 
 
+# ---- discussion/explanation shapes (2026-10-31, pass-11 audit) -------------
+# THE AUDIT: `tell me about X` and `how does X work` answered from the guide for
+# 25/25 features, but `what are the limits of X` had NO path (3/25 right, 22
+# invented or described a different product), the overview was only a sayable
+# list, and a comparison was the model's generic prose. These patterns resolve
+# the SAME row `feature_explain` resolves and let the guide quote its own
+# fields; anything that names no catalogue row falls through to the model (or,
+# when the sentence explicitly says "Jarvis"/"feature", the existing honest
+# "not one of my features" answer).
+_FEATURE_LIMITS = re.compile(
+    r"(?:what\s+are|what's|what\s+is)\s+(?:the\s+)?limits?\s+(?:of|for|on)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEATURE_ASKS = re.compile(
+    r"(?:does|do)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:ask|asks)"
+    r"(?:\s+first|\s+you|\s+for\s+(?:approval|permission))?")
+_FEATURE_APP = re.compile(
+    r"which\s+app(?:s)?\s+(?:can|does|do|has|have)\s+(?:use|have|run|get)?\s*"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|which\s+app\s+is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:on|in)"
+    r"|what\s+app(?:s)?\s+(?:can|does|do)\s+(?:use|have|run|get)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEATURE_WHY = re.compile(
+    r"why\s+(?:would|should|do)\s+(?:i|you)\s+(?:use|want|need|care\s+about)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEATURE_DIFFERENCE = re.compile(
+    r"(?:what(?:'s| is)\s+)?(?:the\s+)?difference\s+between\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+and\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|compare\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:and|with|to)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|(?:the\s+|my\s+)?(.+?)\s+vs\.?\s+(?:the\s+|my\s+)?(.+)")
+_FEATURE_ON_OFF = re.compile(
+    r"is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:on|off)\s+or\s+(?:on|off)")
+#: "how do timers work?" - a how-it-works question about a row whose name is
+#: plural or phrased differently ("Timers, alarms, reminders and lists").
+#: Resolved through the guide's own loose name match, never guessed.
+_FEATURE_HOW_WORKS = re.compile(
+    r"how\s+(?:do|does)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+work")
+_FEATURE_OVERVIEW = re.compile(
+    r"what\s+can\s+(?:you|jarvis)\s+do(?:\s+here)?"
+    r"|what\s+are\s+(?:your|jarvis'?s?)\s+capabilities"
+    r"|what\s+(?:is|does)\s+jarvis\s+able\s+to\s+do"
+    r"|list\s+(?:me\s+)?what\s+(?:you|jarvis)\s+can\s+do")
+_FEATURE_OVERVIEW_ABOUT = re.compile(
+    r"what\s+can\s+(?:you|jarvis)\s+do\s+about\s+(?:the\s+|my\s+)?(.+)")
+
+
 def _feature_capabilities(s: str) -> Optional[Intent]:
     """Capability questions the feature list can answer, or None (2026-10-31)."""
     m = _CAPS_PROTECT.fullmatch(s)
@@ -4662,7 +4720,90 @@ def _feature_capability_question(raw) -> Optional[Intent]:
     text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
     if not text:
         return None
+    m = _FEATURE_OVERVIEW_ABOUT.fullmatch(text)
+    if m:
+        got = _feature_overview_about_intent(text, m.group(1))
+        if got is not None:
+            return got
     return _feature_capabilities(text)
+
+
+# ---- discussion/explanation resolution (2026-10-31, pass-11 audit) ---------
+def _feature_discussion_row(raw, target: str):
+    """The row a discussion shape names, with the SAME gate as explain."""
+    row = _feature_lookup_exact(target)
+    if row is None and _feature_context_ok(raw):
+        row = _feature_lookup(_feature_without_context(target))
+    return row
+
+
+def _feature_discussion_intent(raw, target: str, name: str):
+    """A row-bound discussion intent, or None (never a guess)."""
+    row = _feature_discussion_row(raw, target)
+    if row is not None:
+        return Intent(name, {"id": row["id"]})
+    if _feature_context_ok(raw) and _feature_explicit(_feature_target(target)):
+        return Intent("feature_unknown",
+                      {"words": _feature_target(_feature_without_context(target))})
+    return None
+
+
+def _feature_row_loose(target: str):
+    """The one row a discussion shape's words loosely name, or None."""
+    if not str(target or "").strip():
+        return None
+    try:
+        import jarvis_feature_guide as FG
+        got = FG.find(target, loose=True)
+    except Exception:                       # noqa: BLE001 - guide absent/broken
+        return None
+    return got["row"] if got.get("kind") == "feature" else None
+
+
+def _feature_combined_row(first: str, second: str):
+    """One row whose own name contains BOTH words ("reminders"+"alarms")."""
+    try:
+        import jarvis_feature_guide as FG
+        got = FG.find(f"{first} {second}", loose=True)
+    except Exception:                       # noqa: BLE001 - guide absent/broken
+        return None
+    return got["row"] if got.get("kind") == "feature" else None
+
+
+def _feature_difference_intent(raw, first: str, second: str):
+    """The two-row comparison, or None when neither part names a row."""
+    row_a = _feature_discussion_row(raw, first) or _feature_row_loose(first)
+    row_b = _feature_discussion_row(raw, second) or _feature_row_loose(second)
+    combined = _feature_combined_row(first, second)
+    if combined is not None:
+        # "reminders and alarms" are BOTH in the scheduler row, not two
+        # features: answering that honestly beats inventing a difference.
+        row_a = row_b = combined
+    if row_a is None and row_b is None:
+        # Ordinary conversation ("difference between a car and a bike") falls
+        # through; an explicit "Jarvis"/"feature" question gets the honest
+        # answer instead of a model's invention.
+        if _feature_context_ok(raw):
+            return Intent("feature_unknown",
+                          {"words": f"{first} and {second}".strip()})
+        return None
+    return Intent("feature_difference",
+                  {"first": row_a["id"] if row_a is not None else first,
+                   "second": row_b["id"] if row_b is not None else second})
+
+
+def _feature_overview_about_intent(raw, area: str):
+    """A group overview, only when the words name a real catalogue group."""
+    FG = _guide()
+    if FG is None or not str(area or "").strip():
+        return None
+    try:
+        got = FG.overview(area)
+    except Exception:                       # noqa: BLE001 - guide absent/broken
+        return None
+    if got.get("kind") == "group":
+        return Intent("feature_overview", {"words": area})
+    return None
 
 
 
@@ -5374,6 +5515,11 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
         # Answered here, deterministically, so a model never gets to suggest a
         # third-party sync folder.
         return Intent("feature_explain", {"id": s})
+    m = _FEATURE_OVERVIEW_ABOUT.fullmatch(s)
+    if m:
+        got = _feature_overview_about_intent(raw, m.group(1))
+        if got is not None:
+            return got
     got = _feature_capabilities(s)
     if got is not None:
         return got
@@ -5437,8 +5583,50 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
         return _feature_change_intent(s, raw, target, said_guide)
     m = _FEATURE_STATE.fullmatch(s)
     if m:
-        return _feature_state_intent(raw, _feature_target(m.group(1) or m.group(2) or ""),
-                                     said_guide)
+        got = _feature_state_intent(raw, _feature_target(m.group(1) or m.group(2) or ""),
+                                    said_guide)
+        if got is not None:
+            return got
+    # ---- discussion shapes (2026-10-31, pass-11 audit) ---------------------
+    m = _FEATURE_LIMITS.fullmatch(s)
+    if m:
+        got = _feature_discussion_intent(raw, m.group(1), "feature_limits")
+        if got is not None:
+            return got
+    m = _FEATURE_ASKS.fullmatch(s)
+    if m:
+        got = _feature_discussion_intent(raw, m.group(1), "feature_asks")
+        if got is not None:
+            return got
+    m = _FEATURE_APP.fullmatch(s)
+    if m:
+        target = next((g for g in m.groups() if g is not None), "")
+        got = _feature_discussion_intent(raw, target, "feature_app")
+        if got is not None:
+            return got
+    m = _FEATURE_WHY.fullmatch(s)
+    if m:
+        got = _feature_discussion_intent(raw, m.group(1), "feature_why")
+        if got is not None:
+            return got
+    m = _FEATURE_DIFFERENCE.fullmatch(s)
+    if m:
+        g = m.groups()
+        first = next((g[i] for i in (0, 2, 4) if g[i] is not None), "")
+        second = next((g[i] for i in (1, 3, 5) if g[i] is not None), "")
+        got = _feature_difference_intent(raw, first, second)
+        if got is not None:
+            return got
+    m = _FEATURE_ON_OFF.fullmatch(s)
+    if m:
+        got = _feature_state_intent(raw, _feature_target(m.group(1)))
+        if got is not None:
+            return got
+    m = _FEATURE_HOW_WORKS.fullmatch(s)
+    if m:
+        row = _feature_row_loose(_feature_target(m.group(1)))
+        if row is not None:
+            return Intent("feature_explain", {"id": row["id"]})
     m = _FEATURE_WHAT.fullmatch(s)
     if m:
         target = _feature_target(next(g for g in m.groups() if g is not None))
@@ -8559,6 +8747,60 @@ def _run_feature_unknown(f: dict) -> Result:
     return Result(FG.unknown_words(f.get("words") or ""), "feature_unknown")
 
 
+def _run_feature_limits(f: dict) -> Result:
+    """"What are the limits of X?" - the row's own limit field, no model."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_limits")
+    out = FG.limits(f.get("id") or f.get("words") or "")
+    return Result(str(out.get("words") or ""), "feature_limits")
+
+
+def _run_feature_asks(f: dict) -> Result:
+    """"Does X ask first?" - the row's own asks field, no model."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_asks")
+    out = FG.asks_first(f.get("id") or f.get("words") or "")
+    return Result(str(out.get("words") or ""), "feature_asks")
+
+
+def _run_feature_app(f: dict) -> Result:
+    """"Which app can use X?" - the row's own surface field, no model."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_app")
+    out = FG.which_app(f.get("id") or f.get("words") or "")
+    return Result(str(out.get("words") or ""), "feature_app")
+
+
+def _run_feature_why(f: dict) -> Result:
+    """"Why would I use X?" - the row's what/where/limit, no model."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_why")
+    out = FG.why_use(f.get("id") or f.get("words") or "")
+    return Result(str(out.get("words") or ""), "feature_why")
+
+
+def _run_feature_difference(f: dict) -> Result:
+    """"What's the difference between X and Y?" - both rows side by side."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_difference")
+    out = FG.difference(f.get("first") or "", f.get("second") or "")
+    return Result(str(out.get("words") or ""), "feature_difference")
+
+
+def _run_feature_overview(f: dict) -> Result:
+    """"What can you do?" - the catalogue by group, capped, from the rows."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_overview")
+    out = FG.overview(f.get("words") or "")
+    return Result(str(out.get("words") or ""), "feature_overview")
+
+
 def _run_feature_state(f: dict) -> Result:
     FG = _guide()
     if FG is None:
@@ -8855,6 +9097,18 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_features_group(f)
     if n == "feature_capabilities":
         return _run_feature_capabilities(f)
+    if n == "feature_limits":
+        return _run_feature_limits(f)
+    if n == "feature_asks":
+        return _run_feature_asks(f)
+    if n == "feature_app":
+        return _run_feature_app(f)
+    if n == "feature_why":
+        return _run_feature_why(f)
+    if n == "feature_difference":
+        return _run_feature_difference(f)
+    if n == "feature_overview":
+        return _run_feature_overview(f)
     if n == "feature_explain":
         return _run_feature_explain(f)
     if n == "feature_unknown":
@@ -9367,6 +9621,8 @@ READ_ONLY_INTENTS = frozenset({
     "face_ask", "feature_capabilities", "feature_change", "feature_change_ask",
     "feature_change_refused",
     "feature_explain", "feature_howto", "feature_howto_setting",
+    "feature_limits", "feature_asks", "feature_app", "feature_why",
+    "feature_difference", "feature_overview",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown", "setting_explain",
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
