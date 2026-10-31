@@ -69,8 +69,17 @@ object ChatPins {
     // ChatHistory's own words. Nothing in this object decides whether a row is
     // DRAWN - HomeScreen and PinnedScreen ask the state first.
 
-    /** The screen's title, and the More menu's row. */
+    /** The screen's title. Since 2026-10-30 its way in is History's header. */
     const val TITLE = "Pinned messages"
+
+    /**
+     * The compact action in History's header (the owner's choice of
+     * 2026-10-30: the list moved out of the More menu and into History).
+     */
+    const val ACTION = "Pinned"
+
+    /** What that action does, for TalkBack - the list is the screen above, not a copy. */
+    const val ACTION_TITLE = "Messages you pinned, newest first."
 
     /** One line at the top of the screen: what it is, and where it lives. */
     const val LEAD = "Messages you pinned, newest first. Kept on this phone only."
@@ -90,13 +99,13 @@ object ChatPins {
     const val UNPIN = "Unpin message"
 
     /** Under "Pin message": what pinning does, and where the list is. */
-    const val PIN_DETAIL = "Kept on this phone. In More, under Pinned messages."
+    const val PIN_DETAIL = "Kept on this phone. In History, under Pinned."
 
     /** Under "Unpin message". */
     const val UNPIN_DETAIL = "It goes from the list at once. Nothing else changes."
 
     /** A pin taken, and a pin taken back - said on Home, the app's own notice. */
-    const val PIN_DONE = "Pinned. It is in More, under Pinned messages."
+    const val PIN_DONE = "Pinned. It is in History, under Pinned."
     const val UNPIN_DONE = "Unpinned."
 
     /**
@@ -120,7 +129,7 @@ object ChatPins {
 
     /** The sentence under the list: where the other chats are, since the owner asked. */
     const val WHERE_CHATS_ARE =
-        "Earlier chats are in More, under Earlier chats. New chat starts a fresh one."
+        "Earlier chats are in History, one tap from Home. New chat starts a fresh one."
 
     /** How many pins the phone keeps: past this, pinning waits for an unpin. */
     const val CAP = 100

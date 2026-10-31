@@ -887,8 +887,10 @@ data class HomeActions(
     val onPinMessage: (chatId: String, chatLabel: String, text: String) -> Unit = { _, _, _ -> },
     /** Unpin the message with this [com.jarvis.client.data.ChatPins.key]. Immediate, local. */
     val onUnpinMessage: (key: String) -> Unit = {},
-    /** "Pinned messages": the phone's own list, newest first (ui/screens/PinnedScreen.kt). */
-    val onOpenPins: () -> Unit = {},
+    // NOTE (2026-10-30): there is no "open pins" action here any more. The
+    // pinned-messages list moved into History's header (the owner's choice:
+    // "Tuck the rare ones behind one Filters button" also shortened More), so
+    // History's own `onOpenPins` opens it - one screen, one route.
     /**
      * "Try the cloud model" on the answer on screen's own cloud offer
      * ([com.jarvis.client.net.ChatSession.tryCloudForLast]) - a genuinely
@@ -1930,7 +1932,9 @@ private fun StatusLine(
         // desktop, and one click from the android jarvis app"). It is on the
         // status line, which is the one row no screen size, menu or setting
         // hides, so it is there the moment the app opens - not behind Brain or
-        // the More menu (the More menu's "Earlier chats" row stays as well).
+        // the More menu. Since 2026-10-30 this is the phone's ONE "where are my
+        // old chats" door as well: the More menu's "Earlier chats" row led to
+        // this same screen and was removed rather than kept twice.
         // It says nothing about any chat, so "Hide memory lists and chat
         // history" leaves it alone: History itself hides its list until Show is
         // confirmed, exactly as the Brain's own way in does.
@@ -2670,11 +2674,12 @@ private fun ModelDoorsRow(
         )
         // Jarvis Presets, one tap from Home (the owner's ask of 2026-10-26:
         // "also i want a presets button easily accessibler on the phone app").
-        // It calls the SAME action the More menu's "Jarvis Presets" row calls, so
-        // it opens the one Brain Hardware plate where FocusPresetsSection is
+        // It calls the SAME action MainActivity wires to Brain + hardware, so it
+        // opens the one Brain Hardware plate where FocusPresetsSection is
         // drawn - the destination OpenPlace names for "open focus presets".
-        // Navigation only: it reads nothing and adds no route. The More row stays,
-        // for anyone who looks there first.
+        // Navigation only: it reads nothing and adds no route. Since 2026-10-30
+        // this is the ONLY way in: the More menu's "Jarvis Presets" row was the
+        // second way to the same plate and left the shortened menu.
         Text(
             "Presets →",
             style = MaterialTheme.typography.labelSmall,
@@ -4262,7 +4267,10 @@ private fun Composer(
     // The chat bar keeps only the typing box, Send and the microphone. The
     // focus presets, Photo, Think, Coach this, Temporary chat, Earlier chats,
     // Notifications and Quick note all moved into the More menu (the owner's
-    // ask of 2026-10-25), reached from the More button beside the box.
+    // ask of 2026-10-25), reached from the More button beside the box - and
+    // since 2026-10-30 only the five most-used of them are rows there: the
+    // modes are one tap deeper, and Earlier chats / Pinned messages / Presets
+    // moved to History and Home's own doors.
     // The one quiet line about the chat itself (the chat audit, 2026-09-28):
     // read out by TalkBack as it appears, dismissed by a tap.
     state.chatNote?.let { line ->
@@ -4289,8 +4297,9 @@ private fun Composer(
         }
     }
     // A temporary chat still says so while it is on - the marker for the
-    // whole chat (the owner's decision, 2026-09-28). Starting or ending it,
-    // and "Earlier chats", moved into the More menu on 2026-10-25.
+    // whole chat (the owner's decision, 2026-09-28). Starting or ending it
+    // moved into the More menu on 2026-10-25, and one tap deeper behind the
+    // "Modes" row on 2026-10-30; the marker never moved.
     if (state.temporary) {
         TemporaryChatMarker(empty = state.lastUserText == null && state.conversationTurns == 0)
     }
@@ -4345,10 +4354,11 @@ private fun Composer(
         shared = state.sharedLine != null,
         streaming = state.streaming,
         // The "Coach this" button itself moved into the More menu (the
-        // owner's ask of 2026-10-25). The bar is still the one place the
-        // advice panel and the PC's own missing-route line can be drawn, so
-        // it stays - with no button - and the menu's Coach this entry bumps
-        // `request` to run the same ask.
+        // owner's ask of 2026-10-25), then into the "Modes" sub-sheet
+        // (2026-10-30). The bar is still the one place the advice panel and
+        // the PC's own missing-route line can be drawn, so it stays - with no
+        // button - and the Modes sheet's Coach this entry bumps `request` to
+        // run the same ask.
         showButton = false,
         request = coachTick,
         // "Send mine": exactly the words in the box, down the chat's own path.
@@ -4401,7 +4411,7 @@ private fun Composer(
             MoreMenuWords.MORE,
             color = chrome.textMid,
             modifier = Modifier.semantics {
-                contentDescription = "More chat controls, presets and tools"
+                contentDescription = "More chat controls, modes and tools"
             },
             onClick = onOpenMore,
         )
@@ -4604,7 +4614,7 @@ private fun VoiceBar(
                 Quiet(
                     MoreMenuWords.MORE,
                     modifier = Modifier.semantics {
-                        contentDescription = "More chat controls, presets and tools"
+                        contentDescription = "More chat controls, modes and tools"
                     },
                     onClick = onOpenMore,
                 )
@@ -4720,22 +4730,35 @@ private fun TemporaryChatMarker(empty: Boolean) {
  * "More" - the one menu the chat bar and the full-screen face bar both open
  * (the owner's ask of 2026-10-25: one shared menu, not two that can drift).
  *
- * The chat bar keeps only the typing box, Send and the microphone; everything
- * that used to sit around them is listed here, and ONLY while this PC really
- * offers it - the same gates the controls themselves carried
- * (`pictureOffered`, `thinkOffered`, the coach's route and switch,
- * `notificationsAttachable`, `!streaming`). Nothing new can act: every row
- * calls the existing [HomeActions] callback.
+ * SHORT ON PURPOSE since the owner's choice of 2026-10-30. He photographed the
+ * old sheet ("these both screenshots need further simplification, too many
+ * options") and chose to tuck the rare ones away: it now lists at most five
+ * rows - New chat, Photo, Attach a file, Modes and Quick note - then Close.
+ *
+ * Nothing was dropped, only relocated:
+ * - "Earlier chats" left because it opened History, and History IS the list
+ *   (Home's status line opens it in one tap) - so the row said nothing the
+ *   screen did not.
+ * - "Pinned messages" moved into History's own header as one compact "Pinned"
+ *   action: the same PinnedScreen, one tap from where the chats are.
+ * - "Jarvis Presets" left for Home's one-tap "Presets ->" door in
+ *   [ModelDoorsRow], which already sat beside the Galaxy.
+ * - Think, Coach this and Incognito moved one tap deeper into [HomeMoreModes],
+ *   behind the one "Modes" row.
+ *
+ * Every row still asks the same gate the control carried (`pictureOffered`,
+ * `notificationsAttachable`, the coach's route and switch, `!streaming`), so a
+ * PC that never offered a control still cannot see it. Nothing new can act:
+ * every row calls the existing [HomeActions] callback. The one exception kept
+ * deliberately is the conditional Notifications row - it is the ONLY door to
+ * attaching captured notifications, and tucking it one sheet deeper would make
+ * it three taps instead of two.
  *
  * Drawn as the app's own quiet text rows inside a plain [Dialog] (the
  * PhotoReminderDialog shape: flat surface, no Material sheet, no new
  * dependency). Every row closes the menu before it acts, so a control that
- * raises its own surface - the coach's advice panel, the Brain's preset plate,
- * Android's photo picker, the note plate - is never left behind a dialog.
- *
- * "Jarvis Presets" is navigation only: it opens the Brain's Hardware plate,
- * where [FocusPresetsSection] already lives (the destination OpenPlace names
- * for "open focus presets"). Choosing a preset still raises its approval card.
+ * raises its own surface - the coach's advice panel, Android's photo picker,
+ * the note plate - is never left behind a dialog.
  */
 @Composable
 private fun HomeMoreMenu(
@@ -4744,148 +4767,206 @@ private fun HomeMoreMenu(
     onDismiss: () -> Unit,
     onCoachThis: () -> Unit,
 ) {
+    // The chat's three modes moved one tap further on 2026-10-30, behind ONE
+    // "Modes" row. The flag swaps the dialog's own content instead of opening a
+    // second dialog, so there is still one surface and one Back.
+    var modesOpen by remember { mutableStateOf(false) }
+    Dialog(onDismissRequest = onDismiss) {
+        if (modesOpen) {
+            HomeMoreModes(
+                state = state,
+                actions = actions,
+                onBack = { modesOpen = false },
+                onDismiss = onDismiss,
+                onCoachThis = onCoachThis,
+            )
+        } else {
+            HomeMoreMain(
+                state = state,
+                actions = actions,
+                onDismiss = onDismiss,
+                onOpenModes = { modesOpen = true },
+            )
+        }
+    }
+}
+
+/** The short menu itself: at most five content rows, then Close. */
+@Composable
+private fun HomeMoreMain(
+    state: HomeState,
+    actions: HomeActions,
+    onDismiss: () -> Unit,
+    onOpenModes: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(chrome.surface1)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+    ) {
+        Text(
+            MoreMenuWords.MORE,
+            style = MaterialTheme.typography.titleMedium,
+            color = chrome.textHi,
+        )
+        Gap(4)
+        Text(
+            MoreMenuWords.SUBTITLE,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+        )
+        Gap(8)
+        Rule()
+        Gap(4)
+
+        // New chat: the chat's own reset, the same mechanism the idle timer
+        // uses - nothing is sent and no conversation is minted here.
+        MoreRow(
+            MoreMenuWords.NEW_CHAT,
+            detail = MoreMenuWords.NEW_CHAT_DETAIL,
+        ) { onDismiss(); actions.onNewConversation() }
+
+        // Photo, while the PC's Pictures feature works (HomeState.pictureOffered).
+        if (state.pictureOffered) {
+            MoreRow(
+                MoreMenuWords.PHOTO,
+                enabled = state.link == LinkState.CONNECTED &&
+                    !state.streaming && !state.pictureBusy,
+            ) { onDismiss(); actions.onAttachPicture() }
+        }
+
+        // A document for the next question (2026-10-29): read on the PC within
+        // that one turn. No switch and no capability of its own.
+        MoreRow(
+            MoreMenuWords.FILE,
+            detail = MoreMenuWords.FILE_DETAIL,
+            enabled = state.link == LinkState.CONNECTED &&
+                !state.streaming && !state.attachBusy,
+        ) { onDismiss(); actions.onAttachFile() }
+
+        // Notifications, only while phone notifications are on AND something was
+        // captured (HomeState.notificationsAttachable). Kept a DIRECT row on
+        // purpose: it is the only door to this capability, and one sheet deeper
+        // would make it three taps - so this is the one conditional sixth row
+        // the short menu still allows, and only in that rare state.
+        if (state.notificationsAttachable) {
+            MoreRow(MoreMenuWords.NOTIFICATIONS, enabled = !state.streaming) {
+                onDismiss()
+                actions.onAttachNotifications()
+            }
+        }
+
+        // ONE row for the chat's three modes: Think, Coach this and Incognito
+        // are one tap deeper now, each behaving exactly as it did here.
+        MoreRow(MoreMenuWords.MODES, detail = MoreMenuWords.MODES_DETAIL) { onOpenModes() }
+
+        // Quick note (backend/note-capture.patch): opens the plate in the
+        // conversation, the same one the home-screen widget's Note opens.
+        MoreRow(MoreMenuWords.QUICK_NOTE) { onDismiss(); actions.onQuickNoteOpenChange(true) }
+
+        Gap(8)
+        Rule()
+        Gap(4)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Quiet(MoreMenuWords.CLOSE, color = chrome.textMid, onClick = onDismiss)
+        }
+    }
+}
+
+/**
+ * The small sub-sheet behind More's one "Modes" row (the owner's choice of
+ * 2026-10-30): the three one-question switches that used to be three rows of
+ * the More menu.
+ *
+ * Each keeps its own gate, its own words and its own action, so a PC that never
+ * offered one still cannot see it:
+ * - Think: [HomeState.thinkOffered]; the label says which state the next press
+ *   lands in.
+ * - Coach this: only on a PC whose switch is ON and whose route it knows.
+ * - Incognito: always offered; the marker above the box still says when it is on.
+ *
+ * Every row closes the whole menu before it acts, exactly as the main menu's
+ * rows do; "Back" returns to the short menu without closing anything else.
+ */
+@Composable
+private fun HomeMoreModes(
+    state: HomeState,
+    actions: HomeActions,
+    onBack: () -> Unit,
+    onDismiss: () -> Unit,
+    onCoachThis: () -> Unit,
+) {
     val chrome = LocalChrome.current
     val coach = state.promptCoach
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(chrome.surface1)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-        ) {
-            Text(
-                MoreMenuWords.MORE,
-                style = MaterialTheme.typography.titleMedium,
-                color = chrome.textHi,
-            )
-            Gap(4)
-            Text(
-                MoreMenuWords.SUBTITLE,
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textMid,
-            )
-            Gap(8)
-            Rule()
-            Gap(4)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(chrome.surface1)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+    ) {
+        Text(
+            MoreMenuWords.MODES,
+            style = MaterialTheme.typography.titleMedium,
+            color = chrome.textHi,
+        )
+        Gap(4)
+        Text(
+            MoreMenuWords.MODES_SUBTITLE,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+        )
+        Gap(8)
+        Rule()
+        Gap(4)
 
-            // The chat's own three doors, FIRST (the owner's questions of
-            // 2026-10-27: "where can i find old jarvis chats? and how do i open
-            // new ones?"). They were all reachable before - Earlier chats has
-            // been here since 2026-10-25 - but with nothing under them saying
-            // where they go, and no "New chat" at all until a question had
-            // been asked. Every one of them is navigation or the chat's own
-            // reset: nothing is sent, no card is raised, and Pinned messages
-            // opens a screen whose own "Hide memory lists and chat history"
-            // guard is untouched by opening it.
+        // Think about this one (the owner's decision, 2026-10-11): a
+        // one-question flag. The label says which state the next press lands
+        // in, so a lit key is not a mystery.
+        if (state.thinkOffered) {
             MoreRow(
-                MoreMenuWords.NEW_CHAT,
-                detail = MoreMenuWords.NEW_CHAT_DETAIL,
-            ) { onDismiss(); actions.onNewConversation() }
-            MoreRow(
-                ChatHistory.EARLIER_CHATS,
-                detail = MoreMenuWords.EARLIER_DETAIL,
-            ) { onDismiss(); actions.onEarlierChats() }
-            MoreRow(
-                com.jarvis.client.data.ChatPins.TITLE,
-                detail = MoreMenuWords.PINNED_DETAIL,
-            ) { onDismiss(); actions.onOpenPins() }
-
-            Gap(8)
-            Rule()
-            Gap(4)
-
-            // Jarvis Presets (owner decision 2026-10-18): the preset chip used
-            // to sit above the box. Its list lives on the Brain's Hardware
-            // plate - the destination OpenPlace already names for "open focus
-            // presets" - so this row navigates there rather than growing a
-            // second copy of the list here.
-            MoreRow(
-                MoreMenuWords.PRESETS,
-                detail = MoreMenuWords.PRESETS_DETAIL,
-            ) { onDismiss(); actions.onOpenPresets() }
-
-            // Photo, while the PC's Pictures feature works (HomeState.pictureOffered).
-            if (state.pictureOffered) {
-                MoreRow(
-                    MoreMenuWords.PHOTO,
-                    enabled = state.link == LinkState.CONNECTED &&
-                        !state.streaming && !state.pictureBusy,
-                ) { onDismiss(); actions.onAttachPicture() }
-            }
-
-            // A document for the next question (2026-10-29): PDF, Word, Excel,
-            // PowerPoint, text, Markdown or CSV, read on the PC within that one
-            // turn. No switch and no capability of its own - the row is offered
-            // whenever a question could be sent, and the chip under the box is
-            // the promise that it will be read there.
-            MoreRow(
-                MoreMenuWords.FILE,
-                detail = MoreMenuWords.FILE_DETAIL,
-                enabled = state.link == LinkState.CONNECTED &&
-                    !state.streaming && !state.attachBusy,
-            ) { onDismiss(); actions.onAttachFile() }
-
-            // Think about this one (the owner's decision, 2026-10-11): a
-            // one-question flag. The label says which state the next press
-            // lands in, so a lit key is not a mystery.
-            if (state.thinkOffered) {
-                MoreRow(
-                    if (state.thinkOnce) {
-                        Thinking.ONE_SHOT_LABEL + ": on"
-                    } else {
-                        Thinking.ONE_SHOT_LABEL
-                    },
-                    enabled = !state.streaming,
-                ) { onDismiss(); actions.onToggleThinkOnce() }
-            }
-
-            // Coach this (docs/PROMPT-COACH-DESIGN.md, JARVIS-API section
-            // 119): only on a PC whose switch is ON and whose route it knows -
-            // a PC with no coach gets its own MISSING line above the box
-            // instead (PromptCoachBar), never a button that would 404. The
-            // words are the PC's own.
-            if (coach != null && coach.routeKnown && coach.on) {
-                MoreRow(
-                    coach.button,
-                    enabled = state.link == LinkState.CONNECTED &&
-                        !state.streaming && state.sharedLine == null,
-                ) {
-                    onDismiss()
-                    onCoachThis()
-                }
-            }
-
-            // Temporary chat (the owner's decision of 2026-09-25). The marker
-            // still appears above the box while a temporary chat is on;
-            // starting or ending it happens here now. "Earlier chats" used to
-            // sit beside it - it moved to the chat group at the top of this
-            // menu on 2026-10-27, once, not twice.
-            MoreRow(
-                if (state.temporary) TemporaryChat.END else TemporaryChat.START,
+                if (state.thinkOnce) {
+                    Thinking.ONE_SHOT_LABEL + ": on"
+                } else {
+                    Thinking.ONE_SHOT_LABEL
+                },
                 enabled = !state.streaming,
-            ) { onDismiss(); actions.onToggleTemporary() }
+            ) { onDismiss(); actions.onToggleThinkOnce() }
+        }
 
-            // Notifications, only while phone notifications are on AND
-            // something was captured (HomeState.notificationsAttachable).
-            // Attaching never sends on its own.
-            if (state.notificationsAttachable) {
-                MoreRow(MoreMenuWords.NOTIFICATIONS, enabled = !state.streaming) {
-                    onDismiss()
-                    actions.onAttachNotifications()
-                }
+        // Coach this (docs/PROMPT-COACH-DESIGN.md, JARVIS-API section 119):
+        // only on a PC whose switch is ON and whose route it knows - a PC with
+        // no coach gets its own MISSING line above the box instead
+        // (PromptCoachBar), never a button that would 404. The words are the
+        // PC's own.
+        if (coach != null && coach.routeKnown && coach.on) {
+            MoreRow(
+                coach.button,
+                enabled = state.link == LinkState.CONNECTED &&
+                    !state.streaming && state.sharedLine == null,
+            ) {
+                onDismiss()
+                onCoachThis()
             }
+        }
 
-            // Quick note (backend/note-capture.patch): opens the plate in the
-            // conversation, the same one the home-screen widget's Note opens.
-            MoreRow(MoreMenuWords.QUICK_NOTE) { onDismiss(); actions.onQuickNoteOpenChange(true) }
+        // Temporary chat / Incognito (the owner's decision of 2026-09-25). The
+        // marker still appears above the box while a temporary chat is on;
+        // starting or ending it happens here now.
+        MoreRow(
+            if (state.temporary) TemporaryChat.END else TemporaryChat.START,
+            enabled = !state.streaming,
+        ) { onDismiss(); actions.onToggleTemporary() }
 
-            Gap(8)
-            Rule()
-            Gap(4)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Quiet(MoreMenuWords.CLOSE, color = chrome.textMid, onClick = onDismiss)
-            }
+        Gap(8)
+        Rule()
+        Gap(4)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Quiet(MoreMenuWords.MODES_BACK, color = chrome.textMid, onClick = onBack)
+            Quiet(MoreMenuWords.CLOSE, color = chrome.textMid, onClick = onDismiss)
         }
     }
 }

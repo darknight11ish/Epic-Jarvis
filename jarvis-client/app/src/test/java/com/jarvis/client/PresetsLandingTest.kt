@@ -43,7 +43,7 @@ class PresetsLandingTest {
     private fun source(rel: String): String = repoFile(main + rel).readText()
 
     @Test
-    fun `the More row and its action land on Brain hardware`() {
+    fun `the presets door and its action land on Brain hardware`() {
         val where = OpenPlace.whereFor("focus-presets")
         assertTrue("focus-presets is not a Where.Go: $where", where is OpenPlace.Where.Go)
         where as OpenPlace.Where.Go
@@ -57,11 +57,14 @@ class PresetsLandingTest {
         assertEquals("the anchor would not open its heading", section!!.key, BrainSections.toOpen("hardware"))
         assertTrue("the Hardware heading does not contain the hardware plate", section.plateKeys.contains("hardware"))
 
-        // The More row itself: it names the destination and calls the action.
+        // The More row was the second way to this plate and left the shortened
+        // menu on 2026-10-30 (the owner's choice: fewer options in More); the
+        // one-tap "Presets ->" door on Home is now the one way in, and the action
+        // still lands on the same Brain hardware plate.
         val home = source("ui/screens/HomeScreen.kt")
-        assertTrue("the More row does not offer Jarvis Presets", home.contains("MoreMenuWords.PRESETS"))
-        assertTrue("the More row does not call actions.onOpenPresets()", home.contains("actions.onOpenPresets()"))
-        assertTrue("the More row does not name its destination", home.contains("detail = MoreMenuWords.PRESETS_DETAIL"))
+        assertFalse("the More menu still carries Jarvis Presets", home.contains("MoreMenuWords.PRESETS"))
+        assertTrue("Home's Presets door does not call actions.onOpenPresets", home.contains("actions.onOpenPresets"))
+        // The words still name the destination, wherever the owner reads them.
         assertTrue(MoreMenuWords.PRESETS_DETAIL.contains("Brain"))
         assertTrue(MoreMenuWords.PRESETS_DETAIL.contains("Hardware"))
 
@@ -96,8 +99,8 @@ class PresetsLandingTest {
         // Beside the Galaxy, in the same row of doors ([ModelDoorsRow]): nothing
         // conditional and no More dialog sits between the two labels, and since
         // 2026-10-27 the row is drawn with the face AND without it (Face size
-        // Hidden, keyboard up) - one tap from Home, not a new screen and not a
-        // second copy behind the More button (which stays as well).
+        // Hidden, keyboard up) - one tap from Home, not a new screen. Since
+        // 2026-10-30 this is the ONLY way in: the More menu's row left.
         val between = home.substring(galaxyAt, presetsAt)
         assertTrue("the Presets entry is not beside the Galaxy", between.length < 1400)
         assertFalse("a second condition gates the Presets entry", between.contains("if ("))
@@ -111,8 +114,8 @@ class PresetsLandingTest {
             button.contains(".pressable(onClick = actions.onOpenPresets)"),
         )
         assertEquals(
-            "the More row and the Home entry must use the same one action",
-            2,
+            "Home's one presets action is no longer the ONE way in",
+            1,
             home.split("actions.onOpenPresets").size - 1,
         )
         assertEquals(
@@ -120,8 +123,8 @@ class PresetsLandingTest {
             1,
             home.split("val onOpenPresets: () -> Unit").size - 1,
         )
-        assertTrue(
-            "the More row must stay - the new entry is the easily accessible one, not a replacement",
+        assertFalse(
+            "the More menu's Presets row came back - it was the second way to one plate",
             home.contains("MoreMenuWords.PRESETS"),
         )
 

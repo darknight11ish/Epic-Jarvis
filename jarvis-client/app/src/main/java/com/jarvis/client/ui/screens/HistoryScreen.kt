@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,7 +52,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.data.ChatPins
 import com.jarvis.client.data.HistoryViewPrefs
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
@@ -66,6 +70,7 @@ import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
@@ -141,6 +146,26 @@ private const val FILING_BANNER_MS = 10 * 60 * 1000L
  * ignores `archived=1` cannot put a live chat in the archived view. The
  * hidden-lists guard is the same one the live list keeps.
  *
+ * **One filter row, and one Filters sheet** (the owner's choice of 2026-10-30:
+ * "Tuck the rare ones behind one Filters button"). History used to draw three
+ * chip rows - the conversation kinds, the tags, and the same tags wrapping onto
+ * a second line - which the owner photographed and called "too many options".
+ * Now the owner's tags stay on ONE row that scrolls sideways ("All", "Work",
+ * "Learning", "Personal", ...), with a "Filters" button at its end. That button
+ * opens one sheet holding, unchanged: the conversation-type filters (All chats,
+ * Just chats, Live only, Support chats, Chats with other AIs, Comparisons) and
+ * the Archived view; the full tag list with Untagged; the "Tags" editor; and
+ * "Forget a time frame…". The filters still combine exactly as they did and the
+ * list is read again the moment one is picked; the button shows a dot (and
+ * TalkBack the count) when any of its filters is on. NOTHING was dropped - it
+ * moved.
+ *
+ * **Pinned** (the same choice): the list of pinned messages moved out of the
+ * More menu into History's own header, one tap - the same screen as before, not
+ * a copy. "Earlier chats" did NOT move as a second door: it opened History, and
+ * History is the list; its row is gone from More because it led where the owner
+ * already was (Home's status line opens History in one tap).
+ *
  * "Hide memory lists and chat history" (Security) hides the list and any open conversation
  * until Show is confirmed, the same as Brain's memory lists. The settings
  * stay visible: they say nothing about what was said.
@@ -183,6 +208,12 @@ fun HistoryScreen(
     fileUnder: ChatTags.FileUnder? = null,
     /** The banner was used or cancelled: MainActivity forgets the request. */
     onFileUnderDone: () -> Unit = {},
+    /**
+     * "Pinned": the phone's own pinned-messages list, which used to be a row in
+     * Home's More menu. It opens the same [PinnedScreen] in one tap - the list
+     * itself is not copied into History.
+     */
+    onOpenPins: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -225,6 +256,11 @@ fun HistoryScreen(
     // word of a chat. The row an archive request is out for is separate.
     var archivedView by rememberSaveable { mutableStateOf(false) }
     var archiving by remember { mutableStateOf<String?>(null) }
+    // The one Filters sheet (the owner's choice of 2026-10-30): the
+    // conversation kinds, the Archived view, the full tag list, the Tags editor
+    // and "Forget a time frame…" all live behind this one button now. A view
+    // choice only, kept over a rotation like the sort.
+    var filtersOpen by rememberSaveable { mutableStateOf(false) }
     // The row Delete was picked on, waiting for its confirm; and the request.
     var deleteFor by remember { mutableStateOf<ChatLog.Summary?>(null) }
     var deleteBusy by remember { mutableStateOf(false) }
@@ -247,12 +283,14 @@ fun HistoryScreen(
         onFileUnderDone()
     }
     // Hiding the lists closes any row menu, delete confirm or move list, so
-    // nothing about a chat comes back into view with them.
+    // nothing about a chat comes back into view with them. The Filters sheet
+    // closes too: it draws the tag names, and a tag hides with the titles.
     LaunchedEffect(privateHidden) {
         if (privateHidden) {
             menuFor = null
             moveFor = null
             deleteFor = null
+            filtersOpen = false
         }
     }
     // "History settings", folded until opened: the list comes first.
@@ -263,6 +301,9 @@ fun HistoryScreen(
     // the sections opened with "Show N more", and the clock the ages are read
     // against. All view choices - no word of a chat, nothing sent anywhere.
     val sortOrder = HistoryView.sortOf(sort)
+    // How many Filters-sheet choices are on - the dot on its button, and the
+    // number TalkBack reads out. Nothing is sent by asking.
+    val activeFilters = ChatLog.filtersActive(kind, tagFilter, archivedView)
     val homeChatId = remember(reads) { JarvisRuntime.homeKeptChatId() }
     val nowSeconds = rememberTickingNow(rows, 15_000L) / 1000L
     val revealedKeys = remember(revealed) {
@@ -568,6 +609,15 @@ fun HistoryScreen(
         ) {
             if (open == null && !editorOpen) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // "Pinned": the pinned-messages list, moved here from the
+                    // More menu (the owner's choice of 2026-10-30). One tap to
+                    // the same screen; nothing about a pin is drawn here.
+                    Quiet(
+                        ChatPins.ACTION,
+                        color = chrome.textMid,
+                        modifier = Modifier.semantics { contentDescription = ChatPins.ACTION_TITLE },
+                        onClick = onOpenPins,
+                    )
                     // The same mechanism the idle timer uses: a new
                     // conversation on the phone, no route, no request - the
                     // next question starts the new chat on the PC.
@@ -724,7 +774,6 @@ fun HistoryScreen(
                 val shown = rows
                 val err = readError
                 val view = tagView
-                val groupedTags = view != null && view.tags.isNotEmpty()
                 val wanted = filing
                 // "Tap the chat to file it under Home." Nothing is filed until a tap.
                 if (wanted != null) {
@@ -755,86 +804,48 @@ fun HistoryScreen(
                 val visible = if (shown != null && !wordSearch) ChatLog.filtered(shown, search) else null
                 item(key = "list-head") {
                     Column(Modifier.fillMaxWidth()) {
+                        // The heading says which list this is, so the archived
+                        // view can never be mistaken for the live one (the
+                        // owner's request of 2026-10-29).
+                        Kicker(if (archivedView) "Archived conversations" else "Conversations")
+                        Gap(2)
+                        // ONE filter row (the owner's choice of 2026-10-30).
+                        // The tags stay as quick chips and scroll sideways
+                        // instead of wrapping onto a second line; everything
+                        // rare is behind the one Filters button at the row's
+                        // end, which shows a dot while one of its own filters
+                        // is on. The chips and the sheet write the same state,
+                        // so choosing in either place moves the list at once.
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            // The heading says which list this is, so the
-                            // archived view can never be mistaken for the live
-                            // one (the owner's request of 2026-10-29).
-                            Kicker(if (archivedView) "Archived conversations" else "Conversations")
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                // The tag editor (docs/CHAT-TAGS-DESIGN.md).
-                                if (!tagsOld) {
-                                    Quiet(ChatTags.EDITOR_TITLE, color = chrome.textMid, onClick = { editorOpen = true })
-                                }
-                                // At the top of History, not only deep in Brain
-                                // (the chat audit, 2026-09-28).
-                                Quiet(ChatLog.FORGET_RANGE_LINK, color = chrome.textMid, onClick = onOpenForgetRange)
-                            }
-                        }
-                        Gap(4)
-                        // "Show": every kind, Live only, support chats, chats
-                        // with other AIs, comparisons - and the Archived view
-                        // (the owner's request of 2026-10-29), which shares the
-                        // chip row so it is visible without a menu.
-                        FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            ChatLog.FILTERS.forEach { (value, words) ->
-                                Quiet(
-                                    if (value == kind) "• $words" else words,
-                                    color = if (value == kind) chrome.textHi else chrome.textMid,
-                                    modifier = Modifier.semantics {
-                                        contentDescription = ChatLog.FILTER_LABEL + ": " + words +
-                                            if (value == kind) ", chosen" else ""
-                                    },
-                                    onClick = {
-                                        if (value != kind) {
-                                            kind = value
-                                            rows = null
-                                            mayHaveOlder = false
-                                            // A stale error from the other kind is dropped, and
-                                            // the words typed stay: the search runs again for
-                                            // this kind (the second chat audit, phone B2, C9).
-                                            readError = null
-                                        }
-                                    },
-                                )
-                            }
-                            // One tap shows what has been archived; tapping it
-                            // again goes back to the live list. A view choice
-                            // only - nothing is sent by the tap itself, the
-                            // list is read again for the view it picks.
-                            Quiet(
-                                if (archivedView) "• ${ChatLog.ARCHIVED}" else ChatLog.ARCHIVED,
-                                color = if (archivedView) chrome.textHi else chrome.textMid,
-                                modifier = Modifier.semantics {
-                                    contentDescription = ChatLog.ARCHIVE_FILTER_TITLE +
-                                        if (archivedView) ", chosen" else ""
-                                },
-                                onClick = {
-                                    archivedView = !archivedView
-                                    rows = null
-                                    mayHaveOlder = false
-                                    readError = null
-                                    listSaid = null
-                                },
-                            )
-                        }
-                        // "All" and one chip per tag: shows one tag's chats.
-                        if (view != null && groupedTags) {
-                            Gap(2)
-                            TagFilterChips(view.tags, view.untagged, tagFilter, onPick = { picked ->
-                                if (picked != tagFilter) {
-                                    tagFilter = picked
-                                    rows = null
-                                    mayHaveOlder = false
-                                    readError = null
+                            Box(Modifier.weight(1f)) {
+                                if (view != null) {
+                                    TagFilterChipsRow(
+                                        view.tags,
+                                        view.untagged,
+                                        tagFilter,
+                                        onPick = { picked ->
+                                            if (picked != tagFilter) {
+                                                tagFilter = picked
+                                                rows = null
+                                                mayHaveOlder = false
+                                                readError = null
+                                            }
+                                        },
+                                    )
                                 }
-                            })
+                            }
+                            Quiet(
+                                if (activeFilters > 0) "• ${ChatLog.FILTERS_TITLE}" else ChatLog.FILTERS_TITLE,
+                                color = if (activeFilters > 0) chrome.textHi else chrome.textMid,
+                                modifier = Modifier.semantics {
+                                    contentDescription = ChatLog.filtersTitle(activeFilters)
+                                },
+                                onClick = { filtersOpen = true },
+                            )
                         }
                         Gap(6)
                         when {
@@ -1236,6 +1247,176 @@ fun HistoryScreen(
             }
 
             item(key = "tail") { Gap(24) }
+        }
+    }
+
+    // The one Filters sheet (the owner's choice of 2026-10-30). Drawn as the
+    // app's own flat Dialog - the same shape as Home's More menu - and every
+    // chip writes the same state the visible row writes, so the list behind it
+    // is already narrowed by the time it closes. Nothing is sent and nothing is
+    // stored by asking: these are the same view choices as before.
+    if (filtersOpen && !privateHidden) {
+        HistoryFiltersSheet(
+            tags = tagView?.tags.orEmpty(),
+            untagged = tagView?.untagged ?: 0,
+            tagsOld = tagsOld,
+            kind = kind,
+            tagFilter = tagFilter,
+            archivedView = archivedView,
+            onPickKind = { value ->
+                if (value != kind) {
+                    kind = value
+                    rows = null
+                    mayHaveOlder = false
+                    // A stale error from the other kind is dropped, and the
+                    // words typed stay: the search runs again for this kind
+                    // (the second chat audit, phone B2, C9).
+                    readError = null
+                }
+            },
+            onPickTag = { picked ->
+                if (picked != tagFilter) {
+                    tagFilter = picked
+                    rows = null
+                    mayHaveOlder = false
+                    readError = null
+                }
+            },
+            onToggleArchived = {
+                archivedView = !archivedView
+                rows = null
+                mayHaveOlder = false
+                readError = null
+                listSaid = null
+            },
+            onOpenTagsEditor = {
+                filtersOpen = false
+                editorOpen = true
+            },
+            onOpenForgetRange = {
+                filtersOpen = false
+                onOpenForgetRange()
+            },
+            onDismiss = { filtersOpen = false },
+        )
+    }
+}
+
+/**
+ * The one Filters sheet (the owner's choice of 2026-10-30: "Tuck the rare ones
+ * behind one Filters button").
+ *
+ * It holds every filter History used to draw in its three chip rows - the
+ * conversation kinds, the Archived view, the tags with Untagged - plus the two
+ * links that sat beside the "CONVERSATIONS" heading: the Tags editor and
+ * "Forget a time frame…". NOTHING new acts: each chip calls the same state
+ * change the old row called, and the filters still combine exactly as they did.
+ * The same shape as Home's More menu (a flat Dialog, no Material sheet, no new
+ * dependency), so the two sheets in the app read the same way.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HistoryFiltersSheet(
+    tags: List<ChatTags.Tag>,
+    untagged: Int,
+    tagsOld: Boolean,
+    kind: String,
+    tagFilter: String,
+    archivedView: Boolean,
+    onPickKind: (String) -> Unit,
+    onPickTag: (String) -> Unit,
+    onToggleArchived: () -> Unit,
+    onOpenTagsEditor: () -> Unit,
+    onOpenForgetRange: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(chrome.surface1)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        ) {
+            Text(
+                ChatLog.FILTERS_TITLE,
+                style = MaterialTheme.typography.titleMedium,
+                color = chrome.textHi,
+                modifier = Modifier.semantics { heading() },
+            )
+            Gap(4)
+            Text(
+                ChatLog.FILTERS_SUBTITLE,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+            Gap(8)
+            Rule()
+            Gap(8)
+            Text(
+                ChatLog.FILTERS_KIND,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+            Gap(4)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ChatLog.FILTERS.forEach { (value, words) ->
+                    Quiet(
+                        if (value == kind) "• $words" else words,
+                        color = if (value == kind) chrome.textHi else chrome.textMid,
+                        modifier = Modifier.semantics {
+                            contentDescription = ChatLog.FILTER_LABEL + ": " + words +
+                                if (value == kind) ", chosen" else ""
+                        },
+                        onClick = { onPickKind(value) },
+                    )
+                }
+                // The Archived view shares this list, exactly as it shared the
+                // old chip row. It is never hidden in a menu that cannot say it
+                // is on: this chip marks it, and the Filters button's dot and
+                // the list's own heading say it too.
+                Quiet(
+                    if (archivedView) "• ${ChatLog.ARCHIVED}" else ChatLog.ARCHIVED,
+                    color = if (archivedView) chrome.textHi else chrome.textMid,
+                    modifier = Modifier.semantics {
+                        contentDescription = ChatLog.ARCHIVE_FILTER_TITLE +
+                            if (archivedView) ", chosen" else ""
+                    },
+                    onClick = onToggleArchived,
+                )
+            }
+            if (!tagsOld) {
+                Gap(10)
+                Text(
+                    ChatLog.FILTERS_PROJECTS,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+                Gap(4)
+                // The full tag list with Untagged - the same chips the row
+                // above shows, here in their wrapping form so a PC with many
+                // tags never needs a sideways swipe to reach one.
+                TagFilterChips(tags, untagged, tagFilter, onPick = onPickTag)
+            }
+            Gap(8)
+            Rule()
+            Gap(4)
+            // The two links that used to sit beside "CONVERSATIONS" live here
+            // now. Both do exactly what they did there.
+            if (!tagsOld) {
+                Quiet(ChatTags.EDITOR_TITLE, color = chrome.textMid, onClick = onOpenTagsEditor)
+            }
+            Quiet(ChatLog.FORGET_RANGE_LINK, color = chrome.textMid, onClick = onOpenForgetRange)
+            Gap(8)
+            Rule()
+            Gap(4)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Quiet(MoreMenuWords.CLOSE, color = chrome.textMid, onClick = onDismiss)
+            }
         }
     }
 }

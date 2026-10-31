@@ -868,6 +868,44 @@ object ChatLog {
 
     const val FILTER_NONE = "No conversations of that kind are kept."
 
+    // ---- One filter row, and the one Filters sheet behind it (the owner's
+    // choice of 2026-10-30: "Tuck the rare ones behind one Filters button").
+    //
+    // History used to draw three chip rows: the kinds, the tags and Untagged,
+    // and the same tags again in a second wrapping line. Now the tags stay on
+    // one scrolling row and EVERYTHING rare - the kinds, the Archived view,
+    // the full tag list, the Tags editor and "Forget a time frame…" - lives in
+    // one sheet opened by the button at the end of that row. The filters
+    // themselves are unchanged and still combine exactly as they did; only
+    // where they are drawn moved.
+
+    /** The button at the end of History's one filter row, and the sheet's title. */
+    const val FILTERS_TITLE = "Filters"
+
+    /** One line under the sheet's title: it narrows, and it combines, as before. */
+    const val FILTERS_SUBTITLE = "Narrow the list. These combine, exactly as they always did."
+
+    /** The sheet's heading over the conversation kinds. */
+    const val FILTERS_KIND = "Conversation type"
+
+    /** The sheet's heading over the tags (the owner's projects) and Untagged. */
+    const val FILTERS_PROJECTS = "Projects and tags"
+
+    /**
+     * How many of the sheet's filters are on: the conversation kind, the tag
+     * (or Untagged) and the Archived view. The button's dot is this zero/not
+     * zero, and TalkBack is told the number. A view choice only - nothing is
+     * sent and nothing is stored by asking.
+     */
+    fun filtersActive(kind: String, tag: String, archived: Boolean): Int =
+        (if (kind.isNotEmpty()) 1 else 0) +
+            (if (tag.isNotEmpty()) 1 else 0) +
+            (if (archived) 1 else 0)
+
+    /** "Filters", or "Filters, 2 chosen" - the button's name for TalkBack. */
+    fun filtersTitle(active: Int): String =
+        if (active == 0) FILTERS_TITLE else "$FILTERS_TITLE, $active chosen"
+
     /** Who wrote each line of a kept chatbot conversation or comparison (role "chatbot"). */
     val CHATBOT_WHO = mapOf(
         "chatbot_jarvis" to "Sent by Jarvis",
