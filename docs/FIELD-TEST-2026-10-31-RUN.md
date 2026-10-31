@@ -257,3 +257,124 @@ driven**; the owner's observation starts a row, and the record completes it.
 - Defects: `docs/defect-register.tsv` (DEF-023, DEF-024) and `docs/DEFECT-REGISTER.md`.
 - Matrix: `docs/FIELD-TEST-MATRIX-2026-10-11.md`, the "UPDATED 2026-10-31, pass 8"
   block and rows 21, 22, 39, 50, 71, 106, 137, 138.
+
+---
+
+## Pass 9 — the calendar driven end to end, and what the chat knows (2026-10-31 01:09–01:55 PDT)
+
+**What pass 9 was.** The overnight pass after the machine run above: the calendar feature driven one
+surface at a time on the installed builds, then a second set of questions on whether Jarvis can
+answer about its own features. It used **two instruments, named because the Windows shells differ in
+integrity level**: desktop PART A/B by **the Lead's shell, Medium Mandatory Level `S-1-16-8192`,
+Windows UI Automation + CopyFromScreen**; the phone half by **field-test's own shell, Low Mandatory
+Level `S-1-16-4096`**, through `adb` (`am start`, `uiautomator dump`, `screencap`). UIPI blocks the
+Low shell from the Medium HUD window (`pass9/desktop-privilege-evidence.txt`), which is why the two
+halves could not be driven by one instrument. Builds: **desktop 0.2.374** (`/api/version` 0.40.12;
+desktop pid 14152, backend pid 16356 after the runbook-step-10 restart), **phone 0.2.3303**
+(versionCode 1000003303, lastUpdate 2026-10-30 23:15:30), live backend on 4719. The phone build
+predates #1018 (the PiP Off fix merged later that morning); pass 9 did not re-drive PiP.
+
+**Repairs before the test, measured.** The running HUD was blank - pid 29596 had the window title
+`Jarvis` but a UIA tree of 7 chrome elements and no `msedgewebview2` child. The documented restart
+fixed it (stop the app and the stale backend on 4719, start `jarvis-desktop.exe`): afterwards 8
+WebView2 children and **UIA descendants 66**. The three `0xc0000409` WER events at 01:11 were
+**second-instance launches while the app was already running**, not a crash of the running app.
+
+### PART A - desktop calendar (Lead's shell, UIA): 8 of 8 driven rows PASS
+
+| row | what was driven | what the app said (quoted) | verdict |
+|---|---|---|---|
+| A1 | the rail's Calendar door, UIA focus + ENTER (it has no Invoke pattern) | panel: `CALENDAR`, `Times in America/Los_Angeles`, `Close the calendar`, `Today`, prev/next, `October 2026` | **PASS** |
+| A2 | Month view, six-week grid + side panel | `Sunday 27 September 2026, nothing` … `Saturday 7 November 2026, nothing`; selected `Saturday 31 October 2026`; footer `Your own events, on this PC · Google Calendar is read in chat only · Your iCal calendar is read in chat only` | **PASS** |
+| A3 | Week tab | header `Sun 25 Oct – Sat 31 Oct 2026`, `No events this week.`, seven day rows | **PASS** |
+| A4 | Day tab | header `Saturday 31 October 2026`, week strip SUN 25 … SAT 31 with 31 highlighted | **PASS** (state change). Note: the month grid's day cells stay in the UIA tree in Week/Day - hidden DOM, a text-extraction property, not the app failing |
+| A5 | Add form, read-only | `New event`; EVENT, DATE, ALL DAY, STARTS, ENDS, LAST DAY, REMIND, PLACE, REPEATS, NOTES; `Add event` / `Cancel`; `A reminder is saved with the event; this slice does not ring it.` | **PASS (screen read)** |
+| A6 | Cancel with the form's own Cancel | form gone, nothing created, side panel back to `Nothing on Saturday 31 October 2026.` | **PASS** |
+| A7 | `Close the calendar` | no `calendar-panel` element remains | **PASS** |
+| A8 | Settings → Jarvis Calendar switch, read only | `On. The Calendar card is drawn in the HUD, and the phone's Calendar screen works.`; `Turn the Jarvis Calendar off`; account rows `Jarvis Calendar`, CALENDAR ICAL LINK, CALENDAR (CALDAV) ADDRESS | **PASS (state read; nothing toggled)** |
+
+**Owner-only, never passes:** A9 edit/delete an existing event (none exists on the desktop and
+writing one was not authorised), A10 switch the calendar off (an owner setting write), A11 outside
+calendars (a credential write; the chat's own unsolicited connect-account dialog was cancelled),
+A12 briefing extras and A13 "parking for my next meeting" (no briefing or outside-calendar event
+exists on this PC tonight).
+
+### PART B - chat answering about its own features (Lead's shell): 2 of 8 accurate
+
+| # | question | answer (verbatim in `lead/LEAD-DRIVE.md`) | verdict |
+|---|---|---|---|
+| Q8 (control) | `what is the time?` | `It is 01:22 on Saturday 31 October.` | **ACCURATE** |
+| Q1 | `what can you do with the calendar?` | generic model text claiming availability and invitations that are not built; never names the HUD card, the three views, the Add form or the local/Google/iCal split | **WRONG** |
+| Q2 | `can you add something to my calendar?` | did not answer, and raised an unsolicited `Connect an account — CALENDAR - THE PRIVATE ICAL LINK` dialog (cancelled; nothing saved) | **WRONG** |
+| Q3 | `what are the smart features of the calendar?` | `I am currently unaware of these details…` | **WRONG** |
+| Q4 | `what can you edit in my notes?` | claimed it can add entries / open a Notes application that is not deployed (also a red `Could not reach Jarvis: the request was cancelled or timed out` harness artefact from overlapping questions) | **WRONG** |
+| Q5 | `can I protect a folder from you?` | invented a filesystem-permissions workaround because Protected from Jarvis is not deployed | **WRONG / unknowing** |
+| Q6 | `what is picture-in-picture?` | answered from the feature list: `Phone-Only Setting`, the Maps comparison, the never-approves limits, `It is on the phone only` | **ACCURATE** |
+| Q7 | `what's my next reminder?` | `I am currently unaware of your next reminder` + "device's notification history", which it cannot read | **WRONG** |
+
+**What PART B proves:** "ask Jarvis what it can do" is **not** a trustworthy feature list on this
+build - 2 of 8 answers were accurate, and the two that were came from the feature list or the clock.
+The feature guide screen is the trustworthy list.
+
+### The phone half (field-test's shell, adb): P1-P8/P12 PASS, Edit read-only
+
+| row | what was driven | evidence | verdict |
+|---|---|---|---|
+| P1 | Calendar screen: 7-column month grid, today marked, event counts | `Thursday 1 October, not read` … `Saturday 31 October, today`; after the test event `1 event, hidden` | **PASS** |
+| P2 | month navigation ‹ / Today / › | `September 2026` → `October 2026` → `November 2026` | **PASS** |
+| P3 | selected-day list + empty state | `Today`, `Add`, `Nothing on this day.` | **PASS** |
+| P4 | Add sheet fields, read-only | WHAT IS IT?, DATE 2026-10-31, TIME 09:00, All day, LAST DAY, ENDS, WHERE, NOTES, REMIND ME, Repeats `Does not repeat (Chosen)`, `Kept on your PC, beside your reminders. No card, and nothing leaves this PC.` | **PASS** |
+| P5 | save one clearly-named test event | `ZZ field test delete me` at 09:00 today, drawn `09:00 / (hidden) / Edit / Delete`, cell `1 event, hidden` | **PASS** |
+| P6 | Edit opens prefilled | date/time prefilled; title box empty under hidden lists; cancelled with system Back, no write | **PASS (screen read; not saved)** |
+| P7 | Delete with confirmation | `Delete this event?` / `One event on your PC. This cannot be undone.` / `Keep it` / `Yes, delete it` → `Deleted.`; read-only DB check then `events` count 0 | **PASS** |
+| P12 | no Android calendar permission | `dumpsys package com.jarvis.client`: no READ_CALENDAR / WRITE_CALENDAR | **PASS** |
+| P8 | hidden-lists title redaction | drawn title `(hidden)`, place/recurrence suppressed (`CalendarPlate.kt:562`); **but the a11y tree carried the full title** - see below | **PASS (drawn) + finding** |
+
+**Blocked / not-reachable, never passes:** P9 the phone's Jarvis Calendar switch (not located in
+Settings; the desktop state was read in A8), P10 the home-screen calendar widget (only the board
+widget is placed; placing one needs the owner), P11 the Brain row beside Coming up (not on
+0.2.3303; the screen was reached through the widget's own `OPEN_CALENDAR` intent), P13 off state /
+recurrence / DST / reminder ringing (needs the switch or writes beyond the one authorised event;
+`Nothing rings yet` by design).
+
+**The privacy finding (DEF-025).** With "Hide memory lists and chat history" ON, the phone drew
+`(hidden)` and suppressed place/recurrence, but the same accessibility dump also carries a TextView
+with the full test-event title - `text="ZZ field test delete me, Saturday 31 October at 09:00."`,
+node index 49, bounds `[36,1883][1033,1922]` (`p9-cal-saved.xml`). The screen is FLAG_SECURE, so the
+pixels cannot be checked from here, and the root cause (which composable emits that node, and
+whether it is visible or only TalkBack-readable) is **not determined**. It is recorded as a finding,
+not a claimed-exploited defect: it needs the owner's own eyes, then a fix decision.
+
+### What the matrix got from pass 9
+
+Three new rows, continuing the sequence: **139** `calendar-hud` (DRIVEN, A1-A8), **140**
+`calendar-phone` (DRIVEN with the limits named, P1-P8/P12), **141** `feature-qa` (DRIVEN, the
+2-of-8 result). Inventory after the pass: **34 DRIVEN / 75 SCREEN / 19 BLOCKED / 13 NOT-TESTABLE =
+141 rows** (was 31 / 75 / 19 / 13 = 138).
+
+### Honest limits of pass 9
+
+- **BLOCKED and NOT-REACHABLE are never passes.** A9-A13, P9-P11 and P13 are blocks, not failures
+  of the feature.
+- **The two shells differ by integrity level** - that is why the desktop half is the Lead's
+  instrument; the Low shell could not type into or read the HUD (UIPI), not even with
+  `keybd_event` / `SetForegroundWindow` / `PrintWindow`.
+- **Phone screenshots are black by design** (`FLAG_SECURE`); the accessibility dumps are the record,
+  and that is also why P8's finding is "needs the owner's eyes", not a confirmed leak.
+- **The owner's Show was not available**, so hidden lists stayed hidden throughout.
+- **One clearly-named test event was created and deleted** on the phone's own calendar, exactly as
+  the task allowed; the live `calendar.db` was then verified read-only (`events` count 0). Nothing
+  else was written and no card was approved (one card the chat raised was cancelled).
+- The phone build predates **#1018** (PiP Off fix), so nothing PiP-related is claimed in this pass.
+
+### Evidence index for pass 9
+
+- The whole pass, one line per step: `.dsh-scratch/FIELD-TEST-2026-10-31/pass9/NOTES.md`.
+- Desktop/chat drive and raw captures: `.dsh-scratch/FIELD-TEST-2026-10-31/pass9/lead/LEAD-DRIVE.md`,
+  `lead/q0*.txt/.png`, `lead/calendar-*.txt/.png`, `lead/settings-elements.txt`, `lead/hud.ps1`,
+  `lead/chat.ps1`.
+- Phone dumps: `.dsh-scratch/FIELD-TEST-2026-10-31/pass9/p9-*.xml`, `check_cal_db.py`,
+  `phone-ui9.ps1`; the FLAG_SECURE screenshot `p9-calendar.png`.
+- Environment boundary: `pass9/desktop-privilege-evidence.txt`.
+- Matrix: the "UPDATED 2026-10-31, pass 9" block and rows 139-141.
+- Defects: `docs/defect-register.tsv` (DEF-025) and `docs/DEFECT-REGISTER.md`.

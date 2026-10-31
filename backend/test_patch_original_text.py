@@ -140,8 +140,9 @@ def t_the_late_patches_are_pinned_and_not_new():
     # 2026-10-30: THREE patches raise the count by one each, and all are in this
     # merged stack - this branch's show-card-timer.patch at position 38 (one of
     # its three hunks reads `pending()`'s own SELECT line); the Q2 ruling's
-    # unknown-risk-approvable.patch at position 163 after that insertion (four
-    # of its five hunks read the owner's own jarvis_gate.py text); and #1000's
+    # unknown-risk-approvable.patch at position 163 after that insertion (five
+    # of its six hunks read the owner's own jarvis_gate.py text - the sixth was
+    # added for DEF-021 on 2026-10-31 and reads `_tiers()`); and #1000's
     # jobs-routes.patch, the LAST core patch at position 164 (all four of its
     # hunks read the owner's original jarvis_hud.py job routes). PIN and the
     # tool's docstring name all three, so the count moved with them.
