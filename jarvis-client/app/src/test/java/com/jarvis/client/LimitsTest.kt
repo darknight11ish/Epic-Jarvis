@@ -397,7 +397,11 @@ class LimitsTest {
         // Security. Each carries the same +1 through the map below them, and
         // `SettingsJumpTest` holds every number there to the row the screen
         // really draws.
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 27"))
+        // 28, not 27, since 2026-10-30: the phone's "Picture-in-picture" row
+        // (SettingsScreen.kt, item "pip-mode"; docs/PIP-DESIGN.md) sits under
+        // Floating Jarvis above it, so every number below that row moved down
+        // by one - and SettingsJumpTest holds the whole map to the real order.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 28"))
     }
 
     // ------------------------------------------- a time of day, and the PC's

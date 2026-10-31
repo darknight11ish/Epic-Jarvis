@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
 import com.jarvis.client.data.FloatingAvatarMode
+import com.jarvis.client.data.PipMode
 import com.jarvis.client.data.QuickTiles
 import com.jarvis.client.data.TileAction
 import com.jarvis.client.ui.MenuPlaces
@@ -141,37 +142,41 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // value; every index below this one moved down by one on that day.
     "approval-cards" to 7,
     "floating-avatar" to 8,
-    "manner" to 9,
-    "web-search" to 10,
+    // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md): the phone-only window
+    // that stays over other apps. Its own row right under Floating Jarvis (§2.1,
+    // §9.3), so every number below it moved down by one on that day.
+    "pip-mode" to 9,
+    "manner" to 10,
+    "web-search" to 11,
     // "Prompt coach" (docs/JARVIS-API.md section 119) sits right after Web search.
-    "prompt-coach" to 11,
-    "asks-first" to 12,
-    "reach" to 13,
-    "email-sending" to 14,
-    "folders" to 15,
-    "backup" to 16,
-    "watch-notify" to 17,
-    "phone-notify" to 18,
+    "prompt-coach" to 12,
+    "asks-first" to 13,
+    "reach" to 14,
+    "email-sending" to 15,
+    "folders" to 16,
+    "backup" to 17,
+    "watch-notify" to 18,
+    "phone-notify" to 19,
     // "Notifications from Jarvis" (the owner's decision of 2026-10-09, after
     // docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): one row pointing at
     // Android's own per-app notification screen, not a second copy of the PC's
     // Notifications card. It sits with the two other notification rows, which
     // moved every index below it down by one on that day.
-    "jarvis-notify" to 19,
-    "screen-look" to 20,
-    "browser-engine" to 21,
+    "jarvis-notify" to 20,
+    "screen-look" to 21,
+    "browser-engine" to 22,
     // How long the captcha hand-off stays on offer (the owner's decision of
     // 2026-10-08). Sits with the browser it belongs to, so the two exposure
     // rows are together; every index below it moved down by one on that day,
     // and by one more when the search box landed above the jump list.
-    "handoff" to 22,
+    "handoff" to 23,
     // What a captcha does about the browser window it is blocking (the owner's
     // decision of 2026-10-09). Sits with the hand-off row above, so the two
     // captcha rows are together; every index below it moved down by one - and
     // by one more for "Notifications from Jarvis" above it.
-    "handoff-front" to 23,
-    "devices" to 24,
-    "quick-tiles" to 25,
+    "handoff-front" to 24,
+    "devices" to 25,
+    "quick-tiles" to 26,
     // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
     // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
     // and it sits immediately above "Limits" on the screen - so Limits' own
@@ -180,41 +185,41 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // screen, item by item`, which reads this map against the screen's real row
     // order - and by backend/test_settings_registry.py, which does the same from
     // the Python side. Both moved down one more for "Approval cards" above.
-    "screen-rate" to 26,
+    "screen-rate" to 27,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 27,
+    "limits" to 28,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
     // limits row" pins 25). A row added at the end moves nothing.
-    "idle-new" to 28,
+    "idle-new" to 29,
     // "Data and maths sandbox" (LM-1C, 2026-10-18): whether the AI model is
     // offered the small read-only Python tool. A row added at the end moves no
     // other number; it sits under Idle new on the screen and in the jump list.
-    "sandbox" to 29,
+    "sandbox" to 30,
     // "Learning" (2026-10-28, the settings audit's G1): the two learning
     // switches, which had no Settings row on either app before this. It sits
     // after the sandbox and before First-time setup; every index below it
     // moved down by one.
-    "learning" to 30,
+    "learning" to 31,
     // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
     // fourteen questions and its READ-ONLY plan, drawn by
     // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
-    "setup-questionnaire" to 31,
+    "setup-questionnaire" to 32,
     // "All features and abilities" (2026-10-22): the searchable directory of
     // all 140 features. A row added at the end moves no other number.
-    "all-features" to 32,
+    "all-features" to 33,
     // "Jarvis Calendar" (2026-10-29, the owner's ask: a full calendar of
     // Jarvis's own, ON by default, and "disableable in Settings"). One switch:
     // the PC's own `calendar-settings.json`, read and written through
     // GET /api/calendar and POST /api/calendar/settings, so the phone and the
     // desktop can never disagree about whether it is on. A row added at the end
     // moves no other number.
-    "calendar" to 33,
+    "calendar" to 34,
 )
 
 /**
@@ -283,6 +288,15 @@ fun SettingsScreen(
     /** "Floating Jarvis" - saved on this phone only, so it needs no `canAct` gate. */
     floatingAvatar: FloatingAvatarMode = FloatingAvatarMode.OFF,
     onFloatingAvatarChange: (FloatingAvatarMode) -> Unit = {},
+    /**
+     * "Picture-in-picture" (2026-10-30, `docs/PIP-DESIGN.md`): the small window
+     * that stays on screen while the owner uses other apps. Saved on this phone
+     * only, like Floating Jarvis - no `canAct` gate, nothing sent to the PC.
+     * Its own row right under Floating Jarvis (§2.1, §9.3), and the two are
+     * independent: both may be on (§2.2).
+     */
+    pipMode: PipMode = PipMode.DEFAULT,
+    onPipModeChange: (PipMode) -> Unit = {},
     overlayGranted: Boolean = false,
     onRequestOverlay: () -> Unit = {},
     onOpenBubbleSettings: () -> Unit = {},
@@ -628,6 +642,22 @@ fun SettingsScreen(
                         overlayGranted = overlayGranted,
                         onRequestOverlay = onRequestOverlay,
                         onOpenBubbleSettings = onOpenBubbleSettings,
+                    )
+                }
+            }
+
+            // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md §2.1, §9.3):
+            // the small window that stays on screen while the owner uses other
+            // apps. Its own row right under Floating Jarvis - the owner's own
+            // choice over folding it into that row - and the two are separate:
+            // both may be on (§2.2). Saved on this phone only, so it needs no
+            // `canAct` gate, and the window itself is MainActivity's (it draws
+            // the PiP layout, not this screen).
+            if (menus.shows("settings.pip-mode")) if (drawn("pip-mode")) if (menus.shows("settings.pip-mode")) item(key = "pip-mode") {
+                MenuFrame(menus, "settings.pip-mode") {
+                    PipSection(
+                        mode = pipMode,
+                        onModeChange = onPipModeChange,
                     )
                 }
             }

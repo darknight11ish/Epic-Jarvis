@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 143 rows from features/features.json.
+The owner's feature list, as data: 144 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 afa5f0c1206b7c941ed36cc0a47273ecc90a3d5e5e803b96bf74b3344af9765c); the apps' Features pages read their own
+`features/features.json` (sha256 51e9f678249d6c7fa3f1ff990bcb66dddefffaee031d84c96103fb0725a4841d); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "afa5f0c1206b7c941ed36cc0a47273ecc90a3d5e5e803b96bf74b3344af9765c"
+SOURCE_SHA256 = "51e9f678249d6c7fa3f1ff990bcb66dddefffaee031d84c96103fb0725a4841d"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1024,6 +1024,18 @@ FEATURES = (
         "surface": "both",
         "aliases": ["floating jarvis", "floating face"],
         "covers": ["settings.floating-avatar", "phone-extras"],
+    },
+    {
+        "id": "phone-pip",
+        "group": "Phone",
+        "title": "Picture-in-picture",
+        "what": "A small Jarvis window that stays on screen while you use other apps - the face and the first line of the answer, the last few messages, or Jarvis Live.",
+        "where": "Settings, Picture-in-picture.",
+        "asks": "No card. The window never approves anything, and tapping it brings Jarvis back.",
+        "limit": "It never shows hidden or locked content, never approves a card and never changes a setting. What it shows is chosen on this phone only.",
+        "surface": "phone",
+        "surface_reason": "Picture-in-picture is Android's own OS window over other apps; the PC has no such window - its nearest equivalent is the floating face over other windows, which is not an OS-managed miniature of the app and has no Settings row of its own (docs/ARCHITECTURE.md section 8).",
+        "covers": ["settings.pip-mode", "phone-extras"],
     },
     {
         "id": "phone-tiles",

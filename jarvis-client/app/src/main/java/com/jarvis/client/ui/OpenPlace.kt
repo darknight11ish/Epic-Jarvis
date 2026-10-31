@@ -110,6 +110,13 @@ object OpenPlace {
         // OpenPlaceTest requires every phone-relevant Section to have a place
         // here, which is what caught this missing line in CI.
         "floating-avatar" to Where.Go(Screen.SETTINGS, "floating-avatar"),
+        // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md): the phone-only
+        // Settings row (SettingsScreen.kt, item "pip-mode") for the small window
+        // that stays over other apps. A registry Section since this slice, so
+        // "open picture-in-picture" lands on the row rather than the top of
+        // Settings - OpenPlaceTest's new-section check is what requires this
+        // line for every Section.
+        "pip-mode" to Where.Go(Screen.SETTINGS, "pip-mode"),
         // Hidden navigation menus section (SettingsScreen.kt, item "menu-visibility").
         "menu-visibility" to Where.Go(Screen.SETTINGS, "menu-visibility"),
         // "Limits and how often Jarvis does things" (2026-10-08): the PC's own

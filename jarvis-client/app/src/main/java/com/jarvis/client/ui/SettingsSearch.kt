@@ -243,6 +243,18 @@ object SettingsSearch {
             quotes = listOf("Floating Jarvis"),
             source = JUMP + listOf(PLATES + "FloatingAvatarPlate.kt"),
         ),
+        // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md): the small
+        // window that stays on screen while the owner uses other apps - the
+        // face and the answer, the conversation, or the Live view. Its own row
+        // right under Floating Jarvis; the label carries the names a person
+        // might type for it, and the quote is the plate's own heading.
+        Row(
+            key = "pip-mode", title = "Picture-in-picture",
+            label = "Picture in picture; PIP; the small window; the little window over other apps; " +
+                "the face and the answer; the conversation; Live mode",
+            quotes = listOf("Picture-in-picture"),
+            source = JUMP + listOf(PLATES + "PipPlate.kt"),
+        ),
         Row(
             key = "manner", title = "How Jarvis talks",
             label = "Manner; plain answers; humour; thinking levels; deep thinking; " +

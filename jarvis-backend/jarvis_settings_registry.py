@@ -423,6 +423,26 @@ SECTIONS: tuple = (
     Section("floating-avatar", ("floating jarvis", "the floating face",
                                 "the floating avatar", "the bubble"),
             app="phone"),
+    # "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md; the owner's settled
+    # design of 2026-10-11, §9): Android's own PiP window - a small Jarvis that
+    # stays on screen while the owner uses other apps, showing the face and the
+    # answer, the conversation, or Jarvis Live. Its own Settings row next to
+    # Floating Jarvis (§9.3) and the two may both be on (§2.2); the mode is
+    # saved on this phone only, so it needs no `canAct` gate and nothing about
+    # it reaches the PC.
+    #
+    # PHONE ONLY, and the platform is the reason: picture-in-picture is an
+    # Android window over other APPS. The desktop's nearest equivalent is the
+    # floating face over other windows (`docs/JARVIS-API.md` §57) - a window of
+    # the app's own, not an OS-managed miniature of the whole activity, and it
+    # has no Settings card of the same name. `app="both"` would claim a desktop
+    # card that does not exist, which is the exact class of mistake
+    # `test_settings_registry.py`'s wrong-app audit exists to catch (and §8 of
+    # docs/ARCHITECTURE.md records the one-sided decision).
+    Section("pip-mode", ("picture in picture", "picture-in-picture", "pip",
+                         "the small window", "the little window over other apps",
+                         "the floating window"),
+            app="phone"),
     Section("phone-notify", ("phone notifications", "reading phone notifications",
                             "notifications on my phone"), app="phone"),
     # "Look at this and Watch with me" (2026-09-29: its own card on the

@@ -1543,6 +1543,21 @@
     ]
   },
   {
+    "id": "phone-pip",
+    "group": "Phone",
+    "title": "Picture-in-picture",
+    "what": "A small Jarvis window that stays on screen while you use other apps - the face and the first line of the answer, the last few messages, or Jarvis Live.",
+    "where": "Settings, Picture-in-picture.",
+    "asks": "No card. The window never approves anything, and tapping it brings Jarvis back.",
+    "limit": "It never shows hidden or locked content, never approves a card and never changes a setting. What it shows is chosen on this phone only.",
+    "surface": "phone",
+    "surface_reason": "Picture-in-picture is Android's own OS window over other apps; the PC has no such window - its nearest equivalent is the floating face over other windows, which is not an OS-managed miniature of the app and has no Settings row of its own (docs/ARCHITECTURE.md section 8).",
+    "covers": [
+      "settings.pip-mode",
+      "phone-extras"
+    ]
+  },
+  {
     "id": "phone-tiles",
     "group": "Phone",
     "title": "Quick Settings tiles",
