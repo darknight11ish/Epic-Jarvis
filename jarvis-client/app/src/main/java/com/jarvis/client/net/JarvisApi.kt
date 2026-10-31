@@ -676,6 +676,40 @@ class JarvisApi(
     /** How one "Add to wiki" is going. Never carries a page's text. */
     suspend fun wikiJob(id: String): ApiResult<JsonObject> = probe(Wiki.statusPath(id))
 
+    // ------------------------------------------------------------ notes ----
+    // The notes editor's four routes (docs/JARVIS-API.md; the contract is
+    // .dsh-scratch/NOTES-EDITOR-2026-10-31/CONTRACT.md and the shapes live in
+    // [Notes]). Every one of them is a READ of the PC's answer that may also be
+    // the PC's plain refusal (`{"ok": false, "error": ...}`), including on a
+    // 4xx/503 - so they go through [getExplained], not [probe], which would
+    // throw the sentence away.
+
+    /**
+     * Every `.md`/`.txt` note in the owner's Obsidian vault, newest first.
+     * NEVER note text - `GET /api/notes/list` carries paths, titles, sizes and
+     * mtimes only. [query] is the search text ([Notes.listPath] bounds it).
+     */
+    suspend fun notesList(query: String): ApiResult<JsonObject> = getExplained(Notes.listPath(query))
+
+    /** One note's text and the sha256 the edit must start from. */
+    suspend fun notesRead(path: String): ApiResult<JsonObject> = getExplained(Notes.readPath(path))
+
+    /**
+     * Save one note's text. The desktop raises ONE `edit_vault_note` approval
+     * card and answers `waiting` (202); the write happens only after the owner
+     * approves. A stale `expected_sha256` answers `conflict` and writes
+     * nothing - both are answers, for [Notes.describe]. Nothing here approves.
+     */
+    suspend fun notesSave(path: String, text: String, expectedSha256: String): ApiResult<JsonObject> {
+        val body = Notes.saveBody(path, text, expectedSha256)
+            ?: return ApiResult.Failed(ApiError.Malformed("no note named"))
+        return postExplained(Notes.SAVE_PATH, body)
+    }
+
+    /** How one save is going: `waiting` / `saved` / `denied` / `failed`. */
+    suspend fun notesSaveStatus(id: String): ApiResult<JsonObject> =
+        getExplained(Notes.statusPath(id))
+
     // ------------------------------------------------------------ watch ----
 
     /** `GET /api/watch` - the topics being watched ([Watch.read]). */
@@ -1903,6 +1937,44 @@ class JarvisApi(
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when {
+                        obj != null && obj.containsKey("ok") -> ApiResult.Ok(obj)
+                        resp.isSuccessful && obj != null -> ApiResult.Ok(obj)
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * A GET whose answer is an ANSWER either way - `{"ok": true, ...}` or
+     * `{"ok": false, "error": "<plain words>"}` - rather than a shape or a
+     * status code to be translated. The mirror of [postExplained], for the
+     * reads that can carry a refusal with a sentence: the notes routes answer
+     * 400/404/413/503 that way, and `probe`/`errorFor` would reduce them to a
+     * bare number. An object with `ok` in it is passed on AS IT IS, whatever
+     * the status code; anything else is the ordinary failure mapping.
+     *
+     * Used by the notes editor's three GETs ([notesList], [notesRead],
+     * [notesSaveStatus]); nothing else should reach for it without the same
+     * reason, because its "any status with ok is an answer" rule is exactly
+     * what the two callers above want and would be wrong for a route whose
+     * 404 means "this desktop is too old".
+     */
+    private suspend fun getExplained(path: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val req = Request.Builder().url(target).get().authed().build()
             runCatching {
                 shortCall.newCall(req).execute().use { resp ->
                     val text = resp.body?.string().orEmpty()

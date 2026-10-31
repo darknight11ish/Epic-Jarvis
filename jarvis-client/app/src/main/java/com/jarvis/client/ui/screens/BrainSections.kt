@@ -242,6 +242,15 @@ internal object BrainSections {
                 Plate("wiki", guard = "brain.memory.wiki", note = "drawn instead of wiki-hidden when lists are not hidden", drawnWith = "wiki-hidden"),
                 Plate("memory-as-of-hidden", guard = "brain.memory.as-of", note = "drawn instead of memory-as-of when lists are hidden", drawnWith = "memory-as-of"),
                 Plate("memory-as-of", guard = "brain.memory.as-of", note = "drawn instead of memory-as-of-hidden when lists are not hidden", drawnWith = "memory-as-of-hidden"),
+                // The notes editor (2026-10-31, .dsh-scratch/NOTES-EDITOR-
+                // 2026-10-31/CONTRACT.md; NotesPlate.kt): the WHOLE Obsidian
+                // vault, from this phone. Its own plate - no menu id, because
+                // the contract adds no menu and nothing on the PC hides it -
+                // and a pair for the wiki's own reason: while "Hide memory
+                // lists and chat history" is on, the owner sees the hidden
+                // line, never the vault's file names.
+                Plate("notes-hidden", note = "drawn instead of notes when lists are hidden", drawnWith = "notes"),
+                Plate("notes", note = "drawn instead of notes-hidden when lists are not hidden", drawnWith = "notes-hidden"),
             ),
         ),
         Section(
