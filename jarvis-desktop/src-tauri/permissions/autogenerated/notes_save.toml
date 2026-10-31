@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-notes-save"
+description = "Enables the notes_save command without any pre-configured scope."
+commands.allow = ["notes_save"]
+
+[[permission]]
+identifier = "deny-notes-save"
+description = "Denies the notes_save command without any pre-configured scope."
+commands.deny = ["notes_save"]

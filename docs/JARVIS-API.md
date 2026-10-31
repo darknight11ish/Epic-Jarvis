@@ -28753,3 +28753,161 @@ absence is load-bearing and is not the same fact as an empty list.
   The phone half is compiled and unit-tested here but has NOT been driven on the
   owner's phone against the live backend: that is the field check, and it is
   his - start one job, watch it park, answer it, on either app.
+
+## 170. The Obsidian notes editor: browse, open and save any note in the vault (added 2026-10-31)
+
+**What this section is for.** The owner's decision of 2026-10-31, in his own
+words: **"The whole vault, both apps."** Every note in the Obsidian vault can
+be listed, searched, opened and edited — from the desktop program and from the
+phone. Until this landed the backend could SEARCH the vault (read-only,
+`jarvis_notes.py`) and APPEND to today's daily note (`jarvis_note_capture.py`);
+it could not browse the vault and it could not change an existing note.
+
+The logic lives in the drop-in module `jarvis_notes_edit.py` (a shipped
+module; `plugins/ready/notes-edit/plugin.json` names it and the plugin loader
+calls its `install()`, so there is **no patch and no edit to
+`jarvis_hud.py`**). The four routes are served after the core's own origin and
+token checks, like every other route, and every request sends
+`X-Jarvis-Client: hud` from either app. The routes are local only: no model,
+no network, no token in a log, and no byte of a note's text in a card, an
+audit line or a log.
+
+### 170.1 `GET /api/notes/list`
+
+Request: `?q=<text>` optional. `q` is case-insensitive, matched against the
+note's title and its vault-relative path, and bounded at 200 characters.
+
+    GET  /api/notes/list?q=<text>
+
+Answer 200:
+
+    {"ok": true, "root": "<absolute vault path, for display only>",
+     "count": 123,
+     "notes": [{"path": "Inbox/idea.md", "title": "idea", "size": 812,
+                "mtime": 1761900000.0}],
+     "truncated": false}
+
+Only `.md` and `.txt` files inside the vault are listed. Hidden folders —
+`.obsidian`, `.trash`, anything whose name starts with a dot — are skipped,
+and so is any file or folder that is a symlink or a junction. Sorted newest
+first by `mtime`. At most **2,000** notes are returned and `truncated: true`
+says more exist. **`count` is the number of rows in THIS answer, not the
+vault's total** — `truncated` is what says the vault holds more. **It never
+returns note text.**
+
+### 170.2 `GET /api/notes/read?path=<vault-relative path>`
+
+    GET  /api/notes/read?path=<vault-relative path>
+
+Answer 200:
+
+    {"ok": true, "path": "Inbox/idea.md", "text": "...",
+     "sha256": "<hex of the BYTES on disk>", "size": 812,
+     "mtime": 1761900000.0}
+
+`text` is decoded as UTF-8; invalid bytes become replacement characters (a
+note written by another editor in another encoding is still readable, and
+saving it writes valid UTF-8). The sha256 is always of the bytes.
+
+Errors, each in a plain sentence in `error`:
+
+| Status | When |
+|---|---|
+| 400 | the path is empty, absolute (drive letter, leading `/`, UNC), climbs out with `..`, names a hidden component, contains a character a filename cannot hold, or is not a `.md`/`.txt` file; a path through a symlink or junction |
+| 404 | there is no note at that path in the vault |
+| 413 | the note is over **2 MiB** |
+| 503 | no Obsidian vault is configured, or the vault cannot be read — the sentence names `[notes.obsidian] vault_directory` and `JARVIS_OBSIDIAN_VAULT` |
+
+### 170.3 `POST /api/notes/save`
+
+    POST /api/notes/save
+
+Request body: `{"path": "...", "text": "...", "expected_sha256": "<hex>"}`,
+all three required. `expected_sha256` is the `sha256` from a
+`GET /api/notes/read` of the version the edit started from.
+
+Answers:
+
+| Status | Body | When |
+|---|---|---|
+| 202 | `{"ok": true, "state": "waiting", "id": "<job id>", "path": "..."}` | the approval card is up; the write happens only after Approve |
+| 200 | `{"ok": true, "state": "saved", "path": "...", "sha256": "<new hex>"}` | a save that needed no card (a future config with the action at tier `auto`; not the shipped default) |
+| 409 | `{"ok": false, "state": "conflict", "path": "...", "current_sha256": "<hex>"}` | `expected_sha256` no longer matches; **nothing written, no card raised** |
+| 400 | `{"ok": false, "state": "refused", "error": "<a sentence>"}` | bad/absolute/outside/link path, non-text path, missing `expected_sha256`, missing text, or body not an object |
+| 413 | same shape | the new text is over 2 MiB |
+| 429 | same shape | `4` saves are already waiting for their cards — the sentence names the limit |
+| 503 | same shape | no Obsidian vault is configured; the sentence names the setting |
+
+The POST waits a short moment (1.5 s) for a fast answer; a save that is still
+waiting answers `202` with its id, and `GET /api/notes/save?id=` reports how
+it ended. A Deny, an expired card or a refused card **leaves the file byte
+for byte as it was**.
+
+### 170.4 `GET /api/notes/save?id=<job id>`
+
+    GET  /api/notes/save?id=<job id>
+
+Answer 200:
+
+    {"ok": true, "state": "waiting"|"saved"|"denied"|"failed",
+     "path": "...", "sha256": "<hex or null>",
+     "message": "<plain sentence>"}
+
+`ok` is true only while waiting or after a save. `sha256` is the NEW hash
+after a save and `null` otherwise. `message` is the PC's own sentence ("You
+said no, so the note was not changed.", "Saved Inbox/idea.md into your
+Obsidian vault.", and so on). A note that changed while the card was up ends
+as `failed` with `current_sha256` set and nothing written. An unknown id is
+**404** with `{"ok": false, "error": "<plain sentence>"}` — the PC's own words,
+so a client shows that instead of inventing its own.
+
+### 170.5 The card, the File Guardian and the limits
+
+- **Every save is ONE approval card.** The gate action is
+  **`edit_vault_note`** and its tier is **`"ask"`** in the shipped
+  `jarvis-framework.toml` (`[autonomy.tiers]`, in both copies the repository
+  ships). The app never approves anything; the owner does, on the existing
+  Approve / Deny card.
+- **It is unclassified until a patch says otherwise.** Drop-in modules add no
+  patch and no gate-table row, and a `_RISK` row is written by patches, so the
+  gate has no risk line for `edit_vault_note` yet: it therefore **forces the
+  action to ask** whatever the settings file says, and the card carries the
+  gate's generic worst-case warning line. That is the safe side — the save can
+  never run unattended. A small follow-up patch can classify it properly.
+- **The File Guardian copies the note first.** Immediately after the owner's
+  yes, and BEFORE the write, the module calls the existing
+  `jarvis_notes.snapshot_vault_before_write()` — which is
+  `jarvis_file_guardian.snapshot_before_write()` with the configured vault as
+  the allowed root. If that copy cannot be made, **nothing is written** and the
+  save ends as `failed` with the reason.
+- **No clobbering.** The edit carries the sha256 it started from; a mismatch
+  is `409 conflict` with the current hash before any card, and the same check
+  runs again after the card, in case another editor wrote while it waited.
+- **The vault is the world.** A path is vault-relative and normalised; it is
+  refused if it is absolute, climbs out with `..`, goes through a symlink or
+  junction, is hidden, or is not a `.md`/`.txt` file — all **before any card**.
+- **Bounds.** 2 MiB per note; 2,000 notes per list; at most 4 saves waiting at
+  once. No create, delete or rename in this slice.
+- **The hidden/locked state is unchanged.** This module serves the note text;
+  both apps keep their existing Show gate and hidden-list guard in front of it,
+  and this module adds no bypass.
+
+### 170.6 What is proven, and what is not
+
+- `backend/test_notes_edit.py` proves: the four route answers above (status
+  codes and bodies) against a temporary Obsidian vault; the path sandbox
+  (absolute, `..`, hidden, non-text, symlink); the sha256 conflict (no card, no
+  write); a Deny writes nothing and takes no snapshot; an approved save takes
+  the File Guardian copy, writes the new bytes and reports the new hash; the
+  TOCTOU case (the note changed while the card waited) writes nothing; the
+  2 MiB bound, the 429 waiting limit, the no-vault 503, the unknown-id 404; the
+  `install()` wrapping (origin and token refused, other paths reach the core,
+  a second install does not double-wrap); and that `edit_vault_note` resolves
+  to tier `"ask"` through the published gate's own tier reader for BOTH shipped
+  copies of the settings file.
+- **NOT proven here:** the live PC. These routes are built and proved in this
+  repository; they are **not deployed by this change** (the live backend
+  deploy is its own pass), so the owner's live apps do not show the editor
+  until that deploy. The desktop and phone surfaces are the other two lanes of
+  the same feature; this section documents the contract they build against.
+

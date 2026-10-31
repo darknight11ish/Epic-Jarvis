@@ -2638,6 +2638,17 @@ $SHIPPED = @(
     # (already shipped above), so this adds no patch, no route, no gate list
     # and no tool. Standard library only, so requirements.lock does not move.
     'jarvis_parking.py'
+    # Browse, read and save ANY note in the owner's Obsidian vault
+    # (jarvis_notes_edit.py, 2026-10-31; the owner's "the whole vault, both
+    # apps"): the four routes come from its own install(), called by the
+    # drop-in folder plugins/ready/notes-edit, so this adds no patch. Every
+    # save is ONE ordinary approval card (edit_vault_note, tier ask in both
+    # copies of jarvis-framework.toml) and the File Guardian keeps the old
+    # bytes first; a denied or expired card writes nothing. The module also
+    # carries the vault path sandbox, the sha256 conflict, the 2 MiB bound and
+    # the "no vault configured" 503. The same entry is at the end of
+    # backend/_where.py's SHIPPED list.
+    'jarvis_notes_edit.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

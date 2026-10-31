@@ -1407,6 +1407,16 @@ SHIPPED = (
     # grammar - no model tool, no route, no card, and no requirement beyond the
     # standard library, so requirements.lock does not move.
     "jarvis_parking.py",
+    # Browse, read and save ANY note in the owner's Obsidian vault
+    # (jarvis_notes_edit.py, 2026-10-31; the owner's "the whole vault, both
+    # apps"): four routes added by its own install(), called by the drop-in
+    # folder plugins/ready/notes-edit, so it adds no patch. Every save is ONE
+    # ordinary approval card (edit_vault_note, tier ask in both copies of
+    # jarvis-framework.toml), the File Guardian keeps the old bytes first, the
+    # edit carries the sha256 it started from, and a path outside the vault -
+    # or through a link - is refused before any card. The same entry is at the
+    # end of the script's $SHIPPED.
+    "jarvis_notes_edit.py",
 )
 
 

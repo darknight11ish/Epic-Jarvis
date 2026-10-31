@@ -475,6 +475,15 @@ CLASSIFICATION = {
     "/api/models/rollback": ("ported", ""),
     "/api/models/switch": ("ported", "Allowed by the owner 2026-09-18, raising an approval card."),
     "/api/notes/capture": ("ported", ""),
+    # The Obsidian notes editor (2026-10-31): the owner chose the whole vault in
+    # BOTH apps, so its four routes are ported, not one-sided. Backend:
+    # backend/jarvis_notes_edit.py (install()); the desktop calls them from
+    # src-tauri/src/commands.rs and the phone from net/Notes.kt through
+    # JarvisApi/JarvisRuntime. One card per save, File Guardian first, sha256
+    # conflict, vault path sandbox (JARVIS-API section 170).
+    "/api/notes/list": ("ported", ""),
+    "/api/notes/read": ("ported", ""),
+    "/api/notes/save": ("ported", ""),
     "/api/pending": ("ported", ""),
     "/api/pending/{id}/amend": ("ported", "A note on one waiting approval card; approves nothing (backend/task-control.patch). Desktop: amend_approval (commands.rs). Phone: JarvisApi.amend."),
     "/api/power": ("ported", ""),
