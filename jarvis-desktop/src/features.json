@@ -1044,7 +1044,7 @@
     "title": "Create and customize your notes",
     "what": "Browse, search, create, extend, surgically change, rename and move notes in your Obsidian vault from the PC or the phone, and use the PC editor's formatting toolbar and templates.",
     "where": "The PC's Brain \u2192 Memory \u2192 Notes; the phone's Brain \u2192 What Jarvis knows about you \u2192 Notes. The create, customize, rename and move sentences work in chat on either app.",
-    "asks": "Reading and searching ask nothing. Creating a note, adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
+    "asks": "Reading and searching ask nothing. Creating a BRAND-NEW note asks no card at all (it is additive, and one Undo removes exactly the new file); adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
     "limit": "Obsidian vault only, one note per request; no deleting a note or a line, no bulk edits, no moving outside the vault, no folder renames and no cloud sync. A note change waits while the turn has read outside text.",
     "surface": "both",
     "aliases": [

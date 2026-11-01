@@ -1153,6 +1153,14 @@ def _match(text, now: float) -> Optional[Intent]:
         return None
 
     # --- a question about Jarvis's OWN features, from the raw sentence -------
+    # The notes capability and location answers (2026-10-31 follow-up) are
+    # exact, read-only shapes and must win over the generic capability lane.
+    if _NOTE_CREATE_CAPABILITY.fullmatch(s):
+        return Intent("note_create_capability")
+    if _NOTE_LOCATION_LAST.fullmatch(s):
+        return Intent("note_location", {"context": "last"})
+    if _NOTE_LOCATION_VAULT.fullmatch(s):
+        return Intent("note_location", {"context": "vault"})
     # The capability questions (2026-10-31, the pass-9 field test) are read
     # BEFORE the tidied sentence, because "can you add something to my
     # calendar?" loses its "can you" on the way in and would otherwise be
@@ -8576,7 +8584,41 @@ def _organizer_selection(raw) -> list:
 _NOTE_CREATE_NAMED = re.compile(
     r"(?:create|make|start)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note"
     r"\s+(?:called|named|titled)\s+(?P<name>.+?)"
-    r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+))?$")
+    r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+)"
+    r"|\s+and\s+(?:put|write|add)\s+(?P<text2>.+?)\s+(?:in|into)\s+it)?$")
+#: Card-free create shapes (owner's decision 2026-10-31): "write a note for me
+#: about ...", "write me a note with ...", "make a note about ...". The owner's
+#: words become the body; the title is taken from them. A capability-only
+#: question ("can you write a note?") is matched separately below and creates
+#: nothing.
+_NOTE_CREATE_FREE = re.compile(
+    r"(?:please\s+)?(?:write|make|create)\s+(?:me\s+|for\s+me\s+)?"
+    r"(?:a\s+|one\s+)?(?:new\s+)?note\s+for\s+me\s+"
+    r"(?:about|on|with|containing|saying)\s+(?P<text>.+)$"
+    r"|(?:please\s+)?(?:write|make|create)\s+(?:me\s+)?(?:a\s+|one\s+)?"
+    r"(?:new\s+)?note\s+(?:about|on|with|containing|saying)\s+(?P<text2>.+)$")
+#: "can you write a note?" / "write a note for me" with NO content: answer yes
+#: and say how to ask; never write a note, never raise a card.
+_NOTE_CREATE_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:write|make|create)\s+"
+    r"(?:me\s+|for\s+me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note(?:\s+for\s+me)?\s*\??$"
+    r"|(?:please\s+)?(?:write|make|create)\s+(?:me\s+|for\s+me\s+)?"
+    r"(?:a\s+|one\s+)?(?:new\s+)?note\s+for\s+me\s*\??$"
+    r"|(?:write|make|create)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note\s*\??$")
+#: Where the vault is and where the last note went (read-only, no card,
+#: 2026-10-31 field-test follow-up: the old answer said "I don't have access to
+#: the folder name ... I can search your files", which was wrong).
+_NOTE_LOCATION_LAST = re.compile(
+    r"what\s+folder\s+(?:is|was)\s+(?:it|that|that\s+note|the\s+note)\s+in\s*\??"
+    r"|where\s+did\s+(?:that|the|my)\s+note\s+(?:go|end\s+up)\s*\??"
+    r"|where\s+did\s+(?:you\s+)?(?:put|save|file)\s+(?:it|that|that\s+note|the\s+note)\s*\??"
+    r"|what\s+folder\s+did\s+(?:you\s+)?(?:put|save|file)\s+(?:it|that|the\s+note)\s+in\s*\??")
+_NOTE_LOCATION_VAULT = re.compile(
+    r"where\s+(?:is|are)\s+(?:my|the)\s+(?:vault|notes?|obsidian(?:\s+notes?)?)\s*\??"
+    r"|where\s+do\s+you\s+save\s+(?:my\s+)?notes\s*\??"
+    r"|which\s+folder\s+are\s+(?:my|the)\s+notes\s+in\s*\??"
+    r"|which\s+folder\s+is\s+(?:my|the)\s+vault\s+in\s*\??"
+    r"|where\s+(?:is|are)\s+my\s+obsidian\s+(?:vault|notes?)\s*\??")
 _LIST_NAMES_TO_LEAVE = frozenset({
     "todo", "to-do", "to do", "todo list", "to-do list", "to do list",
     "shopping list", "list",
@@ -8734,23 +8776,154 @@ def _note_write_result(body, ok_intent: str, wait_intent: str, why_intent: str):
     return Result(said or "Nothing was written.", why_intent)
 
 
-def _run_note_create(f: dict) -> Result:
+#: The last note this process filed (create or daily capture), for the read-only
+#: "what folder is it in?" answer. In-process only: no new file on disk, no
+#: secret, and it expires so an old answer cannot be presented as this moment's.
+_LAST_FILED: dict = {}
+_LAST_FILED_TTL = 30 * 60
+#: Said when a location question is asked and no vault is configured. Read-only,
+#: honest, and it never offers to search the PC's files.
+NOTE_NO_VAULT_SAID = ("No Obsidian vault is set up on this PC yet, so no notes are "
+                      "being saved to one. The setting is [notes.obsidian] "
+                      "vault_directory, or JARVIS_OBSIDIAN_VAULT.")
+#: The capability answer: yes, here is how to ask, and nothing is written.
+NOTE_CREATE_CAPABLE_SAID = ('Yes - say "write a note for me about ..." or "create a '
+                            'note called Shopping with milk and eggs", and I will '
+                            'write it into your Obsidian vault. Creating a brand-new '
+                            'note needs no approval card, and you can undo it.')
+NOTE_CREATE_CAPABLE_HIDDEN_SAID = ('Yes - say "write a note for me about ..." and I '
+                                   'will create it in your Obsidian vault. Creating a '
+                                   'brand-new note needs no approval card, and you can '
+                                   'undo it.')
+NOTE_CREATE_HIDDEN_SAID = "Created one note in your Obsidian vault. You can undo it."
+
+
+def _note_create_name(text: str) -> str:
+    """A safe note title drawn from the owner's own words (card-free create)."""
+    words = re.findall(r"[A-Za-z0-9]+", str(text or ""))[:8]
+    name = " ".join(words).strip()
+    return name[:60]
+
+
+def _remember_filed(kind: str, file: str, root: str) -> None:
+    """Record the last note this process filed, for the read-only location answer."""
+    if not file:
+        return
+    try:
+        _LAST_FILED.clear()
+        _LAST_FILED.update({"kind": kind, "file": str(file), "root": str(root),
+                            "at": time.time()})
+    except Exception:                       # noqa: BLE001 - never a write
+        pass
+
+
+def _filed_location(vault) -> str:
+    """The last filed note's exact file, when it is fresh and still the vault."""
+    if not _LAST_FILED or time.time() - float(_LAST_FILED.get("at") or 0) > _LAST_FILED_TTL:
+        return ""
+    if str(_LAST_FILED.get("root") or "") != str(vault):
+        return ""
+    return str(_LAST_FILED.get("file") or "")
+
+
+def _run_note_location(f: dict, hidden: bool = False) -> Result:
+    """Where the vault is, and where the last filed note went. Read-only, no card.
+
+    The system KNOWS the configured vault root and the path it just wrote, so it
+    answers from that. It never says it has no access and never offers to search
+    the PC's files. With hidden lists on, only the vault location is said - no
+    note title or file name.
+    """
+    try:
+        import jarvis_notes_edit as E
+        vault, _why = E._vault()
+    except Exception:                       # noqa: BLE001
+        vault = None
+    if vault is None:
+        return Result(NOTE_NO_VAULT_SAID, "note_location")
+    vault_text = str(vault)
+    if hidden:
+        return Result(f"Your Obsidian vault is at {vault_text}.", "note_location")
+    filed = _filed_location(vault)
+    kind = str(_LAST_FILED.get("kind") or "")
+    context = str((f or {}).get("context") or "last")
+    if context == "last":
+        if not filed:
+            return Result(
+                f"Your Obsidian vault is at {vault_text}. I cannot see which note "
+                "you mean now, so I cannot name the file again - and nothing was "
+                "changed.", "note_location")
+        if kind == "daily":
+            return Result(
+                f"Your Obsidian vault, at {vault_text}; that note went into today's "
+                f"daily note, {filed}.", "note_location")
+        return Result(
+            f"Your Obsidian vault, at {vault_text}; that note is the file {filed}.",
+            "note_location")
+    if filed:
+        if kind == "daily":
+            return Result(
+                f"Your notes live in your Obsidian vault, at {vault_text}. Quick "
+                f"captures go into today's daily note, {filed}.", "note_location")
+        return Result(
+            f"Your notes live in your Obsidian vault, at {vault_text}. The last "
+            f"note filed there is {filed}.", "note_location")
+    return Result(
+        f"Your notes live in your Obsidian vault, at {vault_text}. Quick captures "
+        "go into today's daily note inside it.", "note_location")
+
+
+def _run_note_create_capability() -> Result:
+    """"can you write a note?" - yes, how to ask, and it creates nothing."""
     if _notes_write_hidden():
-        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
-    path = _note_path_for(str(f.get("name") or ""))
+        return Result(NOTE_CREATE_CAPABLE_HIDDEN_SAID, "note_create_capability")
+    return Result(NOTE_CREATE_CAPABLE_SAID, "note_create_capability")
+
+
+def _run_note_create(f: dict) -> Result:
+    hidden = _notes_write_hidden()
+    name = str(f.get("name") or "").strip()
+    text = str(f.get("text") or "")
+    path = _note_path_for(name)
+    if not path and text:
+        # "write a note for me about ..." names no title: draw one from the
+        # owner's own words (the body is exactly what he said).
+        derived = _note_create_name(text)
+        if derived:
+            path = _note_path_for(derived)
     if not path:
         return Result("What should the new note be called? Say \"create a note called ...\".",
                       "note_create_refused")
-    text = str(f.get("text") or "")
     try:
         import jarvis_notes_edit as E
         code, body = E.handle_create({"path": path, "text": text}, by="chat", wait_s=1.5)
     except Exception as exc:                # noqa: BLE001
+        if hidden:
+            return Result("The note could not be created, so nothing was created.",
+                          "note_create_refused")
         return Result(f"The note could not be created ({type(exc).__name__}), so nothing was created.",
                       "note_create_refused")
     if code not in (200, 202):
+        if hidden:
+            return Result("Nothing was created.", "note_create_refused")
         said = str((body or {}).get("error") or "Nothing was created.") if isinstance(body, dict) else "Nothing was created."
         return Result(said, "note_create_refused")
+    body = body if isinstance(body, dict) else {}
+    state = str(body.get("state") or "")
+    filed = str(body.get("path") or path)
+    if state == "created":
+        try:
+            import jarvis_notes_edit as E
+            vault, _why = E._vault()
+            if vault is not None:
+                _remember_filed("create", filed, str(vault))
+        except Exception:                   # noqa: BLE001
+            pass
+        if hidden:
+            return Result(NOTE_CREATE_HIDDEN_SAID, "note_created")
+        said = str(body.get("message") or "").strip()
+        return Result(said or f"Created {filed} in your Obsidian vault. You can undo it.",
+                      "note_created")
     return _note_write_result(body, "note_created", "note_create_waiting", "note_create_refused")
 
 
@@ -9251,10 +9424,23 @@ def _note_asking(s: str) -> Optional[Intent]:
         if name and folder and not _rename_move_overcapture(name, folder):
             return Intent("note_move", {"name": name, "folder": folder,
                                         "create": extra in ("create", "make")})
+    m = _NOTE_LOCATION_LAST.fullmatch(s)
+    if m:
+        return Intent("note_location", {"context": "last"})
+    m = _NOTE_LOCATION_VAULT.fullmatch(s)
+    if m:
+        return Intent("note_location", {"context": "vault"})
+    if _NOTE_CREATE_CAPABILITY.fullmatch(s):
+        return Intent("note_create_capability")
+    m = _NOTE_CREATE_FREE.fullmatch(s)
+    if m:
+        return Intent("note_create", {
+            "name": "",
+            "text": (m.group("text") or m.group("text2") or "").strip()})
     m = _NOTE_CREATE_NAMED.fullmatch(s)
     if m:
         return Intent("note_create", {"name": m.group("name").strip(),
-                                      "text": (m.group("text") or "").strip()})
+                                      "text": (m.group("text") or m.group("text2") or "").strip()})
     m = _NOTE_TAG_ADD.fullmatch(s) or _NOTE_TAG_WITH.fullmatch(s)
     if m:
         return Intent("note_tag", {"name": m.group("name").strip(),
@@ -9524,6 +9710,15 @@ def _run_note_make(f: dict) -> Result:
     said = str(body.get("message") or "").strip()
     state = str(body.get("state") or "")
     if state == "filed":
+        # Remember where it went (in-process only), so "what folder is it in?"
+        # can name the exact daily note instead of saying it has no access.
+        try:
+            import jarvis_notes_edit as E
+            vault, _why = E._vault()
+            if vault is not None:
+                _remember_filed("daily", str(body.get("file") or ""), str(vault))
+        except Exception:                   # noqa: BLE001 - never a write
+            pass
         return Result(said or "Filed in Obsidian.", "note_made")
     if state == "waiting":
         return Result(said or "Waiting for your approval.", "note_make_waiting")
@@ -12072,6 +12267,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_make(f)
     if n == "note_create":
         return _run_note_create(f)
+    if n == "note_create_capability":
+        return _run_note_create_capability()
+    if n == "note_location":
+        return _run_note_location(f, hidden=_notes_write_hidden())
     if n == "note_append":
         return _run_note_append(f)
     if n == "note_tag":
@@ -12743,6 +12942,9 @@ READ_ONLY_INTENTS = frozenset({
     # was refused wrote nothing, so `note_make_refused` is read-only.
     "vault_organizer_plan", "vault_organizer_scoped", "note_change_refused",
     "obsidian_style_refused", "note_make_refused", "note_read_honest",
+    # The card-free create's capability answer and the where-is-my-vault answer
+    # (2026-10-31): both only read the vault setting and change nothing.
+    "note_create_capability", "note_location",
     # main's feature answers (2026-10-31, #1030): the capability answer reads
     # the catalogue and changes nothing, so it must not clear "cancel that".
     "face_ask", "feature_capabilities", "feature_change", "feature_change_ask",
