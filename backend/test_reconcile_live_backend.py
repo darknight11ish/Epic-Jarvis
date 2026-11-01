@@ -3550,7 +3550,12 @@ def t_the_unknown_risk_delta_carries_its_six_hunks_byte_for_byte():
     pre-image is GONE from that install - the earlier `gate` repair inserted the
     app-builder rows right after the table's opening brace - so a deploy must
     run `tools/repair_live_backend_gaps.py`'s `unknown-risk` repair FIRST there.
-    After it, every probe below is present and this entry reports already.
+    That repair now accepts the LIVE lineage itself (Gemini ruling (a),
+    2026-10-31): the 5-hunk #1008 gate `3e9b8068…` and the pre-#1008 gate are
+    brought to the #1023 post-image `39a0c407…` (the same bytes the six pieces
+    produce for the published-base lineage, in the live lineage's own context).
+    After it, every probe below is present, the gate hashes to `39a0c407…`, and
+    this entry reports already.
     """
     name = "unknown-risk-approvable.patch"
     base = BASE_GATE.read_text(encoding="utf-8")

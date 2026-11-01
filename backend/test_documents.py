@@ -408,8 +408,15 @@ def t_read_one_part():
     roots = [os.path.realpath(str(root))]
     p = str(root / "lease.md")
     got = D.read(p, roots=roots)
+    # DEF-019 (fixed 2026-10-31): the part TITLE and every CONTENTS line are
+    # the document's own words too, so the store labels and folds them exactly
+    # like `text` (name and path stay raw).
     check("read: part 1 of several, with the list of parts", got["ok"] and got["part"] == 1
-          and got["parts"] > 2 and got["contents"][0].startswith("1. "), got.get("contents"))
+          and got["parts"] > 2
+          and all(one.startswith(D.OUTSIDE_LABEL) for one in got["contents"])
+          and got["contents"][0].endswith("\n1. Lease"), got.get("contents"))
+    check("read: the part title is labelled too", got["title"].startswith(D.OUTSIDE_LABEL)
+          and got["title"].endswith("\nLease"), got.get("title"))
     got = D.read(p, words="pets deposit", roots=roots)
     check("read: the words pick the part about pets", "Pets are allowed" in got["text"], got)
     got = D.read(p, part=got["parts"], roots=roots)
