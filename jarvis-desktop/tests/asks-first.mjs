@@ -50,10 +50,14 @@ import {
   SWITCHABLE,
   switchView,
   TITLE,
+  TOOLS_DETAIL,
   TOOLS_LABEL,
   TOOLS_PC_ONLY,
   TOOLS_SWITCHABLE,
+  toolGroupsView,
   toolSwitchView,
+  notOfferedView,
+  vaultSwitchView,
   WAITING,
 } from "../src/asks-first.js";
 import * as K from "./uikit.mjs";
@@ -85,6 +89,7 @@ await check("the words are the PC's own, and the phone says the same", async () 
   assert.deepEqual([...SWITCHABLE], CASES.switchable);
   assert.deepEqual([...TOOLS_SWITCHABLE], CASES.tools_switchable);
   assert.equal(TOOLS_LABEL, Wd.tools_label);
+  assert.equal(TOOLS_DETAIL, Wd.tools_detail);
   assert.equal(TOOLS_PC_ONLY, Wd.tools_pc_only);
   const html = read("src/settings.html");
   assert.ok(html.includes(`<h2>${TITLE}</h2>`), "the heading");
@@ -207,17 +212,47 @@ await check("the tool switch: ON held on a stale link and off the PC, OFF never,
   assert.equal(toolSwitchView(calPhone, phone.tools, true).disabled, true,
     "not from the PC: cannot turn it on");
   assert.ok(toolSwitchView(calPhone, phone.tools, true).lines.includes(TOOLS_PC_ONLY));
-  const emailWaiting = phone.tools.items.find((i) => i.id === "email_read");
+  const emailWaiting = phone.tools.items.find((i) => i.id === "email_check");
   const w = toolSwitchView(emailWaiting, phone.tools, true);
   assert.deepEqual(w, { checked: true, disabled: true, lines: [WAITING] }, "its own card waits");
   // On the PC, live link, but a DIFFERENT tool's card is already waiting.
   const oneAtATime = { canEnable: true, items: [
     { id: "calendar_read", title: "Read your calendar", on: false, waiting: false, last: "", lastOutcome: "" },
-    { id: "email_read", title: "Read your email", on: false, waiting: true, last: "", lastOutcome: "" },
+    { id: "email_check", title: "Read your email", on: false, waiting: true, last: "", lastOutcome: "" },
   ] };
   const other = toolSwitchView(oneAtATime.items[0], oneAtATime, true);
   assert.equal(other.disabled, true, "another tool's card waits: one at a time");
   assert.ok(other.lines.includes(ONE_AT_A_TIME));
+});
+
+await check("the tiered tool surface: groups, the vault row and the not-offered note", async () => {
+  const pc = readAsksFirst(C.pc_shipped);
+  assert.equal(pc.tools.items.length, 21, "the 21 Tier A + Tier B switches");
+  assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
+  const groups = toolGroupsView(pc.tools);
+  assert.deepEqual(groups.map((g) => g.title), C.pc_shipped.tools.groups.map((g) => g.title));
+  assert.deepEqual(groups.flatMap((g) => g.items.map((i) => i.id)),
+    C.pc_shipped.tools.items.map((i) => i.id), "the groups draw every item once, in order");
+  const one = groups.flatMap((g) => g.items).find((i) => i.id === "send_file_to_phone");
+  assert.ok(one && one.group === "Safety and sharing", "send-file is its own group row");
+  const vault = pc.tools.vault;
+  assert.equal(vault.id, "vault_organizer");
+  assert.equal(vault.kind, "switch", "the organizer is a separate switch, not a tool item");
+  assert.ok(pc.tools.items.every((i) => i.id !== "vault_organizer"));
+  const vv = vaultSwitchView(vault, true);
+  assert.equal(vv.checked, false);
+  assert.ok(vv.lines.includes(vault.what), "the organizer row says what it does");
+  const phone = readAsksFirst(C.phone_cards_waiting);
+  assert.equal(vaultSwitchView(phone.tools.vault, true).disabled, true,
+    "the phone is read-only for the organizer switch too");
+  const note = notOfferedView(pc.tools);
+  const no = pc.tools.notOffered;
+  for (const id of [...no.tierC, ...no.notThisSlice]) {
+    assert.ok(note.includes(no.labels[id] || id.replace(/_/g, " ")), "the note names " + id);
+  }
+  assert.ok(note.includes(no.why), "the note carries the PC's plain reason");
+  const html = read("src/settings.html");
+  assert.ok(html.includes('id="af-tools"'), "the page has the tools container");
 });
 
 await check("the lights switch: ON held on a stale link, OFF never, waiting said", async () => {
@@ -267,7 +302,8 @@ await check("Settings: every group and row in the PC's words and order", async (
   const page = await settings(C.pc_shipped);
   const text = await page.locator("#asks-first").innerText();
   const ids = await page.locator("#af-groups li").evaluateAll((els) => els.map((e) => e.dataset.asks));
-  const boxes = await page.locator("#af-groups input[type=checkbox]").evaluateAll(
+  const boxes = await page.locator(
+    "#af-groups input[type=checkbox], #af-tools input[type=checkbox]").evaluateAll(
     (els) => els.map((e) => e.id));
   const errors = page.__errors;
   await page.close();
@@ -277,7 +313,8 @@ await check("Settings: every group and row in the PC's words and order", async (
     for (const r of g.rows) assert.ok(text.includes(`${r.title} - ${r.says}`), r.id);
   }
   assert.deepEqual(boxes.sort(), [...CASES.switchable.map((a) => `af-${a}`),
-    ...CASES.tools_switchable.map((a) => `af-tool-${a}`), "af-lights"].sort());
+    ...CASES.tools_switchable.map((a) => `af-tool-${a}`), "af-lights",
+    "af-vault-organizer"].sort());
   assert.ok(text.includes(LIGHTS_LABEL));
   assert.deepEqual(errors, []);
 });

@@ -1661,6 +1661,50 @@ body {
   box-sizing: border-box;
 }
 
+/* Toolbar, template menu, help and counter (owner request, 2026-10-31).
+   The buttons reuse .btn.small so they inherit the design system; the row
+   wraps in a narrow Brain window rather than pushing the card wider. */
+.notes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+
+.notes-toolbar .note-tool {
+  min-width: 30px;
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.notes-toolbar .note-template {
+  flex: 1 1 170px;
+  min-width: 150px;
+  max-width: 260px;
+  padding: 3px 6px;
+  font-size: var(--text-xs);
+}
+
+.notes-help,
+.notes-count {
+  margin: 4px 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.notes-count {
+  font-family: var(--font-mono);
+}
+
+.notes-template-said {
+  margin: 4px 0;
+  font-size: var(--text-xs);
+  color: var(--bad);
+}
+
 .notes-actions {
   margin-top: 8px;
 }

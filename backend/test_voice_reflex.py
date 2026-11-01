@@ -290,13 +290,13 @@ def t_the_safe_number_rule_never_hijacks_ordinary_words():
         got = Q.match(phrase)
         check(f"ordinary words stay chat: {phrase!r}", got is None, got)
     # 2026-10-31 (the owner's chat audit; integrated in the chat-gaps tree):
-    # a note READ is the note lane's fixed answer now - `note_read_honest`,
+    # a note READ is the notes lane's real read now - `note_read`,
     # read-only and no card - because chat cannot read note text and the door
     # is the Brain's Notes plate. This suite pinned the freshness lane's own
     # intent name before the merge; the integrated truth is the note lane's.
     got = Q.match("read my notes")
     check("a note read is the note lane's fixed answer now",
-          getattr(got, "name", None) == "note_read_honest", got)
+          getattr(got, "name", None) == "note_read", got)
     check("... and that answer is read-only, so no 'cancel that' is lost",
           getattr(got, "name", None) in Q.READ_ONLY_INTENTS, got)
     check("'one of the files' is left byte-for-byte alone",

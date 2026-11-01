@@ -209,7 +209,7 @@ def t_the_notes_answer_is_the_notes_editor_row():
           says_row(reply, "notes-editor", ("title", "where", "asks", "limit")),
           reply[:500])
     check("... with its own limits named, not invented",
-          "does not create, delete or rename" in reply, reply[:500])
+          "no deleting a note" in reply, reply[:500])
     check("... and nothing from a different note feature",
           "Write a note for you" not in reply, reply[:300])
 
@@ -493,7 +493,7 @@ def t_ruling_d_owner_words_map_to_catalogue_rows():
     got = ask("what can you do with obsidian?")
     check("the fast path maps 'obsidian' to the notes rows",
           got is not None and got.intent == "feature_capabilities"
-          and "Browse and edit your notes" in (got.reply or ""),
+          and "Create and customize your notes" in (got.reply or ""),
           got.reply[:200] if got else "the model")
     got = ask("what can you do with appointments?")
     check("the fast path maps 'appointments' to the calendar rows",

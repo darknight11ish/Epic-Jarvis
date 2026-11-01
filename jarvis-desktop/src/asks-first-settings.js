@@ -34,9 +34,12 @@ import {
   STALE,
   SWITCH_LABEL,
   switchView,
+  TOOLS_DETAIL,
   TOOLS_LABEL,
-  TOOLS_SWITCHABLE,
+  notOfferedView,
+  toolGroupsView,
   toolSwitchView,
+  vaultSwitchView,
 } from "./asks-first.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -48,6 +51,7 @@ const el = {
   state: $("af-state"),
   body: $("af-body"),
   groups: $("af-groups"),
+  tools: $("af-tools"),
   lockdown: $("af-lockdown"),
   status: $("af-status"),
 };
@@ -107,15 +111,6 @@ function paintRow(row) {
       (want, box) => change(row, want, box)));
     for (const line of sw.lines) li.append(node("span", "sc-gpu-role", line));
   }
-  if (TOOLS_SWITCHABLE.includes(row.action)) {
-    const item = view.tools.items.find((i) => i.id === row.action);
-    const tv = toolSwitchView(item, view.tools, live());
-    if (tv) {
-      li.append(toggle(`af-tool-${row.action}`, TOOLS_LABEL, "", tv.checked, busy || tv.disabled,
-        (want, box) => changeTool(row.action, want, box)));
-      for (const line of tv.lines) li.append(node("span", "sc-gpu-role", line));
-    }
-  }
   if (row.lights) {
     const lv = lightsView(view.lights, live());
     if (lv.show) {
@@ -147,6 +142,60 @@ function paint() {
     box.append(ul);
     return box;
   }));
+  paintTools();
+}
+
+/**
+ * "Let the AI use this": the tiered one-tool switches (Tier A and Tier B),
+ * grouped, plus the vault organizer's own separate row, plus the plain note
+ * naming every tool this slice does NOT offer in-app. One switch per row;
+ * phone read-only because can_enable is false there.
+ */
+function paintTools() {
+  if (!el.tools) return;
+  const tools = view.tools;
+  if (!tools || !tools.items.length) {
+    el.tools.replaceChildren();
+    return;
+  }
+  const parts = [node("h3", "subhead", TOOLS_LABEL),
+    node("p", "note", tools.detail || TOOLS_DETAIL)];
+  for (const group of toolGroupsView(tools)) {
+    const box = node("div", "af-group");
+    box.append(node("h4", "subhead", group.title));
+    const ul = node("ul", "sc-cards");
+    for (const item of group.items) {
+      const li = node("li", "sc-gpu");
+      li.dataset.tool = item.id;
+      li.append(node("span", "sc-gpu-name", item.title));
+      const tv = toolSwitchView(item, tools, live());
+      if (tv) {
+        li.append(toggle(`af-tool-${item.id}`, TOOLS_LABEL, "", tv.checked,
+          busy || tv.disabled, (want, box2) => changeTool(item.id, want, box2)));
+        for (const line of tv.lines) li.append(node("span", "sc-gpu-role", line));
+      }
+      ul.append(li);
+    }
+    box.append(ul);
+    parts.push(box);
+  }
+  if (tools.vault) {
+    const li = node("li", "sc-gpu");
+    li.dataset.tool = tools.vault.id;
+    li.append(node("span", "sc-gpu-name", tools.vault.title));
+    const vv = vaultSwitchView(tools.vault, live());
+    if (vv) {
+      li.append(toggle("af-vault-organizer", TOOLS_LABEL, "", vv.checked,
+        busy || vv.disabled, (want, box2) => changeVault(want, box2)));
+      for (const line of vv.lines) li.append(node("span", "sc-gpu-role", line));
+    }
+    const ul = node("ul", "sc-cards");
+    ul.append(li);
+    parts.push(node("h4", "subhead", "Its own switch"), ul);
+  }
+  const note = notOfferedView(tools);
+  if (note) parts.push(node("p", "note", note));
+  el.tools.replaceChildren(...parts);
 }
 
 /**
@@ -264,8 +313,8 @@ async function changeLights(on, box) {
 }
 
 /**
- * "Let the AI use this", on the four reading tools only: ON one card
- * (held on a stale link, Windows Hello on the PC), OFF at once.
+ * "Let the AI use this", on every Tier A/Tier B tool: ON one card (held on a
+ * stale link, Windows Hello on the PC), OFF at once.
  */
 async function changeTool(tool, enabled, box) {
   if (busy) return;
@@ -278,6 +327,32 @@ async function changeTool(tool, enabled, box) {
   say(enabled ? "Asking…" : "Turning it off…");
   try {
     const out = await TAURI.core.invoke("set_tool_enabled", { tool, enabled });
+    const words = String((out && (out.message || out.error)) || "Done.");
+    say(words, out && out.ok === false ? "bad" : "ok");
+    announce(words);
+  } catch (error) {
+    say(problemWords(error), "bad");
+  } finally {
+    busy = false;
+  }
+  await load();
+}
+
+/**
+ * The vault organizer's own switch: ON one card + Windows Hello on the PC,
+ * OFF at once. A separate route from the tool switches; the page says so.
+ */
+async function changeVault(enabled, box) {
+  if (busy) return;
+  if (enabled && !live()) {
+    box.checked = false;
+    say(STALE, "bad");
+    return;
+  }
+  busy = true;
+  say(enabled ? "Asking…" : "Turning it off…");
+  try {
+    const out = await TAURI.core.invoke("set_vault_organizer_enabled", { enabled });
     const words = String((out && (out.message || out.error)) || "Done.");
     say(words, out && out.ok === false ? "bad" : "ok");
     announce(words);

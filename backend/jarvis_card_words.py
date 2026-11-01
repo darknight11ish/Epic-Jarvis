@@ -181,7 +181,7 @@ TITLES = {
     # One setting going ahead without asking, or (2026-09-28) Lockdown off:
     # both are this one card (jarvis_asks_first.py), so the words cover both.
     "loosen_what_asks_first": "loosen what asks first",
-    "enable_reading_tool": "offer a reading tool to the AI model",
+    "enable_reading_tool": "offer a tool to the AI model",
     "check_tool_updates": "check online for tool updates",
     "modify_own_code": "change its own code",
     "desktop_update": "update Jarvis itself - the backend first, then this app",
@@ -394,7 +394,7 @@ SUMMARY = {
     # --- its own settings and code
     "change_own_config": "change one of its settings",
     "loosen_what_asks_first": "stop asking first for one thing",
-    "enable_reading_tool": "offer a reading tool to the model",
+    "enable_reading_tool": "offer a tool to the model",
     "check_tool_updates": "check online for tool updates",
     "modify_own_code": "change its own code",
     "power_manage": "change its power mode",

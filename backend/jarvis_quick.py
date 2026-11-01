@@ -1144,6 +1144,21 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
         got.f["about"] = _restore(text, got.f["about"])
     if got is not None and got.f.get("items"):
         got.f["items"] = [_restore(text, i) for i in got.f["items"]]
+    # Names become FILE NAMES: the matching form is lowercased, so restore the
+    # owner's capitals from the raw sentence before any handler uses them. On a
+    # case-sensitive filesystem "Shopping" -> "shopping" is a different file.
+    for key in ("name", "tname", "folder", "new", "old", "target", "tag"):
+        if got is not None and got.f.get(key):
+            got.f[key] = _restore(text, got.f[key])
+    # The template's own name is the LAST match in its sentence ("save my
+    # workout log as a template called My workout" has two); the first
+    # occurrence is the source note, not the new template.
+    if got is not None and got.name == "template_save" and got.f.get("tname"):
+        flat = " ".join(str(text or "").replace("\u2019", "'").replace("\u2018", "'").split())
+        piece = got.f["tname"]
+        i = flat.lower().rfind(piece)
+        if i >= 0:
+            got.f["tname"] = flat[i:i + len(piece)].strip(" ,.;:!?")
     return got
 
 
@@ -1166,6 +1181,14 @@ def _match(text, now: float) -> Optional[Intent]:
     # the local-calendar read are owned here, before any honesty sentence.
     # (The note lane's capture path really files even when the note TOOL is
     # off; the honesty lane's old note_write off-answer is retired.)
+    # A rename/move is read from the RAW sentence first, so a new title keeps
+    # its capital letters ("Home", not the lowercased matching form "home").
+    got = _note_rename_move_asking(text)
+    # notes read/search (2026-10-31) before the older note-honesty
+    # shapes: 'read my note <title>' is a real read now.
+    got = _notes_chat(s)
+    if got is not None:
+        return got
     got = _note_asking(s)
     if got is not None:
         return got
@@ -1519,6 +1542,12 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _update(s)
     if got is not None:
         return got
+    # notes: read and search (deterministic, read-only, no card). BEFORE
+    # the honesty/discussion shapes: 'read my note' is a real read now, and
+    # the old 'chat does not read note text' refusal must not answer it.
+    got = _notes_chat(s)
+    if got is not None:
+        return got
     # "what's coming up" / "what's my next reminder" is the SCHEDULER's list,
     # not a feature: the catalogue matches the "coming up" row's own id, so
     # this must run BEFORE the feature guide (2026-10-31 audit ordering bug).
@@ -1535,6 +1564,13 @@ def _match(text, now: float) -> Optional[Intent]:
         return got
 
     # --- (c) the feature discussion/introspection shapes --------------------
+    # "Can I edit the HUD in the jarvis app?" (2026-10-31, the owner's
+    # screenshot: the model said Jarvis had no built-in method, which is false
+    # about the product). Answered HERE, before the feature guide, and only when
+    # the request says it is the phone - see `_hud_edit`.
+    got = _hud_edit(s)
+    if got is not None:
+        return got
     # "What is <feature>?", "is <feature> on?", "how do I turn it on/off?" and
     # "turn on <feature>" (2026-10-20). AFTER the settings block on purpose:
     # every setting already worded keeps its own path, card rule and words, and
@@ -5002,11 +5038,15 @@ def _tool_off_words(subject: str, action: str) -> str:
     if AF is None:
         return (f"{subject} is switched off on this PC because the tool behind "
                 f"it is not offered to me.")
-    switchable = tuple(getattr(AF, "TOOLS_SWITCHABLE", ()) or ())
-    if action in switchable:
+    real = AF.real_tool(action) if hasattr(AF, "real_tool") else action
+    if real in tuple(getattr(AF, "SWITCHABLE_TOOL_NAMES", ()) or ()):
         pc_only = str(getattr(AF, "TOOLS_PC_ONLY", "") or "").strip()
         if pc_only:
             return f"{subject} is switched off on this PC. {pc_only}"
+    if real in tuple(getattr(AF, "TOOLS_TOML_ONLY", ()) or ()):
+        why = str(getattr(AF, "TOOLS_TOML_ONLY_NOTE", "") or "").strip()
+        if why:
+            return f"{subject} is switched off on this PC. {why}"
     not_listed = str(getattr(AF, "TOOLS_NOT_ON_LIST", "") or "").strip()
     head = (f"{subject} is switched off on this PC because the tool behind it "
             f"is not offered to me.")
@@ -5578,6 +5618,37 @@ _PHONE_TIMER = re.compile(
     r"|timers?\s+on\s+my\s+phone\b.*"
     r"|(?:can\s+you|could\s+you|please)?\s*set\s+(?:a\s+)?(?:timer|alarm)\s+on\s+"
     r"my\s+phone\b.*")
+#: "is my phone connected / paired / linked / online / set up?", "can you see my
+#: phone?", "what phone is paired?", "my phone isn't connecting" - the phone's
+#: own STATE question (2026-10-31, post-deploy audit: the model answered "I am
+#: not sure ... allow me to look at the Settings app or Device Manager for
+#: Bluetooth and USB", which is not a place this state lives). It reads the
+#: same paired-device store as the phone-timer answer and writes nothing. Only
+#: WHOLE state sentences: pairing actions keep their own `pair_phone`/ring
+#: paths, so "pair my phone", "connect my phone" and "ring my phone" never
+#: reach this one.
+_PHONE_STATE = re.compile(
+    # "is my phone connected / paired / linked / online / set up / working?"
+    r"(?:is|are|was|were|does|do|did|has|have)\s+(?:my|the|your)\s+"
+    r"(?:phone|android(?:\s+phone)?|mobile(?:\s+phone)?|device)\b[^.]{0,14}?"
+    r"(?:connected|linked|paired|online|set\s+up|working|reachable|"
+    r"recognis\w*|recogniz\w*)"
+    r"(?:\s+(?:to|with)\s*(?:you|jarvis|the\s+pc|this\s+pc)?)?.*"
+    # "can you see / do you see / can you reach my phone?"
+    r"|(?:can|could|do|does)\s+(?:you|jarvis)\s+(?:see|reach|find|detect|"
+    r"recognise|recognize)\s+(?:my|the)\s+(?:phone|android|mobile)\b.*"
+    # the normaliser strips the "can you", so "see my phone" is the same ask
+    r"|(?:see|reach)\s+(?:my|the)\s+(?:phone|android|mobile)\b.*"
+    # "what / which phone is paired / connected?"
+    r"|(?:what|which)\s+(?:phone|android|mobile)\s+(?:is|are)\s+"
+    r"(?:paired|connected|linked)\b.*"
+    # "my phone is not connecting / won't connect / isn't paired"
+    r"|my\s+phone\s+(?:is\s+not|isn't|isnt|isn\s+t|won't|wont|won\s+t|"
+    r"does\s+not|doesn't|doesnt|doesn\s+t|can't|cant|can\s+t|cannot)\s+"
+    r"(?:connect|connecting|connected|pair|pairing|paired|link|linked|reach|"
+    r"reaching|work|working|see|show|online|set\s+up)\b.*"
+    # "phone connection status"
+    r"|(?:phone|android)\s+(?:connection\s+)?status\b.*")
 _MODEL_SWITCH = re.compile(
     r"(?:can\s+you|could\s+you|how\s+do\s+i|how\s+can\s+i|how\s+to|where\s+do\s+i)?\s*"
     r"switch\s+(?:the\s+|my\s+)?models?\b.*"
@@ -5628,8 +5699,38 @@ def _protection_mode_words(P, mode) -> str:
     return str(words.get(mode) or mode or "")
 
 
-def _phone_state_words(devices_state: dict) -> str:
-    """One sentence about the owner's phone, from /api/devices' own rows."""
+#: How recent a paired phone's own check-in must be before this PC calls it
+#: "connected" rather than "paired, but not heard from". A phone writes
+#: last_seen on its requests, so five minutes is longer than any normal gap and
+#: short enough that a phone left in a drawer is not called connected. It is
+#: only a wording line: the row itself is never changed by this read.
+_PHONE_CONNECTED_S = 300
+
+
+def _phone_when_words(age: int, seen: float) -> str:
+    """How long ago the phone was last heard from, in the phone answer's words."""
+    import datetime
+    if age < 120:
+        return "just now"
+    if age < 3600:
+        return f"{age // 60} minutes ago"
+    if age < 86400:
+        return f"{age // 3600} hours ago"
+    return datetime.datetime.fromtimestamp(float(seen)).strftime("%d %B")
+
+
+def _phone_state_words(devices_state: dict, topic: str = "timer") -> str:
+    """What this PC really knows about the owner's phone, from /api/devices.
+
+    Two shapes share one store read: `topic="timer"` ("what timer is on my
+    phone") also says timers live on the phone; any other topic is the phone's
+    STATE ("is my phone connected / paired?") and answers one of four honest
+    facts - connected, paired but not heard from, no phone paired, or the store
+    unreadable. Read-only: nothing is paired, connected, changed or promised,
+    and no answer sends the owner to Settings, Bluetooth or Device Manager to
+    check a state this PC already holds.
+    """
+    timer = str(topic or "timer") == "timer"
     devices = list((devices_state or {}).get("devices") or [])
     phones = []
     for dev in devices:
@@ -5639,35 +5740,57 @@ def _phone_state_words(devices_state: dict) -> str:
             phones.append(dev)
     if not (devices_state or {}).get("readable", True):
         why = str((devices_state or {}).get("why") or "").strip()
-        return ("I cannot read the paired devices on this PC right now."
-                + (f" {why}" if why else ""))
+        head = ("I cannot read the paired devices on this PC right now, so I "
+                "cannot say whether your phone is connected.")
+        if why:
+            if why[0].islower():
+                why = why[0].upper() + why[1:]
+            if not why.endswith((".", "!", "?")):
+                why += "."
+            return f"{head} {why}"
+        return head
     if not phones:
+        if not timer:
+            return ("No phone is paired with Jarvis on this PC yet. On the PC: "
+                    "Settings, Devices, then \"Pair a phone\"; on the phone: "
+                    "Jarvis, Settings, Devices, then \"Pair with your PC\".")
         return ("No phone is paired with Jarvis on this PC yet. Timers set on the "
                 "phone stay on the phone; pair it first and the phone's own Clock "
                 "shows them.")
-    parts = []
-    for dev in phones:
-        name = str(dev.get("name") or "your phone")
-        seen = dev.get("last_seen")
-        if isinstance(seen, (int, float)) and seen > 0:
-            import datetime
-            age = max(0, int(time.time() - float(seen)))
-            if age < 120:
-                when = "just now"
-            elif age < 3600:
-                when = f"{age // 60} minutes ago"
-            elif age < 86400:
-                when = f"{age // 3600} hours ago"
+
+    def _seen(dev) -> float:
+        value = dev.get("last_seen")
+        return float(value) if isinstance(value, (int, float)) and value > 0 else 0.0
+
+    primary = max(phones, key=_seen)
+    name = str(primary.get("name") or "your phone")
+    seen = _seen(primary)
+    when = _phone_when_words(max(0, int(time.time() - seen)), seen) if seen else ""
+    if timer:
+        parts = []
+        for dev in phones:
+            label = str(dev.get("name") or "your phone")
+            stamp = _seen(dev)
+            if stamp:
+                parts.append(f"{label}, last heard from "
+                             f"{_phone_when_words(max(0, int(time.time() - stamp)), stamp)}")
             else:
-                when = datetime.datetime.fromtimestamp(
-                    float(seen)).strftime("%d %B")
-            parts.append(f"{name}, last heard from {when}")
-        else:
-            parts.append(f"{name}, not heard from since it was paired")
-    return ("Your phone is connected to Jarvis right now (" + "; ".join(parts)
-            + "). Timers set on the phone stay on the phone - I cannot read or "
-              "set them from this PC's chat; open the phone's Clock, or ask "
-              "Jarvis on the phone.")
+                parts.append(f"{label}, not heard from since it was paired")
+        return ("Your phone is connected to Jarvis right now (" + "; ".join(parts)
+                + "). Timers set on the phone stay on the phone - I cannot read or "
+                  "set them from this PC's chat; open the phone's Clock, or ask "
+                  "Jarvis on the phone.")
+    if not seen:
+        return (f"Your phone is paired with Jarvis ({name}), but it has not been "
+                f"heard from since it was paired. Open the Jarvis app on the "
+                f"phone and check it can reach this PC.")
+    age = max(0, int(time.time() - seen))
+    if age <= _PHONE_CONNECTED_S:
+        return (f"Your phone is connected to Jarvis right now ({name}, last "
+                f"heard from {when}).")
+    return (f"Your phone is paired with Jarvis ({name}), but I have not heard "
+            f"from it since {when}. Open the Jarvis app on the phone and check "
+            f"it can reach this PC.")
 
 
 def _quiet_hours_words() -> str:
@@ -5725,9 +5848,15 @@ def _honest_early(_text: str, s: str) -> Optional[Intent]:
         if "home_control" not in _enabled_tools_turn():
             return Intent("honest_chat", {"shape": "lights_off"})
         return None
+    # The phone's own STATE ("is my phone connected/paired?"): the same real
+    # paired-device store the timer answer reads, and never a promise to go and
+    # look at Settings, Bluetooth or Device Manager (2026-10-31, post-deploy
+    # audit: the model invented exactly that search).
+    if _PHONE_STATE.fullmatch(s):
+        return Intent("honest_state", {"shape": "phone_state", "topic": "state"})
     # The phone's own timers: real paired-device state, never "not connected".
     if _PHONE_TIMER.fullmatch(s):
-        return Intent("honest_state", {"shape": "phone_state"})
+        return Intent("honest_state", {"shape": "phone_state", "topic": "timer"})
     # Model switching is real; point at its own place and card.
     if _MODEL_SWITCH.fullmatch(s):
         return Intent("honest_chat", {"shape": "model_door"})
@@ -5837,7 +5966,8 @@ def _run_honest_state(f: dict) -> Result:
             state = D.paired_status()
         except Exception:
             state = {}
-        return Result(_phone_state_words(state), "honest_state")
+        return Result(_phone_state_words(state, str(f.get("topic") or "timer")),
+                      "honest_state")
     return Result("That is not something I can read from chat here.", "honest_state")
 
 
@@ -5905,13 +6035,16 @@ def _run_honest_chat_extra(f: dict) -> Optional[Result]:
                       if item.get("title")]
         except Exception:
             titles = []
-        names = ", ".join(titles[:4]) or "calendar, email, notes and home status"
+        count = len(titles)
         return Result(
             "What asks first is Settings, What asks first. There you decide what "
-            "Jarvis may do without asking, and under \"" + label + "\" whether "
-            "the AI is offered each reading tool at all (" + names + "). Turning "
-            "one on is one approval card plus Windows Hello on this PC; turning "
-            "it off is instant.", "honest_chat")
+            "Jarvis may do without asking, and under \"" + label + "\" which "
+            "abilities the AI is offered at all: " + str(count) + " one-tool "
+            "switches, grouped. Turning one on is ONE approval card plus Windows "
+            "Hello on this PC; turning it off is instant. Raw shell, computer and "
+            "browser control, reading one web page, connecting an account and REA "
+            "are not offered in-app by this slice - they stay a settings-file "
+            "choice, and REA also needs its own [rea] enabled = true.", "honest_chat")
     if shape == "quiet_hours":
         return Result(_quiet_hours_words(), "honest_chat")
     if shape == "general_off":
@@ -5921,10 +6054,12 @@ def _run_honest_chat_extra(f: dict) -> Optional[Result]:
                           "right now.", "honest_chat")
         return Result(
             "On this PC these are switched off right now: " + "; ".join(items[:8])
-            + ". The four reading tools (calendar, email, notes and home status) "
-              "are turned on in Settings, What asks first under \"Let the AI use "
-              "this\" - one approval card plus Windows Hello. The other tools "
-              "change only in your settings file.", "honest_chat")
+            + ". The in-app switches are in Settings, What asks first under "
+            "\"Let the AI use this\" - one approval card plus Windows Hello, one "
+            "tool at a time. Raw shell, computer and browser control, reading one "
+            "web page, connecting an account and REA are not offered in-app; they "
+            "stay a settings-file choice, and REA also needs its own [rea] enabled "
+            "= true.", "honest_chat")
     return None
 
 
@@ -8372,12 +8507,42 @@ _NOTE_READ_PATTERNS = (
 #: The organizer, in the owner's words. It is a real, built, off-by-default
 #: planner; this path only reports its state or shows its read-only preview.
 _VAULT_TIDY = re.compile(
-    r"(?:organi[sz]e|tidy|sort|clean\s+up|declutter)\s+"
+    r"(?:organi[sz]e|tidy|sort|clean\s+up|declutter|plan)\s+"
     r"(?:my\s+|the\s+)?(?:obsidian\s+)?(?:vault|notes?)\b"
-    r"|(?:organi[sz]e)\s+(?:my\s+|the\s+)?obsidian\b")
+    r"|(?:organi[sz]e|plan)\s+(?:my\s+|the\s+)?obsidian\b")
+#: "apply the plan", "organize my vault now", "tidy it for real" - the WRITER
+#: half of the organizer, through the module's own one-card apply route. The
+#: words deliberately differ from the read-only plan shapes above: "now" and
+#: "for real" ask for the card, not another preview.
+_VAULT_APPLY = re.compile(
+    r"(?:apply|use|do)\s+(?:the\s+|that\s+|this\s+)?"
+    r"(?:plan|organi[sz]ation|changes?)\b.*"
+    r"|apply\s+it\b.*"
+    r"|(?:organi[sz]e|tidy)\s+(?:my\s+|the\s+)?(?:obsidian\s+)?"
+    r"(?:vault|notes?)\s+now\b.*"
+    r"|(?:organi[sz]e|tidy)\s+it\s+for\s+real\b.*"
+    r"|go\s+ahead\s+and\s+(?:organi[sz]e|tidy|apply)\b.*")
+#: "organize just my Welcome note", "reorganize a specific set of notes" - the
+#: organizer has NO per-note mode: it plans the whole vault and applies one
+#: card for the whole batch. These get that truth plainly, never a pretend
+#: scoped plan. The lookahead keeps it to notes/vault asks, so "organize just my
+#: desktop icons" is still the model's.
+_VAULT_SCOPED = re.compile(
+    r"(?:re)?organi[sz]e\s+(?:just|only)\s+"
+    r"(?:my\s+|the\s+|these\s+|those\s+)?(?P<set>.+?)\s+notes?\b.*"
+    r"|(?:re)?organi[sz]e\s+(?:these|those)\s+notes?\s*[:,-]?\s*"
+    r"(?P<these>.*)"
+    r"|(?:re)?organi[sz]e\s+(?:a\s+specific|a\s+particular)\s+"
+    r"(?:set\s+of\s+)?notes?\s*[:,-]?\s*(?P<specific>.*)"
+    r"|(?:re)?organi[sz]e\s+(?:one|this|that)\s+notes?\s*[:,-]?\s*"
+    r"(?P<single>.+)")
 _ORGANIZER_ON = re.compile(
     r"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?vault\s+organi[sz]er"
     r"|enable\s+(?:the\s+|my\s+)?vault\s+organi[sz]er")
+#: The last plan THIS chat session showed, so "apply the plan" uses the plan
+#: the owner just looked at rather than a silently different one. In memory
+#: only; the module also keeps its own capped plan memory.
+_ORGANIZER_LAST_PLAN: dict = {}
 #: Obsidian's own theme/CSS/templates/plugins are not Jarvis's to change, and
 #: never were - asked about, the model used to invent them.
 _STYLE_WORD = re.compile(
@@ -8396,8 +8561,723 @@ def _obsidian_style_refused(s: str) -> bool:
             and _STYLE_VERB.match(s) is not None)
 
 
+def _organizer_selection(raw) -> list:
+    """The note names in a pick-a-set sentence, in the owner's order.
+
+    "Welcome and Alpha", "Welcome, Alpha", "the Welcome note" and "Work/Alpha"
+    all become names; quotes are stripped and a trailing "note(s)" is dropped.
+    An empty list means the owner named no notes - the runner then asks for
+    names rather than guessing a selection.
+    """
+    text = str(raw or "").strip().strip('"\'`')
+    parts = re.split(r"\s*(?:,|;|&|\band\b)\s*", text) if text else []
+    out: list = []
+    for part in parts:
+        name = part.strip().strip('"\'`')
+        name = re.sub(r"^(?:the|my|these|those)\s+", "", name, flags=re.I)
+        name = re.sub(r"\s+notes?$", "", name, flags=re.I).strip()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+#: The wave-1 note WRITES (2026-10-31, the notes flexibility decision): create
+#: ONE note, add words to the END of ONE existing note, add or remove ONE tag.
+#: Every one is a single-file write through jarvis_notes_edit's own routes, so
+#: the module keeps the one card, the File Guardian copy and the undo receipt.
+#: Several notes in one request are refused in plain words (below), and the
+#: owner's other shapes keep their own doors: "note this"/"make a note: X" is
+#: the daily note, "add milk to my shopping list" is the list, "remind me"
+#: is the reminder and "email ..." is email. None of those match here.
+_NOTE_CREATE_NAMED = re.compile(
+    r"(?:create|make|start)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note"
+    r"\s+(?:called|named|titled)\s+(?P<name>.+?)"
+    r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+))?$")
+_LIST_NAMES_TO_LEAVE = frozenset({
+    "todo", "to-do", "to do", "todo list", "to-do list", "to do list",
+    "shopping list", "list",
+})
+
+
+def _list_owns_name(name: str) -> bool:
+    """True when "add X to my <name>" belongs to the named-list grammar.
+
+    The notes lane's append regex is general ("add TEXT to my NAME"); without
+    this guard it claimed "add milk to my shopping list" and "add milk to my
+    todo list". A named list always ends in "list" (or is one of the synonyms
+    above), so the list keeps its own path (2026-10-31 final-wave integration).
+    """
+    n = name.strip().strip("\"'").casefold()
+    return n in _LIST_NAMES_TO_LEAVE or n.endswith(" list")
+
+
+_NOTE_APPEND_COLON = re.compile(
+    r"(?:add|append)\s+(?:this\s+)?to\s+(?:my|the)\s+(?P<name>.+?)"
+    r"(?:\s+note)?\s*[:,-]\s*(?P<text>.+)$")
+_NOTE_APPEND_PLAIN = re.compile(
+    r"(?:add|append|write)\s+(?P<text>.+?)\s+(?:to|into|at\s+the\s+end\s+of)\s+"
+    r"(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s*$")
+_NOTE_TAG_ADD = re.compile(
+    r"(?:add|put)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+(?:to|on)\s+"
+    r"(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s*$")
+_NOTE_TAG_REMOVE = re.compile(
+    r"(?:remove|delete|take)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+from\s+"
+    r"(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s*$")
+_NOTE_TAG_WITH = re.compile(
+    r"(?:tag|label)\s+(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s+with\s+"
+    r"(?P<tag>[#A-Za-z0-9_/-]+)\b.*")
+#: Several notes at once: refused, never quietly done to the first one.
+_NOTE_WRITE_BATCH = re.compile(
+    r"(?:add|append|write|tag|label|create|make|put)\b.*\b"
+    r"(?:all|every|each|both)\b.*\bnotes?\b.*"
+    r"|(?:add|append|write|tag|label)\s+(?:it\s+)?to\s+(?:my|the)\s+"
+    r"(?:whole|entire)\s+(?:obsidian\s+)?vault\b.*")
+#: Rename and move, wave 4. The note name is required in a familiar shape; a
+#: plain "move my reminder to 5pm" (no note word and no "into") stays the
+#: scheduler's, and a folder named after "into" is fine.
+_NOTE_RENAME = re.compile(
+    r"(?:rename|retitle)\s+(?:my\s+|the\s+)?note\s+(?P<name>.+?)\s+"
+    r"(?:to|as)\s+(?P<new>.+)$"
+    r"|(?:rename|retitle)\s+(?:my\s+|the\s+)?(?P<name2>.+?)"
+    r"(?:\s+note)?\s+(?:to|as)\s+(?P<new2>.+)$")
+_NOTE_MOVE = re.compile(
+    r"move\s+(?:my\s+|the\s+)?(?P<name>.+?)\s+note\s+(?:to|into)\s+"
+    r"(?:the\s+|my\s+|a\s+)?(?P<folder>.+?)(?:\s+folder)?"
+    r"(?:\s+and\s+(?P<extra>create|make|fix|update)\b.*)?$"
+    r"|move\s+(?:the\s+)?note\s+(?P<name2>.+?)\s+(?:to|into)\s+"
+    r"(?:the\s+|my\s+|a\s+)?(?P<folder2>.+?)(?:\s+folder)?"
+    r"(?:\s+and\s+(?P<extra2>create|make|fix|update)\b.*)?$"
+    r"|move\s+(?:my\s+|the\s+)?(?P<name3>.+?)\s+into\s+"
+    r"(?:the\s+|my\s+|a\s+)?(?P<folder3>.+?)(?:\s+folder)?"
+    r"(?:\s+and\s+(?P<extra3>create|make|fix|update)\b.*)?$")
+#: The module's own sentences, so the fast path never invents a promise.
+NOTE_WRITE_BATCH_SAID = (
+    "I change one note at a time, so nothing was written: name ONE note, like "
+    "\"add milk to my Shopping note\".")
+NOTE_DELETE_SAID = (
+    "Deleting a line or a note is not built, so nothing was changed. I can add, "
+    "format, replace, tag, rename a heading or move a line into a section - say "
+    "one of those.")
+_NOTE_DELETE_LINE = re.compile(
+    r"(?:delete|remove|erase|trash)\s+(?:this|that|the|my)\s+"
+    r"(?:line|lines|sentence|paragraph)\b.*")
+
+
+NOTE_HIDDEN_SAID = (
+    "Your lists are hidden on this PC, so I did not open or change a note. "
+    "Tap Show and confirm it is you, then ask again.")
+NOTE_NOT_FOUND_SAID = (
+    "I could not find a note called \"{name}\" in your Obsidian vault. "
+    "Nothing was written - open the Brain window's Notes plate to check the name.")
+
+
+def _notes_write_hidden() -> bool:
+    """True while the owner's hidden-lists / App-lock state hides private words."""
+    try:
+        hidden, _words = _calendar_hidden()
+        return bool(hidden)
+    except Exception:                       # noqa: BLE001 - cannot tell: be safe
+        return True
+
+
+def _note_path_for(name: str) -> str:
+    """`Shopping` -> `Shopping.md`; a name that already ends .md/.txt is kept."""
+    text = str(name or "").strip().strip('"').strip("'")
+    if not text:
+        return ""
+    return text if text.lower().endswith((".md", ".txt")) else text + ".md"
+
+
+def _find_note(rel: str):
+    """`(path, "", title)` for a unique note title/path, or `(None, why, "")`.
+
+    Read-only: it asks the notes editor's existing list (paths and titles, never
+    text) and matches the owner's words against the title or the path. Two
+    matches are an ambiguity answered in words, never guessed.
+    """
+    try:
+        import jarvis_notes_edit as E
+    except Exception:                       # noqa: BLE001 - module absent
+        return None, "The notes editor is not installed on this PC, so nothing was changed.", ""
+    want = str(rel or "").strip().replace("\\", "/").casefold()
+    stem = want.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    code, body = E.handle_list("")
+    if code != 200 or not isinstance(body, dict):
+        return None, "Your Obsidian vault could not be read just now, so nothing was changed.", ""
+    exact, loose = [], []
+    for row in (body.get("notes") or []):
+        path = str(row.get("path") or "")
+        title = str(row.get("title") or "")
+        if not path:
+            continue
+        if path.casefold() == want:
+            exact.append((path, title))
+        elif title.casefold() == stem and len(stem) > 0:
+            loose.append((path, title))
+    found = exact or loose
+    if not found:
+        return None, "not_found", ""
+    if len(found) > 1:
+        names = "; ".join(p for p, _t in found[:6])
+        return None, (f"That name matches {len(found)} notes (" + names + "), so "
+                      "nothing was changed - say the note's folder and name, like "
+                      "\"add milk to my Shopping note in 02 - Areas\"."), ""
+    return found[0][0], "", found[0][1]
+
+
+def _note_read_for_write(path: str):
+    """`(sha256, why)` from the editor's own read: the write must start from it."""
+    try:
+        import jarvis_notes_edit as E
+        from urllib.parse import quote
+        code, body = E.handle_read("path=" + quote(path, safe=""))
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return "", f"The note could not be read ({type(exc).__name__}), so nothing was changed."
+    if code != 200 or not isinstance(body, dict):
+        err = str((body or {}).get("error") or "the note could not be read") if isinstance(body, dict) else "the note could not be read"
+        return "", err + " Nothing was changed."
+    return str(body.get("sha256") or ""), ""
+
+
+def _note_write_result(body, ok_intent: str, wait_intent: str, why_intent: str):
+    body = body if isinstance(body, dict) else {}
+    said = str(body.get("message") or "").strip()
+    state = str(body.get("state") or "")
+    if state in ("saved", "unchanged"):
+        return Result(said or "Done.", ok_intent)
+    if state == "waiting":
+        return Result(said or "Waiting for your approval card.", wait_intent)
+    return Result(said or "Nothing was written.", why_intent)
+
+
+def _run_note_create(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    path = _note_path_for(str(f.get("name") or ""))
+    if not path:
+        return Result("What should the new note be called? Say \"create a note called ...\".",
+                      "note_create_refused")
+    text = str(f.get("text") or "")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_create({"path": path, "text": text}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be created ({type(exc).__name__}), so nothing was created.",
+                      "note_create_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was created.") if isinstance(body, dict) else "Nothing was created."
+        return Result(said, "note_create_refused")
+    return _note_write_result(body, "note_created", "note_create_waiting", "note_create_refused")
+
+
+def _run_note_append(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    text = str(f.get("text") or "").strip()
+    if not name or not text:
+        return Result('Say it as "add milk to my Shopping note", and I will add the words.',
+                      "note_append_refused")
+    path, why, _title = _find_note(_note_path_for(name))
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_append_refused")
+        return Result(why, "note_append_refused")
+    sha, why = _note_read_for_write(path)
+    if why:
+        return Result(why, "note_append_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_append({"path": path, "text": text,
+                                      "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The words could not be added ({type(exc).__name__}), so nothing was written.",
+                      "note_append_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was written.") if isinstance(body, dict) else "Nothing was written."
+        return Result(said, "note_append_refused")
+    return _note_write_result(body, "note_appended", "note_append_waiting", "note_append_refused")
+
+
+def _run_note_tag(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    tag = str(f.get("tag") or "").strip()
+    action = str(f.get("action") or "add").strip().lower()
+    if not name or not tag:
+        return Result('Say it as "add tag recipes to my Shopping note", and I will tag it.',
+                      "note_tag_refused")
+    path, why, _title = _find_note(_note_path_for(name))
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_tag_refused")
+        return Result(why, "note_tag_refused")
+    sha, why = _note_read_for_write(path)
+    if why:
+        return Result(why, "note_tag_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_tag({"path": path, "tag": tag, "action": action,
+                                   "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The tag could not be changed ({type(exc).__name__}), so nothing was changed.",
+                      "note_tag_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_tag_refused")
+    return _note_write_result(body, "note_tagged", "note_tag_waiting", "note_tag_refused")
+
+
+def _run_note_rename(f: dict) -> Result:
+    """\"rename my X to Y\" - one note, one card, links preserved, undo."""
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    new = str(f.get("new") or "").strip()
+    if not name or not new:
+        return Result('Say it as "rename my Welcome note to Home".', "note_rename_refused")
+    paths = _note_title_paths(name)
+    if len(paths) > 1:
+        return Result(f"That name matches {len(paths)} notes (" + "; ".join(paths[:6])
+                      + "), so nothing was changed - say the note's folder and name.",
+                      "note_rename_refused")
+    path, why, _title = _find_note(_note_path_for(name))
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_rename_refused")
+        return Result(why, "note_rename_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_rename({"path": path, "title": new},
+                                     by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be renamed ({type(exc).__name__}), so nothing was changed.",
+                      "note_rename_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_rename_refused")
+    return _note_write_result(body, "note_renamed", "note_rename_waiting",
+                              "note_rename_refused")
+
+
+def _run_note_move(f: dict) -> Result:
+    """\"move my X into Folder\" - one note, links preserved, one card, undo."""
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    folder = str(f.get("folder") or "").strip()
+    if not name or not folder:
+        return Result('Say it as "move my Welcome note into Projects".', "note_move_refused")
+    paths = _note_title_paths(name)
+    if len(paths) > 1:
+        return Result(f"That name matches {len(paths)} notes (" + "; ".join(paths[:6])
+                      + "), so nothing was changed - say the note's folder and name.",
+                      "note_move_refused")
+    path, why, _title = _find_note(_note_path_for(name))
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_move_refused")
+        return Result(why, "note_move_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_move({"path": path, "folder": folder,
+                                    "create_folder": bool(f.get("create"))},
+                                   by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be moved ({type(exc).__name__}), so nothing was changed.",
+                      "note_move_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_move_refused")
+    return _note_write_result(body, "note_moved", "note_move_waiting",
+                              "note_move_refused")
+
+
+
+
+#: The wave-2 SURGICAL edits (2026-10-31): add a line under ONE heading, add a
+#: line before/after ONE literal anchor, wrap ONE span in bold/italic (or
+#: unwrap it), and replace ONE exact occurrence. Each is one file, one card,
+#: with the exact before/after shown on the card. The matchers require the
+#: sentence to name the note ("in my workout log"), so an ordinary "make it
+#: bold" is still the model's, and "add milk to my workout log" keeps the
+#: wave-1 append-at-end door.
+_NOTE_SURGICAL_UNDER = re.compile(
+    r"(?:add|put)\s+(?P<text>.+?)\s+(?:under|underneath)\s+(?:the\s+)?"
+    r"(?P<head>.+?)\s+heading\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_SURGICAL_SECTION = re.compile(
+    r"(?:add|put)\s+(?P<text>.+?)\s+(?:to|in)\s+(?:the\s+)?"
+    r"(?P<head>.+?)\s+section\s+of\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_SURGICAL_ANCHOR = re.compile(
+    r"(?:add|put)\s+(?P<text>.+?)\s+(?P<mode>before|after)\s+(?:the\s+)?"
+    r"(?P<anchor>.+?)(?:\s+line)?\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_FORMAT_ADD = re.compile(
+    r"(?:make|put|set)\s+(?P<target>.+?)\s+(?:in\s+)?(?P<style>bold|italic|strikethrough|strike|code)"
+    r"\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_FORMAT_REMOVE = re.compile(
+    r"(?:remove\s+(?:the\s+)?(?P<style>bold|italic|strikethrough|strike|code)\s+from|un(?P<style2>bold|italic))"
+    r"\s+(?P<target>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_REPLACE = re.compile(
+    r"(?:replace|change)\s+(?P<old>.+?)\s+(?:with|to)\s+(?P<new>.+?)"
+    r"\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+
+NOTE_SURGICAL_HIDDEN = (
+    "Your lists are hidden on this PC, so I did not open or change a note. "
+    "Tap Show and confirm it is you, then ask again.")
+NOTE_SURGICAL_NO_NOTE = (
+    "I could not find a note called \"{name}\" in your Obsidian vault. "
+    "Nothing was changed - open the Brain window's Notes plate to check the name.")
+
+
+def _surgical_note(name: str):
+    """`(path, sha, why)` for a note the owner named in a surgical sentence."""
+    path, why, _title = _find_note(_note_path_for(str(name or "")))
+    if path is None:
+        if why == "not_found":
+            return None, "", NOTE_SURGICAL_NO_NOTE.format(name=name)
+        return None, "", why
+    sha, why = _note_read_for_write(path)
+    if why:
+        return None, "", why
+    return path, sha, ""
+
+
+def _run_note_insert(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _surgical_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_insert_refused")
+    mode = str(f.get("mode") or "under_heading")
+    target = str(f.get("target") or "").strip()
+    text = str(f.get("text") or "").strip()
+    if not text or not target:
+        return Result('Say what to add and where, like "add stretch under the Warm-up '
+                      'heading in my workout log".', "note_insert_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_insert({"path": path, "text": text, "mode": mode,
+                                      "target": target, "expected_sha256": sha},
+                                     by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The line could not be added ({type(exc).__name__}), so nothing was changed.",
+                      "note_insert_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_insert_refused")
+    return _note_write_result(body, "note_inserted", "note_insert_waiting", "note_insert_refused")
+
+
+def _run_note_format(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _surgical_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_format_refused")
+    style = str(f.get("style") or "").strip().lower()
+    action = str(f.get("action") or "add").strip().lower()
+    target = str(f.get("target") or "").strip()
+    if not target or style not in ("bold", "italic"):
+        return Result('Say what to format and how, like "make squats bold in my workout log".',
+                      "note_format_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_format({"path": path, "target": target, "style": style,
+                                      "action": action, "expected_sha256": sha},
+                                     by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The text could not be formatted ({type(exc).__name__}), so nothing was changed.",
+                      "note_format_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_format_refused")
+    return _note_write_result(body, "note_formatted", "note_format_waiting", "note_format_refused")
+
+
+def _run_note_replace(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _surgical_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_replace_refused")
+    old = str(f.get("old") or "")
+    new = str(f.get("new") or "")
+    if not old or not new:
+        return Result('Say it as "replace squats with lunges in my workout log".',
+                      "note_replace_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_replace({"path": path, "old": old, "new": new,
+                                       "expected_sha256": sha},
+                                      by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The words could not be replaced ({type(exc).__name__}), so nothing was changed.",
+                      "note_replace_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_replace_refused")
+    return _note_write_result(body, "note_replaced", "note_replace_waiting", "note_replace_refused")
+
+
+
+
+#: Wave 3 (2026-10-31): the owner's "really enhance customizability" ask. One
+#: deterministic sentence per capability, all ending in the note's name ("in my
+#: workout log"), all through the one /api/notes/customize route, so every edit
+#: keeps the wave-2 card, preview, guardian copy and undo.
+_NOTE_LINE_BULLET = re.compile(
+    r"(?:turn|make|change|put)\s+(?P<text>.+?)\s+(?:into|to|as)\s+a\s+bullet"
+    r"(?:\s+point)?\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_ADD_BULLET = re.compile(
+    r"(?:add|put)\s+a\s+bullet\s+(?:for|to)\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+"
+    r"(?P<name>.+?)\s*$")
+_NOTE_LINE_CHECK = re.compile(
+    r"(?:turn|make|change|put)\s+(?P<text>.+?)\s+(?:into|to|as)\s+a\s+checklist"
+    r"(?:\s+item)?\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_CHECKBOX = re.compile(
+    r"(?:add|put)\s+a\s+checkbox\s+(?:for|to)\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+"
+    r"(?P<name>.+?)\s*$")
+_NOTE_LINE_QUOTE = re.compile(
+    r"(?:turn|make|change|put)\s+(?P<text>.+?)\s+(?:into|to)\s+a\s+quote"
+    r"\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_NUMBER = re.compile(
+    r"number\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_HEADING = re.compile(
+    r"(?:turn|make|change)\s+(?P<text>.+?)\s+(?:into|to|a|as)\s+(?P<hashes>#{1,6})?\s*"
+    r"heading\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_TICK = re.compile(
+    r"tick\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_UNTICK = re.compile(
+    r"untick\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_PLAIN = re.compile(
+    r"(?:turn\s+(?P<text1>.+?)\s+back\s+(?:into|to)\s+plain\s+text|"
+    r"remove\s+the\s+(?:bullet|number|checkbox|checklist|heading|quote)\s+from\s+"
+    r"(?P<text2>.+?))\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_NEW_SECTION = re.compile(
+    r"(?:add|put)\s+(?:a\s+)?(?:new\s+)?section\s+(?:called|named|titled)?\s*"
+    r"(?P<heading>.+?)\s+(?:to|in)\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_RENAME_HEADING = re.compile(
+    r"(?:rename|change)\s+the\s+(?P<old>.+?)\s+heading\s+(?:to|into)\s+"
+    r"(?P<new>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_SET_PROPERTY = re.compile(
+    r"(?:set|add\s+property)\s+(?P<key>[A-Za-z0-9_.-]+)\s+"
+    r"(?:to|with\s+value|with)\s+(?P<value>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_REMOVE_PROPERTY = re.compile(
+    r"remove\s+the\s+(?P<key>[A-Za-z0-9_.-]+)\s+property\s+(?:from|in)\s+"
+    r"(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINK = re.compile(
+    r"(?:add\s+a\s+link\s+to|link)\s+(?P<target>.+?)\s+(?:in|from)\s+"
+    r"(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_TEMPLATE_CREATE = re.compile(
+    r"create\s+(?:a\s+|an\s+)?(?P<kind>workout\s+log|meeting\s+notes|daily\s+journal|"
+    r"journal|project\s+note)"
+    r"(?:\s+(?:for|about)\s+(?P<subject>.+?))?\s*$")
+_NOTE_TEMPLATE_SAVE = re.compile(
+    r"save\s+(?:my\s+|the\s+)?(?P<name>.+?)(?:\s+note)?\s+as\s+a\s+template"
+    r"(?:\s+(?:called|named)\s+(?P<tname>.+?))?\s*$")
+_NOTE_TEMPLATE_LIST = re.compile(
+    r"(?:list|show)\s+my\s+templates|what\s+templates\s+do\s+i\s+have")
+
+
+def _wave3_note(name: str):
+    path, why, _title = _find_note(_note_path_for(str(name or "")))
+    if path is None:
+        if why == "not_found":
+            return None, "", NOTE_SURGICAL_NO_NOTE.format(name=name)
+        return None, "", why
+    sha, why = _note_read_for_write(path)
+    return (path, sha, "") if not why else (None, "", why)
+
+
+def _run_note_customize(f: dict, action: str, card: str) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _wave3_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_customize_refused")
+    body = {"path": path, "action": action, "expected_sha256": sha}
+    body.update({k: v for k, v in f.items() if k not in ("name", "intent")})
+    try:
+        import jarvis_notes_edit as E
+        code, out = E.handle_customize(body, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be changed ({type(exc).__name__}), so nothing was changed.",
+                      "note_customize_refused")
+    if code not in (200, 202):
+        said = str((out or {}).get("error") or "Nothing was changed.") if isinstance(out, dict) else "Nothing was changed."
+        return Result(said, "note_customize_refused")
+    return _note_write_result(out, "note_customized", "note_customize_waiting",
+                              "note_customize_refused")
+
+
+def _run_template_create(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    try:
+        import jarvis_notes_edit as E
+        title, body = E.builtin_template(str(f.get("kind") or ""),
+                                         str(f.get("subject") or ""))
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The template could not be made ({type(exc).__name__}), so nothing was created.",
+                      "template_create_refused")
+    if not title:
+        return Result(body, "template_create_refused")
+    import datetime
+    name = title
+    subject = str(f.get("subject") or "").strip()
+    if subject:
+        name = name + " - " + subject
+    elif f.get("kind") in ("journal",):
+        name = name + " - " + datetime.date.today().isoformat()
+    path = _note_path_for(name)
+    try:
+        code, out = E.handle_create({"path": path, "text": body}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be created ({type(exc).__name__}), so nothing was created.",
+                      "template_create_refused")
+    if code not in (200, 202):
+        said = str((out or {}).get("error") or "Nothing was created.") if isinstance(out, dict) else "Nothing was created."
+        return Result(said, "template_create_refused")
+    return _note_write_result(out, "template_created", "template_create_waiting",
+                              "template_create_refused")
+
+
+def _run_template_save(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _wave3_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "template_save_refused")
+    body = {"path": path, "action": "save_template", "expected_sha256": sha}
+    if str(f.get("tname") or "").strip():
+        body["name"] = str(f.get("tname")).strip()
+    try:
+        import jarvis_notes_edit as E
+        code, out = E.handle_customize(body, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The template could not be saved ({type(exc).__name__}), so nothing was saved.",
+                      "template_save_refused")
+    if code not in (200, 202):
+        said = str((out or {}).get("error") or "Nothing was saved.") if isinstance(out, dict) else "Nothing was saved."
+        return Result(said, "template_save_refused")
+    return _note_write_result(out, "template_saved", "template_save_waiting",
+                              "template_save_refused")
+
+
+def _run_template_list() -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    try:
+        import jarvis_notes_edit as E
+        names, why = E.list_templates()
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The templates could not be read ({type(exc).__name__}).",
+                      "template_list_refused")
+    if why:
+        return Result("I could not read your templates: " + why, "template_list_refused")
+    if not names:
+        return Result("You have no templates yet.", "template_listed")
+    return Result("Your templates: " + ", ".join(names) + ".", "template_listed")
+
+
+
+def _note_title_paths(name: str) -> list:
+    """Every note whose title matches `name`, for the rename/move ambiguity rule."""
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_list("")
+    except Exception:                       # noqa: BLE001
+        return []
+    if code != 200 or not isinstance(body, dict):
+        return []
+    stem = _note_path_for(str(name or "")).rsplit("/", 1)[-1].lower()
+    if stem.endswith((".md", ".txt")):
+        stem = stem.rsplit(".", 1)[0]
+    if not stem:
+        return []
+    found = []
+    for row in (body.get("notes") or []):
+        path = str(row.get("path") or "")
+        title = str(row.get("title") or "")
+        if path and (title.casefold() == stem or path.rsplit("/", 1)[-1].rsplit(".", 1)[0].casefold() == stem):
+            found.append(path)
+    return found
+
+
+def _rename_move_overcapture(name: str, folder: str = "") -> bool:
+    """True for sentences that belong to the surgical/customization lane."""
+    text = (name + " " + folder).lower()
+    if re.search(r"\b(heading|section|line|property|tag)s?\b", text):
+        return True
+    return name.strip().lower().startswith(("in the ", "in my ", "from "))
+
+
+def _note_rename_move_asking(raw: str) -> Optional[Intent]:
+    """Read a rename/move from the raw sentence, keeping the title's case."""
+    s = str(raw or "").strip().rstrip("?.!").strip()
+    m = _NOTE_RENAME.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or "").strip()
+        new = (m.group("new") or m.group("new2") or "").strip()
+        if name and new and not _rename_move_overcapture(name):
+            return Intent("note_rename", {"name": name, "new": new})
+    m = _NOTE_MOVE.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or m.group("name3") or "").strip()
+        folder = (m.group("folder") or m.group("folder2") or m.group("folder3") or "").strip()
+        extra = (m.group("extra") or m.group("extra2") or m.group("extra3") or "").lower()
+        if name and folder and not _rename_move_overcapture(name, folder):
+            return Intent("note_move", {"name": name, "folder": folder,
+                                        "create": extra in ("create", "make")})
+    return None
+
+
 def _note_asking(s: str) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours)."""
+    if _NOTE_WRITE_BATCH.fullmatch(s):
+        return Intent("notes_batch_refused")
+    if _NOTE_DELETE_LINE.fullmatch(s):
+        return Intent("note_delete_refused")
+    m = _NOTE_RENAME.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or "").strip()
+        new = (m.group("new") or m.group("new2") or "").strip()
+        if name and new and not _rename_move_overcapture(name):
+            return Intent("note_rename", {"name": name, "new": new})
+    m = _NOTE_MOVE.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or m.group("name3") or "").strip()
+        folder = (m.group("folder") or m.group("folder2") or m.group("folder3") or "").strip()
+        extra = (m.group("extra") or m.group("extra2") or m.group("extra3") or "").lower()
+        if name and folder and not _rename_move_overcapture(name, folder):
+            return Intent("note_move", {"name": name, "folder": folder,
+                                        "create": extra in ("create", "make")})
+    m = _NOTE_RENAME.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or "").strip()
+        new = (m.group("new") or m.group("new2") or "").strip()
+        if name and new and not _rename_move_overcapture(name):
+            return Intent("note_rename", {"name": name, "new": new})
+    m = _NOTE_MOVE.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or m.group("name3") or "").strip()
+        folder = (m.group("folder") or m.group("folder2") or m.group("folder3") or "").strip()
+        extra = (m.group("extra") or m.group("extra2") or m.group("extra3") or "").lower()
+        if name and folder and not _rename_move_overcapture(name, folder):
+            return Intent("note_move", {"name": name, "folder": folder,
+                                        "create": extra in ("create", "make")})
+    m = _NOTE_CREATE_NAMED.fullmatch(s)
+    if m:
+        return Intent("note_create", {"name": m.group("name").strip(),
+                                      "text": (m.group("text") or "").strip()})
+    m = _NOTE_TAG_ADD.fullmatch(s) or _NOTE_TAG_WITH.fullmatch(s)
+    if m:
+        return Intent("note_tag", {"name": m.group("name").strip(),
+                                   "tag": m.group("tag").strip(), "action": "add"})
+    m = _NOTE_TAG_REMOVE.fullmatch(s)
+    if m:
+        return Intent("note_tag", {"name": m.group("name").strip(),
+                                   "tag": m.group("tag").strip(), "action": "remove"})
     for rx in (_DAILY_NOTE_ADD, _NOTE_TEXT_COLON, _NOTE_THIS, _JOT_DOWN,
                _NOTE_THAT, _NOTE_TEXT_SPACE):
         m = rx.fullmatch(s)
@@ -8405,12 +9285,140 @@ def _note_asking(s: str) -> Optional[Intent]:
             text = m.group("text").strip()
             if text:
                 return Intent("note_make", {"text": text})
+    if _NOTE_TEMPLATE_LIST.fullmatch(s):
+        return Intent("template_list")
+    m = _NOTE_TEMPLATE_SAVE.fullmatch(s)
+    if m:
+        return Intent("template_save", {"name": m.group("name").strip(),
+                                        "tname": (m.group("tname") or "").strip()})
+    m = _NOTE_TEMPLATE_CREATE.fullmatch(s)
+    if m:
+        kind = m.group("kind").replace(" ", "")
+        if kind in ("workoutlog",):
+            kind = "workout"
+        elif kind in ("meetingnotes",):
+            kind = "meeting"
+        elif kind in ("dailyjournal", "journal"):
+            kind = "journal"
+        elif kind in ("projectnote",):
+            kind = "project"
+        return Intent("template_create", {"kind": kind,
+                                          "subject": (m.group("subject") or "").strip()})
+    m = _NOTE_NEW_SECTION.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "new_section",
+                                         "heading": m.group("heading").strip()})
+    m = _NOTE_RENAME_HEADING.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "rename_heading",
+                                         "old": m.group("old").strip(),
+                                         "new": m.group("new").strip()})
+    m = _NOTE_SET_PROPERTY.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "set_property",
+                                         "key": m.group("key").strip(),
+                                         "value": m.group("value").strip()})
+    m = _NOTE_REMOVE_PROPERTY.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "remove_property",
+                                         "key": m.group("key").strip()})
+    m = _NOTE_LINK.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "link",
+                                         "note": m.group("target").strip()})
+    line_map = [
+        (_NOTE_LINE_BULLET, "bullet"), (_NOTE_LINE_ADD_BULLET, "bullet"),
+        (_NOTE_LINE_CHECK, "checklist"), (_NOTE_LINE_CHECKBOX, "checklist"),
+        (_NOTE_LINE_QUOTE, "quote"), (_NOTE_LINE_NUMBER, "number"),
+        (_NOTE_LINE_TICK, "tick"), (_NOTE_LINE_UNTICK, "untick"),
+        (_NOTE_LINE_PLAIN, "plain"),
+    ]
+    for rx, kind in line_map:
+        m = rx.fullmatch(s)
+        if m:
+            text = (m.groupdict().get("text") or m.groupdict().get("text1")
+                    or m.groupdict().get("text2") or "").strip()
+            return Intent("note_customize", {"name": m.group("name").strip(),
+                                             "op": "line", "line_action": kind,
+                                             "target": text})
+    m = _NOTE_LINE_HEADING.fullmatch(s)
+    if m:
+        hashes = m.group("hashes") or "##"
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "line", "line_action": "heading",
+                                         "target": m.group("text").strip(),
+                                         "level": len(hashes)})
+    m = _NOTE_SURGICAL_UNDER.fullmatch(s) or _NOTE_SURGICAL_SECTION.fullmatch(s)
+    if m:
+        return Intent("note_insert", {"name": m.group("name").strip(),
+                                      "target": m.group("head").strip(),
+                                      "text": m.group("text").strip(),
+                                      "mode": "under_heading"})
+    m = _NOTE_SURGICAL_ANCHOR.fullmatch(s)
+    if m:
+        return Intent("note_insert", {"name": m.group("name").strip(),
+                                      "target": m.group("anchor").strip(),
+                                      "text": m.group("text").strip(),
+                                      "mode": m.group("mode").strip().lower()})
+    m = _NOTE_FORMAT_ADD.fullmatch(s)
+    if m:
+        return Intent("note_format", {"name": m.group("name").strip(),
+                                      "target": m.group("target").strip(),
+                                      "style": m.group("style").strip().lower(),
+                                      "action": "add"})
+    m = _NOTE_FORMAT_REMOVE.fullmatch(s)
+    if m:
+        style = (m.group("style") or m.group("style2") or "").strip().lower()
+        return Intent("note_format", {"name": m.group("name").strip(),
+                                      "target": m.group("target").strip(),
+                                      "style": style, "action": "remove"})
+    m = _NOTE_REPLACE.fullmatch(s)
+    if m:
+        return Intent("note_replace", {"name": m.group("name").strip(),
+                                       "old": m.group("old").strip(),
+                                       "new": m.group("new").strip()})
+    # Only a sentence that actually says "note" is a note append: the same
+    # shape is the timer ("add 5 minutes to the timer"), the scheduler
+    # ("add a reminder to my phone") and the focus session's ("add 15 minutes
+    # to my focus session"), and those own their words. A named list keeps its
+    # grammar too ("add milk to my shopping list").
+    _says_note = re.search(r"\bnotes?\b", s, re.I) is not None
+
+    def _named_note_exists(name: str) -> bool:
+        try:
+            path, _why, _title = _find_note(_note_path_for(name))
+            return path is not None
+        except Exception:                   # noqa: BLE001 - older tree
+            return False
+
+    m = _NOTE_APPEND_COLON.fullmatch(s)
+    if (m and (_says_note or _named_note_exists(m.group("name")))
+            and not _list_owns_name(m.group("name"))):
+        return Intent("note_append", {"name": m.group("name").strip(),
+                                      "text": m.group("text").strip()})
+    m = _NOTE_APPEND_PLAIN.fullmatch(s)
+    if (m and (_says_note or _named_note_exists(m.group("name")))
+            and not _list_owns_name(m.group("name"))):
+        return Intent("note_append", {"name": m.group("name").strip(),
+                                      "text": m.group("text").strip()})
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
         if rx.match(s):
             return Intent("note_change_refused")
     for rx in _NOTE_READ_PATTERNS:
         if rx.fullmatch(s):
             return Intent("note_read_honest")
+    if _VAULT_APPLY.fullmatch(s):
+        return Intent("vault_organizer_apply")
+    m = _VAULT_SCOPED.match(s)
+    if m:
+        raw = next((g for g in m.groupdict().values() if g is not None), "")
+        return Intent("vault_organizer_scoped",
+                      {"names": _organizer_selection(raw)})
     if _VAULT_TIDY.match(s):
         return Intent("vault_organizer_plan")
     if _ORGANIZER_ON.fullmatch(s):
@@ -8460,9 +9468,29 @@ ORGANIZER_AWAITING = (
     "until you approve it; nothing is planned or changed before then.")
 #: The organizer's answer says how the WRITER would behave, in words the module
 #: itself uses ("never deletes", "one card"): one card for the whole batch, and
-#: no note is ever removed.
-ORGANIZER_APPLY_NOTE = ("Applying it asks for ONE approval card for the whole "
-                        "batch, and a note is never deleted.")
+#: no note is ever removed. The apply door is named because the plan is read-only
+#: and the owner would otherwise not know what to say next.
+ORGANIZER_APPLY_NOTE = (
+    "Applying it asks for ONE approval card for the whole batch, and a note is "
+    "never deleted. Say \"apply the plan\" when you are ready.")
+#: The pick-a-set door (owner decision, 2026-10-31): a selected plan, counts
+#: only (safe while the hidden lists are on), one card for the selected batch.
+ORGANIZER_SCOPED_OFF = (
+    "The vault organizer is off, so nothing is planned. It is off by default "
+    "and turning it on is one approval card. Say \"turn on the vault organizer\" "
+    "and I will raise that card.")
+ORGANIZER_SCOPED_NEEDS_NAMES = (
+    "Name the notes to organize, for example \"organize these notes: Welcome, "
+    "Alpha\". Nothing was changed.")
+ORGANIZER_SCOPED_APPLY_NOTE = (
+    "Applying it asks for ONE approval card for the whole selected batch; only "
+    "those notes are written, no note is ever deleted, and one Undo restores "
+    "exactly that batch. Say \"apply the plan\" when you are ready.")
+#: The apply answer when the switch is OFF: its own off truth plus the door.
+ORGANIZER_APPLY_OFF = (
+    "The vault organizer is off, so there is nothing to apply. It is off by "
+    "default and turning it on is one approval card. Say \"turn on the vault "
+    "organizer\" and I will raise that card.")
 
 
 def _note_make_gate(action: str, detail: dict, prompt: str):
@@ -8532,12 +9560,39 @@ def _run_obsidian_style_refused() -> Result:
     return Result(OBSIDIAN_STYLE_REFUSAL, "obsidian_style_refused")
 
 
+def _remember_organizer_plan(body: dict) -> dict:
+    """Keep the plan the owner just saw, so "apply the plan" applies THAT one."""
+    plan_id = str((body or {}).get("plan_id") or "").strip()
+    digest = str((body or {}).get("digest") or "").strip()
+    if not plan_id or not digest:
+        return {}
+    plan = {"plan_id": plan_id, "digest": digest, "at": time.time(),
+            "scoped": bool((body or {}).get("scoped")),
+            "scope": list((body or {}).get("scope") or [])}
+    _ORGANIZER_LAST_PLAN.clear()
+    _ORGANIZER_LAST_PLAN.update(plan)
+    return plan
+
+
+def _organizer_plan_body(plan: dict) -> dict:
+    """The plan request that reproduces the plan the owner saw.
+
+    A scoped plan must stay scoped through a re-plan (a module restart, or an
+    apply more than 30 minutes later); a whole-vault plan sends no paths.
+    """
+    if plan.get("scoped"):
+        return {"paths": list(plan.get("scope") or [])}
+    return {}
+
+
 def _run_vault_organizer_plan(peer=None, local=None) -> Result:
     """The organizer's real state or its READ-ONLY plan - never a promise.
 
     Off: the module's own route answer (`why`) is quoted, plus that turning it
     on is one card and the plan changes nothing. On: the module's own plan
-    description (scheme words and counts) plus how the writer would behave.
+    description (scheme words and counts) plus how the writer would behave and
+    the "apply the plan" door. The plan is remembered in memory so the apply
+    answer uses the plan the owner just looked at.
     """
     try:
         import jarvis_vault_organizer as V
@@ -8551,6 +9606,7 @@ def _run_vault_organizer_plan(peer=None, local=None) -> Result:
                       "vault_organizer_plan")
     body = body if isinstance(body, dict) else {}
     if body.get("ok") and str(body.get("said") or "").strip():
+        _remember_organizer_plan(body)
         return Result(str(body["said"]).strip() + "\n\n" + ORGANIZER_APPLY_NOTE,
                       "vault_organizer_plan")
     said = str(body.get("why") or body.get("error") or "").strip()
@@ -8562,6 +9618,135 @@ def _run_vault_organizer_plan(peer=None, local=None) -> Result:
                       '"turn on the vault organizer" and I will raise that one '
                       "approval card.", "vault_organizer_plan")
     return Result(said + " Nothing was changed.", "vault_organizer_plan")
+
+
+def _run_vault_organizer_scoped(f: dict, peer=None, local=None) -> Result:
+    """"organize just my Welcome note" - the READ-ONLY scoped plan, not a card.
+
+    The selection is passed to the module's own plan route (`paths`), which
+    validates it and plans tags for only those notes. The reply names no note
+    title while the app's hidden-lists mode is on (counts only). With the
+    organizer OFF the honest off answer and the one-card turn-on door are kept.
+    """
+    try:
+        import jarvis_vault_organizer as V
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(ORGANIZER_MISSING, "vault_organizer_scoped")
+    if not V.enabled():
+        return Result(ORGANIZER_SCOPED_OFF, "vault_organizer_scoped")
+    names = [str(n) for n in (f.get("names") or []) if str(n).strip()]
+    if not names:
+        return Result(ORGANIZER_SCOPED_NEEDS_NAMES, "vault_organizer_scoped")
+    hidden, withheld = _calendar_hidden()
+    try:
+        _code, body = V.handle_post(V.PLAN_PATH, {"paths": names},
+                                    peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"The vault organizer could not make a scoped plan "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "vault_organizer_scoped")
+    body = body if isinstance(body, dict) else {}
+    if body.get("ok") and str(body.get("said") or "").strip():
+        _remember_organizer_plan(body)
+        reply = str(body["said"]).strip() + "\n\n"
+        if hidden and withheld:
+            # The module's scoped words are counts only; the withheld sentence
+            # explains why, and no note title is ever added.
+            reply += withheld + "\n\n"
+        return Result(reply + ORGANIZER_SCOPED_APPLY_NOTE,
+                      "vault_organizer_scoped")
+    said = str(body.get("why") or body.get("error") or "").strip()
+    if not said:
+        said = ("The vault organizer could not plan that selection, so nothing "
+                "was changed.")
+    if body.get("enabled") is False:
+        said += "\n\n" + ORGANIZER_SCOPED_OFF
+    return Result(said, "vault_organizer_scoped")
+
+
+def _run_vault_organizer_apply(peer=None, local=None) -> Result:
+    """"apply the plan" / "organize my vault now" - the WRITER's one card.
+
+    The writer route is the module's own (`ORGANIZE_PATH`), with the plan_id and
+    digest of the plan the owner just looked at; its words are returned
+    unchanged. A denied card returns the module's own denial and writes nothing.
+    If no chat plan is remembered (new process, or "organize my vault now"
+    first), a read-only plan is made first and then the same writer card is
+    raised, so this is still ONE card and never a silent write. A remembered
+    SCOPED plan is re-planned with the same selected paths, never widened to
+    the whole vault.
+    """
+    try:
+        import jarvis_vault_organizer as V
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(ORGANIZER_MISSING, "vault_organizer_apply")
+    if not V.enabled():
+        return Result(ORGANIZER_APPLY_OFF, "vault_organizer_apply")
+    used_stored = bool(_ORGANIZER_LAST_PLAN)
+    plan = dict(_ORGANIZER_LAST_PLAN)
+    if not plan or time.time() - float(plan.get("at") or 0) > 30 * 60:
+        try:
+            _code, pbody = V.handle_post(V.PLAN_PATH, _organizer_plan_body(plan),
+                                         peer=peer, local=local)
+        except Exception as exc:            # noqa: BLE001
+            return Result(f"The vault organizer could not make a plan "
+                          f"({type(exc).__name__}), so nothing was changed.",
+                          "vault_organizer_apply")
+        pbody = pbody if isinstance(pbody, dict) else {}
+        if not (pbody.get("ok") and _remember_organizer_plan(pbody)):
+            said = str(pbody.get("why") or pbody.get("error") or "").strip()
+            if not said:
+                said = "The vault organizer could not make a plan, so nothing was changed."
+            if pbody.get("enabled") is False:
+                said += "\n\n" + ORGANIZER_APPLY_OFF
+            return Result(said, "vault_organizer_apply")
+        plan = dict(_ORGANIZER_LAST_PLAN)
+    body = _organizer_apply_once(V, plan, peer, local)
+    if not (body.get("ok") is True) and used_stored:
+        why = str(body.get("why") or body.get("words") or "").lower()
+        if "not in memory" in why or "no longer" in why:
+            # The module restarted (or forgot the plan) while this chat kept
+            # its copy. Make the same read-only plan again, then raise the
+            # writer's one card for it - no second card, no silent write.
+            try:
+                _code, pbody = V.handle_post(V.PLAN_PATH,
+                                             _organizer_plan_body(plan),
+                                             peer=peer, local=local)
+            except Exception as exc:        # noqa: BLE001
+                return Result(f"The vault organizer could not make a plan "
+                              f"({type(exc).__name__}), so nothing was changed.",
+                              "vault_organizer_apply")
+            pbody = pbody if isinstance(pbody, dict) else {}
+            if pbody.get("ok") and _remember_organizer_plan(pbody):
+                plan = dict(_ORGANIZER_LAST_PLAN)
+                body = _organizer_apply_once(V, plan, peer, local)
+    if body.get("ok") is True:
+        _ORGANIZER_LAST_PLAN.clear()
+        return Result(str(body.get("said") or body.get("words")
+                          or "The vault organizer finished the plan."),
+                      "vault_organizer_apply")
+    said = str(body.get("why") or body.get("words") or body.get("error")
+               or "").strip()
+    if not said:
+        said = "The vault organizer did not apply the plan."
+    if body.get("enabled") is False:
+        said += "\n\n" + ORGANIZER_APPLY_OFF
+    return Result(said, "vault_organizer_apply")
+
+
+def _organizer_apply_once(V, plan: dict, peer=None, local=None) -> dict:
+    """One call to the module's WRITER route, which raises its ONE card."""
+    try:
+        _code, body = V.handle_post(
+            V.ORGANIZE_PATH,
+            {"plan_id": str(plan.get("plan_id") or ""),
+             "digest": str(plan.get("digest") or "")},
+            peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return {"ok": False,
+                "why": f"the writer could not run ({type(exc).__name__}), "
+                       f"so nothing was changed"}
+    return body if isinstance(body, dict) else {}
 
 
 def _run_vault_organizer_on(peer=None, local=None) -> Result:
@@ -8588,6 +9773,178 @@ def _run_vault_organizer_on(peer=None, local=None) -> Result:
     if not said:
         said = "The vault organizer could not be turned on."
     return Result(said if said.endswith(".") else said + ".", "vault_organizer_on")
+#: What "open the Brain / open Jarvis settings" says when the owner is talking
+#: from the PHONE (2026-10-31, the surface requirement). The phone cannot open
+#: a window on the PC; its own Brain and Settings are real doors in its own app,
+#: so the answer names those and says where the PC's window opens. No new
+#: route, no new field - these are the two apps' own names ("Brain" in the
+#: phone's bottom row, "Settings" beside it).
+PHONE_OPEN_WORDS = {
+    "brain": ("You are asking from the phone. The Brain is in the phone app: tap Brain on "
+              "Home. The PC's own Brain window opens on the PC."),
+    "jarvis": ("You are asking from the phone. Your phone's own settings are in the app: tap "
+               "Settings on Home. The PC's Jarvis settings window opens on the PC - ask me "
+               "there for the PC's settings."),
+}
+
+#: What "can I edit the HUD in the jarvis app?" says from the PHONE (2026-10-31,
+#: the owner's screenshot: the model had answered "Jarvis does not currently
+#: offer a built-in method...", which is false about the product - the HUD's
+#: layout is edited on the PC, where the doors below really exist). The phone
+#: has no HUD-layout control; its own look is Appearance, and every thing named
+#: here is an existing door of one app or the other - no route is invented.
+HUD_EDIT_PHONE = (
+    "The HUD's layout is edited on the PC, not from the phone app: on the desktop, "
+    "Settings has \"Edit HUD in the window\", and the HUD's own header has \"Edit HUD\". "
+    "What you can change here on the phone is this app's own look - Appearance, for the "
+    "theme, the face, face size, text size and spacing.")
+
+#: Matches the questions the owner asks about changing the HUD's layout/look.
+#: Deliberately narrow: a sentence about the HUD that is not about editing it
+#: ("what is the HUD?") keeps its existing path (the feature guide).
+_HUD_EDIT = re.compile(
+    r"(?:(?:can|could|how\s+do|how\s+can|how\s+do\s+i|where\s+do\s+i|where\s+can\s+i|"
+    r"i\s+want\s+to|i'?d\s+like\s+to|let\s+me)\s+)?(?:i\s+)?"
+    r"(?:edit|change|customi[sz]e|adjust|move|rearrange|redesign)\s+"
+    r"(?:the\s+|my\s+|this\s+)?(?:jarvis\s+)?(?:hud|heads?[-\s]?up\s+display)"
+    r"(?:\s+(?:layout|look|arrangement|widgets?|plates?))?"
+    r"(?:\s+(?:in|on|from)\s+(?:the\s+)?(?:jarvis\s+app|this\s+app|my\s+phone|android))?"
+    r"|(?:the\s+|my\s+)?(?:jarvis\s+)?hud(?:'s)?\s+layout"
+    r"(?:\s+(?:in|on|from)\s+(?:the\s+)?(?:jarvis\s+app|this\s+app|my\s+phone|android))?")
+
+
+def _hud_edit(s: str) -> Optional[Intent]:
+    """"can I edit the HUD in the jarvis app?" - answered ONLY from the phone.
+
+    With no header (or from the desktop) this returns None and the old path is
+    unchanged: the owner's requirement is that the PHONE's answer be true, and
+    the desktop already has the doors this sentence names. Answering nothing
+    new elsewhere is the no-over-capture half.
+    """
+    if not _HUD_EDIT.fullmatch(s):
+        return None
+    try:
+        import jarvis_surface as S
+    except Exception:
+        return None
+    return Intent("hud_edit") if S.current() == S.PHONE else None
+
+
+# --- notes: read and search (2026-10-31, the owner's "read & search" half) ---
+#
+# Deterministic, read-only, no card and no model: the answers come from
+# jarvis_notes_edit.chat_* which read the SAME vault files the editor routes
+# read, under the same hidden-folder, protection and size rules. The hidden
+# rule is jarvis_private_view, the backend's one hook: with the lists hidden
+# this says so and shows neither a title nor a word of a note.
+
+NOTES_READ_HIDDEN = ("The memory lists and chat history are hidden on this PC right now, "
+                     "so I will not show a note's words.")
+NOTES_SEARCH_HIDDEN = ("The memory lists and chat history are hidden on this PC right now, "
+                       "so I will not list note titles.")
+NOTES_ONE_AT_A_TIME = "I can read one note at a time; tell me which one."
+NOTES_SEARCH_DOOR = "You can search the whole vault in the notes editor on this PC."
+
+
+def _notes_hidden() -> bool:
+    try:
+        import jarvis_private_view as PV
+        state = PV.effective()
+        return bool(state.get("app_locked") or state.get("hide_memory_lists"))
+    except Exception:
+        return False
+
+
+_NOTE_READ_MY = re.compile(r"read\s+my\s+note\s+(.+)")
+_NOTE_READ = re.compile(
+    r"(?:what\s+does|what\s+is\s+in|what'?s\s+in|read\s+me|read|show\s+me)\s+"
+    r"(?:my\s+)?(.+?)\s+note(?:\s+(?:say|says|contain|contains))?$")
+_NOTE_READ_PLURAL = re.compile(r"(?:read|show)\s+(?:me\s+)?my\s+notes?\s*$")
+_NOTE_OPEN_ALT = re.compile(r"open\s+(?:my\s+)?note\s+(.+)")
+_NOTE_OPEN = re.compile(
+    r"open\s+(?:my\s+|the\s+)?(.+?)\s+note(?:\s+in\s+the\s+notes?\s+editor)?$")
+_NOTE_MENTION = re.compile(r"which\s+notes?\s+mention\s+(.+)")
+_NOTE_SEARCH = re.compile(
+    r"(?:find|search|show|list|any)\s+(?:me\s+)?(?:my\s+)?notes?\s+"
+    r"(?:about|for|mentioning|mention|on)\s+(.+)")
+
+
+def _notes_chat(s: str) -> Optional[Intent]:
+    """The three note questions this file answers without a model."""
+    if _NOTE_READ_PLURAL.fullmatch(s):
+        return Intent("note_read", {"title": ""})
+    m = _NOTE_READ_MY.fullmatch(s) or _NOTE_READ.fullmatch(s)
+    if m:
+        return Intent("note_read", {"title": m.group(1).strip(" \"'")})
+    m = _NOTE_OPEN_ALT.fullmatch(s) or _NOTE_OPEN.fullmatch(s)
+    if m:
+        return Intent("note_open", {"title": m.group(1).strip(" \"'")})
+    m = _NOTE_MENTION.fullmatch(s) or _NOTE_SEARCH.fullmatch(s)
+    if m:
+        return Intent("note_search", {"needle": m.group(1).strip(" \"'")})
+    return None
+
+
+def _run_note_read(title: str) -> Result:
+    if _notes_hidden():
+        return Result(NOTES_READ_HIDDEN, "note_read")
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_read_note(title)
+    except Exception:
+        return Result("The notes could not be read on this PC.", "note_read")
+    if code == 409:
+        titles = "; ".join(body.get("titles") or [])
+        said = NOTES_ONE_AT_A_TIME + (" " + titles if titles else "")
+        return Result(said, "note_read")
+    if code != 200:
+        return Result(str(body.get("said") or NE.CHAT_NO_NOTE.format(title)), "note_read")
+    said = '"{0}" says:\n\n{1}'.format(body["title"], body["text"])
+    if body.get("more"):
+        said += "\n\n\u2026and {0} more characters.".format(body["more"])
+    return Result(said, "note_read")
+
+
+def _run_note_search(needle: str) -> Result:
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_search_notes(needle)
+    except Exception:
+        return Result("The notes could not be searched on this PC.", "note_search")
+    if code != 200:
+        return Result(str(body.get("said") or "The notes could not be searched."), "note_search")
+    count = int(body.get("count") or 0)
+    if _notes_hidden():
+        if count == 0:
+            return Result(NOTES_SEARCH_HIDDEN + " No notes match.", "note_search")
+        return Result(NOTES_SEARCH_HIDDEN + " {0} note(s) match.".format(count), "note_search")
+    if count == 0:
+        return Result('No notes in your vault match "{0}". {1}'.format(
+            str(needle or "").strip(), NOTES_SEARCH_DOOR), "note_search")
+    titles = "; ".join(body.get("titles") or [])
+    said = '{0} note(s) match "{1}": {2}.'.format(
+        count, str(needle or "").strip(), titles)
+    shown = len(body.get("titles") or [])
+    if count > shown:
+        said += " I have shown the first {0}.".format(shown)
+    if body.get("capped"):
+        said += " I looked through the first {0} notes.".format(int(body.get("scanned") or 0))
+    return Result(said, "note_search")
+
+
+def _run_note_open(title: str) -> Result:
+    if _notes_hidden():
+        return Result(NOTES_READ_HIDDEN, "note_open")
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_open_note(title)
+    except Exception:
+        return Result("The notes could not be read on this PC.", "note_open")
+    if code != 200:
+        return Result(str(body.get("said") or NE.CHAT_NO_NOTE.format(title)), "note_open")
+    said = ('Opening the Brain on this PC. Your notes are under Notes - look for '
+            '"{0}" there.'.format(body["title"]))
+    return Result(said, "note_open", open_brain="brain")
 
 
 def _open(s: str) -> Optional[Intent]:
@@ -8910,17 +10267,32 @@ def _parking_lookup(s: str, now: Optional[float] = None) -> Optional[Intent]:
 def _client_surface(peer, local, given: Optional[str] = None) -> str:
     """Which words an answer should use: "hud" or "phone".
 
-    `given` wins when a caller really knows (the tests, and any future caller
-    that does read the header). Otherwise a request that plainly did NOT come
-    from this PC gets the phone's short form - `jarvis_owner_check.from_this_pc`
-    is the project's own answer to "is this the PC", with its documented
-    "cannot be placed counts as this PC" rule, so nothing here is stricter or
-    looser than every PC-only action already is. A path that cannot ask at all
-    gets the fuller answer: a shorter one might drop something a client needed,
-    and a longer one never breaks a client.
+    THE HEADER WINS WHEN IT IS THERE (2026-10-31, the owner's "Jarvis knows
+    which app I am talking from" requirement): the shipped origin gate reads
+    `X-Jarvis-Surface` once per request into `jarvis_surface`, so a request
+    that says it is the Android app gets the phone's words and a request that
+    says it is the desktop program gets the PC's. `given` still wins over both
+    (the tests, and a future caller that really knows).
+
+    Otherwise a request that plainly did NOT come from this PC gets the
+    phone's short form - `jarvis_owner_check.from_this_pc` is the project's own
+    answer to "is this the PC", with its documented "cannot be placed counts as
+    this PC" rule, so nothing here is stricter or looser than every PC-only
+    action already is. A path that cannot ask at all gets the fuller answer: a
+    shorter one might drop something a client needed, and a longer one never
+    breaks a client. With no header anywhere, the old inference is unchanged.
     """
     if given:
         return "phone" if str(given).strip().lower() == "phone" else "hud"
+    try:
+        import jarvis_surface as S
+        surface = S.current()
+        if surface == S.PHONE:
+            return "phone"
+        if surface == S.DESKTOP:
+            return "hud"
+    except Exception:
+        pass
     try:
         import jarvis_owner_check as OC
         if OC.from_this_pc(peer, local) is False:
@@ -10713,6 +12085,42 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # existing change_own_config card.
     if n == "note_make":
         return _run_note_make(f)
+    if n == "note_create":
+        return _run_note_create(f)
+    if n == "note_append":
+        return _run_note_append(f)
+    if n == "note_tag":
+        return _run_note_tag(f)
+    if n == "note_rename":
+        return _run_note_rename(f)
+    if n == "note_move":
+        return _run_note_move(f)
+    if n == "template_list":
+        return _run_template_list()
+    if n == "template_create":
+        return _run_template_create(f)
+    if n == "template_save":
+        return _run_template_save(f)
+    if n == "note_customize":
+        op = str(f.get("op") or "")
+        card = {"line": "change one line in", "new_section": "add a new section to",
+                "rename_heading": "rename a heading in",
+                "set_property": "set a property in",
+                "remove_property": "remove a property from",
+                "link": "add a link in"}.get(op, "change one part of")
+        return _run_note_customize(f, op, card)
+    if n == "note_insert":
+        return _run_note_insert(f)
+    if n == "note_format":
+        return _run_note_format(f)
+    if n == "note_replace":
+        return _run_note_replace(f)
+    if n == "notes_batch_refused":
+        return Result(NOTE_WRITE_BATCH_SAID, "notes_batch_refused")
+    if n == "note_write_hidden":
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    if n == "note_delete_refused":
+        return Result(NOTE_DELETE_SAID, "note_delete_refused")
     if n == "note_read_honest":
         return _run_note_read_honest()
     if n in ("note_change_refused", "obsidian_style_refused"):
@@ -10720,6 +12128,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
                 else _run_obsidian_style_refused())
     if n == "vault_organizer_plan":
         return _run_vault_organizer_plan(peer, local)
+    if n == "vault_organizer_scoped":
+        return _run_vault_organizer_scoped(f, peer, local)
+    if n == "vault_organizer_apply":
+        return _run_vault_organizer_apply(peer, local)
     if n == "vault_organizer_on":
         return _run_vault_organizer_on(peer, local)
     import jarvis_schedule as S
@@ -10910,6 +12322,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # (commands.rs, stream_chat, for its floating face); this file does
         # not know or care which app asked.
         return Result("Here you go.", n)
+    if n == "hud_edit":
+        # Matched only when the request came from the phone (`_hud_edit`): the
+        # HUD's layout is the PC's, and the sentence names the PC's real doors.
+        return Result(HUD_EDIT_PHONE, n)
     if n == "approval_where":
         # A typed (or spoken) word cannot approve anything - rule 4 - so this
         # answers the question the owner is really asking: where IS the
@@ -10930,6 +12346,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
             "window on this PC, with your fingerprint for a risky one. "
             "Typing or saying a decision here cannot approve anything, and "
             "that is on purpose.", n)
+    if n == "note_read":
+        return _run_note_read(intent.f.get("title") or "")
+    if n == "note_search":
+        return _run_note_search(intent.f.get("needle") or "")
+    if n == "note_open":
+        return _run_note_open(intent.f.get("title") or "")
     if n == "open_app":
         # "open Notion", "open settings", "open Jarvis settings"
         # (jarvis_open.py, 2026-10-10). Nothing is opened from here: the app
@@ -10958,11 +12380,30 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
             # it. Nothing is opened, so nothing may be claimed.
             return Result(opened.said, n)
         here = True
+        phone = False
         try:
-            import jarvis_owner_check as OC
-            here = bool(OC.from_this_pc(peer, local))
+            import jarvis_surface as S
+            surface = S.current()
+            if surface == S.PHONE:
+                phone = True
+                here = False
+            elif surface == S.DESKTOP:
+                here = True
         except Exception:
-            here = True
+            phone = False
+        if not phone:
+            try:
+                import jarvis_owner_check as OC
+                here = bool(OC.from_this_pc(peer, local))
+            except Exception:
+                here = True
+        if phone and opened.kind in ("brain", "jarvis"):
+            # 2026-10-31, the owner's "Jarvis knows which app I am talking
+            # from" requirement: the phone cannot open a window on the PC, and
+            # its own Brain / Settings are real doors of its own. The words
+            # name those, and NO route field rides with the answer (there is
+            # nothing for the phone to open on the PC).
+            return Result(PHONE_OPEN_WORDS[opened.kind], n)
         if opened.kind == "brain":
             # Jarvis's own window (2026-10-31): "open the second brain",
             # "open history", "open tutorials", "open my notes". The route's
@@ -11315,7 +12756,7 @@ READ_ONLY_INTENTS = frozenset({
     # WRITE results (`note_made`, `note_make_waiting`) are deliberately NOT
     # here: the daily note may have changed, so the old record goes; a note that
     # was refused wrote nothing, so `note_make_refused` is read-only.
-    "vault_organizer_plan", "note_change_refused",
+    "vault_organizer_plan", "vault_organizer_scoped", "note_change_refused",
     "obsidian_style_refused", "note_make_refused", "note_read_honest",
     # main's feature answers (2026-10-31, #1030): the capability answer reads
     # the catalogue and changes nothing, so it must not clear "cancel that".
@@ -11335,7 +12776,8 @@ READ_ONLY_INTENTS = frozenset({
     "honest_chat", "local_calendar_read", "honest_state",
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
-    "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",
+    "media_play", "media_previous", "missed", "news_list", "news_read", "note_read", "note_search", "note_open",
+    "next_time_list",
     "next_up",
     # "can you process all my Notion notes into Obsidian?" (2026-10-28): a
     # fixed answer that reads nothing and imports nothing, so it must not

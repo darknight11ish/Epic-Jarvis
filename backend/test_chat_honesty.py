@@ -399,7 +399,7 @@ def t_off_tools_name_the_real_switch_and_gate():
     preply = phone.reply if phone is not None else ""
     check("phone control is not an app-switchable tool, said plainly",
           "switched off on this PC" in preply
-          and AF.TOOLS_NOT_ON_LIST in preply, preply)
+          and AF.TOOLS_TOML_ONLY_NOTE in preply, preply)
     old = Q._enabled_tools_turn
     Q._enabled_tools_turn = lambda: {"email_check", "home_read", "control_phone"}
     try:
@@ -547,6 +547,134 @@ def t_the_phone_state_is_read_from_the_real_pairing():
               "Timers set on the phone stay on the phone" in reply, reply)
     finally:
         D.paired_status = old
+
+
+def t_phone_state_questions_read_the_real_pairing():
+    """The phone's own STATE question, answered from /api/devices' rows.
+
+    2026-10-31, the post-deploy audit's live gap: "is my phone connected?"
+    reached the model, which answered "I am not sure if your phone is
+    connected right now. To check, please allow me to look at the Settings app
+    or the Device Manager for Bluetooth and USB connections. Shall I proceed
+    with that search?" - none of which is where this state lives. The honest
+    lane now owns the state question, read-only, from the same paired-device
+    store the phone-timer answer already reads.
+    """
+    fresh_calendar()
+    try:
+        import jarvis_devices as D
+    except Exception:                            # pragma: no cover
+        skip("the devices module is absent here")
+        return
+    # The common spoken shapes are the honesty lane's, whole-sentence only.
+    phrase_matrix = (
+        "is my phone connected?",
+        "is my phone connected to jarvis?",
+        "is my phone still connected?",
+        "is my phone paired?",
+        "is my phone linked?",
+        "is my phone online?",
+        "is my phone set up?",
+        "can you see my phone?",
+        "do you see my phone?",
+        "what phone is paired?",
+        "which phone is connected?",
+        "my phone is not connecting",
+        "my phone wont connect",
+        "my phone is not paired",
+        "phone connection status",
+    )
+    for said in phrase_matrix:
+        got = Q.match(said)
+        name, fields = (getattr(got, "name", None), dict(getattr(got, "f", {}) or {}))
+        check(f"{said!r} is the phone-state read",
+              name == "honest_state" and fields.get("shape") == "phone_state"
+              and fields.get("topic") == "state", (name, fields))
+    check("the phone-state answer is read-only (no card, no 'cancel that' loss)",
+          "honest_state" in Q.READ_ONLY_INTENTS)
+
+    old = D.paired_status
+    try:
+        # 1. None paired: the true door to pairing, never an invented search.
+        D.paired_status = lambda: {"devices": [], "readable": True, "why": ""}
+        none = ask("is my phone connected?")
+        nreply = none.reply if none is not None else ""
+        check("none paired says exactly that",
+              "No phone is paired with Jarvis on this PC yet." in nreply, nreply)
+        check("... and names the PC's own pairing button",
+              "Settings, Devices" in nreply and "Pair a phone" in nreply, nreply)
+        check("... and the phone's own half of the same screen",
+              "Pair with your PC" in nreply, nreply)
+
+        # 2. Paired and heard from recently: the connected truth.
+        D.paired_status = lambda: {
+            "devices": [{"id": "d1", "name": "Pixel test", "kind": "phone",
+                         "last_seen": time.time() - 30, "reach": True}],
+            "readable": True, "why": ""}
+        got = ask("is my phone connected?")
+        reply = got.reply if got is not None else ""
+        check("a phone heard from just now is named as connected",
+              "Pixel test" in reply
+              and "connected to Jarvis right now" in reply, reply)
+        check("... and never sends the owner looking at Bluetooth, USB, "
+              "Device Manager or the Settings app",
+              all(word not in reply for word in
+                  ("Bluetooth", "Device Manager", "USB", "Settings app",
+                   "not sure", "allow me", "Shall I", "shall I")), reply)
+
+        # 3. Paired but not heard from: offline, said plainly, no false connected.
+        D.paired_status = lambda: {
+            "devices": [{"id": "d1", "name": "Pixel test", "kind": "phone",
+                         "last_seen": time.time() - 3 * 86400, "reach": True}],
+            "readable": True, "why": ""}
+        offline = ask("is my phone paired?")
+        oreply = offline.reply if offline is not None else ""
+        check("a paired phone not heard from is 'paired', not 'connected'",
+              "paired with Jarvis" in oreply
+              and "connected to Jarvis right now" not in oreply, oreply)
+        check("... the answer says since when, and what to do on the phone",
+              "have not heard from it since" in oreply
+              and "Open the Jarvis app on the phone" in oreply, oreply)
+
+        # 4. The store cannot be read: the honest unknown, never an invented one.
+        D.paired_status = lambda: {
+            "devices": [], "readable": False,
+            "why": "the devices registry could not be read"}
+        unknown = ask("what phone is paired?")
+        ureply = unknown.reply if unknown is not None else ""
+        check("an unreadable store says it cannot read it",
+              "cannot read the paired devices on this PC right now" in ureply
+              and "cannot say whether your phone is connected" in ureply, ureply)
+        check("... and the module's own reason is quoted as a sentence",
+              "The devices registry could not be read." in ureply, ureply)
+    finally:
+        D.paired_status = old
+
+    timer = Q.match("what timer is on my phone")
+    check("the timer question keeps its own topic and answer",
+          getattr(timer, "name", None) == "honest_state"
+          and (getattr(timer, "f", {}) or {}).get("topic") == "timer", timer)
+
+
+def t_phone_state_phrases_leave_pairing_and_ringing_alone():
+    """Safe guards: the state read must never swallow an ACTION sentence."""
+    fresh_calendar()
+    for said in ("pair my phone", "connect my phone", "how do I pair my phone?",
+                 "pair my phone with jarvis", "link my phone"):
+        got = Q.match(said)
+        check(f"{said!r} keeps the pairing how-to, not the state read",
+              getattr(got, "name", None) == "pair_phone", got)
+    for said in ("ring my phone", "find my phone"):
+        got = Q.match(said)
+        check(f"{said!r} keeps ringing the phone, not the state read",
+              getattr(got, "name", None) == "phone_ring", got)
+    got = Q.match("connect my phone to the wifi")
+    check("a sentence about another connection is not claimed by the state read",
+          got is None or (got.name, (got.f or {}).get("topic")) !=
+          ("honest_state", "state"), got)
+    got = Q.match("is my phone connected?")
+    check("the phone state is not the account-connection path (S6 rule)",
+          getattr(got, "name", None) != "connect_account", got)
 
 
 def t_the_settings_answers_use_owner_words():

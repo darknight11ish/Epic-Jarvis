@@ -1307,8 +1307,9 @@ def t_the_patch_and_the_tables():
                                                       "JARVIS_IMAP_PASSWORD": FAKE_PW}.get(n, ""),
                                        lanes=[], providers=[], gate_action=lambda l: l))["rows"]
                if x["id"] == "email_tidy")
-    check("... off until [tools].enabled names it, and says how",
-          off["state"] == "off" and "tidy_inbox" in off["line"], off)
+    check("... off until the Settings switch offers it, and says how",
+          off["state"] == "off" and "not offered it yet" in off["line"]
+          and "Settings" in off["line"], off)
     check("the tool has a plain name on the page", R.TOOL_NAMES.get("tidy_inbox", "").startswith(
         "Tidy your inbox"))
     toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")

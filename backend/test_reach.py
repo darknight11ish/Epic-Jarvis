@@ -921,8 +921,9 @@ def t_read_web_page_row():
     # line to add - an Off row with no sentence would be a dead end.
     r = row(R.view(ctx()), "read_web_page")
     check("Read one web page: off, and the row says the one step the owner takes",
-          r["state"] == "off" and 'add "read_web_page" to the [tools] enabled list'
-          in r["line"] and "no app can" not in r["line"].lower(), repr(r))
+          r["state"] == "off"
+          and 'add "read_web_page" to the [tools] enabled list' in r["line"].lower()
+          and "no app can" not in r["line"].lower(), repr(r))
     row(R.view(ctx(enabled=("read_web_page",))), "read_web_page")
     check("Read one web page: it is a named way out, so no app may switch it on",
           not R._tool_switchable("read_web_page"))

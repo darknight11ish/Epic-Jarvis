@@ -20,7 +20,7 @@ this suite is the DEPTH half and its acceptance test:
 3. EVERY ALIAS AND THE NEW ROWS. Every `aliases` entry in the source, the
    owner aliases #1041 added (Today board, quiet hours, thinking level,
    memories), and the newer rows (File from your PC, Protected from Jarvis,
-   Browse and edit your notes) are detail-answerable.
+   Create and customize your notes) are detail-answerable.
 4. NO OVER-CAPTURE. Ordinary conversation about non-features ("explain the
    theory of relativity", "how do I use a screwdriver", "what is love like")
    still reaches the model.
@@ -221,7 +221,7 @@ def t_every_alias_and_the_new_rows_are_detail_answerable():
           "resolves in detail to its own row", not bad, bad[:8])
     for title, fid in (("File from your PC", "file-from-pc"),
                        ("Protected from Jarvis", "protected-items"),
-                       ("Browse and edit your notes", "notes-editor")):
+                       ("Create and customize your notes", "notes-editor")):
         row = next((r for r in SOURCE if r["title"] == title), None)
         check(f"the newer row {title!r} exists in the catalogue", row is not None,
               [r["id"] for r in SOURCE][:5])

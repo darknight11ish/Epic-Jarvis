@@ -1,0 +1,1 @@
+- **Surgical edits for your Obsidian notes, wave 2 (2026-10-31).** Chat can now add a line under ONE exact heading, add a line before/after ONE literal anchor, bold/italic a span, and replace ONE exact occurrence - each with an exact-match rule (zero or several matches refuse with the count), ONE card showing the before/after, a File Guardian copy, one Undo, and no deletions.

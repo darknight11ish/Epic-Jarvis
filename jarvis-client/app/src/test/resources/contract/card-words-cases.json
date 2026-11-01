@@ -168,7 +168,7 @@
     },
     {
       "action": "enable_reading_tool",
-      "title": "Jarvis wants to offer a reading tool to the AI model"
+      "title": "Jarvis wants to offer a tool to the AI model"
     },
     {
       "action": "execute_pending_actions",
@@ -943,8 +943,8 @@
     {
       "action": "enable_reading_tool",
       "notice": {
-        "title": "Jarvis wants to offer a reading tool to the AI model",
-        "summary": "Jarvis wants to offer a reading tool to the model.",
+        "title": "Jarvis wants to offer a tool to the AI model",
+        "summary": "Jarvis wants to offer a tool to the model.",
         "full": "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant. nothing has happened yet.",
         "body": "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant. nothing has happened yet.",
         "weight": "normal",

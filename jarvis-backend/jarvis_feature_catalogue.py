@@ -3,7 +3,7 @@
 The owner's feature list, as data: 167 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 3bcde7276ae54679fe635385bc3eb0a5c7f6e35a57649961ee659ac89268458c); the apps' Features pages read their own
+`features/features.json` (sha256 9c2451319f92c3b82e282eaf638880a842b2267d437d9185af75a9e0d4060d36); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "3bcde7276ae54679fe635385bc3eb0a5c7f6e35a57649961ee659ac89268458c"
+SOURCE_SHA256 = "9c2451319f92c3b82e282eaf638880a842b2267d437d9185af75a9e0d4060d36"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -694,14 +694,14 @@ FEATURES = (
     {
         "id": "notes-editor",
         "group": "Notes and files",
-        "title": "Browse and edit your notes",
-        "what": "Browse and search every note in your Obsidian vault from the PC or the phone, open any note, and save a change.",
-        "where": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
-        "asks": "Reading and searching ask nothing. A save replaces the whole note, so it raises one approval card, and denying it changes nothing.",
-        "limit": "Obsidian vault only. This first slice does not create, delete or rename notes, and a note change waits while the turn has read outside text.",
+        "title": "Create and customize your notes",
+        "what": "Browse, search, create, extend, surgically change, rename and move notes in your Obsidian vault from the PC or the phone, and use the PC editor's formatting toolbar and templates.",
+        "where": "The PC's Brain \u2192 Memory \u2192 Notes; the phone's Brain \u2192 What Jarvis knows about you \u2192 Notes. The create, customize, rename and move sentences work in chat on either app.",
+        "asks": "Reading and searching ask nothing. Creating a note, adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
+        "limit": "Obsidian vault only, one note per request; no deleting a note or a line, no bulk edits, no moving outside the vault, no folder renames and no cloud sync. A note change waits while the turn has read outside text.",
         "surface": "both",
-        "aliases": ["notes editor", "the notes editor", "vault editor"],
-        "covers": ["notes-editor"],
+        "aliases": ["notes editor", "the notes editor", "vault editor", "customize a note", "create a note", "notes toolbar"],
+        "covers": ["notes-editor", "notes-customization", "notes-rename-move"],
     },
     {
         "id": "folders",
@@ -866,10 +866,10 @@ FEATURES = (
         "id": "vault-organizer",
         "group": "Notes and files",
         "title": "Organize an Obsidian vault",
-        "what": "Plan a tidy-up of an Obsidian vault - tags, Map-of-Content notes and a Vault Home - then one card writes it.",
-        "where": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
-        "asks": "Off until one card turns it on; the plan is a read-only dry run, then ONE card for the whole batch and one Undo.",
-        "limit": "Off by default and no screen yet - it is run from the API/runbook; one vault this PC is set up for, and it never deletes a note.",
+        "what": "Tidy up an Obsidian vault - tags, Map-of-Content notes and a Vault Home - as a read-only plan first, then ONE card writes the whole batch.",
+        "where": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
+        "asks": "The plan is a read-only dry run and changes nothing - the chat says \"Nothing has been changed yet.\" Saying \"apply the plan\" raises ONE approval card for the whole batch, and denying it changes nothing.",
+        "limit": "Off by default and PC-only; no per-note mode outside the selection you name; one vault this PC is set up for. It never deletes a note, and one Undo puts the whole batch back.",
         "surface": "desktop",
         "surface_reason": "The vault is on this PC, so the organizer is PC-only; the phone has no vault-organizer screen.",
         "aliases": ["vault organizer"],
@@ -1524,8 +1524,8 @@ FEATURES = (
         "title": "What Jarvis can reach",
         "what": "Every way Jarvis can reach something outside itself, and whether it is on right now.",
         "where": "Settings, What Jarvis can reach.",
-        "asks": "Loosening a reading tool from the PC raises one card plus Windows Hello. Nothing outside that short safe list can be loosened from an app.",
-        "limit": "Read-only; the PC writes it from its own settings.",
+        "asks": "No card - it only reads the PC's own settings and the live state of each way out.",
+        "limit": "Read-only, and it changes nothing. Which tools can be switched on from Settings, What asks first is decided there; raw shell, computer and browser control, web-page reading, account connection and REA stay settings-file choices.",
         "surface": "both",
         "aliases": ["what jarvis can reach"],
         "covers": ["settings.reach", "documents-and-search"],
@@ -1789,8 +1789,8 @@ FEATURES = (
         "title": "What asks first",
         "what": "Every action Jarvis can take and whether it asks you first, in plain words.",
         "where": "Settings, What asks first - in both apps.",
-        "asks": "A \"make stricter\" switch is instant. Loosening one of a short safe list is PC-only, and costs one card plus Windows Hello.",
-        "limit": "Nothing outside that short list can be loosened from an app.",
+        "asks": "A \"make stricter\" switch is instant. Loosening one action is PC-only and costs one card plus Windows Hello. Offering a tool to the AI model is a separate one-tool switch (Tier A/B, see the report), PC-only, with ONE card plus Windows Hello each; turning it off is instant.",
+        "limit": "Tier C (raw shell, computer and browser control, reading one web page, connecting an account, REA) and the tools this slice leaves alone are not offered in-app; they stay a settings-file choice. Nothing switches two tools at once, and the phone is read-only.",
         "surface": "both",
         "covers": ["settings.asks-first", "asks-first", "home-devices", "money-and-health"],
     },

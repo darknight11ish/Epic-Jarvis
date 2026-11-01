@@ -2674,6 +2674,27 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **The Notes editor's formatting toolbar, shortcuts and template menu are the
+  desktop's alone** (2026-10-31; the owner asked to "really enhance this
+  customizability for notes"). The notes editor itself is in both apps and
+  keeps the same read/save routes and the same one-card save contract; the phone
+  keeps its existing plain editor for now. The toolbar, shortcuts and template
+  picker only change the words in the desktop's textarea: they add no route, no
+  save path and no server write, so they deliberately do not exist on the phone
+  until its editor has the same controls. The vault's own Templates folder is
+  listed only from the note list the editor already read, and a template is
+  inserted into the box exactly like typing - Save is still the only write.
+
+- **Renaming and moving a note is chat-only for now** (2026-10-31, wave 4 of the
+  notes flexibility slice). The backend routes are on both apps and the one
+  `edit_vault_note` card is drawn by both, but neither app has a rename/move
+  control yet; the deterministic chat sentences "rename my X to Y" and "move my
+  X into Folder" are the only doors. The reason is the exactness rule: these
+  operations need a link-preservation plan and a count preview before the card,
+  and the screens are owed with the same controls on BOTH apps rather than a
+  half-built one on either. No new route is desktop- or phone-only and
+  `tools/check_parity.py` classifies both routes as available to both.
+
 **The approval card's remaining differences, after the 2026-10-28 parity slice**
 (the owner's ruling: *"the cards on android should match the cards on
 desktop"*). Everything a card *decides* is now the same on both apps: the title,

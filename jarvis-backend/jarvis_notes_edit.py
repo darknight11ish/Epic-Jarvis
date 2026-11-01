@@ -14,6 +14,16 @@ existing note. This module is those four routes:
     GET  /api/notes/read?path=<rel>   one note: its text and its sha256
     POST /api/notes/save              save the WHOLE new text of one note
     GET  /api/notes/save?id=<job id>  how one save ended
+    POST /api/notes/create            make ONE new note (no overwrite ever)
+    POST /api/notes/append            add words to the END of one note
+    POST /api/notes/tag               add or remove ONE tag on one note
+    GET  /api/notes/change?id=<job>   how one of those three ended
+
+The three wave-1 writes (2026-10-31, the owner's flexibility decision) are the
+same single-file shape as the save: one note, one approval card, the File
+Guardian copy first where there are old bytes to keep, and every answer says
+you can undo it. Rename, move, delete and several-notes-at-once are NOT here:
+they belong to the wave-2 slice and are refused in plain words by the routes.
 
 `/api/notes/list`'s `count` is the number of rows in THIS answer (never the
 vault's total); `truncated: true` is what says more notes exist beyond the
@@ -91,8 +101,14 @@ WHAT IT WILL NOT DO
     sentence and raises NO card - it is a keep-out, not an approval question.
     When that module is not on the backend at all, this editor behaves as it did
     before the list existed. No note's bytes are read to answer it.
-  - Create, delete or rename a note. This slice edits notes that exist; the
-    contract says so, and a missing path is a 404 on read and on save.
+  - Delete or rename a note. They are still not built (wave 2, with the link
+    repairs a rename needs), so a missing path is a 404 on read, save, append
+    and tag, and no route here removes or moves a file.
+  - Overwrite an existing note from `/api/notes/create`: a path that is already
+    there is a 409 before any card. Creation makes ONE new file; undo removes
+    exactly that file and refuses if it changed since.
+  - Write several notes in one request. Every route takes ONE path; a body that
+    tries to name a list is refused in plain words before any card.
 
 ONE CARD PER SAVE, AND WHAT "WAITING" MEANS
 
@@ -119,7 +135,9 @@ HONEST LIMITS
     sha256 is always of the BYTES on disk.
   - The hidden/locked presentation rule is unchanged: this module serves the
     note text; the apps keep their existing Show gate and hidden-list guard
-    in front of it, and this module adds no bypass.
+    in front of it, and this module adds no bypass. The chat fast path refuses
+    to start any of these writes while the lists are hidden, so no card of its
+    own can show a title.
 
 Standard library only. No network, no subprocess, no second permission
 mechanism.
@@ -136,7 +154,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 # ---------------------------------------------------------------------------
 #   The contract's constants
@@ -175,7 +193,75 @@ MAX_QUERY_CHARS = 200
 LIST_PATH = "/api/notes/list"
 READ_PATH = "/api/notes/read"
 SAVE_PATH = "/api/notes/save"
-GET_PATHS = (LIST_PATH, READ_PATH, SAVE_PATH)
+CREATE_PATH = "/api/notes/create"
+APPEND_PATH = "/api/notes/append"
+TAG_PATH = "/api/notes/tag"
+INSERT_PATH = "/api/notes/insert"
+FORMAT_PATH = "/api/notes/format"
+REPLACE_PATH = "/api/notes/replace"
+CUSTOMIZE_PATH = "/api/notes/customize"
+TEMPLATES_PATH = "/api/notes/templates"
+RENAME_PATH = "/api/notes/rename"
+MOVE_PATH = "/api/notes/move"
+CHANGE_PATH = "/api/notes/change"
+GET_PATHS = (LIST_PATH, READ_PATH, SAVE_PATH, CHANGE_PATH, TEMPLATES_PATH)
+POST_PATHS = (SAVE_PATH, CREATE_PATH, APPEND_PATH, TAG_PATH,
+              INSERT_PATH, FORMAT_PATH, REPLACE_PATH, CUSTOMIZE_PATH,
+              RENAME_PATH, MOVE_PATH)
+
+#: A tag is one Obsidian tag name without the `#`: letters, digits, `_`, `-`
+#: and `/` (nested tags), at least one non-digit, never a space. 64 characters
+#: is the bound this module will write.
+_TAG_NAME = re.compile(r"[A-Za-z0-9_/-]{1,64}")
+_TAG_HAS_WORD = re.compile(r"[A-Za-z_/-]")
+
+#: The words a refused wave-1 write says, in the module's own voice.
+_REFUSED_WRITE = {
+    "create": {
+        "denied": "You said no, so the note was not created.",
+        "timed_out": "Nobody answered the approval card in time, so the note was not created.",
+        "refused": "The approval gate refused it, so the note was not created.",
+    },
+    "append": {
+        "denied": "You said no, so nothing was added.",
+        "timed_out": "Nobody answered the approval card in time, so nothing was added.",
+        "refused": "The approval gate refused it, so nothing was added.",
+    },
+    "tag": {
+        "denied": "You said no, so the note was not tagged.",
+        "timed_out": "Nobody answered the approval card in time, so the note was not tagged.",
+        "refused": "The approval gate refused it, so the note was not tagged.",
+    },
+    "insert": {
+        "denied": "You said no, so nothing was changed.",
+        "timed_out": "Nobody answered the approval card in time, so nothing was changed.",
+        "refused": "The approval gate refused it, so nothing was changed.",
+    },
+    "format": {
+        "denied": "You said no, so nothing was changed.",
+        "timed_out": "Nobody answered the approval card in time, so nothing was changed.",
+        "refused": "The approval gate refused it, so nothing was changed.",
+    },
+    "replace": {
+        "denied": "You said no, so nothing was changed.",
+        "timed_out": "Nobody answered the approval card in time, so nothing was changed.",
+        "refused": "The approval gate refused it, so nothing was changed.",
+    },
+    "customize": {
+        "denied": "You said no, so nothing was changed.",
+        "timed_out": "Nobody answered the approval card in time, so nothing was changed.",
+        "refused": "The approval gate refused it, so nothing was changed.",
+    },
+    "create_template": {
+        "denied": "You said no, so the template was not saved.",
+        "timed_out": "Nobody answered the approval card in time, so the template was not saved.",
+        "refused": "The approval gate refused it, so the template was not saved.",
+    },
+}
+
+#: The one receipts tool name a created note's undo is recorded under. Its
+#: restorer is registered at import, so Undo works after a restart too.
+CREATE_RECEIPT = "notes_create"
 
 #: How long the POST waits before answering `waiting`. The common Deny/Approve
 #: comes back inside this; anything slower is polled through the id.
@@ -752,6 +838,2299 @@ def handle_save_status(query: str = "") -> tuple:
     return save_status(jid)
 
 
+
+# ---------------------------------------------------------------------------
+#   The wave-1 writes: create ONE note, append to ONE note, tag ONE note
+# ---------------------------------------------------------------------------
+#
+# Each is the save's shape: validate everything BEFORE any card; ask the one
+# ordinary card; after the card re-check the disk (TOCTOU); for a change to old
+# bytes take the File Guardian copy FIRST; write atomically (or append-only);
+# answer with the module's own sentence and "You can undo it." Nothing here
+# creates a folder tree, touches `.obsidian`, deletes, renames or moves.
+
+
+def _write_refusal(kind: str, outcome: str, reason: str = "") -> str:
+    words = _REFUSED_WRITE.get(kind, {}).get(
+        outcome, "The approval gate refused it, so nothing was written.")
+    if reason and outcome not in ("denied", "timed_out"):
+        words += " " + str(reason)[:200]
+    return words
+
+
+def _tag_name(raw) -> tuple:
+    """`(tag, "")` for a legal Obsidian tag name, or `("", why not)`."""
+    text = str(raw or "").strip()
+    if text.startswith("#"):
+        text = text[1:]
+    if not text:
+        return "", "the tag is empty"
+    if not _TAG_NAME.fullmatch(text):
+        return "", ("a tag can use letters, numbers, _ - and / (for nested tags), "
+                    "and no spaces")
+    if not _TAG_HAS_WORD.search(text):
+        return "", "a tag needs at least one letter, _ or - (numbers alone are not a tag)"
+    return text, ""
+
+
+def _split_frontmatter(text: str) -> tuple:
+    """`(open_line, front_lines, body, why)`; why non-empty means refuse.
+
+    The front matter exists only when the file starts with a `---` line, and it
+    ends at the next `---` line. Everything is kept as the exact lines they
+    were, line endings included.
+    """
+    if not text.startswith("---"):
+        return "", [], text, ""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return "", [], text, ""
+    for idx in range(1, len(lines)):
+        if lines[idx].strip() == "---":
+            return lines[0], lines[1:idx], "".join(lines[idx + 1:]), ""
+    return "", [], text, ("the note's front matter opens with --- and never closes, "
+                          "so this editor will not change it")
+
+
+def _frontmatter_tags(front: list) -> tuple:
+    """`(kind, index, values, end, why)` for the tags property, or refuse.
+
+    Only the two shapes Obsidian documents are edited: a list block under
+    `tags:` and a one-line flow list `tags: [a, b]`. A scalar `tags: x`, a
+    second `tags:` line or an unreadable indented block is refused in words -
+    the editor never guesses how to rewrite YAML it does not understand.
+    """
+    hits = [i for i, line in enumerate(front) if line.strip().startswith("tags:")]
+    if not hits:
+        return "", -1, [], -1, ""
+    if len(hits) > 1:
+        return "", -1, [], -1, ("the note has more than one tags: line, so it is not "
+                                "changed")
+    i = hits[0]
+    line = front[i]
+    rest = line.split("tags:", 1)[1].strip()
+    if rest.startswith("["):
+        if not rest.endswith("]") or "]" in rest[:-1]:
+            return "", -1, [], -1, "the note's tags line is not a list this editor can read"
+        inner = rest[1:-1].strip()
+        values = [p.strip().strip('"').strip("'") for p in inner.split(",")] if inner else []
+        if any(v == "" for v in values):
+            return "", -1, [], -1, "the note's tags line is not a list this editor can read"
+        return "flow", i, values, i + 1, ""
+    if rest and not rest.startswith("#"):
+        return "", -1, [], -1, ("the note's tags value is a single word, not a list; "
+                                "change it in Obsidian first")
+    values = []
+    j = i + 1
+    while j < len(front):
+        nxt = front[j]
+        stripped = nxt.strip()
+        if stripped == "":
+            break
+        if stripped.startswith("-"):
+            item_m = re.fullmatch(r"-\s+(.+?)\s*", stripped)
+            if not item_m:
+                return "", -1, [], -1, ("the note's tags list is not a list this "
+                                        "editor can read")
+            item = item_m.group(1).strip().strip('"').strip("'")
+            if not item:
+                return "", -1, [], -1, "the note's tags list has an empty item"
+            values.append(item)
+            j += 1
+            continue
+        break
+    return "block", i, values, j, ""
+
+
+def _tag_block_lines(tag: str) -> list:
+    return ["  - " + tag + "\n"]
+
+
+def _edit_frontmatter_tags(text: str, tag: str, action: str) -> tuple:
+    """`(new_text, changed, why)` for a frontmatter add/remove; surgical."""
+    opened, front, body, why = _split_frontmatter(text)
+    if why:
+        return text, False, why
+    if not opened:
+        if action == "remove":
+            return text, False, "the note has no tags property to remove it from"
+        fm = ["---\n", "tags:\n"] + _tag_block_lines(tag) + ["---\n"]
+        return ("".join(fm) + body), True, ""
+    kind, idx, values, end, why = _frontmatter_tags(front)
+    if why:
+        return text, False, why
+    lower = [v.casefold() for v in values]
+    if action == "add":
+        if tag.casefold() in lower:
+            return "That note already has #" + tag + ".", False, ""
+        if kind == "":
+            new_front = list(front) + ["tags:\n"] + _tag_block_lines(tag)
+        elif kind == "flow":
+            new_front = list(front)
+            new_front[idx] = "tags: [" + ", ".join(values + [tag]) + "]\n"
+        else:
+            new_front = list(front)
+            insert = _tag_block_lines(tag)
+            new_front[end:end] = insert
+        return opened + "".join(new_front) + "---\n" + body, True, ""
+    # remove
+    if kind == "" or tag.casefold() not in lower:
+        return "That note does not have #" + tag + ".", False, ""
+    keep = [v for v in values if v.casefold() != tag.casefold()]
+    new_front = list(front)
+    if kind == "flow":
+        if keep:
+            new_front[idx] = "tags: [" + ", ".join(keep) + "]\n"
+        else:
+            new_front[idx] = "tags: []\n"
+    else:
+        replaced = ["tags:\n"] + [("  - " + v + "\n") for v in keep] if keep else ["tags: []\n"]
+        new_front[idx:end] = replaced
+    return opened + "".join(new_front) + "---\n" + body, True, ""
+
+
+def _edit_tag_line(text: str, tag: str, action: str) -> tuple:
+    """`(new_text, changed, why)` for a visible `#tag` line; surgical."""
+    target = "#" + tag
+    lines = text.splitlines(keepends=True)
+    hits = [i for i, line in enumerate(lines) if line.strip().casefold() == target.casefold()]
+    if action == "add":
+        if hits:
+            return "That note already has #" + tag + ".", False, ""
+        add = target + "\n"
+        if text and not text.endswith("\n"):
+            add = "\n" + add
+        return text + add, True, ""
+    if not hits:
+        return "That note does not have #" + tag + ".", False, ""
+    if len(hits) > 1:
+        return text, False, ("that tag appears on more than one line, so this editor "
+                             "will not guess which one to remove")
+    idx = hits[0]
+    new_lines = lines[:idx] + lines[idx + 1:]
+    return "".join(new_lines), True, ""
+
+
+def _new_note_bytes(text: str) -> bytes:
+    data = text.encode("utf-8", errors="surrogatepass")
+    return data
+
+
+def _append_block(old: bytes, text: str) -> bytes:
+    """The exact bytes an append adds: the note's own paragraph, then a newline."""
+    body = text.encode("utf-8", errors="surrogatepass")
+    if not old:
+        lead = b""
+    elif old.endswith(b"\n\n"):
+        lead = b""
+    elif old.endswith(b"\n"):
+        lead = b"\n"
+    else:
+        lead = b"\n\n"
+    return lead + body + b"\n"
+
+
+def _create_restorer(before) -> None:
+    """Undo one created note, from its receipt's before snapshot.
+
+    Deletes the file ONLY when it still holds exactly the bytes the create
+    wrote; a note the owner (or Obsidian) changed since is never removed."""
+    try:
+        rel = str((before or {}).get("path") or "")
+        want = str((before or {}).get("created_sha256") or "")
+        if not rel or not want:
+            return
+        full, _rel, why = _resolve_note(rel)
+        if why or full is None or not full.is_file():
+            return
+        if _sha256(_read_bytes(full)) != want:
+            return
+        os.unlink(str(full))
+    except Exception:                                       # noqa: BLE001
+        return
+
+
+def _record_create(rel: str, data: bytes) -> str:
+    """One undo receipt for the new note, BEFORE the file exists. "" on failure."""
+    try:
+        import jarvis_receipts as R
+        rid = R.record(
+            CREATE_RECEIPT, "created " + rel,
+            before={"path": rel, "created_sha256": _sha256(data)},
+            after={"path": rel, "sha256": _sha256(data)},
+            undo=lambda: _create_restorer({"path": rel,
+                                           "created_sha256": _sha256(data)}))
+        return str(rid or "")
+    except Exception:                                       # noqa: BLE001
+        return ""
+
+
+try:                                            # undo after a restart, by name
+    import jarvis_receipts as _RC
+    _RC.register_restorer(CREATE_RECEIPT, _create_restorer)
+except Exception:                               # noqa: BLE001 - module absent
+    pass
+
+
+def _start_change_job(kind: str, full: Path, rel: str, payload,
+                      expected: str, vault: Path, gate_check,
+                      wait_s: float, by: str, extra: dict) -> tuple:
+    """Register one job and its daemon thread; return the POST's (code, body)."""
+    with _lock:
+        waiting = sum(1 for j in _jobs.values() if j.get("state") == "waiting")
+        if waiting >= MAX_WAITING:
+            return _error(429, (f"{MAX_WAITING} note changes are already waiting for "
+                                "approval - answer those cards first, then ask "
+                                "this one."), state="refused")
+        job_id = "note" + kind + "_" + secrets.token_hex(8)
+        _jobs[job_id] = {
+            "id": job_id, "kind": kind, "state": "waiting", "path": rel,
+            "sha256": None, "current_sha256": None,
+            "message": "Waiting for your approval card.",
+            "created": time.time(), "updated": time.time(), "by": by,
+        }
+        while len(_jobs) > MAX_JOBS:
+            oldest = min(_jobs, key=lambda k: _jobs[k]["created"])
+            _jobs.pop(oldest, None)
+    thread = threading.Thread(
+        target=_change_worker,
+        args=(kind, job_id, full, rel, payload, expected, vault,
+              gate_check or _gate_check, extra),
+        name="jarvis-note-" + kind, daemon=True)
+    thread.start()
+    thread.join(max(0.0, float(wait_s)))
+    code, out = change_status(job_id)
+    if out.get("state") == "waiting":
+        out["id"] = job_id
+    return (202 if out.get("state") == "waiting" else 200), out
+
+
+def _change_prompt(kind: str, rel: str, payload, extra: dict) -> tuple:
+    """(prompt, detail) - the card's own words: the file, what changes, undo.
+
+    The surgical kinds carry the EXACT before/after text (bounded) or, while the
+    hidden lists hide the note's words, a counts-only preview instead.
+    """
+    if kind == "create":
+        data = payload
+        return (f"create {rel} in your Obsidian vault ({len(data)} bytes)",
+                {"path": rel, "bytes": len(data), "action": "create a new note"})
+    if kind == "append":
+        data = payload
+        return (f"add {len(data)} bytes to the end of {rel} in your Obsidian vault",
+                {"path": rel, "bytes": len(data), "action": "add to the end of a note"})
+    if kind in ("insert", "format", "replace", "customize"):
+        words = str(extra.get("card") or "change one part of")
+        detail = {"path": rel,
+                  "action": str(extra.get("action") or kind),
+                  "preview": extra.get("preview") or {}}
+        return (f"{words} {rel} in your Obsidian vault", detail)
+    if kind == "create_template":
+        words = str(extra.get("card") or f"save {rel} as a template in")
+        return (f"{words} your Obsidian vault",
+                {"path": rel, "bytes": len(payload),
+                 "action": "save a note as a template"})
+    tag = str(extra.get("tag") or "")
+    action = str(extra.get("action") or "add")
+    verb = "add the tag #" + tag + " to" if action == "add" else "remove the tag #" + tag + " from"
+    return (f"{verb} {rel} in your Obsidian vault",
+            {"path": rel, "tag": tag, "action": action + " a tag on a note"})
+
+
+def _change_worker(kind: str, job_id: str, full: Path, rel: str, payload,
+                   expected: str, vault: Path, gate_check, extra: dict) -> None:
+    """Ask the card, then (and only then) make the one change. Daemon thread."""
+    try:
+        prompt, detail = _change_prompt(kind, rel, payload, extra)
+        verdict = gate_check(ACTION, detail, prompt)
+        if not getattr(verdict, "allowed", False):
+            outcome = str(getattr(verdict, "outcome", "refused") or "refused")
+            state = "denied" if outcome in ("denied", "timed_out") else "failed"
+            _finish(job_id, state=state, outcome=outcome,
+                    message=_write_refusal(kind, outcome,
+                                           str(getattr(verdict, "reason", ""))))
+            _audit(kind + "_refused", {"job": job_id, "path": rel, "outcome": outcome})
+            return
+        if kind in ("create", "create_template"):
+            _finish_create(job_id, full, rel, payload, kind=kind,
+                           source=str(extra.get("source") or ""))
+            return
+        # append/tag: the note and its bytes must still be what the request saw
+        if not full.is_file():
+            _finish(job_id, state="failed",
+                    message=f"{rel} is no longer in your Obsidian vault, so nothing was changed.")
+            _audit(kind + "_failed", {"job": job_id, "path": rel, "why": "gone"})
+            return
+        try:
+            current = _read_bytes(full)
+        except OSError as exc:
+            _finish(job_id, state="failed",
+                    message=f"The note could not be re-read before writing ({type(exc).__name__}), so nothing was changed.")
+            _audit(kind + "_failed", {"job": job_id, "path": rel, "why": "reread"})
+            return
+        current_sha = _sha256(current)
+        if current_sha != expected:
+            _finish(job_id, state="failed", current_sha256=current_sha,
+                    message=(f"{rel} changed while the card waited, so nothing was "
+                             "written; open it again and ask again."))
+            _audit(kind + "_failed", {"job": job_id, "path": rel, "why": "moved"})
+            return
+        snap = _snapshot(full, rel)
+        if not snap.get("ok"):
+            words = str(snap.get("words") or snap.get("error") or "no copy was made")
+            _finish(job_id, state="failed",
+                    message=("Nothing was written, because a copy of the note could "
+                             "not be saved first: " + words))
+            _audit(kind + "_failed", {"job": job_id, "path": rel, "why": "guardian"})
+            return
+        if kind == "append":
+            block = payload
+            try:
+                fd = os.open(str(full), os.O_WRONLY | os.O_APPEND
+                             | getattr(os, "O_BINARY", 0))
+                try:
+                    os.write(fd, block)
+                finally:
+                    os.close(fd)
+                with open(str(full), "rb") as fh:
+                    fh.seek(max(0, os.stat(str(full)).st_size - len(block)))
+                    landed = fh.read() == block
+            except OSError as exc:
+                _finish(job_id, state="failed",
+                        message=f"The note could not be written ({type(exc).__name__}), so it was left as it was.")
+                _audit("append_failed", {"job": job_id, "path": rel, "why": "write"})
+                return
+            new_data = current + block
+            if not landed:
+                _finish(job_id, state="failed",
+                        message="The words were written but could not be read back, so check the note.")
+                _audit("append_failed", {"job": job_id, "path": rel, "why": "readback"})
+                return
+            _finish(job_id, state="saved", sha256=_sha256(new_data),
+                    snapshot=snap.get("snapshot_id") or None,
+                    message=f"Added to {rel} in your Obsidian vault. You can undo it.")
+            _audit("appended", {"job": job_id, "path": rel, "bytes": len(block)})
+            return
+        # tag / insert / format / replace: the new text was worked out before
+        # the card, from the same bytes the sha256 named; write it atomically.
+        new_data = payload
+        try:
+            _write_note(full, new_data)
+        except OSError as exc:
+            _finish(job_id, state="failed",
+                    message=f"The note could not be written ({type(exc).__name__}), so it was left as it was.")
+            _audit(kind + "_failed", {"job": job_id, "path": rel, "why": "write"})
+            return
+        if kind == "tag":
+            tag = str(extra.get("tag") or "")
+            said = ("Tagged " + rel + " with #" + tag + "." if extra.get("action") == "add"
+                    else "Removed the tag #" + tag + " from " + rel + ".")
+        else:
+            said = str(extra.get("said") or ("Changed " + rel + "."))
+        _finish(job_id, state="saved", sha256=_sha256(new_data),
+                snapshot=snap.get("snapshot_id") or None,
+                message=said + " You can undo it.")
+        _audit(kind + "ed", {"job": job_id, "path": rel,
+                             "action": extra.get("action")})
+    except Exception as exc:                                # noqa: BLE001
+        _finish(job_id, state="failed",
+                message=f"The change failed ({type(exc).__name__}), so nothing was written.")
+        _audit(kind + "_failed", {"job": job_id, "path": rel, "why": "exception"})
+
+
+def _finish_create(job_id: str, full: Path, rel: str, data: bytes,
+                   kind: str = "create", source: str = "") -> None:
+    """The new note (or template): receipt first, one O_EXCL file, read back."""
+    if full.exists():
+        _finish(job_id, state="failed",
+                message=f"There is already a note at {rel}, so nothing was created.")
+        _audit("create_failed", {"job": job_id, "path": rel, "why": "exists"})
+        return
+    parent_real = Path(os.path.realpath(str(full.parent)))
+    vault, _why = _vault()
+    if vault is None or not _inside(vault, parent_real) or not _inside(vault, full):
+        _finish(job_id, state="failed",
+                message="That note's folder is not inside your Obsidian vault, so nothing was created.")
+        _audit("create_failed", {"job": job_id, "path": rel, "why": "outside"})
+        return
+    rid = _record_create(rel, data)
+    if not rid:
+        _finish(job_id, state="failed",
+                message=("Nothing was created, because an undo receipt could not be "
+                         "recorded first."))
+        _audit("create_failed", {"job": job_id, "path": rel, "why": "receipt"})
+        return
+    try:
+        full.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(full), os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                     | getattr(os, "O_BINARY", 0), 0o644)
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
+        with open(str(full), "rb") as fh:
+            landed = fh.read() == data
+    except FileExistsError:
+        _finish(job_id, state="failed",
+                message=f"There is already a note at {rel}, so nothing was created.")
+        try:
+            import jarvis_receipts as R
+            R.discard(rid)
+        except Exception:                               # noqa: BLE001
+            pass
+        _audit("create_failed", {"job": job_id, "path": rel, "why": "exists"})
+        return
+    except OSError as exc:
+        try:
+            import jarvis_receipts as R
+            R.discard(rid)
+        except Exception:                               # noqa: BLE001
+            pass
+        _finish(job_id, state="failed",
+                message=f"The note could not be created ({type(exc).__name__}), so nothing was created.")
+        _audit("create_failed", {"job": job_id, "path": rel, "why": "write"})
+        return
+    if not landed:
+        _finish(job_id, state="failed",
+                message="The note was made but could not be read back, so check Obsidian.")
+        _audit("create_failed", {"job": job_id, "path": rel, "why": "readback"})
+        return
+    if kind == "create_template":
+        said = (f"Saved {source or 'the note'} as the template {rel} in your "
+                "Obsidian vault.")
+    else:
+        said = f"Created {rel} in your Obsidian vault."
+    _finish(job_id, state="saved", sha256=_sha256(data), receipt=rid,
+            message=said + " You can undo it.")
+    _audit("created", {"job": job_id, "path": rel, "bytes": len(data),
+                       "sha256": _sha256(data)})
+
+
+def _one_path(body) -> tuple:
+    """`(raw_path, why)`: ONE path string, or a plain refusal for a list."""
+    if not isinstance(body, dict):
+        return "", "Need a JSON object with one note path."
+    raw = body.get("path")
+    if isinstance(raw, (list, tuple)):
+        return "", ("One note at a time, please: this route names one file, and a "
+                    "list was sent so nothing was changed.")
+    return raw, ""
+
+
+def handle_create(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                  by: str = "") -> tuple:
+    """POST /api/notes/create: exactly one new note, one card, undo by receipt."""
+    raw, why = _one_path(body)
+    if why:
+        return _error(400, why, state="refused")
+    parts, why = note_parts(raw)
+    if why:
+        return _error(400, why, state="refused")
+    rel = "/".join(parts)
+    vault, why = _vault()
+    if vault is None:
+        return _error(503, "No note was created: " + why + ".", state="refused")
+    text = body.get("text", "")
+    if text is None:
+        text = ""
+    if not isinstance(text, str):
+        return _error(400, "Need the new note's text as text.", state="refused")
+    data = _new_note_bytes(text)
+    if len(data) > MAX_FILE_BYTES:
+        return _error(413, (f"The new note is {len(data)} bytes, over the "
+                            f"{MAX_FILE_BYTES} byte limit this editor writes; open it "
+                            "in Obsidian instead."), state="refused")
+    full, rel2, why = _resolve_note(raw)
+    if why:
+        return _error(400, why, state="refused")
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(full), write=True)
+        if _said:
+            return _error(403, _said, state="refused")
+    if full.exists():
+        return _error(409, f"There is already a note at {rel2}, so nothing was created.",
+                      state="exists")
+    return _start_change_job("create", full, rel2, data, "", vault,
+                             gate_check, wait_s, by, {})
+
+
+def handle_append(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                  by: str = "") -> tuple:
+    """POST /api/notes/append: add words to the END of one existing note."""
+    raw, why = _one_path(body)
+    if why:
+        return _error(400, why, state="refused")
+    parts, why = note_parts(raw)
+    if why:
+        return _error(400, why, state="refused")
+    rel = "/".join(parts)
+    vault, why = _vault()
+    if vault is None:
+        return _error(503, "Nothing was added: " + why + ".", state="refused")
+    text = body.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return _error(400, "Need the words to add as text.", state="refused")
+    expected = str(body.get("expected_sha256") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        return _error(400, ("Need expected_sha256: the sha256 of the note when this "
+                            "started - GET /api/notes/read returns it."), state="refused")
+    full, rel2, why = _resolve_note(raw)
+    if why:
+        return _error(400, why, state="refused")
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(full), write=True)
+        if _said:
+            return _error(403, _said, state="refused")
+    if not full.is_file():
+        return _error(404, f"There is no note at {rel2} in your Obsidian vault; "
+                           "create it first.", state="refused")
+    try:
+        current = _read_bytes(full)
+    except OSError as exc:
+        return _error(503, f"The note could not be read ({type(exc).__name__}).",
+                      state="refused")
+    current_sha = _sha256(current)
+    if current_sha != expected:
+        return 409, {"ok": False, "state": "conflict", "path": rel2,
+                     "current_sha256": current_sha,
+                     "error": (f"{rel2} changed since this started, so nothing was "
+                               "added; open it again and ask again.")}
+    if len(current) > MAX_FILE_BYTES:
+        return _error(413, (f"{rel2} is {len(current)} bytes, over the "
+                            f"{MAX_FILE_BYTES} byte limit this editor writes; open it "
+                            "in Obsidian instead."), state="refused")
+    block = _append_block(current, text)
+    if len(current) + len(block) > MAX_FILE_BYTES:
+        return _error(413, (f"Adding those words would make {rel2} over the "
+                            f"{MAX_FILE_BYTES} byte limit, so nothing was added."),
+                      state="refused")
+    return _start_change_job("append", full, rel2, block, expected, vault,
+                             gate_check, wait_s, by, {})
+
+
+def handle_tag(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+               by: str = "") -> tuple:
+    """POST /api/notes/tag: add or remove ONE tag on ONE note, surgically."""
+    raw, why = _one_path(body)
+    if why:
+        return _error(400, why, state="refused")
+    parts, why = note_parts(raw)
+    if why:
+        return _error(400, why, state="refused")
+    rel = "/".join(parts)
+    vault, why = _vault()
+    if vault is None:
+        return _error(503, "No tag was changed: " + why + ".", state="refused")
+    action = str(body.get("action") or "add").strip().lower()
+    if action not in ("add", "remove"):
+        return _error(400, "action must be add or remove.", state="refused")
+    tag, why = _tag_name(body.get("tag"))
+    if why:
+        return _error(400, why, state="refused")
+    where = str(body.get("where") or "auto").strip().lower()
+    if where not in ("auto", "frontmatter", "line"):
+        return _error(400, "where must be auto, frontmatter or line.", state="refused")
+    expected = str(body.get("expected_sha256") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        return _error(400, ("Need expected_sha256: the sha256 of the note when this "
+                            "started - GET /api/notes/read returns it."), state="refused")
+    full, rel2, why = _resolve_note(raw)
+    if why:
+        return _error(400, why, state="refused")
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(full), write=True)
+        if _said:
+            return _error(403, _said, state="refused")
+    if not full.is_file():
+        return _error(404, f"There is no note at {rel2} in your Obsidian vault.",
+                      state="refused")
+    try:
+        old = _read_bytes(full)
+    except OSError as exc:
+        return _error(503, f"The note could not be read ({type(exc).__name__}).",
+                      state="refused")
+    current_sha = _sha256(old)
+    if current_sha != expected:
+        return 409, {"ok": False, "state": "conflict", "path": rel2,
+                     "current_sha256": current_sha,
+                     "error": (f"{rel2} changed since this started, so no tag was "
+                               "changed; open it again and ask again.")}
+    try:
+        text = old.decode("utf-8")
+    except UnicodeDecodeError:
+        return _error(400, (f"{rel2} is not valid UTF-8, so this editor will not rewrite "
+                            "it; change the tag in Obsidian."), state="refused")
+    if where == "frontmatter":
+        changed, ok, why = _edit_frontmatter_tags(text, tag, action)
+    elif where == "line":
+        changed, ok, why = _edit_tag_line(text, tag, action)
+    else:
+        opened, _front, _body, fm_why = _split_frontmatter(text)
+        if fm_why:
+            return _error(400, fm_why, state="refused")
+        if opened:
+            changed, ok, why = _edit_frontmatter_tags(text, tag, action)
+        else:
+            changed, ok, why = _edit_tag_line(text, tag, action)
+    if why:
+        return _error(400, why, state="refused")
+    if not ok:
+        return 200, {"ok": True, "state": "unchanged", "path": rel2,
+                     "sha256": current_sha, "message": changed}
+    new_data = changed.encode("utf-8", errors="surrogatepass")
+    if len(new_data) > MAX_FILE_BYTES:
+        return _error(413, (f"The tagged note would be {len(new_data)} bytes, over the "
+                            f"{MAX_FILE_BYTES} byte limit, so nothing was changed."),
+                      state="refused")
+    return _start_change_job("tag", full, rel2, new_data, expected, vault,
+                             gate_check, wait_s, by,
+                             {"tag": tag, "action": action, "where": where})
+
+
+# ---------------------------------------------------------------------------
+#   Wave 2 - surgical edits: under a heading, before/after an anchor, wrap
+#   bold/italic, and replace exactly once. Every one is pure text work on the
+#   bytes the request read; the card shows the exact before/after (or counts
+#   only while the hidden lists hide the words); the write is one card, one
+#   File Guardian copy, one atomic write, one Undo.
+# ---------------------------------------------------------------------------
+
+MAX_PREVIEW_CHARS = 260
+_WORD = re.compile(r"[A-Za-z0-9_]")
+
+
+def _eol_of(text: str) -> str:
+    return "\r\n" if "\r\n" in text else "\n"
+
+
+def _lines(text: str) -> list:
+    return text.splitlines(keepends=True)
+
+
+def _line_body(line: str) -> str:
+    return line.rstrip("\r\n")
+
+
+def _heading_at(line: str):
+    """`(level, title)` for a markdown heading line, or None."""
+    m = re.match(r"^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$", _line_body(line))
+    if not m:
+        return None
+    return len(m.group(1)), m.group(2).strip()
+
+
+def _split_clip(words: str) -> str:
+    one = " ".join(str(words or "").split())
+    return one[:MAX_PREVIEW_CHARS] + ("..." if len(one) > MAX_PREVIEW_CHARS else "")
+
+
+def _preview(before: str, after: str, note: str = "") -> dict:
+    out = {"before": _split_clip(before), "after": _split_clip(after)}
+    if note:
+        out["note"] = _split_clip(note)
+    return out
+
+
+def _hidden_lists() -> bool:
+    """True while the backend's hidden-lists / App-lock hook says words hide."""
+    try:
+        import importlib
+        PV = importlib.import_module("jarvis_private_view")
+        state = PV.effective()
+        return bool(state.get("app_locked") or state.get("hide_memory_lists"))
+    except Exception:                                       # noqa: BLE001
+        return False
+
+
+def _card_preview(preview: dict) -> dict:
+    """The card's preview, or counts-only while the hidden lists hide words."""
+    if _hidden_lists():
+        return {"counts_only": True, "changes": 1,
+                "why": "the lists are hidden, so the words are not shown"}
+    return preview
+
+
+def _insert_lines(new_text: str, eol: str) -> list:
+    parts = str(new_text).splitlines() or [str(new_text)]
+    return [p + eol for p in parts]
+
+
+def _insert_under_heading(text: str, target: str, new_text: str):
+    """`(new_text, heading_title, preview, why)` for one exact heading."""
+    want = str(target or "").strip().lstrip("#").strip()
+    if not want:
+        return text, "", {}, "which heading?"
+    eol = _eol_of(text)
+    lines = _lines(text)
+    found = []
+    for i, line in enumerate(lines):
+        h = _heading_at(line)
+        if h and h[1].casefold() == want.casefold():
+            found.append((i, h[0], h[1]))
+    if not found:
+        return text, "", {}, f'There is no "{want}" heading in this note, so nothing was changed.'
+    if len(found) > 1:
+        return text, "", {}, (f'There are {len(found)} "{want}" headings in this note, '
+                              'so nothing was changed - name one of them.')
+    idx, level, title = found[0]
+    end = len(lines)
+    for j in range(idx + 1, len(lines)):
+        h = _heading_at(lines[j])
+        if h and h[0] <= level:
+            end = j
+            break
+    last_nonempty = idx
+    for j in range(idx + 1, end):
+        if _line_body(lines[j]).strip():
+            last_nonempty = j
+    at = last_nonempty + 1
+    insert = _insert_lines(new_text, eol)
+    new_lines = lines[:at] + insert + lines[at:]
+    before = _line_body(lines[last_nonempty])
+    after = _line_body(insert[0])
+    preview = _preview(before, after, note="under the \"" + title + "\" heading")
+    return "".join(new_lines), title, preview, ""
+
+
+def _insert_at_anchor(text: str, anchor: str, mode: str, new_text: str):
+    """`(new_text, preview, why)` - one literal anchor, its own bytes untouched."""
+    want = str(anchor or "").strip().strip('"').strip("'")
+    if not want:
+        return text, {}, "which words should the new line go before or after?"
+    count = len(re.findall(re.escape(want), text, re.IGNORECASE))
+    if count == 0:
+        return text, {}, f'I could not find "{want}" in this note, so nothing was changed.'
+    if count > 1:
+        return text, {}, (f'"{want}" appears {count} times in this note, so nothing '
+                          "was changed - give words that appear once.")
+    eol = _eol_of(text)
+    off = text.lower().find(want.lower())
+    line_start = text.rfind("\n", 0, off) + 1
+    line_end = text.find("\n", off)
+    if line_end < 0:
+        line_end = len(text)
+    line_body = text[line_start:line_end]
+    insert = _insert_lines(new_text, eol)
+    if mode == "before":
+        at = line_start
+        before = line_body
+        after = _line_body(insert[0])
+        preview = _preview(before, after, note="before \"" + want + "\"")
+    else:
+        before = line_body
+        after = _line_body(insert[0])
+        preview = _preview(before, after, note="after \"" + want + "\"")
+        if line_end >= len(text):
+            # the anchor is the last line and the file has no final newline:
+            # start the new line with one, so the anchor's own bytes are kept
+            at = len(text)
+            joined = eol + "".join(insert)
+            return text[:at] + joined, preview, ""
+        at = line_end + 1
+    new_lines = text[:at] + "".join(insert) + text[at:]
+    return new_lines, preview, ""
+
+
+def _fence_ranges(text: str) -> list:
+    """`[(start, end)]` character ranges of fenced code blocks (``` or ~~~)."""
+    ranges = []
+    pos = 0
+    open_at = None
+    for line in _lines(text):
+        body = _line_body(line).strip()
+        if body.startswith("```") or body.startswith("~~~"):
+            if open_at is None:
+                open_at = pos
+            else:
+                ranges.append((open_at, pos + len(line)))
+                open_at = None
+        pos += len(line)
+    if open_at is not None:
+        ranges.append((open_at, len(text)))
+    return ranges
+
+
+def _format_span(text: str, target: str, style: str, action: str):
+    """`(new_text, said, preview, why)` - wrap/unwrap ONE exact span."""
+    want = str(target or "").strip().strip('"').strip("'")
+    if not want:
+        return text, "", {}, "which words should be formatted?"
+    count = len(re.findall(re.escape(want), text, re.IGNORECASE))
+    if count == 0:
+        return text, "", {}, f'I could not find "{_split_clip(want)}" in this note, so nothing was changed.'
+    if count > 1:
+        return text, "", {}, (f'"{_split_clip(want)}" appears {count} times in this note, so '
+                              "nothing was changed - give words that appear once.")
+    start = text.lower().find(want.lower())
+    found = text[start:start + len(want)]
+    end = start + len(found)
+    for a, b in _fence_ranges(text):
+        if a <= start < b:
+            return text, "", {}, ("that text is inside a code block, and formatting is "
+                                  "not changed there")
+    _MARKERS = {"bold": "**", "italic": "*", "strike": "~~", "code": "`"}
+    marker = _MARKERS.get(style, "")
+    if not marker:
+        return text, "", {}, "style must be bold, italic, strike or code"
+    before = text[max(0, start - len(marker)):start]
+    after = text[end:end + len(marker)]
+    wrapped = (before == marker and after == marker)
+    if style == "italic" and (text[max(0, start - 2):start] == "**"
+                              or text[end:end + 2] == "**") and action == "add":
+        # bold and italic TOGETHER is standard Markdown: ***text***
+        left_italic = (text[start - 1:start] == "*"
+                       and text[max(0, start - 2):start] != "**")
+        right_italic = (text[end:end + 1] == "*" and text[end:end + 2] != "**")
+        if left_italic or right_italic:
+            return text, "That text is already italic.", {}, ""
+        new = text[:start] + "*" + found + "*" + text[end:]
+        return new, "", _preview("***" + want + "***", "***" + want + "***",
+                                 note="the span, italic"), ""
+    if action == "add":
+        if wrapped:
+            return text, f"That text is already {style}.", {}, ""
+        if text[start - 1:start] == "*" or text[end:end + 1] == "*":
+            return text, "That text is already inside asterisks, so nothing was changed.", {}, ""
+        new = text[:start] + marker + found + marker + text[end:]
+        preview = _preview(marker + want + marker,
+                           marker + want + marker,
+                           note="the span, " + style)
+        return new, "", preview, ""
+    # remove: unwrap exactly one matching pair of this style
+    if text[start - len(marker):start] != marker or text[end:end + len(marker)] != marker:
+        return text, f"That text is not {style}.", {}, ""
+    new = text[:start - len(marker)] + want + text[end + len(marker):]
+    preview = _preview(marker + want + marker, want, note="the span")
+    return new, "", preview, ""
+
+
+def _replace_once(text: str, old: str, new: str):
+    """`(new_text, preview, why)` - one literal occurrence, whole-word edge."""
+    old_s = str(old or "")
+    if not old_s:
+        return text, {}, "what should be replaced?"
+    old_l = old_s.lower()
+    count = len(re.findall(re.escape(old_s), text, re.IGNORECASE))
+    if count == 0:
+        return text, {}, f'I could not find "{_split_clip(old_s)}" in this note, so nothing was changed.'
+    if count > 1:
+        return text, {}, (f'"{_split_clip(old_s)}" appears {count} times in this note, so '
+                          "nothing was changed - give words that appear once.")
+    start = text.lower().find(old_l)
+    found = text[start:start + len(old_s)]
+    end = start + len(found)
+    if _WORD.match(found[0]) and start > 0 and _WORD.match(text[start - 1]):
+        return text, {}, ("that is part of a longer word, so nothing was changed - give "
+                          "the whole word")
+    if _WORD.match(found[-1]) and end < len(text) and _WORD.match(text[end]):
+        return text, {}, ("that is part of a longer word, so nothing was changed - give "
+                          "the whole word")
+    new_text = text[:start] + str(new) + text[end:]
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    if line_end < 0:
+        line_end = len(text)
+    before_line = text[line_start:line_end]
+    new_line_start = new_text.rfind("\n", 0, start) + 1
+    new_line_end = new_text.find("\n", start)
+    if new_line_end < 0:
+        new_line_end = len(new_text)
+    after_line = new_text[new_line_start:new_line_end]
+    return new_text, _preview(before_line, after_line, note="the line"), ""
+
+
+def _surgical_common(body, kind: str, gate_check, wait_s: float, by: str):
+    """`(code, out, full, rel, text, sha)` or an error tuple."""
+    raw, why = _one_path(body)
+    if why:
+        return (_error(400, why, state="refused"),) + (None,) * 5
+    parts, why = note_parts(raw)
+    if why:
+        return (_error(400, why, state="refused"),) + (None,) * 5
+    vault, why = _vault()
+    if vault is None:
+        return (_error(503, "Nothing was changed: " + why + ".", state="refused"),) + (None,) * 5
+    expected = str(body.get("expected_sha256") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        return (_error(400, ("Need expected_sha256: the sha256 of the note when this "
+                             "started - GET /api/notes/read returns it."),
+                       state="refused"),) + (None,) * 5
+    full, rel, why = _resolve_note(raw)
+    if why:
+        return (_error(400, why, state="refused"),) + (None,) * 5
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(full), write=True)
+        if _said:
+            return (_error(403, _said, state="refused"),) + (None,) * 5
+    if not full.is_file():
+        return (_error(404, f"There is no note at {rel} in your Obsidian vault.",
+                       state="refused"),) + (None,) * 5
+    try:
+        old = _read_bytes(full)
+    except OSError as exc:
+        return (_error(503, f"The note could not be read ({type(exc).__name__}).",
+                       state="refused"),) + (None,) * 5
+    current_sha = _sha256(old)
+    if current_sha != expected:
+        return ((409, {"ok": False, "state": "conflict", "path": rel,
+                       "current_sha256": current_sha,
+                       "error": (f"{rel} changed since this started, so nothing was "
+                                 "changed; open it again and ask again.")})
+                + (None,) * 5)
+    try:
+        text = old.decode("utf-8")
+    except UnicodeDecodeError:
+        return (_error(400, (f"{rel} is not valid UTF-8, so this editor will not rewrite "
+                             "it; edit it in Obsidian."), state="refused"),) + (None,) * 5
+    return None, full, rel, text, current_sha, old
+
+
+def _start_surgical(kind: str, body, gate_check, wait_s: float, by: str,
+                    transform, card_words, action_words):
+    """One route's whole flow: validate, transform, one card, one write."""
+    got = _surgical_common(body, kind, gate_check, wait_s, by)
+    if got[0] is not None:
+        code, out = got[0]
+        return code, out
+    _none, full, rel, text, current_sha, old = got
+    new_text, extra_words, preview, why = transform(text)
+    if why:
+        return _error(400, why, state="refused")
+    if new_text == text:
+        said = str(extra_words or "Nothing needed changing.").replace("{rel}", rel)
+        return 200, {"ok": True, "state": "unchanged", "path": rel,
+                     "sha256": current_sha, "message": said}
+    new_data = new_text.encode("utf-8", errors="surrogatepass")
+    if len(new_data) > MAX_FILE_BYTES:
+        return _error(413, (f"The changed note would be {len(new_data)} bytes, over the "
+                            f"{MAX_FILE_BYTES} byte limit, so nothing was changed."),
+                      state="refused")
+    said = str(extra_words or ("Changed " + rel + ".")).replace("{rel}", rel)
+    extra = {"said": said, "preview": _card_preview(preview),
+             "card": card_words, "action": action_words}
+    return _start_change_job(kind, full, rel, new_data, current_sha, _vault()[0],
+                             gate_check, wait_s, by, extra)
+
+
+def handle_insert(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                  by: str = "") -> tuple:
+    """POST /api/notes/insert: under ONE heading, or before/after ONE anchor."""
+    mode = str(body.get("mode") or "").strip().lower() if isinstance(body, dict) else ""
+    target = str((body or {}).get("target") or "").strip() if isinstance(body, dict) else ""
+    text = (body or {}).get("text") if isinstance(body, dict) else None
+    if mode not in ("under_heading", "before", "after"):
+        return _error(400, "mode must be under_heading, before or after.", state="refused")
+    if not isinstance(text, str) or not text.strip():
+        return _error(400, "Need the words to add as text.", state="refused")
+    if mode == "under_heading":
+        def transform(current):
+            new, title, preview, why = _insert_under_heading(current, target, text)
+            if why:
+                return current, "", {}, why
+            said = f'Added under the "{title}" heading in {{rel}}.'
+            return new, said, preview, ""
+        words = f'add "{_split_clip(text)}" under the "{_split_clip(target)}" heading in'
+        action = "add a line under a heading"
+    else:
+        def transform(current):
+            new, preview, why = _insert_at_anchor(current, target, mode, text)
+            if why:
+                return current, "", {}, why
+            said = (f'Added {mode} "{_split_clip(target)}" in {{rel}}.')
+            return new, said, preview, ""
+        words = f'add "{_split_clip(text)}" {mode} "{_split_clip(target)}" in'
+        action = "add a line " + mode + " some words"
+    code, out = _start_surgical("insert", body, gate_check, wait_s, by,
+                                transform, words, action)
+    if isinstance(out, dict) and isinstance(out.get("message"), str):
+        out["message"] = out["message"].replace("{rel}", str(out.get("path") or "the note"))
+    return code, out
+
+
+def handle_format(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                  by: str = "") -> tuple:
+    """POST /api/notes/format: wrap ONE exact span in bold/italic, or unwrap it."""
+    style = str((body or {}).get("style") or "").strip().lower() if isinstance(body, dict) else ""
+    action = str((body or {}).get("action") or "").strip().lower() if isinstance(body, dict) else ""
+    target = str((body or {}).get("target") or "").strip() if isinstance(body, dict) else ""
+    if style not in ("bold", "italic", "strike", "code"):
+        return _error(400, "style must be bold or italic.", state="refused")
+    if action not in ("add", "remove"):
+        return _error(400, "action must be add or remove.", state="refused")
+
+    def transform(current):
+        new, _unused, preview, why = _format_span(current, target, style, action)
+        if why:
+            return current, "", {}, why
+        if action == "add":
+            said = f'Made "{_split_clip(target)}" {style} in {{rel}}.'
+        else:
+            said = f'Removed the {style} from "{_split_clip(target)}" in {{rel}}.'
+        return new, said, preview, ""
+
+    words = (f'make "{_split_clip(target)}" {style} in' if action == "add"
+             else f'remove the {style} from "{_split_clip(target)}" in')
+    action_words = ("wrap one span in " + style) if action == "add" else ("unwrap one " + style)
+    code, out = _start_surgical("format", body, gate_check, wait_s, by,
+                                transform, words, action_words)
+    if isinstance(out, dict) and isinstance(out.get("message"), str):
+        out["message"] = out["message"].replace("{rel}", str(out.get("path") or "the note"))
+    return code, out
+
+
+def handle_replace(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                   by: str = "") -> tuple:
+    """POST /api/notes/replace: replace ONE exact, whole-word occurrence."""
+    old = (body or {}).get("old") if isinstance(body, dict) else None
+    new = (body or {}).get("new") if isinstance(body, dict) else None
+    if not isinstance(old, str) or not old:
+        return _error(400, "Need the words to replace as old.", state="refused")
+    if not isinstance(new, str) or new == old:
+        return _error(400, "Need different words as new.", state="refused")
+
+    def transform(current):
+        fresh, preview, why = _replace_once(current, old, new)
+        if why:
+            return current, "", {}, why
+        said = f'Replaced "{_split_clip(old)}" with "{_split_clip(new)}" in {{rel}}.'
+        return fresh, said, preview, ""
+
+    words = f'replace "{_split_clip(str(old))}" with "{_split_clip(str(new))}" in'
+    code, out = _start_surgical("replace", body, gate_check, wait_s, by,
+                                transform, words, "replace one exact occurrence")
+    if isinstance(out, dict) and isinstance(out.get("message"), str):
+        out["message"] = out["message"].replace("{rel}", str(out.get("path") or "the note"))
+    return code, out
+
+
+# ---------------------------------------------------------------------------
+#   Wave 3 - customization: more formatting, line/checklist conversions,
+#   headings and sections, properties, links and templates. One route with an
+#   action, so every capability keeps ONE card, one guardian copy, one undo.
+# ---------------------------------------------------------------------------
+
+#: The built-in templates the owner can create from chat. Plain Markdown only:
+#: headings and checkboxes, nothing Obsidian-specific beyond that.
+BUILTIN_TEMPLATES = {
+    "workout": ("workout log", """# Workout log
+
+## Warm-up
+- [ ] 5 minutes of easy movement
+
+## Session
+- [ ] Exercise - sets x reps
+
+## Cool-down
+- [ ] 5 minutes of stretching
+
+## Notes
+"""),
+    "meeting": ("meeting notes", """# Meeting notes - {topic}
+
+## Attendees
+
+## Agenda
+- [ ]
+
+## Decisions
+
+## Actions
+- [ ] 
+"""),
+    "journal": ("daily journal", """# Daily journal - {date}
+
+## What happened
+
+## What I noticed
+
+## Tomorrow
+- [ ] 
+"""),
+    "project": ("project note", """# Project - {name}
+
+## Goal
+
+## Next steps
+- [ ]
+
+## Notes
+"""),
+}
+
+
+def builtin_template(kind: str, subject: str = "") -> tuple:
+    """`(title, body)` for one built-in template, or `("", why)`."""
+    got = BUILTIN_TEMPLATES.get(str(kind or "").lower())
+    if got is None:
+        return "", "that is not one of the built-in templates"
+    title, body = got
+    subject = str(subject or "").strip()
+    if "{topic}" in body:
+        if not subject:
+            return "", "say the meeting's topic"
+        body = body.replace("{topic}", subject)
+    if "{name}" in body:
+        if not subject:
+            return "", "say the project's name"
+        body = body.replace("{name}", subject)
+    if "{date}" in body:
+        import datetime
+        body = body.replace("{date}", datetime.date.today().isoformat())
+    return title, body
+
+
+def _heading_line(level: int, title: str, eol: str) -> str:
+    level = max(1, min(6, int(level or 2)))
+    return "#" * level + " " + str(title).strip() + eol
+
+
+def _line_index_exact(text: str, target: str):
+    """`(index, why)` for the ONE line whose stripped text equals `target`."""
+    want = str(target or "").strip()
+    if not want:
+        return -1, "which line?"
+    hits = [i for i, line in enumerate(_lines(text))
+            if _line_body(line).strip() == want]
+    if not hits:
+        return -1, f'There is no line that is exactly "{_split_clip(want)}", so nothing was changed.'
+    if len(hits) > 1:
+        return -1, (f'"{_split_clip(want)}" is the whole line {len(hits)} times, so '
+                    "nothing was changed - give words that appear once.")
+    return hits[0], ""
+
+
+def _with_prefix(text: str, idx: int, prefix: str, replace_prefix=None):
+    """One line with `prefix` after its indentation; other bytes untouched."""
+    lines = _lines(text)
+    eol = _eol_of(text)
+    body = _line_body(lines[idx])
+    indent = body[:len(body) - len(body.lstrip())]
+    content = body[len(indent):]
+    if replace_prefix is not None:
+        m = re.match(replace_prefix, content)
+        if m:
+            content = content[m.end():]
+    lines[idx] = indent + prefix + content + (eol if lines[idx].endswith(("\n", "\r")) else "")
+    return "".join(lines), body, indent + prefix + content
+
+
+def _line_edit(text: str, action: str, target: str, level: int = 2):
+    """`(new_text, said, preview, why)` for one line's prefix shape."""
+    idx, why = _line_index_exact(text, target)
+    if why:
+        return text, "", {}, why
+    body = _line_body(_lines(text)[idx])
+    stripped = body.lstrip()
+    bullet = r"(?:[-*+] |\d+\. |#{1,6} |> |\[[ xX]\] )"
+    if action == "bullet":
+        fresh, _b, newline = _with_prefix(text, idx, "- ", bullet)
+        said = "Turned that line into a bullet."
+    elif action == "number":
+        fresh, _b, newline = _with_prefix(text, idx, "1. ", bullet)
+        said = "Numbered that line."
+    elif action == "checklist":
+        fresh, _b, newline = _with_prefix(text, idx, "- [ ] ", bullet)
+        said = "Turned that line into a checklist item."
+    elif action == "quote":
+        fresh, _b, newline = _with_prefix(text, idx, "> ", bullet)
+        said = "Turned that line into a quote."
+    elif action == "heading":
+        fresh, _b, newline = _with_prefix(text, idx, "#" * max(1, min(6, level)) + " ", bullet)
+        said = "Made that line a heading."
+    elif action == "tick":
+        if not re.match(r"^\s*- \[ \] ", body):
+            return text, "", {}, "that checklist item is not unticked."
+        fresh, _b, newline = _with_prefix(text, idx, "- [x] ", r"^\s*- \[ \] ")
+        said = "Ticked that checklist item."
+    elif action == "untick":
+        if not re.match(r"^\s*- \[[xX]\] ", body):
+            return text, "", {}, "that checklist item is not ticked."
+        fresh, _b, newline = _with_prefix(text, idx, "- [ ] ", r"^\s*- \[[xX]\] ")
+        said = "Unticked that checklist item."
+    elif action == "plain":
+        fresh, _b, newline = _with_prefix(text, idx, "", bullet)
+        said = "Turned that line back into plain text."
+    else:
+        return text, "", {}, "unknown line action"
+    if fresh == text:
+        return text, said, {}, ""
+    preview = _preview(body, newline, note="the line")
+    return fresh, said, preview, ""
+
+
+def _rename_heading(text: str, old: str, new: str):
+    """`(new_text, said, preview, why)` for ONE heading renamed, level kept."""
+    old_s = str(old or "").strip().lstrip("#").strip()
+    new_s = str(new or "").strip()
+    if not old_s or not new_s:
+        return text, "", {}, "which heading, and to what?"
+    lines = _lines(text)
+    hits = [i for i, line in enumerate(lines)
+            if (_heading_at(line) or (0, ""))[1].casefold() == old_s.casefold()]
+    if not hits:
+        return text, "", {}, f'There is no "{_split_clip(old_s)}" heading in this note.'
+    if len(hits) > 1:
+        return text, "", {}, (f'There are {len(hits)} "{_split_clip(old_s)}" headings, so '
+                              "nothing was changed - name one of them.")
+    i = hits[0]
+    level, _title = _heading_at(lines[i])
+    eol = _eol_of(text)
+    old_line = _line_body(lines[i])
+    lines[i] = _heading_line(level, new_s, eol if lines[i].endswith(("\n", "\r")) else "")
+    fresh = "".join(lines)
+    preview = _preview(old_line, _line_body(lines[i]), note="the heading")
+    return fresh, f'Renamed the "{_split_clip(old_s)}" heading to "{_split_clip(new_s)}".', preview, ""
+
+
+def _new_section(text: str, heading: str, body: str, level: int = 2):
+    """`(new_text, said, preview, why)` - a section appended at the end."""
+    head = str(heading or "").strip().lstrip("#").strip()
+    if not head:
+        return text, "", {}, "what should the new section be called?"
+    for line in _lines(text):
+        h = _heading_at(line)
+        if h and h[1].casefold() == head.casefold():
+            return text, "", {}, f'There is already a "{head}" heading in this note.'
+    eol = _eol_of(text)
+    block = ""
+    if not text.endswith(("\n", "\r")):
+        block += eol + eol
+    elif not text.endswith(eol + eol):
+        block += eol
+    block += _heading_line(level, head, eol) + eol
+    if str(body or "").strip():
+        block += str(body).strip() + eol
+    preview = _preview("", "#" * level + " " + head, note="a new section at the end")
+    return text + block, f'Added a new "{_split_clip(head)}" section.', preview, ""
+
+
+def _property_edit(text: str, action: str, key: str, value: str):
+    """`(new_text, said, preview, why)` for ONE frontmatter property."""
+    key_s = str(key or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", key_s):
+        return text, "", {}, "a property name can use letters, numbers, dot, dash and underscore"
+    opened, front, body, why = _split_frontmatter(text)
+    if why:
+        return text, "", {}, why
+    eol = _eol_of(text)
+    hits = [i for i, line in enumerate(front) if line.split(":", 1)[0].strip() == key_s]
+    if len(hits) > 1:
+        return text, "", {}, f'the note has {len(hits)} "{key_s}:" lines, so nothing was changed'
+    if action == "remove":
+        if not opened or not hits:
+            return text, f"That note has no \"{key_s}\" property.", {}, ""
+        idx = hits[0]
+        new_front = front[:idx] + front[idx + 1:]
+        fresh = opened + "".join(new_front) + "---" + eol + body
+        preview = _preview(_line_body(front[idx]), "", note="the property removed")
+        return fresh, f'Removed the "{key_s}" property.', preview, ""
+    val = str(value or "").strip()
+    if val.lower() in ("true", "false"):
+        quoted = val.lower()
+    elif re.fullmatch(r"-?\d+(?:\.\d+)?", val):
+        quoted = val
+    else:
+        quoted = json.dumps(val, ensure_ascii=False)
+    line = f"{key_s}: {quoted}{eol}"
+    if not opened:
+        fresh = "---" + eol + line + "---" + eol + text
+        preview = _preview("", line.rstrip("\r\n"), note="a new property")
+        return fresh, f'Added the "{key_s}" property.', preview, ""
+    if hits:
+        idx = hits[0]
+        new_front = list(front)
+        new_front[idx] = line
+    else:
+        new_front = list(front) + [line]
+    fresh = opened + "".join(new_front) + "---" + eol + body
+    preview = _preview("", line.rstrip("\r\n"), note="the property")
+    return fresh, f'Set the "{key_s}" property.', preview, ""
+
+
+def _append_link(text: str, note_name: str, heading: str = ""):
+    """`(new_text, said, preview, why)` - one `[[Note]]` line."""
+    name = str(note_name or "").strip().strip("[]")
+    if not name or "\n" in name or "[" in name or "]" in name:
+        return text, "", {}, "which note should be linked?"
+    link_line = "[[" + name + "]]"
+    if "[[" + name + "]]" in text:
+        return text, "That link is already in the note.", {}, ""
+    if heading:
+        placed = _insert_under_heading(text, heading, link_line)
+        if placed[3]:
+            return text, "", {}, placed[3]
+        return placed[0], f'Added a link to [[{name}]] under the "{heading}" heading.', placed[2], ""
+    eol = _eol_of(text)
+    led = "" if not text.startswith("\n") else ""
+    if text and not text.endswith(("\n", "\r")):
+        led = eol
+    fresh = text + led + link_line + eol
+    preview = _preview("", link_line, note="a new link line at the end")
+    return fresh, f"Added a link to [[{name}]] at the end of the note.", preview, ""
+
+
+def _template_dir():
+    """`(Path, why)` - the Templates plugin folder or <vault>/Templates."""
+    try:
+        import jarvis_notes as N
+        vault = N.obsidian_vault()
+        why = N.vault_problem(vault)
+    except Exception as exc:                                # noqa: BLE001
+        return None, f"the vault could not be found ({type(exc).__name__})"
+    if why:
+        return None, why
+    root = Path(os.path.realpath(str(vault)))
+    folder = "Templates"
+    try:
+        cfg = root / ".obsidian" / "templates.json"
+        if cfg.is_file():
+            got = json.loads(cfg.read_text(encoding="utf-8"))
+            if isinstance(got, dict) and isinstance(got.get("folder"), str) and got["folder"].strip():
+                folder = got["folder"].strip()
+    except Exception:                                       # noqa: BLE001
+        folder = "Templates"
+    parts = [p for p in folder.replace("\\", "/").split("/") if p and p not in (".", "..")]
+    if any(p.startswith(".") for p in parts):
+        return None, "the templates folder is hidden, so nothing was written there"
+    target = root.joinpath(*parts)
+    if not _inside(root, target):
+        return None, "the templates folder is outside the vault"
+    return target, ""
+
+
+def list_templates() -> tuple:
+    """`(names, why)` - the template file names only, never their text."""
+    folder, why = _template_dir()
+    if folder is None:
+        return [], why
+    if not folder.is_dir():
+        return [], ""
+    names = sorted({p.stem for p in folder.glob("*.md") if p.is_file()
+                    and not _is_link_or_reparse(p)})
+    return names[:200], ""
+
+
+def handle_templates_list() -> tuple:
+    names, why = list_templates()
+    return 200, {"ok": True, "count": len(names), "templates": names, "why": why}
+
+
+def handle_template_save(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                         by: str = "") -> tuple:
+    """POST /api/notes/customize, action save_template: ONE new template file."""
+    raw, why = _one_path(body)
+    if why or not isinstance(body, dict):
+        return _error(400, why or "Need a JSON object.", state="refused")
+    parts, why = note_parts(raw)
+    if why:
+        return _error(400, why, state="refused")
+    vault, why = _vault()
+    if vault is None:
+        return _error(503, "Nothing was saved: " + why + ".", state="refused")
+    full, rel, why = _resolve_note(raw)
+    if why:
+        return _error(400, why, state="refused")
+    _P = _protection()
+    if _P is not None:
+        _said = _P.path_refusal(str(full))
+        if _said:
+            return _error(403, _said, state="refused")
+    if not full.is_file():
+        return _error(404, f"There is no note at {rel} in your Obsidian vault.",
+                      state="refused")
+    folder, why = _template_dir()
+    if folder is None:
+        return _error(503, "Nothing was saved: " + why + ".", state="refused")
+    name = str(body.get("name") or Path(rel).stem).strip()
+    if not re.fullmatch(r"[A-Za-z0-9 _.-]{1,80}", name or ""):
+        return _error(400, "a template name can use letters, numbers, spaces, dot, dash and underscore",
+                      state="refused")
+    target_rel = folder.name + "/" + (name if name.lower().endswith(".md") else name + ".md")
+    target = vault.joinpath(*target_rel.replace("\\", "/").split("/"))
+    if not _inside(vault, target):
+        return _error(400, "the template path is outside the vault", state="refused")
+    if target.exists():
+        return _error(409, f"There is already a template at {target_rel}, so nothing was saved.",
+                      state="exists")
+    try:
+        data = _read_bytes(full)
+    except OSError as exc:
+        return _error(503, f"The note could not be read ({type(exc).__name__}).", state="refused")
+    extra = {"card": "save", "source": rel}
+    return _start_change_job("create_template", target, target_rel, data, "", vault,
+                             gate_check, wait_s, by, extra)
+
+
+def handle_customize(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                     by: str = "") -> tuple:
+    """POST /api/notes/customize: one action, one exact-match edit, one card."""
+    action = str((body or {}).get("action") or "").strip().lower()
+    if action == "save_template":
+        return handle_template_save(body, gate_check=gate_check, wait_s=wait_s, by=by)
+    got = _surgical_common(body, "customize", gate_check, wait_s, by)
+    if got[0] is not None:
+        return got[0][0], got[0][1]
+    _none, full, rel, text, current_sha, old = got
+    preview = {}
+    if action in ("format",):
+        style = str(body.get("style") or "").strip().lower()
+        target = str(body.get("target") or "").strip()
+        act = str(body.get("action2") or body.get("format_action") or "add").strip().lower()
+        new_text, said, preview, why = _format_span(text, target, style, act)
+        card = (f'make "{_split_clip(target)}" {style} in' if act == "add"
+                else f'remove the {style} from "{_split_clip(target)}" in')
+    elif action == "line":
+        kind = str(body.get("line_action") or "").strip().lower()
+        target = str(body.get("target") or "").strip()
+        level = int(body.get("level") or 2)
+        new_text, said, preview, why = _line_edit(text, kind, target, level)
+        card = f"change one line ({kind}) in"
+    elif action == "rename_heading":
+        old_h = str(body.get("old") or "").strip()
+        new_h = str(body.get("new") or "").strip()
+        new_text, said, preview, why = _rename_heading(text, old_h, new_h)
+        card = f'rename the "{_split_clip(old_h)}" heading in'
+    elif action == "new_section":
+        head = str(body.get("heading") or "").strip()
+        body_text = str(body.get("text") or "")
+        level = int(body.get("level") or 2)
+        new_text, said, preview, why = _new_section(text, head, body_text, level)
+        card = f'add a new "{_split_clip(head)}" section to'
+    elif action in ("set_property", "remove_property"):
+        key = str(body.get("key") or "").strip()
+        value = str(body.get("value") or "")
+        act = "remove" if action == "remove_property" else "set"
+        new_text, said, preview, why = _property_edit(text, act, key, value)
+        card = (f'set the "{_split_clip(key)}" property in' if act == "set"
+                else f'remove the "{_split_clip(key)}" property from')
+    elif action == "link":
+        note_name = str(body.get("note") or "").strip()
+        heading = str(body.get("heading") or "").strip()
+        new_text, said, preview, why = _append_link(text, note_name, heading)
+        card = f'add a link to "{_split_clip(note_name)}" in'
+    else:
+        return _error(400, "unknown action.", state="refused")
+    if why:
+        return _error(400, why, state="refused")
+    if new_text == text:
+        return 200, {"ok": True, "state": "unchanged", "path": rel,
+                     "sha256": current_sha, "message": said or "Nothing needed changing."}
+    new_data = new_text.encode("utf-8", errors="surrogatepass")
+    if len(new_data) > MAX_FILE_BYTES:
+        return _error(413, ("The changed note would be over the size limit, so nothing "
+                            "was changed."), state="refused")
+    extra = {"said": str(said or "Changed the note."), "preview": _card_preview(preview),
+             "card": card, "action": action}
+    return _start_change_job("customize", full, rel, new_data, current_sha, _vault()[0],
+                             gate_check, wait_s, by, extra)
+
+
+# ---------------------------------------------------------------------------
+#   Wave 4 - rename or move ONE note, keeping its links working (2026-10-31)
+# ---------------------------------------------------------------------------
+# The owner's "flexibility" decision. A rename/move is one note's PATH change
+# plus the links that named it, so the plan is read-only, the card names the
+# file and the link counts, and ONE approval writes the move plus only those
+# link bytes. Every changed/moved note is copied through the File Guardian
+# first and ONE batch Undo puts every byte and path back. Code fences and
+# inline code are never rewritten.
+
+RENAME_PATH = "/api/notes/rename"
+MOVE_PATH = "/api/notes/move"
+RENAME_RECEIPT = "notes_rename"
+MOVE_RECEIPT = "notes_move"
+MAX_LINK_SCAN = 2000
+_BAD_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WIKI_LINK = re.compile(r"(!?)\[\[([^\]\n]+)\]\]")
+_MD_LINK = re.compile(r"(!?)\[([^\]\n]*)\]\(\s*(?P<target><[^>\n]+>|[^)\s]+)(?P<tail>[^)\n]*)\)")
+_INLINE_CODE = re.compile(r"(`+)([^\n]*?)\1")
+
+for _kind, _words in {
+    "rename": {
+        "denied": "You said no, so the note was not renamed and no link was changed.",
+        "timed_out": "Nobody answered the approval card in time, so the note was not renamed and no link was changed.",
+        "refused": "The approval gate refused it, so the note was not renamed and no link was changed.",
+    },
+    "move": {
+        "denied": "You said no, so the note was not moved and no link was changed.",
+        "timed_out": "Nobody answered the approval card in time, so the note was not moved and no link was changed.",
+        "refused": "The approval gate refused it, so the note was not moved and no link was changed.",
+    },
+}.items():
+    _REFUSED_WRITE.setdefault(_kind, {}).update(_words)
+
+
+def _safe_filename(raw) -> tuple:
+    """`(new .md filename, why)` - ONE filename, never a path."""
+    text = str(raw or "").strip().strip('"').strip("'").strip("`")
+    if text.lower().endswith(".md"):
+        text = text[:-3].strip()
+    if not text:
+        return "", "what should the new name be?"
+    if text.startswith(".") or text.endswith((" ", ".")):
+        return "", "a note name cannot start with a dot or end with a space or dot"
+    if _BAD_FILENAME.search(text):
+        return "", "a note name cannot contain < > : \" / \\ | ? * or a control character"
+    if len(text) > 120:
+        return "", "that note name is longer than the editor's 120-character limit"
+    return text + ".md", ""
+
+
+def _folder_parts(raw) -> tuple:
+    """`(relative folder parts, why)` - inside the vault, not hidden."""
+    text = str(raw or "").strip().strip('"').strip("'").strip("`").replace("\\", "/")
+    if not text:
+        return [], "which folder should it move to?"
+    if os.path.isabs(text) or re.match(r"^[A-Za-z]:", text):
+        return [], "that folder is outside your Obsidian vault"
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    if not parts:
+        return [], "which folder should it move to?"
+    if ".." in parts:
+        return [], "that folder is outside your Obsidian vault"
+    if any(p.startswith(".") for p in parts):
+        return [], "that folder is hidden, and the notes editor does not change hidden folders"
+    if any(_BAD_FILENAME.search(p) for p in parts):
+        return [], "that folder name contains a character a filename cannot hold"
+    return parts, ""
+
+
+def _folder_full(vault: Path, parts: list) -> Path:
+    return vault.joinpath(*parts)
+
+
+def _folder_is_safe(vault: Path, full: Path) -> bool:
+    """Every existing component from the vault down is a real directory."""
+    try:
+        cur = vault
+        rel = os.path.relpath(str(full), str(vault)).replace("\\", "/")
+        for part in rel.split("/"):
+            if part in ("", "."):
+                continue
+            cur = cur / part
+            if cur.exists() and (_is_link_or_reparse(cur) or not cur.is_dir()):
+                return False
+        return _inside(vault, full)
+    except (OSError, ValueError):
+        return False
+
+
+def _case_exists(parent: Path, name: str) -> bool:
+    try:
+        want = name.casefold()
+        return any(p.name.casefold() == want for p in parent.iterdir())
+    except OSError:
+        return True
+
+
+def _code_ranges(text: str) -> list:
+    """Character ranges for fenced blocks and inline code, where links do not change."""
+    ranges = list(_fence_ranges(text))
+    for m in _INLINE_CODE.finditer(text):
+        ranges.append((m.start(), m.end()))
+    ranges.sort()
+    return ranges
+
+
+def _in_ranges(pos: int, ranges: list) -> bool:
+    return any(a <= pos < b for a, b in ranges)
+
+
+def _scan_vault_notes(vault: Path):
+    """[(rel, full, old bytes, text)] for readable .md notes, or (None, why)."""
+    out = []
+    try:
+        paths = sorted(p for p in vault.rglob("*.md") if p.is_file())
+    except OSError as exc:                                  # noqa: BLE001
+        return None, f"the vault could not be read ({type(exc).__name__})"
+    if len(paths) > MAX_LINK_SCAN:
+        return None, (f"the vault has more than {MAX_LINK_SCAN} notes, and the link "
+                      "plan would take too long; nothing was changed")
+    P = _protection()
+    for path in paths:
+        try:
+            rel = os.path.relpath(str(path), str(vault)).replace("\\", "/")
+        except ValueError:
+            continue
+        parts = rel.split("/")
+        if any(part.startswith(".") for part in parts[:-1]):
+            continue
+        if _is_link_or_reparse(path):
+            continue
+        if P is not None and P.path_refusal(str(path), write=False):
+            continue
+        try:
+            if os.stat(str(path)).st_size > MAX_FILE_BYTES:
+                continue
+            old = _read_bytes(path)
+            text = old.decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        out.append((rel, path, old, text))
+    return out, ""
+
+
+def _wiki_target(inner: str, source_rel: str, target_rel: str, kind: str):
+    """The new `[[...]]` inner text, or None when this link is not the note."""
+    cut = len(inner)
+    for mark in ("|", "#"):
+        at = inner.find(mark)
+        if at != -1:
+            cut = min(cut, at)
+    core, suffix = inner[:cut], inner[cut:]
+    if not core:
+        return None
+    segments = core.replace("\\", "/").split("/")
+    old_stem = Path(source_rel).stem
+    new_stem = Path(target_rel).stem
+    if kind == "rename":
+        last = segments[-1]
+        stem = last[:-3] if last.lower().endswith(".md") else last
+        if stem.casefold() != old_stem.casefold():
+            return None
+        segments[-1] = new_stem + (".md" if last.lower().endswith(".md") else "")
+    else:
+        # Wikilinks name a note by title; a move does not change its title. Only
+        # a path-style wikilink that named the old path is rewritten.
+        if "/" not in core:
+            return None
+        norm = os.path.normpath(core).replace("\\", "/")
+        candidates = {source_rel.casefold(), source_rel[:-3].casefold()
+                      if source_rel.lower().endswith(".md") else source_rel.casefold()}
+        if norm.casefold() not in candidates:
+            return None
+        segments = target_rel.replace("\\", "/").split("/")
+        if segments[-1].lower().endswith(".md"):
+            segments[-1] = segments[-1][:-3]
+    return "/".join(segments) + suffix
+
+
+def _markdown_target(raw: str, note_rel: str, source_rel: str, target_rel: str):
+    """The new markdown link target for this note, or None if it is not the note."""
+    bracketed = raw.startswith("<") and raw.endswith(">")
+    target = raw[1:-1] if bracketed else raw
+    if not target or target.startswith(("#", "/", "//")) or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", target):
+        return None
+    core, sep, anchor = target.partition("#")
+    if not core:
+        return None
+    note_dir = os.path.dirname(note_rel).replace("\\", "/")
+    if core.startswith("/"):
+        resolved = core.lstrip("/")
+    elif core.startswith("./"):
+        resolved = os.path.normpath(os.path.join(note_dir, core[2:])).replace("\\", "/")
+    else:
+        resolved = os.path.normpath(os.path.join(note_dir, core)).replace("\\", "/")
+    want = source_rel.casefold()
+    got = resolved.casefold()
+    if got != want and got != (want[:-3] if want.endswith(".md") else want):
+        return None
+    new_core = os.path.relpath(target_rel, note_dir or ".").replace("\\", "/")
+    if core.startswith("./") and not new_core.startswith("./"):
+        new_core = "./" + new_core
+    if bracketed:
+        new_core = "<" + new_core + ">"
+    return new_core + (sep + anchor if sep else "")
+
+
+def _link_plan(vault: Path, source_rel: str, target_rel: str, kind: str):
+    """(plan files, update count, note count, why). Read-only."""
+    notes, why = _scan_vault_notes(vault)
+    if notes is None:
+        return None, 0, 0, why
+    files = []
+    updates = 0
+    for rel, full, old, text in notes:
+        ranges = _code_ranges(text)
+        changed = {"count": 0}
+
+        def wiki(m):
+            if _in_ranges(m.start(), ranges):
+                return m.group(0)
+            inner = _wiki_target(m.group(2), source_rel, target_rel, kind)
+            if inner is None:
+                return m.group(0)
+            changed["count"] += 1
+            return m.group(1) + "[[" + inner + "]]"
+
+        def markdown(m):
+            if _in_ranges(m.start(), ranges):
+                return m.group(0)
+            tail = m.group("tail") or ""
+            target = _markdown_target(m.group("target"), rel, source_rel, target_rel)
+            if target is None:
+                return m.group(0)
+            changed["count"] += 1
+            return m.group(1) + "[" + m.group(2) + "](" + target + tail + ")"
+
+        new_text = _WIKI_LINK.sub(wiki, text)
+        # The positions moved after the wiki replacements, so recompute the
+        # code ranges before checking markdown links for fenced/inline code.
+        ranges = _code_ranges(new_text)
+        new_text = _MD_LINK.sub(markdown, new_text)
+        if changed["count"]:
+            new_bytes = new_text.encode("utf-8")
+            if len(new_bytes) > MAX_FILE_BYTES:
+                return None, 0, 0, (f"{rel} would grow over the {MAX_FILE_BYTES} byte "
+                                   f"limit while its links are updated; nothing was changed")
+            files.append({"rel": rel, "full": str(full), "old": old,
+                          "new": new_bytes, "sha_before": _sha256(old),
+                          "sha_after": _sha256(new_bytes)})
+            updates += changed["count"]
+    return files, updates, len(files), ""
+
+
+def _plan_batch(kind: str, body: dict, *, gate_check=None) -> tuple:
+    """`(plan dict, error tuple)`; every refusal happens before any card."""
+    raw, why = _one_path(body)
+    if why:
+        return None, _error(400, why, state="refused")
+    source_full, source_rel, why = _resolve_note(raw)
+    if why:
+        return None, _error(400, why, state="refused")
+    if not source_rel.lower().endswith(".md"):
+        return None, _error(400, "Rename and move work on .md notes only; this note is not one.",
+                            state="refused")
+    if any(part.startswith(".") for part in source_rel.split("/")):
+        return None, _error(403, "that note is in the hidden part of your vault, so nothing was changed.",
+                            state="refused")
+    if not source_full.is_file():
+        return None, _error(404, f"There is no note at {source_rel} in your Obsidian vault.",
+                            state="refused")
+    _P = _protection()
+    if _P is not None:
+        said = _P.path_refusal(str(source_full), write=True)
+        if said:
+            return None, _error(403, said, state="refused")
+    vault, why = _vault()
+    if vault is None:
+        return None, _error(503, "Nothing was changed: " + why + ".", state="refused")
+    old = _read_bytes(source_full)
+    source_sha = _sha256(old)
+    if kind == "rename":
+        filename, why = _safe_filename(body.get("title") or body.get("new_title")
+                                       or body.get("new_name"))
+        if why:
+            return None, _error(400, why, state="refused")
+        parent = os.path.dirname(source_rel).replace("\\", "/").strip("/")
+        target_rel = (parent + "/" + filename) if parent else filename
+        target_folder_rel = parent
+        create_folder = False
+    else:
+        parts, why = _folder_parts(body.get("folder") or body.get("target_folder")
+                                   or body.get("folder_path"))
+        if why:
+            return None, _error(400, why, state="refused")
+        target_folder_rel = "/".join(parts)
+        folder_full = _folder_full(vault, parts)
+        if not _folder_is_safe(vault, folder_full):
+            return None, _error(400, "that folder is not a real folder inside your Obsidian vault",
+                                state="refused")
+        create_folder = bool(body.get("create_folder") or body.get("create"))
+        if not folder_full.is_dir() and not create_folder:
+            return None, _error(
+                400, (f'There is no folder "{target_folder_rel}" in your Obsidian vault, so '
+                      'nothing was moved. Say "create the folder" if you want it made.'),
+                state="refused")
+        if folder_full.exists() and not folder_full.is_dir():
+            return None, _error(400, "that path is a file, not a folder", state="refused")
+        if _P is not None:
+            said = _P.path_refusal(str(folder_full), write=True)
+            if said:
+                return None, _error(403, said, state="refused")
+        target_rel = (target_folder_rel + "/" + os.path.basename(source_rel)) if target_folder_rel else os.path.basename(source_rel)
+    target_full = vault.joinpath(*target_rel.split("/"))
+    target_parent = target_full.parent
+    if not _inside(vault, target_full) or not _inside(vault, target_parent):
+        return None, _error(400, "the destination is outside your Obsidian vault", state="refused")
+    if target_rel.casefold() == source_rel.casefold():
+        return None, (200, {"ok": True, "state": "unchanged", "path": source_rel,
+                            "message": "That is already the note's name."})
+    if not _folder_is_safe(vault, target_parent):
+        return None, _error(400, "the destination folder is not a safe folder in your vault",
+                            state="refused")
+    if target_parent.exists() and _case_exists(target_parent, target_full.name):
+        return None, _error(409, f"There is already a note at {target_rel}, so nothing was changed.",
+                            state="refused")
+    # Creating a folder is only ever done when the owner explicitly said so.
+    created_folders = []
+    if create_folder:
+        cur = vault
+        for part in target_parent.relative_to(vault).parts:
+            cur = cur / part
+            if not cur.exists():
+                created_folders.append(os.path.relpath(str(cur), str(vault)).replace("\\", "/"))
+    files, updates, notes_n, why = _link_plan(vault, source_rel, target_rel, kind)
+    if files is None:
+        return None, _error(400, why + " Nothing was changed.", state="refused")
+    if kind == "rename":
+        new_stem = Path(target_rel).stem.casefold()
+        old_stem = Path(source_rel).stem.casefold()
+        others = []
+        for other_rel, _full, _old, _text in (_scan_vault_notes(vault)[0] or []):
+            if other_rel.casefold() != source_rel.casefold() \
+                    and Path(other_rel).stem.casefold() == new_stem:
+                others.append(other_rel)
+        if others:
+            return None, _error(409, ("There is already another note with that name in your "
+                                      "vault, so nothing was renamed."), state="refused")
+    source_changed = next((f for f in files if f["rel"] == source_rel), None)
+    target_data = source_changed["new"] if source_changed else old
+    plan = {
+        "kind": kind, "vault": str(vault), "source": source_rel,
+        "target": target_rel, "source_sha": source_sha,
+        "target_sha": _sha256(target_data), "target_data": target_data,
+        "source_unchanged": source_changed is None,
+        "files": files, "updates": updates, "notes": notes_n,
+        "created_folders": created_folders,
+        "hidden": _hidden_lists(),
+    }
+    plan["preview"] = _batch_preview(plan)
+    return plan, None
+
+
+def _batch_preview(plan: dict) -> str:
+    verb = "renames" if plan["kind"] == "rename" else "moves"
+    created = " and creates the folder" if plan["created_folders"] else ""
+    if plan["hidden"]:
+        return (f"This {verb} a note{created} and updates {plan['updates']} link(s) in "
+                f"{plan['notes']} note(s).")
+    if plan["updates"]:
+        return (f"This {verb} {plan['source']} to {plan['target']}{created} and updates "
+                f"{plan['updates']} link(s) in {plan['notes']} note(s).")
+    return f"This {verb} {plan['source']} to {plan['target']}{created}. It has no links to update."
+
+
+def _changed_note_labels(plan: dict, limit: int = 3) -> list:
+    """The first few affected note filenames, in scan order, no duplicates."""
+    names = []
+    for row in plan["files"]:
+        rel = str(row.get("rel") or "")
+        if not rel or rel == plan["source"]:
+            continue
+        name = rel.rsplit("/", 1)[-1]
+        if name not in names:
+            names.append(name)
+        if len(names) >= limit:
+            break
+    return names
+
+
+def _batch_prompt_detail(plan: dict) -> tuple:
+    created = " and create the folder" if plan["created_folders"] else ""
+    if plan["hidden"]:
+        prompt = (f"{plan['kind']} a note in your Obsidian vault{created} and update "
+                  f"{plan['updates']} link(s) in {plan['notes']} note(s)")
+        detail = {"action": "rename a note" if plan["kind"] == "rename" else "move a note",
+                  "updates": plan["updates"], "notes": plan["notes"],
+                  "hidden_lists": True, "undo": True, "deletes": False}
+        return prompt, detail
+    labels = _changed_note_labels(plan)
+    more = max(0, plan["notes"] - len(labels))
+    shown = ""
+    if labels:
+        shown = " (" + ", ".join(labels) + (f" (+{more} more)" if more else "") + ")"
+    prompt = (f"{plan['kind']} {plan['source']} to {plan['target']} in your Obsidian "
+              f"vault{created} and update {plan['updates']} link(s) in "
+              f"{plan['notes']} note(s){shown}")
+    detail = {"path": plan["source"], "target": plan["target"],
+              "action": "rename a note" if plan["kind"] == "rename" else "move a note",
+              "updates": plan["updates"], "notes": plan["notes"],
+              "undo": True, "deletes": False,
+              "creates_folder": bool(plan["created_folders"])}
+    if labels:
+        detail["changed_notes"] = labels
+        if more:
+            detail["changed_notes_more"] = more
+    return prompt, detail
+
+
+def _batch_verify(plan: dict) -> str:
+    """Empty when the plan still matches the disk; else plain words."""
+    vault, why = _vault()
+    if vault is None:
+        return "The Obsidian vault could not be found, so nothing was changed."
+    source = vault.joinpath(*plan["source"].split("/"))
+    if not source.is_file() or _is_link_or_reparse(source):
+        return f"{plan['source']} is no longer in your Obsidian vault, so nothing was changed."
+    try:
+        if _sha256(_read_bytes(source)) != plan["source_sha"]:
+            return f"{plan['source']} changed while the card waited, so nothing was changed."
+    except OSError:
+        return f"{plan['source']} could not be re-read, so nothing was changed."
+    target = Path(plan["vault"]).joinpath(*plan["target"].split("/"))
+    if target.parent.exists() and (target.exists() or _case_exists(target.parent, target.name)):
+        return f"There is already a note at {plan['target']}, so nothing was changed."
+    if not target.parent.exists() and not plan.get("created_folders"):
+        return "The destination folder disappeared, so nothing was changed."
+    for entry in plan["files"]:
+        full = Path(entry["full"])
+        if not full.is_file() or _is_link_or_reparse(full):
+            return f"{entry['rel']} is no longer there, so nothing was changed."
+        want = entry["sha_before"]
+        try:
+            if _sha256(_read_bytes(full)) != want:
+                return f"{entry['rel']} changed while the card waited, so nothing was changed."
+        except OSError:
+            return f"{entry['rel']} could not be re-read, so nothing was changed."
+    return ""
+
+
+def _write_new_file(full: Path, data: bytes) -> None:
+    fd = os.open(str(full), os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                 | getattr(os, "O_BINARY", 0), 0o644)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+    except Exception:
+        try:
+            os.unlink(str(full))
+        except OSError:
+            pass
+        raise
+
+
+def _batch_restore_before(before: dict) -> None:
+    """Undo the whole batch from its own copies. Best effort, never raises."""
+    try:
+        backup = Path(str(before.get("backup_dir") or ""))
+        source = str(before.get("source") or "")
+        target = str(before.get("target") or "")
+        vault = Path(str(before.get("vault") or ""))
+        if not backup.is_dir() or not source or not target:
+            return
+        target_full = vault.joinpath(*target.split("/"))
+        source_full = vault.joinpath(*source.split("/"))
+        if target_full.is_file():
+            try:
+                os.unlink(str(target_full))
+            except OSError:
+                return
+        for row in before.get("files") or []:
+            rel = str(row.get("rel") or "")
+            name = str(row.get("backup") or "")
+            if not rel or not name:
+                continue
+            data = (backup / name).read_bytes()
+            full = vault.joinpath(*rel.split("/"))
+            _write_note(full, data)
+        for rel in sorted((before.get("created_folders") or []), reverse=True):
+            full = vault.joinpath(*str(rel).split("/"))
+            try:
+                if full.is_dir() and not any(full.iterdir()):
+                    os.rmdir(str(full))
+            except OSError:
+                pass
+    except Exception:                                       # noqa: BLE001
+        return
+
+
+def _batch_worker(job_id: str, plan: dict, gate_check) -> None:
+    kind = plan["kind"]
+    try:
+        prompt, detail = _batch_prompt_detail(plan)
+        verdict = gate_check(ACTION, detail, prompt)
+        if not getattr(verdict, "allowed", False):
+            outcome = str(getattr(verdict, "outcome", "refused") or "refused")
+            state = "denied" if outcome in ("denied", "timed_out") else "failed"
+            _finish(job_id, state=state, outcome=outcome,
+                    message=_REFUSED_WRITE.get(kind, {}).get(
+                        outcome, "The approval gate refused it, so nothing was changed."))
+            _audit(kind + "_refused", {"job": job_id, "outcome": outcome})
+            return
+        why = _batch_verify(plan)
+        if why:
+            _finish(job_id, state="failed", message=why)
+            _audit(kind + "_failed", {"job": job_id, "why": "changed"})
+            return
+        vault = Path(plan["vault"])
+        source_full = vault.joinpath(*plan["source"].split("/"))
+        target_full = vault.joinpath(*plan["target"].split("/"))
+        snap_files = [(plan["source"], source_full)]
+        for row in plan["files"]:
+            if row["rel"] != plan["source"]:
+                snap_files.append((row["rel"], Path(row["full"])))
+        snaps = []
+        for rel, full in snap_files:
+            snap = _snapshot(full, rel)
+            if not snap.get("ok"):
+                _finish(job_id, state="failed",
+                        message=("Nothing was changed, because a copy of "
+                                 f"{rel} could not be saved first: "
+                                 + str(snap.get("words") or snap.get("error") or "no copy was made")))
+                _audit(kind + "_failed", {"job": job_id, "why": "guardian"})
+                return
+            snaps.append({"rel": rel, "snapshot": snap})
+        backup = Path(tempfile.mkdtemp(prefix="jarvis-notes-batch-"))
+        backup_rows = []
+        for i, (rel, full) in enumerate(snap_files):
+            old = _read_bytes(full)
+            name = f"{i}.bin"
+            (backup / name).write_bytes(old)
+            backup_rows.append({"rel": rel, "backup": name, "sha256": _sha256(old)})
+        before = {"kind": kind, "vault": str(vault), "source": plan["source"],
+                  "target": plan["target"], "target_sha": plan["target_sha"],
+                  "files": backup_rows, "created_folders": plan["created_folders"],
+                  "backup_dir": str(backup)}
+        try:
+            import jarvis_receipts as R
+            rid = R.record(RENAME_RECEIPT if kind == "rename" else MOVE_RECEIPT,
+                           plan["preview"], before=before,
+                           after={"target": plan["target"], "updates": plan["updates"],
+                                  "notes": plan["notes"]},
+                           undo=lambda: _batch_restore_before(before))
+        except Exception:                                   # noqa: BLE001
+            rid = ""
+        if not rid:
+            _finish(job_id, state="failed",
+                    message="Nothing was changed, because an undo receipt could not be recorded first.")
+            _audit(kind + "_failed", {"job": job_id, "why": "receipt"})
+            return
+        created = []
+        try:
+            for rel in plan["created_folders"]:
+                full = vault.joinpath(*rel.split("/"))
+                full.mkdir(parents=False, exist_ok=True)
+                created.append(rel)
+            for row in plan["files"]:
+                if row["rel"] == plan["source"]:
+                    continue
+                _write_note(Path(row["full"]), row["new"])
+            if plan["source_unchanged"]:
+                os.replace(str(source_full), str(target_full))
+            else:
+                _write_new_file(target_full, plan["target_data"])
+                os.unlink(str(source_full))
+            _finish(job_id, state="saved", sha256=plan["target_sha"],
+                    target=plan["target"], updates=plan["updates"],
+                    notes=plan["notes"], receipt=rid,
+                    message=plan["preview"] + " You can undo it.")
+            _audit(kind + "d", {"job": job_id, "updates": plan["updates"],
+                                "notes": plan["notes"]})
+        except Exception as exc:                            # noqa: BLE001
+            _batch_restore_before(before)
+            _finish(job_id, state="failed",
+                    message=(f"The {kind} failed ({type(exc).__name__}), so the copies "
+                             "that were saved first were put back."))
+            _audit(kind + "_failed", {"job": job_id, "why": "write"})
+    except Exception as exc:                                # noqa: BLE001
+        _finish(job_id, state="failed",
+                message=f"The {kind} failed ({type(exc).__name__}), so nothing was changed.")
+        _audit(kind + "_failed", {"job": job_id, "why": "exception"})
+
+
+def _start_batch_job(kind: str, plan: dict, gate_check, wait_s: float, by: str) -> tuple:
+    with _lock:
+        waiting = sum(1 for j in _jobs.values() if j.get("state") == "waiting")
+        if waiting >= MAX_WAITING:
+            return _error(429, (f"{MAX_WAITING} note changes are already waiting for "
+                                "approval - answer those cards first, then ask this one."),
+                          state="refused")
+        job_id = "notebatch_" + kind + "_" + secrets.token_hex(8)
+        _jobs[job_id] = {"id": job_id, "kind": kind, "state": "waiting",
+                         "path": plan["source"], "target": plan["target"],
+                         "updates": plan["updates"], "notes": plan["notes"],
+                         "message": plan["preview"], "created": time.time(),
+                         "updated": time.time(), "by": by}
+        while len(_jobs) > MAX_JOBS:
+            oldest = min(_jobs, key=lambda k: _jobs[k]["created"])
+            _jobs.pop(oldest, None)
+    thread = threading.Thread(target=_batch_worker,
+                              args=(job_id, plan, gate_check or _gate_check),
+                              name="jarvis-note-" + kind, daemon=True)
+    thread.start()
+    thread.join(max(0.0, float(wait_s)))
+    code, out = change_status(job_id)
+    if out.get("state") == "waiting":
+        out["id"] = job_id
+    return (202 if out.get("state") == "waiting" else 200), out
+
+
+def handle_rename(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                  by: str = "") -> tuple:
+    """POST /api/notes/rename: same folder, new title, links preserved, one card."""
+    if not isinstance(body, dict):
+        return _error(400, "Need a JSON object with path and title.", state="refused")
+    plan, err = _plan_batch("rename", body, gate_check=gate_check)
+    if err is not None:
+        return err
+    return _start_batch_job("rename", plan, gate_check, wait_s, by)
+
+
+def handle_move(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                by: str = "") -> tuple:
+    """POST /api/notes/move: into an existing (or explicitly created) folder."""
+    if not isinstance(body, dict):
+        return _error(400, "Need a JSON object with path and folder.", state="refused")
+    plan, err = _plan_batch("move", body, gate_check=gate_check)
+    if err is not None:
+        return err
+    return _start_batch_job("move", plan, gate_check, wait_s, by)
+
+
+try:
+    import jarvis_receipts as _RENAME_RC
+    _RENAME_RC.register_restorer(RENAME_RECEIPT, _batch_restore_before)
+    _RENAME_RC.register_restorer(MOVE_RECEIPT, _batch_restore_before)
+except Exception:                                           # noqa: BLE001
+    pass
+
+
+
+def change_status(job_id: str) -> tuple:
+    """GET /api/notes/change?id=: waiting / saved / denied / failed, never text."""
+    jid = str(job_id or "").strip()
+    if not jid:
+        return _error(400, "Need the id of a note change.", state="refused")
+    with _lock:
+        job = dict(_jobs.get(jid) or {})
+    if not job:
+        return _error(404, "There is no note change with that id on this PC.",
+                      state="unknown")
+    out = {
+        "ok": job.get("state") in ("waiting", "saved"),
+        "state": job.get("state"),
+        "kind": job.get("kind") or "",
+        "path": job.get("path"),
+        "sha256": job.get("sha256"),
+        "message": job.get("message") or "",
+    }
+    if job.get("current_sha256"):
+        out["current_sha256"] = job["current_sha256"]
+    if job.get("receipt"):
+        out["receipt"] = job["receipt"]
+    if job.get("snapshot"):
+        out["snapshot"] = job["snapshot"]
+    for key in ("target", "updates", "notes"):
+        if job.get(key) is not None:
+            out[key] = job[key]
+    return 200, out
+
+
+def handle_change_status(query: str = "") -> tuple:
+    """GET /api/notes/change?id=<job id> from the raw query string."""
+    try:
+        jid = (parse_qs(_query(query)).get("id") or [""])[0]
+    except Exception:                                       # noqa: BLE001
+        jid = ""
+    return change_status(jid)
+
+
+# ---------------------------------------------------------------------------
+#   Chat doors (2026-10-31): read and search, deterministic and read-only
+# ---------------------------------------------------------------------------
+#
+# The owner chose all three Obsidian abilities on 2026-10-31. This is the
+# read/search half's backend: the chat answers call THESE functions, which call
+# the same `handle_list` and `handle_read` the routes use - one reader, one
+# vault resolution (`_vault()`), the same hidden-folder/protection/size rules.
+# Nothing here writes, raises a card, or starts a model.
+
+#: How much of one note the chat quotes before it says how much is left.
+CHAT_READ_CHARS = 4000
+#: How many notes one content search will open. Honest about the bound.
+CHAT_SEARCH_SCAN = 500
+#: How many matching titles one search prints.
+CHAT_SEARCH_SHOWN = 5
+
+CHAT_NO_NOTE = "I could not find a note called \"{}\" in the vault."
+CHAT_ONE_AT_A_TIME = "I can read one note at a time; tell me which one."
+CHAT_SEARCH_DOOR = "You can search the whole vault in the notes editor on this PC."
+
+
+def _chat_notes_meta() -> tuple:
+    """Every note's path/title from the ONE list reader; `(None, why)` on error."""
+    code, body = handle_list("")
+    if code != 200:
+        return None, str(body.get("error") or "The vault could not be read.")
+    return list(body.get("notes") or []), ""
+
+
+def chat_find_notes(title: str) -> tuple:
+    """Notes whose title equals (then merely contains) `title`, newest first."""
+    want = str(title or "").strip()
+    if not want:
+        return 400, {"said": CHAT_ONE_AT_A_TIME}
+    notes, why = _chat_notes_meta()
+    if notes is None:
+        return 503, {"said": why}
+    low = want.lower()
+    exact = [n for n in notes if str(n.get("title", "")).lower() == low]
+    if exact:
+        return 200, {"ok": True, "matches": exact, "exact": True}
+    return 200, {"ok": True,
+                 "matches": [n for n in notes if low in str(n.get("title", "")).lower()],
+                 "exact": False}
+
+
+def _chat_read(path: str) -> tuple:
+    return handle_read("?path=" + quote(str(path), safe=""))
+
+
+def chat_read_note(title: str) -> tuple:
+    """One note's text, bounded, named only by the real title it was read from."""
+    code, found = chat_find_notes(title)
+    if code != 200:
+        return code, found
+    matches = found["matches"]
+    if not matches:
+        return 404, {"said": CHAT_NO_NOTE.format(str(title or "").strip())}
+    if len(matches) > 1:
+        return 409, {"said": CHAT_ONE_AT_A_TIME,
+                     "titles": [str(n.get("title") or "") for n in matches[:CHAT_SEARCH_SHOWN]],
+                     "count": len(matches)}
+    note = matches[0]
+    code, read = _chat_read(note.get("path", ""))
+    if code != 200:
+        return code, {"said": str(read.get("error") or "The note could not be read.")}
+    text = str(read.get("text") or "")
+    cut = text[:CHAT_READ_CHARS]
+    return 200, {"ok": True, "title": str(note.get("title") or ""),
+                 "path": note.get("path", ""), "text": cut,
+                 "total_chars": len(text), "more": max(0, len(text) - len(cut))}
+
+
+def chat_search_notes(needle: str) -> tuple:
+    """Titles whose NOTE TEXT contains `needle`; never a body, never a path."""
+    want = str(needle or "").strip()
+    if not want:
+        return 400, {"ok": True, "count": 0, "titles": [], "scanned": 0, "capped": False}
+    notes, why = _chat_notes_meta()
+    if notes is None:
+        return 503, {"said": why}
+    low = want.lower()
+    titles, scanned = [], 0
+    for note in notes[:CHAT_SEARCH_SCAN]:
+        scanned += 1
+        code, read = _chat_read(note.get("path", ""))
+        if code != 200:
+            continue
+        if low in str(read.get("text") or "").lower():
+            titles.append(str(note.get("title") or ""))
+    return 200, {"ok": True, "count": len(titles),
+                 "titles": titles[:CHAT_SEARCH_SHOWN],
+                 "scanned": scanned, "capped": len(notes) > scanned}
+
+
+def chat_open_note(title: str) -> tuple:
+    """The note's title/path when it exists (the chat says to open the Brain)."""
+    code, found = chat_find_notes(title)
+    if code != 200:
+        return code, found
+    matches = found["matches"]
+    if not matches:
+        return 404, {"said": CHAT_NO_NOTE.format(str(title or "").strip())}
+    first = matches[0]
+    return 200, {"ok": True, "title": str(first.get("title") or ""),
+                 "path": first.get("path", ""), "count": len(matches)}
+
+
 # ---------------------------------------------------------------------------
 #   install(): the loader's convention, exactly like receipts and vault
 # ---------------------------------------------------------------------------
@@ -795,6 +3174,10 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 code, out = handle_list(parts.query)
             elif route == READ_PATH:
                 code, out = handle_read(parts.query)
+            elif route == TEMPLATES_PATH:
+                code, out = handle_templates_list()
+            elif route == CHANGE_PATH:
+                code, out = handle_change_status(parts.query)
             else:
                 code, out = handle_save_status(parts.query)
         except Exception as exc:                            # noqa: BLE001
@@ -803,7 +3186,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_POST(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
-        if route != SAVE_PATH:
+        if route not in POST_PATHS:
             return post0(self)
         if not _allowed(self):
             return None
@@ -812,7 +3195,26 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         except Exception:                                   # noqa: BLE001
             body = None
         try:
-            code, out = handle_save(body)
+            if route == CREATE_PATH:
+                code, out = handle_create(body)
+            elif route == APPEND_PATH:
+                code, out = handle_append(body)
+            elif route == TAG_PATH:
+                code, out = handle_tag(body)
+            elif route == INSERT_PATH:
+                code, out = handle_insert(body)
+            elif route == FORMAT_PATH:
+                code, out = handle_format(body)
+            elif route == REPLACE_PATH:
+                code, out = handle_replace(body)
+            elif route == CUSTOMIZE_PATH:
+                code, out = handle_customize(body)
+            elif route == RENAME_PATH:
+                code, out = handle_rename(body)
+            elif route == MOVE_PATH:
+                code, out = handle_move(body)
+            else:
+                code, out = handle_save(body)
         except Exception as exc:                            # noqa: BLE001
             code, out = 503, {"ok": False, "error": type(exc).__name__}
         return self._send(code, out)
@@ -821,8 +3223,9 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     do_POST._jarvis_notes_edit = True
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
-    return ("  notes-edit  browse, read and save any Obsidian note "
-            "(one approval card per save)")
+    return ("  notes-edit  browse and read any Obsidian note; save, create, "
+            "append, tag, rename and move ONE note per request (one approval "
+            "card each, undo receipt); a rename/move also updates the links to it")
 
 
 def _reset_for_tests() -> None:

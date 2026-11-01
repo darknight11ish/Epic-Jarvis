@@ -2666,6 +2666,15 @@ $SHIPPED = @(
     # the "no vault configured" 503. The same entry is at the end of
     # backend/_where.py's SHIPPED list.
     'jarvis_notes_edit.py'
+    # Which app the owner is talking from (jarvis_surface.py, 2026-10-31; the
+    # owner's requirement that Jarvis knows the Android app from the desktop
+    # program and tailors its answers): shipped whole, no patch of its own. The
+    # shipped origin gate (jarvis_owner_check.origin_ok) reads the
+    # `X-Jarvis-Surface` header once per request; jarvis_quick,
+    # jarvis_feature_guide and jarvis_agent use it. Not authentication, never a
+    # secret, and a missing header is `unknown` - the old behaviour. The same
+    # entry is at the end of backend/_where.py's SHIPPED list.
+    'jarvis_surface.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

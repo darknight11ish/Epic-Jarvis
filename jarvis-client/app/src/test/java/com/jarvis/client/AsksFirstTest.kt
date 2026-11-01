@@ -147,6 +147,68 @@ class AsksFirstTest {
         assertNull(AsksFirst.lockdownFrom(buildJsonObject { put("on", "yes") }))
     }
 
+
+    @Test
+    fun `the switchable tools are read-only on the phone, in the PC's own groups and labels`() {
+        val v = view("phone_shipped")
+        val t = requireNotNull(v.tools) { "the phone's real view gained no tools payload" }
+        val raw = cases["phone_shipped"]!!.jsonObject["tools"]!!.jsonObject
+        assertEquals(word("tools_label"), t.label)
+        assertEquals(word("tools_detail"), t.detail)
+        assertEquals(word("tools_pc_only"), AsksFirst.TOOLS_PC_ONLY)
+        assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
+        val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
+        val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
+        assertEquals("21 one-tool switches", 21, rawIds.size)
+        assertEquals("every tool, in the PC's own order",
+            rawIds, t.groups.flatMap { g -> g.rows.map { it.id } })
+        assertEquals("the PC's four group titles, in order",
+            raw["groups"]!!.jsonArray.map { it.jsonObject["title"]!!.jsonPrimitive.content },
+            t.groups.map { it.title })
+        assertEquals("a label is the backend's human label, not the id",
+            rawItems.first()["title"]!!.jsonPrimitive.content,
+            t.groups.first().rows.first().title)
+        val first = t.groups.first().rows.first()
+        assertTrue(AsksFirst.toolState(first) == AsksFirst.TOOLS_OFF ||
+            AsksFirst.toolState(first) == AsksFirst.TOOLS_ON ||
+            AsksFirst.toolState(first) == AsksFirst.WAITING)
+        // The same payload from the PC says the PC may change them.
+        val pc = requireNotNull(view("pc_shipped").tools)
+        assertTrue("from the PC the same payload is switchable", pc.canEnable)
+    }
+
+    @Test
+    fun `the vault organizer is its own row and the TOML-only note says what is left out`() {
+        val t = requireNotNull(view("phone_shipped").tools)
+        val vault = requireNotNull(t.vault) { "the vault organizer's own switch is missing" }
+        assertEquals("Organize an Obsidian vault", vault.title)
+        assertTrue("its own words explain what it does", vault.what.contains("tidy-up"))
+        assertTrue("its state is in words", AsksFirst.vaultState(vault).isNotEmpty())
+        val no = requireNotNull(t.notOffered) { "the not-offered list is missing" }
+        assertEquals("16 tools stay a settings-file choice", 16, no.labels.size)
+        assertTrue("the note says where they really live", no.why.contains("jarvis-framework.toml"))
+        assertTrue("it names the raw ones it never offers", no.why.contains("shell"))
+        assertEquals("the phone shows the PC's own sentence",
+            word("tools_pc_only"), AsksFirst.TOOLS_PC_ONLY)
+    }
+
+    @Test
+    fun `the phone's plate draws the tools read-only and writes nothing`() {
+        val plate = java.io.File(
+            "src/main/java/com/jarvis/client/ui/screens/AsksFirstPlate.kt"
+        ).readText()
+        assertTrue("no tool section drawn", plate.contains("v.tools?.let"))
+        assertTrue("no plain PC-only sentence", plate.contains("AsksFirst.TOOLS_PC_ONLY"))
+        assertTrue("no vault organizer row", plate.contains("t.vault?.let"))
+        assertTrue("no TOML-only note", plate.contains("AsksFirst.TOOLS_TOML_ONLY_TITLE"))
+        val block = plate.substringAfter("v.tools?.let").substringBefore("(if (busy)")
+        assertFalse("a switch was drawn inside the read-only tools block", block.contains("SwitchRow("))
+        for (banned in listOf("JarvisRuntime.makeAskFirst", "JarvisRuntime.setLightsWithoutCard",
+                              "JarvisRuntime.enableTool", "JarvisRuntime.setTool")) {
+            assertFalse("the tools block must not write: $banned", block.contains(banned))
+        }
+    }
+
     @Test
     fun `an older PC says so`() {
         assertNull(AsksFirst.parse(buildJsonObject { put("available", false) }))

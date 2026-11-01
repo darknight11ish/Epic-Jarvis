@@ -7455,6 +7455,7 @@ routed); phone control; commands on this PC; plug-in programs (MCP, id
 big model.
 `tools` is the list the chat's tool loop offers the model
 (`jarvis_agent.offered_tools()` of `[tools].enabled`), in plain names.
+For a tool with an in-app switch (Tier A/B, §43), an Off row's own line says it switches on in Settings, What asks first; Tier C and the tools this slice leaves alone say it stays a settings-file choice (and why).
 
 Both apps show a row as "`name` - `state_words`", then, only when it is on,
 "Goes to: `where`" and "Asks you first: `asks`" (not when `asks` is "-"),
@@ -10298,86 +10299,105 @@ read `decodePendingRows` already uses for `pending`.
   queue's own skipped-row count.
 - **No paging.** The list shows whatever `history` sends in one read; there
   is no "load older" here, unlike Chat history's (§18) `before=`.
-## 43. Offering a reading tool to the AI model, from the PC (added 2026-09-27)
+## 43. In-app switches for tools the AI may use (tiered, 2026-10-31)
 
-The owner's answer (`CLAUDE.md`, 2026-09-27, the answers to
-`docs/OWNER-QUESTIONS-2026-09-27.md`): "Reading tools (calendar, email,
-notes, home status) can be switched on from the PC app, each with a card
-plus Windows Hello; other tools stay in the settings file." This is a
-DIFFERENT setting from §32's "Ask me first": that changes whether an
-offered tool asks first ([autonomy.tiers]); this changes whether the AI
-model is offered the tool AT ALL (`[tools].enabled` in
-`jarvis-framework.toml` - `jarvis_agent.offered_tools()` only ever offers a
-tool named there). Before this, the only way to add `calendar_read`,
-`email_read`, `notes_search` or `home_read` to `[tools].enabled` was to
-hand-edit the settings file; every other tool still is.
+The owner asked for in-app switches instead of hand-editing `[tools].enabled`
+for the tools that can be switched safely. Gemini's 2026-10-31 ruling made it
+**tiered, not indiscriminate**:
 
-Built into `backend/jarvis_asks_first.py` (shipped whole, no new module),
-the same PC-only, Windows-Hello shape as §32.3's loosening card:
+- **Tier A** (in-app now): `calendar_read`, `notes_search`,
+  `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`,
+  `set_timer`, `set_reminder`, `todo_add`, `todo_done`, `coming_up`,
+  `protect_from_jarvis`, `github_search`, `send_file_to_phone`.
+- **Tier B** ("Connected accounts & home", included because the owner clicked
+  for maximum flexibility): `email_check`, `send_email`, `draft_email`,
+  `tidy_inbox`, `home_read`, `home_control`, `my_spending`,
+  `retirement_whatif`.
+- **Tier C stays TOML-only and is NEVER exposed in-app:** `shell_exec`,
+  `run_data_script`, `control_computer`, `control_phone`, `browser_control`,
+  `read_web_page`, `connect_account`, `rea_investigate` - raw shell, computer
+  and browser control stay a deliberate settings-file choice, and REA also
+  needs its own `[rea] enabled = true`.
+- **Not offered in-app by this slice:** `calculator`, `memory_search`,
+  `file_read`, `web_search`, `my_files`, `propose_plan`, `change_setting`,
+  `feature_guide`.
+- The vault organizer's **own** switch (`POST /api/vault/organizer/enabled`)
+  rides in the same UI section as its own row; it is not a `[tools].enabled`
+  toggle.
+
+Every switch keeps the ruling's shape: ONE card plus Windows Hello, PC only,
+one tool at a time; OFF is instant from either app; the phone is read-only.
+Per-use action cards are unchanged - the card says each use still asks, the
+send-file card says it stays off by default because the deterministic chat
+request is the normal door, and the raw tools' own row in "What Jarvis can
+reach" says why they are not in the app.
+
+Built into `backend/jarvis_asks_first.py` (shipped whole, no new module), the
+same PC-only, Windows-Hello shape as §32.3's loosening card:
 `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any
-device but the PC. **Desktop only** (`CLAUDE.md`: no deep config editing on
-the phone) - see `docs/ARCHITECTURE.md` section 8.
+device but the PC. **Desktop only for changing** (`CLAUDE.md`: no deep config
+editing on the phone): the phone reads the same list but `can_enable` is false.
 
 ### 43.1 Route
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** for a tool off the four; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
-| (both) | **The row id is the GATE ACTION's name, not the tool's.** The four rows are `calendar_read`, `email_read`, `notes_search`, `home_read`; the tool the model is offered for the second is **`email_check`** (`jarvis_agent.TOOLS`). Until 2026-09-30 the switch wrote `"email_read"` into `[tools].enabled`, which offered nothing (the page said On, "What Jarvis can reach" said Off, and the tool was not there). Now `jarvis_asks_first.TOOL_NAME` maps each row to its tool, the file gets the tool's name, an old `"email_read"` entry is read as `email_check` (and removed when the switch is turned off), and `test_settings_switches.py` proves it end to end for all four rows | |
-| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app (Rust still refuses it on the phone - no screen calls it there), never held: it only narrows what the model may be offered. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the plain "not offered in-app by this slice" note for a Tier C or unlisted tool, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
+| (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. |
 
-Its state rides on `GET /api/asks_first` (§32.2), which now also carries:
+Its state rides on `GET /api/asks_first` (§32.2), which now carries:
 
 ```
-"tools": {"label": "Offer this to the AI model",
+"tools": {"label": "Let the AI use this",
           "detail": <the sentence above the switches>,
           "can_enable": bool,        true only for a request from this PC
-          "items": [{"id": "calendar_read", "title": "Read your calendar",
-                     "on": bool, "waiting": bool,
-                     "last": {"outcome", "tool", "message", "why", "at"}|null}, ...]}
+          "items": [{"id", "title", "group", "on", "waiting",
+                     "last": {"outcome", "tool", "message", "why", "at"}|null}, ...],
+          "groups": [{"title", "ids"}],          # the page's order
+          "vault": {"id": "vault_organizer", "kind": "switch", "title",
+                    "group", "on", "waiting", "can_enable", "action", "what"},
+          "not_offered": {"tier_c": [...], "not_this_slice": [...],
+                          "labels": {...}, "why": <the plain note>}}
 ```
 
-`items` always lists exactly the four (`jarvis_asks_first.TOOLS_SWITCHABLE`),
-in that order, whatever `here` is - the desktop greys the switch when
-`can_enable` is false or another one's card is waiting; OFF is never held.
-The phone reads the same `GET /api/asks_first` for §32's page and simply
-does not read this key.
+`items` lists exactly Tier A + Tier B (21 tools at 2026-10-31), grouped; `vault`
+is the vault organizer's separate switch; `not_offered` names every tool that is
+deliberately NOT in the app, so the page can say so. The phone reads the same
+`GET /api/asks_first` and simply does not toggle anything (`can_enable` false).
 
 ### 43.2 The card
 
 ```
-Offer "read your calendar" to the AI model?
+Offer this ability to the AI model: "Reading your calendar"?
 
-From now on the AI model may use this tool when it decides to - it can read
-your calendar. This changes one line of your settings file on this PC:
-"calendar_read" is added to [tools].enabled. Nothing else in it changes.
+From now on the AI model may use this ability when it decides to. In plain
+words: Reading your calendar. This changes one line in your settings file on
+this PC; nothing else changes.
 
-This is separate from whether it asks you first: that is set above, in "Ask
-me first", and is unchanged by this card.
+This is separate from whether it asks you first: that is set above, in "Ask me
+first", and is unchanged by this card.
 
-Approving it needs Windows Hello on this PC. You can turn it off again at
-any time from either app, and that is instant.
+It does not approve any use of the ability: each time the AI uses it, "Ask me
+first" still decides whether you are asked.
+
+[for send_file_to_phone:] Sending a file stays off by default on purpose:
+asking in chat ("send me the file ...") is the normal door and works without
+this switch. This switch only lets the AI model pick it on its own.
+
+Approving it needs Windows Hello on this PC. You can turn it off again at any
+time from either app, and that is instant.
 
 If you did not just do this, say no.
 
 If you say no: nothing changes - the AI model is still not offered this
-tool.
+ability.
 ```
 
-Its title: "Jarvis wants to offer a reading tool to the AI model"
-(`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the
-shipped `jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and
-`MUST_ASK` like `loosen_what_asks_first` (§32.3) - it always asks, and it is
-never itself on the switchable list.
-
-**Why this card does not name the settings file either (fixed 2026-10-10).**
-It had the same bug as §32.3's: the card IS the `prompt` the gate reads for
-its own `_PROTECTED` names, so naming `jarvis-framework.toml` got it refused
-at tier `never` and no card was ever shown - 21 `gate.refused_protected` lines
-for `enable_reading_tool` in the owner's audit log, each followed by
-`asks_first.tools.card {"outcome": "refused"}`. Offering a reading tool to the
-model from the app had therefore never worked. Both cards are now held against
-the gate's own list by `backend/test_asks_first.py`.
+Its title: "Jarvis wants to offer a tool to the AI model"
+(`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the shipped
+`jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`: it
+always asks, and it is never itself on the switchable list.
 
 ### 43.3 Writing `[tools].enabled`
 
@@ -28914,6 +28934,189 @@ so a client shows that instead of inventing its own.
   until that deploy. The desktop and phone surfaces are the other two lanes of
   the same feature; this section documents the contract they build against.
 
+### 170.7 The wave-1 writes: create ONE note, append to ONE note, tag ONE note (added 2026-10-31)
+
+The owner's flexibility decision, wave 1: three single-file writes on top of the
+editor, each with ONE approval card, a File Guardian copy first where there are
+old bytes, and an answer that says "You can undo it." Rename, move, delete and
+several notes in one request are NOT here (wave 2) and are refused in plain
+words.
+
+| route | body | answer |
+|---|---|---|
+| `POST /api/notes/create` | `{"path": "...", "text": "..."}` - `text` may be empty | `202` waiting (with `id`) or `200` saved with `sha256` and `receipt`; `409` the path already exists (no card); `400` bad/absolute/outside/hidden/non-text path or a list body; `413` over **2 MiB**; `429` four writes already waiting; `503` no vault configured |
+| `POST /api/notes/append` | `{"path": "...", "text": "...", "expected_sha256": "<hex>"}` | `202`/`200` saved with the new `sha256` and `snapshot` (the File Guardian copy id); `409` the note changed since the request (no card, `current_sha256` named); `404` no note there (create it first); `413` the note or the addition would pass 2 MiB; the same `400`/`429`/`503` shapes |
+| `POST /api/notes/tag` | `{"path": "...", "tag": "recipes", "action": "add"\|"remove", "expected_sha256": "<hex>", "where": "auto"\|"frontmatter"\|"line"}` | `200` `saved` with the new `sha256` and `snapshot`, or `200` `unchanged` when the tag was already there / already absent (no card); `409` stale sha; `400` a tag with a space or no letter/`_`/`-`, a `tags:` value that is not a list, two `tags:` lines, unclosed front matter, or a note that is not valid UTF-8 (all BEFORE any card) |
+| `GET /api/notes/change?id=<job id>` | - | the same waiting/saved/denied/failed shape as the save, plus `kind` (`create`/`append`/`tag`), `path`, `sha256`, `message`, and `receipt` for a create or `snapshot` for the two changes |
+
+- **One card, under the existing action.** All three ask `edit_vault_note` (tier
+  `"ask"` in both shipped `jarvis-framework.toml` files; unclassified, so the
+  gate forces ask and uses its generic warning line - the safe side). The card
+  names the file, says what changes, and the finished answer says "You can undo
+  it." A Deny, an expiry or a refused gate writes nothing.
+- **Undo.** Append and tag take `jarvis_notes.snapshot_vault_before_write()` (the
+  File Guardian) AFTER the card and BEFORE the write; a copy that cannot be made
+  refuses the change in words. Create records one `notes_create` receipt BEFORE
+  the file exists; its Undo removes exactly that file, and refuses if the note
+  changed since (the created sha256 is in the receipt). A failed create discards
+  its receipt.
+- **Append is append-only.** The owner's words are added at the end with the
+  same paragraph rule the daily-note capture uses; the old bytes are never
+  rewritten, and the written block is read back before "Added" is said.
+- **Tags are surgical.** Only the frontmatter `tags:` block (list form), or in
+  `line` mode a visible `#tag` line, is changed; every other byte - other
+  properties, line endings, the body - is kept. `auto` uses the front matter
+  when the note has it and the visible line when it does not. Malformed front
+  matter is refused rather than rewritten.
+- **Hidden lists / App lock unchanged.** The chat fast path refuses to start any
+  of these while the lists are hidden (a fixed sentence, no title, NO card); the
+  apps keep their existing Show gate in front of the editor. The routes serve
+  one file each and no note text goes to a model, a log or a card.
+- **Several notes are refused.** Every route takes ONE path; a body that sends a
+  list is a 400 with "One note at a time, please", and the chat refuses "all my
+  notes"/"every note" in words before any card.
+
+### 170.8 Surgical edits, wave 2: under a heading, at an anchor, formatting, replace (added 2026-10-31)
+
+The owner's follow-up to wave 1: *"add something to a part of the note ... very
+specific (add something before this part, or in bold)"*. Three routes, ONE
+action each, the same single-file shape as the save:
+
+| route | body | what it does |
+|---|---|---|
+| `POST /api/notes/insert` | `{"path", "text", "mode": "under_heading"\|"before"\|"after", "target", "expected_sha256"}` | adds ONE line under the ONE heading whose title matches exactly (case-insensitive), at the END of that section (after its last non-empty line, before the next heading of the same or a higher level); or before/after the ONE line whose text contains the literal anchor exactly once |
+| `POST /api/notes/format` | `{"path", "target", "style": "bold"\|"italic", "action": "add"\|"remove", "expected_sha256"}` | wraps ONE exact occurrence in `**`/`*`, or unwraps one matching pair; refuses a match inside a fenced code block and a span already wrapped (that is a no-op with no card) |
+| `POST /api/notes/replace` | `{"path", "old", "new", "expected_sha256"}` | replaces ONE literal occurrence whose word edges are whole words (a match inside a longer word refuses and says so); never a regex |
+
+- **One exact match or refuse.** Zero or several matching headings/anchors/spans
+  get a plain sentence NAMING the count, before any card; nothing is guessed.
+- **The card shows the exact change.** The gate's detail carries a bounded
+  `preview` (`before`/`after`, plus where it lands). While the hidden lists hide
+  the words the preview is `{"counts_only": true, "changes": 1}` and the chat
+  refuses the request before a card is raised at all.
+- **Undo and safety.** The File Guardian copy is taken AFTER the card and BEFORE
+  the write; the sha256 the request started from is checked at the request and
+  again after the card (TOCTOU); a Deny/expiry/refused gate writes nothing; one
+  Undo restores the exact bytes. Line endings (LF/CRLF), blank lines and the
+  anchor's own bytes are preserved. No deletion exists in these routes.
+- **Chat sentences, no model:** `add <text> under the <Heading> heading in my
+  <note>`, `add <text> before/after <anchor> in my <note>`, `make <text> bold`
+  / `put <text> in italic` / `unbold <text> in my <note>`, `replace <old> with
+  <new> in my <note>`. A plain `add milk to my <note>` still appends at the end
+  (wave 1); an ordinary "make it bold" with no note is still the model's.
+
+### 170.9 Customization, wave 3: one route for the exact edits (added 2026-10-31)
+
+Beyond wave 2's insert/format/replace, ONE action route carries the owner's
+"really enhance customizability" edits. Every action keeps the wave-2 shape:
+one exact match or a plain refusal, ONE `edit_vault_note` card showing the exact
+before/after (or counts only while the hidden lists hide the words), the File
+Guardian copy first, an atomic write, one Undo, no deletions.
+
+| route | body | action values |
+|---|---|---|
+| `POST /api/notes/customize` | `{"path", "action", "expected_sha256", ...}` | `format` (`style`: bold/italic/strike/code, `format_action`: add/remove, `target`); `line` (`line_action`: bullet/number/checklist/quote/heading/plain/untick, `target` = the whole line, `level` for a heading); `rename_heading` (`old`, `new`); `new_section` (`heading`, optional `text`, `level`); `set_property`/`remove_property` (`key`, `value`); `link` (`note`, optional `heading`); `save_template` (`name` optional) |
+| `GET /api/notes/templates` | - | `{"ok", "count", "templates": [names only], "why"}` - never any template text |
+
+- **Exactness.** A line shape needs ONE line equal to `target` after stripping
+  its ends; a heading rename needs ONE heading with that title; a property needs
+  at most one `key:` line; a link refuses a second identical link. Zero or
+  several matches refuse in plain words with the count, before any card.
+- **Properties** are written as YAML: `true`/`false` and numbers stay bare,
+  anything else is a quoted string. Only that one line changes; every other byte
+  (other properties, order, line endings, body) is kept. Malformed front matter
+  is refused, never repaired.
+- **Line shapes** keep the line's indentation, blank lines and line endings:
+  bullet `- `, numbered `1. `, checklist `- [ ] `, quote `> `, heading `#`..`######`;
+  `plain` removes one leading shape; `untick` only changes `- [x]` to `- [ ]`.
+  "these lines"/batch and "move under a heading" are NOT built: the answer says
+  so plainly instead of pretending.
+- **Templates.** Built-ins: workout log (`Warm-up`/`Session`/`Cool-down`/`Notes`,
+  checkboxes), meeting notes for a topic, daily journal, project note. They are
+  created through the existing create route (ONE card, collision refused,
+  receipt Undo). "Save my <note> as a template" writes ONE new `.md` in the
+  Templates plugin's folder from `.obsidian/templates.json`, else
+  `<vault>/Templates/`; an existing template is a 409, never overwritten.
+  "List my templates" reads names only; while the hidden lists hide words the
+  chat refuses with no names and no card.
+- **Not built, said plainly:** deleting a line/note, moving a line under
+  another heading, bulk/`these lines` edits (the exact-match rule cannot be
+  kept), reciprocal links (one link per request), highlighting (non-standard).
+
+### 170.10 Rename and move ONE note, keeping its links working (wave 4, added 2026-10-31)
+
+The owner's next flexibility item: *"rename and move notes with link
+preservation"*. A rename or move is one note's PATH change plus only the link
+text that named it, so the plan is read-only, the card names the file and the
+counts, and ONE approval writes the move and those link bytes. The module is
+still `jarvis_notes_edit.py`; the existing `edit_vault_note` action, one
+ordinary card, the File Guardian copy and one Undo are used. No route deletes a
+note or changes any byte outside the link target.
+
+| route | body | answer |
+|---|---|---|
+| `POST /api/notes/rename` | `{"path": "<rel>", "title": "<new name>"}` | 202 `{"ok": true, "state": "waiting", "id": "<job>", "target": "<new rel>"}`; `GET /api/notes/change?id=` says `saved` / `denied` / `failed` |
+| `POST /api/notes/move` | `{"path": "<rel>", "folder": "<rel folder>", "create_folder": false}` | the same shape; `create_folder` must be exactly true to make a missing folder |
+| both | `new_title` / `new_name` and `target_folder` accepted as aliases | the same |
+
+- **Validation before any card.** The source must be a real `.md` note, a
+  regular file, not a link/junction, not hidden and not protected; the new name
+  must be one filename (no `/`, `\`, `..`, `:` or other path character), at most
+  120 characters, not dot-leading, and the target folder must be inside the
+  vault, real, not hidden and not protected. Rename refuses a name already used
+  by another note; move refuses a file already at the destination. Moving to a
+  missing folder is refused with the words "say create the folder" unless
+  `create_folder` is explicitly true; a folder is never created as a side
+  effect.
+- **Link preservation, exactly.** Before the card the module scans every
+  readable `.md` note in the vault (never protected/hidden text) and builds the
+  changes it would make:
+  - wikilinks `[[old]]`, `[[old|alias]]`, `[[old#section]]` and embeds
+    `![[old]]` are rewritten to the new title on rename; a path-style wikilink
+    `[[folder/old]]` is rewritten on either rename or move;
+  - relative Markdown links such as `[x](old.md)` or `[x](folder/old.md#part)`
+    are resolved from the linking note's folder and rewritten only when they
+    really point at the old note; titles, anchors and angle brackets are kept;
+  - a move keeps a bare `[[old]]` alone because the title did not change
+    (Obsidian resolves it by title), and rewrites only links that named the old
+    path;
+  - **fenced code blocks and inline code are never touched** (the rule is
+    stated in this section and pinned by a test). Links inside them stay
+    byte-identical.
+  Only the matched link text changes; every other byte of every note is kept.
+  The card says the old path -> new path and "updates N link(s) in M note(s)";
+  when lists are visible it also names up to the first three affected note
+  filenames (`Index.md, Projects.md (+2 more)`), and when there are no links it
+  says so and the action is just the file rename/move. While the hidden lists
+  hide private words the card carries counts only and names no file at all.
+- **The write is one batch.** After approval the worker re-checks the source and
+  every link-note hash (a note that changed while the card waited refuses, with
+  no write), asks the File Guardian for a copy of the source and of every note
+  it will change, records ONE undo receipt, writes the link notes, and then
+  atomically moves the source note. A failure puts every copy back; the answer
+  says "You can undo it." ONE Undo restores every original byte and path, and
+  removes a folder the batch created if it is empty.
+- **Chat.** `"rename my Welcome note to Home"`, `"move my Welcome note to
+  Archive"`, `"move Welcome into Projects and fix the links"` and
+  `"move my Welcome note into Archive and create the folder"` are deterministic
+  (no model). The reply gives the same preview counts as the card and the ONE
+  card follows; a denied/expired card writes nothing. A name matching more than
+  one note is refused with the count and no card. A hidden-lists state refuses
+  with no title and no card.
+- **Not built, said plainly:** deleting a note, moving outside the vault,
+  renaming or moving folders, renaming a note onto an existing name, cloud sync,
+  moving several notes at once, updating links inside protected or hidden notes,
+  and following links to remote URLs. The chat says these are not built instead
+  of pretending.
+
+The module's twin `jarvis-backend/jarvis_notes_edit.py` is byte-identical, and
+`backend/test_notes_rename_move.py` proves the temp-vault matrix: rename/move
+success and exact bytes, collision, no links, alias/section/embed/Markdown links,
+fenced and inline-code skips, one batch Undo byte-equality, deny/expiry/guardian
+failure/TOCTOU writing nothing, protected/hidden/symlink/`..` refusals, hidden
+cards, preview sentences and over-capture. It uses a fake gate and a temporary
+vault; the real desktop/phone cards are covered by the field check.
+
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and
@@ -29206,3 +29409,104 @@ routes as `ported`; `backend/test_file_to_phone.py` proves the backend half and
 the phone cannot fetch a file the owner did not approve. The action still
 raises its ONE card and the id still lasts ten minutes and works once.
 
+
+## 173. Which app is asking: the phone or the desktop program (added 2026-10-31)
+
+**It is always on. There is no setting, no opt-in and no first-run step.**
+
+Jarvis can now tell whether the owner is talking to it from the **Android app**
+or from the **desktop program**, and it uses that fact in the answers below. A
+request that says neither is `unknown` and behaves exactly as it did before this
+section existed - so an older client, a script or a test changes nothing.
+
+### 173.1 The header
+
+Both clients add one plain header on **every** request:
+
+    X-Jarvis-Surface: phone        -- the Android app (jarvis-client)
+    X-Jarvis-Surface: desktop      -- the desktop program (Rust + the HUD page)
+
+- It is **additive**. The existing `X-Jarvis-Client: hud` header is unchanged,
+  byte for byte, because the origin check and the cloud-escalation rules read
+  it; nothing here replaces it.
+- It is **not authentication and not a secret**. Access is still decided by the
+  origin check and the token, exactly as before. This header only chooses words,
+  it is never logged, and a request cannot gain anything by sending it.
+- Case does not matter (`Phone` is the phone), and anything that is not exactly
+  `phone` or `desktop` reads as `unknown` - over-capture is refused on purpose.
+- One place per client sends it: the phone's `JarvisApi.Request.Builder.authed()`
+  (and the two pairing posts, which are phone requests too), and the desktop's
+  Rust `jarvis_headers` (every Tauri command) plus the HUD page's one
+  `JARVIS.headers()` builder (every page fetch).
+
+### 173.2 Where the PC reads it
+
+The shipped origin gate - `jarvis_owner_check.origin_ok`, which every chat
+request already passes before anything answers - reads the header **once** for
+that request into `jarvis_surface` (a new shipped module). It is kept on the
+request's own thread, so two requests cannot mix surfaces. A missing module or
+odd headers are `unknown`, never a refusal.
+
+It is used by:
+
+- `jarvis_quick.py` - the deterministic quick answers;
+- `jarvis_feature_guide.py` - the feature/limits answers, through each row's
+  own `surface` and `where` fields;
+- `jarvis_agent.py` - one system sentence for the model:
+  "The owner is talking to you from the Android app." /
+  "... from the desktop program." (nothing when unknown).
+
+### 173.3 What changes in the answers
+
+- **Feature answers use the row's own fields with the app that is asking.** A
+  PC-only feature asked from the phone says it is on the PC only and where the
+  PC door is; a phone-only feature asked from the desktop says it is on the
+  phone only and where the phone door is; a both-apps feature keeps its facts
+  and adds only which app is asking. Nothing is reworded: `surface`, `where` and
+  `surface_reason` stay the feature list's own words.
+- **Room-specific quick asks name that app's doors.** "Open the second brain"
+  from the phone says the Brain is in the phone app (tap Brain on Home) and
+  where the PC's window opens; "open Jarvis settings" from the phone says the
+  phone's own Settings are in the app and the PC's settings window opens on the
+  PC. From the desktop the old sentences are unchanged ("Opening the Brain on
+  this PC."), and with no header the old words are returned.
+- **General conversation** gets the one system sentence above, so the model can
+  say "on your phone you can ..." without inventing a route.
+
+No route, no card, no tool and no setting is added or changed by any of this.
+The phone still cannot open a window on the PC, and a phone answer carries no
+route field that would pretend otherwise.
+
+### 173.4 One-sided? No.
+
+Both clients send the header and both apps' routes are named in the answers, so
+there is nothing to record in `docs/ARCHITECTURE.md` §8 as deliberately
+one-sided. `tools/check_parity.py` is unchanged (no route was added).
+
+### 173.5 What proves it
+
+- `backend/test_surface.py` - the header parses to exactly phone/desktop/unknown
+  (including over-capture traps), the origin gate still allows and refuses as
+  before, "open the second brain"/"open Jarvis settings" flip by surface, a
+  phone-only row asked from the desktop and a desktop-only row asked from the
+  phone flip wording using the rows' own `where`, the model's rules-first
+  system turn carries the sentence for a stub model, and with no header every
+  answer is exactly the old one.
+- `jarvis-client`'s `SurfaceHeaderTest` - the one authed builder and the pairing
+  posts send `X-Jarvis-Surface: phone` and still send `X-Jarvis-Client: hud`.
+- the Rust `commands::surface_header_tests` - the one `jarvis_headers` adds
+  `X-Jarvis-Surface: desktop` beside the unchanged client header.
+- `jarvis-backend/jarvis_surface.py` is the byte-identical published base of
+  `backend/jarvis_surface.py`; both `SHIPPED` lists name it.
+
+### 173.6 The HUD question on the phone
+
+The owner's screenshot also showed the phone answering "can I edit the HUD in the
+jarvis app?" with *"Jarvis does not currently offer a built-in method…"*, which is
+false about the product: the HUD's layout is edited on the PC. With the surface
+header, that question from the **phone** is now answered deterministically and
+truthfully - the HUD's layout is edited on the PC (Settings' "Edit HUD in the
+window", or the "Edit HUD" button in the HUD's own header), while this app's own
+look is in Appearance (theme, the face, face size, text size and spacing). No
+phone-side HUD editor is claimed, because there is none. With no header, or from
+the desktop, the old path is untouched; `backend/test_surface.py` pins both.

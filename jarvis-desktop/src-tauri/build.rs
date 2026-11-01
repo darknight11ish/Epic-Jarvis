@@ -538,6 +538,9 @@ fn main() {
             "set_asks_first",
             "set_lights_without_card",
             "set_tool_enabled",
+            // The vault organizer's own switch (2026-10-31 tiered tool
+            // switches): ONE PC-only card + Windows Hello, OFF at once.
+            "set_vault_organizer_enabled",
             // Settings' "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the
             // owner's request of 2026-10-08; backend/prompt-coach.patch):
             // whether the coach is on, in the PC's own words (a read), and
