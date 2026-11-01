@@ -2141,6 +2141,8 @@ $SHIPPED = @(
     'jarvis_photo_remind.py'     # "Photo to reminder": the dates in a picture, read on this PC and PROPOSED, never set by itself (photo-reminder.patch)
     # --- "PC help" (2026-09-28, no patch of its own) ---
     'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
+    # --- Read-only PC facts (2026-10-31, no patch of its own) ---
+    'jarvis_pc_facts.py'         # the same readers as PC help, put together for the chat answers about disk/RAM/CPU/GPU/uptime/current model; jarvis_agent.py calls it (wave-2 PC-stats lane; the same entry is in backend/_where.py's SHIPPED list)
     # --- Tutorials and the FAQ (2026-10-05) ---
     'jarvis_tutorials.py'        # the owner's own request: one catalogue for both apps and the reading progress kept on the PC (tutorials.patch); no gate line, no card, no tool
     # --- "Smarter answers" (2026-09-28, no patch of its own) ---
