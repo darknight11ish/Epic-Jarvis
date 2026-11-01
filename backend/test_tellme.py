@@ -64,6 +64,7 @@ import tempfile
 import time
 import traceback
 import types
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -168,7 +169,12 @@ class World:
         self.clock = Clock(t)
         self.events, self.cards, self.reads = [], [], []
         self.answer, self.tier, self.read_tier = answer, tier, read_tier
-        path = _TMP / f"{name}-{len(os.listdir(_TMP))}.db"
+        # A UNIQUE database per World. This used to be `len(os.listdir(_TMP))`,
+        # which repeats whenever an earlier World's file was removed - two
+        # Worlds then share one scheduler and a later page test sees the five
+        # page watches a former test left behind (found 2026-11-01 on the
+        # clean-config CI run: "there are already 5 watching a web page").
+        path = _TMP / f"{name}-{uuid.uuid4().hex[:12]}.db"
         self.s = S.Scheduler(path, clock=self.clock, gate=self.gate,
                              tier_of=lambda a: self.tier, spawn=self.spawn,
                              publish=lambda k, d: self.events.append((k, d)))
