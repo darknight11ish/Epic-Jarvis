@@ -2872,6 +2872,30 @@ html[data-cal-view="day"] .cal-side{display:none;}
   .cal-side{display:none;}
   .cal-form-grid{grid-template-columns:repeat(2, minmax(0, 1fr));}
 }
+
+/* ---- the Memory tab's card door (2026-10-31, the owner's screenshots): --- *
+ * the pending memory cards are a LIST in the Memory panel, not only the
+ * floating banner. The HUD still decides nothing here; each row says what the
+ * card is and offers Review (opens the Brain) and Dismiss (the banner's own
+ * local removal). While the lists are hidden the list shows only the sentence
+ * hud-safety.js already owns. */
+#memory-door{margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
+#memory-door[hidden]{display:none;}
+#memory-door .hud-label{margin:0 0 6px;}
+.memory-door-list{list-style:none; display:flex; flex-direction:column; gap:8px; margin:0; padding:0;}
+.memory-door-card{border:1px solid var(--line); border-radius:5px; padding:8px 9px;
+  background:rgb(var(--accent-rgb) / .05); display:flex; flex-direction:column; gap:5px;}
+.memory-door-kind{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ice);}
+.memory-door-words{font-size:12px; line-height:1.4; color:var(--text); overflow-wrap:anywhere;}
+.memory-door-replaces{font-size:11px; line-height:1.35; color:var(--dim); overflow-wrap:anywhere;}
+.memory-door-btns{display:flex; gap:6px; flex-wrap:wrap;}
+.memory-door-btns button{font:inherit; font-size:11px; padding:4px 8px; cursor:pointer;
+  color:var(--text); background:transparent; border:1px solid var(--line); border-radius:4px;}
+.memory-door-btns button:hover{color:var(--ice); border-color:rgb(var(--accent-rgb) / .5);}
+.memory-door-empty, .memory-door-hidden, .memory-door-where{margin:6px 0 0; font-size:11.5px;
+  line-height:1.4; color:var(--dim);}
+.memory-door-hidden{color:var(--text); font-weight:600;}
+
 </style>
 
 <!-- ==================================================================== *
@@ -3767,6 +3791,13 @@ html[data-cal-view="day"] .cal-side{display:none;}
       <div class="readout"><span class="k">entities</span><span class="v" id="r-ents">—</span></div>
       <div class="readout"><span class="k">abilities on</span><span class="v" id="r-tools">—</span></div>
       <div class="readout"><span class="k">recalled</span><span class="v ice" id="r-mem">—</span></div>
+      <div id="memory-door" hidden>
+        <div class="hud-label">Memory cards waiting for you</div>
+        <p class="memory-door-hidden" id="memory-door-hidden" hidden></p>
+        <ul class="memory-door-list" id="memory-door-list"></ul>
+        <p class="memory-door-empty" id="memory-door-empty" hidden>No memory cards are waiting. New facts Jarvis wants to remember will show up here.</p>
+        <p class="memory-door-where" id="memory-door-where">Memory is the Memory tab in the Brain window - decide each card there.</p>
+      </div>
     </div>
 
     <div class="rail-section bento-budget" id="rail-budget">
@@ -8922,23 +8953,264 @@ async function initPoll(){
       const j = await m.json();
       const n = (j.pending || []).length;
       const old = document.getElementById("init-memory");
-      if(old && (n === 0 || old.dataset.n !== String(n))) old.remove();
-      if(n > 0 && !document.getElementById("init-memory")){
-        const el = initCard(
-          `<div class="hdr"><span class="who">${n} memory card${n === 1 ? "" : "s"} waiting for you</span><span class="kind">memory</span></div>`
-          + `<div class="det">Review them in the Brain window's Memory tab (tray icon, then Open the Brain). `
-          + `Each card there shows what it would replace and warns about anything that looks slipped in. Nothing is kept until you say so.</div>`
-          + `<div class="btns"><button class="no">Dismiss</button></div>`);
-        if(el){
-          el.id = "init-memory";
-          el.dataset.n = String(n);
-          el.querySelector(".no").onclick = () => el.remove();
+      // On the Memory tab the list below is the door, so the floating banner
+      // collapses; on every other tab it stays the owner's attention signal.
+      const onMemoryTab = document.body.dataset.hudTab === "memory";
+      if(onMemoryTab){ if(old) old.remove(); }
+      else {
+        if(old && (n === 0 || old.dataset.n !== String(n))) old.remove();
+        if(n > 0 && !document.getElementById("init-memory")){
+          const el = initCard(
+            `<div class="hdr"><span class="who">${n} memory card${n === 1 ? "" : "s"} waiting for you</span><span class="kind">memory</span></div>`
+            + `<div class="det">Review them in the Brain window's Memory tab (tray icon, then Open the Brain). `
+            + `Each card there shows what it would replace and warns about anything that looks slipped in. Nothing is kept until you say so.</div>`
+            + `<div class="btns"><button class="no">Dismiss</button></div>`);
+          if(el){
+            el.id = "init-memory";
+            el.dataset.n = String(n);
+            el.querySelector(".no").onclick = () => memoryDismiss(el);
+          }
         }
       }
     }
+    if (window.__hudMemoryDoor) window.__hudMemoryDoor.beat();
   }catch(e){}
   finally{ INIT.inflight = false; }
 }
+
+/* == memory door begin == */
+/* The Memory tab's own list of the pending memory cards. It reads the SAME
+ * route the phone's Learning plate reads (the two flags make the backend
+ * include retire cards and the once-a-day sleep offer), draws each card's own
+ * words and kind, and offers the same two doors the banner offers: Review in
+ * the Brain (navigation only - there is no "memory" place in open_fix_place,
+ * so it opens the Brain and the line under the list says where Memory is) and
+ * Dismiss (the banner's own local removal, shared through memoryDismiss - no
+ * memory decision leaves this page). No approval, no sleep-time write, no
+ * decide/keep/forget route is referenced. While App lock or "Hide memory
+ * lists" is on, nothing but the owner-independent sentence is drawn.
+ */
+var MEMORY_DOOR = {
+  full: "/api/memory/pending?retire_cards=1&sleep_offer=1",
+  cards: "/api/memory/pending?retire_cards=1",
+  rows: [],
+  offer: null,
+  offerDismissed: false,
+  dismissed: {},
+  hidden: false,
+  inflight: false
+};
+
+function memoryHiddenSentence(){
+  return typeof window.__hudHiddenWords === "string" && window.__hudHiddenWords
+    ? window.__hudHiddenWords : "Memory lists are hidden until you unlock.";
+}
+
+function memoryDoorKind(row){
+  if(row && row.source === "feedback_retire") return "Retire";
+  var rid = row && row.replaces_id;
+  if(rid !== null && rid !== undefined && String(rid) !== "" && String(rid) !== "0") {
+    return "Correction";
+  }
+  return "New fact";
+}
+
+function memoryDoorWords(row){
+  if(!row) return "";
+  if(memoryDoorKind(row) === "Retire"){
+    return String(row.replaces_text || row.text || "(the PC did not say which fact)");
+  }
+  return String(row.text || "(no words)");
+}
+
+function memoryDoorOffer(offer){
+  if(!offer || typeof offer !== "object") return null;
+  return { id:"sleep_offer", kind:"Sleep offer",
+    words:String(offer.title || offer.what || "The overnight tidy-up"),
+    detail:String(offer.what || "") };
+}
+
+/* ONE dismiss for the banner and the list: the banner's button and every
+ * list row call this same function. It removes the node; it never decides,
+ * never posts, and never touches the PC's queue. */
+function memoryDismiss(el){
+  if(el && el.parentNode) el.parentNode.removeChild(el);
+}
+
+function paintMemoryDoor(){
+  var box = document.getElementById("memory-door");
+  if(!box) return;
+  var onMemoryTab = document.body.dataset.hudTab === "memory";
+  box.hidden = !onMemoryTab;
+  if(!onMemoryTab) return;
+  var hiddenEl = document.getElementById("memory-door-hidden");
+  var listEl = document.getElementById("memory-door-list");
+  var emptyEl = document.getElementById("memory-door-empty");
+  var whereEl = document.getElementById("memory-door-where");
+  var hidden = MEMORY_DOOR.hidden === true;
+  if(hiddenEl){
+    hiddenEl.hidden = !hidden;
+    hiddenEl.textContent = hidden ? memoryHiddenSentence() : "";
+  }
+  if(!listEl) return;
+  listEl.replaceChildren();
+  var shown = [];
+  if(!hidden){
+    for(var i = 0; i < MEMORY_DOOR.rows.length; i++){
+      var row = MEMORY_DOOR.rows[i];
+      var id = row && row.id !== undefined ? String(row.id) : "";
+      if(MEMORY_DOOR.dismissed[id]) continue;
+      shown.push({ id: row && row.id, kind: memoryDoorKind(row),
+        words: memoryDoorWords(row),
+        replaces: memoryDoorKind(row) === "Correction"
+          ? String(row.replaces_text || row.replaces || "") : "" });
+    }
+    var offer = memoryDoorOffer(MEMORY_DOOR.offer);
+    if(offer && !MEMORY_DOOR.offerDismissed && !MEMORY_DOOR.dismissed["sleep_offer"]){
+      shown.push(offer);
+    }
+  }
+  for(var k = 0; k < shown.length; k++) listEl.appendChild(memoryDoorCardEl(shown[k]));
+  if(emptyEl) emptyEl.hidden = hidden || shown.length > 0;
+  if(whereEl) whereEl.hidden = hidden;
+}
+
+function memoryDoorCardEl(card){
+  var li = document.createElement("li");
+  li.className = "memory-door-card";
+  li.dataset.memoryKind = card.kind;
+  var kind = document.createElement("div");
+  kind.className = "memory-door-kind";
+  kind.textContent = card.kind;
+  li.appendChild(kind);
+  var words = document.createElement("div");
+  words.className = "memory-door-words";
+  words.textContent = card.words;
+  li.appendChild(words);
+  if(card.replaces){
+    var rep = document.createElement("div");
+    rep.className = "memory-door-replaces";
+    rep.textContent = "Replaces: " + card.replaces;
+    li.appendChild(rep);
+  }
+  var btns = document.createElement("div");
+  btns.className = "memory-door-btns";
+  var review = document.createElement("button");
+  review.type = "button";
+  review.className = "memory-door-review";
+  review.textContent = "Review in the Brain";
+  review.onclick = function(){ openMemoryInBrain(); };
+  btns.appendChild(review);
+  var dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "memory-door-dismiss no";
+  dismiss.textContent = "Dismiss";
+  dismiss.onclick = function(){
+    var id = card.id === undefined ? "" : String(card.id);
+    if(id === "sleep_offer") MEMORY_DOOR.offerDismissed = true;
+    else MEMORY_DOOR.dismissed[id] = true;
+    memoryDismiss(li);
+    paintMemoryDoor();
+  };
+  btns.appendChild(dismiss);
+  li.appendChild(btns);
+  return li;
+}
+
+/* The one navigation the list offers. open_fix_place has no "memory" place,
+ * so the Brain opens and the line above the list says which tab to use. */
+function openMemoryInBrain(){
+  try {
+    var core = window.__TAURI__ && window.__TAURI__.core;
+    if(core && typeof core.invoke === "function"){
+      return core.invoke("open_fix_place", {place:"brain"});
+    }
+  } catch(e) { /* a plain browser has no shell; the tray still opens the Brain */ }
+  return null;
+}
+
+async function readMemoryLock(){
+  try {
+    var core = window.__TAURI__ && window.__TAURI__.core;
+    if(core && typeof core.invoke === "function"){
+      var flags = await core.invoke("get_lock_flags");
+      MEMORY_DOOR.hidden = Boolean(flags && (flags.appLock === true ||
+                                            flags.privateAnswers === true));
+    }
+  } catch(e) { /* no shell / no answer: never guess that the lists are shown */ }
+  paintMemoryDoor();
+}
+
+async function refreshMemoryDoor(withOffer){
+  if(!MEMORY_DOOR || document.body.dataset.hudTab !== "memory") {
+    paintMemoryDoor();
+    return;
+  }
+  if(MEMORY_DOOR.inflight) return;
+  MEMORY_DOOR.inflight = true;
+  try {
+    var path = withOffer ? MEMORY_DOOR.full : MEMORY_DOOR.cards;
+    var r = await jfetch(path, {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    if(r.ok){
+      var j = await r.json();
+      MEMORY_DOOR.rows = Array.isArray(j.pending) ? j.pending : [];
+      var offer = j.setup && j.setup.sleep_time_offer;
+      if(offer && !MEMORY_DOOR.offerDismissed) MEMORY_DOOR.offer = offer;
+    }
+  } catch(e) { /* the banner also goes quiet; no invented cards */ }
+  finally {
+    MEMORY_DOOR.inflight = false;
+    paintMemoryDoor();
+  }
+}
+
+function memoryDoorTabChanged(){
+  if(document.body.dataset.hudTab === "memory"){
+    var banner = document.getElementById("init-memory");
+    if(banner) banner.remove();
+    readMemoryLock();
+    refreshMemoryDoor(true);
+  } else {
+    paintMemoryDoor();
+    // The banner is the attention signal on every other tab; put it back at
+    // once rather than waiting up to 30 s for the next poll beat.
+    if (typeof window.__hudInitPoll === "function") window.__hudInitPoll();
+  }
+}
+
+function memoryDoorBeat(){
+  if(document.body.dataset.hudTab === "memory") refreshMemoryDoor(false);
+}
+
+window.__hudMemoryDoor = {
+  refresh: refreshMemoryDoor,
+  beat: memoryDoorBeat,
+  paint: paintMemoryDoor,
+  tabChanged: memoryDoorTabChanged,
+  state: MEMORY_DOOR,
+  kind: memoryDoorKind,
+  words: memoryDoorWords
+};
+
+(function(){
+  try {
+    var ev = window.__TAURI__ && window.__TAURI__.event;
+    if(ev && typeof ev.listen === "function"){
+      ev.listen("private-hidden", function(){
+        MEMORY_DOOR.hidden = true;
+        paintMemoryDoor();
+      }).catch(function(){});
+      ev.listen("security-changed", function(){ readMemoryLock(); }).catch(function(){});
+    }
+  } catch(e) { /* plain browser: no lock events, and no memory list without a PC */ }
+  window.addEventListener("focus", function(){
+    if(document.body.dataset.hudTab === "memory") readMemoryLock();
+  });
+  readMemoryLock();
+}());
+/* == memory door end == */
+
+window.__hudInitPoll = initPoll;
 initPoll();
 
 /* ---------------------------------------------------------------------- *
@@ -9297,6 +9569,7 @@ subscribe();
     document.documentElement.setAttribute("data-hud-tab", body.dataset.hudTab);
     placeReminders();
     refreshTab();
+    if (window.__hudMemoryDoor) window.__hudMemoryDoor.tabChanged();
     // The Studio stage's Galaxy tab can be the face's home (2026-10-29: the
     // hidden galaxy's space). Choosing another tab takes it off screen again,
     // so the one place that decides whether the face iframe runs is told.
