@@ -34,7 +34,20 @@ export class JarvisPanel extends ItemView {
   private bodyEl: HTMLElement | null = null;
   private resultEl: HTMLElement | null = null;
   private question = "";
+  /**
+   * The insert draft, its heading and the note it was typed for. They are kept
+   * together so a line typed for one note can never be sent for another: when
+   * the active note changes, this panel clears the draft instead of carrying it.
+   */
   private insertDraft = "";
+  private insertHeading = "";
+  private insertNotePath = "";
+  /** The template picker's choice and the new-note path, kept across re-renders. */
+  private templateChoice = "";
+  private templateNotePathValue = "";
+  private templatePathTouched = false;
+  /** The last read-only answer, kept across re-renders so the panel does not lose it. */
+  private askAnswer = "Read-only: Jarvis answers here.";
   /** The last write result, kept across re-renders so the PC's sentence is not wiped. */
   private lastResultMessage = READY_MESSAGE;
   private lastResultKind: WriteKind | undefined = undefined;
@@ -162,7 +175,7 @@ export class JarvisPanel extends ItemView {
     const ask = row.createEl("button", { text: "Ask", cls: "mod-cta" });
     const capture = row.createEl("button", { text: "Capture selection" });
     const answer = el.createDiv({ cls: "jarvis-answer" });
-    answer.setText("Read-only: Jarvis answers here.");
+    answer.setText(this.askAnswer);
 
     ask.addEventListener("click", () => {
       void (async () => {
@@ -185,11 +198,12 @@ export class JarvisPanel extends ItemView {
             contextText,
             context.path,
           );
-          answer.setText(
-            outcome.kind === "ok" ? outcome.answer : "Could not ask Jarvis: " + outcome.message,
-          );
+          this.askAnswer =
+            outcome.kind === "ok" ? outcome.answer : "Could not ask Jarvis: " + outcome.message;
+          answer.setText(this.askAnswer);
         } catch (error) {
-          answer.setText("Could not ask Jarvis: " + shortError(error));
+          this.askAnswer = "Could not ask Jarvis: " + shortError(error);
+          answer.setText(this.askAnswer);
         } finally {
           ask.disabled = false;
         }
@@ -214,6 +228,14 @@ export class JarvisPanel extends ItemView {
     });
 
     /* Insert one line under one of the note's own headings. */
+    // The draft, the chosen heading and the note belong together. If the active
+    // note changed, start clean for the new note - never carry a line typed for
+    // one note into another.
+    if (this.insertNotePath !== context.path) {
+      this.insertNotePath = context.path;
+      this.insertDraft = "";
+      this.insertHeading = "";
+    }
     el.createEl("p", { cls: "jarvis-label", text: "Insert under a heading" });
     const headingSelect = el.createEl("select", { cls: "dropdown jarvis-select" });
     if (context.headings.length) {
@@ -223,6 +245,12 @@ export class JarvisPanel extends ItemView {
         option.text = headingLabel(heading);
         headingSelect.appendChild(option);
       }
+      const remembered = context.headings.some((heading) => heading.text === this.insertHeading);
+      headingSelect.value = remembered ? this.insertHeading : context.headings[0].text;
+      this.insertHeading = headingSelect.value;
+      headingSelect.addEventListener("change", () => {
+        this.insertHeading = headingSelect.value;
+      });
     } else {
       const option = document.createElement("option");
       option.value = "";
@@ -293,6 +321,11 @@ export class JarvisPanel extends ItemView {
     templatePath.type = "text";
     templatePath.className = "jarvis-text";
     templatePath.placeholder = "New note path, vault-relative (for example project.md)";
+    templatePath.value = this.templateNotePathValue;
+    templatePath.addEventListener("input", () => {
+      this.templateNotePathValue = templatePath.value;
+      this.templatePathTouched = true;
+    });
     el.appendChild(templatePath);
     const createRow = el.createDiv({ cls: "jarvis-row" });
     const createButton = createRow.createEl("button", { text: "Create note from template", cls: "mod-cta" });
@@ -309,13 +342,24 @@ export class JarvisPanel extends ItemView {
   ): Promise<void> {
     const text = insertInput.value.trim();
     const heading = headingSelect.value;
-    const path = this.plugin.activeFilePath();
+    // The draft belongs to the note recorded when it was typed. Refuse loudly if
+    // the active note has moved on, rather than send the line to a different note.
+    const path = this.insertNotePath || this.plugin.activeFilePath();
     if (!text) {
       new Notice("Type the line to add first.");
       return;
     }
     if (!heading || !path) {
       new Notice("Pick a heading and open a note first.");
+      return;
+    }
+    if (this.plugin.activeFilePath() !== path) {
+      this.showResult(
+        "The active note changed, so nothing was sent. The line still belongs to " +
+          path +
+          " - open that note again and retry.",
+        "error",
+      );
       return;
     }
     button.disabled = true;
@@ -439,18 +483,21 @@ export class JarvisPanel extends ItemView {
       select.appendChild(option);
     }
     const firstUsable = choices.find((choice) => canCreateFromTemplate(choice));
-    if (firstUsable) select.value = firstUsable.name;
+    // Restore the remembered template when it is still offered and usable, so a
+    // re-render does not silently switch which template "Create" would use.
+    const remembered = choices.find(
+      (choice) => choice.name === this.templateChoice && canCreateFromTemplate(choice),
+    );
+    const initial = remembered ?? firstUsable;
+    select.value = initial ? initial.name : "";
+    if (initial) this.templateChoice = initial.name;
     // "Jarvis only" names are listed but cannot be created from: no route sends
     // template text back, and the plugin will not invent a body.
-    createButton.disabled = !firstUsable;
-    // The offered path follows the chosen template until the owner types one.
-    let pathTouched = false;
-    pathInput.addEventListener("input", () => {
-      pathTouched = true;
-    });
+    createButton.disabled = select.value === "";
     const refresh = (): void => {
       void (async () => {
         const name = select.value;
+        this.templateChoice = name;
         if (!name) {
           preview.setText("");
           createButton.disabled = true;
@@ -462,7 +509,12 @@ export class JarvisPanel extends ItemView {
         try {
           const body = await this.readVaultTemplate(filePath);
           preview.setText("Preview (read-only):\n" + clip(body, TEMPLATE_PREVIEW_CHARS));
-          if (!pathTouched) pathInput.value = templateNotePath(name);
+          // The offered path follows the chosen template until the owner types
+          // one; both survive a re-render.
+          if (!this.templatePathTouched) {
+            pathInput.value = templateNotePath(name);
+            this.templateNotePathValue = pathInput.value;
+          }
         } catch (error) {
           preview.setText(
             "This template's text cannot be read from the vault (" +

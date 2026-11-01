@@ -790,3 +790,27 @@ describe("a card answered very fast is not an error", () => {
     assert.match(outcome.message, /nothing was changed/i);
   });
 });
+
+describe("a capture state of failed is not filed", () => {
+  test("state failed maps to not_filed, never to filed", () => {
+    const outcome = interpretCaptureReply(200, {
+      ok: true,
+      state: "failed",
+      message: "Not filed: the daily note could not be written.",
+    });
+    assert.equal(outcome.kind, "not_filed");
+    assert.equal(outcome.message, "Not filed: the daily note could not be written.");
+  });
+
+  test("state denied and timed_out also map to not_filed", () => {
+    for (const state of ["denied", "timed_out"]) {
+      const outcome = interpretCaptureReply(200, { ok: true, state });
+      assert.equal(outcome.kind, "not_filed", "state " + state + " must not be filed");
+    }
+  });
+
+  test("state filed still maps to filed", () => {
+    const outcome = interpretCaptureReply(200, { ok: true, state: "filed", message: "Filed." });
+    assert.equal(outcome.kind, "filed");
+  });
+});

@@ -456,6 +456,17 @@ export function interpretCaptureReply(status: number, body: Record<string, unkno
       httpStatus: status,
     };
   }
+  // Any other terminal state the backend reports means it was NOT filed. This
+  // must come before the 2xx fallback: a `state:"failed"` answer is a failure,
+  // not a success that merely lacks a known state word.
+  if (state === "failed" || state === "denied" || state === "timed_out" || state === "not_filed") {
+    return {
+      kind: "not_filed",
+      message: said || "Not captured: " + (text(data.error) || "Jarvis did not file it."),
+      jobId: text(data.id),
+      httpStatus: status,
+    };
+  }
   if (status >= 200 && status < 300) {
     return {
       kind: "filed",

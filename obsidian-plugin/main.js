@@ -354,6 +354,14 @@ function interpretCaptureReply(status, body) {
       httpStatus: status
     };
   }
+  if (state === "failed" || state === "denied" || state === "timed_out" || state === "not_filed") {
+    return {
+      kind: "not_filed",
+      message: said || "Not captured: " + (text(data.error) || "Jarvis did not file it."),
+      jobId: text(data.id),
+      httpStatus: status
+    };
+  }
   if (status >= 200 && status < 300) {
     return {
       kind: "filed",
@@ -901,7 +909,20 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     this.bodyEl = null;
     this.resultEl = null;
     this.question = "";
+    /**
+     * The insert draft, its heading and the note it was typed for. They are kept
+     * together so a line typed for one note can never be sent for another: when
+     * the active note changes, this panel clears the draft instead of carrying it.
+     */
     this.insertDraft = "";
+    this.insertHeading = "";
+    this.insertNotePath = "";
+    /** The template picker's choice and the new-note path, kept across re-renders. */
+    this.templateChoice = "";
+    this.templateNotePathValue = "";
+    this.templatePathTouched = false;
+    /** The last read-only answer, kept across re-renders so the panel does not lose it. */
+    this.askAnswer = "Read-only: Jarvis answers here.";
     /** The last write result, kept across re-renders so the PC's sentence is not wiped. */
     this.lastResultMessage = READY_MESSAGE;
     this.lastResultKind = void 0;
@@ -1005,7 +1026,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     const ask = row.createEl("button", { text: "Ask", cls: "mod-cta" });
     const capture = row.createEl("button", { text: "Capture selection" });
     const answer = el.createDiv({ cls: "jarvis-answer" });
-    answer.setText("Read-only: Jarvis answers here.");
+    answer.setText(this.askAnswer);
     ask.addEventListener("click", () => {
       void (async () => {
         ask.disabled = true;
@@ -1018,11 +1039,11 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
             contextText,
             context.path
           );
-          answer.setText(
-            outcome.kind === "ok" ? outcome.answer : "Could not ask Jarvis: " + outcome.message
-          );
+          this.askAnswer = outcome.kind === "ok" ? outcome.answer : "Could not ask Jarvis: " + outcome.message;
+          answer.setText(this.askAnswer);
         } catch (error) {
-          answer.setText("Could not ask Jarvis: " + shortError(error));
+          this.askAnswer = "Could not ask Jarvis: " + shortError(error);
+          answer.setText(this.askAnswer);
         } finally {
           ask.disabled = false;
         }
@@ -1042,6 +1063,11 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       cls: "jarvis-hint",
       text: "Each edit raises Jarvis's own one card. Answer it in the Jarvis window on the PC; this panel only waits and reports."
     });
+    if (this.insertNotePath !== context.path) {
+      this.insertNotePath = context.path;
+      this.insertDraft = "";
+      this.insertHeading = "";
+    }
     el.createEl("p", { cls: "jarvis-label", text: "Insert under a heading" });
     const headingSelect = el.createEl("select", { cls: "dropdown jarvis-select" });
     if (context.headings.length) {
@@ -1051,6 +1077,12 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
         option.text = headingLabel(heading);
         headingSelect.appendChild(option);
       }
+      const remembered = context.headings.some((heading) => heading.text === this.insertHeading);
+      headingSelect.value = remembered ? this.insertHeading : context.headings[0].text;
+      this.insertHeading = headingSelect.value;
+      headingSelect.addEventListener("change", () => {
+        this.insertHeading = headingSelect.value;
+      });
     } else {
       const option = document.createElement("option");
       option.value = "";
@@ -1116,6 +1148,11 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     templatePath.type = "text";
     templatePath.className = "jarvis-text";
     templatePath.placeholder = "New note path, vault-relative (for example project.md)";
+    templatePath.value = this.templateNotePathValue;
+    templatePath.addEventListener("input", () => {
+      this.templateNotePathValue = templatePath.value;
+      this.templatePathTouched = true;
+    });
     el.appendChild(templatePath);
     const createRow = el.createDiv({ cls: "jarvis-row" });
     const createButton = createRow.createEl("button", { text: "Create note from template", cls: "mod-cta" });
@@ -1127,13 +1164,20 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
   async insertUnderHeading(button, headingSelect, insertInput) {
     const text2 = insertInput.value.trim();
     const heading = headingSelect.value;
-    const path = this.plugin.activeFilePath();
+    const path = this.insertNotePath || this.plugin.activeFilePath();
     if (!text2) {
       new import_obsidian3.Notice("Type the line to add first.");
       return;
     }
     if (!heading || !path) {
       new import_obsidian3.Notice("Pick a heading and open a note first.");
+      return;
+    }
+    if (this.plugin.activeFilePath() !== path) {
+      this.showResult(
+        "The active note changed, so nothing was sent. The line still belongs to " + path + " - open that note again and retry.",
+        "error"
+      );
       return;
     }
     button.disabled = true;
@@ -1246,15 +1290,17 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       select.appendChild(option);
     }
     const firstUsable = choices.find((choice) => canCreateFromTemplate(choice));
-    if (firstUsable) select.value = firstUsable.name;
-    createButton.disabled = !firstUsable;
-    let pathTouched = false;
-    pathInput.addEventListener("input", () => {
-      pathTouched = true;
-    });
+    const remembered = choices.find(
+      (choice) => choice.name === this.templateChoice && canCreateFromTemplate(choice)
+    );
+    const initial = remembered != null ? remembered : firstUsable;
+    select.value = initial ? initial.name : "";
+    if (initial) this.templateChoice = initial.name;
+    createButton.disabled = select.value === "";
     const refresh = () => {
       void (async () => {
         const name = select.value;
+        this.templateChoice = name;
         if (!name) {
           preview.setText("");
           createButton.disabled = true;
@@ -1266,7 +1312,10 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
         try {
           const body = await this.readVaultTemplate(filePath);
           preview.setText("Preview (read-only):\n" + clip(body, TEMPLATE_PREVIEW_CHARS));
-          if (!pathTouched) pathInput.value = templateNotePath(name);
+          if (!this.templatePathTouched) {
+            pathInput.value = templateNotePath(name);
+            this.templateNotePathValue = pathInput.value;
+          }
         } catch (error) {
           preview.setText(
             "This template's text cannot be read from the vault (" + shortError(error) + "). Jarvis knows the name, but no route sends template text back, so this plugin will not invent a body."
