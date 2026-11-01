@@ -5215,6 +5215,27 @@ def compact_messages(messages: list, budget: int, *, question: str = "") -> list
     kept, evicted, _at = fit_messages_detailed(messages, budget)
     if not evicted:
         return kept
+    # An app's own system message is demoted to a labelled USER turn beside the
+    # owner's words. If these two sit at the front of a long list, eviction can
+    # fold the app's text away as an "earlier exchange" - found 2026-11-01 when
+    # the grown rules block pushed a request over the window and the app's words
+    # silently vanished from the model's payload (test_injection_cases). The
+    # labelled turn belongs to the newest turn, so it is pinned directly before
+    # it and the fit is taken again; a turn that evicts nothing never moves.
+    labels = str(_CLIENT_SYSTEM_LABEL)
+    pinned = [m for m in (messages or [])
+              if (isinstance(m, dict) and m.get("role") == "user"
+                  and str(m.get("content") or "").startswith(labels))]
+    if pinned:
+        rest = [m for m in (messages or []) if not any(m is p for p in pinned)]
+        pinned_room = sum(estimate_tokens(p) for p in pinned)
+        kept, evicted, _at = fit_messages_detailed(rest, max(1, budget - pinned_room))
+        newest = max((i for i, m in enumerate(kept)
+                      if isinstance(m, dict) and m.get("role") == "user"),
+                     default=len(kept))
+        kept = kept[:newest] + pinned + kept[newest:]
+        if not evicted:
+            return kept
     compaction = _compaction()
     if compaction is None:
         return kept
