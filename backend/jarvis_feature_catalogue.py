@@ -3,7 +3,7 @@
 The owner's feature list, as data: 167 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 e64bc35b466a0f07b0b2ed52d2ce4bdb499738cd61bb5cf02a51612b54bcc9dd); the apps' Features pages read their own
+`features/features.json` (sha256 1580d5e4bb0c95f52a85de17c1270b198f4ad07bb6a033d1932f9e69a7fd6b17); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "e64bc35b466a0f07b0b2ed52d2ce4bdb499738cd61bb5cf02a51612b54bcc9dd"
+SOURCE_SHA256 = "1580d5e4bb0c95f52a85de17c1270b198f4ad07bb6a033d1932f9e69a7fd6b17"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -694,14 +694,14 @@ FEATURES = (
     {
         "id": "notes-editor",
         "group": "Notes and files",
-        "title": "Browse and edit your notes",
-        "what": "Browse and search every note in your Obsidian vault from the PC or the phone, open any note, and save a change.",
-        "where": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
-        "asks": "Reading and searching ask nothing. A save replaces the whole note, so it raises one approval card, and denying it changes nothing.",
-        "limit": "Obsidian vault only. This first slice does not create, delete or rename notes, and a note change waits while the turn has read outside text.",
+        "title": "Create and customize your notes",
+        "what": "Browse, search, create, extend, surgically change, rename and move notes in your Obsidian vault from the PC or the phone, and use the PC editor's formatting toolbar and templates.",
+        "where": "The PC's Brain \u2192 Memory \u2192 Notes; the phone's Brain \u2192 What Jarvis knows about you \u2192 Notes. The create, customize, rename and move sentences work in chat on either app.",
+        "asks": "Reading and searching ask nothing. Creating a note, adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
+        "limit": "Obsidian vault only, one note per request; no deleting a note or a line, no bulk edits, no moving outside the vault, no folder renames and no cloud sync. A note change waits while the turn has read outside text.",
         "surface": "both",
-        "aliases": ["notes editor", "the notes editor", "vault editor"],
-        "covers": ["notes-editor"],
+        "aliases": ["notes editor", "the notes editor", "vault editor", "customize a note", "create a note", "notes toolbar"],
+        "covers": ["notes-editor", "notes-customization", "notes-rename-move"],
     },
     {
         "id": "folders",

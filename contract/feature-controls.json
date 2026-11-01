@@ -3050,15 +3050,15 @@
     },
     {
       "id": "notes-editor",
-      "name": "Browse and edit your notes",
+      "name": "Create and customize your notes",
       "group": "Notes and files",
       "surface": "both",
-      "where": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
+      "where": "The PC's Brain → Memory → Notes; the phone's Brain → What Jarvis knows about you → Notes. The create, customize, rename and move sentences work in chat on either app.",
       "control": {
         "type": "refused",
         "setting_keys": [],
-        "turn_on": "turn on Browse and edit your notes",
-        "turn_off": "turn off Browse and edit your notes",
+        "turn_on": "turn on Create and customize your notes",
+        "turn_off": "turn off Create and customize your notes",
         "adjust": [],
         "intent": "feature_switch_refused"
       },
@@ -3066,7 +3066,7 @@
         "section": null,
         "location": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
         "search": [
-          "Browse and edit your notes"
+          "Create and customize your notes"
         ],
         "found": true
       },
@@ -3083,7 +3083,7 @@
       "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
-        "example_phrase": "turn on Browse and edit your notes",
+        "example_phrase": "turn on Create and customize your notes",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
