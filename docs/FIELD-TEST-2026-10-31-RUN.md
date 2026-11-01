@@ -473,3 +473,15 @@ and are recorded here for the next build's drive, not filed as new rows.
   `p10-after-relaunch.xml`, `p10-cal-*.xml`).
 - Matrix: the "UPDATED 2026-10-31, pass 10" block and rows 138, 141, 142-147.
 - Defects: `docs/defect-register.tsv` (DEF-025, reproduced) and `docs/DEFECT-REGISTER.md`.
+
+### Pass 12 additions (appended 2026-10-31)
+
+The notes-and-chat wave's live checks are recorded in the matrix's **"UPDATED 2026-10-31, pass 12"**
+block (rows 12.1-12.10): feature-depth answers, the deny-safe send-file flow, the real
+make-a-note write (undone, vault sha restored), the organizer off/plan answers with one denied
+`change_own_config` card, and the pass-12 phone Today / DEF-025 read. Owner-only steps
+(note save, accepted writes, organizer apply) and the DEF-025 TalkBack / DEF-026 banner checks are
+recorded as **BLOCKED-OWNER**, never as passes. The chat-audit capability wave (notes, organizer
+scopes, surface awareness, tiered switches, PiP/home UI, HUD memory tab) is recorded as
+**in-flight - not driven on live; CI/deploy #5 pending**.
+

@@ -1,0 +1,426 @@
+JARVIS NOTES BRIDGE - BUILD VERIFICATION
+========================================
+
+VERDICT: PASS for build-verification only, on the exact snapshot hashed below -
+typecheck (exit 0), build (exit 0, main.js 69,721 bytes), node --check (exit 0),
+JSON parse 4/4 files, bundle greps 11/11 required routes + 10/10 forbidden strings
+at 0 + 5/5 header/surface strings + 0 high-entropy literals, manifest schema 6/6
+rules, test-vault copy 3/3 files byte-identical, package 22 entries + zip SHA-256,
+staged main.js identical to source; and 9 areas UNTESTED (Obsidian was never
+opened), which are NOT a pass.
+
+
+WHAT WAS BUILT
+--------------
+Date:            2026-10-31
+Branch:          feat/obsidian-plugin-2026-10-31
+Base commit:     66d114038
+Plugin id:       jarvis-notes-bridge
+Plugin version:  0.1.1
+Manifest:        minAppVersion 1.13.0, isDesktopOnly true
+Machine:         the owner's Windows PC
+Shell/tools:     PowerShell 7.6.9, Node v22.23.2, npm 12.0.2
+Working tree:    C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\.dsh-scratch\
+                 OBSIDIAN-PLUGIN-LANE-2026-10-31\wt\obsidian-plugin
+
+What the plugin is: an Obsidian plugin that asks the local Jarvis about the note
+or selection you are reading, and drives note edits through Jarvis's own
+one-card routes. It never writes the vault itself and never approves a card.
+
+SNAPSHOT NOTE (important - the tree was moving): another agent was editing the
+plugin source and the docs while this lane ran. The build here was made from the
+source as it stood at 20:56:22 on 2026-10-31, and the zip was written at
+20:57:38. Every size and hash in this file describes exactly that snapshot. An
+earlier build in this same lane (main.js 68,816 bytes) was superseded when the
+source changed and is NOT the one packaged. README.md, INSTALL.md and SECURITY.md
+are still being written by the other agent; if they have changed since 20:57:38,
+the zip carries the older text and only the zip needs rebuilding (the plugin code
+in it is unaffected). This lane edited no source file, no doc, no test and no
+package.json.
+
+
+BUILD COMMANDS (all run from obsidian-plugin\)
+---------------------------------------------
+1) npm run typecheck
+   exit code: 0
+   output:
+     npm notice run jarvis-notes-bridge@0.1.1 typecheck
+     npm notice run tsc --noEmit
+   (tsc printed no diagnostics at all)
+
+2) npm run build
+   exit code: 0
+   output:
+     npm notice run jarvis-notes-bridge@0.1.1 build
+     npm notice run node esbuild.config.mjs
+
+       main.js  68.1kb
+
+     Done in 27ms
+   esbuild's "main.js  68.1kb" is 69,721 bytes on disk.
+
+3) node --check main.js
+   exit code: 0
+   output: (none - silence means the file parses as JavaScript)
+
+4) JSON parse checks, one command per file:
+   Get-Content -Raw 'manifest.json' | ConvertFrom-Json
+     exit code: 0   -> PARSE OK: manifest.json  (top-level properties: 7)
+   Get-Content -Raw 'package.json' | ConvertFrom-Json
+     exit code: 0   -> PARSE OK: package.json  (top-level properties: 9)
+   Get-Content -Raw 'versions.json' | ConvertFrom-Json
+     exit code: 0   -> PARSE OK: versions.json  (top-level properties: 2)
+        (versions.json is a small object: "0.1.0": "1.13.0", "0.1.1": "1.13.0")
+   Get-Content -Raw 'tsconfig.json' | ConvertFrom-Json
+     exit code: 0   -> PARSE OK: tsconfig.json  (top-level properties: 2)
+
+5) The build was run a second time from the same source to prove it is
+   reproducible:
+     exit code: 0
+     output:
+       main.js  68.1kb
+       Done in 28ms
+     main.js SHA-256 before and after that rebuild: identical
+     (EF0B56C92B24F295409612E16E74713ADCB24AFC1AEFBA4D7AE974E52A2A0E1F)
+     So the bundle on disk is the bundle the current source produces.
+
+6) Package and hash commands are recorded under PACKAGE CONTENTS below.
+   Compress-Archive is a PowerShell cmdlet, so it has no native exit code; the
+   run reported "$? = True" and the zip exists at the expected size.
+
+
+TYPE CHECK
+----------
+`npm run typecheck` runs `tsc --noEmit`: TypeScript reads the .ts files and
+complains about type errors, and writes no files. Exit code 0 with no
+diagnostics means there were no type errors. It was run twice - before and after
+the other agent's last source edit - and both runs exited 0 with no output
+beyond npm's own "npm notice run ..." lines. This is a real pass for the type
+checker. It says nothing about whether the code works at runtime.
+
+
+ARTIFACT SIZES
+--------------
+main.js on disk:        69,721 bytes
+main.js SHA-256:        EF0B56C92B24F295409612E16E74713ADCB24AFC1AEFBA4D7AE974E52A2A0E1F
+main.js size esbuild printed:  68.1kb
+styles.css:             2,920 bytes
+manifest.json:          387 bytes
+versions.json:          45 bytes
+package.json:           1,050 bytes
+README.md (in zip):     17,924 bytes
+INSTALL.md (in zip):    12,915 bytes
+SECURITY.md (in zip):   12,732 bytes
+
+zip:                    jarvis-obsidian-plugin-0.1.1.zip
+zip bytes:              80,765
+zip SHA-256:            52504033CD3D6529129C868623109D013D17FABE40F2CB104F0AD03685146AB1
+zip written at:         2026-10-31 20:57:38
+zip entries:            22
+
+
+MANIFEST SCHEMA CHECK
+---------------------
+Read with Get-Content -Raw manifest.json | ConvertFrom-Json, then checked rule by
+rule. Values as found:
+
+  rule                                             value found                result
+  id: lowercase letters/digits + hyphens, no
+      "obsidian" in it                             jarvis-notes-bridge        PASS
+  version: x.y.z                                   0.1.1                      PASS
+  minAppVersion: present and x.y.z                 1.13.0                     PASS
+  author: present, not empty                       Epic-Jarvis field test     PASS
+  description: present, not empty                  185 characters             PASS
+  isDesktopOnly: JSON boolean true                 true                       PASS
+  name: present                                    Jarvis notes bridge        PASS
+
+All six rules the brief asked for passed (the name check is a seventh, extra
+check). The manifest is byte-identical in the source tree and in the zip
+(SHA-256 starts 2A790EB2AFB39E59).
+
+
+BUNDLE SAFETY GREPS (on main.js)
+--------------------------------
+Counts are literal-substring occurrences in the whole file. EXPECTED is what the
+brief said to expect; RESULT compares the two.
+
+A. Required routes must be present (expected: at least 1 each)
+  pattern                    count   expected   result
+  /api/chat                      1   >= 1       PASS
+  /api/notes/capture             2   >= 1       PASS
+  /api/notes/read                1   >= 1       PASS
+  /api/notes/templates           1   >= 1       PASS
+  /api/notes/insert              1   >= 1       PASS
+  /api/notes/format              1   >= 1       PASS
+  /api/notes/replace             1   >= 1       PASS
+  /api/notes/customize           1   >= 1       PASS
+  /api/notes/tag                 1   >= 1       PASS
+  /api/notes/create              1   >= 1       PASS
+  /api/notes/change              2   >= 1       PASS
+  (/api/notes/capture is 2 because "capture" and "captureStatus" share the route
+   at main.js lines 41-42; /api/notes/change is 2 because the route constant at
+   line 51 and a code comment at line 1693 both name it.)
+
+B. Forbidden strings must all be 0 (expected: exactly 0 each)
+  pattern                    count   expected   result
+  /api/approve                   0   0          PASS
+  /api/deny                      0   0          PASS
+  vault.modify                   0   0          PASS
+  vault.create                   0   0          PASS
+  vault.process                  0   0          PASS
+  replaceSelection               0   0          PASS
+  obsidian://                    0   0          PASS
+  "Bearer " (with the space)     0   0          PASS
+  Authorization                  0   0          PASS
+  localStorage                   0   0          PASS
+
+C. Header names and surface must be present (expected: at least 1 each)
+  pattern                    count   expected   result
+  X-Jarvis-Token                 1   >= 1       PASS
+  X-Jarvis-Client                1   >= 1       PASS
+  X-Jarvis-Surface               1   >= 1       PASS
+  hud                            1   >= 1       PASS
+  desktop                        2   >= 1       PASS
+
+  The bundle's own header lines, verbatim:
+    line 95: "X-Jarvis-Token": token,
+    line 96: "X-Jarvis-Client": "hud",
+    line 97: "X-Jarvis-Surface": "desktop"
+
+D. Token-literal check (the question: is a real pairing token baked into the file?)
+  What was measured: five regular expressions over the whole of main.js.
+    1. \b[0-9a-fA-F]{32,}\b                   32+ character hex run        count 0
+    2. [A-Za-z0-9+/]{32,}={0,2}               32+ char base64-ish run      count 0
+    3. [A-Za-z0-9+/]{40,}={0,2}               40+ char base64-ish run      count 0
+    4. token ... "20+ char literal"           token near a quoted literal  count 0
+    5. token = "12+ chars" / token: "12+..." token directly assigned      count 0
+  All five are 0, so there is no long high-entropy literal anywhere in the
+  bundle, and nothing that looks like a token is assigned to a quoted constant.
+  What the token actually is at runtime: a function call. main.js line 95 sends
+  header "X-Jarvis-Token": token, where that variable comes from
+  requireToken(this.getToken()) - i.e. from the plugin's own settings /
+  SecretStorage at runtime. The settings default is empty ("fallbackToken: \"\"")
+  and the settings UI says "Token in SecretStorage (preferred)". So the token is
+  supplied by the user at runtime and is not in the file.
+
+METHOD NOTE (do not be alarmed if you re-run this): on this PowerShell (7.6.9),
+`Select-String -Path main.js -Pattern 'desktop' -SimpleMatch -AllMatches` returns
+the matching MatchInfo objects but with an EMPTY Matches collection, so summing
+`$_.Matches.Count` reports 0 for every pattern - including patterns that are
+plainly there. Measured directly: "Select-String -AllMatches: MatchInfo
+objects=2 ; Matches[] populated=0". The first grep attempt in this lane therefore
+printed 0 for all 21 patterns and was WRONG; it was thrown away. The counts above
+come from [regex]::Matches on the raw file text with the pattern literal-escaped
+(identical semantics to -SimpleMatch), and each was cross-checked against
+`Select-String -Pattern ... -SimpleMatch` hit-line counts, which agreed on every
+pattern. If you reproduce this check, use one of those two methods, not
+-AllMatches.
+
+
+TEST-VAULT COPY DRY RUN
+-----------------------
+This proves only that the three runtime files can be copied into the folder
+layout Obsidian expects. It does NOT prove that Obsidian loaded the plugin - it
+was never opened.
+
+Throwaway vault created under the system temp folder:
+
+  C:\Users\pcadmin\AppData\Local\Temp\dsh-2VunEn\jarvis-plugin-testvault-s4ud7xg6\
+    .obsidian\plugins\jarvis-notes-bridge\main.js          69,721 bytes
+    .obsidian\plugins\jarvis-notes-bridge\manifest.json       387 bytes
+    .obsidian\plugins\jarvis-notes-bridge\styles.css        2,920 bytes
+
+  Hashes, source vs copy:
+    manifest.json    identical=True
+    main.js          identical=True
+    styles.css       identical=True
+
+  The folder was then deleted:
+    delete target: C:\Users\pcadmin\AppData\Local\Temp\dsh-2VunEn\jarvis-plugin-testvault-s4ud7xg6
+    deleted: yes
+    still exists: False
+
+  (The temp path begins with dsh-2VunEn because this session's TEMP points at a
+  private temp folder; it is the system temp area, not the owner's vault.)
+
+
+PACKAGE CONTENTS
+----------------
+Staged at:
+  .dsh-scratch\OBSIDIAN-PLUGIN-LANE-2026-10-31\package-staging\jarvis-notes-bridge\
+Zip written at:
+  .dsh-scratch\OBSIDIAN-PLUGIN-LANE-2026-10-31\jarvis-obsidian-plugin-0.1.1.zip
+Command used:
+  Compress-Archive -Path '<staging>\jarvis-notes-bridge' -DestinationPath '<zip>'
+    -CompressionLevel Optimal -Force
+
+The zip has one top-level folder, jarvis-notes-bridge\, so extracting it into
+<vault>\.obsidian\plugins lands the plugin folder in the right place. Runtime
+files sit at that folder's root. 22 entries, sizes in bytes:
+
+    1866  jarvis-notes-bridge/esbuild.config.mjs
+   12915  jarvis-notes-bridge/INSTALL.md
+   69721  jarvis-notes-bridge/main.js            <- runtime file
+     387  jarvis-notes-bridge/manifest.json      <- runtime file
+   19387  jarvis-notes-bridge/package-lock.json
+    1050  jarvis-notes-bridge/package.json
+   17924  jarvis-notes-bridge/README.md
+   12732  jarvis-notes-bridge/SECURITY.md
+   11332  jarvis-notes-bridge/src/client.ts
+   19029  jarvis-notes-bridge/src/main.ts
+    8225  jarvis-notes-bridge/src/modals.ts
+   18781  jarvis-notes-bridge/src/panel.ts
+   18927  jarvis-notes-bridge/src/protocol.ts
+    6454  jarvis-notes-bridge/src/settings.ts
+    4157  jarvis-notes-bridge/src/templates.ts
+    2725  jarvis-notes-bridge/src/types.ts
+    2920  jarvis-notes-bridge/styles.css         <- runtime file
+   27469  jarvis-notes-bridge/tests/protocol.test.mjs
+   13391  jarvis-notes-bridge/tests/safety.test.mjs
+    6650  jarvis-notes-bridge/tests/templates.test.mjs
+     333  jarvis-notes-bridge/tsconfig.json
+      45  jarvis-notes-bridge/versions.json
+
+Deliberately NOT included, and verified absent by a relative-path scan of the
+staged tree (hits = 0 for each): node_modules, .npm-cache, .npm-logs,
+tests/_build, any .dsh-scratch path.
+
+Zip integrity check (independent of Compress-Archive): the zip was opened with
+[System.IO.Compression.ZipFile]::OpenRead (22 entries listed above). The zip that
+is actually being delivered (SHA-256 52504033..., 80,765 bytes) was then expanded
+with Expand-Archive into a temp folder at 20:59:43: 22 files extracted, extracted
+main.js 69,721 bytes, SHA-256 EF0B56C92B24F295409612E16E74713ADCB24AFC1AEFBA4D7AE974E52A2A0E1F
+(matches the source main.js), and the temp folder was deleted afterwards. The zip
+hash was unchanged before and after that test.
+
+Staged main.js vs source main.js (the brief's step 9):
+  staged:  EF0B56C92B24F295409612E16E74713ADCB24AFC1AEFBA4D7AE974E52A2A0E1F
+  source:  EF0B56C92B24F295409612E16E74713ADCB24AFC1AEFBA4D7AE974E52A2A0E1F
+  identical: True
+A byte-for-byte comparison of every staged file against the live tree reported
+drift count: 0 at 20:57:38, and again drift count: 0 at 20:59:34 (the live tree
+was then quiet, so the zip is not stale against it).
+
+Proof the zip is not stale in its code: after packaging, `npm run build` was run
+again and reproduced main.js byte-identically from the current source.
+
+
+HOW TO INSTALL INTO A TEST VAULT
+--------------------------------
+A "test vault" here means a throwaway folder that is NOT the owner's live vault.
+Make one, point $vault at it, and unpack the zip into its plugins folder. This
+writes nothing outside that folder:
+
+  $vault="C:\path\to\a\throwaway\test\vault"; New-Item -ItemType Directory -Force (Join-Path $vault ".obsidian\plugins") | Out-Null; Expand-Archive -LiteralPath "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\.dsh-scratch\OBSIDIAN-PLUGIN-LANE-2026-10-31\jarvis-obsidian-plugin-0.1.1.zip" -DestinationPath (Join-Path $vault ".obsidian\plugins") -Force; "Files landed in: " + (Join-Path $vault ".obsidian\plugins\jarvis-notes-bridge")
+
+The files land in <$vault>\.obsidian\plugins\jarvis-notes-bridge\ (manifest.json,
+main.js and styles.css at its root, plus the source, tests and docs). Launching
+Obsidian and enabling the plugin is the next step and was NOT done here.
+
+Do NOT do this to the live vault without the Lead's word. This lane was told not
+to touch it, and it did not.
+
+
+THE ONE-LINE INSTALL COMMAND (exact, copy-pasteable)
+----------------------------------------------------
+Change the first value to a throwaway test-vault path you own, then paste the
+whole line:
+
+  $vault="D:\path\to\your\test\vault"; New-Item -ItemType Directory -Force (Join-Path $vault ".obsidian\plugins") | Out-Null; Expand-Archive -LiteralPath "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\.dsh-scratch\OBSIDIAN-PLUGIN-LANE-2026-10-31\jarvis-obsidian-plugin-0.1.1.zip" -DestinationPath (Join-Path $vault ".obsidian\plugins") -Force; "Files landed in: " + (Join-Path $vault ".obsidian\plugins\jarvis-notes-bridge")
+
+It ends by printing where the files landed:
+  Files landed in: <your vault>\.obsidian\plugins\jarvis-notes-bridge
+
+Then, in Obsidian (not done here, not tested): Settings > Community plugins >
+enable "Jarvis notes bridge". Never point that command at the live vault without
+the Lead's word.
+
+
+UNTESTED - OBSERVED HONESTLY
+----------------------------
+None of the following was run. This list is NOT a pass, a partial pass or
+"probably fine" - it is untested.
+
+  1. Loading the plugin in Obsidian at all (startup, onload, unload).
+  2. The SecretStorage / SecretComponent UI (where the pairing token is meant to
+     be kept).
+  3. Panel rendering in Obsidian's right sidebar.
+  4. requestUrl from Obsidian's Electron process against the live backend - no
+     HTTP request was sent from Obsidian to Jarvis by this lane.
+  5. Every real card flow: capture, insert, format, replace, customize, tag,
+     create. Seven flows, none exercised.
+  6. Polling /api/notes/change.
+  7. The status bar item.
+  8. The template dropdown against a real vault.
+  9. Vaults larger than the context bounds (what happens when a note is too big
+     to send).
+
+CORRECTION TO THE BRIEF: this lane was told to record that Obsidian is not
+installed in this environment. That is not true on this PC. Measured at
+20:52 on 2026-10-31:
+  C:\Program Files\Obsidian\Obsidian.exe        True  (the program is installed)
+  C:\Users\pcadmin\AppData\Roaming\obsidian     True  (Obsidian's config folder)
+  Obsidian processes running                    0
+  "obsidian" on PATH                            False
+So the reason nothing above was run is not "Obsidian is missing". It is that
+this lane was forbidden from touching the owner's live vault and from installing
+anything into Obsidian, and no Obsidian window was opened. Opening the app,
+creating/registering a test vault and clicking through the plugin are what a
+future test lane would have to do. Until someone does, the 9 items above are
+untested.
+
+
+WHAT THIS RECORD PROVES, IN ONE SENTENCE
+----------------------------------------
+The TypeScript compiles, esbuild produces a parseable 69,721-byte main.js that
+contains all 11 Jarvis note routes and none of the 10 forbidden strings or any
+baked-in token, the manifest meets Obsidian's schema rules, the three runtime
+files copy into the expected plugin folder, and the zip contains exactly the
+staged files with main.js byte-identical to the source build - and nothing at all
+about how the plugin behaves inside Obsidian.
+
+
+LEAD RE-CHECK (independent, run after this record was written, 21:02 on 2026-10-31)
+----------------------------------------------------------------------------------
+The Lead re-ran the mechanical checks on the final tree so this file is not only
+the packaging agent's word. Measured, not assumed:
+
+  npm run typecheck                          exit 0
+  npm run build                              exit 0, "main.js  68.1kb" (69,721 bytes)
+  node --check main.js                       exit 0
+  JSON parse manifest/package/versions/tsconfig   4/4 parse
+  test-vault copy dry run                    manifest.json + main.js + styles.css
+                                             copied into a TEMP vault-shaped folder,
+                                             3/3 present, folder then deleted
+  [regex]::Matches counts on main.js         11/11 required routes present;
+                                              /api/approve 0, /api/deny 0,
+                                              vault.modify 0, vault.create 0,
+                                              vault.delete 0, replaceSelection 0,
+                                              obsidian:// 0, Authorization 0,
+                                              Bearer 0, localStorage 0, fetch( 0;
+                                              X-Jarvis-Token/-Client/-Surface present
+  zip re-opened and listed                   22 entries, single top-level
+                                             jarvis-notes-bridge\ folder,
+                                             80,765 bytes,
+                                             SHA-256 52504033CD3D6529129C868623109D013D17FABE40F2CB104F0AD03685146AB1
+  docs unchanged since the zip               README 17,924 / INSTALL 12,915 /
+                                             SECURITY 12,732 bytes - the same sizes
+                                             the zip carries, so the package is not stale
+
+TESTS (run by the Lead; the packaging lane was not asked to run them)
+---------------------------------------------------------------------
+  Command: node --experimental-test-isolation=none --test tests/protocol.test.mjs
+           tests/templates.test.mjs tests/safety.test.mjs
+  Result:  96 tests, 96 pass, 0 fail, exit 0
+           (protocol 67, templates 17, safety 12)
+  Why the flag: this agent sandbox refuses the child processes plain
+  `node --test` starts; plain `node --test` fails here with "spawn EPERM" before
+  any test runs. That is an environment limit, not a test failure, and it is NOT
+  counted as a pass. On a normal PC `npm test` is plain `node --test`; the
+  package.json also has `test:sandbox` for this environment.
+
+  This BUILD-VERIFICATION.txt is a repo file, not an entry inside the zip: the
+  zip's 22 entries are the runtime files, the docs and the source/build files
+  (that layout is listed above and was measured). Keeping the record out of the
+  zip leaves the recorded zip hash valid.
+
