@@ -9618,9 +9618,21 @@ def with_rules_first(msgs: list) -> list:
         note = jarvis_surface.sentence()
     except Exception:
         note = ""
-    if not note:
+    # The model it is running and the active preset (2026-10-31, the owner's
+    # "what ai model do you have?" bug): one honest line, right after the
+    # rules, so general chat stops denying what the HUD telemetry already says.
+    # Read from this PC's own state (`jarvis_model_knowledge`); empty - exactly
+    # the old list - when nothing is recorded.
+    try:
+        import jarvis_model_knowledge
+        knowledge_note = jarvis_model_knowledge.prompt_line()
+    except Exception:
+        knowledge_note = ""
+    extra = [{"role": "system", "content": text}
+             for text in (note, knowledge_note) if text]
+    if not extra:
         return rules
-    return [rules[0], {"role": "system", "content": note}] + rules[1:]
+    return [rules[0]] + extra + rules[1:]
 
 
 # --------------------------------------------------------------------------

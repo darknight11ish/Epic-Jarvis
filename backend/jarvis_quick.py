@@ -1239,6 +1239,10 @@ def _match(text, now: float) -> Optional[Intent]:
     # the local-calendar read are owned here, before any honesty sentence.
     # (The note lane's capture path really files even when the note TOOL is
     # off; the honesty lane's old note_write off-answer is retired.)
+    # model/preset self-knowledge (2026-10-31), before the notes and features.
+    got = _model_chat(s)
+    if got is not None:
+        return got
     # A rename/move is read from the RAW sentence first, so a new title keeps
     # its capital letters ("Home", not the lowercased matching form "home").
     got = _note_rename_move_asking(text)
@@ -11380,6 +11384,333 @@ def _run_note_open(title: str) -> Result:
     return Result(said, "note_open", open_brain="brain")
 
 
+# --- what model Jarvis is running, the presets, measured models (2026-10-31) ---
+#
+# The owner asked "what ai model do you have?" and got "I don't know what
+# specific AI model I'm running on", while the HUD telemetry said qwen3.5:9b.
+# These are deterministic answers from the PC's own state (jarvis_presets,
+# jarvis_models, the benchmark store); the switches use the EXISTING cards
+# (jarvis_presets.apply_from_body and jarvis_models.switch_to) and never approve
+# anything themselves.
+
+MODEL_CURRENT_UNKNOWN = ("This PC does not record which model is running right now. "
+                         "Brain, Models lists every installed model.")
+MODELS_NOT_LISTED = ("This PC does not list its installed models right now. Brain, "
+                     "Models on the PC is where the list is.")
+PRESETS_NOT_LISTED = ("This PC does not list its presets right now (the preset "
+                      "contract module is missing).")
+MODEL_CARD_WORDS = ("Nothing switches until you answer the ONE approval card on your PC"
+                    " (Windows Hello for a risky one).")
+
+_K_MODEL_CURRENT = re.compile(
+    r"(?:what|which)\s+(?:ai\s+)?model\s+(?:are\s+you\s+(?:running|using|on)|"
+    r"do\s+you\s+have|are\s+you|is\s+this)\b.*")
+_K_MODEL_ANSWERED = re.compile(
+    r"(?:which|what)\s+model\s+(?:answered|wrote|gave|produced|said)\s+"
+    r"(?:that|this|it|the\s+answer)\b.*")
+_K_MODELS_LIST = re.compile(
+    r"(?:what|which)\s+(?:local\s+)?models?\s+(?:are\s+)?(?:installed|available|"
+    r"do\s+you\s+have|can\s+you\s+use|can\s+you\s+run)\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?(?:local\s+|installed\s+)?"
+    r"models?\s*\??$")
+_K_PRESETS_LIST = re.compile(
+    r"(?:what|which)\s+presets?\s+(?:do\s+you\s+have|are\s+there|exist|can\s+i\s+use)\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?presets?\s*\??$")
+_K_PRESET_DETAIL = re.compile(
+    r"(?:what\s+does|what\s+is|explain|describe)\s+(?:the\s+)?(.+?)\s+preset"
+    r"(?:\s+(?:change|do|mean|load|run|use))?\s*\??$"
+    r"|which\s+model\s+(?:would|does|will)\s+(?:the\s+)?(.+?)\s+preset\s+"
+    r"(?:load|run|use)\s*\??$")
+_K_MODEL_SPEED = re.compile(
+    r"(?:how\s+fast\s+is|what(?:'s|\s+is)\s+the\s+speed\s+of|"
+    r"tokens\s+(?:a|per)\s+second\s+for)\s+(.+?)\s*\??$")
+_K_MODEL_PROSCONS = re.compile(
+    r"(?:what\s+are\s+the\s+)?pros\s+and\s+cons\s+of\s+(.+?)\s*\??$"
+    r"|what\s+is\s+good\s+and\s+bad\s+about\s+(.+?)\s*\??$")
+_K_MODEL_RELEASE = re.compile(r"when\s+was\s+(.+?)\s+released\s*\??$")
+_K_MODEL_RECOMMEND = re.compile(
+    r"which\s+model\s+should\s+i\s+(?:use|pick)\s+for\s+(.+?)\s*\??$"
+    r"|which\s+(?:local\s+)?model\s+is\s+best\s+for\s+(.+?)\s*\??$")
+_K_PRESET_SWITCH = re.compile(
+    r"(?:switch|change)\s+(?:to\s+)?(?:the\s+)?(.+?)\s+preset\s*\??$"
+    r"|use\s+(?:the\s+)?(.+?)\s+preset\s*\??$"
+    r"|apply\s+(?:the\s+)?preset\s+(.+?)\s*\??$")
+_K_MODEL_SWITCH = re.compile(
+    r"(?:switch|change)\s+to\s+(?:the\s+)?(?:model\s+)?(.+?)\s*\??$"
+    r"|load\s+(?:the\s+)?(?:model\s+)?(.+?)\s*\??$"
+    r"|use\s+(?:the\s+)?model\s+(.+?)\s*\??$")
+
+
+def _model_known_refs() -> dict:
+    try:
+        import jarvis_model_knowledge as K
+    except Exception:
+        return {}
+    refs = {}
+    for ref in list(K.installed_models()) + [K.current_model()] + list(K.benchmarks()):
+        if ref:
+            refs[str(ref).lower()] = str(ref)
+    for preset in K.presets():
+        if preset.get("model"):
+            refs.setdefault(str(preset["model"]).lower(), str(preset["model"]))
+    return refs
+
+
+def _resolve_model(text) -> str:
+    """A model ref this PC knows, or "" - never a guess from ordinary words."""
+    want = " ".join(str(text or "").strip().strip("\"'").split())
+    if not want:
+        return ""
+    known = _model_known_refs()
+    if want.lower() in known:
+        return known[want.lower()]
+    try:
+        import jarvis_model_knowledge as K
+        preset = K.preset_by_name(want)
+        if preset and preset.get("model"):
+            return str(preset["model"])
+    except Exception:
+        pass
+    low = want.lower()
+    # A tag such as qwen3.5:9b, or a full hf.co/ Ollama name. A sentence with
+    # a colon in it ("change your settings: turn on ...") is not a model ref.
+    looks_ref = ((":" in want and " " not in want.strip())
+                 or (low.startswith("hf.co/") and " " not in want.strip())
+                 or (low.startswith("ollama/") and " " not in want.strip()))
+    return want if looks_ref else ""
+
+
+def _model_chat(s: str) -> Optional[Intent]:
+    """The model/preset question shapes. Never a switch unless the words name one."""
+    for rx, name in ((_K_MODEL_CURRENT, "model_current"),
+                     (_K_MODEL_ANSWERED, "model_answerer")):
+        if rx.fullmatch(s):
+            return Intent(name)
+    m = _K_MODEL_RELEASE.fullmatch(s)
+    if m:
+        return Intent("model_release", {"model": m.group(1)})
+    m = _K_MODEL_SPEED.fullmatch(s)
+    if m:
+        return Intent("model_speed", {"model": m.group(1)})
+    m = _K_MODEL_PROSCONS.fullmatch(s)
+    if m:
+        return Intent("model_pros_cons", {"model": m.group(1)})
+    m = _K_MODEL_RECOMMEND.fullmatch(s)
+    if m:
+        return Intent("model_recommend", {"task": m.group(1) or m.group(2) or ""})
+    if _K_PRESETS_LIST.fullmatch(s):
+        return Intent("presets_list")
+    if _K_MODELS_LIST.fullmatch(s):
+        return Intent("models_list")
+    m = _K_PRESET_DETAIL.fullmatch(s)
+    if m:
+        return Intent("preset_detail", {"name": m.group(1) or m.group(2) or ""})
+    m = _K_PRESET_SWITCH.fullmatch(s)
+    if m:
+        return Intent("preset_switch", {"name": m.group(1) or m.group(2) or ""})
+    m = _K_MODEL_SWITCH.fullmatch(s)
+    if m:
+        target = m.group(1) or m.group(2) or ""
+        if _resolve_model(target):
+            return Intent("model_switch", {"model": target})
+    return None
+
+
+def _preset_words_for(name) -> str:
+    try:
+        import jarvis_model_knowledge as K
+    except Exception:
+        return PRESETS_NOT_LISTED
+    preset = K.preset_by_name(name)
+    if not preset:
+        names = ", ".join(str(p.get("title") or p.get("id")) for p in K.presets())
+        return f'There is no preset called "{name}". The presets are: {names}.'
+    return K.preset_model_words(preset)
+
+
+def _run_model_current() -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model, preset = K.current_model(), K.current_preset()
+    except Exception:
+        model, preset = "", None
+    if not model and not preset:
+        return Result(MODEL_CURRENT_UNKNOWN, "model_current")
+    if model and preset:
+        said = (f'You are running {model} on this PC, under the "{preset.get("title")}" '
+                "preset. Brain, Models lists every installed model and its measured speed.")
+    elif model:
+        said = (f"You are running {model} on this PC. Brain, Models lists every installed "
+                "model and its measured speed.")
+    else:
+        said = (f'The active preset is "{preset.get("title")}"; the exact model it runs '
+                "is not recorded here.")
+    return Result(said, "model_current")
+
+
+def _run_model_answerer() -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model, preset = K.current_model(), K.current_preset()
+    except Exception:
+        model, preset = "", None
+    if not model:
+        return Result("The PC does not record which model answered that. " +
+                      MODEL_CURRENT_UNKNOWN, "model_answerer")
+    under = f', under the "{preset.get("title")}" preset' if preset else ""
+    return Result(f"That answer came from {model}, the model this PC runs for chat{under}. "
+                  "The PC does not record a separate per-answer model line.",
+                  "model_answerer")
+
+
+def _run_models_list() -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        refs, current = K.installed_models(), K.current_model()
+    except Exception:
+        return Result(MODELS_NOT_LISTED, "models_list")
+    if not refs:
+        return Result(MODELS_NOT_LISTED, "models_list")
+    shown = refs[:12]
+    said = "This PC has %d local model%s installed: %s." % (
+        len(refs), "" if len(refs) == 1 else "s", ", ".join(shown))
+    if current and current in refs:
+        said += f" Chat is using {current}."
+    if len(refs) > len(shown):
+        said += f" ({len(refs) - len(shown)} more not listed.)"
+    said += ' Ask "how fast is <model>" for a measured speed, or "switch to <model>".'
+    return Result(said, "models_list")
+
+
+def _run_presets_list() -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        rows, current = K.presets(), K.current_preset()
+    except Exception:
+        return Result(PRESETS_NOT_LISTED, "presets_list")
+    if not rows:
+        return Result(PRESETS_NOT_LISTED, "presets_list")
+    current_id = (current or {}).get("id")
+    parts = []
+    for row in rows:
+        mark = " (current)" if row.get("id") == current_id else ""
+        parts.append(f"{row.get('title')}{mark}: {row.get('model') or 'cloud'}")
+    said = ('%d presets - %s. Ask "what does <preset> change?" for its model, '
+            "window and honest cost." % (len(rows), "; ".join(parts)))
+    return Result(said, "presets_list")
+
+
+def _run_preset_detail(name) -> Result:
+    return Result(_preset_words_for(name), "preset_detail")
+
+
+def _run_model_speed(ref) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model = _resolve_model(ref)
+        if not model:
+            return Result(f'I do not know a model called "{ref}" on this PC. '
+                          'Ask "what local models are installed?".', "model_speed")
+        return Result(f"{model}: " + K.speed_words(model), "model_speed")
+    except Exception:
+        return Result("The measured speeds could not be read on this PC.", "model_speed")
+
+
+def _run_model_pros_cons(ref) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model = _resolve_model(ref)
+        if not model:
+            return Result(f'I do not know a model called "{ref}" on this PC.', "model_pros_cons")
+        facts = K.model_facts(model)
+        parts = [f"{model}."]
+        if facts.get("preset"):
+            parts.append(f'It is the model behind the "{facts["preset"]}" preset.')
+        if facts.get("pros"):
+            parts.append("Pros: " + str(facts["pros"]))
+        if facts.get("cons"):
+            parts.append("Cons: " + str(facts["cons"]))
+        parts.append("Speed: " + K.speed_words(model))
+        if facts.get("params_b"):
+            parts.append(f"{facts['params_b']}B parameters.")
+        if facts.get("size_gib"):
+            parts.append(f"{facts['size_gib']} GB on disk.")
+        if facts.get("licence"):
+            parts.append(f"Licence: {facts['licence']}.")
+        parts.append("Release date: not recorded.")
+        return Result(" ".join(parts), "model_pros_cons")
+    except Exception:
+        return Result("The model facts could not be read on this PC.", "model_pros_cons")
+
+
+def _run_model_release(ref) -> Result:
+    return Result(f"{str(ref or '').strip()}: release date is not recorded on this PC. "
+                  "These are local Ollama tags, and no official release page for the exact "
+                  "tag is recorded in this tree - so this is 'not recorded', not a guess.",
+                  "model_release")
+
+
+def _run_model_recommend(task) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        preset = K.recommendation(task)
+    except Exception:
+        preset = None
+    if not preset:
+        try:
+            names = ", ".join(str(p.get("title")) for p in K.presets())
+        except Exception:
+            names = ""
+        return Result(f'No preset\'s own words match "{task}". The presets are: {names}. '
+                      "This is advice; nothing was switched.", "model_recommend")
+    return Result(f'For {task}, the "{preset.get("title")}" preset fits: '
+                  f'{preset.get("what")} It runs {preset.get("model")}. This is advice - '
+                  f'nothing was switched; say "switch to the {preset.get("title").lower()} '
+                  'preset" and its ONE card decides.', "model_recommend")
+
+
+def _model_switch_words(code, body, what) -> str:
+    body = body if isinstance(body, dict) else {}
+    said = " ".join(str(body.get(k) or "") for k in ("said", "message", "preview", "error")).strip()
+    if code in (200, 202) and body.get("ok", True) and not body.get("error"):
+        waiting = (body.get("waiting") is True
+                   or str(body.get("state")) == "waiting" or code == 202)
+        if waiting:
+            text = f"{what}: the approval card is up on your PC. {MODEL_CARD_WORDS}"
+            if said:
+                text += " " + said
+            return text
+        return f"{what}: done. " + (said or "")
+    reason = said or str(body.get("reason") or "the PC refused it")
+    return f"{what}: nothing was changed - {reason}"
+
+
+def _run_preset_switch(name) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        preset = K.preset_by_name(name)
+        if not preset:
+            return Result(_preset_words_for(name), "preset_switch")
+        code, body = K.apply_preset(preset.get("id"))
+        return Result(_model_switch_words(code, body,
+                                    f'Applying the "{preset.get("title")}" preset'),
+                      "preset_switch")
+    except Exception:
+        return Result("The preset could not be applied on this PC.", "preset_switch")
+
+
+def _run_model_switch(name) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model = _resolve_model(name)
+        if not model:
+            return Result(f'I do not know a model called "{name}" on this PC.', "model_switch")
+        code, body = K.switch_model(model)
+        return Result(_model_switch_words(code, body, f"Switching to {model}"), "model_switch")
+    except Exception:
+        return Result("The model switch could not be asked on this PC.", "model_switch")
+
+
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     the owner's request of 2026-10-10), and Jarvis's own windows and places
@@ -13802,6 +14133,28 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_search(intent.f.get("needle") or "")
     if n == "note_open":
         return _run_note_open(intent.f.get("title") or "")
+    if n == "model_current":
+        return _run_model_current()
+    if n == "model_answerer":
+        return _run_model_answerer()
+    if n == "models_list":
+        return _run_models_list()
+    if n == "presets_list":
+        return _run_presets_list()
+    if n == "preset_detail":
+        return _run_preset_detail(intent.f.get("name") or "")
+    if n == "preset_switch":
+        return _run_preset_switch(intent.f.get("name") or "")
+    if n == "model_speed":
+        return _run_model_speed(intent.f.get("model") or "")
+    if n == "model_pros_cons":
+        return _run_model_pros_cons(intent.f.get("model") or "")
+    if n == "model_release":
+        return _run_model_release(intent.f.get("model") or "")
+    if n == "model_recommend":
+        return _run_model_recommend(intent.f.get("task") or "")
+    if n == "model_switch":
+        return _run_model_switch(intent.f.get("model") or "")
     if n == "open_app":
         # "open Notion", "open settings", "open Jarvis settings"
         # (jarvis_open.py, 2026-10-10). Nothing is opened from here: the app
