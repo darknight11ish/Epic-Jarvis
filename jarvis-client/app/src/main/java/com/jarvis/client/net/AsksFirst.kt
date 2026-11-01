@@ -136,6 +136,74 @@ object AsksFirst {
         val why: String,
     )
 
+    // --- The switchable in-app tools (2026-10-31, the tiered-tools slice) -----
+    //
+    // The PC now offers 21 one-tool switches in four groups, plus the vault
+    // organizer's own switch and the list of tools it deliberately does not
+    // offer in-app. The PHONE IS READ-ONLY here (`can_enable` is false for a
+    // request that did not come from the PC): it shows every switch and its
+    // state in the PC's own labels and says, plainly, that the PC is where they
+    // are changed. No new route, no approval, no write.
+
+    /** The PC's own sentence for a switch page opened away from the PC. */
+    const val TOOLS_PC_ONLY =
+        "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
+            "first). It takes one approval card and Windows Hello."
+
+    /** The read-only state lines the phone draws for one tool. */
+    const val TOOLS_ON = "On: the AI model is offered this."
+    const val TOOLS_OFF = "Off: the AI model is not offered this."
+    const val TOOLS_TOML_ONLY_TITLE = "Kept in your settings file on the PC"
+
+    /** The vault organizer's own state lines (it is not a tool switch). */
+    const val TOOLS_VAULT_ON = "On: it can plan a tidy-up; the PC writes nothing until its one card."
+    const val TOOLS_VAULT_OFF = "Off: nothing is planned or changed."
+
+    data class ToolSwitch(
+        val id: String,
+        val title: String,
+        val group: String,
+        val on: Boolean,
+        val waiting: Boolean,
+        val last: String,
+    )
+
+    data class ToolGroup(val title: String, val rows: List<ToolSwitch>)
+
+    /** The vault organizer's own switch, shown beside the tool switches. */
+    data class VaultSwitch(
+        val title: String,
+        val what: String,
+        val on: Boolean,
+        val waiting: Boolean,
+    )
+
+    /** The tools this slice deliberately does not offer in-app. */
+    data class ToolsNotOffered(val labels: List<Pair<String, String>>, val why: String)
+
+    data class Tools(
+        val label: String,
+        val detail: String,
+        val canEnable: Boolean,
+        val groups: List<ToolGroup>,
+        val vault: VaultSwitch?,
+        val notOffered: ToolsNotOffered?,
+    )
+
+    /** One tool's state in words - the phone shows it, never changes it. */
+    fun toolState(r: ToolSwitch): String = when {
+        r.waiting -> WAITING
+        r.on -> TOOLS_ON
+        else -> TOOLS_OFF
+    }
+
+    /** The vault organizer's state, in the same shape. */
+    fun vaultState(v: VaultSwitch): String = when {
+        v.waiting -> WAITING
+        v.on -> TOOLS_VAULT_ON
+        else -> TOOLS_VAULT_OFF
+    }
+
     /** Lockdown's state, as the PC says it; null from a PC without it. */
     data class Lockdown(
         val on: Boolean,
@@ -155,6 +223,7 @@ object AsksFirst {
         val last: Last?,
         val lights: Lights?,
         val lockdown: Lockdown? = null,
+        val tools: Tools? = null,
     )
 
     /** `GET /api/asks_first`, read - or null when it is not one (an older PC). */
@@ -179,6 +248,7 @@ object AsksFirst {
             last = l?.let { Last(it.text("outcome") ?: "", it.text("action") ?: "", it.text("message") ?: "") },
             lights = (body["lights"] as? JsonObject)?.let(::lights),
             lockdown = (body["lockdown"] as? JsonObject)?.let(::lockdown),
+            tools = (body["tools"] as? JsonObject)?.let(::tools),
         )
     }
 
@@ -224,6 +294,57 @@ object AsksFirst {
      * else (an older PC).
      */
     fun lockdownFrom(o: JsonObject?): Boolean? = o?.flag("on")
+
+    private fun tools(o: JsonObject): Tools? {
+        val label = o.text("label") ?: return null
+        val items = (o["items"] as? JsonArray)?.mapNotNull { el ->
+            val it = el as? JsonObject ?: return@mapNotNull null
+            val id = it.text("id") ?: return@mapNotNull null
+            val last = (it["last"] as? JsonObject)?.text("message") ?: ""
+            ToolSwitch(
+                id = id,
+                title = it.text("title") ?: id,
+                group = it.text("group") ?: "",
+                on = it.flag("on") == true,
+                waiting = it.flag("waiting") == true,
+                last = last,
+            )
+        } ?: emptyList()
+        val byId = items.associateBy { it.id }
+        val groups = (o["groups"] as? JsonArray)?.mapNotNull { el ->
+            val g = el as? JsonObject ?: return@mapNotNull null
+            val title = g.text("title") ?: ""
+            val ids = (g["ids"] as? JsonArray)?.mapNotNull { id -> (id as? JsonPrimitive)?.contentOrNull } ?: emptyList()
+            ToolGroup(title, ids.mapNotNull(byId::get))
+        } ?: emptyList()
+        val vaultObj = o["vault"] as? JsonObject
+        val vault = vaultObj?.let {
+            val title = it.text("title") ?: return@let null
+            VaultSwitch(
+                title = title,
+                what = it.text("what") ?: "",
+                on = it.flag("on") == true,
+                waiting = it.flag("waiting") == true,
+            )
+        }
+        val no = o["not_offered"] as? JsonObject
+        val notOffered = no?.let {
+            val labelsObj = it["labels"] as? JsonObject
+            val labels = labelsObj?.entries?.mapNotNull { e ->
+                val title = (e.value as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull
+                if (title.isNullOrEmpty()) null else e.key to title
+            } ?: emptyList()
+            ToolsNotOffered(labels = labels, why = it.text("why") ?: "")
+        }
+        return Tools(
+            label = label,
+            detail = o.text("detail") ?: "",
+            canEnable = o.flag("can_enable") == true,
+            groups = groups.ifEmpty { listOf(ToolGroup("", items)) },
+            vault = vault,
+            notOffered = notOffered,
+        )
+    }
 
     private fun row(o: JsonObject): Row? {
         val id = o.text("id") ?: return null

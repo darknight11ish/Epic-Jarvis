@@ -172,6 +172,53 @@ internal fun AsksFirstSection(canAct: Boolean) {
                             }
                         }
                     }
+                    // The switchable in-app tools (2026-10-31): every switch in
+                    // the PC's own groups and labels, READ-ONLY on this phone -
+                    // no SwitchRow, no write, no card. The plain sentence above
+                    // them says where they really change.
+                    v.tools?.let { t ->
+                        Gap(14)
+                        Text(t.label, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+                        Text(t.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                        Text(AsksFirst.TOOLS_PC_ONLY, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid)
+                        t.groups.forEach { tg ->
+                            Gap(8)
+                            if (tg.title.isNotEmpty()) {
+                                Text(tg.title, style = MaterialTheme.typography.labelMedium,
+                                    color = chrome.textMid)
+                            }
+                            tg.rows.forEach { tr ->
+                                Gap(4)
+                                Text(tr.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+                                Text(AsksFirst.toolState(tr), style = MaterialTheme.typography.bodySmall,
+                                    color = if (tr.on || tr.waiting) chrome.textHi else chrome.textMid)
+                                if (tr.last.isNotEmpty() && !tr.waiting) {
+                                    Text(tr.last, style = MaterialTheme.typography.labelSmall,
+                                        color = chrome.textMid)
+                                }
+                            }
+                        }
+                        t.vault?.let { vs ->
+                            Gap(10)
+                            Text(vs.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+                            Text(vs.what, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                            Text(AsksFirst.vaultState(vs), style = MaterialTheme.typography.bodySmall,
+                                color = if (vs.on || vs.waiting) chrome.textHi else chrome.textMid)
+                            Text(AsksFirst.TOOLS_PC_ONLY, style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textMid)
+                        }
+                        t.notOffered?.let { no ->
+                            Gap(10)
+                            Text(AsksFirst.TOOLS_TOML_ONLY_TITLE,
+                                style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+                            Text(no.why, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                            if (no.labels.isNotEmpty()) {
+                                Text(no.labels.joinToString("; ") { it.second },
+                                    style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                            }
+                        }
+                    }
                 }
             }
             (if (busy) "Asking your PC…" else said)?.let {
