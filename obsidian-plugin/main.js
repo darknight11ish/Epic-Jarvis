@@ -200,6 +200,17 @@ function interpretWriteReply(status, body) {
       data
     );
   }
+  if (state === "denied") {
+    return baseOutcome("denied", said || "You said no, so nothing was changed.", status, data);
+  }
+  if (state === "failed") {
+    return baseOutcome(
+      "failed",
+      said || "Jarvis could not make the change. Nothing was written.",
+      status,
+      data
+    );
+  }
   if (status >= 200 && status < 300 && data.ok !== false) {
     if (state === "unchanged") {
       return baseOutcome("unchanged", said || "Nothing needed changing.", status, data);
@@ -411,6 +422,13 @@ function pollGaveUpMessage() {
 }
 function shouldPoll(outcome) {
   return outcome.kind === "waiting" && outcome.jobId !== "";
+}
+function obsidianOpenUri(vaultName, filePath, heading) {
+  const vault = (vaultName != null ? vaultName : "").trim();
+  const file = (filePath != null ? filePath : "").trim().replace(/^\/+/, "");
+  const at = (heading != null ? heading : "").trim();
+  const target = at ? file + "#" + at : file;
+  return "obsidian://open?vault=" + encodeURIComponent(vault) + "&file=" + encodeURIComponent(target);
 }
 
 // src/client.ts
@@ -751,7 +769,8 @@ var ReplaceModal = class extends import_obsidian2.Modal {
           await this.plugin.performWrite(
             "Asking Jarvis to replace the selection in " + this.path,
             (sha) => this.plugin.client.replaceOnce(this.path, this.selection, this.newText, sha),
-            show
+            show,
+            this.path
           );
         } finally {
           button.setDisabled(false);
@@ -798,7 +817,8 @@ var TagModal = class extends import_obsidian2.Modal {
               if (!this.resultEl) return;
               this.resultEl.setText(message);
               this.resultEl.setAttribute("data-kind", kind != null ? kind : "");
-            }
+            },
+            this.path
           );
         } finally {
           button.setDisabled(false);
@@ -1102,7 +1122,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     createButton.addEventListener("click", () => {
       void this.createFromTemplate(createButton, templateSelect, templatePath);
     });
-    void this.fillTemplates(templateSelect, templatePreview, templatePath);
+    void this.fillTemplates(templateSelect, templatePreview, templatePath, createButton);
   }
   async insertUnderHeading(button, headingSelect, insertInput) {
     const text2 = insertInput.value.trim();
@@ -1121,7 +1141,8 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       await this.plugin.performWrite(
         'Asking Jarvis to add a line under "' + heading + '"',
         (sha) => this.plugin.client.insertUnderHeading(path, text2, heading, sha),
-        (message, kind) => this.showResult(message, kind)
+        (message, kind) => this.showResult(message, kind),
+        path
       );
     } finally {
       button.disabled = false;
@@ -1143,7 +1164,8 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       await this.plugin.performWrite(
         "Asking Jarvis to make the selection " + style,
         (sha) => this.plugin.client.formatSpan(path, selection, style, "add", sha),
-        (message, kind) => this.showResult(message, kind)
+        (message, kind) => this.showResult(message, kind),
+        path
       );
     } finally {
       button.disabled = false;
@@ -1164,7 +1186,8 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       await this.plugin.performWrite(
         "Asking Jarvis to turn that line into a checklist item",
         (sha) => this.plugin.client.customizeLine(path, "checklist", line, sha),
-        (message, kind) => this.showResult(message, kind)
+        (message, kind) => this.showResult(message, kind),
+        path
       );
     } finally {
       button.disabled = false;
@@ -1189,7 +1212,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     }
     return await this.app.vault.cachedRead(file);
   }
-  async fillTemplates(select, preview, pathInput) {
+  async fillTemplates(select, preview, pathInput, createButton) {
     if (!select.isConnected) return;
     let backendNames = [];
     let backendWhy = "";
@@ -1212,6 +1235,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       option.disabled = true;
       select.appendChild(option);
       preview.setText(backendWhy ? "Jarvis said: " + backendWhy : "");
+      createButton.disabled = true;
       return;
     }
     for (const choice of choices) {
@@ -1223,6 +1247,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     }
     const firstUsable = choices.find((choice) => canCreateFromTemplate(choice));
     if (firstUsable) select.value = firstUsable.name;
+    createButton.disabled = !firstUsable;
     let pathTouched = false;
     pathInput.addEventListener("input", () => {
       pathTouched = true;
@@ -1232,8 +1257,11 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
         const name = select.value;
         if (!name) {
           preview.setText("");
+          createButton.disabled = true;
           return;
         }
+        const chosen = select.selectedOptions[0];
+        createButton.disabled = !chosen || chosen.disabled;
         const filePath = templateFilePath(this.plugin.settings.templatesFolder, name);
         try {
           const body = await this.readVaultTemplate(filePath);
@@ -1395,7 +1423,8 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     this.statusEl = null;
     this.statusBusy = false;
     this.lastStatus = "Jarvis: checking\u2026";
-    this.refreshTimer = null;
+    /** One write at a time: a second card while the first waits is only confusing. */
+    this.writeBusy = false;
   }
   async onload() {
     await this.loadSettings();
@@ -1454,6 +1483,11 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
       name: "Through Jarvis: tag this note\u2026",
       callback: () => this.openTag()
     });
+    this.addCommand({
+      id: "copy-obsidian-link-to-this-note",
+      name: "Copy an Obsidian link to this note (read-only)",
+      callback: () => void this.copyObsidianLink()
+    });
     this.addRibbonIcon("message-square", "Open the Jarvis panel", () => {
       void this.activatePanel();
     });
@@ -1477,7 +1511,6 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     );
   }
   onunload() {
-    if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
   }
   /* ------------------------------------------------------------------ */
   /* Settings and token                                                  */
@@ -1510,9 +1543,6 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
   hasToken() {
     var _a;
     return ((_a = this.getToken()) != null ? _a : "").trim().length > 0;
-  }
-  baseUrl() {
-    return normalizeBackendUrl(this.settings.backendUrl);
   }
   /* ------------------------------------------------------------------ */
   /* The active note's bounded, read-only context                        */
@@ -1644,6 +1674,34 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     }
     new TagModal(this.app, this, path).open();
   }
+  /* ------------------------------------------------------------------ */
+  /* The read-only direction: an obsidian://open link to this note       */
+  /* ------------------------------------------------------------------ */
+  /**
+   * Copy the read-only `obsidian://open` link for the active note, so it can be
+   * pasted where a person (or Jarvis's own answer) can open that note.
+   *
+   * This builds an OPEN link only. It never builds `new`, `daily`, `unique` or
+   * the `prepend`/`append` actions those take: those write a note immediately,
+   * which would bypass Jarvis's one card, the File Guardian copy and Undo.
+   */
+  async copyObsidianLink() {
+    const path = this.activeFilePath();
+    if (!path) {
+      new import_obsidian5.Notice("Open a note first.");
+      return;
+    }
+    const uri = obsidianOpenUri(this.app.vault.getName(), path);
+    try {
+      await navigator.clipboard.writeText(uri);
+      new import_obsidian5.Notice("Copied the Obsidian link: " + uri, 8e3);
+    } catch (error) {
+      new import_obsidian5.Notice(
+        "Could not copy the link (" + shortError(error) + "). The link is: " + uri,
+        12e3
+      );
+    }
+  }
   async formatSelection(editor, style) {
     var _a;
     const selection = ((_a = editor.getSelection()) != null ? _a : "").trim();
@@ -1659,7 +1717,8 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     await this.performWrite(
       "Asking Jarvis to make the selection " + style,
       (sha) => this.client.formatSpan(path, selection, style, "add", sha),
-      (message) => new import_obsidian5.Notice(message, 8e3)
+      (message) => new import_obsidian5.Notice(message, 8e3),
+      path
     );
   }
   async checklistSelectionLine(editor) {
@@ -1677,7 +1736,8 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     await this.performWrite(
       "Asking Jarvis to turn that line into a checklist item",
       (sha) => this.client.customizeLine(path, "checklist", line, sha),
-      (message) => new import_obsidian5.Notice(message, 8e3)
+      (message) => new import_obsidian5.Notice(message, 8e3),
+      path
     );
   }
   /* ------------------------------------------------------------------ */
@@ -1693,26 +1753,54 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
    *  4. if a card is waiting, poll GET /api/notes/change until the owner
    *     answers it on the PC, and show the backend's final sentence.
    *
+   * `targetPath` is the note the edit was started for. Passing it means a note
+   * switch between the button press and the confirm cannot make the flow read a
+   * different note's hash; the Replace and Tag dialogs pass the path they
+   * captured when they opened.
+   *
+   * Only ONE write runs at a time: a second card while the first is waiting is
+   * confusing, so the next attempt is told to answer or dismiss the first card
+   * (the backend would refuse the loser anyway, with its own hash check).
+   *
    * This method never writes a note, never approves a card, and never turns an
    * error or a "waiting" into a "saved".
    */
-  async performWrite(label, start, show) {
-    show(label + "\u2026", "waiting");
-    let outcome;
-    try {
-      const path = this.activeFilePath();
-      if (!path) throw new ProtocolError("Open a note first.", "invalid");
-      const read = await this.client.readNote(path);
-      if (read.kind !== "ok") throw new ProtocolError(read.message);
-      outcome = await start(read.sha256);
-    } catch (error) {
-      show("Could not ask Jarvis: " + shortError(error), "error");
+  async performWrite(label, start, show, targetPath) {
+    if (this.writeBusy) {
+      show("Another Jarvis edit is already waiting. Answer or dismiss that card first.", "waiting");
       return;
     }
-    show(outcome.message, outcome.kind);
-    if (!shouldPoll(outcome)) return;
-    const final = await this.client.pollChange(outcome.jobId, (message) => show(message, "waiting"));
-    show(final.message, final.kind);
+    this.writeBusy = true;
+    try {
+      show(label + "\u2026", "waiting");
+      let outcome;
+      try {
+        const path = targetPath != null ? targetPath : this.activeFilePath();
+        if (!path) throw new ProtocolError("Open a note first.", "invalid");
+        const read = await this.client.readNote(path);
+        if (read.kind !== "ok") throw new ProtocolError(read.message);
+        outcome = await start(read.sha256);
+      } catch (error) {
+        show("Could not ask Jarvis: " + shortError(error), "error");
+        return;
+      }
+      show(outcome.message, outcome.kind);
+      if (!shouldPoll(outcome)) return;
+      try {
+        const final = await this.client.pollChange(
+          outcome.jobId,
+          (message) => show(message, "waiting")
+        );
+        show(final.message, final.kind);
+      } catch (error) {
+        show(
+          "Lost contact with Jarvis while checking the card: " + shortError(error) + " The write may still have happened - check Jarvis on the PC, then reopen the panel.",
+          "error"
+        );
+      }
+    } finally {
+      this.writeBusy = false;
+    }
   }
   /**
    * The same honest flow for a write that needs no starting hash: creating ONE
@@ -1721,18 +1809,37 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
    * and records the Undo receipt.
    */
   async performWriteUnhashed(label, start, show) {
-    show(label + "\u2026", "waiting");
-    let outcome;
-    try {
-      outcome = await start();
-    } catch (error) {
-      show("Could not ask Jarvis: " + shortError(error), "error");
+    if (this.writeBusy) {
+      show("Another Jarvis edit is already waiting. Answer or dismiss that card first.", "waiting");
       return;
     }
-    show(outcome.message, outcome.kind);
-    if (!shouldPoll(outcome)) return;
-    const final = await this.client.pollChange(outcome.jobId, (message) => show(message, "waiting"));
-    show(final.message, final.kind);
+    this.writeBusy = true;
+    try {
+      show(label + "\u2026", "waiting");
+      let outcome;
+      try {
+        outcome = await start();
+      } catch (error) {
+        show("Could not ask Jarvis: " + shortError(error), "error");
+        return;
+      }
+      show(outcome.message, outcome.kind);
+      if (!shouldPoll(outcome)) return;
+      try {
+        const final = await this.client.pollChange(
+          outcome.jobId,
+          (message) => show(message, "waiting")
+        );
+        show(final.message, final.kind);
+      } catch (error) {
+        show(
+          "Lost contact with Jarvis while checking the card: " + shortError(error) + " The write may still have happened - check Jarvis on the PC, then reopen the panel.",
+          "error"
+        );
+      }
+    } finally {
+      this.writeBusy = false;
+    }
   }
   /* ------------------------------------------------------------------ */
   /* Panel                                                               */

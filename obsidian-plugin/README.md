@@ -15,7 +15,7 @@ Windows PC.
 |---|---|
 | Plugin id | `jarvis-notes-bridge` |
 | Display name | Jarvis notes bridge |
-| Version | `0.1.1` |
+| Version | `0.1.2` |
 | Needs Obsidian | `1.13.0` or newer |
 | Runs on | Desktop only |
 | Talks to | the Jarvis backend on this PC, default `http://127.0.0.1:4719` |
@@ -170,6 +170,32 @@ default hotkey; you can assign one in Obsidian's **Settings -> Hotkeys**.
 | **Through Jarvis: turn the selection's line into a checklist item** | Wave 2. One card. |
 | **Through Jarvis: replace the selection...** | Wave 2. One card. |
 | **Through Jarvis: tag this note...** | Wave 2. One card. |
+| **Copy an Obsidian link to this note (read-only)** | Copies an `obsidian://open?vault=...&file=...` link to the clipboard, so it can be pasted where a note can be opened. It builds an open link only - never a URI write action. |
+
+## Links back to Obsidian (the read-only direction)
+
+The other half of "fully integrated" is the way **back** to the note. This
+plugin does its half without writing anything: **Copy an Obsidian link to this
+note** puts one link on the clipboard, in the shape Obsidian's own URI
+documentation defines:
+
+```
+obsidian://open?vault=<vault name>&file=<vault-relative path>
+```
+
+The vault name is the name Obsidian shows; the path uses `/` and is
+URL-encoded. A `#Heading` can be added after the file to jump to a section
+(`%23Heading` once encoded) - the helper supports it even though the command
+copies the whole note.
+
+**Only `open` is ever built.** Obsidian's URI scheme also has actions that
+change a note at once (`new` with `prepend`/`append`, `daily`, `unique`). This
+plugin builds none of them, and a test pins that: a link is a way to *look* at
+a note, never a way to change it. Every change in this project goes through
+Jarvis's one card, the File Guardian copy and Undo, and an instant URI write
+would bypass all three. The Jarvis desktop and chat lanes can use the same
+`obsidian://open` shape to send the owner back to a note; that direction
+belongs to those lanes, not this plugin.
 
 ## The status bar
 

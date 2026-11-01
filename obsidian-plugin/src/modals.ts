@@ -175,6 +175,7 @@ export class ReplaceModal extends Modal {
               "Asking Jarvis to replace the selection in " + this.path,
               (sha) => this.plugin.client.replaceOnce(this.path, this.selection, this.newText, sha),
               show,
+              this.path,
             );
           } finally {
             button.setDisabled(false);
@@ -231,6 +232,7 @@ export class TagModal extends Modal {
                 this.resultEl.setText(message);
                 this.resultEl.setAttribute("data-kind", kind ?? "");
               },
+              this.path,
             );
           } finally {
             button.setDisabled(false);

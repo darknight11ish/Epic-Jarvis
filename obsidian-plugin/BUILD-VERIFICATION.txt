@@ -424,3 +424,84 @@ TESTS (run by the Lead; the packaging lane was not asked to run them)
   (that layout is listed above and was measured). Keeping the record out of the
   zip leaves the recorded zip hash valid.
 
+
+
+STACKED CHANGE 0.1.2 - READ-ONLY OBSIDIAN LINK + THE FINAL AUDIT'S FIXES (2026-10-31)
+-------------------------------------------------------------------------------------
+This section is appended on the stacked branch `feat/obsidian-plugin-uri-open-2026-10-31`,
+which sits on top of the commit recorded above (same base 66d114038). It adds one
+read-only feature and fixes the findings of the independent final audit (that
+audit's report is outside this repository, at
+.dsh-scratch/OBSIDIAN-PLUGIN-LANE-2026-10-31/audit/AUDIT.md; it committed nothing).
+
+WHAT CHANGED (all inside obsidian-plugin/; the one changelog.d fragment is separate):
+  - NEW read-only feature: the command "Copy an Obsidian link to this note
+    (read-only)" copies `obsidian://open?vault=<vault name>&file=<path>` to the
+    clipboard (a #Heading may follow the file). The pure helpers `obsidianOpenUri`
+    and `obsidianUriAction` live in src/protocol.ts. It builds ONLY the `open`
+    action: no `new`, `daily`, `unique`, `prepend` or `append` link is ever built,
+    because those write a note instantly and would bypass Jarvis's one card, the
+    File Guardian copy and Undo. A unit test and the source-text safety test pin it.
+  - AUDIT FIX (MEDIUM): the waiting-card poll is now inside the try/catch of
+    performWrite/performWriteUnhashed. A backend restart while a card waits now
+    shows "Lost contact with Jarvis while checking the card ... The write may
+    still have happened" instead of freezing the panel on "Waiting" forever (and
+    logging an unhandled rejection).
+  - AUDIT FIX (LOW-MEDIUM): ONE write at a time. A `writeBusy` guard refuses a
+    second edit while the first card waits, saying so plainly; the backend would
+    refuse the loser with its own hash check, so this is UI clarity, not safety.
+  - AUDIT FIX (LOW): performWrite takes the target path the edit was started for,
+    and the Replace and Tag dialogs pass the path they captured when they opened,
+    so a note switch mid-dialog cannot read a different note's hash (previously a
+    misleading 409; never a wrong write).
+  - AUDIT FIX (LOW): a very fast `denied` or `failed` answer on a write route now
+    maps to kind denied/failed, not to "error".
+  - AUDIT FIX (LOW): the template "Create note" button is disabled when no listed
+    template can be read (all "Jarvis only") and when the selected option is
+    disabled; the offered new-note path follows the chosen template until the
+    owner types one.
+  - AUDIT CLEANUP: removed the never-assigned `refreshTimer` field, the unused
+    `baseUrl()` method and the now-unused `normalizeBackendUrl` import in
+    src/main.ts. `onunload()` stays (empty, documented) because Obsidian's
+    register* calls clean up.
+  - VERSION 0.1.2 in manifest.json, package.json, package-lock.json and
+    versions.json.
+
+MEASURED ON THE STACKED TREE (Lead, 2026-10-31, commands from obsidian-plugin\)
+  npm run typecheck (tsc --noEmit)      exit 0
+  npm run build (esbuild)               exit 0, main.js 73,755 bytes
+  node --check main.js                  exit 0
+  tests (node --experimental-test-isolation=none --test; see the note above about
+  why the sandbox needs that flag)
+      tests/protocol.test.mjs           75 tests, 75 pass, 0 fail
+      tests/templates.test.mjs          17 tests, 17 pass, 0 fail
+      tests/safety.test.mjs             12 tests, 12 pass, 0 fail
+      combined                         104 tests, 104 pass, 0 fail, exit 0
+  main.js SHA-256                       F930E8E21D43690CE00BCA36C12AB29D5419E26CCFB639B327BD91C2128AF9A7
+  JSON parse (manifest/package/versions/tsconfig)   4/4 parse; versions.json holds
+                                         0.1.0, 0.1.1 and 0.1.2, each 1.13.0
+  bundle greps (main.js, [regex]::Matches on literal-escaped patterns)
+      11/11 required routes present: /api/chat 1, /api/notes/capture 2,
+        read 1, templates 1, insert 1, format 1, replace 1, customize 1,
+        tag 1, create 1, change 2
+      forbidden at 0: /api/approve, /api/deny, vault.modify, vault.create,
+        vault.delete, replaceSelection, obsidian://new, obsidian://daily,
+        obsidian://unique, obsidian://append, obsidian://prepend,
+        Authorization, "Bearer ", localStorage, fetch(
+      allowed URI present once: obsidian://open?vault=
+      headers present: X-Jarvis-Token 1, X-Jarvis-Client 1, X-Jarvis-Surface 1,
+        "hud" 1, "desktop" 1
+      long hex/base64-looking literals (32+): 0
+  package: jarvis-obsidian-plugin-0.1.2.zip
+      path:   .dsh-scratch\OBSIDIAN-URI-STACK-2026-10-31\jarvis-obsidian-plugin-0.1.2.zip
+      bytes:  85,055
+      SHA-256: 2B6761D9F2C271593EF2C817F9BE0345D8E45D0042EA89401EE2F6172847D640
+      entries: 22, one top-level jarvis-notes-bridge\ folder (runtime files at its
+      root plus README/INSTALL/SECURITY and the source/build files). This
+      BUILD-VERIFICATION.txt is a repository file and is NOT inside the zip, so
+      the recorded zip hash stays valid.
+
+UNTESTED, AGAIN, NOT A PASS: the clipboard write and the copied link opening a
+real note were not run (Obsidian is installed on this PC but this work never
+opened it and never touched a vault); everything in the UNTESTED list above still
+applies unchanged. No write was sent to the live backend.

@@ -286,6 +286,19 @@ export function interpretWriteReply(status: number, body: Record<string, unknown
       data,
     );
   }
+  // A card answered very fast (denied or failed before the first answer) comes
+  // back from the write route itself, not from the status poll. Say what it is.
+  if (state === "denied") {
+    return baseOutcome("denied", said || "You said no, so nothing was changed.", status, data);
+  }
+  if (state === "failed") {
+    return baseOutcome(
+      "failed",
+      said || "Jarvis could not make the change. Nothing was written.",
+      status,
+      data,
+    );
+  }
   if (status >= 200 && status < 300 && data.ok !== false) {
     if (state === "unchanged") {
       return baseOutcome("unchanged", said || "Nothing needed changing.", status, data);
@@ -541,4 +554,43 @@ export function pollGaveUpMessage(): string {
 /** True when an outcome means a card exists and its status should be polled. */
 export function shouldPoll(outcome: WriteOutcome): boolean {
   return outcome.kind === "waiting" && outcome.jobId !== "";
+}
+
+/* ---------------------------------------------------------------------- */
+/* The READ-ONLY direction: a link that opens a note in Obsidian           */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * The action part of an `obsidian://` URI, lowercased ("open" for a link that
+ * only opens a note, "" when there is no action). Used by the tests and by the
+ * safety test to prove the plugin builds OPEN links only.
+ */
+export function obsidianUriAction(uri: string): string {
+  const match = /^obsidian:\/\/([A-Za-z]+)/.exec((uri ?? "").trim());
+  return match ? match[1].toLowerCase() : "";
+}
+
+/**
+ * Build the link that OPENS one note (optionally at a heading), for the
+ * read-only direction "Jarvis sends the owner back to the exact note":
+ *
+ *   obsidian://open?vault=<vault name>&file=<vault-relative path>[#<heading>]
+ *
+ * Obsidian's URI scheme also has write actions (`new` with `prepend`/`append`,
+ * `daily`, `unique`). This plugin deliberately builds ONLY `open`: a link is a
+ * way to look at a note, never a way to change it. Every write in this project
+ * goes through Jarvis's one-card routes, and a URI that writes instantly would
+ * bypass the card, the File Guardian copy and Undo.
+ */
+export function obsidianOpenUri(vaultName: string, filePath: string, heading?: string): string {
+  const vault = (vaultName ?? "").trim();
+  const file = (filePath ?? "").trim().replace(/^\/+/, "");
+  const at = (heading ?? "").trim();
+  const target = at ? file + "#" + at : file;
+  return (
+    "obsidian://open?vault=" +
+    encodeURIComponent(vault) +
+    "&file=" +
+    encodeURIComponent(target)
+  );
 }

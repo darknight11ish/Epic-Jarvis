@@ -299,7 +299,7 @@ export class JarvisPanel extends ItemView {
     createButton.addEventListener("click", () => {
       void this.createFromTemplate(createButton, templateSelect, templatePath);
     });
-    void this.fillTemplates(templateSelect, templatePreview, templatePath);
+    void this.fillTemplates(templateSelect, templatePreview, templatePath, createButton);
   }
 
   private async insertUnderHeading(
@@ -324,6 +324,7 @@ export class JarvisPanel extends ItemView {
         'Asking Jarvis to add a line under "' + heading + '"',
         (sha) => this.plugin.client.insertUnderHeading(path, text, heading, sha),
         (message, kind) => this.showResult(message, kind),
+        path,
       );
     } finally {
       button.disabled = false;
@@ -347,6 +348,7 @@ export class JarvisPanel extends ItemView {
         "Asking Jarvis to make the selection " + style,
         (sha) => this.plugin.client.formatSpan(path, selection, style, "add", sha),
         (message, kind) => this.showResult(message, kind),
+        path,
       );
     } finally {
       button.disabled = false;
@@ -368,6 +370,7 @@ export class JarvisPanel extends ItemView {
         "Asking Jarvis to turn that line into a checklist item",
         (sha) => this.plugin.client.customizeLine(path, "checklist", line, sha),
         (message, kind) => this.showResult(message, kind),
+        path,
       );
     } finally {
       button.disabled = false;
@@ -401,6 +404,7 @@ export class JarvisPanel extends ItemView {
     select: HTMLSelectElement,
     preview: HTMLElement,
     pathInput: HTMLInputElement,
+    createButton: HTMLButtonElement,
   ): Promise<void> {
     if (!select.isConnected) return;
     let backendNames: string[] = [];
@@ -424,6 +428,7 @@ export class JarvisPanel extends ItemView {
       option.disabled = true;
       select.appendChild(option);
       preview.setText(backendWhy ? "Jarvis said: " + backendWhy : "");
+      createButton.disabled = true;
       return;
     }
     for (const choice of choices) {
@@ -435,6 +440,9 @@ export class JarvisPanel extends ItemView {
     }
     const firstUsable = choices.find((choice) => canCreateFromTemplate(choice));
     if (firstUsable) select.value = firstUsable.name;
+    // "Jarvis only" names are listed but cannot be created from: no route sends
+    // template text back, and the plugin will not invent a body.
+    createButton.disabled = !firstUsable;
     // The offered path follows the chosen template until the owner types one.
     let pathTouched = false;
     pathInput.addEventListener("input", () => {
@@ -445,8 +453,11 @@ export class JarvisPanel extends ItemView {
         const name = select.value;
         if (!name) {
           preview.setText("");
+          createButton.disabled = true;
           return;
         }
+        const chosen = select.selectedOptions[0];
+        createButton.disabled = !chosen || chosen.disabled;
         const filePath = templateFilePath(this.plugin.settings.templatesFolder, name);
         try {
           const body = await this.readVaultTemplate(filePath);
