@@ -3,7 +3,7 @@
 The owner's feature list, as data: 167 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 fe5407a58fae1507ac1831301e9b5e01bcd03fad5711b958b261c8b57a006df7); the apps' Features pages read their own
+`features/features.json` (sha256 f71656e8fd545251d830608ac1edb3898ccbe6af8208383a7de097fb865f43eb); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "fe5407a58fae1507ac1831301e9b5e01bcd03fad5711b958b261c8b57a006df7"
+SOURCE_SHA256 = "f71656e8fd545251d830608ac1edb3898ccbe6af8208383a7de097fb865f43eb"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -741,10 +741,10 @@ FEATURES = (
         "id": "pc-help",
         "group": "Notes and files",
         "title": "PC help",
-        "what": "Five plain answers about this PC - what is slow, what is full, what is hot.",
-        "where": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help.",
+        "what": "Plain answers about this PC - how full the drives are, how much RAM is free, what CPU and graphics cards it has, how long it has been on, why it is slow or hot, and the current chat model and focus preset.",
+        "where": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help. The same facts are answered straight in chat, on either app, when you ask about disk/storage, RAM, CPU, GPU or uptime.",
         "asks": "No card - it only reads.",
-        "limit": "Nothing is read until you press the button.",
+        "limit": "The chat answers read the PC when you ask; the PC help card reads when you press Check now. Nothing is written, changed, sent or learned, and no user name or file path is included - drives are named by their letter only. A fact this PC cannot read (for example a CPU model name, a non-NVIDIA card or its temperature) is said as not readable, never guessed.",
         "surface": "both",
         "covers": ["brain.model.pc-help"],
     },

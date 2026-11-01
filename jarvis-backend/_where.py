@@ -570,6 +570,9 @@ SHIPPED = (
     # using the graphics card - read-only, answered without the model;
     # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
     "jarvis_pc_help.py",
+    # Read-only PC facts (2026-10-31): the same readers as PC help, put
+    # together for the chat answers about disk/RAM/CPU/GPU/uptime/current model.
+    "jarvis_pc_facts.py",
     # Tutorials and the FAQ (owner, 2026-10-05; docs/TUTORIALS-DESIGN.md): one
     # catalogue and the owner's reading progress, read by both apps -
     # GET /api/tutorials, POST /api/tutorials/progress, GET /api/faq

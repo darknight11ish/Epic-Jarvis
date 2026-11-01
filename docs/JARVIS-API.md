@@ -15934,6 +15934,40 @@ rule rather than being read aloud - and marks the turn as having read
 outside text (`pc_help_programs`), because a program chooses its own name:
 it is never learned from. Disk, heat and restart answers are neither.
 
+### 84.1a PC facts in chat (added 2026-10-31)
+
+The owner asked "how much storage does my computer have available?" and the
+model said it could not read system storage. The facts already existed; a
+small read-only layer, `jarvis_pc_facts.py` (shipped whole), now puts them
+together for the fast path. It calls the SAME readers PC help uses
+(`jarvis_pc_help.real_readers()`: kernel32 memory/drives/uptime, nvidia-smi
+cards) and adds the current chat model and focus preset. **No new route**: the
+apps already read `GET /api/pc/help` (§84.2), and the phone is not given a
+second one. Nothing is written, changed, sent, gated or learned.
+
+| Asked | Answered from |
+|---|---|
+| "how much storage does my computer have available?" / "how much space is free on my C: drive?" | every fixed drive's own total/free bytes, as `C: has 41.0 GB free of 930 GB (4% free).` |
+| "how much RAM do I have / is free?" | GlobalMemoryStatusEx total and available bytes |
+| "what CPU do I have?" | the real logical core count; the CPU's NAME is not read anywhere, so it is said "not recorded" and never invented |
+| "what GPU do I have?" | nvidia-smi's card names and VRAM (temperature/load only where that same reader has them); no nvidia-smi = said plainly |
+| "how long has this PC been on?" | GetTickCount64, said in days and hours |
+| "is my disk getting full?" | the C: free space against `jarvis_storage.MIN_FREE_AFTER_DOWNLOAD` (25 GB) and `MIN_FREE_TO_START` (3 GB), the same margins the model chooser uses, with what they mean |
+
+The answers name only drive letters - never a user name, a path or a program
+name - so they are not private and are not outside text. A fact that cannot
+be read is "not readable", never a guess. "How much storage does Google give
+me?" is not captured: the shapes require this PC or a drive. The older
+PC-help phrases still win their own topics ("how much space do I have left?"
+is `pc_help.disk`; "how long has my PC been on?" is `pc_help.restart`), and
+the new layer answers the shapes those patterns did not cover.
+
+The current model/preset line is added to a local prompt only when the newest
+question is about this PC (`jarvis_agent.with_pc_facts_note`): the model is
+told what model and focus preset are current and that it may read disk, RAM,
+CPU, GPU and uptime facts on request, and never to invent a number. An
+ordinary question gets exactly the prompt it had before.
+
 ### 84.2 `GET /api/pc/help`
 
 The same five answers for the apps, routed by `jarvis_brain_reads.py`

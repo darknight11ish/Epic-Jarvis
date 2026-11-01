@@ -1570,6 +1570,11 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "PC facts": disk/RAM/CPU/GPU/uptime, the owner's own machine ---------
+    got = _pc_facts(s)
+    if got is not None:
+        return got
+
     # --- "remind me next time I talk about ..." (jarvis_next_time.py) ------------------
     got = _next_time(s)
     if got is not None:
@@ -2280,6 +2285,37 @@ _PC = r"(?:my|the|this)\s+(?:pc|computer|laptop|machine|desktop)"
 _GPU = r"(?:my|the)\s+(?:graphics\s+card|gpu|video\s+card)"
 _DRIVE = (r"(?:my|the)\s+(?:disks?|drives?|hard\s+drives?|hard\s+disks?|ssds?|storage|"
           r"c\s+drive)")
+#: "PC facts" (jarvis_pc_facts.py, 2026-10-31): the owner's own storage/space,
+#: RAM, CPU/GPU, uptime and "is my disk getting full?" - answered without the
+#: model from the readers PC help already uses. Each is a whole sentence and
+#: names THIS PC (or a drive): "how much storage does Google give me" is not
+#: one of ours and stays the model's/search's.
+_PC_FACTS = (
+    ("drive", re.compile(
+        r"how\s+much\s+(?:free\s+)?(?:space|storage)\s+"
+        r"(?:is\s+(?:free|left|available)|do\s+i\s+have)\s+(?:on|of)\s+"
+        r"(?:my|the)\s+(?P<drive>[a-z])(?::)?(?:\s+drive)?(?:\s+left)?")),
+    ("storage", re.compile(
+        r"how\s+much\s+(?:storage|space)\s+(?:does|do)\s+(?:my|this|the)\s+"
+        r"(?:computer|pc|machine)\s+(?:have|has)(?:\s+(?:available|free|left))?")),
+    ("space_all", re.compile(
+        r"how\s+much\s+(?:free\s+)?(?:space|storage)\s+"
+        r"(?:do\s+i\s+have|have\s+i\s+got|is\s+there)(?:\s+(?:left|available))?")),
+    ("ram", re.compile(
+        r"how\s+much\s+(?:ram|memory)\s+(?:do\s+i\s+have|is\s+free|"
+        r"have\s+i\s+got|does\s+(?:my|this|the)\s+(?:pc|computer)\s+have)")),
+    ("cpu", re.compile(
+        r"what\s+(?:cpu|processor)\s+(?:do\s+i\s+have|does\s+(?:my|this|the)\s+"
+        r"(?:pc|computer)\s+have)")),
+    ("gpu", re.compile(
+        r"what\s+(?:gpu|graphics\s+card)\s+(?:do\s+i\s+have|does\s+(?:my|this|the)\s+"
+        r"(?:pc|computer)\s+have)|what\s+graphics\s+card\s+is\s+in\s+" + _PC)),
+    ("uptime", re.compile(
+        r"how\s+long\s+has\s+(?:this|my)\s+(?:pc|computer|machine)\s+been\s+on")),
+    ("full", re.compile(
+        r"is\s+my\s+(?:disk|drive|storage)\s+getting\s+full")),
+)
+
 _PC_HELP = (
     ("slow", re.compile(
         r"why\s+is\s+" + _PC + r"\s+(?:so\s+|really\s+|being\s+|running\s+)?"
@@ -2318,6 +2354,28 @@ _PC_HELP = (
         r"|what(?:'?s|\s+is)\s+(?:my|the)\s+(?:pc's\s+|computer's\s+)?uptime"
         r"|(?:pc|computer|system)\s+uptime")),
 )
+
+
+def _pc_facts(s: str) -> Optional[Intent]:
+    """The whole-sentence PC-facts shapes, or None (not ours)."""
+    for shape, rx in _PC_FACTS:
+        m = rx.fullmatch(s)
+        if m:
+            return Intent("pc_facts", {"shape": shape,
+                                       "drive": (m.groupdict().get("drive") or "").upper()})
+    return None
+
+
+def _run_pc_facts(f: dict) -> Result:
+    """The fixed PC-facts answer, from the real read-only readers."""
+    shape = str(f.get("shape") or "")
+    drive = str(f.get("drive") or "")
+    try:
+        import jarvis_pc_facts as F
+        return Result(F.answer(shape, drive=drive), "pc_facts")
+    except Exception:                                       # noqa: BLE001
+        return Result("I could not read this PC's facts just now, so I will not guess.",
+                      "pc_facts")
 
 
 def _pc_help(s: str) -> Optional[Intent]:
@@ -10992,6 +11050,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_wellbeing(intent)
     if n == "pc_help":
         return _run_pc_help(intent)
+    if n == "pc_facts":
+        return _run_pc_facts(f)
     if n in ("phone_ring", "phone_stop"):
         return _run_find_phone(intent)
     if n.startswith("lockdown_"):
