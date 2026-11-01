@@ -806,3 +806,38 @@ See the table at the end: every entry there says whether the **preflight** cover
 | "from now on..." rules | unknown | **no** | no artifact |
 
 **Read the `real turn` column as the second half of the testing queue.** Everything marked **no** there has never been driven by the owner's own words on his own machine, whatever the suites say.
+
+## UPDATED 2026-10-31, pass 12 - the notes-and-chat wave, live on the deployed build
+
+Measured on the live HUD and phone after the chat-gap deploy (desktop 0.2.379+, phone 0.2.3339).
+Two-stage verdict wording from Gemini ruling 8 is used here:
+**PASS (card-verified & deny-safe)** = the action was driven, its approval card appeared, it was
+**denied**, and the effect was checked absent; **BLOCKED-OWNER (accept & undo on live)** = the safe
+path was reached but completing it needs the owner's own yes on live hardware - never a pass.
+
+| # | area | what was actually driven | verdict | evidence / limit |
+|---|---|---|---|---|
+| 12.1 | feature explanations | "what can you do?" gave the by-group overview **"167 features in 9 groups"**; depth answers for the vault organizer, notes editor, picture-in-picture limits and privacy rules quoted the catalogue | **PASS (read-only)** | no card, no model; matches the 167-row catalogue |
+| 12.2 | send files to phone | typed send-file chat ask: the **`send_file_to_phone` card appeared, was denied**, `/api/files/send` stayed empty, the files stayed put | **PASS (card-verified & deny-safe)** | denied card, empty send route, files intact |
+| 12.3 | Obsidian make-a-note | "make a note: ..." filed real text into **2026-10-31.md**; the entry was then cleaned up and the **vault sha restored** | **PASS (card-verified & deny-safe; write undone)** | real file write observed, then undone |
+| 12.4 | vault organizer | off-state and plan-state answers were read; one approval card (`change_own_config`) was raised and **denied** | **PASS (card-verified & deny-safe)** | card denied; no organizer setting changed |
+| 12.5 | phone Today (DEF-025) | pass-12 phone drive read the Today board and checked it against DEF-025 | **PASS** | phone read of the live board; TalkBack pixels still owner's eyes |
+| 12.6 | note save | reached the save path, one card waits | **BLOCKED-OWNER (accept & undo on live)** | accepting a save is the owner's yes; not performed |
+| 12.7 | accepted writes generally | cards raised, left for the owner | **BLOCKED-OWNER (accept & undo on live)** | never approved by the machine |
+| 12.8 | organizer apply | apply-to-a-copy reached, card waits | **BLOCKED-OWNER (accept & undo on live)** | owner's yes required |
+| 12.9 | DEF-025 TalkBack | the visible/TalkBack distinction needs the owner's screen reader on the live phone | **BLOCKED-OWNER** | not counted as a pass |
+| 12.10 | DEF-026 banner | hidden-title banner check needs the owner's eyes on live | **BLOCKED-OWNER** | not counted as a pass |
+
+### New capabilities recorded as in-flight (not a pass, not deployed yet)
+
+The chat audit's follow-up wave is built and green on its branches but **not deployed to the live
+binaries yet - CI/deploy #5 pending**: notes read / search / write / surgical edit / customize
+answers; organizer scopes; surface awareness; tiered switches; PiP and home UI; the HUD memory tab.
+These are recorded here as **IN-FLIGHT - NOT DRIVEN ON LIVE**, and each becomes a row that can be
+promoted only by a later live drive under the same two-stage wording.
+
+**Evidence for pass 12.** The owner's chat audit and the re-drive raw records:
+`.dsh-scratch/FIELD-TEST-2026-10-31/pass11/` and the pass-12 phone/desktop drive notes; the deploy's
+raw evidence is `.dsh-scratch/DEPLOY-EVIDENCE-2026-10-31.md`. Matrix rows above supersede no older
+row; where an older row says NEVER, this block is the later record.
+
