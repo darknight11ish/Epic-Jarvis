@@ -15,7 +15,7 @@ Windows PC.
 |---|---|
 | Plugin id | `jarvis-notes-bridge` |
 | Display name | Jarvis notes bridge |
-| Version | `0.1.1` |
+| Version | `0.1.2` |
 | Needs Obsidian | `1.13.0` or newer |
 | Runs on | Desktop only |
 | Talks to | the Jarvis backend on this PC, default `http://127.0.0.1:4719` |
@@ -39,9 +39,9 @@ before the deploy they will honestly say the notes routes are not deployed yet
 | What | Details |
 |---|---|
 | Ribbon icon and panel | Click the ribbon icon (a speech bubble on Obsidian's left ribbon) and a **Jarvis** panel opens on the right. |
-| The note's shape | The panel shows the active note's title and path, its headings, outgoing links, inbound links, unresolved links and frontmatter keys. It reads all of that from Obsidian's own metadata cache - the index Obsidian already keeps. The note's text is read read-only, and only when you ask something. |
-| Bounds | At most 80 headings, 80 links and 60 frontmatter keys. A note with more shows the first ones. The bounds are fixed, not a setting. |
-| Ask | Type a question in the panel's box and the answer appears in the panel, under "Read-only: Jarvis answers here." Asking raises no card. Up to 12,000 characters of the note, and up to 12,000 characters of any selected text, go with the question; it does not send the whole vault. |
+| The note's shape | The panel shows the active note's title and path, its headings, outgoing links, inbound links, unresolved links and frontmatter keys. It reads all of that from Obsidian's own metadata cache - the index Obsidian already keeps. Obsidian's in-memory copy of the note's text is read read-only whenever the panel refreshes and when you ask; it only leaves this PC (to the local Jarvis) when you ask. |
+| Bounds | The panel displays the first 30 headings and links per list, and the ask context carries up to 80 headings, 80 links and 60 frontmatter keys. A note with more is cut at those fixed bounds - not a setting. |
+| Ask | Type a question in the panel's box and the answer appears in the panel, under "Read-only: Jarvis answers here." The ask writes nothing by itself, but it is an ordinary Jarvis turn: if Jarvis decides to do something, its own card appears on the PC, never here. Up to 12,000 characters of the note, and up to 12,000 characters of any selected text, go with the question; it does not send the whole vault. |
 | Selection ask | With text selected, the panel's question carries the selection too. The command **Ask Jarvis about the selection** does the same from the editor. |
 | Capture | The command **Capture to today's note** opens a small box, prefilled with your selection. What you type is filed into today's daily note by the same route the desktop `#obs` capture uses. The panel has a **Capture selection** button for the same thing. |
 | Capture's answer | The box shows Jarvis's own sentence back, and says plainly: "This plugin cannot approve cards. If a card appears, answer it in the Jarvis window on the PC - nothing is written before you do." |
@@ -170,6 +170,32 @@ default hotkey; you can assign one in Obsidian's **Settings -> Hotkeys**.
 | **Through Jarvis: turn the selection's line into a checklist item** | Wave 2. One card. |
 | **Through Jarvis: replace the selection...** | Wave 2. One card. |
 | **Through Jarvis: tag this note...** | Wave 2. One card. |
+| **Copy an Obsidian link to this note (read-only)** | Copies an `obsidian://open?vault=...&file=...` link to the clipboard, so it can be pasted where a note can be opened. It builds an open link only - never a URI write action. |
+
+## Links back to Obsidian (the read-only direction)
+
+The other half of "fully integrated" is the way **back** to the note. This
+plugin does its half without writing anything: **Copy an Obsidian link to this
+note** puts one link on the clipboard, in the shape Obsidian's own URI
+documentation defines:
+
+```
+obsidian://open?vault=<vault name>&file=<vault-relative path>
+```
+
+The vault name is the name Obsidian shows; the path uses `/` and is
+URL-encoded. A `#Heading` can be added after the file to jump to a section
+(`%23Heading` once encoded) - the helper supports it even though the command
+copies the whole note.
+
+**Only `open` is ever built.** Obsidian's URI scheme also has actions that
+change a note at once (`new` with `prepend`/`append`, `daily`, `unique`). This
+plugin builds none of them, and a test pins that: a link is a way to *look* at
+a note, never a way to change it. Every change in this project goes through
+Jarvis's one card, the File Guardian copy and Undo, and an instant URI write
+would bypass all three. The Jarvis desktop and chat lanes can use the same
+`obsidian://open` shape to send the owner back to a note; that direction
+belongs to those lanes, not this plugin.
 
 ## The status bar
 

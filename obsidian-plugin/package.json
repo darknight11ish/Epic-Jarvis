@@ -1,6 +1,6 @@
 {
   "name": "jarvis-notes-bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Obsidian plugin: ask the local Jarvis about the note or selection you are reading, and drive note edits through Jarvis's own one-card routes. Read-only in the vault: the plugin never writes a note and never approves a card.",
   "main": "main.js",
   "scripts": {

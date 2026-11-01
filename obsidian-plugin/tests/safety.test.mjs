@@ -305,8 +305,31 @@ describe("safety: the vault is never written", () => {
 });
 
 describe("safety: nothing calls out through another door", () => {
-  test("no obsidian:// URI is built", () => {
-    assertNoText(sources(), "obsidian://", "the plugin must never open an obsidian:// URI");
+  test("no obsidian:// WRITE action is built (an OPEN link is the only one)", () => {
+    // The plugin may build one kind of obsidian:// link: `open`, which only
+    // shows a note. Obsidian's other actions write immediately (new + append /
+    // prepend, daily, unique) and would bypass the one-card model.
+    const files = sources();
+    for (const banned of [
+      "obsidian://new",
+      "obsidian://daily",
+      "obsidian://unique",
+      "obsidian://append",
+      "obsidian://prepend",
+    ]) {
+      assertNoText(files, banned, "a URI write action is banned: " + banned);
+    }
+    // The one builder lives in protocol.ts, and it emits `open` only.
+    assertHasPattern(
+      files.filter((file) => file.name === "protocol.ts"),
+      /obsidian:\/\/open\?vault=/,
+      "the only obsidian:// link the plugin builds must be an open link",
+    );
+    assertNoPattern(
+      files.filter((file) => file.name === "protocol.ts"),
+      /obsidian:\/\/(new|daily|unique|append|prepend)/,
+      "protocol.ts must never build a URI write action",
+    );
   });
 
   test("the only network call is requestUrl", () => {

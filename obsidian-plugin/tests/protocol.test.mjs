@@ -35,6 +35,8 @@ const {
   isLoopbackUrl,
   lineContaining,
   normalizeBackendUrl,
+  obsidianOpenUri,
+  obsidianUriAction,
   parseJsonBody,
   pollDelayMs,
   pollGaveUpMessage,
@@ -713,5 +715,102 @@ describe("clip and shortError", () => {
     assert.equal(shortError("z".repeat(500)).length, 240);
     assert.equal(shortError(new Error("plain")), "plain");
     assert.equal(shortError("plain"), "plain");
+  });
+});
+
+describe("the read-only Obsidian link (obsidian://open)", () => {
+  test("builds an OPEN link with the vault name and the vault-relative path", () => {
+    assert.equal(
+      obsidianOpenUri("My Vault", "Projects/Jarvis.md"),
+      "obsidian://open?vault=My%20Vault&file=Projects%2FJarvis.md",
+    );
+    assert.equal(obsidianUriAction(obsidianOpenUri("v", "a.md")), "open");
+  });
+
+  test("a heading becomes one encoded #heading after the file", () => {
+    const uri = obsidianOpenUri("v", "a.md", "Session notes");
+    assert.equal(uri, "obsidian://open?vault=v&file=a.md%23Session%20notes");
+    assert.equal(decodeURIComponent(uri.split("file=")[1]), "a.md#Session notes");
+  });
+
+  test("strips one leading slash and trims the inputs", () => {
+    assert.equal(
+      obsidianOpenUri("  v  ", "/folder/a.md", "  Part 1  "),
+      "obsidian://open?vault=v&file=folder%2Fa.md%23Part%201",
+    );
+  });
+
+  test("an empty heading means no fragment", () => {
+    assert.equal(
+      obsidianOpenUri("v", "a.md", "   "),
+      "obsidian://open?vault=v&file=a.md",
+    );
+  });
+
+  test("only ever produces the open action, never a write action", () => {
+    for (const uri of [
+      obsidianOpenUri("v", "a.md"),
+      obsidianOpenUri("v", "a.md", "H"),
+      obsidianOpenUri("", ""),
+    ]) {
+      assert.equal(obsidianUriAction(uri), "open");
+      assert.ok(!/obsidian:\/\/(new|daily|unique|append|prepend)/i.test(uri));
+    }
+    assert.equal(obsidianUriAction("obsidian://daily?vault=v"), "daily");
+    assert.equal(obsidianUriAction("https://example.com"), "");
+  });
+});
+
+describe("a card answered very fast is not an error", () => {
+  test("a write answer that is already denied maps to denied, not error", () => {
+    const outcome = interpretWriteReply(200, {
+      ok: false,
+      state: "denied",
+      path: "a.md",
+      message: "You said no, so nothing was changed.",
+    });
+    assert.equal(outcome.kind, "denied");
+    assert.equal(outcome.message, "You said no, so nothing was changed.");
+  });
+
+  test("a write answer that is already failed maps to failed, not error", () => {
+    const outcome = interpretWriteReply(200, {
+      ok: false,
+      state: "failed",
+      path: "a.md",
+      message: "The copy of the note could not be saved.",
+    });
+    assert.equal(outcome.kind, "failed");
+    assert.equal(outcome.message, "The copy of the note could not be saved.");
+  });
+
+  test("a denied write answer without a sentence still says nothing was changed", () => {
+    const outcome = interpretWriteReply(200, { ok: false, state: "denied" });
+    assert.equal(outcome.kind, "denied");
+    assert.match(outcome.message, /nothing was changed/i);
+  });
+});
+
+describe("a capture state of failed is not filed", () => {
+  test("state failed maps to not_filed, never to filed", () => {
+    const outcome = interpretCaptureReply(200, {
+      ok: true,
+      state: "failed",
+      message: "Not filed: the daily note could not be written.",
+    });
+    assert.equal(outcome.kind, "not_filed");
+    assert.equal(outcome.message, "Not filed: the daily note could not be written.");
+  });
+
+  test("state denied and timed_out also map to not_filed", () => {
+    for (const state of ["denied", "timed_out"]) {
+      const outcome = interpretCaptureReply(200, { ok: true, state });
+      assert.equal(outcome.kind, "not_filed", "state " + state + " must not be filed");
+    }
+  });
+
+  test("state filed still maps to filed", () => {
+    const outcome = interpretCaptureReply(200, { ok: true, state: "filed", message: "Filed." });
+    assert.equal(outcome.kind, "filed");
   });
 });
