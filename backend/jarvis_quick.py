@@ -1037,6 +1037,15 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
         if d is None:
             return None
         return When(at=now + d)
+    # "30 minutes from now", "an hour from now", "half an hour from now"
+    # (2026-10-31: the live owner's "a reminder for 30 minutes from now to
+    # check my phone" reached the model as a calendar event).
+    m = re.fullmatch(r"(.+?)\s+from\s+now", s)
+    if m:
+        d = parse_duration(m.group(1))
+        if d is None:
+            return None
+        return When(at=now + d)
     # "tomorrow at 6", "on friday at 5pm", "tonight at 8", "tomorrow 6am"
     for split in _splits(s):
         a, b = split
@@ -1191,6 +1200,18 @@ def _match(text, now: float) -> Optional[Intent]:
     # desktop ships 11 bindable hotkeys and the notes editor has its own keys.
     # This fast path answers from the measured tables before any action path.
     got = _shortcuts_question(text)
+    if got is not None:
+        return got
+
+    # --- timers, alarms and reminders, capability questions only (2026-10-31)
+    # The owner asked "can you make a reminder for me" and the model said it
+    # could not set a system alarm and could only note reminders in a calendar -
+    # false. A real request with a time keeps its own reminder_set/timer_set/
+    # alarm_set path; only the capability family is answered here.
+    got = _reminders_question(text)
+    if got is not None:
+        return got
+    got = _bare_when(s, now)
     if got is not None:
         return got
 
@@ -2207,6 +2228,27 @@ _REMIND_ASK = (_REMIND_LEAD
 _REMIND = re.compile(_REMIND_ASK)
 
 
+def _bare_when(s: str, now: float) -> Optional[Intent]:
+    """A bare time with no action word (2026-10-31).
+
+    "in 10 minutes" is a timer. "at 6pm" / "tomorrow at 9" are reminders. A
+    sentence with no time is never guessed at here; a sentence carrying an
+    action word belongs to that action's own path.
+    """
+    if re.search(r"\b(?:remind|reminder|timer|alarm|calendar|event|note|call|email)\b", s):
+        return None
+    m = re.fullmatch(r"in\s+(.+)", s)
+    if m:
+        d = parse_duration(m.group(1))
+        if d is not None:
+            return Intent("timer_set", {"seconds": d, "label": ""})
+        return None
+    when = parse_when(s, now, "reminder")
+    if when is not None:
+        return Intent("reminder_set", {"text": "your reminder", "when": when})
+    return None
+
+
 def _reminder(s: str, now: float) -> Optional[Intent]:
     # "in 10 minutes remind me to drink water" / "at 6pm remind me to call"
     # (2026-10-18): the time can come first, exactly as it can in
@@ -2254,6 +2296,14 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
             when = parse_when(when_s[3:], now, "reminder")
         if when is not None:
             return Intent("reminder_set", {"text": text, "when": when})
+    # "remind me 30 minutes from now" / "set a reminder in an hour" / "remind me
+    # in 2 hours": a real reminder request whose words were only the time. The
+    # scheduler requires SOME words, so the stored text is the honest default;
+    # the confirmation still names the exact clock time.
+    bare = re.sub(r"^for\s+", "", rest.strip())
+    when = parse_when(bare, now, "reminder")
+    if when is not None:
+        return Intent("reminder_set", {"text": "your reminder", "when": when})
     return None
 
 
@@ -5107,6 +5157,169 @@ def _shortcuts_question(raw) -> Optional[Intent]:
         # ones. Only for shortcut questions, never for a general "shortcut".
         return Intent("shortcuts_unknown", {"words": target})
     return None
+
+
+# Timers, alarms and reminders capability answers (2026-10-31 honesty fix)
+#
+# The owner asked "can you make a reminder for me" and the model said it could
+# not set a system-wide alarm and could only "note reminders in my calendar" -
+# false. The real feature is jarvis_schedule.py (set_reminder/set_timer/
+# set_alarm quick intents, the Coming up list) plus the desktop's Windows
+# notification (jarvis-desktop/src-tauri/src/brain/schedule.rs: toast_fired,
+# rings(), notifications.rs) and the phone's Android notification while it is
+# connected (jarvis-client/.../service/ScheduleNotifier.kt - "THE PC IS THE
+# CLOCK ... Nothing here sets an alarm on the phone").
+#
+# These constants are the measured truth table the answers are built from.
+# A REAL request with a time or a thing ("remind me to call Mom at 6pm") is
+# never claimed here: the matcher refuses any sentence carrying a time or a
+# duration, so the existing reminder_set/timer_set/alarm_set paths keep it.
+# --------------------------------------------------------------------------
+
+REMINDER_SURFACES = (
+    ("desktop", "Brain, Work, Coming up; the HUD's Reminders panel (#rail-reminders)"),
+    ("desktop-toast", "a Windows notification while Jarvis is running"),
+    ("desktop-late", "a late alarm rings only at most 10 minutes late; after that it is a quiet missed note"),
+    ("desktop-closed", "with the Jarvis app fully closed no notification appears at the time; the job is kept and shows when Jarvis opens"),
+    ("phone", "the phone shows an Android notification while it is connected to the PC; the PC is the clock and the phone sets no alarm of its own"),
+)
+
+_REMINDER_WORDS = re.compile(r"\b(?:reminder|reminders|timer|timers|alarm|alarms|remind)\b")
+_REMINDER_REAL_TIME = re.compile(
+    r"\b(?:for|in)\s+\d+|\bat\s+\d|\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|"
+    r"\b(?:tomorrow|tonight|today|noon|midnight|monday|tuesday|wednesday|thursday|"
+    r"friday|saturday|sunday|every\s+\w+)\b|\b\d+\s*(?:seconds?|minutes?|hours?|days?)\b")
+
+_REMINDER_POPUP_RX = re.compile(
+    r"\b(?:pop\s*up|popup|show up|appear)\b.*\b(?:computer|pc|screen|desktop)\b|"
+    r"\b(?:will|does|do)\s+(?:it|they|you)\b.*\b(?:pop\s*up|popup|show up|appear)\b")
+_REMINDER_SOUND_RX = re.compile(
+    r"\b(?:ring|rings|ringing|sound|sounds|beep|beeps|noise|alert)\b")
+_REMINDER_NOTIFY_RX = re.compile(
+    r"\b(?:system|windows|desktop|pc)\s+notifications?\b|"
+    r"\b(?:do|does|will|can)\s+you\s+(?:show|send|display)\b.*\bnotifications?\b")
+_REMINDER_CLOSED_RX = re.compile(
+    r"\b(?:app|jarvis|computer|pc)\b.*\b(?:closed|off|shut\s*down|not\s+running)\b|"
+    r"\beven\s+if\b.*\bclosed\b")
+_REMINDER_HOWTO_RX = re.compile(
+    r"\bhow\s+(?:do|can|should)\s+i\s+(?:ask|set|make|create|add)\b|"
+    r"what\s+(?:do|should)\s+i\s+say\b")
+
+
+def _reminders_question(raw) -> Optional[Intent]:
+    """Capability questions about timers/alarms/reminders, from the RAW sentence.
+
+    None when the sentence already carries a time or a duration (a real
+    request), when it is ordinary conversation ("remind me what we said"), or
+    when it is about something else entirely. No card and no state: the answer
+    is fixed words built from REMINDER_SURFACES.
+    """
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    # A Settings sentence ("turn on Reminder sounds", "turn off ... notifications")
+    # belongs to the feature-control grammar, not to this capability family.
+    if re.match(r"(?:turn|switch)\s+(?:on|off)\b|\b(?:enable|disable)\b", text):
+        return None
+    if _REMINDER_REAL_TIME.search(text):
+        return None                         # the real set_reminder/timer path keeps it
+    # "ring my phone" / "find my phone" is the find-my-phone action, not a
+    # question about how a reminder sounds. The two lanes met here on
+    # 2026-11-01: the sound regex below is a plain .search("ring") and would
+    # otherwise swallow the command. Whole-sentence match, like its owner.
+    if _RING.fullmatch(text) or _RING_STOP.fullmatch(text):
+        return None
+    # The phone's own timer and state questions have their own answer (the
+    # phone door, 2026-10-31), and "set a timer on my phone" is not a claim
+    # about this PC's reminders. Same whole-sentence owners, so a reminder
+    # question that merely mentions the phone still gets this family's answer.
+    if _PHONE_TIMER.fullmatch(text) or _PHONE_STATE.fullmatch(text):
+        return None
+    if _REMINDER_CLOSED_RX.search(text):
+        return Intent("reminder_closed", {"surface": "closed"})
+    if _REMINDER_HOWTO_RX.search(text):
+        return Intent("reminder_howto", {"surface": "howto"})
+    if _REMINDER_POPUP_RX.search(text):
+        return Intent("reminder_popup", {"surface": "popup"})
+    if _REMINDER_SOUND_RX.search(text):
+        return Intent("reminder_sound", {"surface": "sound"})
+    if _REMINDER_NOTIFY_RX.search(text):
+        return Intent("reminder_notify", {"surface": "notify"})
+    if _REMINDER_WORDS.search(text) and re.search(
+            r"\bcan\s+you\b|\bcould\s+you\b|\bdo\s+you\b", text):
+        return Intent("reminder_capability", {"surface": "capability"})
+    return None
+
+
+def _reminder_phone_note() -> str:
+    return (" On the phone: while it is connected to the PC it shows an Android notification too, "
+            "but the PC is the clock and the phone sets no alarm of its own.")
+
+
+def _run_reminders(name: str, surface: str) -> "Result":
+    """Fixed, read-only answers from the measured truth table."""
+    phone = surface == "phone"
+    suffix = _reminder_phone_note()
+    if name == "reminder_capability":
+        if phone:
+            return Result("Yes - the timers, alarms and reminders live on the PC running Jarvis. "
+                          "Ask the PC \"remind me to call Mom at 6pm\", \"set a timer for 10 minutes\" "
+                          "or \"set an alarm for 7am\". They show in Brain, Work, Coming up on the PC, "
+                          "and the PC shows a Windows notification when one goes off (an alarm keeps "
+                          "ringing, a reminder or timer shows once)." + suffix +
+                          " If the PC's Jarvis is fully closed, no notification appears then, but the "
+                          "job is kept and appears when you open Jarvis; an alarm more than 10 minutes "
+                          "late is a quiet missed note.", "reminder_capability")
+        return Result("Yes. I keep timers, alarms, reminders and lists on this PC - ask \"remind me to "
+                      "call Mom at 6pm\", \"set a timer for 10 minutes\" or \"set an alarm for 7am\". They "
+                      "appear in Brain, Work, Coming up and the HUD's Reminders panel. When one goes off "
+                      "the PC shows a Windows notification while Jarvis is running: an alarm keeps ringing, "
+                      "a reminder or a timer shows once." + suffix +
+                      " If the Jarvis app is fully closed, no notification appears at the time, but the job "
+                      "is kept and shows when you open Jarvis; an alarm more than 10 minutes late is a quiet "
+                      "missed note.", "reminder_capability")
+    if name == "reminder_popup":
+        base = ("Yes - while Jarvis is running on the PC. A timer, alarm or reminder that goes off shows a "
+                "Windows notification (with the job's own words unless App lock or the hidden lists are on, "
+                "when it says only what kind of thing is due). An alarm keeps ringing; a reminder or timer "
+                "shows once.")
+        if phone:
+            return Result("On the PC, yes - while Jarvis is running it shows a Windows notification" + suffix,
+                          "reminder_popup")
+        return Result(base + suffix +
+                      " If the PC's Jarvis is fully closed, no pop-up appears at the time; the job is kept "
+                      "and shows in Coming up when you open it. A late alarm rings only if it is at most "
+                      "10 minutes late.", "reminder_popup")
+    if name == "reminder_sound":
+        base = ("On the PC, an alarm keeps ringing until it is dismissed; a reminder or a timer makes the "
+                "normal Windows notification sound once. The alarm is never held back by quiet hours, "
+                "reminders can be.")
+        if phone:
+            return Result("On the PC, an alarm keeps ringing and a reminder or timer makes the normal "
+                          "Windows notification sound once." + suffix, "reminder_sound")
+        return Result(base + suffix, "reminder_sound")
+    if name == "reminder_notify":
+        base = ("Yes, on the PC: it is a Windows notification (a toast) posted while Jarvis is running - "
+                "not a separate system alarm service. Alarms and reminders can each be switched off in "
+                "Settings, Notifications, and quiet hours hold back reminders but never an alarm.")
+        if phone:
+            return Result("On the PC it is a Windows notification while Jarvis is running." + suffix,
+                          "reminder_notify")
+        return Result(base + suffix, "reminder_notify")
+    if name == "reminder_closed":
+        base = ("No notification appears at the moment it is due while the Jarvis app is fully closed. "
+                "The PC keeps the job, and when you open Jarvis it is in Coming up; if it is an alarm that "
+                "went off more than 10 minutes late it is a quiet note saying it was missed, not a ring. "
+                "The phone shows an Android notification only while it is connected to the PC.")
+        return Result(("On the phone: " if phone else "") + base, "reminder_closed")
+    if name == "reminder_howto":
+        return Result("Say or type, for example: \"remind me to call Mom at 6pm\", \"set a timer for 10 "
+                      "minutes\", \"set an alarm for 7am\", or \"add milk to my shopping list\". Timers, "
+                      "one-time reminders and alarms need no approval card; they appear in Brain, Work, "
+                      "Coming up and the HUD's Reminders panel." + suffix, "reminder_howto")
+    return Result("Yes - see Brain, Work, Coming up for timers, alarms and reminders on this PC.",
+                  "reminder_capability")
 
 
 def _feature_capability_question(raw) -> Optional[Intent]:
@@ -12611,6 +12824,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # card, no state read, no model.
     if n in _SHORTCUT_INTENTS:
         return _run_shortcuts(n, f, _client_surface(peer, local, client_surface))
+    if n in _REMINDER_INTENTS:
+        return _run_reminders(n, _client_surface(peer, local, client_surface))
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
     if n in ("update_ask", "update_notes"):
@@ -13316,10 +13531,17 @@ _SHORTCUT_INTENTS = frozenset({
     "shortcuts_named", "shortcuts_notes_named", "shortcuts_unknown",
 })
 
+#: The reminders capability answers (2026-10-31): fixed words, no card.
+_REMINDER_INTENTS = frozenset({
+    "reminder_capability", "reminder_popup", "reminder_sound", "reminder_notify",
+    "reminder_closed", "reminder_howto",
+})
+
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
-    "shortcuts_unknown", "animal_ask", "approval_where", "briefing_list", "briefing_now",
+    "shortcuts_unknown", "reminder_capability", "reminder_popup", "reminder_sound",
+    "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
     # fixed answer that reads this PC's own settings and connects nothing, so it

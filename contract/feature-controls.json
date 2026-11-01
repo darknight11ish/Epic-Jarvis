@@ -1193,7 +1193,7 @@
       "name": "Timers, alarms, reminders and lists",
       "group": "Talking",
       "surface": "both",
-      "where": "Just ask (\"remind me at six\"), or see them in Brain, Work, Coming up.",
+      "where": "Just ask - \"remind me at six\", \"remind me in 30 minutes to check my phone\", \"make a reminder for 30 minutes from now\", \"set a timer for 10 minutes\" - or see them in Brain, Work, Coming up and the HUD's Reminders panel (#rail-reminders).",
       "control": {
         "type": "refused",
         "setting_keys": [],
