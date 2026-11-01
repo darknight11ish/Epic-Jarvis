@@ -60,8 +60,8 @@ def test_off_state():
               and r.intent == "price_radar_lookup", r.intent if r else "model")
         check("... it says the radar is OFF by default", "OFF by default" in r.reply,
               r.reply if r else "")
-        check("... it says how to turn it on and that a card is raised",
-              "[price_radar] enabled = true" in r.reply and "change_own_config" in r.reply,
+        check("... it says how to turn it on (settings file, no chat card)",
+              "[price_radar] enabled = true" in r.reply and "no chat approval card" in r.reply.lower(),
               r.reply if r else "")
         check("... it says there is no chat route/app screen yet",
               "no chat lookup route" in r.reply or "app screen" in r.reply, r.reply if r else "")
@@ -70,9 +70,9 @@ def test_off_state():
               r is not None and r.intent == "price_radar_state" and "No" in r.reply,
               r.reply if r else "model")
         r = ask("how do I turn on the flight price radar?")
-        check("the enable question names the settings key and card",
+        check("the enable question names the settings key and no chat card",
               r is not None and r.intent == "price_radar_enable"
-              and "[price_radar] enabled = true" in r.reply and "change_own_config" in r.reply,
+              and "[price_radar] enabled = true" in r.reply and "no chat approval card" in r.reply.lower(),
               r.reply if r else "model")
     finally:
         Q._price_radar_state = _ORIG_STATE
@@ -83,9 +83,12 @@ def test_on_state_and_about():
     try:
         r = ask("can you check flight prices to Las Vegas leaving Nov 26 coming back Dec 3?")
         check("a specific flight question is answered", r is not None
-              and r.intent == "price_radar_lookup", r.intent if r else "model")
-        check("... it says the radar is on but has no chat route yet",
-              "ON" in r.reply and ("no chat lookup route" in r.reply or "app screen" in r.reply),
+              and r.intent in ("price_radar_lookup", "price_radar_flight"),
+              r.intent if r else "model")
+        check("... it says the radar is on (this chat can look up, no app screen)",
+              ("which airport" in r.reply.lower()
+               or ("This chat can run a read-only lookup" in r.reply
+                   and "app screen" in r.reply)),
               r.reply if r else "")
         check("... it never invents a price", not re.search(r"\$\s*\d", r.reply),
               r.reply if r else "")
