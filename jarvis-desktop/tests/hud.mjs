@@ -2839,6 +2839,105 @@ await check("no id, no caret menu; and a backend without the route removes it", 
   await page.close();
 });
 
+// THE OWNER'S FIELD TEST, 2026-11-01: he typed "was this answer right?" into
+// the HUD's own box and the model answered it as a question. The words are the
+// caret menu's own question, so they must OPEN that menu - never become a chat
+// turn, never reach the PC. BOTH routes into send() are driven here: Enter in
+// the box, and the Send button, because either is how he types.
+await check("typing 'was this answer right?' opens the LAST answer's menu, and sends nothing", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const { page, problems, chats } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId });
+  // TWO real answers, so "the last one" is a real choice and not just the only one.
+  await send(page, "first question");
+  await send(page, "second question");
+  assert.equal(chats.length, 2, "the setup questions did not reach /api/chat");
+  assert.equal(await page.locator("#log .jarvis-answer-caret").count(), 2,
+    "the two setup answers did not both get a caret");
+  const stateNow = () => page.evaluate(() => {
+    const users = [...document.querySelectorAll("#log .msg.user .body")].map((el) => el.textContent);
+    const systems = [...document.querySelectorAll("#log .msg.system .body")].map((el) => el.textContent);
+    const jars = [...document.querySelectorAll("#log .msg.jarvis")];
+    const last = jars[jars.length - 1];
+    const open = last ? last.querySelector(".jarvis-answer-menu:not([hidden])") : null;
+    return {
+      value: document.getElementById("input").value,
+      users, systems,
+      openMenus: document.querySelectorAll("#log .jarvis-answer-menu:not([hidden])").length,
+      lastAnswerMenuOpen: Boolean(open),
+      lastAnswerMenuWords: open ? open.innerText : "",
+      focused: document.activeElement ? document.activeElement.className : "",
+    };
+  });
+  const before = await stateNow();
+
+  // ROUTE 1: Enter in the box, typed the way the owner typed it.
+  await page.fill("#input", "was this answer right?");
+  await page.press("#input", "Enter");
+  await page.waitForTimeout(300);
+  const byEnter = await stateNow();
+
+  // ROUTE 2: the Send button. Escape closes the menu first, as a person would.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  await page.fill("#input", "was that right");
+  await page.click("#send");
+  await page.waitForTimeout(300);
+  const bySend = await stateNow();
+  await page.close();
+
+  for (const [route, after] of [["Enter", byEnter], ["Send", bySend]]) {
+    assert.equal(after.value, "", `${route}: the box was not cleared`);
+    assert.equal(after.openMenus, 1, `${route}: exactly one menu should be open`);
+    assert.equal(after.lastAnswerMenuOpen, true,
+      `${route}: the menu that opened is not the last answer's`);
+    assert.match(after.lastAnswerMenuWords, /was this answer right\?/i,
+      `${route}: the open thing is not the answer menu`);
+    assert.match(after.focused, /jarvis-answer-item/,
+      `${route}: focus did not move into the menu`);
+    assert.deepEqual(after.users, before.users, `${route}: a user bubble was drawn for the phrase`);
+    assert.ok(!after.users.some((words) => /was (this|that)/i.test(words || "")),
+      `${route}: the phrase became a chat turn`);
+    assert.deepEqual(after.systems, before.systems, `${route}: the phrase added a system line`);
+  }
+  assert.equal(chats.length, 2, "the phrase was sent to the PC");
+  assert.ok(!chats.some((c) => c.messages.some((m) => /was (this|that)/i.test(m.content || ""))),
+    "the phrase reached the model in a request body");
+  assert.deepEqual(problems, []);
+});
+
+// The other half of the same field test: with NO finished answer on screen
+// there is nothing to mark, so the page says so in its own "system" voice
+// (never in Jarvis's, which would invent an answer) and still sends nothing.
+// The page's own boot greeting is a .msg.jarvis, but it is not an answer and
+// gets no caret - which is exactly what this path keys on.
+await check("with no answer yet, 'was this answer right?' says there is nothing to mark", async () => {
+  const { page, problems, chats } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false });
+  const nothingToMark = "There is no answer on screen yet, so there is nothing to mark.";
+  const read = () => page.evaluate(() => ({
+    value: document.getElementById("input").value,
+    systems: [...document.querySelectorAll("#log .msg.system .body")].map((el) => el.textContent),
+    users: [...document.querySelectorAll("#log .msg.user .body")].map((el) => el.textContent),
+    carets: document.querySelectorAll("#log .jarvis-answer-caret").length,
+  }));
+  const before = await read();
+  await page.fill("#input", "was this answer right?");
+  await page.press("#input", "Enter");
+  await page.waitForTimeout(400);
+  const after = await read();
+  await page.close();
+  assert.equal(before.carets, 0, "the empty page already had a caret");
+  assert.equal(after.value, "", "the box was not cleared");
+  assert.equal(after.systems.filter((words) => words === nothingToMark).length,
+    before.systems.filter((words) => words === nothingToMark).length + 1,
+    "the page did not say, in its system voice, that there is nothing to mark");
+  assert.deepEqual(after.users, before.users, "the phrase still became a user bubble");
+  assert.equal(after.carets, 0, "a caret was invented where there is no answer");
+  assert.equal(chats.length, 0, "the phrase was sent to the PC with no answer on screen");
+  assert.deepEqual(problems, []);
+});
+
 /* ── The mic: the quickbar's local push-to-talk, never browser speech ────── */
 
 await check("the HUD mic opens the quickbar's push-to-talk, and records nothing itself", async () => {
