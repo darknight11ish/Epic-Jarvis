@@ -339,13 +339,70 @@ def t_a_taught_row_must_name_words_its_lesson_uses():
           all(any(x.get("id") == fid for x in C.entries()) for fid in C.TEACHING_GAP))
 
 
+def t_evidence_anchors_are_real_and_line_numbers_are_not():
+    """Rule 8: a file, symbol or route a row names must exist; a line never."""
+    real = C.anchor_problems(C.entries())
+    check("CONTROL: every real row's file/symbol/route evidence is real",
+          real == [], real[:3])
+
+    def rows(*texts):
+        return [{"id": "synthetic", "what": t} for t in texts]
+
+    bad = C.anchor_problems(rows("see backend/not-a-real-file.py"))
+    check("a made-up file FAILS and is named", any("not-a-real-file.py" in x for x in bad), bad)
+    bad = C.anchor_problems(rows("the route /api/never-written exists"))
+    check("a made-up route FAILS and is named", any("/api/never-written" in x for x in bad), bad)
+    bad = C.anchor_problems(rows("jarvis_quick.py:4121 answers it"))
+    check("a line number FAILS and says a line is not evidence",
+          any("line number is not evidence" in x for x in bad), bad)
+    bad = C.anchor_problems(rows("`jarvis_quick.no_such_function` answers it"))
+    check("a made-up module.symbol FAILS", any("no_such_function" in x for x in bad), bad)
+    ok = C.anchor_problems(rows("`jarvis_quick.match` answers it; see /api/pending"))
+    check("a real symbol and a documented route pass",
+          ok == [] or all("line number" not in x for x in ok), ok)
+
+
+def t_a_card_claim_needs_an_ask_tier_gate():
+    """Rule 9: a promised card names a gate action whose tier is really ask."""
+    check("CONTROL: every real card claim names an ask-tier gate or a recorded gap",
+          C.gate_problems(C.entries()) == [], C.gate_problems(C.entries())[:3])
+    claimed = [e for e in C.entries() if C.card_claim(e)]
+    gated = [e for e in claimed if e.get("gate")]
+    check("the real rows that claim a card mostly carry their gate action",
+          len(gated) >= 50, (len(gated), len(claimed)))
+    tiers = {"edit_vault_note": "ask", "switch_model": "auto"}
+    row = {"id": "synthetic", "asks": "One card before the note changes.",
+           "gate": ["made_up_action"]}
+    bad = C.gate_problems([row], gaps={}, tiers=tiers)
+    check("a made-up gate action FAILS and is named",
+          any("made_up_action" in x and "not an action" in x for x in bad), bad)
+    wrong = {"id": "synthetic", "asks": "One card before the model changes.",
+             "gate": ["switch_model"]}
+    bad = C.gate_problems([wrong], gaps={}, tiers=tiers)
+    check("a gate action whose tier is not ask FAILS, naming the tier",
+          any("switch_model" in x and "'auto'" in x for x in bad), bad)
+    good = {"id": "synthetic", "asks": "One card before the note changes.",
+            "gate": ["edit_vault_note"]}
+    check("a real ask-tier gate action passes",
+          C.gate_problems([good], gaps={}, tiers=tiers) == [])
+    missing = {"id": "synthetic", "asks": "One card before the note changes."}
+    bad = C.gate_problems([missing], gaps={}, tiers=tiers)
+    check("a card claim with no gate action FAILS",
+          any("names no `gate` action" in x for x in bad), bad)
+    gap = {"id": "synthetic", "asks": "One card before the note changes."}
+    check("the same row passes once recorded in CARD_GATE_GAP",
+          C.gate_problems([gap], gaps={"synthetic": "why"}, tiers=tiers) == [])
+
+
 if __name__ == "__main__":
     for fn in (t_the_list_is_complete_and_true,
                t_the_check_is_sensitive_both_directions,
                t_every_copy_is_the_same_file,
                t_every_lesson_is_claimed_by_a_feature_row,
                t_a_one_sided_claim_carries_its_reason,
-               t_a_taught_row_must_name_words_its_lesson_uses):
+               t_a_taught_row_must_name_words_its_lesson_uses,
+               t_evidence_anchors_are_real_and_line_numbers_are_not,
+               t_a_card_claim_needs_an_ask_tier_gate):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

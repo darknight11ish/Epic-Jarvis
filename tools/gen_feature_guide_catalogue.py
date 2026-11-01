@@ -50,7 +50,11 @@ REQUIRED = ("id", "group", "title", "what", "where", "asks", "limit", "surface")
 #: module. It is NAMED here rather than left unknown, because the refusal below
 #: exists so a new field has to be looked at by a person - and this is that
 #: looking, written down (2026-10-25, rule 7 of tools/check_feature_list.py).
-NOT_CARRIED = ("must_mention",)
+#: Checker-only metadata: `must_mention` is the teaching gate (rule 7) and
+#: `gate` is the evidence gate's card action (rule 9, 2026-10-31). Neither
+#: is part of what the guide SHOWS, so neither is carried into the
+#: catalogue - but both are known keys, so the source stays one file.
+NOT_CARRIED = ("must_mention", "gate")
 OPTIONAL = ("surface_reason", "aliases", "covers")
 
 HEADER = '''"""GENERATED FILE - do not edit by hand.
