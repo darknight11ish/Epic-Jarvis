@@ -9766,6 +9766,158 @@ def tidy_assistant_whitespace(msgs: list) -> list:
     return out
 
 
+#: The two dynamic system lines the model gets about its own runtime (Gemini
+#: ruling 1, 2026-10-31). They are added ONLY when the request's surface is
+#: known (`jarvis_surface`, PR #1046's X-Jarvis-Surface context); an older
+#: client, a script or a test with no surface keeps exactly its old prompt.
+RUNTIME_RULE = ('Rule: Never invent features, shortcuts, or settings; if unsure, '
+                'point to "Everything Jarvis can do" in the Brain.')
+
+
+def _surface_now() -> str:
+    """The request's surface (phone/desktop) or unknown. Never raises."""
+    try:
+        import importlib
+        mod = importlib.import_module("jarvis_surface")
+        value = str(mod.current() or "").strip().lower()
+    except Exception:                                       # noqa: BLE001
+        value = ""
+    return value if value in ("phone", "desktop") else "unknown"
+
+
+def _runtime_model() -> str:
+    try:
+        import jarvis_power_switch
+        got = jarvis_power_switch.chat_model()
+        if got:
+            return str(got)
+    except Exception:                                       # noqa: BLE001
+        pass
+    try:
+        import jarvis_models
+        got = jarvis_models.current_model()
+        if isinstance(got, dict):
+            got = got.get("ref") or got.get("name") or got.get("model")
+        if got:
+            return str(got)
+    except Exception:                                       # noqa: BLE001
+        pass
+    return "unknown"
+
+
+def _runtime_preset() -> str:
+    try:
+        import jarvis_presets
+        got = jarvis_presets.choice()
+        if not got:
+            try:
+                got = (jarvis_presets.view() or {}).get("chosen_preset")
+            except Exception:                               # noqa: BLE001
+                pass
+        return str(got or "none")
+    except Exception:                                       # noqa: BLE001
+        return "unknown"
+
+
+def _runtime_cloud() -> str:
+    try:
+        import jarvis_presets
+        state = getattr(jarvis_presets, "cloud_state", None)
+        if callable(state):
+            got = state() or {}
+            name = str(got.get("provider_name") or got.get("provider") or "")
+            return name or "off"
+        chosen = getattr(jarvis_presets, "cloud_chosen", None)
+        got = str((chosen() if callable(chosen) else "") or "")
+        return got or "off"
+    except Exception:                                       # noqa: BLE001
+        return "unknown"
+
+
+def _runtime_vault() -> str:
+    try:
+        import jarvis_notes
+        vault = jarvis_notes.obsidian_vault()
+        if vault is None:
+            return "off"
+        return "off" if jarvis_notes.vault_problem(vault) else "configured"
+    except Exception:                                       # noqa: BLE001
+        return "unknown"
+
+
+def _runtime_phone() -> str:
+    try:
+        import jarvis_devices
+        status = jarvis_devices.paired_status() or {}
+        if not status.get("readable", False):
+            return "unknown"
+        rows = status.get("devices") or []
+        return "connected" if any(r.get("reach") for r in rows if isinstance(r, dict)) else "off"
+    except Exception:                                       # noqa: BLE001
+        return "unknown"
+
+
+def runtime_identity_fields(*, probes: Optional[dict] = None) -> dict:
+    """The live values, or explicit test probes. Never raises; unknown missing."""
+    def read(key: str, fn) -> str:
+        if isinstance(probes, dict) and key in probes:
+            value = probes[key]
+            try:
+                value = value() if callable(value) else value
+            except Exception:                               # noqa: BLE001
+                return "unknown"
+            return str(value) if value not in (None, "") else "unknown"
+        try:
+            return fn()
+        except Exception:                                   # noqa: BLE001
+            return "unknown"
+    return {
+        "surface": read("surface", _surface_now),
+        "model": read("model", _runtime_model),
+        "preset": read("preset", _runtime_preset),
+        "cloud": read("cloud", _runtime_cloud),
+        "vault": read("vault", _runtime_vault),
+        "phone": read("phone", _runtime_phone),
+    }
+
+
+def runtime_identity_line(*, probes: Optional[dict] = None) -> str:
+    """Exactly two dynamic lines, or "" while the surface is unknown."""
+    f = runtime_identity_fields(probes=probes)
+    if f.get("surface") == "unknown":
+        return ""
+    values = [
+        ("surface", f.get("surface") or "unknown"),
+        ("local model", f.get("model") or "unknown"),
+        ("preset", f.get("preset") or "unknown"),
+        ("cloud escalation", f.get("cloud") or "unknown"),
+        ("vault", f.get("vault") or "unknown"),
+        ("phone", f.get("phone") or "unknown"),
+    ]
+    runtime = ("Runtime: Jarvis on " + values[0][1] + " (local model: " + values[1][1]
+               + ", preset: " + values[2][1] + ", cloud escalation: " + values[3][1]
+               + ", vault: " + values[4][1] + ", phone: " + values[5][1] + ").")
+    return runtime + "\n" + RUNTIME_RULE
+
+
+def with_runtime_identity_note(msgs: list, *, probes: Optional[dict] = None) -> list:
+    """A copy with the two-line runtime note before the newest user message.
+
+    No surface -> the list is returned unchanged, which is what keeps older
+    clients and every pre-#1046 test on exactly their old prompt bytes. No
+    static feature list, no prose beyond the fixed Rule line.
+    """
+    line = runtime_identity_line(probes=probes)
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not line or not users:
+        return list(msgs)
+    at = users[-1]
+    msg = {"role": "system", "content": line}
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    next_time: str = "", spoken: bool = False, live: bool = False,
                    cut_off: str = "", crisis: bool = False,
@@ -9812,6 +9964,9 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
         # The crisis help line (jarvis_wellbeing.py): nearest the question
         # of every note here, never first.
         out = with_crisis_note(out, True)
+    # The runtime identity (surface, model, preset, cloud, vault, phone), only
+    # when the request context knows the surface. Nothing known -> no line.
+    out = with_runtime_identity_note(out)
     # Last, after trimming and every note above: the rules stay first.
     return keep_rules_first(out)
 
