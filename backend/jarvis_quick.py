@@ -1144,6 +1144,12 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
         got.f["about"] = _restore(text, got.f["about"])
     if got is not None and got.f.get("items"):
         got.f["items"] = [_restore(text, i) for i in got.f["items"]]
+    # Names become FILE NAMES: the matching form is lowercased, so restore the
+    # owner's capitals from the raw sentence before any handler uses them. On a
+    # case-sensitive filesystem "Shopping" -> "shopping" is a different file.
+    for key in ("name", "folder", "new", "old", "target", "tag"):
+        if got is not None and got.f.get(key):
+            got.f[key] = _restore(text, got.f[key])
     return got
 
 

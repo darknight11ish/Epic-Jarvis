@@ -76,6 +76,9 @@ GLOBS = ("backend/test_*.py", "tools/check_*.py", "tools/test_*.py")
 
 #: A recorded ceiling per file. Absent = 0. May only go DOWN.
 SOURCE_PIN_CEILING: dict[str, int] = {
+    # The wave-4 rename/move suite (2026-10-31): two checked source pins in its
+    # own suite; recorded as debt, like every other ceiling.
+    "backend/test_notes_rename_move.py": 2,
     # The surface-aware lane (2026-10-31): one card-words pin in its own new
     # suite; recorded as debt, not approval, and may only go down.
     "backend/test_surface.py": 1,
