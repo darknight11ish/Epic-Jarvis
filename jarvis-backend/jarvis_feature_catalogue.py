@@ -3,7 +3,7 @@
 The owner's feature list, as data: 167 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 e64bc35b466a0f07b0b2ed52d2ce4bdb499738cd61bb5cf02a51612b54bcc9dd); the apps' Features pages read their own
+`features/features.json` (sha256 58c565e7ef5438941d46dffa5fe3e68836360dfb4321aa6186f2a390cba13f74); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "e64bc35b466a0f07b0b2ed52d2ce4bdb499738cd61bb5cf02a51612b54bcc9dd"
+SOURCE_SHA256 = "58c565e7ef5438941d46dffa5fe3e68836360dfb4321aa6186f2a390cba13f74"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -685,9 +685,9 @@ FEATURES = (
         "group": "Notes and files",
         "title": "Write a note for you",
         "what": "Jarvis writes a note into Obsidian, Logseq or Joplin.",
-        "where": "Say \"note this\" in chat (2026-10-31) or use the quick-note key Alt+Shift+N to open the bar ready to file one.",
+        "where": "Say \"note this\" in chat (2026-10-31) or press Alt+Shift+N (one of the PC's changeable shortcuts in Settings, Shortcuts) to open the bar ready to file one. The notes editor's own Ctrl+B and friends work inside the editor.",
         "asks": "No card normally. In a turn where Jarvis has read an email, a page or a file, writing a note raises one.",
-        "limit": "Only the note apps this PC is set up for. With App lock on, adding a note to a running task needs an unlock first.",
+        "limit": "Only the note apps this PC is set up for. The quick-note key opens the bar ready to file; it does not save by itself, and the phone has no keyboard shortcuts. With App lock on, adding a note to a running task needs an unlock first.",
         "surface": "both",
         "covers": ["notes-and-wiki"],
     },
@@ -1280,10 +1280,10 @@ FEATURES = (
         "id": "shortcuts",
         "group": "The PC itself",
         "title": "Keyboard shortcuts",
-        "what": "Every shortcut in one list, and a key of your own for each one.",
-        "where": "Settings, Shortcuts.",
+        "what": "Every PC shortcut in one measured list: 11 bindable Jarvis actions - Alt+Space the Jarvis bar, Alt+Shift+N quick note, Alt+Shift+S Look at this, Alt+Shift+X stop everything, Alt+Shift+W widget, Alt+Shift+F floating face, Alt+Shift+C clipboard history, Alt+Shift+T talk-to-type, Super+Shift+J attach the clipboard; Watch with me and Jarvis Live ship unbound - plus the notes editor's own formatting keys.",
+        "where": "PC: Settings, Shortcuts has the global keys and lets you change each one. The notes editor's Ctrl+B bold, Ctrl+I italic, Ctrl+K wikilink, Ctrl+E code, Ctrl+Shift+X strikethrough, Ctrl+Shift+Q quote, Ctrl+2/3 headings and Ctrl+Shift+7/8/9 lists work inside the Notes plate only.",
         "asks": "No card.",
-        "limit": "A key another program already owns is refused, with the reason.",
+        "limit": "Global keys can be changed in Settings, Shortcuts; a key another program already owns is refused, with the reason. The notes editor's keys are fixed. The phone has no keyboard shortcuts - they are on the PC.",
         "surface": "desktop",
         "surface_reason": "It is the PC keyboard's own shortcut list, with a key of your own for each, and the phone has no keyboard shortcuts to list.",
         "covers": ["settings.shortcuts", "how-it-talks", "pc-at-a-glance"],
