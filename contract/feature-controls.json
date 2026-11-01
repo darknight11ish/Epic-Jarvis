@@ -8799,7 +8799,7 @@
       "name": "Build the Android app in a project task",
       "group": "The PC itself",
       "surface": "both",
-      "where": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
+      "where": "In a project task, say 'build the Android app' or 'build my app and put it on my phone'. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
       "control": {
         "type": "refused",
         "setting_keys": [],

@@ -1210,6 +1210,12 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- the Android builder, before the reminder capability family too:
+    # "how do I ask you to build one" is about the app, not a reminder.
+    got = _android_question(text)
+    if got is not None:
+        return got
+
     # --- timers, alarms and reminders, capability questions only (2026-10-31)
     # The owner asked "can you make a reminder for me" and the model said it
     # could not set a system alarm and could only note reminders in a calendar -
@@ -5565,6 +5571,115 @@ def _run_plugins(name: str, f: dict, surface: str) -> "Result":
     if name == "plugin_install":
         return Result(_plugin_install_sentence(), "plugin_install")
     return Result(_plugin_list_sentence(installed), "plugin_list")
+
+
+
+# --------------------------------------------------------------------------
+# Android app building (2026-10-31 honesty fix)
+#
+# Measured: backend/jarvis_android_builder.py builds a FIXED minimal WebView
+# Android project from the task's own index.html/app.js/app.css in one project
+# task - `gradlew.bat assembleDebug` behind the app_build_android card, then
+# `adb install -r <apk>` behind app_install_android. Needs the Android SDK,
+# a Java 17 JDK, the Gradle wrapper files beside jarvis_hud.py, and a cable
+# with USB debugging for the install; the first build downloads Gradle and the
+# Android Gradle plugin. It never writes Kotlin/manifest itself, adds no
+# permissions, no release signing and no Play Store. The live model said "I
+# can't build Android apps... I don't have the tools to write code, compile
+# projects", which is false.
+# --------------------------------------------------------------------------
+
+ANDROID_BUILD_ACTION = "app_build_android"
+ANDROID_INSTALL_ACTION = "app_install_android"
+
+
+def _android_state():
+    """The real toolchain report, or None when the module is not installed."""
+    try:
+        import jarvis_android_builder as AB
+        return AB.toolchain()
+    except Exception:                       # noqa: BLE001 - module absent
+        return None
+
+
+def _android_missing_words(state) -> str:
+    if state is None:
+        return ("I cannot read the Android toolchain from here; on the PC the builder needs "
+                "the Android SDK, a Java 17 JDK and its Gradle wrapper files.")
+    missing = list(state.get("missing") or [])
+    if not missing:
+        return "This PC has the Android SDK, a Java 17 JDK and the Gradle wrapper files, so it is ready."
+    return "This PC is missing: " + "; ".join(missing) + "."
+
+
+def _run_android(name: str, state) -> "Result":
+    ready = bool(state and state.get("ready"))
+    where = ("Writing the fixed template needs no card. Building raises ONE card "
+             "(" + ANDROID_BUILD_ACTION + ") that names the exact Gradle command, folder and "
+             "toolchain. Installing raises ONE more card (" + ANDROID_INSTALL_ACTION + ") that "
+             "names the exact adb command, APK and size. Never a Play Store upload.")
+    if name == "android_capability":
+        return Result("Yes - I can build a small Android app for you. In a project task, ask "
+                      "\"build the Android app\" or \"build my app and put it on my phone\". I write "
+                      "a fixed minimal Android project around your own index.html, app.js and "
+                      "app.css (I do not hand-write Kotlin or the manifest), then Gradle builds it "
+                      "and adb installs it over the cable. " + where + " " +
+                      _android_missing_words(state), "android_capability")
+    if name == "android_howto":
+        return Result("Say it in a project task, for example: \"build the Android app\" to build "
+                      "it, or \"build my app and put it on my phone\" to build and install. I write "
+                      "the template project first (no card), then the build card appears with the "
+                      "exact Gradle command, then the install card appears with the exact adb "
+                      "command and the APK. " + _android_missing_words(state), "android_howto")
+    if name == "android_needs":
+        return Result("The Android builder needs the Android SDK on this PC, a Java 17 JDK, its "
+                      "Gradle wrapper files beside jarvis_hud.py, and - only for the install - adb "
+                      "and a USB cable with debugging on the phone. A first build also downloads "
+                      "the Gradle distribution and the Android Gradle plugin. " +
+                      _android_missing_words(state), "android_needs")
+    if name == "android_build_install":
+        return Result("Build and install are two separate steps with two separate cards: " +
+                      ANDROID_BUILD_ACTION + " runs exactly `gradlew.bat assembleDebug` in the "
+                      "task's copy, and " + ANDROID_INSTALL_ACTION + " runs exactly `adb install -r` "
+                      "on the APK that build made. There is no adb shell, no uninstall, no release "
+                      "signing and no Play Store. " + _android_missing_words(state),
+                      "android_build_install")
+    return Result("Yes - ask in a project task: \"build the Android app\". " + where,
+                  "android_capability")
+
+
+_ANDROID_BUILD_RX = re.compile(
+    r"\b(?:can|could|are|will)\s+you\s+(?:be\s+able\s+to\s+)?(?:build|compile|make|create)"
+    r"\s+(?:an?\s+)?android\s+apps?\b|"
+    r"\bare\s+you\s+able\s+to\s+build\s+android\s+apps?\b|"
+    r"\bcan\s+you\s+build\s+(?:me\s+)?(?:an?\s+)?app\s+(?:for\s+)?(?:my\s+)?phone\b")
+_ANDROID_HOW_RX = re.compile(
+    r"\bhow\s+(?:do|can|should)\s+i\s+(?:ask|tell)\s+you\s+to\s+build\s+(?:one|it|an?\s+app)\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+get\s+(?:you\s+to\s+)?build\s+(?:one|it|an?\s+android\s+app)\b")
+_ANDROID_NEEDS_RX = re.compile(
+    r"\bwhat\s+(?:does|do)\s+(?:the\s+)?android\s+builder\s+need\b|"
+    r"\bwhat\s+(?:does|do)\s+(?:it|building\s+android\s+apps?)\s+need\b|"
+    r"\bwhat\s+do\s+you\s+need\s+to\s+build\s+(?:an?\s+)?android\s+app\b")
+_ANDROID_INSTALL_RX = re.compile(
+    r"\bcan\s+you\s+(?:compile|build)\s+and\s+(?:install|put)\s+it\b|"
+    r"\bcan\s+you\s+install\s+(?:it|the\s+app|an?\s+apk)\s+(?:on|to)\s+my\s+phone\b|"
+    r"\bcan\s+you\s+put\s+(?:it|the\s+app)\s+on\s+my\s+phone\b")
+
+
+def _android_question(raw) -> Optional[Intent]:
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if _ANDROID_HOW_RX.search(text):
+        return Intent("android_howto")
+    if _ANDROID_NEEDS_RX.search(text):
+        return Intent("android_needs")
+    if _ANDROID_INSTALL_RX.search(text):
+        return Intent("android_build_install")
+    if _ANDROID_BUILD_RX.search(text):
+        return Intent("android_capability")
+    return None
 
 
 def _feature_capability_question(raw) -> Optional[Intent]:
@@ -13073,6 +13188,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_reminders(n, _client_surface(peer, local, client_surface))
     if n in _PLUGIN_INTENTS:
         return _run_plugins(n, f, _client_surface(peer, local, client_surface))
+    if n in _ANDROID_INTENTS:
+        return _run_android(n, _android_state())
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
     if n in ("update_ask", "update_notes"):
@@ -13778,6 +13895,10 @@ _SHORTCUT_INTENTS = frozenset({
     "shortcuts_named", "shortcuts_notes_named", "shortcuts_unknown",
 })
 
+#: The Android-builder answers (2026-10-31): fixed words, no card.
+_ANDROID_INTENTS = frozenset({"android_capability", "android_howto", "android_needs",
+                              "android_build_install"})
+
 #: The plug-in answers (2026-10-31): fixed words, no card.
 _PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plugin_install"})
 
@@ -13790,8 +13911,9 @@ _REMINDER_INTENTS = frozenset({
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
-    "shortcuts_unknown", "plugin_list", "plugin_state", "plugin_about", "plugin_install",
-    "reminder_capability", "reminder_popup", "reminder_sound",
+    "shortcuts_unknown", "android_capability", "android_howto", "android_needs",
+    "android_build_install", "plugin_list", "plugin_state", "plugin_about",
+    "plugin_install", "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
