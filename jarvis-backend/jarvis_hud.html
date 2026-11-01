@@ -2346,6 +2346,15 @@ body[data-hud-edit="on"] .hud-card-hidden .hud-card-body{display:none;}
   .hud-presets-item:hover{
     border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice);
   }
+  /* The chosen preset is a RECTANGLE, not the word "(chosen)" (owner's request,
+     2026-10-31: every chosen name grew a noisy suffix). The visible label is
+     the name alone; this border plus aria-current carries the state, and the
+     word lives only in the item's accessible name. One rule, so the model
+     presets, the Cloud row and the cloud providers all wear the same box. */
+  .hud-presets-item.is-chosen{
+    border-color:var(--ice); background:rgb(var(--accent-rgb) / .10); color:var(--ice);
+  }
+  .hud-presets-item.is-chosen:hover{border-color:var(--ice);}
   /* A11Y-2026-10-27 (finding 5): was part of the hover rule above, with
      `outline:none` on the shared selector list, so a keyboard reader of the
      Layouts menu had colour alone. Split, so hover no longer suppresses a
