@@ -244,8 +244,14 @@ def t_every_real_settings_card_is_listed():
     # "app-control" (2026-10-19) is the same shape once more: the phone's
     # accessibility service is a phone-only capability, so the desktop registry
     # has no menu for it and the row is always drawn.
+    # "model-lane" (2026-10-31) joined them when the owner asked for the
+    # automatic-restart sentence and switch to leave the top of Home and live
+    # in Settings ("it should be in settings"): it is the same lane-auto route
+    # Home used (no new setting, no new registry setter), so it is a phone-only
+    # card with no desktop settings card and no registry Section - deliberately
+    # named here rather than given a registry id it would not use.
     phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify",
-                "app-control"}
+                "app-control", "model-lane"}
     check("every desktop settings card is a SECTION",
           not (desktop_ids - listed), sorted(desktop_ids - listed))
     check("every phone Settings row is a SECTION (bar the named spacers)",
