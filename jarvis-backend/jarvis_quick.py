@@ -5323,9 +5323,16 @@ _REMINDER_NOTIFY_RX = re.compile(
 _REMINDER_CLOSED_RX = re.compile(
     r"\b(?:app|jarvis|computer|pc)\b.*\b(?:closed|off|shut\s*down|not\s+running)\b|"
     r"\beven\s+if\b.*\bclosed\b")
-_REMINDER_HOWTO_RX = re.compile(
-    r"\bhow\s+(?:do|can|should)\s+i\s+(?:ask|set|make|create|add)\b|"
-    r"what\s+(?:do|should)\s+i\s+say\b")
+#: "how do I ask for a reminder?" / "how do I set a timer up". The HOW shape is
+#: the family's even when the object is a pronoun ("how do I ask for one?", a
+#: follow-up); a named feature's "how do I set X up" has already stepped aside
+#: in `_asks_about_a_named_feature`.
+_REMINDER_HOWTO_HOW_RX = re.compile(
+    r"\bhow\s+(?:do|can|should)\s+i\s+(?:ask|set|make|create|add)\b")
+#: "what do I say to set a reminder?" - but NOT the sayable list's own "What
+#: should I say?" / "what do I say to use Galaxy": this one only answers when
+#: the sentence also names a reminder, timer or alarm.
+_REMINDER_HOWTO_SAY_RX = re.compile(r"what\s+(?:do|should)\s+i\s+say\b")
 
 
 def _reminders_question(raw) -> Optional[Intent]:
@@ -5365,10 +5372,11 @@ def _reminders_question(raw) -> Optional[Intent]:
         return None
     if _REMINDER_CLOSED_RX.search(text):
         return Intent("reminder_closed", {"surface": "closed"})
-    # "What should I say?" and "what do I say to use Galaxy" are the sayable
-    # list's and the guide's own questions, not a reminder how-to: this shape
+    # "What should I say?" is the sayable list's own question, so the SAY shape
     # only answers when the sentence also names a reminder, timer or alarm.
-    if _REMINDER_HOWTO_RX.search(text) and _REMINDER_WORDS.search(text):
+    # "how do I ask for one?" (a follow-up) keeps the HOW shape unconditionally.
+    if (_REMINDER_HOWTO_HOW_RX.search(text)
+            or (_REMINDER_HOWTO_SAY_RX.search(text) and _REMINDER_WORDS.search(text))):
         return Intent("reminder_howto", {"surface": "howto"})
     if _REMINDER_POPUP_RX.search(text):
         return Intent("reminder_popup", {"surface": "popup"})
