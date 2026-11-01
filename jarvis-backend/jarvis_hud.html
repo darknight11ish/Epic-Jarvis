@@ -6598,6 +6598,21 @@ async function send(){
     return;
   }
 
+  // GEMINI RULING 5 (2026-10-31): a loaded ARCHIVED chat that is continued is
+  // reopened first, so the new turn is never hidden in the Archive filter.
+  // Best effort: if the PC cannot answer, the message still sends.
+  if(window.__jarvisArchivedContinue){
+    const archivedId = window.__jarvisArchivedContinue;
+    window.__jarvisArchivedContinue = "";
+    try{
+      await jfetch("/api/history/archive", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", "X-Jarvis-Client":"hud"},
+        body: JSON.stringify({id: archivedId, archived: false})
+      });
+    }catch(err){ /* older PC or a dropped connection: send anyway */ }
+  }
+
   const body = {
     auto: S.lane === "auto",
     lane: S.lane === "auto" ? null
@@ -12587,6 +12602,10 @@ window.hudHistoryHost = {
     // a chat of its own, which is what the Brain's History tab does too.
     const record = c.continuable === false;
     S.conversationId = record ? newConversationId() : String(c.id || newConversationId());
+    // GEMINI RULING 5 (2026-10-31): a chat loaded from the ARCHIVED list is
+    // kept, and the first new message must not be filed into a chat the
+    // Archive filter still hides. Mark it; send() reopens it before the turn.
+    window.__jarvisArchivedContinue = c.archived === true ? S.conversationId : "";
     turns.forEach(function (t) {
       const turn = t && typeof t === "object" ? t : {};
       const words = typeof turn.text === "string" ? turn.text : "";
@@ -12622,6 +12641,7 @@ window.hudHistoryHost = {
     S.messages = [];
     S.dropped = 0;
     S.conversationId = newConversationId();
+    window.__jarvisArchivedContinue = "";
   },
 };
 /* ── Text size (2026-10-27 accessibility audit, finding 3): this window never
