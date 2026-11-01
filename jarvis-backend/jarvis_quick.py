@@ -5566,13 +5566,12 @@ def _run_price_radar(name: str, state: dict) -> "Result":
         if on:
             return Result("Yes - the price and flight radar is ON. It reads Google Flights' public "
                           "search page (unofficial and experimental) and keeps a local price history; "
-                          "it never books, holds a seat or buys anything. There is no chat lookup "
-                          "route or app screen yet, so it cannot run a flight lookup from this "
-                          "conversation.", "price_radar_state")
+                          "it never books, holds a seat or buys anything. This chat can run a read-only lookup now; "
+                          "there is no app screen yet.", "price_radar_state")
         return Result("No - the price and flight radar is OFF by default. It is read-only (it never "
-                      "books or buys), and it is turned on with `[price_radar] enabled = true` in the "
-                      "Jarvis settings file; that change raises the ordinary change_own_config "
-                      "approval card. There is no app screen or chat route for it yet.", "price_radar_state")
+                      "books or buys), and it is turned on by setting `[price_radar] enabled = true` in the "
+                      "Jarvis settings file; no chat approval card for that switch exists yet. "
+                      "There is no app screen yet, but this chat can run a read-only lookup once it is on.", "price_radar_state")
     if name == "price_radar_about":
         return Result("The price and flight radar is a read-only module on this PC: it reads Google "
                       "Flights' public search page (unofficial, experimental, can change or break at "
@@ -5582,9 +5581,9 @@ def _run_price_radar(name: str, state: dict) -> "Result":
                       ("" if on else " It is off right now."), "price_radar_about")
     if name == "price_radar_enable":
         return Result("To turn on the price and flight radar, set `[price_radar] enabled = true` in "
-                      "Jarvis's settings file (the same file the other switches live in). That is a "
-                      "config change, so it raises the ordinary change_own_config approval card; "
-                      "turning it off is immediate. There is no app screen or chat route for it yet. "
+                      "Jarvis's settings file (the same file the other switches live in). No chat approval card "
+                      "for that switch exists yet; turning it off is immediate. There is no app screen "
+                      "yet; this chat can run a read-only lookup once it is on. "
                       "It stays read-only: prices only, never a booking.", "price_radar_enable")
     if name == "price_radar_book":
         return Result("No - I cannot book a flight. The price and flight radar is read-only: it only "
@@ -5595,7 +5594,7 @@ def _run_price_radar(name: str, state: dict) -> "Result":
         base = ("I can read flight prices with the price and flight radar, but only when it is on. " +
                 ("It is ON right now. " if on else
                  "It is OFF by default - set `[price_radar] enabled = true` in the settings file "
-                 "(that change raises the ordinary change_own_config card) - and " ) +
+                 "(no chat approval card for that switch exists yet) - and " ) +
                 "there is no chat lookup route or app screen yet, so I cannot run a live lookup from "
                 "this conversation. When wired, it reads Google Flights' public search page "
                 "(unofficial and experimental, can break), returns prices only, and never books or "
@@ -5604,8 +5603,8 @@ def _run_price_radar(name: str, state: dict) -> "Result":
     if name == "price_radar_track":
         return Result("Yes - when the radar is on it keeps a local price history with target prices, "
                       "so a price can be watched over time. It is read-only and never buys; it is "
-                      "OFF by default, has no chat route or app screen yet, and turning it on is the "
-                      "ordinary change_own_config card." if not on else
+                      "OFF by default, has no app screen yet, and turning it on is done in the settings file "
+                      "today; no chat card exists for that switch." if not on else
                       "Yes - the radar is on and keeps a local price history with target prices for "
                       "the items it reads. It is read-only and never buys, and there is no chat "
                       "lookup route or app screen yet.", "price_radar_track")
@@ -5625,9 +5624,9 @@ def _run_price_radar(name: str, state: dict) -> "Result":
 
 PRICE_RADAR_DISCLAIMER = "Experimental read-only check; Jarvis cannot book or hold tickets"
 PRICE_RADAR_OFF_SAID = (
-    "The price and flight radar is OFF by default, so I did not search. Say "
-    "\"turn on price radar\" and I will raise its one change_own_config approval card; "
-    "I never approve it for you. Once it is on I can run a read-only price check.")
+    "The price and flight radar is OFF by default, so I did not search. Turning it on is "
+    "done in the settings file today: set [price_radar] enabled = true; no chat approval card "
+    "for that switch exists yet. Once it is on I can run a read-only price check.")
 PRICE_RADAR_NOTICE = ("I could not read a price for that route just now - the public page may have "
                       "changed or returned nothing. Nothing was booked or held.")
 

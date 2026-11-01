@@ -1193,7 +1193,7 @@
       "name": "Timers, alarms, reminders and lists",
       "group": "Talking",
       "surface": "both",
-      "where": "Just ask - \"remind me at six\", \"remind me in 30 minutes to check my phone\", \"make a reminder for 30 minutes from now\", \"set a timer for 10 minutes\" - or see them in Brain, Work, Coming up and the HUD's Reminders panel (#rail-reminders).",
+      "where": "Just ask (\"remind me at six\"), or see them in Brain, Work, Coming up.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3050,15 +3050,15 @@
     },
     {
       "id": "notes-editor",
-      "name": "Create and customize your notes",
+      "name": "Browse and edit your notes",
       "group": "Notes and files",
       "surface": "both",
-      "where": "The PC's Brain → Memory → Notes; the phone's Brain → What Jarvis knows about you → Notes. The create, customize, rename and move sentences work in chat on either app.",
+      "where": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
       "control": {
         "type": "refused",
         "setting_keys": [],
-        "turn_on": "turn on Create and customize your notes",
-        "turn_off": "turn off Create and customize your notes",
+        "turn_on": "turn on Browse and edit your notes",
+        "turn_off": "turn off Browse and edit your notes",
         "adjust": [],
         "intent": "feature_switch_refused"
       },
@@ -3066,7 +3066,7 @@
         "section": null,
         "location": "PC: Brain, the Notes plate. Phone: Mind, the notes plate.",
         "search": [
-          "Create and customize your notes"
+          "Browse and edit your notes"
         ],
         "found": true
       },
@@ -3083,7 +3083,7 @@
       "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
-        "example_phrase": "turn on Create and customize your notes",
+        "example_phrase": "turn on Browse and edit your notes",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
@@ -3695,7 +3695,7 @@
       "name": "Goals",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Work, Goals. Ask in chat for a short plan if you want one drafted first.",
+      "where": "Brain, Work, Goals.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8748,7 +8748,7 @@
       "name": "Build the Android app in a project task",
       "group": "The PC itself",
       "surface": "both",
-      "where": "In a project task, say 'build the Android app' or 'build my app and put it on my phone'. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
+      "where": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -9054,7 +9054,7 @@
       "name": "Organize an Obsidian vault",
       "group": "Notes and files",
       "surface": "desktop",
-      "where": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
+      "where": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -9065,7 +9065,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
+        "location": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
         "search": [
           "Organize an Obsidian vault"
         ],
@@ -9073,7 +9073,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
+        "location": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
         "search": [
           "organize an obsidian vault"
         ],

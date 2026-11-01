@@ -54,8 +54,8 @@ def test_off_state_offers_switch_and_searches_nothing():
               and r.intent == "price_radar_flight", r.intent if r else "model")
         reply = r.reply if r else ""
         check("off says it is OFF by default", "OFF by default" in reply, reply)
-        check("off offers 'turn on price radar' and the one card",
-              "turn on price radar" in reply and "change_own_config" in reply, reply)
+        check("off tells the measured truth: settings file, no chat card",
+              "settings file" in reply and "no chat approval card" in reply, reply)
         check("off runs no lookup", called == [], str(called))
         check("off answer carries no fare", not re.search(r"\$\s*\d", reply), reply)
     finally:
