@@ -54,7 +54,7 @@ REQUIRED = ("id", "group", "title", "what", "where", "asks", "limit", "surface")
 #: `gate` is the evidence gate's card action (rule 9, 2026-10-31). Neither
 #: is part of what the guide SHOWS, so neither is carried into the
 #: catalogue - but both are known keys, so the source stays one file.
-NOT_CARRIED = ("must_mention", "gate")
+NOT_CARRIED = ("must_mention", "gate", "lesson_id")
 OPTIONAL = ("surface_reason", "aliases", "covers")
 
 HEADER = '''"""GENERATED FILE - do not edit by hand.

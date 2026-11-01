@@ -394,6 +394,36 @@ def t_a_card_claim_needs_an_ask_tier_gate():
           C.gate_problems([gap], gaps={"synthetic": "why"}, tiers=tiers) == [])
 
 
+def t_lesson_and_settings_anchors_are_real():
+    """Gemini round 2, ruling 6: a row's lesson exists, and settings.* is real."""
+    lessons = C.lesson_ids()
+    check("CONTROL: every real row's lesson_id and settings.* covers are real",
+          C.lesson_anchor_problems(C.entries()) == []
+          and C.settings_covers_problems(C.entries()) == [],
+          (C.lesson_anchor_problems(C.entries())[:2],
+           C.settings_covers_problems(C.entries())[:2]))
+    rows = C.entries()
+    with_lesson = [e for e in rows if isinstance(e, dict) and e.get("lesson_id")]
+    check("the catalogue really carries primary lesson ids",
+          len(with_lesson) >= 100, len(with_lesson))
+    check("... and every one names a real lesson",
+          all(e["lesson_id"] in lessons for e in with_lesson))
+    bad = C.lesson_anchor_problems([{"id": "synthetic", "lesson_id": "not-a-lesson"}],
+                                   lessons=lessons)
+    check("a made-up lesson_id FAILS and is named",
+          any("not-a-lesson" in x for x in bad), bad)
+    good = {"id": "synthetic", "lesson_id": lessons[0]}
+    check("a real lesson_id passes", C.lesson_anchor_problems([good], lessons=lessons) == [])
+    bad = C.settings_covers_problems(
+        [{"id": "synthetic", "covers": ["settings.not-a-real-setting"]}],
+        known_settings={"settings.ask-first"})
+    check("a made-up settings.* cover FAILS and is named",
+          any("settings.not-a-real-setting" in x for x in bad), bad)
+    good = {"id": "synthetic", "covers": ["settings.ask-first"]}
+    check("a real settings.* cover passes",
+          C.settings_covers_problems([good], known_settings={"settings.ask-first"}) == [])
+
+
 if __name__ == "__main__":
     for fn in (t_the_list_is_complete_and_true,
                t_the_check_is_sensitive_both_directions,
@@ -402,7 +432,8 @@ if __name__ == "__main__":
                t_a_one_sided_claim_carries_its_reason,
                t_a_taught_row_must_name_words_its_lesson_uses,
                t_evidence_anchors_are_real_and_line_numbers_are_not,
-               t_a_card_claim_needs_an_ask_tier_gate):
+               t_a_card_claim_needs_an_ask_tier_gate,
+               t_lesson_and_settings_anchors_are_real):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

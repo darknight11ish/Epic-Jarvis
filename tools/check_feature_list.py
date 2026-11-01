@@ -1082,6 +1082,60 @@ def anchor_problems(rows: list, root: Path = ROOT) -> list:
     return bad
 
 
+def lesson_anchor_problems(rows: list, lessons=None) -> list:
+    """Rule 9's first half (Gemini round 2, ruling 6): a row's lesson must exist.
+
+    Every row may carry `lesson_id` (the one lesson the page's own "Learn
+    this" button opens). It must name a lesson that really exists in
+    `backend/jarvis_tutorials.py`; a made-up or renamed lesson id fails. The
+    lessons a row names through `covers` are checked by the reverse-completeness
+    rules already; this makes the row's PRIMARY lesson an explicit anchor.
+    """
+    known = set(lesson_ids() if lessons is None else lessons)
+    bad = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fid = row.get("id", "?")
+        lid = row.get("lesson_id")
+        if lid is None:
+            continue
+        if not isinstance(lid, str) or not lid.strip():
+            bad.append(f"{fid}: `lesson_id` is empty - name the one lesson this "
+                       "row's Learn button opens, or delete the field")
+        elif lid not in known:
+            bad.append(f"{fid}: `lesson_id` names {lid!r}, which is not a lesson in "
+                       f"backend/jarvis_tutorials.py ({len(known)} lessons) - name a "
+                       "real lesson or fix the catalogue")
+    return bad
+
+
+def settings_covers_problems(rows: list, known_settings=None) -> list:
+    """Rule 9's second half (Gemini round 2, ruling 6): `settings.*` is real.
+
+    A `settings.*` token in `covers` is a claim that the row is reachable from a
+    named row in one app's Settings/menu registry. Those ids are read from the
+    two real registries (`menu-catalog.js`, `MenuPlaces.kt`); an invented
+    `settings.something` fails rather than sitting in the list as a dead pointer.
+    """
+    known = set()
+    if known_settings is not None:
+        known = set(known_settings)
+    else:
+        known = set(desktop_menu_ids()) | set(phone_menu_ids())
+    bad = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fid = row.get("id", "?")
+        for cid in row.get("covers") or []:
+            if isinstance(cid, str) and cid.startswith("settings.") and cid not in known:
+                bad.append(f"{fid}: covers names {cid!r}, which is not a settings/menu "
+                           "id in the desktop menu catalogue or the phone's "
+                           "MenuPlaces.kt - name a real row or drop the token")
+    return bad
+
+
 def card_claim(row: dict) -> bool:
     """Does this row's prose positively promise an approval card?
 
@@ -1167,7 +1221,8 @@ def problems() -> list:
     return (field_problems(got) + phantom_covers(got, known) + uncovered(got, known)
             + internal_problems(known) + copy_problems() + teaching_problems(got, known)
             + lesson_problems(got) + pending_problems(got) + keyword_problems(got)
-            + anchor_problems(got) + gate_problems(got))
+            + anchor_problems(got) + gate_problems(got)
+            + lesson_anchor_problems(got) + settings_covers_problems(got))
 
 
 def main() -> int:
@@ -1203,6 +1258,10 @@ def main() -> int:
         (f"every row that claims a card names the gate action behind it, and that "
          f"action really resolves to tier ask ({len(CARD_GATE_GAP)} recorded gap(s))",
          gate_problems(got)),
+        (f"every row's `lesson_id` names a real lesson in jarvis_tutorials.py "
+         f"({len(lessons)} lessons)", lesson_anchor_problems(got)),
+        ("every `settings.*` token in `covers` is a real settings/menu id in one "
+         "app's registry", settings_covers_problems(got)),
     ]
     failed = 0
     for name, bad in checks:
@@ -1232,6 +1291,13 @@ def main() -> int:
     if TEACHING_GAP:
         print("teaching gaps (a work list for the lessons, not a pass): "
               + ", ".join(sorted(TEACHING_GAP)))
+    lesson_rows = [e for e in got if isinstance(e, dict) and e.get("lesson_id")]
+    settings_tokens = sorted({c for e in got if isinstance(e, dict)
+                              for c in (e.get("covers") or [])
+                              if isinstance(c, str) and c.startswith("settings.")})
+    print(f"{len(lesson_rows)} rows name a primary `lesson_id` "
+          f"({len(lessons)} lessons in jarvis_tutorials.py); "
+          f"{len(settings_tokens)} distinct `settings.*` covers tokens, all real")
     claimed = [e.get("id") for e in got if isinstance(e, dict) and card_claim(e)]
     gated = [e.get("id") for e in got if isinstance(e, dict) and card_claim(e) and e.get("gate")]
     print(f"{len(gated)} of {len(claimed)} card-claiming features name their gate action; "
