@@ -1,6 +1,7 @@
 package com.jarvis.client.data
 
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.net.SignedApproval
 
 /**
  * The phone's lock and fingerprint settings, and every decision made from
@@ -202,9 +203,14 @@ object SecurityRules {
      * same card - but I can approve the same level of card on Android as well."*
      *
      * What pressing Approve will ask for, in plain words, or null when it asks
-     * for nothing. Read ONLY from the same two things the check itself is read
-     * from - [approvalNeedsCheck] and [Security.method] - so this line cannot
+     * for nothing. Read ONLY from the things the press itself reads:
+     * [approvalNeedsCheck] and [Security.method], plus - for a risky card - the
+     * signed-approval state [SignedApproval.stateOf] that decides between the
+     * prompt and the offer path ([SignedApproval.pathFor]). So this line cannot
      * promise a check that will not happen, or stay silent about one that will.
+     * (DEF-022, fixed 2026-10-31: before this the line promised the fingerprint
+     * prompt even while signed approvals were off and Approve only showed the
+     * offer notice.)
      *
      * IT GATES NOTHING. [approvalNeedsCheck] and the `BiometricGate` prompt
      * decide; this is the sentence under the buttons. A test
@@ -227,10 +233,33 @@ object SecurityRules {
      * "Asks Windows Hello - your PIN, fingerprint or face - then shows this
      * list.", shortened for a card.
      */
-    fun approveCheckWords(s: Security, item: PendingItem): String? = when {
-        !approvalNeedsCheck(s, item) -> null
-        s.method == CheckMethod.FINGERPRINT_ONLY -> APPROVE_ASKS_FINGERPRINT
-        else -> APPROVE_ASKS_FINGERPRINT_OR_PIN
+    fun approveCheckWords(
+        s: Security,
+        item: PendingItem,
+        signed: SignedApproval.State? = null,
+    ): String? {
+        if (!approvalNeedsCheck(s, item)) return null
+        // DEF-022 (fixed 2026-10-31): a RISKY card does not always take the
+        // local prompt. [SignedApproval.pathFor] sends it down the offer path
+        // when signed approvals are OFF, need turning on again, or are waiting
+        // for the PC's yes - and that path shows the offer notice INSTEAD of a
+        // fingerprint prompt. So the line below the button must say what will
+        // really happen, not promise a prompt that will not appear. A null
+        // state (not read yet / the read failed) is honestly the prompt case:
+        // the PLAIN path still runs the local check.
+        if (riskyByToday(item)) {
+            when (signed) {
+                SignedApproval.State.OFF -> return APPROVE_ASKS_SIGNED_OFF
+                SignedApproval.State.AGAIN -> return APPROVE_ASKS_SIGNED_AGAIN
+                SignedApproval.State.WAITING -> return APPROVE_ASKS_SIGNED_WAITING
+                else -> Unit
+            }
+        }
+        return if (s.method == CheckMethod.FINGERPRINT_ONLY) {
+            APPROVE_ASKS_FINGERPRINT
+        } else {
+            APPROVE_ASKS_FINGERPRINT_OR_PIN
+        }
     }
 
     /** A card's Approve asks for a strong fingerprint, and nothing else (Fingerprint only). */
@@ -238,6 +267,24 @@ object SecurityRules {
 
     /** A card's Approve asks for the fingerprint or the phone's PIN - the default method. */
     const val APPROVE_ASKS_FINGERPRINT_OR_PIN = "Approve asks for your fingerprint or PIN."
+
+    /**
+     * Signed approvals are OFF (DEF-022): pressing Approve shows the offer
+     * notice instead of a prompt, so the line says that instead of promising
+     * one. The requirement itself is still said, in plain words.
+     */
+    const val APPROVE_ASKS_SIGNED_OFF =
+        "Approve asks you to turn signed approvals on first. Risky approvals from this phone " +
+            "need your fingerprint or PIN once they are on."
+
+    /** Signed approvals need turning on again: the phone's key stopped working. */
+    const val APPROVE_ASKS_SIGNED_AGAIN =
+        "Approve asks you to turn signed approvals on again first. This phone's approval key " +
+            "stopped working."
+
+    /** A card that turns signed approvals on is already waiting for the PC's yes. */
+    const val APPROVE_ASKS_SIGNED_WAITING =
+        "Approve asks you to answer the card that turns signed approvals on first."
 
     /** Shown once, after the first pairing, when App lock is turned on by default. */
     const val SETUP_LOCK_ON =

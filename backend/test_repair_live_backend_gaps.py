@@ -16,6 +16,14 @@ hunks of `unknown-risk-approvable.patch` (the sixth is DEF-021's file-wins
 tier fix with its revised forced-ask block, added 2026-10-31), and the
 repaired file must equal the published gate byte for byte.
 
+The SAME repair also carries the LIVE lineage (Gemini ruling (a), 2026-10-31):
+the 5-hunk #1008 gate (`3e9b8068…`) and the pre-#1008 gate are brought to the
+#1023 post-image (`39a0c407…`) from stored, hash-keyed patches; a listed gate
+whose bytes no longer match, or an unrecognised live-sized gate, is REFUSED
+rather than guessed. `backend/fixtures/def-021-gate-39a0c407.txt.gz` is the
+verified post-image; every accepted pre-image is derived from it and its hash
+checked here, so this suite fails if the tool's stored table drifts.
+
 It writes into the LIVE backend folder, so every failure path matters more
 than the happy one: a missing or ambiguous anchor must refuse, an already
 repaired file must be a no-op, a broken rewrite must be rolled back, and the
@@ -392,6 +400,89 @@ def t_the_unknown_risk_repair_puts_the_published_gate_back_exactly():
     fresh = a_live_folder(gate=base)
     check("a gate that already carries the change is a no-op",
           mod.apply_one(fresh, mod.REPAIRS["unknown-risk"], stamp="test") == "already")
+
+
+
+FIXTURE_TARGET = REPO / "backend" / "fixtures" / "def-021-gate-39a0c407.txt.gz"
+
+
+def live_target_gate() -> str:
+    """The verified #1023 post-image, from the committed gzip fixture."""
+    import gzip
+    return gzip.decompress(FIXTURE_TARGET.read_bytes()).decode("utf-8")
+
+
+def a_live_folder_with_exact_bytes(text: str) -> Path:
+    """A repair folder whose jarvis_gate.py is text's EXACT bytes (LF, no CRLF).
+
+    `a_live_folder` writes through text mode, which would make the hashes in
+    this test meaningless on Windows; the live lineage is hash-addressed."""
+    live = a_live_folder(gate=text)
+    (live / "jarvis_gate.py").write_bytes(text.encode("utf-8"))
+    return live
+
+
+def t_live_lineage_gates_repair_to_the_1023_post_image():
+    """Every accepted live gate, the idempotent no-op, and the refusal.
+
+    The ruling names the live 5-hunk #1008 gate and the pre-#1008 gate; this
+    tool also keeps the three real backups of that lineage. Each is derived by
+    reversing its stored patch out of the verified post-image, so the pre-image
+    bytes are the ones the tool's own table promises, not typed fixtures.
+    """
+    mod = load_tool()
+    target = live_target_gate()
+    check("the gzip fixture is the verified #1023 post-image",
+          mod._sha256_text(target) == mod.LIVE_GATE_TARGET_SHA256)
+    check("the repair accepts more than one live lineage",
+          len(mod.LIVE_LEGACY_GATES) >= 2,
+          len(mod.LIVE_LEGACY_GATES))
+    for digest, _blob in mod.LIVE_LEGACY_GATES.items():
+        patch = mod._legacy_patch(digest)
+        check(f"{digest[:12]}… has a stored patch", bool(patch))
+        pre = mod._reverse_unified_diff(target, patch)
+        check(f"{digest[:12]}… reverses out of the post-image",
+              mod._sha256_text(pre) == digest)
+        live = a_live_folder_with_exact_bytes(pre)
+        check(f"{digest[:12]}… is reported missing, not refused",
+              mod.check_one(live, mod.REPAIRS["unknown-risk"]) == "missing")
+        check(f"{digest[:12]}… applies",
+              mod.apply_one(live, mod.REPAIRS["unknown-risk"], stamp="test") == "applied")
+        landed = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+        check(f"{digest[:12]}… lands on the post-image BYTE FOR BYTE",
+              landed == target)
+        again = mod.apply_one(live, mod.REPAIRS["unknown-risk"], stamp="test-2")
+        check(f"{digest[:12]}… is then the idempotent no-op", again == "already")
+
+    fresh = a_live_folder_with_exact_bytes(target)
+    check("a gate already at the post-image is a no-op",
+          mod.apply_one(fresh, mod.REPAIRS["unknown-risk"], stamp="test") == "already")
+
+    # an unrecognised live-sized gate: same anchors, one byte changed
+    digest = next(iter(mod.LIVE_LEGACY_GATES))
+    pre = mod._reverse_unified_diff(target, mod._legacy_patch(digest))
+    unknown = pre.replace("out.update(_SYNTH_TIERS)", "out.update(_SYNTH_TIERS_unknown)", 1)
+    check("the mutation really changed the bytes", unknown != pre)
+    check("the unknown gate is still the right size for the guard",
+          len(unknown.encode("utf-8")) >= mod.LIVE_LINEAGE_MIN_BYTES)
+    live = a_live_folder_with_exact_bytes(unknown)
+    before = (live / "jarvis_gate.py").read_bytes()
+    refused = False
+    try:
+        mod.check_one(live, mod.REPAIRS["unknown-risk"])
+    except mod.Refused as exc:
+        refused = "not recognise" in str(exc) or "sha256" in str(exc)
+    check("an unrecognised live-lineage gate is REFUSED, not guessed", refused)
+    refused_write = False
+    try:
+        mod.apply_one(live, mod.REPAIRS["unknown-risk"], stamp="test")
+    except mod.Refused:
+        refused_write = True
+    check("... and a refused write leaves the file and no backup",
+          refused_write and (live / "jarvis_gate.py").read_bytes() == before
+          and not any(live.glob("jarvis_gate.py.before-repair-*")))
+    check("the published-base path is still its own (six pieces), not this one",
+          len(mod.REPAIRS["unknown-risk"].parts()) == 6)
 
 
 def main():

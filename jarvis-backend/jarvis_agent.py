@@ -1861,7 +1861,17 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
     home_control call - it always goes through the real gate instead, which
     is stricter than necessary, never a bypass. A plugin (outside_program)
     tool can never be named by a step at all (see _PLAN_EXCLUDED_STEPS's
-    own docstring for the rest of that list, and why)."""
+    own docstring for the rest of that list, and why).
+
+    THE SHAPED-TURN BELTS APPLY TO A STEP TOO (DEF-018 finding 5, fixed
+    2026-10-31): the Gap-1 page-address rule and the Gap-2 sandbox-run rule are
+    applied here exactly as `_one_call` applies them to a direct call - the
+    sandbox run swaps to SANDBOX_FILES_ACTION and appends its reason, the page
+    address prepends URL_FETCH_* to the card, and either one refuses with its
+    own NOBODY_ASKED_* sentence when the gate lets it through with nobody
+    asked. Without this, a plan that began with a reading step could run a
+    script or fetch a model-chosen URL unchecked if propose_plan were ever
+    switched on."""
     cache: dict = {}   # id(step) -> (tool, state, checked_args, verdict)
     # A result-filled step is a fresh copy `jarvis_plan.run()` makes for each
     # step and drops once the next one starts. CPython hands a freed object's
@@ -1915,6 +1925,21 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
         except Exception:
             pass
         action_name = _sandbox_action_for(step.tool, action_name, checked_args)
+        # DEF-018 finding 5 (fixed 2026-10-31): the shaped-turn belts the direct
+        # path already applies must apply to a PLAN STEP too, or a plan that
+        # starts with a reading tool could run a script (Gap 2), or fetch a URL
+        # the model chose (Gap 1), with nobody asked - the exact shapes the two
+        # gaps close on the direct path. Same rules, same words, same order.
+        sandbox_why = (_sandbox_after_outside_why(watch)
+                       if step.tool == SANDBOX_TOOL else "")
+        if sandbox_why:
+            action_name = SANDBOX_FILES_ACTION
+        url_why = ""
+        if step.tool in ("read_web_page", "browser_control"):
+            url_why = "\n".join(url_fetch_card_lines(
+                watch, fetched_urls(step.tool, state)))
+            if url_why:
+                plan_text = f"{url_why}\n\n{plan_text}"
         # A step the plan card promised would ask again on its own card
         # (risky, or result-filled), and a note write once this turn - this
         # plan included - has read outside text (NOTE_WRITES, the 2026-09-24
@@ -1928,6 +1953,8 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
         shaped = f"Plan step - {step.why}\n\n{plan_text}"
         if note_why:
             shaped = f"{note_why}\n\n{shaped}"
+        if sandbox_why:
+            shaped = f"{shaped}\n\n{sandbox_why}"
         if _card_would_be_cut(step.tool, action_name, shaped):
             return refuse("refused: this step's own card would be too long to show in "
                          "full, so nobody was asked and it did not run.")
@@ -1953,6 +1980,30 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
                 reason=NOBODY_ASKED_WORDS.format(name=step.tool, why=why_person,
                                                  action=action_name),
                 gate=NOBODY_ASKED_WHY.format(tier=vtier, action=action_name))
+        elif (getattr(verdict, "allowed", False) and url_why
+                and not _a_person_said_yes(verdict)):
+            # DEF-018 finding 5: the Gap-1 belt, in a plan. Only reached when a
+            # fetch tool is NOT in NEEDS_A_PERSON (the set's own refusal above
+            # fires first otherwise) - i.e. the day one leaves it, or its tier
+            # is loosened, a plan step still cannot fetch a model-chosen URL
+            # with nobody asked.
+            vtier = getattr(verdict, "tier", None) or "unknown"
+            vaction = getattr(verdict, "action", None) or action_name
+            verdict = _PlanStepVerdict(
+                False, outcome=str(getattr(verdict, "outcome", None) or "unknown"),
+                reason=NOBODY_ASKED_URL_WORDS.format(name=step.tool, action=vaction),
+                gate=NOBODY_ASKED_WHY.format(tier=vtier, action=vaction))
+        elif (getattr(verdict, "allowed", False) and sandbox_why
+                and not _a_person_said_yes(verdict)):
+            # DEF-018 finding 5: the Gap-2 belt, in a plan. The action was
+            # swapped to the sandbox's own ask action above; this catches a
+            # config (or a future row) that lets it through at a looser tier.
+            vtier = getattr(verdict, "tier", None) or "unknown"
+            vaction = getattr(verdict, "action", None) or action_name
+            verdict = _PlanStepVerdict(
+                False, outcome=str(getattr(verdict, "outcome", None) or "unknown"),
+                reason=NOBODY_ASKED_SANDBOX_WORDS.format(name=step.tool, action=vaction),
+                gate=NOBODY_ASKED_WHY.format(tier=vtier, action=vaction))
         cache[key] = (tool, state, checked_args, verdict)
         return cache[key]
 
@@ -3158,7 +3209,8 @@ def _schedule_call(name: str, args: dict, call: dict, convo: list, steps: list, 
     """A scheduler tool: straight to jarvis_schedule, no gate (SCHEDULE_TOOLS)."""
     step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
     steps.append(step)
-    if name != "coming_up" and watch is not None and watch.note_needs_a_person():
+    if name != "coming_up" and watch is not None and watch.note_needs_a_person(
+            ignore_read=("coming_up",)):
         say_step("tool_refused", name)
         step["outcome"] = "refused"
         result = {"ok": False, "error": SCHEDULE_AFTER_OUTSIDE}
@@ -3887,10 +3939,19 @@ def _lockdown_on() -> bool:
 #: The rule, in web_search's own terms: if this turn read outside text (a
 #: reading tool ran, or the conversation is tainted), or saved memories were
 #: recalled, and the address is NOT literally in the owner's own words, the
-#: fetch asks on a card FIRST and the card says why. `read_web_page` is asked
-#: under URL_FETCH_AFTER_OUTSIDE_ACTION when its own tier would not ask (so a
-#: loosened `read_web_page` tier cannot skip the card); the browser keeps
-#: `control_browser`, which is already "ask".
+#: fetch asks on a card FIRST and the card says why.
+#:
+#: THERE IS NO ACTION SWAP HERE, and that is deliberate (DEF-018 finding 3,
+#: corrected 2026-10-31 - the comment above used to promise one, and the test
+#: that "checked" it was then checking a name the tool was already using).
+#: `read_web_page` keeps its own action and the browser keeps
+#: `control_browser`: both are already "ask" and both are in NEEDS_A_PERSON,
+#: so a person is asked anyway. What the constants below are FOR is the belt:
+#: if either fetcher ever leaves NEEDS_A_PERSON, or a future config row lets
+#: its action through at a looser tier with nobody asked, the refusal
+#: (NOBODY_ASKED_URL_WORDS) still stops the fetch and says why - and it names
+#: the action that was loosened. `URL_FETCH_AFTER_OUTSIDE_ACTION` is that
+#: action name written once, not a swap target.
 #:
 #: WHAT IS NOT CHANGED, deliberately: a turn nothing outside shaped, and an
 #: address the owner typed themselves, are exactly as before - the tool's own
@@ -3911,11 +3972,10 @@ URL_FETCH_APP = ("The app sent extra text with your message (for example the cli
 URL_FETCH_LOCKDOWN = ("Lockdown is on, so Jarvis asks before fetching any web page until you "
                       "turn it off.")
 
-#: The gate action a page fetch is asked under when its own tier would let it
-#: run without a card and the turn was shaped by outside text (Gap 1). The
-#: same action `read_web_page` already uses every other time - one card per
-#: address, the address in full - so nothing about the card changes except
-#: WHEN it is raised and what it says shaped it.
+#: The action name the page-fetch BELT names when it refuses a fetch nobody was
+#: asked about (NOBODY_ASKED_URL_WORDS) - written once so the refusal and the
+#: tests agree. NOT a swap target: the fetch keeps its own action (see the
+#: comment above).
 URL_FETCH_AFTER_OUTSIDE_ACTION = "read_web_page"
 
 
@@ -3931,12 +3991,23 @@ def _urls_in_words(url) -> str:
 
 
 def _url_in_owner_words(watch, url) -> bool:
-    """Is this address literally in the owner's own typed or said words?"""
+    """Is this address literally in the owner's own typed or said words?
+
+    A BOUNDARY MATCH, never a bare substring (DEF-018 finding 2, fixed
+    2026-10-31). `"evil.com" in "notevil.com"` is True, so the old check
+    treated a model-chosen address as owner-given whenever the owner had typed
+    a longer host that merely ends in it - and the card then dropped the line
+    saying the address was the model's choice. The address must begin and end
+    at a hostname boundary (not another letter, digit, dot or hyphen), so only
+    the address itself counts, wherever in the sentence it was typed."""
     key = _urls_in_words(url)
     if not key:
         return False
     words = getattr(watch, "owner_words", "") or ""
-    return bool(words) and key in words
+    if not words:
+        return False
+    pattern = r"(?<![0-9a-z.-])" + re.escape(key) + r"(?![0-9a-z.-])"
+    return re.search(pattern, words.lower()) is not None
 
 
 def url_fetch_card_lines(watch, urls) -> list:
@@ -5974,16 +6045,34 @@ def _vet_outside_text(name: str, text: str) -> str:
     return out
 
 
+#: DEF-018 finding 4 (fixed 2026-10-31): the boundary walkers below used to
+#: return an object nested deeper than this UNCHANGED - so a string 26 levels
+#: down reached the model unnormalised and unscanned. Past the cap they now put
+#: a plain marker where the too-deep part was, and `took_in` REFUSES such a
+#: result outright (TOO_DEEP_RESULT) rather than pass any part of it through.
+#: No real tool's JSON answer is anywhere near this deep; the cap exists so a
+#: hostile or accidental shape cannot hide text below what the scanner walks.
+_MAX_RESULT_DEPTH = 20
+_DEEP_PART = ("[a part of this result was nested more than "
+              f"{_MAX_RESULT_DEPTH} levels deep, too deep to check, so Jarvis did not read it]")
+TOO_DEEP_RESULT = ("refused: this result was nested too deeply for Jarvis to check its text, "
+                   "so nothing in it was passed on.")
+
+
 def _strings_in(obj, out: list, depth: int = 0) -> list:
     """Every string value inside `obj` (not the keys), in order."""
-    if depth > 20:
-        return out
     if isinstance(obj, str):
         out.append(obj)
     elif isinstance(obj, dict):
+        if depth >= _MAX_RESULT_DEPTH:
+            out.append(_DEEP_PART)
+            return out
         for v in obj.values():
             _strings_in(v, out, depth + 1)
     elif isinstance(obj, (list, tuple)):
+        if depth >= _MAX_RESULT_DEPTH:
+            out.append(_DEEP_PART)
+            return out
         for v in obj:
             _strings_in(v, out, depth + 1)
     return out
@@ -5991,15 +6080,18 @@ def _strings_in(obj, out: list, depth: int = 0) -> list:
 
 def _cleaned(obj, depth: int = 0):
     """A copy of `obj` with strip_chat_markers applied to every string,
-    keys included."""
-    if depth > 20:
-        return obj
+    keys included. A part nested past `_MAX_RESULT_DEPTH` becomes the plain
+    `_DEEP_PART` marker: never the untouched object (DEF-018 finding 4)."""
     if isinstance(obj, str):
         return strip_chat_markers(obj)
     if isinstance(obj, dict):
+        if depth >= _MAX_RESULT_DEPTH:
+            return _DEEP_PART
         return {strip_chat_markers(k) if isinstance(k, str) else k: _cleaned(v, depth + 1)
                 for k, v in obj.items()}
     if isinstance(obj, list):
+        if depth >= _MAX_RESULT_DEPTH:
+            return _DEEP_PART
         return [_cleaned(v, depth + 1) for v in obj]
     return obj
 
@@ -6010,14 +6102,17 @@ def _vetted(obj, name: str, depth: int = 0):
     The same walk as `_cleaned`, one step earlier in the boundary: this is
     the copy the model reads, so it is the normalised one. Keys are left
     alone - a result's keys are the tool's own field names, never outside
-    text."""
-    if depth > 20:
-        return obj
+    text. A part nested past `_MAX_RESULT_DEPTH` becomes the plain
+    `_DEEP_PART` marker: never the untouched object (DEF-018 finding 4)."""
     if isinstance(obj, str):
         return _vet_outside_text(name, obj)
     if isinstance(obj, dict):
+        if depth >= _MAX_RESULT_DEPTH:
+            return _DEEP_PART
         return {k: _vetted(v, name, depth + 1) for k, v in obj.items()}
     if isinstance(obj, list):
+        if depth >= _MAX_RESULT_DEPTH:
+            return _DEEP_PART
         return [_vetted(v, name, depth + 1) for v in obj]
     return obj
 
@@ -6519,6 +6614,12 @@ class _TurnWatch:
             raw_pieces = _strings_in(result, [])
             result = _vetted(result, name)
             pieces = _strings_in(result, [])
+            if _DEEP_PART in pieces:
+                # DEF-018 finding 4 (fixed 2026-10-31): a part nested too deep
+                # to walk was not checked, so the whole result is REFUSED here
+                # rather than handed to the model with that part untouched.
+                return {OUTSIDE_FIELD: OUTSIDE_LABEL, "ok": False,
+                        "error": TOO_DEEP_RESULT}
             self.outside.append("\n".join(pieces)[:_MAX_SCAN_CHARS])
             # Each field on its own - a sender's address in one field and
             # "send me the update" in the next are not an instruction to
@@ -6624,14 +6725,24 @@ class _TurnWatch:
                         break       # the whole value: its pieces say nothing more
         return found[:5]
 
-    def note_needs_a_person(self) -> str:
+    def note_needs_a_person(self, ignore_read=()) -> str:
         """"" when a note write in this turn goes by the config's own tier,
         else the card's line saying why it waits for a yes (NOTE_WRITES): a
         reading tool ran this turn, the conversation is tainted, or the
         newest message was not typed. A note write's own result is Jarvis's
         confirmation of what it wrote, not outside text, so two notes in a
-        clean turn are both saved straight away."""
-        if self.tainted or any(n not in NOTE_WRITES for n in self.read):
+        clean turn are both saved straight away.
+
+        `ignore_read` names tools whose OWN read mark is not outside text for
+        THIS question. The scheduler's guard passes `("coming_up",)`: listing
+        the schedule is a read, but it is the owner's own request being
+        answered, and it must not stop the reminder asked for in the same
+        sentence (DEF-018 finding 1, fixed 2026-10-31). Everything else still
+        sees that read: a NOTE write after `coming_up` keeps asking, because
+        it calls this with no exemption."""
+        ignored = set(ignore_read or ())
+        reads = [n for n in self.read if n not in ignored]
+        if self.tainted or any(n not in NOTE_WRITES for n in reads):
             return NOTE_AFTER_READING
         if self.provenance:
             return NOTE_AFTER_NOT_TYPED.format(how=_NOT_OWN_WORDS[self.provenance])

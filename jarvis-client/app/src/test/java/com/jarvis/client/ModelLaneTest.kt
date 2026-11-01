@@ -474,18 +474,27 @@ class ModelLaneTest {
     // ------------------------------------------------------- who draws it ---
 
     @Test
-    fun `Home draws the automatic line and its switch from this one rule`() {
-        val home = java.io.File("src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt")
-        assertTrue("HomeScreen.kt is not where the test expects it", home.isFile)
-        val text = home.readText()
-        assertTrue("Home does not draw the PC's sentence", text.contains("ModelLane.notice("))
-        assertTrue("Home does not read the shared switch words", text.contains("switchWords("))
-        assertTrue("Home does not use the shared switch rule", text.contains("switchAsks("))
-        assertTrue("Home does not wire the switch", text.contains("onSetLaneAuto"))
+    fun `the automatic line and its switch now live in Settings, not on Home`() {
+        // Moved on 2026-10-31 (the owner's screenshot: the paragraph and its
+        // button sat at the top of Home permanently). The card still draws the
+        // PC's own sentence and uses the SAME shared switch rule; only its
+        // address changed.
+        val card = java.io.File("src/main/java/com/jarvis/client/ui/screens/ModelLaneSection.kt")
+        assertTrue("ModelLaneSection.kt is not where the test expects it", card.isFile)
+        val text = card.readText()
+        assertTrue("Settings does not draw the PC's sentence", text.contains("ModelLane.notice("))
+        assertTrue("Settings does not read the shared switch words", text.contains("switchWords("))
+        assertTrue("Settings does not use the shared switch rule", text.contains("switchAsks("))
+        assertTrue("Settings does not wire the switch", text.contains("JarvisRuntime.setLaneAuto"))
         // Its own state, apart from the Start button's failure: one press
-        // failing must never be shown as the other's.
+        // failing must never be shown as the other's. Both are read from the
+        // runtime the same way Home used to read them.
         assertTrue(text.contains("laneAutoFailure"))
         assertTrue(text.contains("laneAutoBusy"))
+        // ...and Home no longer draws any of it.
+        val home = java.io.File("src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt").readText()
+        assertFalse("Home still draws the PC's sentence", home.contains("ModelLane.notice("))
+        assertFalse("Home still reads the shared switch words", home.contains("switchWords("))
     }
 
     @Test

@@ -358,6 +358,10 @@ async function openHud(browser, status, pageOptions = {}) {
             }
             return { opened: "page", id: args.id };
           }
+          case "open_fix_place":
+            // Navigation only (hud.json `open-fix-place`); the Memory door's
+            // Review button must be able to reach the Brain from this page.
+            return null;
           case "stop_everything":
             // The fixed HUD control (owner-approved 2026-10-22): the same
             // command the hotkey, tray and widget use. It stops only, approves
@@ -564,7 +568,7 @@ async function openHud(browser, status, pageOptions = {}) {
       if (url.pathname === "/api/memory/pending" && status.memory) {
         memoryReads.push(url.search);
         return route.fulfill({ status: 200, headers: cors,
-          json: { available: true, pending: status.memory, setup: {} } });
+          json: { available: true, pending: status.memory, setup: status.memorySetup || {} } });
       }
       if (url.pathname === "/api/feedback/mark" && status.turnId) {
         marks.push(JSON.parse(req.postData() || "{}"));
@@ -2650,6 +2654,122 @@ await check("memory cards are decided in the Brain: the HUD only says how many w
   await page.waitForTimeout(200);
   assert.equal(refused.status, 403);
   assert.deepEqual(memoryWrites, [], "a memory decision from the HUD reached the backend");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+
+await check("the Memory tab lists the waiting cards with their own kind words, and Dismiss is the banner's own local removal", async () => {
+  // The owner's screenshots (2026-10-31): the pending memory cards must be
+  // reachable from the HUD's MEMORY tab, not only from the floating banner.
+  // This is a DOOR, not a second decision place: the list has no Keep/Approve/
+  // Deny, its Dismiss removes the row locally exactly as the banner's button
+  // does, and Review opens the Brain. The read is the phone's own queue read,
+  // with both flags.
+  const memory = [
+    { id: 41, text: "I like oat milk", source: "conversation", replaces: null, replaces_id: null },
+    { id: 42, text: "I moved to Porto", source: "conversation",
+      replaces: "I live in Lisbon", replaces_id: 7, replaces_text: "I live in Lisbon" },
+    { id: 43, text: "Stop using this fact? I drive a diesel", source: "feedback_retire",
+      replaces: "I drive a diesel", replaces_id: 8, replaces_text: "I drive a diesel" },
+  ];
+  const memorySetup = { sleep_time_offer: {
+    title: "Tidy up today's memories?", what: "Jarvis can sort today's new facts overnight.",
+    pro: ["keeps long-term memory tidy"], con: ["it is a slower answer while it runs"], how: "It asks first." } };
+  const { page, problems, memoryReads, memoryWrites } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, memory, memorySetup });
+  await setHudLook(page, "studio");
+  await page.waitForTimeout(250);
+  await page.click('#studio-dock [data-hud-tab-choice="memory"]');
+  await page.waitForTimeout(500);
+  const door = await page.evaluate(() => {
+    const box = document.getElementById("memory-door");
+    return {
+      visible: Boolean(box && !box.hidden),
+      kinds: [...box.querySelectorAll(".memory-door-kind")].map((e) => e.textContent),
+      allWords: box.innerText,
+      banner: document.querySelectorAll("#init-memory").length,
+      decisions: [...box.querySelectorAll("button")]
+        .filter((b) => /^\s*(Keep|Approve|Deny|Discard|Forget)\b/i.test(b.textContent)).length,
+      reviews: box.querySelectorAll(".memory-door-review").length,
+      dismisses: box.querySelectorAll(".memory-door-dismiss").length,
+    };
+  });
+  assert.equal(door.visible, true, "the Memory tab did not draw the pending-card list");
+  assert.deepEqual(door.kinds, ["New fact", "Correction", "Retire", "Sleep offer"],
+    `the list's kinds are wrong: ${JSON.stringify(door.kinds)}`);
+  assert.match(door.allWords, /I like oat milk/);
+  assert.match(door.allWords, /I moved to Porto/);
+  assert.match(door.allWords, /Replaces: I live in Lisbon/);
+  assert.match(door.allWords, /I drive a diesel/);
+  assert.equal(door.banner, 0, "the banner and the list both claim the same cards");
+  assert.equal(door.decisions, 0, "the HUD list offers a memory decision");
+  assert.equal(door.reviews, 4, "not every card offers Review in the Brain");
+  assert.equal(door.dismisses, 4, "not every card offers Dismiss");
+  assert.ok(memoryReads.some((q) => q.includes("retire_cards=1&sleep_offer=1")),
+    `the tab did not use the phone's own queue read: ${JSON.stringify(memoryReads)}`);
+
+  await page.locator("#memory-door .memory-door-card").first()
+    .locator(".memory-door-dismiss").click();
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator("#memory-door .memory-door-card").count(), 3,
+    "Dismiss did not remove the one row locally");
+  assert.deepEqual(memoryWrites, [], "a Dismiss reached a memory write route");
+
+  await page.locator("#memory-door .memory-door-review").first().click();
+  await page.waitForTimeout(200);
+  const opens = await page.evaluate(() =>
+    window.__invokes.filter((c) => c[0] === "open_fix_place").map((c) => c[1]));
+  assert.deepEqual(opens, [{ place: "brain" }],
+    "Review in the Brain did not use the existing open_fix_place path");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("the Memory tab says so when no card is waiting", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, memory: [], memorySetup: {} });
+  await setHudLook(page, "studio");
+  await page.waitForTimeout(250);
+  await page.click('#studio-dock [data-hud-tab-choice="memory"]');
+  await page.waitForTimeout(400);
+  const empty = await page.evaluate(() => {
+    const el = document.getElementById("memory-door-empty");
+    return { hidden: el.hidden, text: el.textContent,
+      cards: document.querySelectorAll("#memory-door .memory-door-card").length,
+      door: !document.getElementById("memory-door").hidden };
+  });
+  assert.equal(empty.door, true, "the Memory tab list section is not shown");
+  assert.equal(empty.cards, 0, "the empty list drew cards");
+  assert.equal(empty.hidden, false, "the empty list has no sentence");
+  assert.match(empty.text, /No memory cards are waiting/);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("while App lock / hidden memory lists are on, the Memory tab lists no titles", async () => {
+  const memory = [{ id: 91, text: "Distinct secret phrase 9931", source: "conversation" }];
+  const { page, problems } = await openHud(browser, {
+    jarvis: false, ollama: true, proxy: false, memory,
+    lockFlags: { appLock: true, privateAnswers: false } });
+  await setHudLook(page, "studio");
+  await page.waitForTimeout(250);
+  await page.click('#studio-dock [data-hud-tab-choice="memory"]');
+  await page.waitForTimeout(500);
+  const hidden = await page.evaluate(() => {
+    const sentence = document.getElementById("memory-door-hidden");
+    return {
+      shown: !sentence.hidden,
+      sentence: sentence.textContent,
+      cards: document.querySelectorAll("#memory-door .memory-door-card").length,
+      bodyWords: document.body.innerText,
+    };
+  });
+  assert.equal(hidden.shown, true, "the hidden sentence is not drawn");
+  assert.match(hidden.sentence, /Memory lists are hidden/);
+  assert.equal(hidden.cards, 0, "the hidden list drew cards");
+  assert.doesNotMatch(hidden.bodyWords, /Distinct secret phrase 9931/,
+    "a card title survived the hidden state in the page");
   await page.close();
   assert.deepEqual(problems, []);
 });

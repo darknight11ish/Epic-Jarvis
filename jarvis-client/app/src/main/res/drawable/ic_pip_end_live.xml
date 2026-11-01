@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PiP Live's "End Live" control (2026-10-31). A solid silhouette: the
+     Compose Icon tints it with the app's own text colour, so the fillColor here
+     is only a placeholder. Drawn as a rounded stop square - the same shape the
+     Live screen's own end control uses. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7,7 a2,2 0 0,1 2,-2 h6 a2,2 0 0,1 2,2 v10 a2,2 0 0,1 -2,2 h-6 a2,2 0 0,1 -2,-2 Z" />
+</vector>

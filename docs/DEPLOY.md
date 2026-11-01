@@ -205,6 +205,19 @@ row for the file the repository does not ship. **Not run against the owner's
 live folder when it was written:** the dry run is the first thing to read, and
 it writes nothing.
 
+**The authoritative live preflight baseline after the 2026-10-31 DEF-021 repair is `35 pass / 4 fail /
+3 warn (5 skipped)` — measured on the owner's own install, not inferred (Gemini ruling (f), 2026-10-31;
+the run's output is `.dsh-scratch/DEPLOY-2026-10-31/logs/21-preflight-after-gate-fix.txt`).**
+Only these four rows are expected to stay `FAIL`, and all four are `PARTIAL` patch rows:
+`appearance.patch 216/334`, `show-card-timer.patch 10/60`, `cloud-honesty.patch 3/80`, and
+`attached-file.patch 0/30` (`attached-file.patch is not in jarvis_hud.py`). **The three base-file hash rows
+(`jarvis_extract.py`, `jarvis_gate.py`, `jarvis_hud.py`) and `unknown-risk-approvable.patch` must now
+`PASS`** — the DEF-021 gate delta repair (`jarvis_gate.py = 39a0c407…`) plus `--rebaseline-unprovable`
+moved those rows and the reseal re-hashed them. Those four patches stay `PARTIAL` only because this
+install's lineage can no longer replay their pre-images through the patch stack; the features are live
+through reconcile and the repair tools, so the row records lineage, not missing function. **Any new FAIL
+row is a real change, not the baseline.**
+
 **Order matters.** Run it after a deploy and after `repair_live_backend_gaps.py`,
 not before: each of those writes files, and a later write is a later drift the
 record has not seen. The safe sequence is `reconcile_live_backend.py` (dry run,

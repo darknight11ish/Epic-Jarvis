@@ -483,7 +483,18 @@ def t_the_hud_does_not_use_up_the_sleep_card():
         SL._cfg = keep
         SL._seen.clear()
     hud_src = HUD_HTML.read_text(encoding="utf-8")
-    check("the HUD page does not ask for the card", "sleep_offer" not in hud_src)
+    # 2026-10-31: the Memory tab now LISTS the pending cards, including the
+    # once-a-day overnight-tidy card, so the HUD must ask for it only from
+    # that list (on the explicit Memory-tab entry, never from the 30-second
+    # banner read), and only that list may show it. The banner's own plain
+    # read still never gets or uses up the day's offer.
+    _banner = re.search(r'jfetch\("/api/memory/pending"[^\n]*', hud_src)
+    check("the HUD banner's plain read never gets the card",
+          _banner is not None and "sleep_offer" not in _banner.group(0))
+    check("the HUD asks for it only from the Memory-tab list that shows it",
+          hud_src.count("sleep_offer=1") == 1 and
+          'full: "/api/memory/pending?retire_cards=1&sleep_offer=1"' in hud_src and
+          "MEMORY_DOOR.full" in hud_src)
     rs = ROUTES_RS.read_text(encoding="utf-8")
     check("the Brain window asks for it (its read table, brain/routes.rs)",
           re.search(r'"/api/memory/pending\?[^"]*\bsleep_offer=1(?:&[^"]*)?"', rs) is not None)

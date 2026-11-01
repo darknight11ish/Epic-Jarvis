@@ -332,7 +332,7 @@ class SettingsSearchTest {
         }
         assertEquals(
             "this test walked no row that names switch titles, so it checks nothing",
-            4,
+            5,
             rowsWalked,
         )
         assertTrue(
