@@ -690,6 +690,16 @@ data class HomeState(
      */
     val security: com.jarvis.client.data.Security = com.jarvis.client.data.Security(),
     /**
+     * This phone's signed-approval state, or null when it has not been read
+     * (or could not be). It is what makes the line under Approve tell the truth
+     * for a risky card: with signed approvals off / needing turning on again /
+     * waiting for the PC's yes, pressing Approve shows the offer notice instead
+     * of a fingerprint prompt (DEF-022, fixed 2026-10-31;
+     * [com.jarvis.client.data.SecurityRules.approveCheckWords]). Null is the
+     * prompt case - the PLAIN path still runs the local check.
+     */
+    val signedApprovals: com.jarvis.client.net.SignedApproval.State? = null,
+    /**
      * The PC's own approval-card setting (net/CardSummary): "start short" (the
      * default) draws each card's short summary with an "Explain more" control,
      * "always show everything" draws the whole card. Cosmetic, read from the
@@ -1682,6 +1692,7 @@ private fun ConversationList(
                     onAmend = { note -> actions.onAmend(item.id, note) },
                     swipeAllowed = state.swipeDecides,
                     security = state.security,
+                    signedApprovals = state.signedApprovals,
                     pictureHidden = state.memoryHidden,
                     showFooter = state.pending.size == 1,
                     // UI-AUDIT-2026-09-26 item 6: a new card fades in, and the

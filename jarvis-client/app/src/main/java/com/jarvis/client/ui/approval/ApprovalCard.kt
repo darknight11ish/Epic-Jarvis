@@ -59,6 +59,7 @@ import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.FormReview
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.ReplaceConfirm
+import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.ui.parts.Affirm
 import com.jarvis.client.ui.parts.Meter
 import com.jarvis.client.ui.parts.Pill
@@ -115,6 +116,7 @@ fun ApprovalCard(
     onAmend: suspend (note: String) -> Unit = {},
     swipeAllowed: Boolean = true,
     security: Security = Security(),
+    signedApprovals: SignedApproval.State? = null,
     pictureHidden: Boolean = false,
     modifier: Modifier = Modifier,
     showFooter: Boolean = true,
@@ -131,6 +133,7 @@ fun ApprovalCard(
     onAmend = onAmend,
     swipeAllowed = swipeAllowed,
     security = security,
+    signedApprovals = signedApprovals,
     pictureHidden = pictureHidden,
     modifier = modifier,
     showFooter = showFooter,
@@ -188,6 +191,17 @@ fun ApprovalCard(
      * runs the check before any approval is sent, whether or not it is drawn.
      */
     security: Security = Security(),
+    /**
+     * This phone's signed-approval state ([SignedApproval.stateOf]), or null
+     * when it has not been read (or the PC could not be read). It is what the
+     * line under the buttons needs to say what Approve will REALLY ask for
+     * (DEF-022, fixed 2026-10-31): with signed approvals OFF / needing turning
+     * on again / waiting for the PC's yes, a risky card's Approve shows the
+     * offer notice instead of a fingerprint prompt. Defaulted, so a caller that
+     * does not thread it draws the prompt sentence - which is also what the
+     * PLAIN path really does. It gates nothing.
+     */
+    signedApprovals: SignedApproval.State? = null,
     /**
      * "Hide memory lists and chat history" is on: a "submit this form" card
      * shows a line instead of the form's picture, and never asks for it.
@@ -312,15 +326,22 @@ fun ApprovalCard(
     // and the card says where to choose. Denying needs no option and stays.
     val canApprove = canDecide && !item.needsChoice && !item.pcOnly && heavyGateOk
 
-    // WHAT PRESSING APPROVE WILL ASK FOR (the owner's ruling of 2026-10-30).
-    // Null when Approve asks for nothing, or when this card has no Approve to
-    // press at all: a PC-only card's button is not drawn (it can only be
-    // approved there, with Windows Hello) and a `needsChoice` card's is drawn
-    // but disabled until the PC knows which plan - neither can reach a prompt,
-    // so neither may promise one. The sentence itself is
-    // [SecurityRules.approveCheckWords]'s, from the same rule the check uses.
+    // WHAT PRESSING APPROVE WILL ASK FOR (the owner's ruling of 2026-10-30,
+    // corrected for DEF-022 on 2026-10-31). Null when Approve asks for nothing,
+    // or when this card has no Approve to press at all: a PC-only card's button
+    // is not drawn (it can only be approved there, with Windows Hello) and a
+    // `needsChoice` card's is drawn but disabled until the PC knows which plan -
+    // neither can reach a prompt, so neither may promise one. The sentence
+    // itself is [SecurityRules.approveCheckWords]'s, from the same rules the
+    // press uses - including [signedApprovals], so a risky card whose Approve
+    // would only offer to turn signed approvals on says THAT, never a
+    // fingerprint prompt.
     val approveCheck =
-        if (item.pcOnly || item.needsChoice) null else SecurityRules.approveCheckWords(security, item)
+        if (item.pcOnly || item.needsChoice) {
+            null
+        } else {
+            SecurityRules.approveCheckWords(security, item, signedApprovals)
+        }
 
     // A decision on this screen is felt, not just seen - a swipe is answered
     // with no visual confirmation until the card has already animated off

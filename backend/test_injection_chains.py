@@ -214,8 +214,10 @@ MUTATIONS = (
      "the store stops folding invisible characters away, so a zero-width "
      "character survives into the words the model reads"),
     ("chain3a-documents-notes", "jarvis_agent.py",
-     ('        if self.tainted or any(n not in NOTE_WRITES for n in self.read):\n'
+     ('        reads = [n for n in self.read if n not in ignored]\n'
+      '        if self.tainted or any(n not in NOTE_WRITES for n in reads):\n'
       '            return NOTE_AFTER_READING\n',
+      '        reads = [n for n in self.read if n not in ignored]\n'
       '        if False:\n'
       '            return NOTE_AFTER_READING\n'),
      "note_rule_not_armed",

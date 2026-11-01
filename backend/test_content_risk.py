@@ -54,6 +54,7 @@ import shutil
 import sys
 import tempfile
 import time
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -77,6 +78,7 @@ BASE = REPO / "jarvis-backend"
 sys.path.append(str(BASE))
 
 import jarvis_content_risk as CR  # noqa: E402
+import jarvis_documents as DOC  # noqa: E402
 import jarvis_framework as FW  # noqa: E402
 
 FAILED, PASSED = [], []
@@ -330,9 +332,64 @@ def t_pins():
           (chk.status, chk.drift, chk.diff[:200]))
 
 
+def t_documents_boundary():
+    """C6's STORE half: a read() answer carries the document's own part TITLE
+    and, for a multi-part document, CONTENTS lines built from those titles.
+    Both are the file's words, so they must be folded and labelled exactly like
+    `text` - the answer's own promise is "every word this module returns comes
+    from a FILE the owner did not write", and before DEF-019 (fixed 2026-10-31)
+    the title and every contents line came back byte-identical: not folded, not
+    labelled, not scanned.
+
+    Read through the real `read()` with a stand-in converter, so this is the
+    real store path: `.docx` extension, the real zip checks, the real
+    `split_parts` (the heading becomes the part title) and the real
+    `_mark_answer`. The converter is replaced only so the test does not need
+    MarkItDown or a Word file to be installed on the machine running it."""
+    folder = TMP / "documents"
+    folder.mkdir(parents=True, exist_ok=True)
+    doc = folder / "titled.docx"
+    with zipfile.ZipFile(doc, "w") as zf:
+        zf.writestr("[Content_Types].xml", "<?xml version='1.0'?><Types/>")
+        zf.writestr("word/document.xml", "<?xml version='1.0'?><w:document/>")
+
+    ZW = "\u200b"   # the invisible character the defect was measured with
+
+    def convert(path, ext):
+        # Markdown headings: split_parts turns each into that part's TITLE, and
+        # the two parts are what `contents` is built from.
+        return {"ok": True, "text": (
+            f"# Part{ZW} One\nfirst words\n\n# Second{ZW} Part\nsecond words\n")}
+
+    got = DOC.read(str(doc), roots=[str(folder)], convert=convert)
+    check("a real read() of a two-part document is ok", got.get("ok") is True, got)
+    title = str(got.get("title") or "")
+    check("the part TITLE carries the outside-text label",
+          title.startswith(DOC.OUTSIDE_LABEL), repr(title[:120]))
+    check("... and its invisible character is folded away",
+          ZW not in title and "Part One" in title, repr(title))
+    contents = [str(one) for one in (got.get("contents") or [])]
+    check("every CONTENTS line carries the outside-text label",
+          len(contents) == 2
+          and all(one.startswith(DOC.OUTSIDE_LABEL) for one in contents),
+          contents)
+    check("... and every contents line is folded",
+          len(contents) == 2 and all(ZW not in one for one in contents)
+          and all("Part" in one for one in contents), contents)
+    text = str(got.get("text") or "")
+    check("the TEXT is still labelled and folded, as before",
+          text.startswith(DOC.OUTSIDE_LABEL) and ZW not in text, repr(text[:120]))
+    check("the answer still carries the outside_text fact",
+          got.get("outside_text") is True)
+    check("the NAME and PATH stay raw on purpose (a caller must open what was found)",
+          got.get("name") == "titled.docx"
+          and str(got.get("path") or "").endswith("titled.docx")
+          and DOC.OUTSIDE_LABEL not in str(got.get("name")), (got.get("name"), got.get("path")))
+
+
 def main() -> int:
     for fn in (t_normalise, t_find_rush, t_assess, t_vet_tool_result,
-               t_the_latch, t_pins):
+               t_the_latch, t_pins, t_documents_boundary):
         print(f"\n--- {fn.__name__} ---")
         fn()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
