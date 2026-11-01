@@ -3695,7 +3695,7 @@
       "name": "Goals",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Work, Goals.",
+      "where": "Brain, Work, Goals. Ask in chat for a short plan if you want one drafted first.",
       "control": {
         "type": "refused",
         "setting_keys": [],

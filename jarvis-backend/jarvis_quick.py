@@ -1215,6 +1215,9 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _android_question(text)
     if got is not None:
         return got
+    got = _goals_question(text)
+    if got is not None:
+        return got
 
     # --- timers, alarms and reminders, capability questions only (2026-10-31)
     # The owner asked "can you make a reminder for me" and the model said it
@@ -5679,6 +5682,162 @@ def _android_question(raw) -> Optional[Intent]:
         return Intent("android_build_install")
     if _ANDROID_BUILD_RX.search(text):
         return Intent("android_capability")
+    return None
+
+
+
+# --------------------------------------------------------------------------
+# Goals (2026-10-31 honesty fix)
+#
+# Measured: plugins/ready/goals + backend/jarvis_goals.py keep goals in
+# goals.db (one row per goal: the owner's words, a short plan of at most
+# MAX_STEPS steps, status), shown in Brain, Work, Goals. Accepting a drafted
+# goal raises ONE ordinary approval card; ticking a step and the weekly
+# check-in raise NO card; every acting step still needs its own card. There is
+# no automatic progress tracking - a step is met by the owner's tick or, where
+# a step names a project benchmark, when that benchmark's number reaches its
+# target on a read/check-in; nothing is ticked silently. The live model said
+# "I don't have a built-in goal-tracking system that updates automatically",
+# which is false.
+# --------------------------------------------------------------------------
+
+MAX_GOAL_STEPS = 7
+
+
+def _goals_store():
+    """The real goals store, or None when the module is not installed."""
+    try:
+        import jarvis_goals as G
+        return G.Goals.get()
+    except Exception:                       # noqa: BLE001 - module absent
+        return None
+
+
+def _goal_rows() -> list:
+    store = _goals_store()
+    if store is None:
+        return None
+    try:
+        return list(store.list())
+    except Exception:                       # noqa: BLE001 - unreadable store
+        return None
+
+
+def _goal_list_sentence(surface: str) -> "Result":
+    rows = _goal_rows()
+    if rows is None:
+        return Result("The goals feature lives on the PC (Brain, Work, Goals), but I cannot read "
+                      "the goals store from here right now.", "goal_list")
+    if not rows:
+        return Result("You have no goals tracked on this PC right now. Goals live in Brain, Work, "
+                      "Goals; accepting a drafted goal raises one ordinary card, and ticking a step "
+                      "does not.", "goal_list")
+    shown = []
+    for row in rows[:8]:
+        text = str(row.get("text") or "").strip()
+        if text:
+            shown.append(text)
+    more = max(0, len(rows) - len(shown))
+    where = ("The goals are on the PC in Brain, Work, Goals." if surface != "phone"
+             else "The goals are on the PC - the phone shows them through the same feature.")
+    return Result("You are tracking " + str(len(rows)) + " goal(s) on this PC: " +
+                  "; ".join(shown) + ((" and " + str(more) + " more") if more else "") + ". " +
+                  where + " Accepting a drafted goal raises one card; ticking a step raises none, "
+                  "and nothing is ticked silently.", "goal_list")
+
+
+def _goal_find(name: str) -> dict:
+    rows = _goal_rows()
+    wanted = " ".join(str(name or "").lower().split())
+    if not rows or not wanted:
+        return None
+    for row in rows:
+        text = str(row.get("text") or "")
+        if wanted in text.lower():
+            return row
+    return None
+
+
+def _run_goals(name: str, f: dict, surface: str) -> "Result":
+    if name == "goal_list":
+        return _goal_list_sentence(surface)
+    if name == "goal_state":
+        row = _goal_find(str(f.get("name") or ""))
+        if row is not None:
+            return Result("Yes - \"" + str(row.get("text") or "") + "\" is one of your goals on this "
+                          "PC. " + str(row.get("status") or "") + ". It is in Brain, Work, Goals.",
+                          "goal_state")
+        return Result("I don't see a goal called \"" + str(f.get("name") or "") + "\" on this PC. "
+                      "Your goals are in Brain, Work, Goals; add one there (or ask me in chat for a "
+                      "short plan to paste in).", "goal_state")
+    if name == "goal_about":
+        return Result("Goals keep a plan you edit, with at most 7 steps, in Brain, Work, Goals on the "
+                      "PC. Accepting a drafted goal raises ONE ordinary approval card; ticking a step "
+                      "and the weekly check-in raise NO card. Every acting step still needs its own "
+                      "card. Nothing ticks a step silently: a step is met when you tick it, or where it "
+                      "names a project benchmark, when that number reaches its target on a read/check-in.",
+                      "goal_about")
+    if name == "goal_update":
+        return Result("Open Brain, Work, Goals and tick the step yourself - ticking and the weekly "
+                      "check-in need no card. Say \"add a goal\" or describe the goal in chat if you "
+                      "want a short plan drafted first; accepting that draft raises ONE ordinary card. "
+                      "Every acting step still needs its own card.", "goal_update")
+    if name == "goal_capability":
+        rows = _goal_rows()
+        count = (" I can read the PC's goals store from here." if rows is not None
+                 else " I cannot read the goals store from here, but the feature is on the PC.")
+        return Result("Yes - I keep track of goals for you on this PC: each goal is your own words "
+                      "plus a short editable plan of at most 7 steps, kept in Brain, Work, Goals."
+                      + count + " Accepting a drafted goal raises ONE ordinary card; ticking a step "
+                      "and the weekly check-in raise NO card. Progress is not tracked automatically - "
+                      "you tick steps, and a step that names a project benchmark is met when that "
+                      "number reaches its target.", "goal_capability")
+    return Result("Yes - goals live in Brain, Work, Goals on this PC.", "goal_capability")
+
+
+_GOAL_CAP_RX = re.compile(
+    r"\b(?:can|could|do|will)\s+you\s+(?:keep\s+track\s+of|track|manage|remember|help\s+with)\s+"
+    r"(?:my\s+)?goals?\b|\bcan\s+you\s+(?:keep\s+track\s+of|track)\s+(?:my\s+)?goals?\b|"
+    r"\bdo\s+you\s+have\s+(?:a\s+)?(?:built-in\s+)?goal[- ]tracking\b")
+_GOAL_LIST_RX = re.compile(
+    r"\bwhat\s+goals\s+(?:am\s+i|are\s+on|do\s+i\s+have)\b|"
+    r"\bwhat\s+(?:are\s+)?my\s+goals\b|\b(?:list|show)\s+(?:me\s+)?my\s+goals\b")
+_GOAL_ABOUT_RX = re.compile(
+    r"\bwhat\s+(?:does|do)\s+(?:the\s+)?goals?\s+(?:feature|system|tracker)?\s*do\b|"
+    r"\bwhat\s+is\s+the\s+goals?\s+feature\b|\bhow\s+does\s+(?:the\s+)?goal[- ]tracking\b")
+_GOAL_UPDATE_RX = re.compile(
+    r"\bhow\s+(?:do|can)\s+i\s+(?:add|create|make|update|tick|mark)\s+(?:a\s+)?goal\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+(?:add|create|make)\s+a\s+goal\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+update\s+(?:my\s+)?(?:progress|goal)\b")
+_GOAL_STATE_RX = re.compile(
+    r"\bis\s+(?:the\s+)?[\"']?(?P<name>[a-z0-9][a-z0-9 ,-]{2,50}?)[\"']?\s+(?:goal\s+)?"
+    r"(?:one\s+of\s+my\s+goals|tracked|a\s+goal\s+of\s+mine)\b|"
+    r"\bdo\s+i\s+have\s+a\s+goal\s+(?:called|about)\s+[\"']?(?P<name2>[a-z0-9][a-z0-9 ,-]{2,50})")
+
+
+def _goals_question(raw) -> Optional[Intent]:
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if re.search(r"\b(?:company|business|football|game|score|sales|team|project)\s+goals?\b", text):
+        return None
+    if re.search(r"\b(?:track|tracking)\s+(?:my\s+)?(?:package|order|parcel|time|spending|sleep)\b", text):
+        return None
+    if _GOAL_STATE_RX.search(text):
+        m = _GOAL_STATE_RX.search(text)
+        name = m.group("name") or m.group("name2") or ""
+        return Intent("goal_state", {"name": name.strip()})
+    if _GOAL_LIST_RX.search(text):
+        return Intent("goal_list")
+    if _GOAL_UPDATE_RX.search(text):
+        return Intent("goal_update")
+    if _GOAL_ABOUT_RX.search(text):
+        return Intent("goal_about")
+    if _GOAL_CAP_RX.search(text):
+        return Intent("goal_capability")
+    if re.search(r"\b(?:my\s+)?goals?\b", text) and re.search(r"\b(?:can you|do you|help|track)\b", text):
+        return Intent("goal_capability")
     return None
 
 
@@ -13190,6 +13349,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_plugins(n, f, _client_surface(peer, local, client_surface))
     if n in _ANDROID_INTENTS:
         return _run_android(n, _android_state())
+    if n in _GOAL_INTENTS:
+        return _run_goals(n, f, _client_surface(peer, local, client_surface))
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
     if n in ("update_ask", "update_notes"):
@@ -13895,6 +14056,9 @@ _SHORTCUT_INTENTS = frozenset({
     "shortcuts_named", "shortcuts_notes_named", "shortcuts_unknown",
 })
 
+#: The goal answers (2026-10-31): fixed words plus the PC's real goal list.
+_GOAL_INTENTS = frozenset({"goal_capability", "goal_list", "goal_state", "goal_about", "goal_update"})
+
 #: The Android-builder answers (2026-10-31): fixed words, no card.
 _ANDROID_INTENTS = frozenset({"android_capability", "android_howto", "android_needs",
                               "android_build_install"})
@@ -13911,7 +14075,8 @@ _REMINDER_INTENTS = frozenset({
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
-    "shortcuts_unknown", "android_capability", "android_howto", "android_needs",
+    "shortcuts_unknown", "goal_capability", "goal_list", "goal_state", "goal_about",
+    "goal_update", "android_capability", "android_howto", "android_needs",
     "android_build_install", "plugin_list", "plugin_state", "plugin_about",
     "plugin_install", "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
