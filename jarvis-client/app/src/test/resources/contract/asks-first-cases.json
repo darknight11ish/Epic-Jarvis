@@ -1193,7 +1193,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Offer a reading tool to the AI model"
+       "title": "Offer a tool to the AI model"
       },
       {
        "action": "restore_backup",
@@ -1311,38 +1311,273 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "groups": [
+     {
+      "ids": [
+       "calendar_read",
+       "notes_search",
+       "append_obsidian_daily",
+       "create_joplin_note",
+       "append_logseq_journal"
+      ],
+      "title": "Notes and reading"
+     },
+     {
+      "ids": [
+       "set_timer",
+       "set_reminder",
+       "todo_add",
+       "todo_done",
+       "coming_up"
+      ],
+      "title": "Timers, lists and plans"
+     },
+     {
+      "ids": [
+       "email_check",
+       "send_email",
+       "draft_email",
+       "tidy_inbox",
+       "home_read",
+       "home_control",
+       "my_spending",
+       "retirement_whatif"
+      ],
+      "title": "Connected accounts & home"
+     },
+     {
+      "ids": [
+       "protect_from_jarvis",
+       "github_search",
+       "send_file_to_phone"
+      ],
+      "title": "Safety and sharing"
+     }
+    ],
     "items": [
      {
+      "group": "Notes and reading",
       "id": "calendar_read",
       "last": null,
       "on": false,
-      "title": "Read your calendar",
+      "title": "Reading your calendar",
       "waiting": false
      },
      {
-      "id": "email_read",
-      "last": null,
-      "on": false,
-      "title": "Read your email",
-      "waiting": false
-     },
-     {
+      "group": "Notes and reading",
       "id": "notes_search",
       "last": null,
       "on": false,
-      "title": "Search your notes",
+      "title": "Searching your notes",
       "waiting": false
      },
      {
+      "group": "Notes and reading",
+      "id": "append_obsidian_daily",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Obsidian daily note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "create_joplin_note",
+      "last": null,
+      "on": false,
+      "title": "Making a Joplin note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "append_logseq_journal",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Logseq journal",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_timer",
+      "last": null,
+      "on": false,
+      "title": "Timers",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_reminder",
+      "last": null,
+      "on": false,
+      "title": "Reminders",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_add",
+      "last": null,
+      "on": false,
+      "title": "Adding to the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_done",
+      "last": null,
+      "on": false,
+      "title": "Ticking off the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "coming_up",
+      "last": null,
+      "on": false,
+      "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "email_check",
+      "last": null,
+      "on": false,
+      "title": "Reading your email",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "send_email",
+      "last": null,
+      "on": false,
+      "title": "Send an email (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "draft_email",
+      "last": null,
+      "on": false,
+      "title": "Save an email draft (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "tidy_inbox",
+      "last": null,
+      "on": false,
+      "title": "Tidy your inbox (one card lists every email)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
       "id": "home_read",
       "last": null,
       "on": false,
-      "title": "Check your smart home",
+      "title": "Reading Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "home_control",
+      "last": null,
+      "on": false,
+      "title": "Changing things in Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "my_spending",
+      "last": null,
+      "on": false,
+      "title": "Adding up spending from your bank files (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "retirement_whatif",
+      "last": null,
+      "on": false,
+      "title": "A retirement what-if from numbers you type (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "protect_from_jarvis",
+      "last": null,
+      "on": false,
+      "title": "Protecting a folder, file or program from Jarvis (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "github_search",
+      "last": null,
+      "on": false,
+      "title": "GitHub research",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "send_file_to_phone",
+      "last": null,
+      "on": false,
+      "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
      }
     ],
-    "label": "Let the AI use this"
+    "label": "Let the AI use this",
+    "not_offered": {
+     "labels": {
+      "browser_control": "Browser control",
+      "calculator": "Calculator",
+      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "control_computer": "Computer control",
+      "control_phone": "Phone control",
+      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+      "file_read": "Reading files on this PC",
+      "memory_search": "Searching what it has learned about you",
+      "my_files": "Finding and reading files in the folders you listed",
+      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
+      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "read_web_page": "Reading one web page out loud (one card each)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "shell_exec": "Running commands on this PC",
+      "web_search": "Web search"
+     },
+     "not_this_slice": [
+      "calculator",
+      "memory_search",
+      "file_read",
+      "web_search",
+      "my_files",
+      "propose_plan",
+      "change_setting",
+      "feature_guide"
+     ],
+     "tier_c": [
+      "shell_exec",
+      "run_data_script",
+      "control_computer",
+      "control_phone",
+      "browser_control",
+      "read_web_page",
+      "connect_account",
+      "rea_investigate"
+     ],
+     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+    },
+    "vault": {
+     "action": "change_own_config",
+     "can_enable": true,
+     "group": "Notes and reading",
+     "id": "vault_organizer",
+     "kind": "switch",
+     "on": false,
+     "title": "Organize an Obsidian vault",
+     "waiting": true,
+     "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
+    }
    },
    "waiting": null
   },
@@ -2539,7 +2774,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Offer a reading tool to the AI model"
+       "title": "Offer a tool to the AI model"
       },
       {
        "action": "restore_backup",
@@ -2657,38 +2892,273 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "groups": [
+     {
+      "ids": [
+       "calendar_read",
+       "notes_search",
+       "append_obsidian_daily",
+       "create_joplin_note",
+       "append_logseq_journal"
+      ],
+      "title": "Notes and reading"
+     },
+     {
+      "ids": [
+       "set_timer",
+       "set_reminder",
+       "todo_add",
+       "todo_done",
+       "coming_up"
+      ],
+      "title": "Timers, lists and plans"
+     },
+     {
+      "ids": [
+       "email_check",
+       "send_email",
+       "draft_email",
+       "tidy_inbox",
+       "home_read",
+       "home_control",
+       "my_spending",
+       "retirement_whatif"
+      ],
+      "title": "Connected accounts & home"
+     },
+     {
+      "ids": [
+       "protect_from_jarvis",
+       "github_search",
+       "send_file_to_phone"
+      ],
+      "title": "Safety and sharing"
+     }
+    ],
     "items": [
      {
+      "group": "Notes and reading",
       "id": "calendar_read",
       "last": null,
       "on": false,
-      "title": "Read your calendar",
+      "title": "Reading your calendar",
       "waiting": false
      },
      {
-      "id": "email_read",
-      "last": null,
-      "on": false,
-      "title": "Read your email",
-      "waiting": false
-     },
-     {
+      "group": "Notes and reading",
       "id": "notes_search",
       "last": null,
       "on": false,
-      "title": "Search your notes",
+      "title": "Searching your notes",
       "waiting": false
      },
      {
+      "group": "Notes and reading",
+      "id": "append_obsidian_daily",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Obsidian daily note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "create_joplin_note",
+      "last": null,
+      "on": false,
+      "title": "Making a Joplin note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "append_logseq_journal",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Logseq journal",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_timer",
+      "last": null,
+      "on": false,
+      "title": "Timers",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_reminder",
+      "last": null,
+      "on": false,
+      "title": "Reminders",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_add",
+      "last": null,
+      "on": false,
+      "title": "Adding to the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_done",
+      "last": null,
+      "on": false,
+      "title": "Ticking off the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "coming_up",
+      "last": null,
+      "on": false,
+      "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "email_check",
+      "last": null,
+      "on": false,
+      "title": "Reading your email",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "send_email",
+      "last": null,
+      "on": false,
+      "title": "Send an email (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "draft_email",
+      "last": null,
+      "on": false,
+      "title": "Save an email draft (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "tidy_inbox",
+      "last": null,
+      "on": false,
+      "title": "Tidy your inbox (one card lists every email)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
       "id": "home_read",
       "last": null,
       "on": false,
-      "title": "Check your smart home",
+      "title": "Reading Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "home_control",
+      "last": null,
+      "on": false,
+      "title": "Changing things in Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "my_spending",
+      "last": null,
+      "on": false,
+      "title": "Adding up spending from your bank files (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "retirement_whatif",
+      "last": null,
+      "on": false,
+      "title": "A retirement what-if from numbers you type (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "protect_from_jarvis",
+      "last": null,
+      "on": false,
+      "title": "Protecting a folder, file or program from Jarvis (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "github_search",
+      "last": null,
+      "on": false,
+      "title": "GitHub research",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "send_file_to_phone",
+      "last": null,
+      "on": false,
+      "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
      }
     ],
-    "label": "Let the AI use this"
+    "label": "Let the AI use this",
+    "not_offered": {
+     "labels": {
+      "browser_control": "Browser control",
+      "calculator": "Calculator",
+      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "control_computer": "Computer control",
+      "control_phone": "Phone control",
+      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+      "file_read": "Reading files on this PC",
+      "memory_search": "Searching what it has learned about you",
+      "my_files": "Finding and reading files in the folders you listed",
+      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
+      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "read_web_page": "Reading one web page out loud (one card each)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "shell_exec": "Running commands on this PC",
+      "web_search": "Web search"
+     },
+     "not_this_slice": [
+      "calculator",
+      "memory_search",
+      "file_read",
+      "web_search",
+      "my_files",
+      "propose_plan",
+      "change_setting",
+      "feature_guide"
+     ],
+     "tier_c": [
+      "shell_exec",
+      "run_data_script",
+      "control_computer",
+      "control_phone",
+      "browser_control",
+      "read_web_page",
+      "connect_account",
+      "rea_investigate"
+     ],
+     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+    },
+    "vault": {
+     "action": "change_own_config",
+     "can_enable": true,
+     "group": "Notes and reading",
+     "id": "vault_organizer",
+     "kind": "switch",
+     "on": false,
+     "title": "Organize an Obsidian vault",
+     "waiting": true,
+     "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
+    }
    },
    "waiting": null
   },
@@ -3880,7 +4350,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Offer a reading tool to the AI model"
+       "title": "Offer a tool to the AI model"
       },
       {
        "action": "restore_backup",
@@ -3998,38 +4468,273 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "groups": [
+     {
+      "ids": [
+       "calendar_read",
+       "notes_search",
+       "append_obsidian_daily",
+       "create_joplin_note",
+       "append_logseq_journal"
+      ],
+      "title": "Notes and reading"
+     },
+     {
+      "ids": [
+       "set_timer",
+       "set_reminder",
+       "todo_add",
+       "todo_done",
+       "coming_up"
+      ],
+      "title": "Timers, lists and plans"
+     },
+     {
+      "ids": [
+       "email_check",
+       "send_email",
+       "draft_email",
+       "tidy_inbox",
+       "home_read",
+       "home_control",
+       "my_spending",
+       "retirement_whatif"
+      ],
+      "title": "Connected accounts & home"
+     },
+     {
+      "ids": [
+       "protect_from_jarvis",
+       "github_search",
+       "send_file_to_phone"
+      ],
+      "title": "Safety and sharing"
+     }
+    ],
     "items": [
      {
+      "group": "Notes and reading",
       "id": "calendar_read",
       "last": null,
       "on": false,
-      "title": "Read your calendar",
+      "title": "Reading your calendar",
       "waiting": false
      },
      {
-      "id": "email_read",
-      "last": null,
-      "on": false,
-      "title": "Read your email",
-      "waiting": false
-     },
-     {
+      "group": "Notes and reading",
       "id": "notes_search",
       "last": null,
       "on": false,
-      "title": "Search your notes",
+      "title": "Searching your notes",
       "waiting": false
      },
      {
+      "group": "Notes and reading",
+      "id": "append_obsidian_daily",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Obsidian daily note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "create_joplin_note",
+      "last": null,
+      "on": false,
+      "title": "Making a Joplin note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "append_logseq_journal",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Logseq journal",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_timer",
+      "last": null,
+      "on": false,
+      "title": "Timers",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_reminder",
+      "last": null,
+      "on": false,
+      "title": "Reminders",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_add",
+      "last": null,
+      "on": false,
+      "title": "Adding to the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_done",
+      "last": null,
+      "on": false,
+      "title": "Ticking off the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "coming_up",
+      "last": null,
+      "on": false,
+      "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "email_check",
+      "last": null,
+      "on": false,
+      "title": "Reading your email",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "send_email",
+      "last": null,
+      "on": false,
+      "title": "Send an email (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "draft_email",
+      "last": null,
+      "on": false,
+      "title": "Save an email draft (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "tidy_inbox",
+      "last": null,
+      "on": false,
+      "title": "Tidy your inbox (one card lists every email)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
       "id": "home_read",
       "last": null,
       "on": false,
-      "title": "Check your smart home",
+      "title": "Reading Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "home_control",
+      "last": null,
+      "on": false,
+      "title": "Changing things in Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "my_spending",
+      "last": null,
+      "on": false,
+      "title": "Adding up spending from your bank files (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "retirement_whatif",
+      "last": null,
+      "on": false,
+      "title": "A retirement what-if from numbers you type (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "protect_from_jarvis",
+      "last": null,
+      "on": false,
+      "title": "Protecting a folder, file or program from Jarvis (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "github_search",
+      "last": null,
+      "on": false,
+      "title": "GitHub research",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "send_file_to_phone",
+      "last": null,
+      "on": false,
+      "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
      }
     ],
-    "label": "Let the AI use this"
+    "label": "Let the AI use this",
+    "not_offered": {
+     "labels": {
+      "browser_control": "Browser control",
+      "calculator": "Calculator",
+      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "control_computer": "Computer control",
+      "control_phone": "Phone control",
+      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+      "file_read": "Reading files on this PC",
+      "memory_search": "Searching what it has learned about you",
+      "my_files": "Finding and reading files in the folders you listed",
+      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
+      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "read_web_page": "Reading one web page out loud (one card each)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "shell_exec": "Running commands on this PC",
+      "web_search": "Web search"
+     },
+     "not_this_slice": [
+      "calculator",
+      "memory_search",
+      "file_read",
+      "web_search",
+      "my_files",
+      "propose_plan",
+      "change_setting",
+      "feature_guide"
+     ],
+     "tier_c": [
+      "shell_exec",
+      "run_data_script",
+      "control_computer",
+      "control_phone",
+      "browser_control",
+      "read_web_page",
+      "connect_account",
+      "rea_investigate"
+     ],
+     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+    },
+    "vault": {
+     "action": "change_own_config",
+     "can_enable": true,
+     "group": "Notes and reading",
+     "id": "vault_organizer",
+     "kind": "switch",
+     "on": false,
+     "title": "Organize an Obsidian vault",
+     "waiting": true,
+     "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
+    }
    },
    "waiting": null
   },
@@ -5216,7 +5921,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Offer a reading tool to the AI model"
+       "title": "Offer a tool to the AI model"
       },
       {
        "action": "restore_backup",
@@ -5334,38 +6039,273 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "groups": [
+     {
+      "ids": [
+       "calendar_read",
+       "notes_search",
+       "append_obsidian_daily",
+       "create_joplin_note",
+       "append_logseq_journal"
+      ],
+      "title": "Notes and reading"
+     },
+     {
+      "ids": [
+       "set_timer",
+       "set_reminder",
+       "todo_add",
+       "todo_done",
+       "coming_up"
+      ],
+      "title": "Timers, lists and plans"
+     },
+     {
+      "ids": [
+       "email_check",
+       "send_email",
+       "draft_email",
+       "tidy_inbox",
+       "home_read",
+       "home_control",
+       "my_spending",
+       "retirement_whatif"
+      ],
+      "title": "Connected accounts & home"
+     },
+     {
+      "ids": [
+       "protect_from_jarvis",
+       "github_search",
+       "send_file_to_phone"
+      ],
+      "title": "Safety and sharing"
+     }
+    ],
     "items": [
      {
+      "group": "Notes and reading",
       "id": "calendar_read",
       "last": null,
       "on": true,
-      "title": "Read your calendar",
+      "title": "Reading your calendar",
       "waiting": false
      },
      {
-      "id": "email_read",
-      "last": null,
-      "on": false,
-      "title": "Read your email",
-      "waiting": false
-     },
-     {
+      "group": "Notes and reading",
       "id": "notes_search",
       "last": null,
       "on": false,
-      "title": "Search your notes",
+      "title": "Searching your notes",
       "waiting": false
      },
      {
+      "group": "Notes and reading",
+      "id": "append_obsidian_daily",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Obsidian daily note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "create_joplin_note",
+      "last": null,
+      "on": false,
+      "title": "Making a Joplin note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "append_logseq_journal",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Logseq journal",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_timer",
+      "last": null,
+      "on": false,
+      "title": "Timers",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_reminder",
+      "last": null,
+      "on": false,
+      "title": "Reminders",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_add",
+      "last": null,
+      "on": false,
+      "title": "Adding to the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_done",
+      "last": null,
+      "on": false,
+      "title": "Ticking off the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "coming_up",
+      "last": null,
+      "on": false,
+      "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "email_check",
+      "last": null,
+      "on": false,
+      "title": "Reading your email",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "send_email",
+      "last": null,
+      "on": false,
+      "title": "Send an email (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "draft_email",
+      "last": null,
+      "on": false,
+      "title": "Save an email draft (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "tidy_inbox",
+      "last": null,
+      "on": false,
+      "title": "Tidy your inbox (one card lists every email)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
       "id": "home_read",
       "last": null,
       "on": false,
-      "title": "Check your smart home",
+      "title": "Reading Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "home_control",
+      "last": null,
+      "on": false,
+      "title": "Changing things in Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "my_spending",
+      "last": null,
+      "on": false,
+      "title": "Adding up spending from your bank files (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "retirement_whatif",
+      "last": null,
+      "on": false,
+      "title": "A retirement what-if from numbers you type (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "protect_from_jarvis",
+      "last": null,
+      "on": false,
+      "title": "Protecting a folder, file or program from Jarvis (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "github_search",
+      "last": null,
+      "on": false,
+      "title": "GitHub research",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "send_file_to_phone",
+      "last": null,
+      "on": false,
+      "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
      }
     ],
-    "label": "Let the AI use this"
+    "label": "Let the AI use this",
+    "not_offered": {
+     "labels": {
+      "browser_control": "Browser control",
+      "calculator": "Calculator",
+      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "control_computer": "Computer control",
+      "control_phone": "Phone control",
+      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+      "file_read": "Reading files on this PC",
+      "memory_search": "Searching what it has learned about you",
+      "my_files": "Finding and reading files in the folders you listed",
+      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
+      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "read_web_page": "Reading one web page out loud (one card each)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "shell_exec": "Running commands on this PC",
+      "web_search": "Web search"
+     },
+     "not_this_slice": [
+      "calculator",
+      "memory_search",
+      "file_read",
+      "web_search",
+      "my_files",
+      "propose_plan",
+      "change_setting",
+      "feature_guide"
+     ],
+     "tier_c": [
+      "shell_exec",
+      "run_data_script",
+      "control_computer",
+      "control_phone",
+      "browser_control",
+      "read_web_page",
+      "connect_account",
+      "rea_investigate"
+     ],
+     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+    },
+    "vault": {
+     "action": "change_own_config",
+     "can_enable": true,
+     "group": "Notes and reading",
+     "id": "vault_organizer",
+     "kind": "switch",
+     "on": false,
+     "title": "Organize an Obsidian vault",
+     "waiting": true,
+     "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
+    }
    },
    "waiting": null
   },
@@ -6552,7 +7492,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Offer a reading tool to the AI model"
+       "title": "Offer a tool to the AI model"
       },
       {
        "action": "restore_backup",
@@ -6670,38 +7610,273 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "groups": [
+     {
+      "ids": [
+       "calendar_read",
+       "notes_search",
+       "append_obsidian_daily",
+       "create_joplin_note",
+       "append_logseq_journal"
+      ],
+      "title": "Notes and reading"
+     },
+     {
+      "ids": [
+       "set_timer",
+       "set_reminder",
+       "todo_add",
+       "todo_done",
+       "coming_up"
+      ],
+      "title": "Timers, lists and plans"
+     },
+     {
+      "ids": [
+       "email_check",
+       "send_email",
+       "draft_email",
+       "tidy_inbox",
+       "home_read",
+       "home_control",
+       "my_spending",
+       "retirement_whatif"
+      ],
+      "title": "Connected accounts & home"
+     },
+     {
+      "ids": [
+       "protect_from_jarvis",
+       "github_search",
+       "send_file_to_phone"
+      ],
+      "title": "Safety and sharing"
+     }
+    ],
     "items": [
      {
+      "group": "Notes and reading",
       "id": "calendar_read",
       "last": null,
       "on": false,
-      "title": "Read your calendar",
+      "title": "Reading your calendar",
       "waiting": false
      },
      {
-      "id": "email_read",
-      "last": null,
-      "on": false,
-      "title": "Read your email",
-      "waiting": true
-     },
-     {
+      "group": "Notes and reading",
       "id": "notes_search",
       "last": null,
       "on": false,
-      "title": "Search your notes",
+      "title": "Searching your notes",
       "waiting": false
      },
      {
+      "group": "Notes and reading",
+      "id": "append_obsidian_daily",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Obsidian daily note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "create_joplin_note",
+      "last": null,
+      "on": false,
+      "title": "Making a Joplin note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "append_logseq_journal",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Logseq journal",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_timer",
+      "last": null,
+      "on": false,
+      "title": "Timers",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_reminder",
+      "last": null,
+      "on": false,
+      "title": "Reminders",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_add",
+      "last": null,
+      "on": false,
+      "title": "Adding to the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_done",
+      "last": null,
+      "on": false,
+      "title": "Ticking off the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "coming_up",
+      "last": null,
+      "on": false,
+      "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "email_check",
+      "last": null,
+      "on": false,
+      "title": "Reading your email",
+      "waiting": true
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "send_email",
+      "last": null,
+      "on": false,
+      "title": "Send an email (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "draft_email",
+      "last": null,
+      "on": false,
+      "title": "Save an email draft (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "tidy_inbox",
+      "last": null,
+      "on": false,
+      "title": "Tidy your inbox (one card lists every email)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
       "id": "home_read",
       "last": null,
       "on": false,
-      "title": "Check your smart home",
+      "title": "Reading Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "home_control",
+      "last": null,
+      "on": false,
+      "title": "Changing things in Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "my_spending",
+      "last": null,
+      "on": false,
+      "title": "Adding up spending from your bank files (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "retirement_whatif",
+      "last": null,
+      "on": false,
+      "title": "A retirement what-if from numbers you type (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "protect_from_jarvis",
+      "last": null,
+      "on": false,
+      "title": "Protecting a folder, file or program from Jarvis (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "github_search",
+      "last": null,
+      "on": false,
+      "title": "GitHub research",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "send_file_to_phone",
+      "last": null,
+      "on": false,
+      "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
      }
     ],
-    "label": "Let the AI use this"
+    "label": "Let the AI use this",
+    "not_offered": {
+     "labels": {
+      "browser_control": "Browser control",
+      "calculator": "Calculator",
+      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "control_computer": "Computer control",
+      "control_phone": "Phone control",
+      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+      "file_read": "Reading files on this PC",
+      "memory_search": "Searching what it has learned about you",
+      "my_files": "Finding and reading files in the folders you listed",
+      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
+      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "read_web_page": "Reading one web page out loud (one card each)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "shell_exec": "Running commands on this PC",
+      "web_search": "Web search"
+     },
+     "not_this_slice": [
+      "calculator",
+      "memory_search",
+      "file_read",
+      "web_search",
+      "my_files",
+      "propose_plan",
+      "change_setting",
+      "feature_guide"
+     ],
+     "tier_c": [
+      "shell_exec",
+      "run_data_script",
+      "control_computer",
+      "control_phone",
+      "browser_control",
+      "read_web_page",
+      "connect_account",
+      "rea_investigate"
+     ],
+     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+    },
+    "vault": {
+     "action": "change_own_config",
+     "can_enable": false,
+     "group": "Notes and reading",
+     "id": "vault_organizer",
+     "kind": "switch",
+     "on": false,
+     "title": "Organize an Obsidian vault",
+     "waiting": true,
+     "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
+    }
    },
    "waiting": {
     "action": "calendar_read",
@@ -7902,7 +9077,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Offer a reading tool to the AI model"
+       "title": "Offer a tool to the AI model"
       },
       {
        "action": "restore_backup",
@@ -8020,38 +9195,273 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "groups": [
+     {
+      "ids": [
+       "calendar_read",
+       "notes_search",
+       "append_obsidian_daily",
+       "create_joplin_note",
+       "append_logseq_journal"
+      ],
+      "title": "Notes and reading"
+     },
+     {
+      "ids": [
+       "set_timer",
+       "set_reminder",
+       "todo_add",
+       "todo_done",
+       "coming_up"
+      ],
+      "title": "Timers, lists and plans"
+     },
+     {
+      "ids": [
+       "email_check",
+       "send_email",
+       "draft_email",
+       "tidy_inbox",
+       "home_read",
+       "home_control",
+       "my_spending",
+       "retirement_whatif"
+      ],
+      "title": "Connected accounts & home"
+     },
+     {
+      "ids": [
+       "protect_from_jarvis",
+       "github_search",
+       "send_file_to_phone"
+      ],
+      "title": "Safety and sharing"
+     }
+    ],
     "items": [
      {
+      "group": "Notes and reading",
       "id": "calendar_read",
       "last": null,
       "on": false,
-      "title": "Read your calendar",
+      "title": "Reading your calendar",
       "waiting": false
      },
      {
-      "id": "email_read",
-      "last": null,
-      "on": false,
-      "title": "Read your email",
-      "waiting": false
-     },
-     {
+      "group": "Notes and reading",
       "id": "notes_search",
       "last": null,
       "on": false,
-      "title": "Search your notes",
+      "title": "Searching your notes",
       "waiting": false
      },
      {
+      "group": "Notes and reading",
+      "id": "append_obsidian_daily",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Obsidian daily note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "create_joplin_note",
+      "last": null,
+      "on": false,
+      "title": "Making a Joplin note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "append_logseq_journal",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Logseq journal",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_timer",
+      "last": null,
+      "on": false,
+      "title": "Timers",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_reminder",
+      "last": null,
+      "on": false,
+      "title": "Reminders",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_add",
+      "last": null,
+      "on": false,
+      "title": "Adding to the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_done",
+      "last": null,
+      "on": false,
+      "title": "Ticking off the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "coming_up",
+      "last": null,
+      "on": false,
+      "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "email_check",
+      "last": null,
+      "on": false,
+      "title": "Reading your email",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "send_email",
+      "last": null,
+      "on": false,
+      "title": "Send an email (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "draft_email",
+      "last": null,
+      "on": false,
+      "title": "Save an email draft (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "tidy_inbox",
+      "last": null,
+      "on": false,
+      "title": "Tidy your inbox (one card lists every email)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
       "id": "home_read",
       "last": null,
       "on": false,
-      "title": "Check your smart home",
+      "title": "Reading Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "home_control",
+      "last": null,
+      "on": false,
+      "title": "Changing things in Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "my_spending",
+      "last": null,
+      "on": false,
+      "title": "Adding up spending from your bank files (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "retirement_whatif",
+      "last": null,
+      "on": false,
+      "title": "A retirement what-if from numbers you type (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "protect_from_jarvis",
+      "last": null,
+      "on": false,
+      "title": "Protecting a folder, file or program from Jarvis (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "github_search",
+      "last": null,
+      "on": false,
+      "title": "GitHub research",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "send_file_to_phone",
+      "last": null,
+      "on": false,
+      "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
      }
     ],
-    "label": "Let the AI use this"
+    "label": "Let the AI use this",
+    "not_offered": {
+     "labels": {
+      "browser_control": "Browser control",
+      "calculator": "Calculator",
+      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "control_computer": "Computer control",
+      "control_phone": "Phone control",
+      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+      "file_read": "Reading files on this PC",
+      "memory_search": "Searching what it has learned about you",
+      "my_files": "Finding and reading files in the folders you listed",
+      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
+      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "read_web_page": "Reading one web page out loud (one card each)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "shell_exec": "Running commands on this PC",
+      "web_search": "Web search"
+     },
+     "not_this_slice": [
+      "calculator",
+      "memory_search",
+      "file_read",
+      "web_search",
+      "my_files",
+      "propose_plan",
+      "change_setting",
+      "feature_guide"
+     ],
+     "tier_c": [
+      "shell_exec",
+      "run_data_script",
+      "control_computer",
+      "control_phone",
+      "browser_control",
+      "read_web_page",
+      "connect_account",
+      "rea_investigate"
+     ],
+     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+    },
+    "vault": {
+     "action": "change_own_config",
+     "can_enable": false,
+     "group": "Notes and reading",
+     "id": "vault_organizer",
+     "kind": "switch",
+     "on": false,
+     "title": "Organize an Obsidian vault",
+     "waiting": true,
+     "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
+    }
    },
    "waiting": null
   },
@@ -9243,7 +10653,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Offer a reading tool to the AI model"
+       "title": "Offer a tool to the AI model"
       },
       {
        "action": "restore_backup",
@@ -9361,38 +10771,273 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "groups": [
+     {
+      "ids": [
+       "calendar_read",
+       "notes_search",
+       "append_obsidian_daily",
+       "create_joplin_note",
+       "append_logseq_journal"
+      ],
+      "title": "Notes and reading"
+     },
+     {
+      "ids": [
+       "set_timer",
+       "set_reminder",
+       "todo_add",
+       "todo_done",
+       "coming_up"
+      ],
+      "title": "Timers, lists and plans"
+     },
+     {
+      "ids": [
+       "email_check",
+       "send_email",
+       "draft_email",
+       "tidy_inbox",
+       "home_read",
+       "home_control",
+       "my_spending",
+       "retirement_whatif"
+      ],
+      "title": "Connected accounts & home"
+     },
+     {
+      "ids": [
+       "protect_from_jarvis",
+       "github_search",
+       "send_file_to_phone"
+      ],
+      "title": "Safety and sharing"
+     }
+    ],
     "items": [
      {
+      "group": "Notes and reading",
       "id": "calendar_read",
       "last": null,
       "on": false,
-      "title": "Read your calendar",
+      "title": "Reading your calendar",
       "waiting": false
      },
      {
-      "id": "email_read",
-      "last": null,
-      "on": false,
-      "title": "Read your email",
-      "waiting": false
-     },
-     {
+      "group": "Notes and reading",
       "id": "notes_search",
       "last": null,
       "on": false,
-      "title": "Search your notes",
+      "title": "Searching your notes",
       "waiting": false
      },
      {
+      "group": "Notes and reading",
+      "id": "append_obsidian_daily",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Obsidian daily note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "create_joplin_note",
+      "last": null,
+      "on": false,
+      "title": "Making a Joplin note",
+      "waiting": false
+     },
+     {
+      "group": "Notes and reading",
+      "id": "append_logseq_journal",
+      "last": null,
+      "on": false,
+      "title": "Adding to your Logseq journal",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_timer",
+      "last": null,
+      "on": false,
+      "title": "Timers",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "set_reminder",
+      "last": null,
+      "on": false,
+      "title": "Reminders",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_add",
+      "last": null,
+      "on": false,
+      "title": "Adding to the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "todo_done",
+      "last": null,
+      "on": false,
+      "title": "Ticking off the to-do list",
+      "waiting": false
+     },
+     {
+      "group": "Timers, lists and plans",
+      "id": "coming_up",
+      "last": null,
+      "on": false,
+      "title": "Coming up (timers, alarms, reminders)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "email_check",
+      "last": null,
+      "on": false,
+      "title": "Reading your email",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "send_email",
+      "last": null,
+      "on": false,
+      "title": "Send an email (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "draft_email",
+      "last": null,
+      "on": false,
+      "title": "Save an email draft (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "tidy_inbox",
+      "last": null,
+      "on": false,
+      "title": "Tidy your inbox (one card lists every email)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
       "id": "home_read",
       "last": null,
       "on": false,
-      "title": "Check your smart home",
+      "title": "Reading Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "home_control",
+      "last": null,
+      "on": false,
+      "title": "Changing things in Home Assistant",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "my_spending",
+      "last": null,
+      "on": false,
+      "title": "Adding up spending from your bank files (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Connected accounts & home",
+      "id": "retirement_whatif",
+      "last": null,
+      "on": false,
+      "title": "A retirement what-if from numbers you type (shown on screen only)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "protect_from_jarvis",
+      "last": null,
+      "on": false,
+      "title": "Protecting a folder, file or program from Jarvis (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "github_search",
+      "last": null,
+      "on": false,
+      "title": "GitHub research",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "send_file_to_phone",
+      "last": null,
+      "on": false,
+      "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
      }
     ],
-    "label": "Let the AI use this"
+    "label": "Let the AI use this",
+    "not_offered": {
+     "labels": {
+      "browser_control": "Browser control",
+      "calculator": "Calculator",
+      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "control_computer": "Computer control",
+      "control_phone": "Phone control",
+      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+      "file_read": "Reading files on this PC",
+      "memory_search": "Searching what it has learned about you",
+      "my_files": "Finding and reading files in the folders you listed",
+      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
+      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "read_web_page": "Reading one web page out loud (one card each)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "shell_exec": "Running commands on this PC",
+      "web_search": "Web search"
+     },
+     "not_this_slice": [
+      "calculator",
+      "memory_search",
+      "file_read",
+      "web_search",
+      "my_files",
+      "propose_plan",
+      "change_setting",
+      "feature_guide"
+     ],
+     "tier_c": [
+      "shell_exec",
+      "run_data_script",
+      "control_computer",
+      "control_phone",
+      "browser_control",
+      "read_web_page",
+      "connect_account",
+      "rea_investigate"
+     ],
+     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+    },
+    "vault": {
+     "action": "change_own_config",
+     "can_enable": false,
+     "group": "Notes and reading",
+     "id": "vault_organizer",
+     "kind": "switch",
+     "on": false,
+     "title": "Organize an Obsidian vault",
+     "waiting": true,
+     "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
+    }
    },
    "waiting": null
   }
@@ -9427,9 +11072,26 @@
  ],
  "tools_switchable": [
   "calendar_read",
-  "email_read",
   "notes_search",
-  "home_read"
+  "append_obsidian_daily",
+  "create_joplin_note",
+  "append_logseq_journal",
+  "set_timer",
+  "set_reminder",
+  "todo_add",
+  "todo_done",
+  "coming_up",
+  "protect_from_jarvis",
+  "github_search",
+  "send_file_to_phone",
+  "email_check",
+  "send_email",
+  "draft_email",
+  "tidy_inbox",
+  "home_read",
+  "home_control",
+  "my_spending",
+  "retirement_whatif"
  ],
  "words": {
   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
@@ -9459,10 +11121,10 @@
   "says_search": "Asks only when something private could slip in",
   "switch_label": "Ask me first",
   "title": "What asks first",
-  "tools_detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+  "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
   "tools_label": "Let the AI use this",
-  "tools_not_on_list": "Only reading your calendar, email, notes and home status can be offered to the AI model from an app. Every other tool changes only in your settings file (jarvis-framework.toml, [tools].enabled).",
-  "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes an approval card and Windows Hello.",
+  "tools_not_on_list": "This PC does not know a tool by that name, so nothing was changed.",
+  "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card and Windows Hello.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }
 }

@@ -556,10 +556,13 @@ def _tool_row(id_: str, name: str, tool: str, ctx: Ctx, *, configured: bool,
 
 
 def _tool_switchable(tool: str) -> bool:
-    """Can this tool be offered to the model from an app at all - the owner's
-    answer of 2026-09-27 ("Reading tools ... can be switched on from the PC
-    app") - or only in the settings file, like every other tool? `tool` is the
-    TOOL's name ("email_check"), not the gate action's ("email_read")."""
+    """Can this tool be offered to the model from an app at all?
+
+    Since the 2026-10-31 tiered ruling (Gemini): Tier A and Tier B tools switch
+    on from Settings, What asks first (ONE PC-only card + Windows Hello each);
+    Tier C (raw shell/computer/browser, reading one web page, connecting an
+    account, REA) and the tools this slice leaves alone stay settings-file
+    choices. `tool` is the TOOL's name ("email_check"), not a row id."""
     try:
         import jarvis_asks_first
         return tool in jarvis_asks_first.SWITCHABLE_TOOL_NAMES
@@ -587,16 +590,31 @@ _CAN_DO = {
 
 
 def _only_in_file(tool: str) -> str:
-    """The plain sentence for a tool the apps cannot switch on: where it is
-    switched on, and why only there (the owner's choice of 2026-09-27: only
-    reading tools - calendar, email, notes, home status - switch on from an
-    app; the rest can act, so they stay a deliberate step on the PC)."""
+    """The plain sentence for a tool that is NOT offered in-app by this slice.
+
+    The 2026-10-31 tiered ruling: Tier C (raw shell/computer/browser, reading
+    one web page, connecting an account, REA) and the nine tools this slice
+    leaves alone stay deliberate settings-file choices; the page says which and
+    why, rather than implying an app switch exists.
+    """
     what = _CAN_DO.get(tool, "act for you")
-    return (f"It can only be switched on in the settings file on your PC "
-            f"(jarvis-framework.toml: add \"{tool}\" to the [tools] enabled list). You "
-            f"chose that only reading tools (calendar, email, notes, home status) can be "
-            f"switched on from an app; this one can {what}, so it stays a step you take "
-            f"on the PC.")
+    try:
+        import jarvis_asks_first as AF
+        raw = tool in tuple(getattr(AF, "TIER_C", ()) or ())
+        unlisted = tool in tuple(getattr(AF, "TIER_UNLISTED", ()) or ())
+    except Exception:                       # noqa: BLE001 - module absent
+        raw, unlisted = False, False
+    if raw:
+        why = ("raw shell, computer and browser control, reading one web page, "
+               "connecting an account and REA stay a deliberate settings-file "
+               "choice; REA also needs its own [rea] enabled = true")
+    elif unlisted:
+        why = "this slice does not offer it in-app"
+    else:
+        why = "it is not offered from inside the app by this slice"
+    return (f"It is not switched on from the app: {why}. It can {what}. Add "
+            f"\"{tool}\" to the [tools] enabled list in the settings file on this PC "
+            f"(jarvis-framework.toml) if you want the model offered it.")
 
 
 def _enable_line(tool: str) -> str:

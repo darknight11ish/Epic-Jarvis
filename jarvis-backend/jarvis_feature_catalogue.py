@@ -3,7 +3,7 @@
 The owner's feature list, as data: 147 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 a41b565eb1f920467f6847664b434fa3d73b90b6b69682535c88c3c64faad85d); the apps' Features pages read their own
+`features/features.json` (sha256 8e207764e6628ee1a07fc3305fab0110094864a3d5855a7e19843009c18fdd9f); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "a41b565eb1f920467f6847664b434fa3d73b90b6b69682535c88c3c64faad85d"
+SOURCE_SHA256 = "8e207764e6628ee1a07fc3305fab0110094864a3d5855a7e19843009c18fdd9f"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1449,8 +1449,8 @@ FEATURES = (
         "title": "What Jarvis can reach",
         "what": "Every way Jarvis can reach something outside itself, and whether it is on right now.",
         "where": "Settings, What Jarvis can reach.",
-        "asks": "Loosening a reading tool from the PC raises one card plus Windows Hello. Nothing outside that short safe list can be loosened from an app.",
-        "limit": "Read-only; the PC writes it from its own settings.",
+        "asks": "No card - it only reads the PC's own settings and the live state of each way out.",
+        "limit": "Read-only, and it changes nothing. Which tools can be switched on from Settings, What asks first is decided there; raw shell, computer and browser control, web-page reading, account connection and REA stay settings-file choices.",
         "surface": "both",
         "aliases": ["what jarvis can reach"],
         "covers": ["settings.reach", "documents-and-search"],
@@ -1581,8 +1581,8 @@ FEATURES = (
         "title": "What asks first",
         "what": "Every action Jarvis can take and whether it asks you first, in plain words.",
         "where": "Settings, What asks first - in both apps.",
-        "asks": "A \"make stricter\" switch is instant. Loosening one of a short safe list is PC-only, and costs one card plus Windows Hello.",
-        "limit": "Nothing outside that short list can be loosened from an app.",
+        "asks": "A \"make stricter\" switch is instant. Loosening one action is PC-only and costs one card plus Windows Hello. Offering a tool to the AI model is a separate one-tool switch (Tier A/B, see the report), PC-only, with ONE card plus Windows Hello each; turning it off is instant.",
+        "limit": "Tier C (raw shell, computer and browser control, reading one web page, connecting an account, REA) and the tools this slice leaves alone are not offered in-app; they stay a settings-file choice. Nothing switches two tools at once, and the phone is read-only.",
         "surface": "both",
         "covers": ["settings.asks-first", "asks-first", "home-devices", "money-and-health"],
     },
