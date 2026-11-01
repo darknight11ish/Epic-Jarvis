@@ -1,5 +1,10 @@
 package com.jarvis.client.net
 
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
 /**
  * The DeepSeek-shaped History list the owner asked for (2026-10-27): pinned
  * chats first, then one collapsible section per chat tag (the owner's
@@ -93,6 +98,30 @@ object HistoryView {
             s < 365L * 86_400L -> "${s / (30L * 86_400L)}mo"
             else -> "${s / (365L * 86_400L)}y"
         }
+    }
+
+    // ------------------------------------------------------- one answer ---
+
+    // "Sat 31 Oct, 21:10" - the desktop HUD's own answer-time shape
+    // (`hud_bootstrap.js`'s `answerWhenWords`: weekday, day, month, hour,
+    // minute, 24-hour clock), in English so both apps read the same.
+    private val ANSWER_TIME = DateTimeFormatter.ofPattern("EEE dd MMM, HH:mm", Locale.UK)
+
+    /**
+     * The answer's own date and time, for the ONE read-only line at the top of
+     * the per-answer menu (the desktop HUD shows the same line in the same
+     * place; the phone had none until the owner's field test of 2026-11-01).
+     *
+     * Empty - not "unknown" - when the moment is not known ([atMs] null or 0),
+     * so the menu draws nothing at all rather than a line about not knowing.
+     *
+     * [atMs] is milliseconds since the epoch, the unit
+     * [ChatSession.answerAt] keeps. [zone] is a parameter so a test can hold
+     * one place still, exactly like [age] takes `nowSeconds`.
+     */
+    fun answerTime(atMs: Long?, zone: ZoneId = ZoneId.systemDefault()): String {
+        if (atMs == null || atMs == 0L) return ""
+        return ANSWER_TIME.format(Instant.ofEpochMilli(atMs).atZone(zone))
     }
 
     // ---------------------------------------------------------- sorting ---

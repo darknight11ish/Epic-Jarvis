@@ -120,6 +120,30 @@ class ChatSession(
      */
     val turnId: StateFlow<String?> = _turnId.asStateFlow()
 
+    private val _answerAt = MutableStateFlow<Long?>(null)
+
+    /**
+     * When the answer now on screen finished, in milliseconds since the epoch,
+     * or null.
+     *
+     * The per-answer menu shows it as its first, READ-ONLY line ("Sat 31 Oct,
+     * 21:10" - [HistoryView.answerTime]) - the same line the desktop HUD puts
+     * at the top of its answer menu (`hud_bootstrap.js`'s `answerWhenWords`,
+     * 2026-11-01). Nothing is sent, asked or written: one number, memory only,
+     * like [turnId].
+     *
+     * A live answer carries no timestamp in this route, so this is the moment
+     * the turn FINISHED here. (The HUD's own comment says it uses the moment
+     * the turn arrived instead; that is the only difference between the two,
+     * and a generation that takes a minute reads a minute later on the phone.)
+     * Null - and the menu then draws no line at all, never "unknown" - until an
+     * answer has finished, after a new question ([send]), after a new
+     * conversation or a chat carried on from History ([newConversation]), and
+     * for an answer that was stopped, failed or cut short at the length limit.
+     * Cleared with [turnId] so the time can never label a different answer.
+     */
+    val answerAt: StateFlow<Long?> = _answerAt.asStateFlow()
+
     private val _tableId = MutableStateFlow<String?>(null)
 
     /**
@@ -602,7 +626,9 @@ class ChatSession(
         _question.value = if (message.isBlank() && !shared.isNullOrBlank()) shared else message
         // The previous answer's id goes with the previous answer: a mark
         // tapped now must never land on the answer that is being replaced.
+        // So does its time - see [answerAt].
         _turnId.value = null
+        _answerAt.value = null
         _tableId.value = null
         _waiting.value = null
         _answerNote.value = null
@@ -1072,7 +1098,14 @@ class ChatSession(
         ) {
             _history.update { ChatHistory.commit(it, asking, answer) }
             _thread.update { ChatHistory.addToThread(it, asking, answer) }
-            lastTurnAt = System.currentTimeMillis()
+            val finishedAt = System.currentTimeMillis()
+            // The moment THIS answer finished, for the per-answer menu's
+            // first, read-only line (see [answerAt]). Read here, where the
+            // answer joins the conversation and nowhere earlier: nothing
+            // labels a half-written reply, and nothing labels the time the
+            // menu was opened.
+            _answerAt.value = finishedAt
+            lastTurnAt = finishedAt
         }
         return mine
     }
@@ -1109,6 +1142,7 @@ class ChatSession(
         _reply.value = ""
         _question.value = null
         _turnId.value = null
+        _answerAt.value = null
         _tableId.value = null
         _error.value = null
         _problem.value = null

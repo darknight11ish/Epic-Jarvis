@@ -324,4 +324,44 @@ class HistoryViewTest {
         assertEquals(1, sections[0].rows.single().tagId)
         assertEquals(1, sections[1].rows.single().tagId)
     }
+
+    // ------------------------------------ the answer's own date and time ---
+
+    // The per-answer menu's first, read-only line (the owner's parity request
+    // of 2026-11-01): the desktop HUD's own shape, "Sat 31 Oct, 21:10". Fixed
+    // instants and a fixed zone, like every age test above - no clock.
+
+    private val london: java.time.ZoneId = java.time.ZoneId.of("Europe/London")
+
+    private fun ms(iso: String): Long = java.time.Instant.parse(iso).toEpochMilli()
+
+    @Test
+    fun `the answer's time reads like the desktop HUD's line`() {
+        // The HUD's own example, in the owner's local time.
+        assertEquals(
+            "Sat 31 Oct, 21:10",
+            HistoryView.answerTime(ms("2026-10-31T21:10:00Z"), london),
+        )
+        // The same moment in another place is that place's time.
+        assertEquals(
+            "Sat 31 Oct, 17:10",
+            HistoryView.answerTime(ms("2026-10-31T21:10:00Z"), java.time.ZoneId.of("America/New_York")),
+        )
+        // Two-digit minutes, and a leading zero on the hour.
+        assertEquals("Sun 01 Nov, 09:05", HistoryView.answerTime(ms("2026-11-01T09:05:00Z"), london))
+    }
+
+    @Test
+    fun `the answer's time does not slip at midnight`() {
+        assertEquals("Sat 31 Oct, 23:59", HistoryView.answerTime(ms("2026-10-31T23:59:59Z"), london))
+        assertEquals("Sun 01 Nov, 00:00", HistoryView.answerTime(ms("2026-11-01T00:00:00Z"), london))
+    }
+
+    @Test
+    fun `an unknown moment says nothing at all`() {
+        // The caller draws no line - never the word "unknown", and never 1970.
+        assertEquals("", HistoryView.answerTime(null, london))
+        assertEquals("", HistoryView.answerTime(0L, london))
+        assertEquals("", HistoryView.answerTime(0L))
+    }
 }

@@ -426,6 +426,16 @@ data class HomeState(
      */
     val answerFeedback: AnswerFeedback? = null,
     /**
+     * When the answer on screen finished, in milliseconds since the epoch, or
+     * null ([com.jarvis.client.net.ChatSession.answerAt]).
+     *
+     * The per-answer menu draws it as its FIRST line, read-only, in the
+     * desktop HUD's own shape ("Sat 31 Oct, 21:10") - the HUD grew the same
+     * line in its answer menu (wave-2, 2026-11-01). Unknown draws nothing at
+     * all: the menu never says "unknown", and the line is never a control.
+     */
+    val answerAtMs: Long? = null,
+    /**
      * The kept chat the answer on screen belongs to, or null when this chat is
      * not kept at all (a temporary chat, a game the PC made temporary, or
      * nothing said yet) - see
@@ -1134,6 +1144,19 @@ fun HomeScreen(
     // opens beside the words it is about (see PromptCoachBar's `request`).
     var coachTick by remember { mutableIntStateOf(0) }
 
+    // "Was this answer right?" typed into the box asks for the answer's own
+    // menu instead of being sent to the PC (the owner's field test of
+    // 2026-11-01: they typed it, the phone sent it, and Jarvis answered it as
+    // a question). Pressing Send bumps this number; the answer on screen opens
+    // the menu the chevron opens when it sees a new one, and opens nothing at
+    // all while an answer is still arriving.
+    var answerMenuTick by remember { mutableIntStateOf(0) }
+    // The newest request the answer has already opened a menu for. Kept HERE
+    // and not in the answer, because a LazyColumn throws away what scrolls off
+    // the screen: an answer composed again must not open a menu nobody asked
+    // for, and the list must not stop scrolling to it either.
+    var answerMenuServed by remember { mutableIntStateOf(0) }
+
     // ---- The split between the face and the conversation -----------------
     //
     // Three values, kept apart on purpose:
@@ -1324,6 +1347,16 @@ fun HomeScreen(
             }
         }
 
+        // The answer's own menu was asked for in words. Bring the answer into
+        // view FIRST: a LazyColumn composes only what is on screen, and the
+        // composable that owns the menu has to exist before it can open one
+        // (the owner may have scrolled up the thread before typing).
+        LaunchedEffect(answerMenuTick) {
+            if (answerMenuTick > 0) {
+                listState.animateScrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+            }
+        }
+
         LaunchedEffect(state.streaming, state.followReply, state.focusApproval) {
             if (!state.streaming || !state.followReply || state.focusApproval != null) {
                 return@LaunchedEffect
@@ -1399,6 +1432,9 @@ fun HomeScreen(
                         actions = actions,
                         reply = reply,
                         listState = listState,
+                        openAnswerMenuTick = answerMenuTick,
+                        openAnswerMenuServed = answerMenuServed,
+                        onAnswerMenuServed = { answerMenuServed = it },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                 }
@@ -1447,6 +1483,9 @@ fun HomeScreen(
                             actions = actions,
                             reply = reply,
                             listState = listState,
+                            openAnswerMenuTick = answerMenuTick,
+                            openAnswerMenuServed = answerMenuServed,
+                            onAnswerMenuServed = { answerMenuServed = it },
                             modifier = Modifier.layoutId(PANE_LIST),
                         )
                     },
@@ -1516,6 +1555,13 @@ fun HomeScreen(
                 micLevel,
                 onOpenMore = { moreOpen = true },
                 coachTick = coachTick,
+                // "Was this answer right?" (the owner's field test of
+                // 2026-11-01): open the answer's own menu instead of sending
+                // the words. Only a FINISHED answer has one - the same test
+                // that draws the chevron - so the box can say why nothing
+                // happened instead of opening a menu on half a reply.
+                onOpenAnswerMenu = { answerMenuTick += 1 },
+                hasFinishedAnswer = { !state.streaming && reply().isNotBlank() },
             )
         }
     }
@@ -1544,6 +1590,12 @@ private fun ConversationList(
     actions: HomeActions,
     reply: () -> String,
     listState: LazyListState,
+    /** A new number means "open the current answer's menu" - see [Reply]. */
+    openAnswerMenuTick: Int = 0,
+    /** The newest of those the answer has already opened - see [Reply]. */
+    openAnswerMenuServed: Int = 0,
+    /** The answer has looked at that request, so it is used up. */
+    onAnswerMenuServed: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -1719,6 +1771,14 @@ private fun ConversationList(
                 state.streaming,
                 state.lastUserText,
                 feedback = state.answerFeedback,
+                // When this answer finished, for the menu's first, read-only
+                // line (the desktop HUD's own line in the same place).
+                answerAtMs = state.answerAtMs,
+                // The owner typed "was this answer right?" instead of asking
+                // a question: open the menu the chevron opens.
+                openMenuRequest = openAnswerMenuTick,
+                openMenuServed = openAnswerMenuServed,
+                onMenuRequestServed = onAnswerMenuServed,
                 // The same test every other write on the phone uses: a mark is
                 // not an approval, but it is still sent to the desktop, and
                 // nothing is sent over a link that cannot be confirmed live.
@@ -3355,6 +3415,18 @@ private fun Reply(
     streaming: Boolean,
     question: String?,
     feedback: AnswerFeedback? = null,
+    // When this answer finished, in ms since the epoch - [HomeState.answerAtMs].
+    // Null (unknown) draws no line in the menu at all.
+    answerAtMs: Long? = null,
+    // A new number means "open this answer's own menu" - the words the owner
+    // typed instead of a question ("was this answer right?"). 0 is none.
+    openMenuRequest: Int = 0,
+    // The newest request already opened. The pair is kept by the caller (see
+    // [openMenuRequest]'s comment in HomeScreen), so a list item that is
+    // scrolled away and back never opens a menu nobody asked for.
+    openMenuServed: Int = 0,
+    // Said with the request number once it has been looked at.
+    onMenuRequestServed: (Int) -> Unit = {},
     canMark: Boolean = false,
     onMark: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
     conversationTurns: Int = 0,
@@ -3409,6 +3481,20 @@ private fun Reply(
     // the chevron on this answer's own "Jarvis" line, and closed by any row in
     // it. `remember(text)` so a different answer never inherits an open menu.
     var menuOpen by remember(text) { mutableStateOf(false) }
+    // The same menu, asked for in words instead of with the chevron (the
+    // owner's field test of 2026-11-01: "was this answer right?"). Only a
+    // FINISHED answer opens: mid-stream there is no whole answer to mark, to
+    // pin or to put a time on, and the chevron is not drawn then either.
+    // Each request opens at most one menu: the caller remembers which request
+    // this answer has already looked at, because being composed again later -
+    // a LazyColumn throws away what scrolls off the screen - must not re-open
+    // it.
+    LaunchedEffect(openMenuRequest) {
+        if (openMenuRequest > openMenuServed) {
+            if (!streaming && text.isNotBlank()) menuOpen = true
+            onMenuRequestServed(openMenuRequest)
+        }
+    }
     AnimatedVisibility(
         visible = text.isNotBlank() || streaming || question != null || thread.isNotEmpty(),
         enter = fadeIn(motion.enter()),
@@ -3753,6 +3839,7 @@ private fun Reply(
             pins = pins,
             text = text,
             question = question,
+            answerAtMs = answerAtMs,
             onDismiss = { menuOpen = false },
         )
     }
@@ -3974,8 +4061,14 @@ private fun MessageActionsButton(what: String, pinned: Boolean, onClick: () -> U
  * jarvis. put a carrot that opens a menu on each chat that has this, along
  * with a pin message button").
  *
- * It holds exactly two things, and both belong to one message:
+ * It holds exactly three things, and all of them belong to one message:
  *
+ *  - **When this answer was made** - one READ-ONLY line, first, in the desktop
+ *    HUD's shape ("Sat 31 Oct, 21:10"): the owner's parity request of
+ *    2026-11-01, the same line the HUD's answer menu grew in wave-2. It is
+ *    plain text - it cannot be tapped and is read out as text, never as a
+ *    button - and an answer whose moment is not known draws no line at all
+ *    rather than saying "unknown".
  *  - **"Was this right?"** - the Right / Wrong pair that used to be drawn under
  *    every finished answer. The rule is unchanged (`feedback.patch`): one mark
  *    per answer, tapping the chosen one again takes it back, a mark never
@@ -4002,6 +4095,8 @@ private fun MessageMenu(
     pins: PinMenu?,
     text: String,
     question: String?,
+    /** When this answer finished, in ms since the epoch, or null (no line). */
+    answerAtMs: Long? = null,
     onDismiss: () -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -4028,6 +4123,21 @@ private fun MessageMenu(
             Gap(8)
             Rule()
             Gap(4)
+
+            // WHEN this answer was made, as the FIRST line and read-only
+            // (the owner's parity request of 2026-11-01; the desktop HUD shows
+            // the same line at the top of its answer menu). Plain text: no
+            // tap, no role, nothing to press - and no line at all when the
+            // moment is not known, never an "unknown".
+            val whenWords = com.jarvis.client.net.HistoryView.answerTime(answerAtMs)
+            if (whenWords.isNotEmpty()) {
+                Text(
+                    whenWords,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = chrome.textMid,
+                )
+                Gap(8)
+            }
 
             if (feedback != null) {
                 AnswerMarkRows(feedback, canMark, onMark)
@@ -4219,6 +4329,16 @@ private fun Composer(
     micLevel: State<Float>,
     onOpenMore: () -> Unit,
     coachTick: Int,
+    /**
+     * Open the answer on screen's own menu - what the chevron opens. Called
+     * when the typed words ask for it (see [com.jarvis.client.net.AnswerMenuAsk]).
+     */
+    onOpenAnswerMenu: () -> Unit = {},
+    /**
+     * Is there a FINISHED answer on screen? The same test that draws the
+     * chevron: words, and nothing still streaming.
+     */
+    hasFinishedAnswer: () -> Boolean = { false },
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
@@ -4227,12 +4347,47 @@ private fun Composer(
     // recomposes this composable and nothing above it.
     val text = draft()
     // A picture still being prepared is not attached yet: sending now would
-    // send the words without it and leave the photo to ride the NEXT question
-    // (2026-10-24). The Photo button already refuses during that window; Send
-    // and the keyboard's Send action did not. A document being read is the
-    // same window, and the same rule (2026-10-29).
+    // send the words without the photo and leave the photo to ride the NEXT
+    // question (2026-10-24). The Photo button already refuses during that
+    // window; Send and the keyboard's Send action did not. A document being
+    // read is the same window, and the same rule (2026-10-29).
     val canSend = (text.isNotBlank() || state.sharedLine != null) &&
         state.link == LinkState.CONNECTED && !state.pictureBusy && !state.attachBusy
+    // Said here - this screen's own words, not Jarvis's bubble and not the
+    // PC's sentence - when the words asked for the answer's menu and there
+    // was no finished answer to open one for. Nothing was sent, so the PC has
+    // nothing to say about it, and no answer is invented.
+    var askLine by remember { mutableStateOf<String?>(null) }
+    // THE one send path. The Send button, the keyboard's Send key and the
+    // prompt coach's "Send mine" all come through here, so the words below
+    // cannot be sent to the PC by one of them and not the others.
+    fun sendNow() {
+        if (!canSend) return
+        askLine = null
+        // "Was this answer right?" asks for the answer's own menu (the
+        // owner's field test of 2026-11-01: they typed it, the phone sent it,
+        // and Jarvis answered it as a question). Answered here, on the phone,
+        // and never sent.
+        if (com.jarvis.client.net.AnswerMenuAsk.matches(text)) {
+            if (hasFinishedAnswer()) {
+                // The words were used up by the menu, so the box empties as it
+                // does after a real send, and the menu opens.
+                actions.onDraftChange("")
+                onOpenAnswerMenu()
+            } else {
+                // Nothing was sent and nothing was used up: the words stay in
+                // the box to be edited, and the line says why nothing happened.
+                askLine = com.jarvis.client.net.AnswerMenuAsk.NO_ANSWER
+            }
+            return
+        }
+        actions.onSend()
+    }
+    // The Send button: Send while there is something to send, Stop while an
+    // answer is arriving - one action, as it has always been.
+    val sendPress: () -> Unit = {
+        if (state.streaming) actions.onInterrupt else sendNow()
+    }
 
     Column(
         Modifier
@@ -4337,9 +4492,10 @@ private fun Composer(
         // run the same ask.
         showButton = false,
         request = coachTick,
-        // "Send mine": exactly the words in the box, down the chat's own path.
-        // Nothing is sent unless one of these two is pressed.
-        sendMine = { actions.onSend() },
+        // "Send mine": exactly the words in the box, down the chat's own path
+        // - and through the one send action above, so a typed menu request is
+        // answered here too. Nothing is sent unless one of these is pressed.
+        sendMine = { sendNow() },
         // "Send the suggestion": into the box first, then sent - so the owner
         // sees the words that went, and the box is empty afterwards exactly as
         // after an ordinary Send.
@@ -4373,6 +4529,29 @@ private fun Composer(
             color = chrome.textLo,
             modifier = Modifier.padding(bottom = 6.dp),
         )
+    }
+    // "Was this answer right?" with no finished answer on screen to open a
+    // menu for: said here, right above the box the words are in, rather than
+    // in a Jarvis bubble or as the PC's sentence (nothing was sent, so the PC
+    // said nothing). Dismissible, and read out as it appears.
+    askLine?.let { line ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                line,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+                modifier = Modifier.weight(1f).liveStatus(),
+            )
+            Quiet(
+                "Dismiss",
+                color = chrome.textLo,
+                modifier = Modifier.semantics {
+                    contentDescription = "Dismiss this line about the answer menu"
+                },
+                onClick = { askLine = null },
+            )
+        }
+        Spacer(Modifier.height(6.dp))
     }
     Row(
         Modifier.fillMaxWidth(),
@@ -4420,9 +4599,10 @@ private fun Composer(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 // The keyboard showed a Send key that did nothing: ImeAction
                 // only chooses the key's label, and without this the press is
-                // swallowed. Same guard as the button, so an empty draft or a
-                // dead link cannot be sent from the keyboard either.
-                keyboardActions = KeyboardActions(onSend = { if (canSend) actions.onSend() }),
+                // swallowed. The same guard as the button (inside sendNow),
+                // and the same action - so a typed menu request cannot slip
+                // out from the keyboard either.
+                keyboardActions = KeyboardActions(onSend = { sendNow() }),
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -4441,7 +4621,7 @@ private fun Composer(
                 )
                 .pressable(
                     enabled = state.streaming || canSend,
-                    onClick = if (state.streaming) actions.onInterrupt else actions.onSend,
+                    onClick = sendPress,
                 )
                 .padding(horizontal = 18.dp),
             contentAlignment = Alignment.Center,
