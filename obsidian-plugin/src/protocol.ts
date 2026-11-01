@@ -605,3 +605,141 @@ export function obsidianOpenUri(vaultName: string, filePath: string, heading?: s
     encodeURIComponent(target)
   );
 }
+
+/* ---------------------------------------------------------------------- */
+/* Route request builders: the one place a request's shape is decided      */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * One outgoing request in plain data: which method, which route, which query
+ * and which JSON body. `JarvisClient` builds every request through these pure
+ * helpers, so the integration tests can exercise the real bodies against a
+ * fake Jarvis without an Obsidian app in the loop.
+ */
+export interface RouteRequest {
+  method: "GET" | "POST";
+  route: string;
+  query?: Record<string, string>;
+  body?: unknown;
+}
+
+/** One note's text plus the sha256 of its bytes. */
+export function readNoteRequest(path: string): RouteRequest {
+  return { method: "GET", route: ROUTES.read, query: { path } };
+}
+
+/** The template names Jarvis knows (names only). */
+export function templatesRequest(): RouteRequest {
+  return { method: "GET", route: ROUTES.templates };
+}
+
+/** A read-only ask about the note or the selection. */
+export function chatRequest(question: string, contextText: string, notePath: string): RouteRequest {
+  const content =
+    question.trim() + "\n\nRead-only context from " + notePath + ":\n" + contextText;
+  return {
+    method: "POST",
+    route: ROUTES.chat,
+    body: {
+      messages: [{ role: "user", content, provenance: "pasted" }],
+      stream: false,
+      auto: false,
+    },
+  };
+}
+
+/** Capture to today's daily note (the existing capture route). */
+export function captureRequest(text: string): RouteRequest {
+  return {
+    method: "POST",
+    route: ROUTES.capture,
+    body: { target: "obsidian", text: (text ?? "").trim() },
+  };
+}
+
+/** How one capture ended. */
+export function captureStatusRequest(jobId: string): RouteRequest {
+  return { method: "GET", route: ROUTES.captureStatus, query: { id: jobId } };
+}
+
+/** Add one line under the named heading of one note. */
+export function insertRequest(
+  path: string,
+  text: string,
+  heading: string,
+  expectedSha: string,
+): RouteRequest {
+  return {
+    method: "POST",
+    route: ROUTES.insert,
+    body: { path, text, mode: "under_heading", target: heading, expected_sha256: expectedSha },
+  };
+}
+
+/** Wrap one exact span in bold or italic. */
+export function formatRequest(
+  path: string,
+  target: string,
+  style: "bold" | "italic",
+  action: "add" | "remove",
+  expectedSha: string,
+): RouteRequest {
+  return {
+    method: "POST",
+    route: ROUTES.format,
+    body: { path, target, style, action, expected_sha256: expectedSha },
+  };
+}
+
+/** Replace one exact, whole-word occurrence. */
+export function replaceRequest(
+  path: string,
+  oldText: string,
+  newText: string,
+  expectedSha: string,
+): RouteRequest {
+  return {
+    method: "POST",
+    route: ROUTES.replace,
+    body: { path, old: oldText, new: newText, expected_sha256: expectedSha },
+  };
+}
+
+/** Change one whole line's shape (this plugin uses it for "make it a checklist item"). */
+export function customizeLineRequest(
+  path: string,
+  lineAction: "bullet" | "number" | "checklist" | "quote" | "plain" | "untick",
+  targetLine: string,
+  expectedSha: string,
+): RouteRequest {
+  return {
+    method: "POST",
+    route: ROUTES.customize,
+    body: {
+      path,
+      action: "line",
+      line_action: lineAction,
+      target: targetLine,
+      expected_sha256: expectedSha,
+    },
+  };
+}
+
+/** Add one tag to one note (frontmatter list when present, else a visible line). */
+export function tagRequest(path: string, tag: string, expectedSha: string): RouteRequest {
+  return {
+    method: "POST",
+    route: ROUTES.tag,
+    body: { path, tag, action: "add", where: "auto", expected_sha256: expectedSha },
+  };
+}
+
+/** Create ONE new note (one card; the backend refuses an existing path). */
+export function createNoteRequest(path: string, text: string): RouteRequest {
+  return { method: "POST", route: ROUTES.create, body: { path, text } };
+}
+
+/** How one write ended. */
+export function changeStatusRequest(jobId: string): RouteRequest {
+  return { method: "GET", route: ROUTES.change, query: { id: jobId } };
+}

@@ -1,5 +1,10 @@
+# The plugin's runtime bundle is committed on purpose (the owner copies the
+# folder without building), but packaged binaries are NOT: zips and dist
+# output live in a scratch/release folder and are recorded by SHA-256 in
+# BUILD-VERIFICATION.txt instead of being tracked here.
 node_modules/
 .npm-cache/
 .npm-logs/
 tests/_build/
-
+*.zip
+dist/
