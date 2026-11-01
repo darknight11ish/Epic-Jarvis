@@ -20,7 +20,10 @@ you first.** The plugin holds no approval power and writes no note.
   italic, checklist, replace, set a tag, create a note from a template.
 - Read the template **names** Jarvis knows, and the first ~600 characters of a
   template file in your vault, to preview it.
-- Show a status item and a settings tab.
+- Copy a **read-only** `obsidian://open` link to the active note - a link that
+  only opens the note in Obsidian, never one that changes it.
+- Show a status item and a settings tab, with a first-run checklist until the
+  connection is set up.
 
 That is the whole list. Everything it sends goes to the one backend address you
 configure.
@@ -31,7 +34,7 @@ configure.
 |---|---|
 | Approve or deny a card | It never calls `/api/approve` or `/api/deny`, and it has no code that could. The card is raised on the PC and answered on the PC. |
 | Write, create, delete or rename a note itself | Nothing calls `vault.modify`, and it does not create or delete notes either - creation goes through Jarvis, after a card. Changes are made by the backend, with the File Guardian copy and Undo. |
-| Drive Obsidian through `obsidian://` links | It uses no `obsidian://` write action; the vault is not changed by asking Obsidian to change it. |
+| Drive Obsidian through `obsidian://` write actions | The only `obsidian://` link it builds is `open`, which just shows a note. It never builds `new`, `daily`, `unique` or the `prepend`/`append` actions, so no link it copies can change the vault. |
 | Talk to any other computer | The only address in the bundle is the backend URL, default `127.0.0.1:4719`. No telemetry, no analytics, no crash reporting, no update check, no remote fonts or images. |
 | Keep working when the token is wrong | The backend answers `401` and the plugin reports it. Nothing is raised, nothing is written. |
 | Hide what it did from you | Every write is a card on your PC with Jarvis's own sentence, and the answer is the backend's own sentence - saved, denied, failed or conflict. |

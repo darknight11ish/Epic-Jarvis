@@ -1053,6 +1053,9 @@ export function mountHudEditor(options = {}) {
   let statusEl = null;
   let barEl = null;
   let badgeEl = null;
+  let editTab = "cards";       // the tab the bar opens on (owner's request)
+  let selectedCard = null;     // the ONE card whose controls the Cards tab shows
+  let movedTools = null;       // { el, id } while a card's toolbar sits in the bar
   let homeDoc = null;      // the main screen's feature cards
   let homeStrip = null;    // the strip they are drawn in
 
@@ -1296,6 +1299,7 @@ export function mountHudEditor(options = {}) {
     }
     doc.body.setAttribute("data-hud-edit", editing ? "on" : "off");
     if (barEl) barEl.hidden = !editing;
+    if (editing) renderPanes();
     renderHomeStrip();
     updateBadge();
     if (options.onRender) {
@@ -1411,9 +1415,14 @@ export function mountHudEditor(options = {}) {
     if (editing) {
       entrySnapshot = layout;
       undoStack.length = 0;
+      editTab = "cards";          // the owner's default: Cards, no rows expanded
+      selectedCard = null;
+      if (doc.body) doc.body.setAttribute("data-hud-edit-tab", editTab);
       announce("");
-    } else if (saveTimer) {
-      flushSave();
+    } else {
+      detachMovedTools();
+      selectedCard = null;
+      if (saveTimer) flushSave();
     }
     revealRailsForEditing();
     render();
@@ -1576,6 +1585,275 @@ export function mountHudEditor(options = {}) {
   }
 
   // --------------------------------------------------------------------- bar
+  /* THE EDIT HUD, SIMPLIFIED (owner's request, 2026-10-31: "the edit hud needs
+   * to be way more simplified with the options under menu tabs instead of
+   * everything all at once").
+   *
+   * The bar keeps the four whole-edit controls it always had (Undo, Reset to
+   * preset, Discard changes, Done) and adds FOUR TABS. Nothing is dropped: the
+   * per-card controls are MOVED, not rewritten, into the ONE selected-card
+   * editor in the Cards tab - the same `.hud-card-tools` element with the same
+   * buttons, disabled states, titles and handlers, so the drag/resize/fold/hide
+   * behaviour and the keyboard routes are exactly as before. The canvas keeps
+   * the cards themselves (drag-to-place is untouched); only their always-open
+   * control rows are hidden there. */
+  const EDIT_TABS = Object.freeze([
+    ["cards", "Cards"], ["presets", "Presets"],
+    ["panels", "Panels"], ["advanced", "Advanced"],
+  ]);
+
+  function paneFor(name) {
+    return barEl ? barEl.querySelector(`[data-hud-edit-pane="${name}"]`) : null;
+  }
+
+  function setEditTab(name) {
+    if (!EDIT_TABS.some(([id]) => id === name)) return;
+    editTab = name;
+    if (doc.body) doc.body.setAttribute("data-hud-edit-tab", name);
+    renderPanes();
+  }
+
+  /** Select ONE card (the controls it owns move into the bar), or none. */
+  function selectEditCard(id) {
+    if (id && !MOVABLE_SET.has(id)) return;
+    selectedCard = id || null;
+    renderPanes();
+  }
+
+  /** Put a card's toolbar back on the card before rebuilding the bar. */
+  function detachMovedTools() {
+    if (!movedTools) return;
+    const shell = cardShells.get(movedTools.id);
+    const head = shell ? shell.querySelector(".hud-card-head") : null;
+    if (head && movedTools.el.parentElement !== head) head.appendChild(movedTools.el);
+    movedTools = null;
+  }
+
+  function paneWords(text, className) {
+    const p = doc.createElement("p");
+    p.className = className || "hud-edit-pane-said";
+    p.textContent = text;
+    return p;
+  }
+
+  function paneButton(label, extra = {}) {
+    const b = doc.createElement("button");
+    b.type = "button";
+    b.className = extra.className || "ghost hud-edit-pane-btn";
+    b.textContent = label;
+    for (const [key, value] of Object.entries(extra.attrs || {})) b.setAttribute(key, value);
+    return b;
+  }
+
+  function renderCardsPane() {
+    const pane = paneFor("cards");
+    if (!pane) return;
+    detachMovedTools();
+    pane.textContent = "";
+    pane.appendChild(paneWords(
+      "Select a card on the canvas, or one below. Its controls open here - " +
+      "nothing else is drawn on the cards while you edit."));
+    const cards = layout.cards.filter((card) => MOVABLE_SET.has(card.id))
+      .sort((a, b) => EDIT_REGIONS.indexOf(a.region) - EDIT_REGIONS.indexOf(b.region)
+        || a.order - b.order || a.id.localeCompare(b.id));
+    if (!cards.length) {
+      pane.appendChild(paneWords("This layout has no cards to edit."));
+      return;
+    }
+    const list = doc.createElement("div");
+    list.className = "hud-edit-card-list";
+    list.setAttribute("role", "list");
+    for (const card of cards) {
+      const row = doc.createElement("div");
+      row.className = "hud-edit-card-row";
+      row.setAttribute("role", "listitem");
+      const pick = paneButton(labelOf(card.id), {
+        className: "hud-edit-card-pick" + (card.id === selectedCard ? " is-selected" : ""),
+        attrs: {
+          "data-hud-edit-card-pick": card.id,
+          "aria-pressed": String(card.id === selectedCard),
+        },
+      });
+      if (!card.visible) {
+        const tag = doc.createElement("span");
+        tag.className = "hud-edit-card-state";
+        tag.textContent = "hidden";
+        pick.appendChild(tag);
+      }
+      row.appendChild(pick);
+      list.appendChild(row);
+    }
+    pane.appendChild(list);
+    const editor = doc.createElement("div");
+    editor.id = "hud-edit-card-controls";
+    editor.className = "hud-edit-card-controls";
+    editor.setAttribute("aria-live", "polite");
+    if (!selectedCard) {
+      editor.appendChild(paneWords("No card selected yet."));
+    } else {
+      editor.appendChild(paneWords(`Options for ${labelOf(selectedCard)}`));
+      const shell = cardShells.get(selectedCard);
+      const tools = shell ? shell.querySelector(".hud-card-tools") : null;
+      if (tools) {
+        // The SAME element, with the same buttons and listeners, moved here.
+        editor.appendChild(tools);
+        movedTools = { el: tools, id: selectedCard };
+      }
+      if (PROTECTED_SET.has(selectedCard)) {
+        editor.appendChild(paneWords(
+          `${labelOf(selectedCard)} is always visible; it can never be hidden.`));
+      }
+    }
+    pane.appendChild(editor);
+  }
+
+  function renderPresetsPane() {
+    const pane = paneFor("presets");
+    if (!pane) return;
+    pane.textContent = "";
+    pane.appendChild(paneWords(
+      "Pick a layout preset, then Apply. Applying is one Undo away."));
+    const list = doc.createElement("div");
+    list.className = "hud-edit-card-list";
+    for (const preset of PRESETS) {
+      const chosen = layout.base_preset === preset.id;
+      const info = presetInfo(preset.id) || { label: preset.id };
+      const row = doc.createElement("div");
+      row.className = "hud-edit-card-row";
+      const name = doc.createElement("span");
+      name.className = "hud-edit-preset-name" + (chosen ? " is-chosen" : "");
+      name.textContent = info.label;
+      row.appendChild(name);
+      if (chosen) row.appendChild(paneWords("chosen", "hud-edit-pane-tag"));
+      row.appendChild(paneButton(chosen ? "Applied" : "Apply", {
+        className: "ghost hud-edit-apply",
+        attrs: { "data-hud-edit-preset": preset.id },
+      }));
+      list.appendChild(row);
+    }
+    pane.appendChild(list);
+  }
+
+  function renderPanelsPane() {
+    const pane = paneFor("panels");
+    if (!pane) return;
+    pane.textContent = "";
+    pane.appendChild(paneWords("Where each card lives, and the order it sits in."));
+    for (const region of EDIT_REGIONS) {
+      const box = doc.createElement("div");
+      box.className = "hud-edit-panel-group";
+      const head = doc.createElement("h3");
+      head.className = "hud-edit-pane-head";
+      head.textContent = REGION_LABEL[region];
+      box.appendChild(head);
+      const cards = layout.cards
+        .filter((card) => MOVABLE_SET.has(card.id) && card.region === region)
+        .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+      if (!cards.length) {
+        box.appendChild(paneWords("No cards here."));
+      }
+      for (const card of cards) {
+        const row = doc.createElement("div");
+        row.className = "hud-edit-card-row";
+        const name = doc.createElement("span");
+        name.className = "hud-edit-pane-name";
+        name.textContent = labelOf(card.id);
+        row.appendChild(name);
+        for (const [command, glyph, word] of [["up", "\u2191", "Move up"], ["down", "\u2193", "Move down"]]) {
+          row.appendChild(paneButton(glyph, {
+            className: "hud-tool",
+            attrs: {
+              "data-hud-edit-command": command,
+              "data-hud-edit-card": card.id,
+              title: `${word} ${labelOf(card.id)}`,
+              "aria-label": `${word} ${labelOf(card.id)}`,
+            },
+          }));
+        }
+        box.appendChild(row);
+      }
+      pane.appendChild(box);
+    }
+  }
+
+  function renderAdvancedPane() {
+    const pane = paneFor("advanced");
+    if (!pane) return;
+    pane.textContent = "";
+    pane.appendChild(paneWords(
+      "Rare options: cards that are hidden, cards that are folded, and cards that can never be hidden."));
+    const cards = layout.cards.filter((card) => MOVABLE_SET.has(card.id));
+    const hidden = cards.filter((card) => !card.visible);
+    pane.appendChild(paneWords(hidden.length
+      ? "Hidden cards - Show brings one back:" : "No cards are hidden."));
+    for (const card of hidden) {
+      const row = doc.createElement("div");
+      row.className = "hud-edit-card-row";
+      row.appendChild(paneWords(labelOf(card.id), "hud-edit-pane-name"));
+      row.appendChild(paneButton("Show", {
+        className: "ghost hud-edit-pane-btn",
+        attrs: { "data-hud-edit-advanced": "show", "data-hud-edit-card": card.id },
+      }));
+      pane.appendChild(row);
+    }
+    const pending = pendingCount();
+    const folded = cards.filter((card) => effectiveCollapsed(card, pending));
+    pane.appendChild(paneWords(folded.length
+      ? "Folded cards - Expand opens one:" : "No cards are folded."));
+    for (const card of folded) {
+      const row = doc.createElement("div");
+      row.className = "hud-edit-card-row";
+      row.appendChild(paneWords(labelOf(card.id), "hud-edit-pane-name"));
+      row.appendChild(paneButton("Expand", {
+        className: "ghost hud-edit-pane-btn",
+        attrs: { "data-hud-edit-advanced": "expand", "data-hud-edit-card": card.id },
+      }));
+      pane.appendChild(row);
+    }
+    const always = cards.filter((card) => PROTECTED_SET.has(card.id));
+    pane.appendChild(paneWords(always.length
+      ? "Always visible (no Hide control):" : "Every card can be hidden."));
+    for (const card of always) pane.appendChild(paneWords(labelOf(card.id), "hud-edit-pane-name"));
+  }
+
+  function renderPanes() {
+    if (!barEl || !editing || !layout) return;
+    if (doc.body) doc.body.setAttribute("data-hud-edit-tab", editTab);
+    for (const [name] of EDIT_TABS) {
+      const tab = barEl.querySelector(`[data-hud-edit-tab="${name}"]`);
+      if (tab) tab.setAttribute("aria-selected", String(name === editTab));
+      const pane = paneFor(name);
+      if (pane) pane.hidden = name !== editTab;
+    }
+    for (const shell of cardShells.values()) {
+      const id = shell.getAttribute("data-hud-card");
+      shell.setAttribute("data-hud-edit-selected",
+        selectedCard && id === selectedCard ? "true" : "false");
+    }
+    renderCardsPane();
+    renderPresetsPane();
+    renderPanelsPane();
+    renderAdvancedPane();
+  }
+
+  /** A plain click on a card selects it (its options move into the bar), while
+   *  a click on one of its own controls still does what that control does. */
+  function onEditCardClick(event) {
+    if (!editing || !event || !event.target || !event.target.closest) return;
+    // A click on a card's OWN controls is that control's business: it must not
+    // re-render the bar or move the toolbar out from under the pointer. CI's
+    // rapid-action/debounce check and the field test both drive these buttons;
+    // only a click on the card itself picks the card.
+    if (event.target.closest(".hud-card-tools, button, select, input, textarea, a, [role='button']")) {
+      return;
+    }
+    const shell = event.target.closest("[data-hud-card]");
+    if (!shell) return;
+    const id = shell.getAttribute("data-hud-card");
+    if (!id || !MOVABLE_SET.has(id)) return;
+    if (id !== selectedCard) selectEditCard(id);
+  }
+
   function ensureBar() {
     const stage = byId("stage");
     if (!stage) return;
@@ -1587,15 +1865,18 @@ export function mountHudEditor(options = {}) {
     barEl.setAttribute("aria-label", "HUD editing controls");
     // Built node by node: this page has an HTML-sink rule (tests/html-sinks.mjs)
     // and a capture bar has no dynamic text needing markup.
+    const title = doc.createElement("strong");
+    title.className = "hud-edit-title";
+    title.textContent = "Edit HUD";
     const words = doc.createElement("span");
     words.className = "hud-edit-words";
-    words.textContent = "Editing the HUD — drag a card or use its buttons. Press Esc when done.";
+    words.textContent = "Drag a card, or open its options.";
     const status = doc.createElement("span");
     status.className = "hud-edit-status";
     status.id = "hud-edit-status";
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
-    barEl.append(words, status);
+    barEl.append(title, words, status);
     for (const [what, text] of [["undo", "Undo"], ["reset", "Reset to preset"],
       ["discard", "Discard changes"], ["done", "Done"]]) {
       const button = doc.createElement("button");
@@ -1606,11 +1887,68 @@ export function mountHudEditor(options = {}) {
       button.textContent = text;
       barEl.appendChild(button);
     }
+    const tabs = doc.createElement("div");
+    tabs.className = "hud-edit-tabs";
+    tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("aria-label", "Edit HUD options");
+    for (const [name, label] of EDIT_TABS) {
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.className = "hud-edit-tab";
+      button.id = `hud-edit-tab-${name}`;
+      button.setAttribute("role", "tab");
+      button.setAttribute("data-hud-edit-tab", name);
+      button.setAttribute("aria-controls", `hud-edit-pane-${name}`);
+      button.setAttribute("aria-selected", "false");
+      button.textContent = label;
+      tabs.appendChild(button);
+    }
+    barEl.appendChild(tabs);
+    const panes = doc.createElement("div");
+    panes.className = "hud-edit-panes";
+    for (const [name] of EDIT_TABS) {
+      const pane = doc.createElement("div");
+      pane.className = "hud-edit-pane";
+      pane.id = `hud-edit-pane-${name}`;
+      pane.hidden = true;
+      pane.setAttribute("role", "tabpanel");
+      pane.setAttribute("data-hud-edit-pane", name);
+      pane.setAttribute("aria-labelledby", `hud-edit-tab-${name}`);
+      panes.appendChild(pane);
+    }
+    barEl.appendChild(panes);
     stage.insertBefore(barEl, byId("banner") || stage.firstChild);
     statusEl = doc.getElementById("hud-edit-status");
     barEl.addEventListener("click", (event) => {
-      const button = event.target && event.target.closest
-        ? event.target.closest("[data-hud-edit-global]") : null;
+      const target = event.target && event.target.closest ? event.target : null;
+      if (!target) return;
+      // The active tab is ALSO on <body> as `data-hud-edit-tab` (for the page's
+      // stylesheet). The tab branch must therefore match a real tab BUTTON, not
+      // any ancestor carrying the attribute: `closest("[data-hud-edit-tab]")`
+      // matched <body> for every click in the bar, so Done/Reset/Discard were
+      // swallowed as "switch to the Cards tab" and edit mode never closed.
+      const tab = target.closest('[data-hud-edit-tab][role="tab"]');
+      if (tab) { setEditTab(tab.getAttribute("data-hud-edit-tab")); return; }
+      const pick = target.closest("[data-hud-edit-card-pick]");
+      if (pick) {
+        const id = pick.getAttribute("data-hud-edit-card-pick");
+        selectEditCard(id === selectedCard ? null : id);
+        return;
+      }
+      const preset = target.closest("[data-hud-edit-preset]");
+      if (preset) {
+        doAction({ type: "resetToPreset", id: preset.getAttribute("data-hud-edit-preset") });
+        return;
+      }
+      const advanced = target.closest("[data-hud-edit-advanced]");
+      if (advanced) {
+        const id = advanced.getAttribute("data-hud-edit-card");
+        const what = advanced.getAttribute("data-hud-edit-advanced");
+        if (what === "show") doAction({ type: "setVisible", id });
+        else if (what === "expand") doAction({ type: "toggleCollapsed", id });
+        return;
+      }
+      const button = target.closest("[data-hud-edit-global]");
       if (!button) return;
       const what = button.getAttribute("data-hud-edit-global");
       if (what === "undo") undo();
@@ -1950,6 +2288,7 @@ export function mountHudEditor(options = {}) {
   function wire() {
     doc.addEventListener("click", onToolbarClick);
     doc.addEventListener("click", onHomeClick);
+    doc.addEventListener("click", onEditCardClick);
     doc.addEventListener("change", onRegionChange);
     doc.addEventListener("pointerdown", onPointerDown, true);
     doc.addEventListener("pointermove", onPointerMove, true);

@@ -169,6 +169,10 @@ ACTION = "edit_vault_note"
 #: read (413) and for a save (413): a card the owner cannot read is not an
 #: approval, and a whole-vault editor is not a file manager.
 MAX_FILE_BYTES = 2 * 1024 * 1024
+#: A CARD-FREE create is capped far below that (Gemini round-3 ruling 2): a new
+#: note is unattended, additive work, so 64 KB of words is the most it writes
+#: without a card. Anything larger goes through the carded path.
+CARD_FREE_MAX_BYTES = 64 * 1024
 
 #: At most this many notes are returned by one list; `truncated` says more
 #: exist. Sorted newest first, so the cut keeps the notes most likely wanted.
@@ -1306,6 +1310,107 @@ def _finish_create(job_id: str, full: Path, rel: str, data: bytes,
                        "sha256": _sha256(data)})
 
 
+def _create_now(full: Path, rel: str, data: bytes) -> tuple:
+    """Create ONE new note with NO approval card (owner's decision 2026-10-31:
+    "jarvis should be able to make a new note into my notes without needing an
+    approval card").
+
+    Creating a brand-new file is ADDITIVE: it cannot overwrite or delete any
+    existing content, which is why the owner's one-card rule for changes does
+    not apply to it. Everything that still applies does: the path is inside the
+    vault, a collision is refused (never overwritten, and the O_EXCL open is a
+    second guard), the undo receipt is recorded BEFORE the file exists so one
+    Undo removes exactly the new file, and the bytes are read back. The File
+    Guardian copy is not needed for a brand-new path (there are no old bytes to
+    keep) - the receipt is what makes the undo exact.
+
+    Returns the same `(status, body)` shape the routes use, so every caller sees
+    the module's own words.
+    """
+    import jarvis_receipts as R
+    # Gemini round-3 ruling 2: the card-free payload is capped at 64 KB. A
+    # bigger note is a bigger change than an unattended write should be.
+    if len(data) > CARD_FREE_MAX_BYTES:
+        return 413, {"ok": False, "state": "refused", "path": rel,
+                     "error": (f"A brand-new note is capped at {CARD_FREE_MAX_BYTES} "
+                               f"bytes here and that one is {len(data)} bytes, so "
+                               "nothing was created; use the notes editor for a "
+                               "bigger note.")}
+    if full.exists():
+        return 409, {"ok": False, "state": "exists", "path": rel,
+                     "error": f"There is already a note at {rel}, so nothing was created."}
+    # On Windows a name is case-insensitive: "gym.md" and "Gym.md" are the SAME
+    # note, but a case-sensitive filesystem would let a second one appear. Look
+    # for a name-equal sibling before the O_EXCL write either way (ruling 2).
+    try:
+        key = full.name.casefold()
+        parent = full.parent
+        if parent.is_dir():
+            for sibling in parent.iterdir():
+                if sibling.name.casefold() == key:
+                    return 409, {"ok": False, "state": "exists", "path": rel,
+                                 "error": (f"There is already a note at {sibling.name} "
+                                           f"(same name, different case) so nothing "
+                                           "was created.")}
+    except OSError:
+        pass
+    try:
+        vault, _why = _vault()
+        parent_real = Path(os.path.realpath(str(full.parent)))
+        if (vault is None or not _inside(vault, parent_real)
+                or not _inside(vault, full)):
+            return 403, {"ok": False, "state": "refused", "path": rel,
+                         "error": ("That note's folder is not inside your Obsidian "
+                                   "vault, so nothing was created.")}
+    except Exception as exc:                                # noqa: BLE001
+        return 503, {"ok": False, "state": "refused", "path": rel,
+                     "error": (f"The note could not be created "
+                               f"({type(exc).__name__}), so nothing was created.")}
+    rid = _record_create(rel, data)
+    if not rid:
+        return 503, {"ok": False, "state": "refused", "path": rel,
+                     "error": ("Nothing was created, because an undo receipt "
+                               "could not be recorded first.")}
+    try:
+        full.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(full), os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                     | getattr(os, "O_BINARY", 0), 0o644)
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
+        with open(str(full), "rb") as fh:
+            landed = fh.read() == data
+    except FileExistsError:
+        try:
+            R.discard(rid)
+        except Exception:                                   # noqa: BLE001
+            pass
+        return 409, {"ok": False, "state": "exists", "path": rel,
+                     "error": f"There is already a note at {rel}, so nothing was created."}
+    except OSError as exc:
+        try:
+            R.discard(rid)
+        except Exception:                                   # noqa: BLE001
+            pass
+        return 503, {"ok": False, "state": "refused", "path": rel,
+                     "error": (f"The note could not be created "
+                               f"({type(exc).__name__}), so nothing was created.")}
+    if not landed:
+        try:
+            R.discard(rid)
+        except Exception:                                   # noqa: BLE001
+            pass
+        return 503, {"ok": False, "state": "refused", "path": rel,
+                     "error": ("The note was made but could not be read back, so "
+                               "check Obsidian.")}
+    _audit("created", {"path": rel, "bytes": len(data), "sha256": _sha256(data),
+                       "card": False})
+    return 200, {"ok": True, "state": "created", "path": rel,
+                 "sha256": _sha256(data), "receipt": rid,
+                 "message": f"Created {rel} in your Obsidian vault. You can undo it."}
+
+
 def _one_path(body) -> tuple:
     """`(raw_path, why)`: ONE path string, or a plain refusal for a list."""
     if not isinstance(body, dict):
@@ -1318,8 +1423,17 @@ def _one_path(body) -> tuple:
 
 
 def handle_create(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
-                  by: str = "") -> tuple:
-    """POST /api/notes/create: exactly one new note, one card, undo by receipt."""
+                  by: str = "", provenance: str = "typed",
+                  client: str = "hud") -> tuple:
+    """POST /api/notes/create: exactly one new note, ONE card unless owner-direct.
+
+    Gemini round-3 ruling 2 (2026-10-31): card-free is allowed ONLY for a
+    direct owner write - provenance "typed" or "voice" AND the HUD client. A
+    write after outside text (`after_outside_text`), a background job, or any
+    other client keeps the old ONE-card path. A brand-new note is still
+    additive: the vault/protected/hidden/reserved/collision checks and the undo
+    receipt are unchanged, and every OTHER note change keeps its card.
+    """
     raw, why = _one_path(body)
     if why:
         return _error(400, why, state="refused")
@@ -1351,8 +1465,18 @@ def handle_create(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
     if full.exists():
         return _error(409, f"There is already a note at {rel2}, so nothing was created.",
                       state="exists")
-    return _start_change_job("create", full, rel2, data, "", vault,
-                             gate_check, wait_s, by, {})
+    # OWNER DECISION 2026-10-31: creating a brand-new note is card-free - but
+    # ONLY when the owner is writing directly in the HUD (typed or voice).
+    # After outside text, a background job, or another client, the ONE-card
+    # path stays (Gemini round-3 ruling 2).
+    body_prov = str((body or {}).get("provenance") or provenance or "typed").strip().lower()
+    body_client = str((body or {}).get("client") or client or "").strip().lower()
+    owner_direct = body_prov in ("typed", "voice") and body_client == "hud"
+    if not owner_direct:
+        return _start_change_job("create", full, rel2, data, "", vault,
+                                 gate_check, wait_s, by,
+                                 {"provenance": body_prov, "client": body_client})
+    return _create_now(full, rel2, data)
 
 
 def handle_append(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
@@ -3196,7 +3320,15 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             body = None
         try:
             if route == CREATE_PATH:
-                code, out = handle_create(body)
+                _hdr_client = ""
+                try:
+                    _hdr_client = str(self.headers.get("X-Jarvis-Client") or "")
+                except Exception:                       # noqa: BLE001
+                    _hdr_client = ""
+                code, out = handle_create(
+                    body,
+                    client=_hdr_client.strip().lower() or "hud",
+                    provenance=str((body or {}).get("provenance") or "typed"))
             elif route == APPEND_PATH:
                 code, out = handle_append(body)
             elif route == TAG_PATH:

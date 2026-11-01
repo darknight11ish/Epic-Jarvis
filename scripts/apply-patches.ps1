@@ -2141,6 +2141,8 @@ $SHIPPED = @(
     'jarvis_photo_remind.py'     # "Photo to reminder": the dates in a picture, read on this PC and PROPOSED, never set by itself (photo-reminder.patch)
     # --- "PC help" (2026-09-28, no patch of its own) ---
     'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
+    # --- Read-only PC facts (2026-10-31, no patch of its own) ---
+    'jarvis_pc_facts.py'         # the same readers as PC help, put together for the chat answers about disk/RAM/CPU/GPU/uptime/current model; jarvis_agent.py calls it (wave-2 PC-stats lane; the same entry is in backend/_where.py's SHIPPED list)
     # --- Tutorials and the FAQ (2026-10-05) ---
     'jarvis_tutorials.py'        # the owner's own request: one catalogue for both apps and the reading progress kept on the PC (tutorials.patch); no gate line, no card, no tool
     # --- "Smarter answers" (2026-09-28, no patch of its own) ---
@@ -2372,7 +2374,7 @@ $SHIPPED = @(
     # --- The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5) ---
     'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
     # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
-    'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is BUILT as the intended ONE gate for every download - never a silent download, and never one that would leave less than 25 GB free (the night C: hit 5.7 GB free and every build on this PC broke) - but NO CALLER YET (checked 2026-10-26): the model chooser/download path does not consult it, so do not describe downloads as gated until a wiring PR makes that true. Reads no network, starts nothing, downloads nothing. The work setups were meant to use it rather than building a second chooser - no patch, no route
+    'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is BUILT as the intended ONE gate for every download - never a silent download, and never one that would leave less than 25 GB free (the night C: hit 5.7 GB free and every build on this PC broke) - but the model chooser/download path does not consult may_download() (checked 2026-10-26), so do not describe downloads as gated until a wiring PR makes that true. backend/jarvis_pc_facts.py imports the module, but only to read MIN_FREE_AFTER_DOWNLOAD for the PC-stats answers. Reads no network, starts nothing, downloads nothing. The work setups were meant to use it rather than building a second chooser - no patch, no route
     # --- Ask for a picture, and keep it (2026-10-11, pictures.patch, JARVIS-API section 129) ---
     'jarvis_pictures.py'         # /api/pictures, /api/pictures/file and POST /api/pictures: a prompt the owner typed, drawn by a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a setting with named values, never guessed at), saved as a PNG in a folder on this PC (Pictures\Jarvis by default, PC-only) with a sidecar holding the prompt, the seed, the model and the settings so it can be made again. Nothing leaves the PC; no route sends a picture anywhere, so making one needs NO approval card. Nothing is deleted on a timer. The switch ("Making pictures") is OFF by default - the second card is shared with the everyday model - and with nothing configured the owner gets ONE plain sentence naming both programs to install, never a crash. Not a tool in jarvis_agent.py, so no model turn can fill in a prompt
     # --- The 30B coder, both cards (2026-10-11) ---
@@ -2675,6 +2677,10 @@ $SHIPPED = @(
     # secret, and a missing header is `unknown` - the old behaviour. The same
     # entry is at the end of backend/_where.py's SHIPPED list.
     'jarvis_surface.py'
+    # What Jarvis is running and what it could run (jarvis_model_knowledge.py,
+    # 2026-10-31): shipped whole, no patch; reads the model/preset and the
+    # measured rows, and asks the EXISTING switch/apply cards.
+    'jarvis_model_knowledge.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

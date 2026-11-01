@@ -1037,6 +1037,15 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
         if d is None:
             return None
         return When(at=now + d)
+    # "30 minutes from now", "an hour from now", "half an hour from now"
+    # (2026-10-31: the live owner's "a reminder for 30 minutes from now to
+    # check my phone" reached the model as a calendar event).
+    m = re.fullmatch(r"(.+?)\s+from\s+now", s)
+    if m:
+        d = parse_duration(m.group(1))
+        if d is None:
+            return None
+        return When(at=now + d)
     # "tomorrow at 6", "on friday at 5pm", "tonight at 8", "tomorrow 6am"
     for split in _splits(s):
         a, b = split
@@ -1167,7 +1176,24 @@ def _match(text, now: float) -> Optional[Intent]:
     if not s or len(s) > 400 or "\n" in s:
         return None
 
+    # --- the cloud/API honesty questions (2026-10-31) -----------------------
+    # These come before the feature answers: the owner asked the local model
+    # and got "I have no connection to any external API" while the Cloud
+    # preset was chosen and its DeepSeek key was saved. They read the PC's
+    # real state and never a key.
+    got = _cloud_honesty_prompt(s)
+    if got is not None:
+        return got
+
     # --- a question about Jarvis's OWN features, from the raw sentence -------
+    # The notes capability and location answers (2026-10-31 follow-up) are
+    # exact, read-only shapes and must win over the generic capability lane.
+    if _NOTE_CREATE_CAPABILITY.fullmatch(s):
+        return Intent("note_create_capability")
+    if _NOTE_LOCATION_LAST.fullmatch(s):
+        return Intent("note_location", {"context": "last"})
+    if _NOTE_LOCATION_VAULT.fullmatch(s):
+        return Intent("note_location", {"context": "vault"})
     # The capability questions (2026-10-31, the pass-9 field test) are read
     # BEFORE the tidied sentence, because "can you add something to my
     # calendar?" loses its "can you" on the way in and would otherwise be
@@ -1176,11 +1202,58 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- keyboard shortcuts, from the RAW sentence (2026-10-31 honesty fix) --
+    # The owner asked and the model answered "I don't have any keyboard
+    # shortcuts myself... that's up to your OS settings", which is false: the
+    # desktop ships 11 bindable hotkeys and the notes editor has its own keys.
+    # This fast path answers from the measured tables before any action path.
+    got = _shortcuts_question(text)
+    if got is not None:
+        return got
+
+    # --- plug-ins, before the reminder capability family (2026-10-31): "how
+    # do I add a plugin" is a plug-in question, not "how do I ask for a
+    # reminder".
+    got = _plugins_question(text)
+    if got is not None:
+        return got
+
+    # --- the Android builder, before the reminder capability family too:
+    # "how do I ask you to build one" is about the app, not a reminder.
+    got = _android_question(text)
+    if got is not None:
+        return got
+    got = _goals_question(text)
+    if got is not None:
+        return got
+    got = _price_radar_flight_question(text, now)
+    if got is not None:
+        return got
+    got = _price_radar_question(text)
+    if got is not None:
+        return got
+
+    # --- timers, alarms and reminders, capability questions only (2026-10-31)
+    # The owner asked "can you make a reminder for me" and the model said it
+    # could not set a system alarm and could only note reminders in a calendar -
+    # false. A real request with a time keeps its own reminder_set/timer_set/
+    # alarm_set path; only the capability family is answered here.
+    got = _reminders_question(text)
+    if got is not None:
+        return got
+    got = _bare_when(s, now)
+    if got is not None:
+        return got
+
     # --- (a) actionable quick paths FIRST (2026-10-31 integration) ----------
     # A real action beats an "off" answer: the note writer, the organizer and
     # the local-calendar read are owned here, before any honesty sentence.
     # (The note lane's capture path really files even when the note TOOL is
     # off; the honesty lane's old note_write off-answer is retired.)
+    # model/preset self-knowledge (2026-10-31), before the notes and features.
+    got = _model_chat(s)
+    if got is not None:
+        return got
     # A rename/move is read from the RAW sentence first, so a new title keeps
     # its capital letters ("Home", not the lowercased matching form "home").
     got = _note_rename_move_asking(text)
@@ -1603,6 +1676,11 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- "PC help": why is my PC slow, how full is my disk ... (jarvis_pc_help.py) ---
     got = _pc_help(s)
+    if got is not None:
+        return got
+
+    # --- "PC facts": disk/RAM/CPU/GPU/uptime, the owner's own machine ---------
+    got = _pc_facts(s)
     if got is not None:
         return got
 
@@ -2189,6 +2267,27 @@ _REMIND_ASK = (_REMIND_LEAD
 _REMIND = re.compile(_REMIND_ASK)
 
 
+def _bare_when(s: str, now: float) -> Optional[Intent]:
+    """A bare time with no action word (2026-10-31).
+
+    "in 10 minutes" is a timer. "at 6pm" / "tomorrow at 9" are reminders. A
+    sentence with no time is never guessed at here; a sentence carrying an
+    action word belongs to that action's own path.
+    """
+    if re.search(r"\b(?:remind|reminder|timer|alarm|calendar|event|note|call|email)\b", s):
+        return None
+    m = re.fullmatch(r"in\s+(.+)", s)
+    if m:
+        d = parse_duration(m.group(1))
+        if d is not None:
+            return Intent("timer_set", {"seconds": d, "label": ""})
+        return None
+    when = parse_when(s, now, "reminder")
+    if when is not None:
+        return Intent("reminder_set", {"text": "your reminder", "when": when})
+    return None
+
+
 def _reminder(s: str, now: float) -> Optional[Intent]:
     # "in 10 minutes remind me to drink water" / "at 6pm remind me to call"
     # (2026-10-18): the time can come first, exactly as it can in
@@ -2236,6 +2335,14 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
             when = parse_when(when_s[3:], now, "reminder")
         if when is not None:
             return Intent("reminder_set", {"text": text, "when": when})
+    # "remind me 30 minutes from now" / "set a reminder in an hour" / "remind me
+    # in 2 hours": a real reminder request whose words were only the time. The
+    # scheduler requires SOME words, so the stored text is the honest default;
+    # the confirmation still names the exact clock time.
+    bare = re.sub(r"^for\s+", "", rest.strip())
+    when = parse_when(bare, now, "reminder")
+    if when is not None:
+        return Intent("reminder_set", {"text": "your reminder", "when": when})
     return None
 
 
@@ -2316,6 +2423,37 @@ _PC = r"(?:my|the|this)\s+(?:pc|computer|laptop|machine|desktop)"
 _GPU = r"(?:my|the)\s+(?:graphics\s+card|gpu|video\s+card)"
 _DRIVE = (r"(?:my|the)\s+(?:disks?|drives?|hard\s+drives?|hard\s+disks?|ssds?|storage|"
           r"c\s+drive)")
+#: "PC facts" (jarvis_pc_facts.py, 2026-10-31): the owner's own storage/space,
+#: RAM, CPU/GPU, uptime and "is my disk getting full?" - answered without the
+#: model from the readers PC help already uses. Each is a whole sentence and
+#: names THIS PC (or a drive): "how much storage does Google give me" is not
+#: one of ours and stays the model's/search's.
+_PC_FACTS = (
+    ("drive", re.compile(
+        r"how\s+much\s+(?:free\s+)?(?:space|storage)\s+"
+        r"(?:is\s+(?:free|left|available)|do\s+i\s+have)\s+(?:on|of)\s+"
+        r"(?:my|the)\s+(?P<drive>[a-z])(?::)?(?:\s+drive)?(?:\s+left)?")),
+    ("storage", re.compile(
+        r"how\s+much\s+(?:storage|space)\s+(?:does|do)\s+(?:my|this|the)\s+"
+        r"(?:computer|pc|machine)\s+(?:have|has)(?:\s+(?:available|free|left))?")),
+    ("space_all", re.compile(
+        r"how\s+much\s+(?:free\s+)?(?:space|storage)\s+"
+        r"(?:do\s+i\s+have|have\s+i\s+got|is\s+there)(?:\s+(?:left|available))?")),
+    ("ram", re.compile(
+        r"how\s+much\s+(?:ram|memory)\s+(?:do\s+i\s+have|is\s+free|"
+        r"have\s+i\s+got|does\s+(?:my|this|the)\s+(?:pc|computer)\s+have)")),
+    ("cpu", re.compile(
+        r"what\s+(?:cpu|processor)\s+(?:do\s+i\s+have|does\s+(?:my|this|the)\s+"
+        r"(?:pc|computer)\s+have)")),
+    ("gpu", re.compile(
+        r"what\s+(?:gpu|graphics\s+card)\s+(?:do\s+i\s+have|does\s+(?:my|this|the)\s+"
+        r"(?:pc|computer)\s+have)|what\s+graphics\s+card\s+is\s+in\s+" + _PC)),
+    ("uptime", re.compile(
+        r"how\s+long\s+has\s+(?:this|my)\s+(?:pc|computer|machine)\s+been\s+on")),
+    ("full", re.compile(
+        r"is\s+my\s+(?:disk|drive|storage)\s+getting\s+full")),
+)
+
 _PC_HELP = (
     ("slow", re.compile(
         r"why\s+is\s+" + _PC + r"\s+(?:so\s+|really\s+|being\s+|running\s+)?"
@@ -2354,6 +2492,28 @@ _PC_HELP = (
         r"|what(?:'?s|\s+is)\s+(?:my|the)\s+(?:pc's\s+|computer's\s+)?uptime"
         r"|(?:pc|computer|system)\s+uptime")),
 )
+
+
+def _pc_facts(s: str) -> Optional[Intent]:
+    """The whole-sentence PC-facts shapes, or None (not ours)."""
+    for shape, rx in _PC_FACTS:
+        m = rx.fullmatch(s)
+        if m:
+            return Intent("pc_facts", {"shape": shape,
+                                       "drive": (m.groupdict().get("drive") or "").upper()})
+    return None
+
+
+def _run_pc_facts(f: dict) -> Result:
+    """The fixed PC-facts answer, from the real read-only readers."""
+    shape = str(f.get("shape") or "")
+    drive = str(f.get("drive") or "")
+    try:
+        import jarvis_pc_facts as F
+        return Result(F.answer(shape, drive=drive), "pc_facts")
+    except Exception:                                       # noqa: BLE001
+        return Result("I could not read this PC's facts just now, so I will not guess.",
+                      "pc_facts")
 
 
 def _pc_help(s: str) -> Optional[Intent]:
@@ -4778,6 +4938,36 @@ _FEAT_CAN_DO = re.compile(
 _FEAT_LIKE = re.compile(
     r"what\s+is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+like")
 
+#: The shapes that ASK ABOUT a named feature - the feature guide's own
+#: vocabulary, kept as one tuple so the honesty families that run BEFORE the
+#: guide can step aside on a question about another feature (2026-11-01
+#: integration). Without this, "tell me about Ring my phone" became a
+#: reminder-sound answer (the word "ring"), "how do I set Galaxy up" a reminder
+#: how-to, and "what does Goals do" a goals answer.
+_FEATURE_QUESTION_SHAPES = (
+    _FEATURE_STATE, _FEATURE_WHAT, _FEATURE_USE, _FEATURE_WHERE,
+    _FEATURE_LIMITS, _FEATURE_ASKS, _FEATURE_APP, _FEATURE_WHY,
+    _FEATURE_CHANGE, _FEATURE_DIFFERENCE, _FEATURE_ON_OFF, _FEAT_DETAIL,
+    _FEAT_HOW_USE, _FEAT_EXAMPLE, _FEAT_PRIVATE, _FEAT_NEEDS, _FEAT_WHY_STATE,
+    _FEAT_WRONG, _FEAT_CAN_DO, _FEAT_LIKE,
+)
+
+
+def _asks_about_a_named_feature(text: str, raw: str = "") -> bool:
+    """Is `text` a feature question that resolves to a real catalogue row?
+
+    Asked by the honesty families (reminders, goals) that the fast path runs
+    BEFORE the feature guide. True means "the guide owns this sentence, return
+    None and let it answer". The exact-name gate is the guide's own, so a
+    sentence that names no row still keeps the honesty answer.
+    """
+    if not any(rx.search(text) for rx in _FEATURE_QUESTION_SHAPES):
+        return False
+    try:
+        return _feature_guide(text, raw) is not None
+    except Exception:                                       # noqa: BLE001
+        return False
+
 
 def _feature_capabilities(s: str) -> Optional[Intent]:
     """Capability questions the feature list can answer, or None (2026-10-31)."""
@@ -4813,6 +5003,1292 @@ def _feature_capabilities(s: str) -> Optional[Intent]:
         area = next((got for got in m.groups() if got), "")
         if area:
             return Intent("feature_capabilities", {"words": area})
+    return None
+
+
+
+# --------------------------------------------------------------------------
+# Keyboard shortcuts (2026-10-31 honesty fix)
+#
+# MEASURED, never invented. The PC list is `jarvis-desktop/src-tauri/src/
+# hotkeys.rs` `ACTIONS` (11 bindable actions); the notes-editor keys are
+# `jarvis-desktop/src/notes.js` `SHORTCUTS`/`TOOLBAR`; the bar and chat keys
+# are `jarvis-desktop/src/main.js`'s keydown contract and the Brain window's
+# own handlers. `backend/test_shortcuts_honesty.py` reads those source files
+# and fails if these tables drift, so a new key cannot silently be missed by
+# the fast path. The phone has no keyboard shortcuts, and saying otherwise is
+# the bug this fixes.
+# --------------------------------------------------------------------------
+
+#: (id, key, what it does, where it works) for every bindable PC action.
+#: An empty key is a real state: the action ships unbound until the owner
+#: picks one in Settings -> Shortcuts. Default keys only, exactly as shipped.
+SHORTCUT_ACTIONS = (
+    ("toggle_quickbar", "Alt+Space", "show or hide the Jarvis bar", "anywhere on the PC"),
+    ("ingest_clipboard", "Super+Shift+J", "attach whatever is on the clipboard to the bar", "anywhere on the PC"),
+    ("capture_screen", "Alt+Shift+S", "look at the window in front, once", "anywhere on the PC"),
+    ("quick_note", "Alt+Shift+N", "open the Jarvis bar ready to file a quick note", "anywhere on the PC"),
+    ("toggle_widget", "Alt+Shift+W", "show or hide the widget", "anywhere on the PC"),
+    ("stop_everything", "Alt+Shift+X", "stop Jarvis talking and anything it is doing, at once", "anywhere on the PC"),
+    ("toggle_floating", "Alt+Shift+F", "show or hide the floating face", "anywhere on the PC"),
+    ("talk_to_type", "Alt+Shift+T", "hold it and speak, then let go; Jarvis types what you said", "anywhere on the PC, once Talk-to-type is on"),
+    ("toggle_watch", "", "start or stop Watch with me", "anywhere on the PC, off until you pick a key"),
+    ("toggle_live", "", "start or end Jarvis Live", "anywhere on the PC, off until you pick a key"),
+    ("clipboard_time_machine", "Alt+Shift+C", "open the clipboard history drawer at the Jarvis bar", "anywhere on the PC"),
+)
+
+#: The label each unbound action is called by when it has no key yet.
+SHORTCUT_ACTION_LABELS = {
+    "toggle_watch": "start or stop Watch with me",
+    "toggle_live": "start or end Jarvis Live",
+}
+
+#: (key, action) inside the NOTES EDITOR only, exactly as the editor binds it.
+SHORTCUT_NOTES_EDITOR = (
+    ("Ctrl+B", "bold"),
+    ("Ctrl+I", "italic"),
+    ("Ctrl+K", "wikilink"),
+    ("Ctrl+E", "inline code"),
+    ("Ctrl+Shift+X", "strikethrough"),
+    ("Ctrl+Shift+Q", "quote"),
+    ("Ctrl+Shift+7", "numbered list"),
+    ("Ctrl+Shift+8", "bullet list"),
+    ("Ctrl+Shift+9", "checklist"),
+    ("Ctrl+2", "heading 2"),
+    ("Ctrl+3", "heading 3"),
+)
+
+#: The words a named-shortcut question may use, mapped to the real answer.
+#: Every entry names a key above (or the real unbound state); nothing guesses.
+SHORTCUT_NAMES = {
+    "bar": "toggle_quickbar", "jarvis bar": "toggle_quickbar",
+    "quickbar": "toggle_quickbar", "spotlight": "toggle_quickbar",
+    "open jarvis": "toggle_quickbar", "show jarvis": "toggle_quickbar",
+    "hide jarvis": "toggle_quickbar", "summon jarvis": "toggle_quickbar",
+    "clipboard": "ingest_clipboard", "attach the clipboard": "ingest_clipboard",
+    "look at this": "capture_screen", "look at the screen": "capture_screen",
+    "screen": "capture_screen",
+    "quick note": "quick_note", "note": "quick_note", "new note": "quick_note",
+    "widget": "toggle_widget",
+    "stop everything": "stop_everything", "stop": "stop_everything",
+    "floating face": "toggle_floating", "floating": "toggle_floating",
+    "talk to type": "talk_to_type", "talk-to-type": "talk_to_type",
+    "dictation": "talk_to_type",
+    "watch with me": "toggle_watch", "watch": "toggle_watch",
+    "jarvis live": "toggle_live", "live": "toggle_live",
+    "clipboard history": "clipboard_time_machine",
+}
+
+#: The notes editor's own names, answered with "inside the notes editor".
+SHORTCUT_NOTES_NAMES = {
+    "bold": "Ctrl+B",
+    "italic": "Ctrl+I",
+    "wikilink": "Ctrl+K", "link": "Ctrl+K", "wiki link": "Ctrl+K",
+    "inline code": "Ctrl+E", "code": "Ctrl+E",
+    "strikethrough": "Ctrl+Shift+X",
+    "quote": "Ctrl+Shift+Q",
+    "numbered list": "Ctrl+Shift+7", "number list": "Ctrl+Shift+7",
+    "bullet list": "Ctrl+Shift+8", "bullets": "Ctrl+Shift+8",
+    "checklist": "Ctrl+Shift+9",
+    "heading 2": "Ctrl+2", "h2": "Ctrl+2",
+    "heading 3": "Ctrl+3", "h3": "Ctrl+3",
+}
+
+_SHORTCUTS_LIST_RX = re.compile(
+    r"(?:what|which)\s+(?:are\s+)?(?:your\s+|the\s+)?(?:keyboard\s+)?shortcuts?"
+    r"(?:\s+(?:do\s+you\s+have|are\s+there|have\s+you\s+got))?\s*$"
+    r"|what\s+shortcuts\s+do\s+you\s+have\s*$"
+    r"|(?:do\s+you\s+have|have\s+you\s+got)\s+(?:any\s+)?(?:keyboard\s+)?shortcuts?"
+    r"|keyboard\s+shortcuts?\s+(?:list|please)\s*$")
+_SHORTCUTS_OPEN_RX = re.compile(
+    r"(?:how\s+(?:do|can)\s+i\s+(?:open|summon|call|show)\s+(?:you|jarvis)\b.*keyboard|"
+    r"(?:keyboard\s+)?shortcut\s+(?:to|for)\s+(?:open|summon|show|call)\s+(?:you|jarvis)\b|"
+    r"(?:open|summon)\s+(?:you|jarvis)\s+with\s+(?:the\s+)?keyboard)")
+_SHORTCUTS_QUICK_NOTE_RX = re.compile(
+    r"(?:what|which)\s+(?:is\s+)?(?:the\s+)?(?:keyboard\s+)?shortcut\s+(?:for|to)\s+"
+    r"(?:a\s+|the\s+)?quick[\s-]?note\b|"
+    r"(?:what|which)\s+(?:is\s+)?(?:the\s+)?quick[\s-]?note\s+(?:shortcut|key)\b|"
+    r"shortcut\s+(?:makes|for)\s+(?:a\s+)?quick[\s-]?note\b|"
+    r"quick[\s-]?note\s+shortcut\b")
+_SHORTCUTS_CHANGE_RX = re.compile(
+    r"(?:can\s+i|how\s+(?:do|can)\s+i|do\s+i)\s+(?:change|remap|rebind|edit)\s+"
+    r"(?:the\s+|my\s+|your\s+)?(?:keyboard\s+)?shortcuts?\b|"
+    r"are\s+(?:the\s+|your\s+)?(?:keyboard\s+)?shortcuts\s+(?:changeable|configurable|customi[sz]able)\b")
+_SHORTCUT_FOR_RX = re.compile(r"^(?:what(?:'s|\s+is)\s+the\s+|what\s+is\s+the\s+|the\s+)?"
+                              r"shortcut\s+(?:for|to)\s+(.+?)\s*$")
+_SHORTCUT_MAKES_RX = re.compile(r"^(?:what|which)\s+shortcut\s+(?:makes|does|is)\s+(.+?)\s*$")
+
+#: Things whose shortcuts belong to Windows or another program, never to Jarvis.
+_SHORTCUT_NOT_OURS = re.compile(
+    r"\b(?:chrome|edge|firefox|browser|windows|word|excel|powerpoint|outlook|"
+    r"close|minimi[sz]e|maximi[sz]e|shutdown|shut\s+down|restart|task\s+manager|"
+    r"screenshot\s+tool|snipping\s+tool|copy\s+text|paste\s+text|select\s+all)\b")
+
+
+def _shortcut_desktop_list() -> str:
+    """The measured PC list, in plain words, for the desktop."""
+    unbound = [a for a in SHORTCUT_ACTIONS if not a[1]]
+    bound = [a for a in SHORTCUT_ACTIONS if a[1]]
+    parts = ["Yes - the Jarvis Desktop on this PC has real keyboard shortcuts."]
+    parts.append("Global keys (they work in any program; change them in Settings, Shortcuts):")
+    for _id, key, what, where in bound:
+        parts.append("- " + key + ": " + what + " (" + where + ").")
+    if unbound:
+        parts.append("These have no key until you pick one in Settings, Shortcuts: "
+                     + "; ".join(SHORTCUT_ACTION_LABELS.get(a[0], a[0]) for a in unbound) + ".")
+    parts.append("In the notes editor only: "
+                 + ", ".join(k + " " + what for k, what in SHORTCUT_NOTES_EDITOR) + ".")
+    parts.append("In the Jarvis bar: Enter sends, Shift+Enter adds a line, hold Space or Enter "
+                 "on the mic to talk, and Esc dismisses. In the chat window Ctrl+Enter asks a "
+                 "Deep question.")
+    parts.append("The phone has no keyboard shortcuts; the shortcuts are on the PC.")
+    return " ".join(parts)
+
+
+def _shortcut_phone_list() -> str:
+    """The same truth, surface-aware, for the phone."""
+    return ("The keyboard shortcuts are on the PC running Jarvis Desktop, not on the phone. "
+            "On the PC, Alt+Space shows or hides the Jarvis bar, Alt+Shift+N opens a quick note, "
+            "and Settings, Shortcuts has the full list and lets you change each global key. "
+            "The notes editor's Ctrl+B, Ctrl+I and the rest work inside the notes editor. "
+            "The phone has no keyboard shortcuts of its own.")
+
+
+def _shortcut_action_words(action_id: str) -> str:
+    for _id, key, what, _where in SHORTCUT_ACTIONS:
+        if _id == action_id:
+            if not key:
+                suggestion = " (the hint suggests Alt+Shift+V)" if action_id == "toggle_watch" else (
+                    " (the hint suggests Alt+Shift+L)" if action_id == "toggle_live" else "")
+                return (SHORTCUT_ACTION_LABELS.get(action_id, action_id)
+                        + " has no key until you pick one in Settings, Shortcuts" + suggestion)
+            return key + " " + what
+    return ""
+
+
+def _run_shortcuts(name: str, f: dict, surface: str) -> "Result":
+    """Read-only, deterministic answers built from the measured tables."""
+    if name == "shortcuts_list":
+        return Result(_shortcut_phone_list() if surface == "phone" else _shortcut_desktop_list(),
+                      "shortcuts_list")
+    if name == "shortcuts_open":
+        if surface == "phone":
+            return Result("Press Alt+Space on the PC to show or hide the Jarvis bar - that is how "
+                          "you open Jarvis with the keyboard. The phone has no keyboard shortcut "
+                          "of its own.", "shortcuts_open")
+        return Result("Press Alt+Space anywhere on the PC to show or hide the Jarvis bar - that is "
+                      "how you open Jarvis with the keyboard. You can change it in Settings, "
+                      "Shortcuts.", "shortcuts_open")
+    if name == "shortcuts_quick_note":
+        if surface == "phone":
+            return Result("The quick-note key is on the PC: Alt+Shift+N opens the Jarvis bar ready "
+                          "to file a note. The phone has no keyboard shortcut of its own.",
+                          "shortcuts_quick_note")
+        return Result("Alt+Shift+N opens the Jarvis bar ready to file a quick note. You can change "
+                      "that key in Settings, Shortcuts.", "shortcuts_quick_note")
+    if name == "shortcuts_change":
+        if surface == "phone":
+            return Result("Keyboard shortcuts are changed on the PC: Settings, Shortcuts. The "
+                          "phone has no keyboard shortcuts of its own.", "shortcuts_change")
+        return Result("Yes. On the PC open Settings, Shortcuts: every global key can be changed, "
+                      "and a key another program already owns is refused with the reason. The "
+                      "notes editor's own keys (Ctrl+B and the rest) work inside the notes editor "
+                      "and are not configurable. The phone has no keyboard shortcuts.",
+                      "shortcuts_change")
+    if name == "shortcuts_named":
+        action_id = str(f.get("action") or "")
+        words = _shortcut_action_words(action_id)
+        if surface == "phone":
+            return Result("That shortcut is on the PC: " + words + ". The phone has no keyboard "
+                          "shortcut of its own.", "shortcuts_named")
+        return Result("That shortcut is " + words + ". It is a Jarvis Desktop key on the PC; you "
+                      "can change the global ones in Settings, Shortcuts.", "shortcuts_named")
+    if name == "shortcuts_notes_named":
+        key = str(f.get("key") or "")
+        what = str(f.get("what") or "")
+        if surface == "phone":
+            return Result(key + " is " + what + " inside the notes editor on the PC. The phone has "
+                          "no keyboard shortcuts.", "shortcuts_notes_named")
+        return Result(key + " is " + what + " inside the notes editor only; those keys are fixed. "
+                      "Global Jarvis keys are changed in Settings, Shortcuts.", "shortcuts_notes_named")
+    if name == "shortcuts_unknown":
+        words = str(f.get("words") or "").strip()
+        return Result("There isn't a Jarvis shortcut for \"" + words + "\". The nearest real ones "
+                      "are Alt+Shift+N for a quick note, Alt+Space for the Jarvis bar, and Ctrl+B "
+                      "for bold inside the notes editor. A shortcut belonging to Windows or another "
+                      "program is not Jarvis's.", "shortcuts_unknown")
+    return Result(_shortcut_phone_list() if surface == "phone" else _shortcut_desktop_list(),
+                  "shortcuts_list")
+
+
+def _known_shortcut_name(target: str):
+    """(intent name, fields) for a named shortcut, or None when not ours."""
+    t = " ".join(str(target or "").lower().strip(" ?.!").split())
+    if not t:
+        return None
+    if t in SHORTCUT_NAMES:
+        return Intent("shortcuts_named", {"action": SHORTCUT_NAMES[t]})
+    for name, action_id in SHORTCUT_NAMES.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", t):
+            return Intent("shortcuts_named", {"action": action_id})
+    if t in SHORTCUT_NOTES_NAMES:
+        return Intent("shortcuts_notes_named",
+                      {"key": SHORTCUT_NOTES_NAMES[t], "what": t})
+    for name, key in SHORTCUT_NOTES_NAMES.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", t):
+            return Intent("shortcuts_notes_named", {"key": key, "what": name})
+    return None
+
+
+def _shortcuts_question(raw) -> Optional[Intent]:
+    """Keyboard-shortcut questions, read off the RAW sentence (2026-10-31).
+
+    Deterministic and source-measured: the list comes from the same tables the
+    test compares to `hotkeys.rs`/`notes.js`, so the model can never again say
+    Jarvis has none. Over-capture is deliberate: a shortcut that belongs to
+    Windows or another program ("shortcut to close Chrome") falls through to
+    the model, and the tests pin that.
+    """
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if _SHORTCUTS_CHANGE_RX.search(text):
+        # "can I change Keyboard shortcuts" is the FEATURE row's own question
+        # (Settings directory): let the feature guide answer it. "can I change
+        # the shortcuts?" - the owner's actual phrasing - stays ours.
+        if re.search(r"\bkeyboard shortcuts\b", text):
+            return None
+        return Intent("shortcuts_change")
+    if _SHORTCUTS_QUICK_NOTE_RX.search(text):
+        return Intent("shortcuts_quick_note")
+    if _SHORTCUTS_OPEN_RX.search(text):
+        return Intent("shortcuts_open")
+    if _SHORTCUTS_LIST_RX.fullmatch(text) or re.fullmatch(
+            r"(?:what|which)\s+(?:are\s+)?your\s+(?:keyboard\s+)?shortcuts?", text):
+        return Intent("shortcuts_list")
+    m = _SHORTCUT_FOR_RX.fullmatch(text) or _SHORTCUT_MAKES_RX.fullmatch(text)
+    if m:
+        target = m.group(1).strip(" \"'")
+        if _SHORTCUT_NOT_OURS.search(target):
+            return None                     # Windows/another program owns it: model/OS
+        got = _known_shortcut_name(target)
+        if got is not None:
+            return got
+        # A named key that is not real: say so plainly, name the nearest real
+        # ones. Only for shortcut questions, never for a general "shortcut".
+        return Intent("shortcuts_unknown", {"words": target})
+    return None
+
+
+# Timers, alarms and reminders capability answers (2026-10-31 honesty fix)
+#
+# The owner asked "can you make a reminder for me" and the model said it could
+# not set a system-wide alarm and could only "note reminders in my calendar" -
+# false. The real feature is jarvis_schedule.py (set_reminder/set_timer/
+# set_alarm quick intents, the Coming up list) plus the desktop's Windows
+# notification (jarvis-desktop/src-tauri/src/brain/schedule.rs: toast_fired,
+# rings(), notifications.rs) and the phone's Android notification while it is
+# connected (jarvis-client/.../service/ScheduleNotifier.kt - "THE PC IS THE
+# CLOCK ... Nothing here sets an alarm on the phone").
+#
+# These constants are the measured truth table the answers are built from.
+# A REAL request with a time or a thing ("remind me to call Mom at 6pm") is
+# never claimed here: the matcher refuses any sentence carrying a time or a
+# duration, so the existing reminder_set/timer_set/alarm_set paths keep it.
+# --------------------------------------------------------------------------
+
+REMINDER_SURFACES = (
+    ("desktop", "Brain, Work, Coming up; the HUD's Reminders panel (#rail-reminders)"),
+    ("desktop-toast", "a Windows notification while Jarvis is running"),
+    ("desktop-late", "a late alarm rings only at most 10 minutes late; after that it is a quiet missed note"),
+    ("desktop-closed", "with the Jarvis app fully closed no notification appears at the time; the job is kept and shows when Jarvis opens"),
+    ("phone", "the phone shows an Android notification while it is connected to the PC; the PC is the clock and the phone sets no alarm of its own"),
+)
+
+_REMINDER_WORDS = re.compile(r"\b(?:reminder|reminders|timer|timers|alarm|alarms|remind)\b")
+_REMINDER_REAL_TIME = re.compile(
+    r"\b(?:for|in)\s+\d+|\bat\s+\d|\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|"
+    r"\b(?:tomorrow|tonight|today|noon|midnight|monday|tuesday|wednesday|thursday|"
+    r"friday|saturday|sunday|every\s+\w+)\b|\b\d+\s*(?:seconds?|minutes?|hours?|days?)\b")
+
+_REMINDER_POPUP_RX = re.compile(
+    r"\b(?:pop\s*up|popup|show up|appear)\b.*\b(?:computer|pc|screen|desktop)\b|"
+    r"\b(?:will|does|do)\s+(?:it|they|you)\b.*\b(?:pop\s*up|popup|show up|appear)\b")
+_REMINDER_SOUND_RX = re.compile(
+    r"\b(?:ring|rings|ringing|sound|sounds|beep|beeps|noise|alert)\b")
+_REMINDER_NOTIFY_RX = re.compile(
+    r"\b(?:system|windows|desktop|pc)\s+notifications?\b|"
+    r"\b(?:do|does|will|can)\s+you\s+(?:show|send|display)\b.*\bnotifications?\b")
+_REMINDER_CLOSED_RX = re.compile(
+    r"\b(?:app|jarvis|computer|pc)\b.*\b(?:closed|off|shut\s*down|not\s+running)\b|"
+    r"\beven\s+if\b.*\bclosed\b")
+#: "how do I ask for a reminder?" / "how do I set a timer up". The HOW shape is
+#: the family's even when the object is a pronoun ("how do I ask for one?", a
+#: follow-up); a named feature's "how do I set X up" has already stepped aside
+#: in `_asks_about_a_named_feature`.
+_REMINDER_HOWTO_HOW_RX = re.compile(
+    r"\bhow\s+(?:do|can|should)\s+i\s+(?:ask|set|make|create|add)\b")
+#: "what do I say to set a reminder?" - but NOT the sayable list's own "What
+#: should I say?" / "what do I say to use Galaxy": this one only answers when
+#: the sentence also names a reminder, timer or alarm.
+_REMINDER_HOWTO_SAY_RX = re.compile(r"what\s+(?:do|should)\s+i\s+say\b")
+#: A real "set a timer / set a reminder / set an alarm" request, however politely
+#: led in ("can you kindly set a timer for five minutes"): the ACTION path owns
+#: it and the capability answer must never swallow it (test_voice_reflex,
+#: 2026-11-01 integration).
+_REMINDER_ACTION_RX = re.compile(
+    r"\b(?:set|create|make|add|start)\s+(?:me\s+)?(?:a|an|the|another|my)?\s*"
+    r"(?:reminder|timer|alarm)s?\b")
+#: ... and it carries a REAL time or duration, in words or digits. A bare
+#: "can you set a timer?" stays a capability question (test_reminders_honesty);
+#: "set a timer for five minutes" is the action path's (test_voice_reflex).
+_REMINDER_ACTION_TIME_RX = re.compile(
+    r"\b(?:for|in)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|an?)\b|"
+    r"\b\d+\s*(?:seconds?|minutes?|hours?|days?)\b|"
+    r"\b(?:second|minute|hour|half\s+an\s+hour)\b|"
+    r"\b(?:at|by)\s+\d|"
+    r"\b(?:tomorrow|tonight|today|noon|midnight|morning|afternoon|evening)\b|"
+    r"\b(?:every|each)\s+(?:day|morning|afternoon|evening|week|monday|tuesday|"
+    r"wednesday|thursday|friday|saturday|sunday)\b")
+#: The nouns of OTHER features. "how do I set up a calendar connection" names
+#: one of these and no reminder at all, so it is the connect/calendar card's
+#: question, not a reminder how-to (test_calendar_answer, 2026-11-01).
+_OTHER_TOPIC_RX = re.compile(
+    r"\b(?:calendar|connect(?:ion|ed|ing|s)?|account|accounts|notes?|vault|email|"
+    r"file|files|wifi|bluetooth|home\s+assistant)\b")
+
+
+def _reminders_question(raw) -> Optional[Intent]:
+    """Capability questions about timers/alarms/reminders, from the RAW sentence.
+
+    None when the sentence already carries a time or a duration (a real
+    request), when it is ordinary conversation ("remind me what we said"), or
+    when it is about something else entirely. No card and no state: the answer
+    is fixed words built from REMINDER_SURFACES.
+    """
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    # A Settings sentence ("turn on Reminder sounds", "turn off ... notifications")
+    # belongs to the feature-control grammar, not to this capability family.
+    if re.match(r"(?:turn|switch)\s+(?:on|off)\b|\b(?:enable|disable)\b", text):
+        return None
+    # "open settings, sound" is the Settings no-route answer's sentence, not a
+    # question about what a reminder sounds like (test_jarvis_open, 2026-11-01).
+    if re.match(r"open\s+(?:jarvis\s+)?settings\b", text):
+        return None
+    if _REMINDER_REAL_TIME.search(text):
+        return None                         # the real set_reminder/timer path keeps it
+    # "ring my phone" / "find my phone" is the find-my-phone action, not a
+    # question about how a reminder sounds. The two lanes met here on
+    # 2026-11-01: the sound regex below is a plain .search("ring") and would
+    # otherwise swallow the command. Whole-sentence match, like its owner.
+    if _RING.fullmatch(text) or _RING_STOP.fullmatch(text):
+        return None
+    # The phone's own timer and state questions have their own answer (the
+    # phone door, 2026-10-31), and "set a timer on my phone" is not a claim
+    # about this PC's reminders. Same whole-sentence owners, so a reminder
+    # question that merely mentions the phone still gets this family's answer.
+    if _PHONE_TIMER.fullmatch(text) or _PHONE_STATE.fullmatch(text):
+        return None
+    # A question about a NAMED feature is the feature guide's, not this
+    # family's: "tell me about Ring my phone" carries "ring", and "how do I set
+    # Galaxy up" carries "set", but both are feature questions (2026-11-01).
+    if _asks_about_a_named_feature(text, str(raw or "")):
+        return None
+    if _REMINDER_CLOSED_RX.search(text):
+        return Intent("reminder_closed", {"surface": "closed"})
+    # A question whose nouns are another feature's and which never says reminder,
+    # timer or alarm is that feature's question, not this family's (2026-11-01).
+    if not _REMINDER_WORDS.search(text) and _OTHER_TOPIC_RX.search(text):
+        return None
+    # "What should I say?" is the sayable list's own question, so the SAY shape
+    # only answers when the sentence also names a reminder, timer or alarm.
+    # "how do I ask for one?" (a follow-up) keeps the HOW shape unconditionally.
+    if (_REMINDER_HOWTO_HOW_RX.search(text)
+            or (_REMINDER_HOWTO_SAY_RX.search(text) and _REMINDER_WORDS.search(text))):
+        return Intent("reminder_howto", {"surface": "howto"})
+    if _REMINDER_POPUP_RX.search(text):
+        return Intent("reminder_popup", {"surface": "popup"})
+    if _REMINDER_SOUND_RX.search(text):
+        return Intent("reminder_sound", {"surface": "sound"})
+    if _REMINDER_NOTIFY_RX.search(text):
+        return Intent("reminder_notify", {"surface": "notify"})
+    # A REAL set request - it names timer/reminder/alarm AND a time or duration,
+    # even politely led in - is the action path's, never the capability answer
+    # (test_voice_reflex, 2026-11-01 integration). A bare "can you set a timer?"
+    # stays here: it is the capability question the honesty lane answers.
+    if (_REMINDER_ACTION_RX.search(text)
+            and (_REMINDER_REAL_TIME.search(text)
+                 or _REMINDER_ACTION_TIME_RX.search(text))):
+        return None
+    if _REMINDER_WORDS.search(text) and re.search(
+            r"\bcan\s+you\b|\bcould\s+you\b|\bdo\s+you\b", text):
+        return Intent("reminder_capability", {"surface": "capability"})
+    return None
+
+
+def _reminder_phone_note() -> str:
+    return (" On the phone: while it is connected to the PC it shows an Android notification too, "
+            "but the PC is the clock and the phone sets no alarm of its own.")
+
+
+def _run_reminders(name: str, surface: str) -> "Result":
+    """Fixed, read-only answers from the measured truth table."""
+    phone = surface == "phone"
+    suffix = _reminder_phone_note()
+    if name == "reminder_capability":
+        if phone:
+            return Result("Yes - the timers, alarms and reminders live on the PC running Jarvis. "
+                          "Ask the PC \"remind me to call Mom at 6pm\", \"set a timer for 10 minutes\" "
+                          "or \"set an alarm for 7am\". They show in Brain, Work, Coming up on the PC, "
+                          "and the PC shows a Windows notification when one goes off (an alarm keeps "
+                          "ringing, a reminder or timer shows once)." + suffix +
+                          " If the PC's Jarvis is fully closed, no notification appears then, but the "
+                          "job is kept and appears when you open Jarvis; an alarm more than 10 minutes "
+                          "late is a quiet missed note.", "reminder_capability")
+        return Result("Yes. I keep timers, alarms, reminders and lists on this PC - ask \"remind me to "
+                      "call Mom at 6pm\", \"set a timer for 10 minutes\" or \"set an alarm for 7am\". They "
+                      "appear in Brain, Work, Coming up and the HUD's Reminders panel. When one goes off "
+                      "the PC shows a Windows notification while Jarvis is running: an alarm keeps ringing, "
+                      "a reminder or a timer shows once." + suffix +
+                      " If the Jarvis app is fully closed, no notification appears at the time, but the job "
+                      "is kept and shows when you open Jarvis; an alarm more than 10 minutes late is a quiet "
+                      "missed note.", "reminder_capability")
+    if name == "reminder_popup":
+        base = ("Yes - while Jarvis is running on the PC. A timer, alarm or reminder that goes off shows a "
+                "Windows notification (with the job's own words unless App lock or the hidden lists are on, "
+                "when it says only what kind of thing is due). An alarm keeps ringing; a reminder or timer "
+                "shows once.")
+        if phone:
+            return Result("On the PC, yes - while Jarvis is running it shows a Windows notification" + suffix,
+                          "reminder_popup")
+        return Result(base + suffix +
+                      " If the PC's Jarvis is fully closed, no pop-up appears at the time; the job is kept "
+                      "and shows in Coming up when you open it. A late alarm rings only if it is at most "
+                      "10 minutes late.", "reminder_popup")
+    if name == "reminder_sound":
+        base = ("On the PC, an alarm keeps ringing until it is dismissed; a reminder or a timer makes the "
+                "normal Windows notification sound once. The alarm is never held back by quiet hours, "
+                "reminders can be.")
+        if phone:
+            return Result("On the PC, an alarm keeps ringing and a reminder or timer makes the normal "
+                          "Windows notification sound once." + suffix, "reminder_sound")
+        return Result(base + suffix, "reminder_sound")
+    if name == "reminder_notify":
+        base = ("Yes, on the PC: it is a Windows notification (a toast) posted while Jarvis is running - "
+                "not a separate system alarm service. Alarms and reminders can each be switched off in "
+                "Settings, Notifications, and quiet hours hold back reminders but never an alarm.")
+        if phone:
+            return Result("On the PC it is a Windows notification while Jarvis is running." + suffix,
+                          "reminder_notify")
+        return Result(base + suffix, "reminder_notify")
+    if name == "reminder_closed":
+        base = ("No notification appears at the moment it is due while the Jarvis app is fully closed. "
+                "The PC keeps the job, and when you open Jarvis it is in Coming up; if it is an alarm that "
+                "went off more than 10 minutes late it is a quiet note saying it was missed, not a ring. "
+                "The phone shows an Android notification only while it is connected to the PC.")
+        return Result(("On the phone: " if phone else "") + base, "reminder_closed")
+    if name == "reminder_howto":
+        return Result("Say or type, for example: \"remind me to call Mom at 6pm\", \"set a timer for 10 "
+                      "minutes\", \"set an alarm for 7am\", or \"add milk to my shopping list\". Timers, "
+                      "one-time reminders and alarms need no approval card; they appear in Brain, Work, "
+                      "Coming up and the HUD's Reminders panel." + suffix, "reminder_howto")
+    return Result("Yes - see Brain, Work, Coming up for timers, alarms and reminders on this PC.",
+                  "reminder_capability")
+
+
+
+# --------------------------------------------------------------------------
+# Drop-in plug-ins: the measured catalogue (2026-10-31 honesty fix)
+#
+# The live owner asked "what plug-ins do you have integrated into you?" and
+# the model said it had no plug-ins, only built-in capabilities. False: the
+# loader (backend/jarvis_plugins.py) imports every folder in jarvis_plugins\
+# beside jarvis_hud.py and calls its own install(); plugins/ready/ holds 45
+# drop-in modules and plugins/loader/README.md documents it. This table is
+# generated from those folders' own plugin.json summaries and pinned by
+# backend/test_plugins_honesty.py, so a plug-in cannot silently vanish from
+# the answer. The installed state is read at runtime from jarvis_plugins.discover().
+# --------------------------------------------------------------------------
+
+PLUGIN_CATALOGUE = (
+    ('android-builder', 'Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for th...'),
+    ('antislop', "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buz..."),
+    ('auto-router', 'estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and a...'),
+    ('brain-reads', "the Brain's read-only routes (the Brain upgrades, and a chat's facts)."),
+    ('card-prefs', 'how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.'),
+    ('chatbot-limits-hud', "the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app."),
+    ('chatbot-routes', 'the routes both apps use to have Jarvis talk to an AI chatbot for the owner.'),
+    ('decks', 'review decks.'),
+    ('docker', "the containers on Jarvis's OWN list, and start/stop for them."),
+    ('documents', '"Folders Jarvis may look in": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part...'),
+    ('goals', '"Goals with one card per step".'),
+    ('google-calendar', 'Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time...'),
+    ('history-import', '"Bring in chats from ChatGPT, Claude, Gemini or DeepSeek".'),
+    ('jarvis-calendar', "Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch tur..."),
+    ('live', 'Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no "hey Jarvis" between turns.'),
+    ('media-index', 'searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (...'),
+    ('media', '"pause", "next song", "what\'s playing": play, pause, next, previous and now-playing for whatever is playing on this PC (Spotify, a browser tab, or...'),
+    ('model-lanes', 'the button that starts the model lane that is down.'),
+    ('model-recommendations', 'suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies.'),
+    ('news', 'news headlines in the morning briefing, from RSS/Atom feed addresses the owner names.'),
+    ('notes-edit', 'browse, open and edit any note in your Obsidian vault, from the desktop or the phone: one approval card per save, a File Guardian copy first, and t...'),
+    ('notion-obsidian', 'bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attac...'),
+    ('photo-reminder', '"Photo to reminder": a picture in, a PROPOSED reminder out. Nothing is set up here.'),
+    ('picture-card', '"which card draws the pictures, and what the chat does about it".'),
+    ('pictures', '"ask for a picture, and keep it" (the owner\'s decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and maki...'),
+    ('progress', "the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-..."),
+    ('projects', 'Projects, steps 1 and 2.'),
+    ('protected-items', 'a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card...'),
+    ('quiz', '"Quiz me on a text".'),
+    ('receipts', 'action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back.'),
+    ('retirement', 'the retirement what-if calculator.'),
+    ('sandbox', "the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once)."),
+    ('screen-attach', '"look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it.'),
+    ('secret-handoff', 'the host half of the owner-secret hand-off.'),
+    ('self-improve', "two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling..."),
+    ('send-file', "send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaq..."),
+    ('setup', 'the setup questionnaire: a guided path through settings that already exist.'),
+    ('skill-hub', "the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and..."),
+    ('sky', 'the sun, the moon and the weather behind the animal faces and the robot (which counts as an animal face for every option).'),
+    ('spending', '"How much did I spend on food last month?", added up from a bank export the owner dropped into a folder Jarvis may look in.'),
+    ('tool-updates', '"Check for tool updates", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newe...'),
+    ('tutorials', "Tutorials and the FAQ, for both apps, with the owner's progress."),
+    ('vault-organizer', 'plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the own...'),
+    ('vault', 'a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value.'),
+    ('voiceprint', "Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it..."),
+)
+
+
+def _plugin_entries():
+    """The installed drop-in folders on THIS PC, or None when unreadable."""
+    try:
+        import jarvis_plugins as P
+        return list(P.discover())
+    except Exception:                       # noqa: BLE001 - module absent/broken
+        return None
+
+
+def _plugin_names():
+    return [name for name, _summary in PLUGIN_CATALOGUE]
+
+
+def _plugin_purpose(name: str) -> str:
+    for n, summary in PLUGIN_CATALOGUE:
+        if n == name:
+            return summary
+    return ""
+
+
+def _plugin_installed_names(entries) -> list:
+    if entries is None:
+        return None
+    out = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        if e.get("error"):
+            continue
+        folder = str(e.get("folder") or e.get("name") or e.get("module") or "")
+        if not folder:
+            continue
+        out.append(folder)
+    return out
+
+
+def _plugin_list_sentence(installed) -> str:
+    names = _plugin_names()
+    if installed is None:
+        head = ("Yes - Jarvis has a real drop-in plug-in system: " + str(len(names)) +
+                " optional plug-ins are in the catalogue, each a folder under jarvis_plugins "
+                "beside jarvis_hud.py. I cannot read the plug-in folder on this PC from here, "
+                "so I cannot say which are installed right now.")
+    elif installed:
+        listed = installed[:8]
+        more = len(installed) - len(listed)
+        head = ("Yes - Jarvis has a real drop-in plug-in system, and " + str(len(installed)) +
+                " plug-in(s) are installed on this PC: " +
+                ", ".join(listed) + ((" and " + str(more) + " more") if more else "") + ".")
+    else:
+        head = ("Jarvis has a real drop-in plug-in system - " + str(len(names)) +
+                " plug-ins are in the catalogue - but none are installed on this PC right now.")
+    parts = [head]
+    sample = names[:10]
+    parts.append("The catalogue has " + str(len(names)) + " plug-ins; the first ten: " +
+                 ", ".join(sample) + ".")
+    if len(names) > len(sample):
+        parts.append("There are " + str(len(names) - len(sample)) + " more.")
+    parts.append("A plug-in is a folder under jarvis_plugins beside jarvis_hud.py; the loader "
+                 "imports its module and calls its own install() at start-up. Add one with "
+                 "scripts/add-plugin.ps1 -Name <name>, then restart Jarvis. The loader itself "
+                 "raises no approval card; an installed plug-in's own feature keeps its own one card.")
+    return " ".join(parts)
+
+
+def _plugin_install_sentence() -> str:
+    return ("Yes. On the PC, add a plug-in with scripts/add-plugin.ps1 -Name <name> (it copies "
+            "the folder from plugins/ready/), or copy the folder into jarvis_plugins\\ beside "
+            "jarvis_hud.py yourself, then restart Jarvis - the loader imports it at start-up. "
+            "To switch one off, remove its folder or put a file named disabled in it, and restart. "
+            "The loader itself raises no card; the plug-in's own feature keeps its own approval "
+            "card where it has one. The phone cannot install or remove plug-ins: it uses the "
+            "features once they are installed on the PC.")
+
+
+def _plugin_installed_sentence(name: str, installed) -> str:
+    wanted = " ".join(str(name or "").lower().split())
+    for n in _plugin_names():
+        if n.lower() == wanted or wanted == n.lower().replace("-", " "):
+            if installed is None:
+                return ("I cannot read the plug-in folder on this PC from here, so I cannot say "
+                        "whether " + n + " is installed right now. It is in the catalogue.")
+            if installed and n in installed:
+                return ("Yes, " + n + " is installed on this PC. " + _plugin_purpose(n) +
+                        " It is a folder under jarvis_plugins; restart Jarvis if it is not loaded.")
+            return ("No, " + n + " is not installed on this PC right now, though it is in the "
+                    "catalogue: " + _plugin_purpose(n) + " Add it with scripts/add-plugin.ps1 "
+                    "-Name " + n + ", then restart Jarvis.")
+    import difflib
+    near = difflib.get_close_matches(wanted.replace(" ", "-"), _plugin_names(), n=3, cutoff=0.4)
+    if not near:
+        near = _plugin_names()[:3]
+    return ("There isn't a Jarvis plug-in called \"" + str(name) + "\". The nearest real ones are " +
+            ", ".join(near) + ".")
+
+
+def _plugins_question(raw) -> Optional[Intent]:
+    """Plug-in capability questions, from the RAW sentence (2026-10-31)."""
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    # Not Jarvis's plug-ins: Obsidian, browsers, editors, WordPress, etc.
+    if re.search(r"\b(?:obsidian|chrome|firefox|edge|browser|vscode|visual studio|wordpress|"
+                 r"vst|audio|after effects|premiere|photoshop|figma|blender)\b", text):
+        return None
+    if "plug-in" not in text and "plugin" not in text:
+        return None
+    if re.search(r"\b(?:turn|switch)\s+(?:on|off)\b|\b(?:enable|disable)\b", text):
+        return None
+    if re.search(r"\b(?:what|which)\b.*\b(?:plug-?ins?)\b.*\b(?:integrated|installed|ready)\b", text) \
+            or re.search(r"\b(?:integrated|built)\b.*\bplug-?ins?\b", text) \
+            or re.search(r"\b(?:what|which)\s+plug-?ins?\b", text) \
+            or re.search(r"\bplug-?ins?\b.*\b(?:do you have|have you got|are installed|available)\b", text):
+        m = re.search(r"\b(?:what does|what is|what's|describe|explain)\s+(?:the\s+)?"
+                      r"[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?\s+plug-?in\b", text)
+        if m:
+            return Intent("plugin_about", {"name": m.group("name")})
+        m = re.search(r"\b(?:what does|what is|what's|describe|explain)\s+(?:the\s+)?"
+                      r"plug-?in\s+[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?(?:\s+do)?\b", text)
+        if m:
+            return Intent("plugin_about", {"name": m.group("name")})
+        m = re.search(r"\b(?:is|are)\s+(?:the\s+)?[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?\s+"
+                      r"(?:plug-?in\s+)?(?:installed|ready|enabled)\b", text)
+        if m:
+            return Intent("plugin_state", {"name": m.group("name")})
+        if re.search(r"\b(?:can i|how do i|how can i|where do i)\b.*\b(?:install|add|enable|remove)\b", text):
+            return Intent("plugin_install")
+        if re.search(r"\b(?:what does|what is|what's|describe|explain)\b", text):
+            m = re.search(r"plug-?in\s+(?:called\s+)?[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40})", text)
+            if m:
+                return Intent("plugin_about", {"name": m.group("name")})
+        return Intent("plugin_list")
+    if re.search(r"\b(?:can i|how do i|how can i|where do i)\b.*\b(?:install|add|enable)\b.*"
+                 r"\bplug-?in\b", text):
+        return Intent("plugin_install")
+    m = re.search(r"\b(?:what does|what is|what's|describe|explain)\s+(?:the\s+)?"
+                  r"[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?\s+plug-?in\b", text)
+    if m:
+        return Intent("plugin_about", {"name": m.group("name")})
+    m = re.search(r"\b(?:is|are)\s+(?:the\s+)?[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?\s+"
+                  r"plug-?in\s+(?:installed|ready|enabled)\b", text)
+    if m:
+        return Intent("plugin_state", {"name": m.group("name")})
+    m = re.search(r"\b(?:what does|what is|what's|describe|explain)\s+(?:the\s+)?"
+                  r"plug-?in\s+[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?(?:\s+do)?\b", text)
+    if m:
+        return Intent("plugin_about", {"name": m.group("name")})
+    return None
+
+
+def _run_plugins(name: str, f: dict, surface: str) -> "Result":
+    installed = _plugin_installed_names(_plugin_entries())
+    if name == "plugin_list":
+        if surface == "phone":
+            return Result("Jarvis's plug-ins are installed and managed on the PC, not on the phone - "
+                          "the phone uses the feature once it is installed there. " +
+                          _plugin_list_sentence(installed), "plugin_list")
+        return Result(_plugin_list_sentence(installed), "plugin_list")
+    if name == "plugin_state":
+        return Result(_plugin_installed_sentence(str(f.get("name") or ""), installed), "plugin_state")
+    if name == "plugin_about":
+        target = str(f.get("name") or "")
+        for n, summary in PLUGIN_CATALOGUE:
+            if n.lower().replace("-", " ") == target.lower() or n.lower() == target.lower():
+                return Result(n + ": " + summary, "plugin_about")
+        import difflib
+        near = difflib.get_close_matches(target.replace(" ", "-"), _plugin_names(), n=3, cutoff=0.4)
+        return Result("There isn't a Jarvis plug-in called \"" + target + "\". The nearest real ones "
+                      "are " + ", ".join(near or _plugin_names()[:3]) + ".", "plugin_about")
+    if name == "plugin_install":
+        return Result(_plugin_install_sentence(), "plugin_install")
+    return Result(_plugin_list_sentence(installed), "plugin_list")
+
+
+
+# --------------------------------------------------------------------------
+# Android app building (2026-10-31 honesty fix)
+#
+# Measured: backend/jarvis_android_builder.py builds a FIXED minimal WebView
+# Android project from the task's own index.html/app.js/app.css in one project
+# task - `gradlew.bat assembleDebug` behind the app_build_android card, then
+# `adb install -r <apk>` behind app_install_android. Needs the Android SDK,
+# a Java 17 JDK, the Gradle wrapper files beside jarvis_hud.py, and a cable
+# with USB debugging for the install; the first build downloads Gradle and the
+# Android Gradle plugin. It never writes Kotlin/manifest itself, adds no
+# permissions, no release signing and no Play Store. The live model said "I
+# can't build Android apps... I don't have the tools to write code, compile
+# projects", which is false.
+# --------------------------------------------------------------------------
+
+ANDROID_BUILD_ACTION = "app_build_android"
+ANDROID_INSTALL_ACTION = "app_install_android"
+
+
+def _android_state():
+    """The real toolchain report, or None when the module is not installed."""
+    try:
+        import jarvis_android_builder as AB
+        return AB.toolchain()
+    except Exception:                       # noqa: BLE001 - module absent
+        return None
+
+
+def _android_missing_words(state) -> str:
+    if state is None:
+        return ("I cannot read the Android toolchain from here; on the PC the builder needs "
+                "the Android SDK, a Java 17 JDK and its Gradle wrapper files.")
+    missing = list(state.get("missing") or [])
+    if not missing:
+        return "This PC has the Android SDK, a Java 17 JDK and the Gradle wrapper files, so it is ready."
+    return "This PC is missing: " + "; ".join(missing) + "."
+
+
+def _run_android(name: str, state) -> "Result":
+    ready = bool(state and state.get("ready"))
+    where = ("Writing the fixed template needs no card. Building raises ONE card "
+             "(" + ANDROID_BUILD_ACTION + ") that names the exact Gradle command, folder and "
+             "toolchain. Installing raises ONE more card (" + ANDROID_INSTALL_ACTION + ") that "
+             "names the exact adb command, APK and size. Never a Play Store upload.")
+    if name == "android_capability":
+        return Result("Yes - I can build a small Android app for you. In a project task, ask "
+                      "\"build the Android app\" or \"build my app and put it on my phone\". I write "
+                      "a fixed minimal Android project around your own index.html, app.js and "
+                      "app.css (I do not hand-write Kotlin or the manifest), then Gradle builds it "
+                      "and adb installs it over the cable. " + where + " " +
+                      _android_missing_words(state), "android_capability")
+    if name == "android_howto":
+        return Result("Say it in a project task, for example: \"build the Android app\" to build "
+                      "it, or \"build my app and put it on my phone\" to build and install. I write "
+                      "the template project first (no card), then the build card appears with the "
+                      "exact Gradle command, then the install card appears with the exact adb "
+                      "command and the APK. " + _android_missing_words(state), "android_howto")
+    if name == "android_needs":
+        return Result("The Android builder needs the Android SDK on this PC, a Java 17 JDK, its "
+                      "Gradle wrapper files beside jarvis_hud.py, and - only for the install - adb "
+                      "and a USB cable with debugging on the phone. A first build also downloads "
+                      "the Gradle distribution and the Android Gradle plugin. " +
+                      _android_missing_words(state), "android_needs")
+    if name == "android_build_install":
+        return Result("Build and install are two separate steps with two separate cards: " +
+                      ANDROID_BUILD_ACTION + " runs exactly `gradlew.bat assembleDebug` in the "
+                      "task's copy, and " + ANDROID_INSTALL_ACTION + " runs exactly `adb install -r` "
+                      "on the APK that build made. There is no adb shell, no uninstall, no release "
+                      "signing and no Play Store. " + _android_missing_words(state),
+                      "android_build_install")
+    return Result("Yes - ask in a project task: \"build the Android app\". " + where,
+                  "android_capability")
+
+
+_ANDROID_BUILD_RX = re.compile(
+    r"\b(?:can|could|are|will)\s+you\s+(?:be\s+able\s+to\s+)?(?:build|compile|make|create)"
+    r"\s+(?:an?\s+)?android\s+apps?\b|"
+    r"\bare\s+you\s+able\s+to\s+build\s+android\s+apps?\b|"
+    r"\bcan\s+you\s+build\s+(?:me\s+)?(?:an?\s+)?app\s+(?:for\s+)?(?:my\s+)?phone\b")
+_ANDROID_HOW_RX = re.compile(
+    r"\bhow\s+(?:do|can|should)\s+i\s+(?:ask|tell)\s+you\s+to\s+build\s+(?:one|it|an?\s+app)\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+get\s+(?:you\s+to\s+)?build\s+(?:one|it|an?\s+android\s+app)\b")
+_ANDROID_NEEDS_RX = re.compile(
+    r"\bwhat\s+(?:does|do)\s+(?:the\s+)?android\s+builder\s+need\b|"
+    r"\bwhat\s+(?:does|do)\s+(?:it|building\s+android\s+apps?)\s+need\b|"
+    r"\bwhat\s+do\s+you\s+need\s+to\s+build\s+(?:an?\s+)?android\s+app\b")
+_ANDROID_INSTALL_RX = re.compile(
+    r"\bcan\s+you\s+(?:compile|build)\s+and\s+(?:install|put)\s+it\b|"
+    r"\bcan\s+you\s+install\s+(?:it|the\s+app|an?\s+apk)\s+(?:on|to)\s+my\s+phone\b|"
+    r"\bcan\s+you\s+put\s+(?:it|the\s+app)\s+on\s+my\s+phone\b")
+
+
+def _android_question(raw) -> Optional[Intent]:
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if _ANDROID_HOW_RX.search(text):
+        return Intent("android_howto")
+    if _ANDROID_NEEDS_RX.search(text):
+        return Intent("android_needs")
+    if _ANDROID_INSTALL_RX.search(text):
+        return Intent("android_build_install")
+    if _ANDROID_BUILD_RX.search(text):
+        return Intent("android_capability")
+    return None
+
+
+
+# --------------------------------------------------------------------------
+# Goals (2026-10-31 honesty fix)
+#
+# Measured: plugins/ready/goals + backend/jarvis_goals.py keep goals in
+# goals.db (one row per goal: the owner's words, a short plan of at most
+# MAX_STEPS steps, status), shown in Brain, Work, Goals. Accepting a drafted
+# goal raises ONE ordinary approval card; ticking a step and the weekly
+# check-in raise NO card; every acting step still needs its own card. There is
+# no automatic progress tracking - a step is met by the owner's tick or, where
+# a step names a project benchmark, when that benchmark's number reaches its
+# target on a read/check-in; nothing is ticked silently. The live model said
+# "I don't have a built-in goal-tracking system that updates automatically",
+# which is false.
+# --------------------------------------------------------------------------
+
+MAX_GOAL_STEPS = 7
+
+
+def _goals_store():
+    """The real goals store, or None when the module is not installed."""
+    try:
+        import jarvis_goals as G
+        return G.Goals.get()
+    except Exception:                       # noqa: BLE001 - module absent
+        return None
+
+
+def _goal_rows() -> list:
+    store = _goals_store()
+    if store is None:
+        return None
+    try:
+        return list(store.list())
+    except Exception:                       # noqa: BLE001 - unreadable store
+        return None
+
+
+def _goal_list_sentence(surface: str) -> "Result":
+    rows = _goal_rows()
+    if rows is None:
+        return Result("The goals feature lives on the PC (Brain, Work, Goals), but I cannot read "
+                      "the goals store from here right now.", "goal_list")
+    if not rows:
+        return Result("You have no goals tracked on this PC right now. Goals live in Brain, Work, "
+                      "Goals; accepting a drafted goal raises one ordinary card, and ticking a step "
+                      "does not.", "goal_list")
+    shown = []
+    for row in rows[:8]:
+        text = str(row.get("text") or "").strip()
+        if text:
+            shown.append(text)
+    more = max(0, len(rows) - len(shown))
+    where = ("The goals are on the PC in Brain, Work, Goals." if surface != "phone"
+             else "The goals are on the PC - the phone shows them through the same feature.")
+    return Result("You are tracking " + str(len(rows)) + " goal(s) on this PC: " +
+                  "; ".join(shown) + ((" and " + str(more) + " more") if more else "") + ". " +
+                  where + " Accepting a drafted goal raises one card; ticking a step raises none, "
+                  "and nothing is ticked silently.", "goal_list")
+
+
+def _goal_find(name: str) -> dict:
+    rows = _goal_rows()
+    wanted = " ".join(str(name or "").lower().split())
+    if not rows or not wanted:
+        return None
+    for row in rows:
+        text = str(row.get("text") or "")
+        if wanted in text.lower():
+            return row
+    return None
+
+
+def _run_goals(name: str, f: dict, surface: str) -> "Result":
+    if name == "goal_list":
+        return _goal_list_sentence(surface)
+    if name == "goal_state":
+        row = _goal_find(str(f.get("name") or ""))
+        if row is not None:
+            return Result("Yes - \"" + str(row.get("text") or "") + "\" is one of your goals on this "
+                          "PC. " + str(row.get("status") or "") + ". It is in Brain, Work, Goals.",
+                          "goal_state")
+        return Result("I don't see a goal called \"" + str(f.get("name") or "") + "\" on this PC. "
+                      "Your goals are in Brain, Work, Goals; add one there (or ask me in chat for a "
+                      "short plan to paste in).", "goal_state")
+    if name == "goal_about":
+        return Result("Goals keep a plan you edit, with at most 7 steps, in Brain, Work, Goals on the "
+                      "PC. Accepting a drafted goal raises ONE ordinary approval card; ticking a step "
+                      "and the weekly check-in raise NO card. Every acting step still needs its own "
+                      "card. Nothing ticks a step silently: a step is met when you tick it, or where it "
+                      "names a project benchmark, when that number reaches its target on a read/check-in.",
+                      "goal_about")
+    if name == "goal_update":
+        return Result("Open Brain, Work, Goals and tick the step yourself - ticking and the weekly "
+                      "check-in need no card. Say \"add a goal\" or describe the goal in chat if you "
+                      "want a short plan drafted first; accepting that draft raises ONE ordinary card. "
+                      "Every acting step still needs its own card.", "goal_update")
+    if name == "goal_capability":
+        rows = _goal_rows()
+        count = (" I can read the PC's goals store from here." if rows is not None
+                 else " I cannot read the goals store from here, but the feature is on the PC.")
+        return Result("Yes - I keep track of goals for you on this PC: each goal is your own words "
+                      "plus a short editable plan of at most 7 steps, kept in Brain, Work, Goals."
+                      + count + " Accepting a drafted goal raises ONE ordinary card; ticking a step "
+                      "and the weekly check-in raise NO card. Progress is not tracked automatically - "
+                      "you tick steps, and a step that names a project benchmark is met when that "
+                      "number reaches its target.", "goal_capability")
+    return Result("Yes - goals live in Brain, Work, Goals on this PC.", "goal_capability")
+
+
+_GOAL_CAP_RX = re.compile(
+    r"\b(?:can|could|do|will)\s+you\s+(?:keep\s+track\s+of|track|manage|remember|help\s+with)\s+"
+    r"(?:my\s+)?goals?\b|\bcan\s+you\s+(?:keep\s+track\s+of|track)\s+(?:my\s+)?goals?\b|"
+    r"\bdo\s+you\s+have\s+(?:a\s+)?(?:built-in\s+)?goal[- ]tracking\b")
+_GOAL_LIST_RX = re.compile(
+    r"\bwhat\s+goals\s+(?:am\s+i|are\s+on|do\s+i\s+have)\b|"
+    r"\bwhat\s+(?:are\s+)?my\s+goals\b|\b(?:list|show)\s+(?:me\s+)?my\s+goals\b")
+_GOAL_ABOUT_RX = re.compile(
+    r"\bwhat\s+(?:does|do)\s+(?:the\s+)?goals?\s+(?:feature|system|tracker)?\s*do\b|"
+    r"\bwhat\s+is\s+the\s+goals?\s+feature\b|\bhow\s+does\s+(?:the\s+)?goal[- ]tracking\b")
+_GOAL_UPDATE_RX = re.compile(
+    r"\bhow\s+(?:do|can)\s+i\s+(?:add|create|make|update|tick|mark)\s+(?:a\s+)?goal\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+(?:add|create|make)\s+a\s+goal\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+update\s+(?:my\s+)?(?:progress|goal)\b")
+_GOAL_STATE_RX = re.compile(
+    r"\bis\s+(?:the\s+)?[\"']?(?P<name>[a-z0-9][a-z0-9 ,-]{2,50}?)[\"']?\s+(?:goal\s+)?"
+    r"(?:one\s+of\s+my\s+goals|tracked|a\s+goal\s+of\s+mine)\b|"
+    r"\bdo\s+i\s+have\s+a\s+goal\s+(?:called|about)\s+[\"']?(?P<name2>[a-z0-9][a-z0-9 ,-]{2,50})")
+
+
+def _goals_question(raw) -> Optional[Intent]:
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if re.search(r"\b(?:company|business|football|game|score|sales|team|project)\s+goals?\b", text):
+        return None
+    if re.search(r"\b(?:track|tracking)\s+(?:my\s+)?(?:package|order|parcel|time|spending|sleep)\b", text):
+        return None
+    # "what does Goals do" / "tell me about Goals" is the feature guide's own
+    # explanation (all 168 catalogue rows must answer through it); the family's
+    # goal_about answer stays for a phrasing the guide does not claim
+    # (2026-11-01 integration).
+    if _asks_about_a_named_feature(text, str(raw or "")):
+        return None
+    if _GOAL_STATE_RX.search(text):
+        m = _GOAL_STATE_RX.search(text)
+        name = m.group("name") or m.group("name2") or ""
+        return Intent("goal_state", {"name": name.strip()})
+    if _GOAL_LIST_RX.search(text):
+        return Intent("goal_list")
+    if _GOAL_UPDATE_RX.search(text):
+        return Intent("goal_update")
+    if _GOAL_ABOUT_RX.search(text):
+        return Intent("goal_about")
+    if _GOAL_CAP_RX.search(text):
+        return Intent("goal_capability")
+    if re.search(r"\b(?:my\s+)?goals?\b", text) and re.search(r"\b(?:can you|do you|help|track)\b", text):
+        return Intent("goal_capability")
+    return None
+
+
+
+# --------------------------------------------------------------------------
+# The price / flight radar (2026-10-31 honesty fix)
+#
+# Measured: backend/jarvis_price_radar.py (F1, owner-approved 2026-10-21) is a
+# READ-ONLY flight engine + SQLite price history. It reads Google Flights'
+# public search page (unofficial, experimental, can break), keeps target
+# prices/history, and has NO booking/cart/seat-hold/checkout path. It is OFF by
+# default (`[price_radar] enabled = false`); turning it on raises the ordinary
+# `change_own_config` approval card; there is no route, no app surface and no
+# chat lookup door yet. The live model said "I can't book or check real-time
+# flight availability directly... pull up travel sites", which is wrong about
+# reading prices: the engine exists, it is just off and unwired.
+# --------------------------------------------------------------------------
+
+PRICE_RADAR_TOML_KEY = "[price_radar] enabled"
+
+
+def _price_radar_state():
+    """{'available': bool, 'enabled': bool}; False/False when not installed."""
+    try:
+        import jarvis_price_radar as R
+        return {"available": True, "enabled": bool(R.enabled())}
+    except Exception:                       # noqa: BLE001 - module absent/broken
+        return {"available": False, "enabled": False}
+
+
+def _run_price_radar(name: str, state: dict) -> "Result":
+    available = bool(state.get("available"))
+    on = bool(state.get("enabled"))
+    if not available:
+        return Result("The price and flight radar is not installed on this PC. When it is, it is "
+                      "read-only and off by default.", "price_radar_state")
+    if name == "price_radar_state":
+        if on:
+            return Result("Yes - the price and flight radar is ON. It reads Google Flights' public "
+                          "search page (unofficial and experimental) and keeps a local price history; "
+                          "it never books, holds a seat or buys anything. This chat can run a read-only lookup now; "
+                          "there is no app screen yet.", "price_radar_state")
+        return Result("No - the price and flight radar is OFF by default. It is read-only (it never "
+                      "books or buys), and it is turned on by setting `[price_radar] enabled = true` in the "
+                      "Jarvis settings file; no chat approval card for that switch exists yet. "
+                      "There is no app screen yet, but this chat can run a read-only lookup once it is on.", "price_radar_state")
+    if name == "price_radar_about":
+        return Result("The price and flight radar is a read-only module on this PC: it reads Google "
+                      "Flights' public search page (unofficial, experimental, can change or break at "
+                      "any time) and keeps a local SQLite price history with target prices. It never "
+                      "books, holds a seat, adds to a cart or checks out; there is no such code path. "
+                      "It is off by default and has no chat route or app screen yet." +
+                      ("" if on else " It is off right now."), "price_radar_about")
+    if name == "price_radar_enable":
+        return Result("To turn on the price and flight radar, set `[price_radar] enabled = true` in "
+                      "Jarvis's settings file (the same file the other switches live in). No chat approval card "
+                      "for that switch exists yet; turning it off is immediate. There is no app screen "
+                      "yet; this chat can run a read-only lookup once it is on. "
+                      "It stays read-only: prices only, never a booking.", "price_radar_enable")
+    if name == "price_radar_book":
+        return Result("No - I cannot book a flight. The price and flight radar is read-only: it only "
+                      "reads public prices and keeps a local price history. It has no booking, cart, "
+                      "seat-hold or checkout code path at all, only that one read-only page request.",
+                      "price_radar_book")
+    if name == "price_radar_lookup":
+        base = ("I can read flight prices with the price and flight radar, but only when it is on. " +
+                ("It is ON right now. " if on else
+                 "It is OFF by default - set `[price_radar] enabled = true` in the settings file "
+                 "(no chat approval card for that switch exists yet) - and " ) +
+                "there is no app screen yet. Once it is on, this chat can run a read-only lookup "
+                "from a route and dates. It reads Google Flights' public search page "
+                "(unofficial and experimental, can break), returns prices only, and never books or "
+                "holds anything.")
+        return Result(base, "price_radar_lookup")
+    if name == "price_radar_track":
+        return Result("Yes - when the radar is on it keeps a local price history with target prices, "
+                      "so a price can be watched over time. It is read-only and never buys; it is "
+                      "OFF by default, has no app screen yet, and turning it on is done in the settings file "
+                      "today; no chat card exists for that switch." if not on else
+                      "Yes - the radar is on and keeps a local price history with target prices for "
+                      "the items it reads. It is read-only and never buys, and there is no app "
+                      "screen yet.", "price_radar_track")
+    return Result("The price and flight radar is read-only and off by default.", "price_radar_state")
+
+
+
+# --------------------------------------------------------------------------
+# The read-only, switch-gated flight lookup chat door (2026-10-31, ruling 3).
+#
+# OFF: say so and name the settings-file switch ("[price_radar] enabled =
+# true"); no chat approval card for that switch exists yet, so no card path is
+# offered or claimed. ON: run the existing engine
+# (jarvis_price_radar.PriceStore + check_route) for one route/dates. The answer
+# ALWAYS ends with the approved disclaimer; a changed/empty page or a network
+# error is a one-line notice, never an invented price. No booking path exists.
+# --------------------------------------------------------------------------
+
+PRICE_RADAR_DISCLAIMER = "Experimental read-only check; Jarvis cannot book or hold tickets"
+PRICE_RADAR_OFF_SAID = (
+    "The price and flight radar is OFF by default, so I did not search. Turning it on is "
+    "done in the settings file today: set [price_radar] enabled = true; no chat approval card "
+    "for that switch exists yet. Once it is on I can run a read-only price check.")
+PRICE_RADAR_NOTICE = ("I could not read a price for that route just now - the public page may have "
+                      "changed or returned nothing. Nothing was booked or held.")
+
+_CITY_IATA = {
+    "las vegas": "LAS", "seattle": "SEA", "new york": "JFK", "los angeles": "LAX",
+    "san francisco": "SFO", "chicago": "ORD", "miami": "MIA", "boston": "BOS",
+    "denver": "DEN", "paris": "CDG", "london": "LHR", "tokyo": "NRT",
+    "reykjavik": "KEF", "dublin": "DUB", "rome": "FCO", "madrid": "MAD",
+    "berlin": "BER", "amsterdam": "AMS", "dubai": "DXB", "sydney": "SYD",
+}
+_PRICE_MONTHS = {m: i + 1 for i, m in enumerate(
+    ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))}
+_PRICE_DATE = re.compile(
+    r"(?P<mon>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
+    r"dec(?:ember)?)\.?\s+(?P<day>\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(?P<year>\d{4}))?")
+
+
+def _price_date(s: str, now: float):
+    """One month/day (optional year) -> ISO date string, or ''."""
+    m = _PRICE_DATE.search(s or "")
+    if not m:
+        return ""
+    try:
+        import time as _t
+        year = int(m.group("year") or _t.localtime(now).tm_year)
+        mon = _PRICE_MONTHS[m.group("mon")[:3]]
+        day = int(m.group("day"))
+        if not (1 <= day <= 31 and 1 <= mon <= 12):
+            return ""
+        return "%04d-%02d-%02d" % (year, mon, day)
+    except Exception:                       # noqa: BLE001
+        return ""
+
+
+def _price_flight_parts(s: str, now: float):
+    """(origin, destination, depart, return) strings from a flight sentence."""
+    text = " ".join(str(s or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not re.search(r"\b(?:flight|flights|airfare|ticket|tickets)\b", text):
+        return None
+    if re.search(r"\b(?:price\s+of|cost\s+of)\b.*\b(?:milk|bread|coffee|house|car|gas)\b", text):
+        return None
+    origin = destination = ""
+    dates_rx = r"\s+(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}|(?:on|for|leaving|departing|between|from)\b)"
+    m = re.search(r"\bfrom\s+(?P<a>[a-z ]{2,30}?)\s+to\s+(?P<b>[a-z ]{2,30}?)" + dates_rx + r"|\bfrom\s+(?P<a2>[a-z ]{2,30}?)\s+to\s+(?P<b2>[a-z ]{2,30}?)(?:[,.]|$)", text)
+    if not m:
+        m = re.search(r"\bto\s+(?P<b>[a-z ]{2,30}?)" + dates_rx + r"|\bto\s+(?P<b2>[a-z ]{2,30}?)(?:[,.]|$)", text)
+    if m:
+        origin = (m.groupdict().get("a") or m.groupdict().get("a2") or "").strip()
+        destination = (m.groupdict().get("b") or m.groupdict().get("b2") or "").strip()
+    if not destination:
+        return None
+    dates = []
+    for dm in _PRICE_DATE.finditer(text):
+        iso = _price_date(dm.group(0), now)
+        if iso and (not dates or iso != dates[-1]):
+            dates.append(iso)
+    depart = dates[0] if dates else ""
+    ret = dates[1] if len(dates) > 1 else ""
+    return (origin, destination, depart, ret)
+
+
+def _price_radar_engine_lookup(origin: str, dest: str, depart: str, return_date: str) -> dict:
+    """Run the REAL engine for one route. Tests monkeypatch this boundary."""
+    import jarvis_price_radar as R
+    store = R.PriceStore()
+    route = store.add_route(origin, dest, depart, return_date=(return_date or None),
+                            cabin="economy", max_stops=None)
+    return R.check_route(store, route)
+
+
+def _price_radar_fares(answer: dict, origin: str, dest: str, depart: str, return_date: str) -> str:
+    snap = (answer or {}).get("snapshot") or {}
+    if not (answer or {}).get("ok") or not snap.get("ok"):
+        return PRICE_RADAR_NOTICE
+    cents = snap.get("lowest_price_cents")
+    if not isinstance(cents, int) or cents <= 0:
+        return PRICE_RADAR_NOTICE
+    price = "$%d" % (cents // 100)
+    bits = [price]
+    if snap.get("airline"):
+        bits.append(str(snap["airline"]))
+    stops = snap.get("stops")
+    if stops == 0:
+        bits.append("nonstop")
+    elif isinstance(stops, int):
+        bits.append("%d stop%s" % (stops, "" if stops == 1 else "s"))
+    mins = snap.get("duration_minutes")
+    if isinstance(mins, int) and mins > 0:
+        bits.append("%dh%02dm" % (mins // 60, mins % 60))
+    window = depart + ((" to " + return_date) if return_date else "")
+    return ("Experimental read-only check: lowest fare I can read from %s to %s (%s) is %s." %
+            (origin, dest, window, ", ".join(bits)))
+
+
+def _run_price_radar_flight(f: dict) -> "Result":
+    state = _price_radar_state()
+    if not state.get("available"):
+        return Result("The price and flight radar is not installed on this PC.", "price_radar_flight")
+    if not state.get("enabled"):
+        return Result(PRICE_RADAR_OFF_SAID, "price_radar_flight")
+    origin = str(f.get("origin") or "")
+    dest = str(f.get("dest") or "")
+    depart = str(f.get("depart") or "")
+    ret = str(f.get("return") or "")
+    if not origin:
+        return Result("Which airport are you flying from? Say e.g. \"search flights from Seattle to "
+                      "Las Vegas on Nov 26\" - or say \"turn on price radar\" first if I said it is off.",
+                      "price_radar_flight")
+    if not depart:
+        return Result("Which date should I check? Say e.g. \"search flights from Seattle to Las Vegas "
+                      "on Nov 26\".", "price_radar_flight")
+    try:
+        answer = _price_radar_engine_lookup(origin, dest, depart, ret)
+    except Exception:                       # noqa: BLE001 - network/page/parse
+        return Result(PRICE_RADAR_NOTICE + " " + PRICE_RADAR_DISCLAIMER, "price_radar_flight")
+    body = _price_radar_fares(answer, origin, dest, depart, ret)
+    return Result(body + " " + PRICE_RADAR_DISCLAIMER, "price_radar_flight")
+
+
+def _price_radar_flight_question(raw, now: float = 0.0) -> Optional[Intent]:
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    if not re.search(r"\b(?:search|find|check|look\s+up|show)\b.*\b(?:flights?|airfare|tickets?)\b", text) \
+            and not re.search(r"\bflights?\s+(?:from|to)\b", text):
+        return None
+    parts = _price_flight_parts(text, now)
+    if parts is None:
+        return None
+    origin, destination, depart, ret = parts
+    return Intent("price_radar_flight", {"origin": origin, "dest": destination,
+                                         "depart": depart, "return": ret})
+
+
+_PRICE_RADAR_BOOK_RX = re.compile(
+    r"\b(?:can|could|will|do)\s+you\s+(?:book|reserve|buy|purchase)\s+(?:me\s+)?(?:a\s+)?"
+    r"(?:flight|flights|ticket|tickets|seat|seats)\b|"
+    r"\bbook\s+(?:me\s+)?(?:a\s+)?(?:flight|ticket)s?\b")
+_PRICE_RADAR_ENABLE_RX = re.compile(
+    r"\bhow\s+(?:do|can)\s+i\s+(?:turn\s+on|enable|switch\s+on|start)\s+(?:the\s+)?"
+    r"(?:price\s*(?:and|or)?\s*flight\s*|flight\s*|price\s*)?radar\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+(?:turn\s+on|enable)\s+(?:flight|price)\s+(?:prices?|radar)\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+(?:turn\s+on|enable|switch\s+on)\s+(?:the\s+)?"
+    r"flight\s+price\s+radar\b|"
+    r"\bis\s+the\s+(?:flight|price)\s+radar\s+(?:available|there)\b")
+_PRICE_RADAR_STATE_RX = re.compile(
+    r"\bis\s+(?:the\s+)?(?:price\s*(?:and|or)?\s*flight\s*|flight\s*|price\s*)?radar\s+"
+    r"(?:on|off|enabled|disabled|running)\b|"
+    r"\b(?:is|has)\s+(?:the\s+)?(?:flight|price)\s+radar\b")
+_PRICE_RADAR_TRACK_RX = re.compile(
+    r"\bcan\s+you\s+(?:track|watch|follow)\s+(?:a\s+|the\s+)?(?:flight\s+)?price\b|"
+    r"\b(?:track|watch)\s+(?:a\s+)?(?:flight\s+)?price\s+(?:for\s+me|over\s+time)\b")
+_PRICE_RADAR_ABOUT_RX = re.compile(
+    r"\bwhat\s+(?:does|is)\s+(?:the\s+)?(?:price\s*(?:and|or)?\s*flight\s*|flight\s*|price\s*)?"
+    r"radar\s+(?:do|for|about)?\b|"
+    r"\bwhat\s+is\s+the\s+(?:price|flight)\s+radar\b")
+_PRICE_RADAR_LOOKUP_RX = re.compile(
+    r"\bcan\s+you\s+(?:search|find|check|look\s+up)\s+(?:for\s+)?(?:me\s+)?(?:a\s+)?"
+    r"(?:flight|flights|airfare|flight\s+prices?)\b|"
+    r"\bcan\s+you\s+check\s+flight\s+prices?\b|"
+    r"\bcan\s+you\s+check\s+(?:the\s+)?prices?\s+of\s+flights?\b")
+
+
+def _price_radar_question(raw) -> Optional[Intent]:
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if _PRICE_RADAR_BOOK_RX.search(text):
+        return Intent("price_radar_book")
+    if _PRICE_RADAR_ENABLE_RX.search(text):
+        return Intent("price_radar_enable")
+    if _PRICE_RADAR_STATE_RX.search(text):
+        return Intent("price_radar_state")
+    if _PRICE_RADAR_TRACK_RX.search(text):
+        return Intent("price_radar_track")
+    if _PRICE_RADAR_ABOUT_RX.search(text):
+        return Intent("price_radar_about")
+    if _PRICE_RADAR_LOOKUP_RX.search(text):
+        return Intent("price_radar_lookup")
     return None
 
 
@@ -5416,6 +6892,279 @@ _PICTURES = re.compile(
     r"(?:make|draw|create|generate|paint)\s+(?:me\s+)?(?:a\s+|an\s+)?"
     r"(?:picture|image|drawing)\b.*")
 _NOTE_NAMES = "notes, the Notes plate, or Obsidian itself"
+
+#: The cloud/API honesty questions (2026-10-31, owner-reported). The local
+#: model denied that any external API existed while the Cloud preset was
+#: chosen and its key was saved (owner's screenshots); these ten shapes are
+#: answered from the PC's real state below, with no model, and never with a
+#: key or a fragment of one.
+_CLOUD_CONNECTED = re.compile(
+    r"(?:are|do)\s+you\s+(?:have\s+(?:a\s+)?(?:connection|access)\s+to|connect(?:ed)?\s+to|"
+    r"use|using)\s+(?:my\s+|the\s+|a\s+)?(?:deepseek(?:\s+api)?|cloud(?:\s+api)?|api)\b.*")
+_CLOUD_HAVE_KEY = re.compile(
+    r"(?:do|did)\s+you\s+(?:have|got|get|keep|store)\s+(?:my\s+|the\s+|a\s+)?"
+    r"(?:deepseek|cloud)?\s*(?:api\s+)?key\b.*")
+_CLOUD_USING = re.compile(
+    r"(?:are|is)\s+(?:you|jarvis)\s+(?:using|on)\s+the\s+cloud\b.*")
+_CLOUD_WHICH_ANSWER = re.compile(
+    r"(?:is|was)\s+(?:this|that|the\s+last)\s+answer\s+(?:from|by)\s+"
+    r"(?:deepseek|the\s+cloud|the\s+local\s+model|the\s+model\s+on\s+this\s+pc)\b.*")
+_CLOUD_HOW_ESCALATE = re.compile(
+    r"how\s+(?:do|can|should)\s+i\s+(?:escalate|send|move|pass)\s+"
+    r"(?:something|this|that|a\s+question|it)\s+(?:to|into)\s+the\s+cloud\b.*")
+_CLOUD_WHAT_SENT = re.compile(
+    r"what\s+(?:gets|is)\s+sent\s+(?:when|if)\s+(?:you|jarvis)\s+(?:use|uses|using)\s+the\s+cloud\b.*"
+    r"|what\s+goes\s+to\s+the\s+cloud\b.*")
+_CLOUD_NEVER_SENT = re.compile(
+    r"what\s+(?:never\s+gets\s+sent|is\s+never\s+sent|does\s+not\s+go|doesn't\s+go)\b.*")
+_CLOUD_CALL_API = re.compile(
+    r"(?:can\s+you\s+)?(?:call|use|query|access|reach)\s+(?:the\s+)?"
+    r"(?:deepseek|cloud)\s+api\b.*")
+_CLOUD_ON_OFF = re.compile(
+    r"is\s+the\s+cloud\s+(?:on|off|enabled|disabled)\b.*")
+_CLOUD_PROVIDER = re.compile(
+    r"(?:which|what)\s+(?:provider|service|api)\s+(?:is|does)\s+the\s+cloud\s+"
+    r"(?:preset\s+)?(?:using|use)\b.*")
+
+
+def _cloud_facts() -> dict:
+    """The real cloud state, or a safe empty one - never a key."""
+    try:
+        import jarvis_presets as P
+        return P.cloud_state()
+    except Exception:                                       # noqa: BLE001
+        return {"available": False, "provider": "", "provider_name": "",
+                "company": "", "host": "", "model": "", "key_saved": None,
+                "ready": "", "escalate": False, "escalate_why": "",
+                "deepseek_key_saved": None}
+
+
+def _cloud_who(st: dict) -> str:
+    return (f"{st.get('company') or st.get('provider_name') or 'the cloud service'}"
+            f" ({st.get('host') or 'its host'}, model {st.get('model') or 'not named'})")
+
+
+def _cloud_readiness(st: dict) -> str:
+    return ("It can be used now." if not st.get("ready")
+            else "It cannot be used right now: " + str(st.get("ready")).rstrip(".") + ".")
+
+
+def _cloud_honesty_prompt(s: str) -> Optional[Intent]:
+    """One fixed, state-read answer for a cloud/API question - no model."""
+    shape = ""
+    if _CLOUD_USING.fullmatch(s):
+        shape = "using"
+    elif _CLOUD_CONNECTED.fullmatch(s) or _CLOUD_CALL_API.fullmatch(s):
+        shape = "call" if _CLOUD_CALL_API.fullmatch(s) else "connected"
+    elif _CLOUD_HAVE_KEY.fullmatch(s):
+        shape = "key"
+    elif _CLOUD_WHICH_ANSWER.fullmatch(s):
+        shape = "which_answer"
+    elif _CLOUD_HOW_ESCALATE.fullmatch(s):
+        shape = "how"
+    elif _CLOUD_WHAT_SENT.fullmatch(s):
+        shape = "sent"
+    elif _CLOUD_NEVER_SENT.fullmatch(s):
+        shape = "never"
+    elif _CLOUD_ON_OFF.fullmatch(s):
+        shape = "on_off"
+    elif _CLOUD_PROVIDER.fullmatch(s):
+        shape = "provider"
+    if not shape:
+        return None
+    return Intent("cloud_honesty", {"shape": shape})
+
+
+def _run_cloud_honesty(f: dict) -> Result:
+    """The fixed cloud/API answer, read from the real PC state."""
+    shape = str(f.get("shape") or "")
+    st = _cloud_facts()
+    provider = st.get("provider") or ""
+    who = _cloud_who(st)
+    deepseek_saved = st.get("deepseek_key_saved")
+    chosen_is_deepseek = provider == "deepseek_api"
+    key = st.get("key_saved")
+    if shape == "connected":
+        if not provider:
+            if deepseek_saved:
+                return Result(
+                    "Not connected, no. Your DeepSeek API key is saved on this PC, but "
+                    "no cloud service is chosen: choose the Cloud row in the Presets "
+                    "menu and pick DeepSeek (API) first. Until then every answer is "
+                    "written by the model on this PC.", "cloud_honesty")
+            return Result(
+                "Not connected, no. No cloud API service is chosen on this PC and no "
+                "DeepSeek API key is saved, so every answer is written by the model on "
+                "this PC. The Cloud row in the Presets menu is where a service is chosen.",
+                "cloud_honesty")
+        if not chosen_is_deepseek:
+            return Result(
+                f"Not to DeepSeek, no. The cloud service chosen on this PC is {who}."
+                + (" A DeepSeek API key is also saved, but DeepSeek is not the chosen "
+                   "service." if deepseek_saved else "")
+                + " Nothing is sent to any of them without your yes.", "cloud_honesty")
+        if key is False:
+            return Result(
+                f"Not yet, no. {who} is the chosen cloud service, but no DeepSeek API "
+                "key is saved on this PC, so no question can be sent to it. The key is "
+                "added in Windows Credential Manager, on the PC only, and I never show "
+                "or repeat it.", "cloud_honesty")
+        if key is None:
+            return Result(
+                f"The Cloud preset is set to {who}, but this PC cannot read Windows "
+                "Credential Manager, so I cannot say whether its key is saved. Nothing "
+                "is sent to it without your yes.", "cloud_honesty")
+        if st.get("ready"):
+            return Result(
+                f"Partly, no. {who} is the chosen cloud service and its key is saved, "
+                f"but it cannot be used right now: {str(st['ready']).rstrip('.')}. "
+                "Nothing is sent to it until that is fixed.", "cloud_honesty")
+        escalate = (st.get("escalate") and
+                    " The standing escalation switch is ON, so a hard question may go "
+                    "there without asking you first after every privacy gate." or
+                    " The standing escalation switch is OFF, so each cloud turn needs "
+                    "your yes.")
+        return Result(
+            f"Yes. {who} is the chosen cloud service, its key is saved in Windows "
+            f"Credential Manager, and it can be used now. Nothing is sent to it until "
+            f"a question is allowed: the Try the cloud model button, a standing "
+            f"switch, or your explicit request. Email, files, credentials, stored "
+            f"memory, pictures, your screen and a tainted conversation never go.{escalate}",
+            "cloud_honesty")
+    if shape == "key":
+        if deepseek_saved is True:
+            return Result(
+                "Yes - a DeepSeek API key is saved on this PC, in Windows Credential "
+                "Manager. I never show it, repeat it, log it or put any part of it in "
+                "an answer. It is sent only to DeepSeek's own API host when you allow "
+                "a cloud turn.", "cloud_honesty")
+        if deepseek_saved is False:
+            return Result(
+                "No. No DeepSeek API key is saved on this PC. The key is added in "
+                "Windows Credential Manager, on the PC only, and I never show or "
+                "repeat it.", "cloud_honesty")
+        return Result(
+            "I cannot tell right now: this PC cannot read Windows Credential Manager. "
+            "I never show or repeat a key, and nothing is sent anywhere without your "
+            "yes.", "cloud_honesty")
+    if shape == "using":
+        preset = (f"The Cloud preset is set to {who}." if provider else
+                  "No cloud service is chosen on this PC.")
+        switch = ("The standing escalation switch is ON, so a hard question can go "
+                  "without a per-question yes after every privacy gate." if st.get("escalate")
+                  else "The standing escalation switch is OFF, so each cloud turn needs a yes.")
+        if provider and key is True and not st.get("ready"):
+            line = f"{preset} Its key is saved and {_cloud_readiness(st).lower()} {switch}"
+        elif provider:
+            line = f"{preset} Its key is {('not saved' if key is False else 'not readable')}; nothing can be sent to it. {switch}"
+        else:
+            line = f"{preset} {switch}"
+        return Result(
+            "This answer is written on this PC, not by a cloud service. " + line
+            + " Choosing the Cloud preset does not send by itself; the cloud is used "
+              "only for an allowed turn, and every privacy gate runs first.",
+            "cloud_honesty")
+    if shape == "which_answer":
+        return Result(
+            "This answer is written on this PC. I cannot read a label on an earlier "
+            "answer to say which model wrote it; a cloud turn is used only when you "
+            "press Try the cloud model, the standing switch is on, or you explicitly "
+            "ask to send that question to the cloud. The preset alone never switches "
+            "the answer to DeepSeek.", "cloud_honesty")
+    if shape == "how":
+        if not provider:
+            first = ("First choose the Cloud row in the Presets menu and pick a provider "
+                     "whose key is saved on this PC; ")
+        else:
+            first = f"{who} is already the chosen cloud service; "
+        return Result(
+            first +
+            "then either press Try the cloud model under an answer that offers it, or "
+            "turn on \"escalate to the cloud when the work is too complex\" (ONE card; "
+            "off is instant), or say \"send this to the cloud\" for one question. Every "
+            "privacy gate, the monthly money limit and the one cloud lane still run "
+            "first; I never send a cloud turn without one of those doors.",
+            "cloud_honesty")
+    if shape == "sent":
+        return Result(
+            "When a cloud turn is allowed, the service you chose receives the newest "
+            "message's own words only (not earlier conversation), plus its model name "
+            "and the answer-length cap. The key goes in the request header to that "
+            "service's own host. Never sent: email, files, credentials, stored memory, "
+            "a picture, your screen, a private question, a pasted secret or a "
+            "conversation that has read outside text. The monthly money limit still "
+            "applies.", "cloud_honesty")
+    if shape == "never":
+        return Result(
+            "Email, files, credentials and stored memory always stay on the local "
+            "model; that is the project's first rule. A cloud turn is explicit opt-in "
+            "and every privacy gate runs first, so a private question, a tainted "
+            "conversation, a picture, your screen, a pasted secret or a file also never "
+            "go to the cloud. The key lives in Windows Credential Manager, is never "
+            "logged or echoed, and goes only to its own service's host.",
+            "cloud_honesty")
+    if shape == "call":
+        if not provider:
+            return Result(
+                "Not this way, no: no cloud service is chosen on this PC, so there is "
+                "no DeepSeek API call I can make. Choose the Cloud row and a provider "
+                "first; then a cloud turn still needs your yes or the standing switch, "
+                "and every privacy gate runs first.", "cloud_honesty")
+        if not chosen_is_deepseek:
+            return Result(
+                f"Not DeepSeek: the chosen cloud service is {who}. "
+                + ("A DeepSeek key is saved, but DeepSeek is not the chosen service. "
+                   if deepseek_saved else "")
+                + "I can use the cloud only through an allowed cloud turn, never as a "
+                  "silent API call on my own.", "cloud_honesty")
+        if key is not True or st.get("ready"):
+            return Result(
+                f"Not right now, no. {who} is chosen, but " +
+                ("its key is not saved" if key is False else
+                 "this PC cannot read whether its key is saved" if key is None else
+                 "it cannot be used") +
+                (f": {str(st['ready']).rstrip('.')}" if st.get("ready") else "") +
+                ". Nothing is sent anywhere without your yes.", "cloud_honesty")
+        return Result(
+            f"I can, but only through a cloud turn you allow: press Try the cloud model "
+            f"under a hard answer, say \"send this to the cloud\", or turn on the "
+            f"standing switch. {who} is ready and its key is saved in Windows Credential "
+            f"Manager; I never call its API silently and never send email, files, "
+            f"credentials, stored memory, pictures or your screen.", "cloud_honesty")
+    if shape == "on_off":
+        bits = []
+        if provider:
+            bits.append(f"The Cloud preset is chosen: {who}.")
+            bits.append("Its key is " + ("saved." if key is True else
+                                        "not saved." if key is False else
+                                        "not readable."))
+            bits.append("It " + ("can be used now." if not st.get("ready")
+                                  else "cannot be used right now: " + str(st.get("ready")).rstrip(".") + "."))
+        else:
+            bits.append("No cloud service is chosen on this PC.")
+        bits.append("The standing escalation switch is " +
+                    ("ON." if st.get("escalate") else "OFF."))
+        bits.append("The Cloud preset is a service choice, not a live connection; "
+                    "nothing is sent until a cloud turn is allowed.")
+        return Result(" ".join(bits), "cloud_honesty")
+    if shape == "provider":
+        if provider:
+            return Result(
+                f"The cloud preset is using {who}. Its key is " +
+                ("saved on this PC." if key is True else
+                 "not saved yet." if key is False else "not readable here.") +
+                ("" if not st.get("ready") else " It cannot be used right now: "
+                 + str(st.get("ready")).rstrip(".") + "."), "cloud_honesty")
+        if deepseek_saved:
+            return Result(
+                "No cloud provider is chosen; a DeepSeek API key is saved but not "
+                "selected. Choose the Cloud row and DeepSeek (API) in the Presets menu.",
+                "cloud_honesty")
+        return Result(
+            "No cloud provider is chosen on this PC. The Cloud row in the Presets menu "
+            "is where one is picked, and it lists the services whose keys are saved.",
+            "cloud_honesty")
+    return Result("That is not something I can do from chat here.", "honest_chat")
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -8591,7 +10340,41 @@ def _organizer_selection(raw) -> list:
 _NOTE_CREATE_NAMED = re.compile(
     r"(?:create|make|start)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note"
     r"\s+(?:called|named|titled)\s+(?P<name>.+?)"
-    r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+))?$")
+    r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+)"
+    r"|\s+and\s+(?:put|write|add)\s+(?P<text2>.+?)\s+(?:in|into)\s+it)?$")
+#: Card-free create shapes (owner's decision 2026-10-31): "write a note for me
+#: about ...", "write me a note with ...", "make a note about ...". The owner's
+#: words become the body; the title is taken from them. A capability-only
+#: question ("can you write a note?") is matched separately below and creates
+#: nothing.
+_NOTE_CREATE_FREE = re.compile(
+    r"(?:please\s+)?(?:write|make|create)\s+(?:me\s+|for\s+me\s+)?"
+    r"(?:a\s+|one\s+)?(?:new\s+)?note\s+for\s+me\s+"
+    r"(?:about|on|with|containing|saying)\s+(?P<text>.+)$"
+    r"|(?:please\s+)?(?:write|make|create)\s+(?:me\s+)?(?:a\s+|one\s+)?"
+    r"(?:new\s+)?note\s+(?:about|on|with|containing|saying)\s+(?P<text2>.+)$")
+#: "can you write a note?" / "write a note for me" with NO content: answer yes
+#: and say how to ask; never write a note, never raise a card.
+_NOTE_CREATE_CAPABILITY = re.compile(
+    r"(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:write|make|create)\s+"
+    r"(?:me\s+|for\s+me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note(?:\s+for\s+me)?\s*\??$"
+    r"|(?:please\s+)?(?:write|make|create)\s+(?:me\s+|for\s+me\s+)?"
+    r"(?:a\s+|one\s+)?(?:new\s+)?note\s+for\s+me\s*\??$"
+    r"|(?:write|make|create)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note\s*\??$")
+#: Where the vault is and where the last note went (read-only, no card,
+#: 2026-10-31 field-test follow-up: the old answer said "I don't have access to
+#: the folder name ... I can search your files", which was wrong).
+_NOTE_LOCATION_LAST = re.compile(
+    r"what\s+folder\s+(?:is|was)\s+(?:it|that|that\s+note|the\s+note)\s+in\s*\??"
+    r"|where\s+did\s+(?:that|the|my)\s+note\s+(?:go|end\s+up)\s*\??"
+    r"|where\s+did\s+(?:you\s+)?(?:put|save|file)\s+(?:it|that|that\s+note|the\s+note)\s*\??"
+    r"|what\s+folder\s+did\s+(?:you\s+)?(?:put|save|file)\s+(?:it|that|the\s+note)\s+in\s*\??")
+_NOTE_LOCATION_VAULT = re.compile(
+    r"where\s+(?:is|are)\s+(?:my|the)\s+(?:vault|notes?|obsidian(?:\s+notes?)?)\s*\??"
+    r"|where\s+do\s+you\s+save\s+(?:my\s+)?notes\s*\??"
+    r"|which\s+folder\s+are\s+(?:my|the)\s+notes\s+in\s*\??"
+    r"|which\s+folder\s+is\s+(?:my|the)\s+vault\s+in\s*\??"
+    r"|where\s+(?:is|are)\s+my\s+obsidian\s+(?:vault|notes?)\s*\??")
 _LIST_NAMES_TO_LEAVE = frozenset({
     "todo", "to-do", "to do", "todo list", "to-do list", "to do list",
     "shopping list", "list",
@@ -8742,30 +10525,176 @@ def _note_write_result(body, ok_intent: str, wait_intent: str, why_intent: str):
     body = body if isinstance(body, dict) else {}
     said = str(body.get("message") or "").strip()
     state = str(body.get("state") or "")
-    if state in ("saved", "unchanged"):
+    # "created" is the card-free create's own success state (2026-10-31): the
+    # note did not exist, so there was nothing to compare - it is a success,
+    # not a refusal. Every other caller still reports "saved"/"unchanged".
+    if state in ("saved", "unchanged", "created"):
         return Result(said or "Done.", ok_intent)
     if state == "waiting":
         return Result(said or "Waiting for your approval card.", wait_intent)
     return Result(said or "Nothing was written.", why_intent)
 
 
-def _run_note_create(f: dict) -> Result:
+#: The last note this process filed (create or daily capture), for the read-only
+#: "what folder is it in?" answer. In-process only: no new file on disk, no
+#: secret, and it expires so an old answer cannot be presented as this moment's.
+_LAST_FILED: dict = {}
+_LAST_FILED_TTL = 30 * 60
+#: Said when a location question is asked and no vault is configured. Read-only,
+#: honest, and it never offers to search the PC's files.
+NOTE_NO_VAULT_SAID = ("No Obsidian vault is set up on this PC yet, so no notes are "
+                      "being saved to one. The setting is [notes.obsidian] "
+                      "vault_directory, or JARVIS_OBSIDIAN_VAULT.")
+#: The capability answer: yes, here is how to ask, and nothing is written.
+NOTE_CREATE_CAPABLE_SAID = ('Yes - say "write a note for me about ..." or "create a '
+                            'note called Shopping with milk and eggs", and I will '
+                            'write it into your Obsidian vault. Creating a brand-new '
+                            'note needs no approval card, and you can undo it.')
+NOTE_CREATE_CAPABLE_HIDDEN_SAID = ('Yes - say "write a note for me about ..." and I '
+                                   'will create it in your Obsidian vault. Creating a '
+                                   'brand-new note needs no approval card, and you can '
+                                   'undo it.')
+NOTE_CREATE_HIDDEN_SAID = "Created one note in your Obsidian vault. You can undo it."
+
+
+def _note_create_name(text: str) -> str:
+    """A safe note title drawn from the owner's own words (card-free create)."""
+    words = re.findall(r"[A-Za-z0-9]+", str(text or ""))[:8]
+    name = " ".join(words).strip()
+    return name[:60]
+
+
+def _remember_filed(kind: str, file: str, root: str) -> None:
+    """Record the last note this process filed, for the read-only location answer."""
+    if not file:
+        return
+    try:
+        _LAST_FILED.clear()
+        _LAST_FILED.update({"kind": kind, "file": str(file), "root": str(root),
+                            "at": time.time()})
+    except Exception:                       # noqa: BLE001 - never a write
+        pass
+
+
+def _filed_location(vault) -> str:
+    """The last filed note's exact file, when it is fresh and still the vault."""
+    if not _LAST_FILED or time.time() - float(_LAST_FILED.get("at") or 0) > _LAST_FILED_TTL:
+        return ""
+    if str(_LAST_FILED.get("root") or "") != str(vault):
+        return ""
+    return str(_LAST_FILED.get("file") or "")
+
+
+def _run_note_location(f: dict, hidden: bool = False) -> Result:
+    """Where the vault is, and where the last filed note went. Read-only, no card.
+
+    The system KNOWS the configured vault root and the path it just wrote, so it
+    answers from that. It never says it has no access and never offers to search
+    the PC's files. With hidden lists on, only the vault location is said - no
+    note title or file name.
+    """
+    try:
+        import jarvis_notes_edit as E
+        vault, _why = E._vault()
+    except Exception:                       # noqa: BLE001
+        vault = None
+    if vault is None:
+        return Result(NOTE_NO_VAULT_SAID, "note_location")
+    vault_text = str(vault)
+    if hidden:
+        return Result(f"Your Obsidian vault is at {vault_text}.", "note_location")
+    filed = _filed_location(vault)
+    kind = str(_LAST_FILED.get("kind") or "")
+    context = str((f or {}).get("context") or "last")
+    if context == "last":
+        if not filed:
+            return Result(
+                f"Your Obsidian vault is at {vault_text}. I cannot see which note "
+                "you mean now, so I cannot name the file again - and nothing was "
+                "changed.", "note_location")
+        if kind == "daily":
+            return Result(
+                f"Your Obsidian vault, at {vault_text}; that note went into today's "
+                f"daily note, {filed}.", "note_location")
+        return Result(
+            f"Your Obsidian vault, at {vault_text}; that note is the file {filed}.",
+            "note_location")
+    if filed:
+        if kind == "daily":
+            return Result(
+                f"Your notes live in your Obsidian vault, at {vault_text}. Quick "
+                f"captures go into today's daily note, {filed}.", "note_location")
+        return Result(
+            f"Your notes live in your Obsidian vault, at {vault_text}. The last "
+            f"note filed there is {filed}.", "note_location")
+    return Result(
+        f"Your notes live in your Obsidian vault, at {vault_text}. Quick captures "
+        "go into today's daily note inside it.", "note_location")
+
+
+def _run_note_create_capability() -> Result:
+    """"can you write a note?" - yes, how to ask, and it creates nothing."""
     if _notes_write_hidden():
-        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
-    path = _note_path_for(str(f.get("name") or ""))
+        return Result(NOTE_CREATE_CAPABLE_HIDDEN_SAID, "note_create_capability")
+    return Result(NOTE_CREATE_CAPABLE_SAID, "note_create_capability")
+
+
+def _note_write_tainted() -> str:
+    """"typed" when the owner is writing directly; "after_outside_text" when
+    the conversation has read outside text (Gemini round-3 ruling 2: only the
+    direct owner write is card-free; a tainted turn keeps the one card)."""
+    try:
+        return "after_outside_text" if bool(_gate_module().taint_active()) else "typed"
+    except Exception:                       # noqa: BLE001 - fail closed
+        return "after_outside_text"
+
+
+def _run_note_create(f: dict) -> Result:
+    hidden = _notes_write_hidden()
+    name = str(f.get("name") or "").strip()
+    text = str(f.get("text") or "")
+    path = _note_path_for(name)
+    if not path and text:
+        # "write a note for me about ..." names no title: draw one from the
+        # owner's own words (the body is exactly what he said).
+        derived = _note_create_name(text)
+        if derived:
+            path = _note_path_for(derived)
     if not path:
         return Result("What should the new note be called? Say \"create a note called ...\".",
                       "note_create_refused")
-    text = str(f.get("text") or "")
     try:
         import jarvis_notes_edit as E
-        code, body = E.handle_create({"path": path, "text": text}, by="chat", wait_s=1.5)
+        code, body = E.handle_create({"path": path, "text": text}, by="chat",
+                                     provenance=_note_write_tainted(),
+                                     client="hud", wait_s=1.5)
     except Exception as exc:                # noqa: BLE001
+        if hidden:
+            return Result("The note could not be created, so nothing was created.",
+                          "note_create_refused")
         return Result(f"The note could not be created ({type(exc).__name__}), so nothing was created.",
                       "note_create_refused")
     if code not in (200, 202):
+        if hidden:
+            return Result("Nothing was created.", "note_create_refused")
         said = str((body or {}).get("error") or "Nothing was created.") if isinstance(body, dict) else "Nothing was created."
         return Result(said, "note_create_refused")
+    body = body if isinstance(body, dict) else {}
+    state = str(body.get("state") or "")
+    filed = str(body.get("path") or path)
+    if state == "created":
+        try:
+            import jarvis_notes_edit as E
+            vault, _why = E._vault()
+            if vault is not None:
+                _remember_filed("create", filed, str(vault))
+        except Exception:                   # noqa: BLE001
+            pass
+        if hidden:
+            return Result(NOTE_CREATE_HIDDEN_SAID, "note_created")
+        said = str(body.get("message") or "").strip()
+        return Result(said or f"Created {filed} in your Obsidian vault. You can undo it.",
+                      "note_created")
     return _note_write_result(body, "note_created", "note_create_waiting", "note_create_refused")
 
 
@@ -9266,10 +11195,23 @@ def _note_asking(s: str) -> Optional[Intent]:
         if name and folder and not _rename_move_overcapture(name, folder):
             return Intent("note_move", {"name": name, "folder": folder,
                                         "create": extra in ("create", "make")})
+    m = _NOTE_LOCATION_LAST.fullmatch(s)
+    if m:
+        return Intent("note_location", {"context": "last"})
+    m = _NOTE_LOCATION_VAULT.fullmatch(s)
+    if m:
+        return Intent("note_location", {"context": "vault"})
+    if _NOTE_CREATE_CAPABILITY.fullmatch(s):
+        return Intent("note_create_capability")
+    m = _NOTE_CREATE_FREE.fullmatch(s)
+    if m:
+        return Intent("note_create", {
+            "name": "",
+            "text": (m.group("text") or m.group("text2") or "").strip()})
     m = _NOTE_CREATE_NAMED.fullmatch(s)
     if m:
         return Intent("note_create", {"name": m.group("name").strip(),
-                                      "text": (m.group("text") or "").strip()})
+                                      "text": (m.group("text") or m.group("text2") or "").strip()})
     m = _NOTE_TAG_ADD.fullmatch(s) or _NOTE_TAG_WITH.fullmatch(s)
     if m:
         return Intent("note_tag", {"name": m.group("name").strip(),
@@ -9539,6 +11481,15 @@ def _run_note_make(f: dict) -> Result:
     said = str(body.get("message") or "").strip()
     state = str(body.get("state") or "")
     if state == "filed":
+        # Remember where it went (in-process only), so "what folder is it in?"
+        # can name the exact daily note instead of saying it has no access.
+        try:
+            import jarvis_notes_edit as E
+            vault, _why = E._vault()
+            if vault is not None:
+                _remember_filed("daily", str(body.get("file") or ""), str(vault))
+        except Exception:                   # noqa: BLE001 - never a write
+            pass
         return Result(said or "Filed in Obsidian.", "note_made")
     if state == "waiting":
         return Result(said or "Waiting for your approval.", "note_make_waiting")
@@ -9945,6 +11896,333 @@ def _run_note_open(title: str) -> Result:
     said = ('Opening the Brain on this PC. Your notes are under Notes - look for '
             '"{0}" there.'.format(body["title"]))
     return Result(said, "note_open", open_brain="brain")
+
+
+# --- what model Jarvis is running, the presets, measured models (2026-10-31) ---
+#
+# The owner asked "what ai model do you have?" and got "I don't know what
+# specific AI model I'm running on", while the HUD telemetry said qwen3.5:9b.
+# These are deterministic answers from the PC's own state (jarvis_presets,
+# jarvis_models, the benchmark store); the switches use the EXISTING cards
+# (jarvis_presets.apply_from_body and jarvis_models.switch_to) and never approve
+# anything themselves.
+
+MODEL_CURRENT_UNKNOWN = ("This PC does not record which model is running right now. "
+                         "Brain, Models lists every installed model.")
+MODELS_NOT_LISTED = ("This PC does not list its installed models right now. Brain, "
+                     "Models on the PC is where the list is.")
+PRESETS_NOT_LISTED = ("This PC does not list its presets right now (the preset "
+                      "contract module is missing).")
+MODEL_CARD_WORDS = ("Nothing switches until you answer the ONE approval card on your PC"
+                    " (Windows Hello for a risky one).")
+
+_K_MODEL_CURRENT = re.compile(
+    r"(?:what|which)\s+(?:ai\s+)?model\s+(?:are\s+you\s+(?:running|using|on)|"
+    r"do\s+you\s+have|are\s+you|is\s+this)\b.*")
+_K_MODEL_ANSWERED = re.compile(
+    r"(?:which|what)\s+model\s+(?:answered|wrote|gave|produced|said)\s+"
+    r"(?:that|this|it|the\s+answer)\b.*")
+_K_MODELS_LIST = re.compile(
+    r"(?:what|which)\s+(?:local\s+)?models?\s+(?:are\s+)?(?:installed|available|"
+    r"do\s+you\s+have|can\s+you\s+use|can\s+you\s+run)\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?(?:local\s+|installed\s+)?"
+    r"models?\s*\??$")
+_K_PRESETS_LIST = re.compile(
+    r"(?:what|which)\s+presets?\s+(?:do\s+you\s+have|are\s+there|exist|can\s+i\s+use)\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?presets?\s*\??$")
+_K_PRESET_DETAIL = re.compile(
+    r"(?:what\s+does|what\s+is|explain|describe)\s+(?:the\s+)?(.+?)\s+preset"
+    r"(?:\s+(?:change|do|mean|load|run|use))?\s*\??$"
+    r"|which\s+model\s+(?:would|does|will)\s+(?:the\s+)?(.+?)\s+preset\s+"
+    r"(?:load|run|use)\s*\??$")
+_K_MODEL_SPEED = re.compile(
+    r"(?:how\s+fast\s+is|what(?:'s|\s+is)\s+the\s+speed\s+of|"
+    r"tokens\s+(?:a|per)\s+second\s+for)\s+(.+?)\s*\??$")
+_K_MODEL_PROSCONS = re.compile(
+    r"(?:what\s+are\s+the\s+)?pros\s+and\s+cons\s+of\s+(.+?)\s*\??$"
+    r"|what\s+is\s+good\s+and\s+bad\s+about\s+(.+?)\s*\??$")
+_K_MODEL_RELEASE = re.compile(r"when\s+was\s+(.+?)\s+released\s*\??$")
+_K_MODEL_RECOMMEND = re.compile(
+    r"which\s+model\s+should\s+i\s+(?:use|pick)\s+for\s+(.+?)\s*\??$"
+    r"|which\s+(?:local\s+)?model\s+is\s+best\s+for\s+(.+?)\s*\??$")
+_K_PRESET_SWITCH = re.compile(
+    r"(?:switch|change)\s+(?:to\s+)?(?:the\s+)?(.+?)\s+preset\s*\??$"
+    r"|use\s+(?:the\s+)?(.+?)\s+preset\s*\??$"
+    r"|apply\s+(?:the\s+)?preset\s+(.+?)\s*\??$")
+_K_MODEL_SWITCH = re.compile(
+    r"(?:switch|change)\s+to\s+(?:the\s+)?(?:model\s+)?(.+?)\s*\??$"
+    r"|load\s+(?:the\s+)?(?:model\s+)?(.+?)\s*\??$"
+    r"|use\s+(?:the\s+)?model\s+(.+?)\s*\??$")
+
+
+def _model_known_refs() -> dict:
+    try:
+        import jarvis_model_knowledge as K
+    except Exception:
+        return {}
+    refs = {}
+    for ref in list(K.installed_models()) + [K.current_model()] + list(K.benchmarks()):
+        if ref:
+            refs[str(ref).lower()] = str(ref)
+    for preset in K.presets():
+        if preset.get("model"):
+            refs.setdefault(str(preset["model"]).lower(), str(preset["model"]))
+    return refs
+
+
+def _resolve_model(text) -> str:
+    """A model ref this PC knows, or "" - never a guess from ordinary words."""
+    want = " ".join(str(text or "").strip().strip("\"'").split())
+    if not want:
+        return ""
+    known = _model_known_refs()
+    if want.lower() in known:
+        return known[want.lower()]
+    try:
+        import jarvis_model_knowledge as K
+        preset = K.preset_by_name(want)
+        if preset and preset.get("model"):
+            return str(preset["model"])
+    except Exception:
+        pass
+    low = want.lower()
+    # A tag such as qwen3.5:9b, or a full hf.co/ Ollama name. A sentence with
+    # a colon in it ("change your settings: turn on ...") is not a model ref.
+    looks_ref = ((":" in want and " " not in want.strip())
+                 or (low.startswith("hf.co/") and " " not in want.strip())
+                 or (low.startswith("ollama/") and " " not in want.strip()))
+    return want if looks_ref else ""
+
+
+def _model_chat(s: str) -> Optional[Intent]:
+    """The model/preset question shapes. Never a switch unless the words name one."""
+    for rx, name in ((_K_MODEL_CURRENT, "model_current"),
+                     (_K_MODEL_ANSWERED, "model_answerer")):
+        if rx.fullmatch(s):
+            return Intent(name)
+    m = _K_MODEL_RELEASE.fullmatch(s)
+    if m:
+        return Intent("model_release", {"model": m.group(1)})
+    m = _K_MODEL_SPEED.fullmatch(s)
+    if m:
+        return Intent("model_speed", {"model": m.group(1)})
+    m = _K_MODEL_PROSCONS.fullmatch(s)
+    if m:
+        return Intent("model_pros_cons", {"model": m.group(1)})
+    m = _K_MODEL_RECOMMEND.fullmatch(s)
+    if m:
+        return Intent("model_recommend", {"task": m.group(1) or m.group(2) or ""})
+    if _K_PRESETS_LIST.fullmatch(s):
+        return Intent("presets_list")
+    if _K_MODELS_LIST.fullmatch(s):
+        return Intent("models_list")
+    m = _K_PRESET_DETAIL.fullmatch(s)
+    if m:
+        return Intent("preset_detail", {"name": m.group(1) or m.group(2) or ""})
+    m = _K_PRESET_SWITCH.fullmatch(s)
+    if m:
+        return Intent("preset_switch", {"name": m.group(1) or m.group(2) or ""})
+    m = _K_MODEL_SWITCH.fullmatch(s)
+    if m:
+        target = m.group(1) or m.group(2) or ""
+        if _resolve_model(target):
+            return Intent("model_switch", {"model": target})
+    return None
+
+
+def _preset_words_for(name) -> str:
+    try:
+        import jarvis_model_knowledge as K
+    except Exception:
+        return PRESETS_NOT_LISTED
+    preset = K.preset_by_name(name)
+    if not preset:
+        names = ", ".join(str(p.get("title") or p.get("id")) for p in K.presets())
+        return f'There is no preset called "{name}". The presets are: {names}.'
+    return K.preset_model_words(preset)
+
+
+def _run_model_current() -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model, preset = K.current_model(), K.current_preset()
+    except Exception:
+        model, preset = "", None
+    if not model and not preset:
+        return Result(MODEL_CURRENT_UNKNOWN, "model_current")
+    if model and preset:
+        said = (f'You are running {model} on this PC, under the "{preset.get("title")}" '
+                "preset. Brain, Models lists every installed model and its measured speed.")
+    elif model:
+        said = (f"You are running {model} on this PC. Brain, Models lists every installed "
+                "model and its measured speed.")
+    else:
+        said = (f'The active preset is "{preset.get("title")}"; the exact model it runs '
+                "is not recorded here.")
+    return Result(said, "model_current")
+
+
+def _run_model_answerer() -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model, preset = K.current_model(), K.current_preset()
+    except Exception:
+        model, preset = "", None
+    if not model:
+        return Result("The PC does not record which model answered that. " +
+                      MODEL_CURRENT_UNKNOWN, "model_answerer")
+    under = f', under the "{preset.get("title")}" preset' if preset else ""
+    return Result(f"That answer came from {model}, the model this PC runs for chat{under}. "
+                  "The PC does not record a separate per-answer model line.",
+                  "model_answerer")
+
+
+def _run_models_list() -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        refs, current = K.installed_models(), K.current_model()
+    except Exception:
+        return Result(MODELS_NOT_LISTED, "models_list")
+    if not refs:
+        return Result(MODELS_NOT_LISTED, "models_list")
+    shown = refs[:12]
+    said = "This PC has %d local model%s installed: %s." % (
+        len(refs), "" if len(refs) == 1 else "s", ", ".join(shown))
+    if current and current in refs:
+        said += f" Chat is using {current}."
+    if len(refs) > len(shown):
+        said += f" ({len(refs) - len(shown)} more not listed.)"
+    said += ' Ask "how fast is <model>" for a measured speed, or "switch to <model>".'
+    return Result(said, "models_list")
+
+
+def _run_presets_list() -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        rows, current = K.presets(), K.current_preset()
+    except Exception:
+        return Result(PRESETS_NOT_LISTED, "presets_list")
+    if not rows:
+        return Result(PRESETS_NOT_LISTED, "presets_list")
+    current_id = (current or {}).get("id")
+    parts = []
+    for row in rows:
+        mark = " (current)" if row.get("id") == current_id else ""
+        parts.append(f"{row.get('title')}{mark}: {row.get('model') or 'cloud'}")
+    said = ('%d presets - %s. Ask "what does <preset> change?" for its model, '
+            "window and honest cost." % (len(rows), "; ".join(parts)))
+    return Result(said, "presets_list")
+
+
+def _run_preset_detail(name) -> Result:
+    return Result(_preset_words_for(name), "preset_detail")
+
+
+def _run_model_speed(ref) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model = _resolve_model(ref)
+        if not model:
+            return Result(f'I do not know a model called "{ref}" on this PC. '
+                          'Ask "what local models are installed?".', "model_speed")
+        return Result(f"{model}: " + K.speed_words(model), "model_speed")
+    except Exception:
+        return Result("The measured speeds could not be read on this PC.", "model_speed")
+
+
+def _run_model_pros_cons(ref) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model = _resolve_model(ref)
+        if not model:
+            return Result(f'I do not know a model called "{ref}" on this PC.', "model_pros_cons")
+        facts = K.model_facts(model)
+        parts = [f"{model}."]
+        if facts.get("preset"):
+            parts.append(f'It is the model behind the "{facts["preset"]}" preset.')
+        if facts.get("pros"):
+            parts.append("Pros: " + str(facts["pros"]))
+        if facts.get("cons"):
+            parts.append("Cons: " + str(facts["cons"]))
+        parts.append("Speed: " + K.speed_words(model))
+        if facts.get("params_b"):
+            parts.append(f"{facts['params_b']}B parameters.")
+        if facts.get("size_gib"):
+            parts.append(f"{facts['size_gib']} GB on disk.")
+        if facts.get("licence"):
+            parts.append(f"Licence: {facts['licence']}.")
+        parts.append("Release date: not recorded.")
+        return Result(" ".join(parts), "model_pros_cons")
+    except Exception:
+        return Result("The model facts could not be read on this PC.", "model_pros_cons")
+
+
+def _run_model_release(ref) -> Result:
+    return Result(f"{str(ref or '').strip()}: release date is not recorded on this PC. "
+                  "These are local Ollama tags, and no official release page for the exact "
+                  "tag is recorded in this tree - so this is 'not recorded', not a guess.",
+                  "model_release")
+
+
+def _run_model_recommend(task) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        preset = K.recommendation(task)
+    except Exception:
+        preset = None
+    if not preset:
+        try:
+            names = ", ".join(str(p.get("title")) for p in K.presets())
+        except Exception:
+            names = ""
+        return Result(f'No preset\'s own words match "{task}". The presets are: {names}. '
+                      "This is advice; nothing was switched.", "model_recommend")
+    return Result(f'For {task}, the "{preset.get("title")}" preset fits: '
+                  f'{preset.get("what")} It runs {preset.get("model")}. This is advice - '
+                  f'nothing was switched; say "switch to the {preset.get("title").lower()} '
+                  'preset" and its ONE card decides.', "model_recommend")
+
+
+def _model_switch_words(code, body, what) -> str:
+    body = body if isinstance(body, dict) else {}
+    said = " ".join(str(body.get(k) or "") for k in ("said", "message", "preview", "error")).strip()
+    if code in (200, 202) and body.get("ok", True) and not body.get("error"):
+        waiting = (body.get("waiting") is True
+                   or str(body.get("state")) == "waiting" or code == 202)
+        if waiting:
+            text = f"{what}: the approval card is up on your PC. {MODEL_CARD_WORDS}"
+            if said:
+                text += " " + said
+            return text
+        return f"{what}: done. " + (said or "")
+    reason = said or str(body.get("reason") or "the PC refused it")
+    return f"{what}: nothing was changed - {reason}"
+
+
+def _run_preset_switch(name) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        preset = K.preset_by_name(name)
+        if not preset:
+            return Result(_preset_words_for(name), "preset_switch")
+        code, body = K.apply_preset(preset.get("id"))
+        return Result(_model_switch_words(code, body,
+                                    f'Applying the "{preset.get("title")}" preset'),
+                      "preset_switch")
+    except Exception:
+        return Result("The preset could not be applied on this PC.", "preset_switch")
+
+
+def _run_model_switch(name) -> Result:
+    try:
+        import jarvis_model_knowledge as K
+        model = _resolve_model(name)
+        if not model:
+            return Result(f'I do not know a model called "{name}" on this PC.', "model_switch")
+        code, body = K.switch_model(model)
+        return Result(_model_switch_words(code, body, f"Switching to {model}"), "model_switch")
+    except Exception:
+        return Result("The model switch could not be asked on this PC.", "model_switch")
 
 
 def _open(s: str) -> Optional[Intent]:
@@ -12036,8 +14314,27 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_local_calendar_read(f, now)
     if n == "honest_chat":
         return _run_honest_chat(f)
+    if n == "cloud_honesty":
+        return _run_cloud_honesty(f)
     if n == "honest_state":
         return _run_honest_state(f)
+    # Keyboard shortcuts (2026-10-31 honesty fix): fixed answers from the
+    # measured desktop tables; the phone is told the keys are on the PC. No
+    # card, no state read, no model.
+    if n in _SHORTCUT_INTENTS:
+        return _run_shortcuts(n, f, _client_surface(peer, local, client_surface))
+    if n in _REMINDER_INTENTS:
+        return _run_reminders(n, _client_surface(peer, local, client_surface))
+    if n in _PLUGIN_INTENTS:
+        return _run_plugins(n, f, _client_surface(peer, local, client_surface))
+    if n in _ANDROID_INTENTS:
+        return _run_android(n, _android_state())
+    if n in _GOAL_INTENTS:
+        return _run_goals(n, f, _client_surface(peer, local, client_surface))
+    if n == "price_radar_flight":
+        return _run_price_radar_flight(f)
+    if n in _PRICE_RADAR_INTENTS:
+        return _run_price_radar(n, _price_radar_state())
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
     if n in ("update_ask", "update_notes"):
@@ -12087,6 +14384,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_make(f)
     if n == "note_create":
         return _run_note_create(f)
+    if n == "note_create_capability":
+        return _run_note_create_capability()
+    if n == "note_location":
+        return _run_note_location(f, hidden=_notes_write_hidden())
     if n == "note_append":
         return _run_note_append(f)
     if n == "note_tag":
@@ -12352,6 +14653,28 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_search(intent.f.get("needle") or "")
     if n == "note_open":
         return _run_note_open(intent.f.get("title") or "")
+    if n == "model_current":
+        return _run_model_current()
+    if n == "model_answerer":
+        return _run_model_answerer()
+    if n == "models_list":
+        return _run_models_list()
+    if n == "presets_list":
+        return _run_presets_list()
+    if n == "preset_detail":
+        return _run_preset_detail(intent.f.get("name") or "")
+    if n == "preset_switch":
+        return _run_preset_switch(intent.f.get("name") or "")
+    if n == "model_speed":
+        return _run_model_speed(intent.f.get("model") or "")
+    if n == "model_pros_cons":
+        return _run_model_pros_cons(intent.f.get("model") or "")
+    if n == "model_release":
+        return _run_model_release(intent.f.get("model") or "")
+    if n == "model_recommend":
+        return _run_model_recommend(intent.f.get("task") or "")
+    if n == "model_switch":
+        return _run_model_switch(intent.f.get("model") or "")
     if n == "open_app":
         # "open Notion", "open settings", "open Jarvis settings"
         # (jarvis_open.py, 2026-10-10). Nothing is opened from here: the app
@@ -12433,6 +14756,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_wellbeing(intent)
     if n == "pc_help":
         return _run_pc_help(intent)
+    if n == "pc_facts":
+        return _run_pc_facts(f)
     if n in ("phone_ring", "phone_stop"):
         return _run_find_phone(intent)
     if n.startswith("lockdown_"):
@@ -12737,8 +15062,42 @@ UNDO_NOTHING_SAID = "Nothing of mine to cancel."
 #: an intent added later, and forgotten here, keeps the old safe behaviour
 #: (the record is dropped, so "cancel that" can never take back something the
 #: owner did not just do).
+#: The keyboard-shortcut answers (2026-10-31): fixed words from measured tables.
+_SHORTCUT_INTENTS = frozenset({
+    "shortcuts_list", "shortcuts_open", "shortcuts_quick_note", "shortcuts_change",
+    "shortcuts_named", "shortcuts_notes_named", "shortcuts_unknown",
+})
+
+#: The price/flight radar answers (2026-10-31): fixed words plus the real switch.
+_PRICE_RADAR_INTENTS = frozenset({"price_radar_state", "price_radar_about", "price_radar_enable",
+                                  "price_radar_book", "price_radar_lookup", "price_radar_track"})
+
+#: The goal answers (2026-10-31): fixed words plus the PC's real goal list.
+_GOAL_INTENTS = frozenset({"goal_capability", "goal_list", "goal_state", "goal_about", "goal_update"})
+
+#: The Android-builder answers (2026-10-31): fixed words, no card.
+_ANDROID_INTENTS = frozenset({"android_capability", "android_howto", "android_needs",
+                              "android_build_install"})
+
+#: The plug-in answers (2026-10-31): fixed words, no card.
+_PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plugin_install"})
+
+#: The reminders capability answers (2026-10-31): fixed words, no card.
+_REMINDER_INTENTS = frozenset({
+    "reminder_capability", "reminder_popup", "reminder_sound", "reminder_notify",
+    "reminder_closed", "reminder_howto",
+})
+
 READ_ONLY_INTENTS = frozenset({
-    "alarm_list", "animal_ask", "approval_where", "briefing_list", "briefing_now",
+    "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
+    "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
+    "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
+    "price_radar_book", "price_radar_lookup", "price_radar_track",
+    "goal_capability", "goal_list", "goal_state", "goal_about", "goal_update",
+    "android_capability", "android_howto", "android_needs", "android_build_install",
+    "plugin_list", "plugin_state", "plugin_about", "plugin_install",
+    "reminder_capability", "reminder_popup", "reminder_sound",
+    "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
     # fixed answer that reads this PC's own settings and connects nothing, so it
@@ -12758,6 +15117,9 @@ READ_ONLY_INTENTS = frozenset({
     # was refused wrote nothing, so `note_make_refused` is read-only.
     "vault_organizer_plan", "vault_organizer_scoped", "note_change_refused",
     "obsidian_style_refused", "note_make_refused", "note_read_honest",
+    # The card-free create's capability answer and the where-is-my-vault answer
+    # (2026-10-31): both only read the vault setting and change nothing.
+    "note_create_capability", "note_location",
     # main's feature answers (2026-10-31, #1030): the capability answer reads
     # the catalogue and changes nothing, so it must not clear "cancel that".
     "face_ask", "feature_capabilities", "feature_change", "feature_change_ask",

@@ -10,9 +10,12 @@ What it proves:
     for specifics - and never claims romance or companionship (the
     owner's "no romance" condition);
   - a real spread of phrasings - identity, "are you an AI", the Iron Man
-    probe, feelings, romance and friendship probes, and "what model are
-    you" - are answered by jarvis_quick.py's own grammar with no model,
-    end to end (Q.answer_turn), and a near miss or pasted text is not;
+    probe, feelings, romance and friendship probes - are answered by
+    jarvis_quick.py's own grammar with no model, end to end
+    (Q.answer_turn), and a near miss or pasted text is not; the
+    "what model are you running" question moved to the model
+    self-knowledge lane in wave 2 (2026-11-01) and is held by
+    backend/test_model_self_knowledge.py, still with no model;
   - it is fixed text: no gate, no card, no setting, nothing written;
   - without jarvis_identity.py, the fast path says to run
     apply-patches.ps1, the same shape as jarvis_reach.py's own fallback;
@@ -95,7 +98,6 @@ PHRASINGS = (
     "are you my friend",
     "will you be my friend",
     "are you lonely",
-    "what model are you running",
     "what model do you use",
     "what AI is this",
     "hey Jarvis, who are you",
@@ -144,6 +146,25 @@ def t_every_phrasing_is_answered_with_no_model():
             intent = Q.match(text, now=now)
             check(f"a near miss goes to the model: {text!r}",
                   intent is None or intent.name != "identity_help", intent)
+    finally:
+        sched.close()
+
+
+def t_the_model_question_moved_to_its_own_lane():
+    """Wave 2 (2026-11-01): "what model are you running" is no longer the identity
+    grammar's. The model self-knowledge lane owns it (`model_current`) and still
+    answers with no model - naming the live model and preset, or saying plainly
+    that this PC does not record one. The identity grammar must not claim it."""
+    now = time.time()
+    intent = Q.match("what model are you running", now=now)
+    check("model_current owns 'what model are you running'",
+          intent is not None and intent.name == "model_current", intent)
+    sched = _Sched()
+    try:
+        result = Q.run(intent, sched, now) if intent is not None else None
+        check("and it answers without the model",
+              result is not None and isinstance(result.reply, str) and result.reply.strip(),
+              result)
     finally:
         sched.close()
 

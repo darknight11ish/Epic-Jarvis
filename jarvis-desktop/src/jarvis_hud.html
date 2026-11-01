@@ -1766,6 +1766,20 @@ html[data-hud-shell="split-stage"] #rail-right{
   overflow-y:auto; padding:18px 14px;
   border-left:1px solid var(--line-hot);
   background:linear-gradient(180deg, var(--plate), var(--void));
+  /* OPAQUE BASE UNDER THAT GRADIENT (owner's report, 2026-10-31: "words on
+     top of words" - the Today/Coming up/Right now/Settings cards showed
+     through the Telemetry panel). The dark theme's window tokens are
+     translucent on purpose for the window itself (theme.css:
+     --bg-window: rgba(4,7,12,.86), --surface-1: rgba(10,17,25,.9)), and
+     --void/--plate alias them, so this panel's own gradient mixed with
+     whatever the stage painted behind it. --surface-sunken is the theme's
+     opaque surface in all three themes (#04070c dark, rgb(228,233,240)
+     light, rgb(0,0,0) high contrast), so the panel is now solid while every
+     colour still comes from the owner's theme - no hard-coded colour here.
+     Same for the Approvals, Reminders and Memory panels: they all draw in
+     this one rail, so one rule keeps all four opaque. The Galaxy view is
+     untouched (it does not use this rail). */
+  background-color:var(--surface-sunken);
   box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .5);
 }
 html[data-hud-shell="split-stage"][data-hud-tab="telemetry"] #rail-right,
@@ -2089,6 +2103,59 @@ html[data-hud-shell="center-core"] .composer{
 .hud-edit-bar[hidden]{display:none;}
 .hud-edit-words{font-family:var(--f-mono); font-size:11px; color:var(--text);}
 .hud-edit-status{font-family:var(--f-mono); font-size:10.5px; color:var(--dim); flex:1; min-width:120px;}
+/* ---- EDIT HUD, simplified (owner's request, 2026-10-31: "the edit hud needs
+ * to be way more simplified with the options under menu tabs instead of
+ * everything all at once") --------------------------------------------------
+ * The bar keeps the four whole-edit controls and gains four tabs. The cards'
+ * OWN control rows are moved (same elements, same handlers) into the ONE
+ * selected-card editor in the Cards tab, so nothing is dropped and nothing is
+ * re-implemented. On the canvas only the card itself is drawn while editing. */
+.hud-edit-title{font-family:var(--f-hud); font-size:12px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ice);}
+.hud-edit-tabs{display:flex; gap:2px; flex-basis:100%; margin-top:2px;
+  border-bottom:1px solid var(--line);}
+.hud-edit-tab{font:inherit; font-family:var(--f-mono); font-size:10.5px;
+  letter-spacing:.06em; color:var(--dim); background:transparent; border:0;
+  border-bottom:2px solid transparent; padding:5px 10px; cursor:pointer;}
+.hud-edit-tab:hover{color:var(--text);}
+.hud-edit-tab:focus-visible{outline:2px solid var(--ice); outline-offset:-2px;}
+.hud-edit-tab[aria-selected="true"]{color:var(--ice); border-bottom-color:var(--ice);}
+.hud-edit-panes{flex-basis:100%; display:block; max-height:min(34vh, 300px);
+  overflow-y:auto; padding:6px 0 2px;}
+.hud-edit-pane[hidden]{display:none !important;}
+.hud-edit-pane-said{margin:4px 0; font-family:var(--f-mono); font-size:10.5px;
+  line-height:1.45; color:var(--dim);}
+.hud-edit-pane-head{margin:8px 0 3px; font-family:var(--f-mono); font-size:10px;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--dimmer);}
+.hud-edit-pane-name{font-family:var(--f-mono); font-size:11px; color:var(--text);}
+.hud-edit-pane-tag{margin:0 2px 0 6px; font-size:9.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ice);}
+.hud-edit-card-list{display:flex; flex-direction:column; gap:1px;}
+.hud-edit-card-row{display:flex; align-items:center; flex-wrap:wrap; gap:4px;
+  padding:1px 0;}
+.hud-edit-card-pick{font:inherit; font-family:var(--f-mono); font-size:11px;
+  text-align:left; color:var(--text); background:transparent; border:1px solid transparent;
+  border-radius:3px; padding:3px 8px; cursor:pointer; flex:1 1 160px;
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.hud-edit-card-pick:hover{color:var(--ice); border-color:var(--line-hot);}
+.hud-edit-card-pick:focus-visible{outline:2px solid var(--ice); outline-offset:-2px;}
+.hud-edit-card-pick.is-selected{color:var(--ice); border-color:var(--ice);}
+.hud-edit-card-state{margin-left:6px; font-size:9.5px; text-transform:uppercase;
+  letter-spacing:.08em; color:var(--dimmer);}
+.hud-edit-card-controls{margin-top:6px; padding-top:6px; border-top:1px solid var(--line);}
+.hud-edit-card-controls .hud-card-tools{display:flex; flex-wrap:wrap; gap:4px;}
+.hud-edit-preset-name{font-family:var(--f-mono); font-size:11px; color:var(--text);
+  border:1px solid transparent; border-radius:3px; padding:3px 8px; flex:1 1 140px;}
+.hud-edit-preset-name.is-chosen{color:var(--ice); border-color:var(--ice);}
+.hud-edit-panel-group{margin:2px 0 6px;}
+.hud-edit-pane-btn{font-family:var(--f-mono); font-size:10.5px;}
+/* The card's OWN controls stay on the canvas and remain clickable in edit
+   mode: the CI layout/field tests drive them there, and hiding them was the
+   frontend regression (ft-2/L2). Picking a card's body moves that same toolbar
+   into the bar's editor; it is never removed or duplicated. */
+body[data-hud-edit="on"] .hud-card .hud-card-tools{display:flex;}
+body[data-hud-edit="on"] .hud-card[data-hud-edit-selected="true"]{
+  outline:2px solid var(--ice); outline-offset:-2px;}
 .hud-region{display:grid; grid-template-columns:repeat(12, minmax(0, 1fr)); gap:0; align-content:start; min-height:0;}
 .hud-region:empty{display:none;}
 .hud-region-left{margin-top:6px;}
@@ -2346,6 +2413,15 @@ body[data-hud-edit="on"] .hud-card-hidden .hud-card-body{display:none;}
   .hud-presets-item:hover{
     border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice);
   }
+  /* The chosen preset is a RECTANGLE, not the word "(chosen)" (owner's request,
+     2026-10-31: every chosen name grew a noisy suffix). The visible label is
+     the name alone; this border plus aria-current carries the state, and the
+     word lives only in the item's accessible name. One rule, so the model
+     presets, the Cloud row and the cloud providers all wear the same box. */
+  .hud-presets-item.is-chosen{
+    border-color:var(--ice); background:rgb(var(--accent-rgb) / .10); color:var(--ice);
+  }
+  .hud-presets-item.is-chosen:hover{border-color:var(--ice);}
   /* A11Y-2026-10-27 (finding 5): was part of the hover rule above, with
      `outline:none` on the shared selector list, so a keyboard reader of the
      Layouts menu had colour alone. Split, so hover no longer suppresses a
@@ -6447,9 +6523,18 @@ function attachRecall(node, trace){
   $("log").scrollTop = $("log").scrollHeight;
 }
 
-function addMessage(role, text){
+function addMessage(role, text, at){
   const el = document.createElement("div");
   el.className = "msg " + role;
+  // The turn's own time, when the PC sent one (a kept chat's turns carry
+  // `at`, unix seconds - the same moment History shows). It rides on the
+  // message so the answer menu can say WHEN that answer was produced, and it
+  // is a data attribute rather than visible text: the history row already
+  // shows the relative age, and the menu shows the exact date and time.
+  if (at !== undefined && at !== null && String(at) !== "") {
+    const seconds = Number(at);
+    if (Number.isFinite(seconds) && seconds > 0) el.setAttribute("data-at", String(Math.round(seconds)));
+  }
   const who = role === "user" ? "you" : role === "jarvis" ? "jarvis"
             : role === "sample" ? "sample reply \u00b7 not from jarvis" : "system";
   el.innerHTML = `<div class="who">${who}</div><div class="body"></div>`;
@@ -6516,6 +6601,21 @@ async function send(){
     reactor.set("idle");
     tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
     return;
+  }
+
+  // GEMINI RULING 5 (2026-10-31): a loaded ARCHIVED chat that is continued is
+  // reopened first, so the new turn is never hidden in the Archive filter.
+  // Best effort: if the PC cannot answer, the message still sends.
+  if(window.__jarvisArchivedContinue){
+    const archivedId = window.__jarvisArchivedContinue;
+    window.__jarvisArchivedContinue = "";
+    try{
+      await jfetch("/api/history/archive", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", "X-Jarvis-Client":"hud"},
+        body: JSON.stringify({id: archivedId, archived: false})
+      });
+    }catch(err){ /* older PC or a dropped connection: send anyway */ }
   }
 
   const body = {
@@ -12507,11 +12607,19 @@ window.hudHistoryHost = {
     // a chat of its own, which is what the Brain's History tab does too.
     const record = c.continuable === false;
     S.conversationId = record ? newConversationId() : String(c.id || newConversationId());
+    // GEMINI RULING 5 (2026-10-31): a chat loaded from the ARCHIVED list is
+    // kept, and the first new message must not be filed into a chat the
+    // Archive filter still hides. Mark it; send() reopens it before the turn.
+    window.__jarvisArchivedContinue = c.archived === true ? S.conversationId : "";
     turns.forEach(function (t) {
       const turn = t && typeof t === "object" ? t : {};
       const words = typeof turn.text === "string" ? turn.text : "";
+      // The turn's own `at` (unix seconds, JARVIS-API §18) rides with the
+      // bubble, so the answer menu's timestamp is the HISTORY time, not the
+      // moment the row was clicked.
+      const when = turn.at !== undefined && turn.at !== null ? turn.at : null;
       if (turn.role === "user") {
-        addMessage("user", words);
+        addMessage("user", words, when);
         if (!record) {
           S.messages.push({
             role: "user",
@@ -12520,7 +12628,7 @@ window.hudHistoryHost = {
           });
         }
       } else if (turn.role === "assistant") {
-        addMessage("jarvis", words);
+        addMessage("jarvis", words, when);
         if (!record) S.messages.push({ role: "assistant", content: words });
       }
     });
@@ -12538,6 +12646,7 @@ window.hudHistoryHost = {
     S.messages = [];
     S.dropped = 0;
     S.conversationId = newConversationId();
+    window.__jarvisArchivedContinue = "";
   },
 };
 /* ── Text size (2026-10-27 accessibility audit, finding 3): this window never

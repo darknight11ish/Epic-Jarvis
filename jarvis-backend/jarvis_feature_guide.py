@@ -2219,6 +2219,7 @@ NO_COMMAND_REASON = {
     # Jarvis are abilities/read-write actions, not stored settings with a switch
     # of their own. Their cards and Settings row carry the real rules.
     "notes-editor": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    "cloud-escalation": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: the Cloud row is a preset choice and the standing switch is on its own card; the cards and the fixed chat answers carry the rule, so there is no separate stored setting.', 'none-needed'),
     "protected-items": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     # Joined 2026-10-31 with the send-file row: a chat action plus a phone-side
     # listing, not a stored setting - its own Settings row carries the rule.

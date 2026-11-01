@@ -15954,6 +15954,40 @@ rule rather than being read aloud - and marks the turn as having read
 outside text (`pc_help_programs`), because a program chooses its own name:
 it is never learned from. Disk, heat and restart answers are neither.
 
+### 84.1a PC facts in chat (added 2026-10-31)
+
+The owner asked "how much storage does my computer have available?" and the
+model said it could not read system storage. The facts already existed; a
+small read-only layer, `jarvis_pc_facts.py` (shipped whole), now puts them
+together for the fast path. It calls the SAME readers PC help uses
+(`jarvis_pc_help.real_readers()`: kernel32 memory/drives/uptime, nvidia-smi
+cards) and adds the current chat model and focus preset. **No new route**: the
+apps already read `GET /api/pc/help` (§84.2), and the phone is not given a
+second one. Nothing is written, changed, sent, gated or learned.
+
+| Asked | Answered from |
+|---|---|
+| "how much storage does my computer have available?" / "how much space is free on my C: drive?" | every fixed drive's own total/free bytes, as `C: has 41.0 GB free of 930 GB (4% free).` |
+| "how much RAM do I have / is free?" | GlobalMemoryStatusEx total and available bytes |
+| "what CPU do I have?" | the CPU model name from Windows' registry (or `platform.processor()`), plus the real logical core count; a name that cannot be read is said "not recorded", never invented |
+| "what GPU do I have?" | nvidia-smi's card names, live temperature, percent busy and VRAM used/free/total (where that same reader has them); no nvidia-smi = said plainly; serials/UUIDs/paths are stripped |
+| "how long has this PC been on?" | GetTickCount64, said in days and hours |
+| "is my disk getting full?" | the C: free space against `jarvis_storage.MIN_FREE_AFTER_DOWNLOAD` (25 GB) and `MIN_FREE_TO_START` (3 GB), the same margins the model chooser uses, with what they mean |
+
+The answers name only drive letters - never a user name, a path or a program
+name - so they are not private and are not outside text. A fact that cannot
+be read is "not readable", never a guess. "How much storage does Google give
+me?" is not captured: the shapes require this PC or a drive. The older
+PC-help phrases still win their own topics ("how much space do I have left?"
+is `pc_help.disk`; "how long has my PC been on?" is `pc_help.restart`), and
+the new layer answers the shapes those patterns did not cover.
+
+The current model/preset line is added to a local prompt only when the newest
+question is about this PC (`jarvis_agent.with_pc_facts_note`): the model is
+told what model and focus preset are current and that it may read disk, RAM,
+CPU, GPU and uptime facts on request, and never to invent a number. An
+ordinary question gets exactly the prompt it had before.
+
 ### 84.2 `GET /api/pc/help`
 
 The same five answers for the apps, routed by `jarvis_brain_reads.py`
@@ -24967,6 +25001,39 @@ Tests: `backend/test_presets_cloud.py`,
 gates, the patch round trip on the published base, and the automatic-turn
 fallback).
 
+**The chat now says the real cloud state (2026-10-31, owner-reported).** With
+the Cloud preset set to DeepSeek (API) and its key saved, the local model told
+the owner "I have no connection to any external API" and "no external
+connections or handoff paths". Both were false. Two additions fix it without
+moving any state, route, card or gate:
+
+- **The model's prompt.** Every local prompt (only when a Cloud provider is
+  chosen) carries ONE redacted system line from
+  `jarvis_presets.cloud_state_line()`: the chosen service, host and model;
+  whether its key is saved (a bool, never a value or fragment); whether it can
+  be used now and why not; and the standing switch. It also says that choosing
+  the preset sends nothing and that email, files, credentials, stored memory,
+  pictures, the screen and a tainted conversation never go. No key, message or
+  private text is in it. A backend with no chosen provider adds no line, so a
+  PC with no cloud set up keeps the old prompt byte for byte.
+- **The fixed chat answers.** Ten sentence shapes are answered with no model
+  from `jarvis_presets.cloud_state()` and `jarvis_chatbot_api`'s presence-only
+  key reads: "are you connected to my deepseek api?", "do you have my deepseek
+  key?", "are you using the cloud right now?", "is this answer from deepseek or
+  the local model?", "how do I escalate something to the cloud?", "what gets
+  sent when you use the cloud?", "what never gets sent?", "can you call the
+  deepseek api for this?", "is the cloud on/off?" and "which provider is the
+  cloud preset using?". They say the real provider/key/readiness/switch state,
+  never the key or a fragment, and quote the one privacy rule. A generic "what
+  is the cloud?" is not over-captured. The three real doors are named exactly:
+  the Try the cloud model button, the standing switch, and "send this to the
+  cloud" in the newest message.
+
+Tests: `backend/test_cloud_honesty_state.py` (40 checks: the system line in a
+stub prompt, all ten shapes in every state, no key in any answer, no model
+call, no over-capture). A chosen provider whose key is not saved, whose monthly
+limit is unset, or whose model cannot be used says so rather than pretending.
+
 ### 145.2 What a cloud answer is corrected with, and `cloud_refused` (added 2026-10-28)
 
 From the 2026-10-27 AI-safety audit (`.dsh-scratch/AUDITS-2026-10-27/partner-ai-safety.md`, H1 and M1). Two things changed about a cloud turn, and **no existing key moved or changed meaning** - the header gains ONE key, and only when it applies.
@@ -28944,7 +29011,7 @@ words.
 
 | route | body | answer |
 |---|---|---|
-| `POST /api/notes/create` | `{"path": "...", "text": "..."}` - `text` may be empty | `202` waiting (with `id`) or `200` saved with `sha256` and `receipt`; `409` the path already exists (no card); `400` bad/absolute/outside/hidden/non-text path or a list body; `413` over **2 MiB**; `429` four writes already waiting; `503` no vault configured |
+| `POST /api/notes/create` | `{"path": "...", "text": "..."}` - `text` may be empty | **CARD-FREE only for a DIRECT owner write (owner's decision 2026-10-31; Gemini round-3 ruling 2): creating a brand-new note is additive and can never destroy content. The scope is strict - provenance `typed` or `voice` AND `X-Jarvis-Client: hud`; after outside text, a background job, or any other client the create keeps its ONE approval card (202 `waiting`).** The card-free payload is capped at **64 KB** (413 above it, no card), a same-name collision is a 409 case-insensitively on Windows, and the vault/protected/hidden/reserved/symlink/`..` refusals are unchanged. Synchronous `200` `created` with `sha256`, `receipt` and the module's own `message` ("Created ... You can undo it."); the undo receipt is recorded BEFORE the file exists so one Undo removes exactly the new file. `409` the path already exists (nothing overwritten, and the write itself is `O_EXCL`); `400` bad/absolute/outside/hidden/non-text path or a list body; `413` over **2 MiB**; `403` a protected path; `503` no vault configured or the receipt/write failed (nothing created) |
 | `POST /api/notes/append` | `{"path": "...", "text": "...", "expected_sha256": "<hex>"}` | `202`/`200` saved with the new `sha256` and `snapshot` (the File Guardian copy id); `409` the note changed since the request (no card, `current_sha256` named); `404` no note there (create it first); `413` the note or the addition would pass 2 MiB; the same `400`/`429`/`503` shapes |
 | `POST /api/notes/tag` | `{"path": "...", "tag": "recipes", "action": "add"\|"remove", "expected_sha256": "<hex>", "where": "auto"\|"frontmatter"\|"line"}` | `200` `saved` with the new `sha256` and `snapshot`, or `200` `unchanged` when the tag was already there / already absent (no card); `409` stale sha; `400` a tag with a space or no letter/`_`/`-`, a `tags:` value that is not a list, two `tags:` lines, unclosed front matter, or a note that is not valid UTF-8 (all BEFORE any card) |
 | `GET /api/notes/change?id=<job id>` | - | the same waiting/saved/denied/failed shape as the save, plus `kind` (`create`/`append`/`tag`), `path`, `sha256`, `message`, and `receipt` for a create or `snapshot` for the two changes |
@@ -29108,6 +29175,20 @@ note or changes any byte outside the link target.
   moving several notes at once, updating links inside protected or hidden notes,
   and following links to remote URLs. The chat says these are not built instead
   of pretending.
+
+- **The desktop plate's two controls (2026-10-31).** The Brain -> Notes editor's
+  chrome has **Rename…** and **Move…** beside Save, calling these same two
+  routes with exactly the bodies above (`{path, title}` and
+  `{path, folder, create_folder}`) and following the card with
+  `GET /api/notes/change?id=`. Rename is pre-filled with the current title and
+  is disabled when the note has no path. Move offers every folder the editor's
+  own note list proves exists (plus the vault's top level) and a new-folder
+  field whose **"Create it if it does not exist"** checkbox is the only way
+  `create_folder` can become true. The plate only asks and follows: it never
+  approves the card, never saves, shows the module's own waiting / denied /
+  failed / saved words (including "You can undo it."), and after a `saved`
+  change opens the note at its new path. The phone has no rename/move control
+  by this slice; its chat grammar calls the same routes.
 
 The module's twin `jarvis-backend/jarvis_notes_edit.py` is byte-identical, and
 `backend/test_notes_rename_move.py` proves the temp-vault matrix: rename/move

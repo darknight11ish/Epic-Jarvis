@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 167 rows from features/features.json.
+The owner's feature list, as data: 168 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 9c2451319f92c3b82e282eaf638880a842b2267d437d9185af75a9e0d4060d36); the apps' Features pages read their own
+`features/features.json` (sha256 cce0c97c4b2c1b5e131ca38fb23590a69d6a6c6fb34fe9a4942748eb029bb159); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "9c2451319f92c3b82e282eaf638880a842b2267d437d9185af75a9e0d4060d36"
+SOURCE_SHA256 = "cce0c97c4b2c1b5e131ca38fb23590a69d6a6c6fb34fe9a4942748eb029bb159"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -267,10 +267,10 @@ FEATURES = (
         "id": "coming-up",
         "group": "Talking",
         "title": "Timers, alarms, reminders and lists",
-        "what": "Jarvis keeps your timers, alarms, reminders, to-do lists and the standby schedule.",
-        "where": "Just ask (\"remind me at six\"), or see them in Brain, Work, Coming up.",
+        "what": "Jarvis keeps your timers, alarms, reminders, to-do lists and the standby schedule on this PC, and shows them to the phone too.",
+        "where": "Just ask - \"remind me at six\", \"remind me in 30 minutes to check my phone\", \"make a reminder for 30 minutes from now\", \"set a timer for 10 minutes\" - or see them in Brain, Work, Coming up and the HUD's Reminders panel (#rail-reminders).",
         "asks": "A plain timer, a one-time reminder, a repeating reminder, an alarm and the standby schedule need no card. The morning briefing and \"tell me when\" raise one.",
-        "limit": "A late alarm rings only if it is at most 10 minutes late; after that it is a quiet note saying it was missed.",
+        "limit": "The PC is the clock. When one goes off, while Jarvis is running on the PC it shows a Windows notification: an alarm keeps ringing, a reminder or timer shows once. With the Jarvis app fully closed no notification appears then, but the job is kept and shows when it opens; a late alarm rings only if at most 10 minutes late, after that it is a quiet missed note. While the phone is connected to the PC the same job also shows an Android notification; the phone sets no alarm of its own. The morning briefing and \"tell me when\" raise one approval card.",
         "surface": "both",
         "covers": ["brain.work.coming-up", "timers-reminders"],
     },
@@ -685,9 +685,9 @@ FEATURES = (
         "group": "Notes and files",
         "title": "Write a note for you",
         "what": "Jarvis writes a note into Obsidian, Logseq or Joplin.",
-        "where": "Say \"note this\" in chat (2026-10-31) or use the quick-note key Alt+Shift+N to open the bar ready to file one.",
+        "where": "Say \"note this\" in chat (2026-10-31) or press Alt+Shift+N (one of the PC's changeable shortcuts in Settings, Shortcuts) to open the bar ready to file one. The notes editor's own Ctrl+B and friends work inside the editor.",
         "asks": "No card normally. In a turn where Jarvis has read an email, a page or a file, writing a note raises one.",
-        "limit": "Only the note apps this PC is set up for. With App lock on, adding a note to a running task needs an unlock first.",
+        "limit": "Only the note apps this PC is set up for. The quick-note key opens the bar ready to file; it does not save by itself, and the phone has no keyboard shortcuts. With App lock on, adding a note to a running task needs an unlock first.",
         "surface": "both",
         "covers": ["notes-and-wiki"],
     },
@@ -697,7 +697,7 @@ FEATURES = (
         "title": "Create and customize your notes",
         "what": "Browse, search, create, extend, surgically change, rename and move notes in your Obsidian vault from the PC or the phone, and use the PC editor's formatting toolbar and templates.",
         "where": "The PC's Brain \u2192 Memory \u2192 Notes; the phone's Brain \u2192 What Jarvis knows about you \u2192 Notes. The create, customize, rename and move sentences work in chat on either app.",
-        "asks": "Reading and searching ask nothing. Creating a note, adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
+        "asks": "Reading and searching ask nothing. Creating a BRAND-NEW note from your own typed or spoken words in the HUD asks no card at all (it is additive, and one Undo removes exactly the new file; after a turn that read outside text, or from a background job, it still asks its one card); adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
         "limit": "Obsidian vault only, one note per request; no deleting a note or a line, no bulk edits, no moving outside the vault, no folder renames and no cloud sync. A note change waits while the turn has read outside text.",
         "surface": "both",
         "aliases": ["notes editor", "the notes editor", "vault editor", "customize a note", "create a note", "notes toolbar"],
@@ -741,10 +741,10 @@ FEATURES = (
         "id": "pc-help",
         "group": "Notes and files",
         "title": "PC help",
-        "what": "Five plain answers about this PC - what is slow, what is full, what is hot.",
-        "where": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help.",
+        "what": "Plain answers about this PC - how full the drives are, how much RAM is free, the CPU model name and cores, what graphics cards it has with their live temperature/utilisation/VRAM, how long it has been on, why it is slow or hot, and the current chat model and focus preset.",
+        "where": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help. The same facts are answered straight in chat, on either app, when you ask about disk/storage, RAM, CPU, GPU or uptime.",
         "asks": "No card - it only reads.",
-        "limit": "Nothing is read until you press the button.",
+        "limit": "The chat answers read the PC when you ask; the PC help card reads when you press Check now. Nothing is written, changed, sent or learned, and no user name, file path, serial or UUID is included - drives are named by their letter only. A non-NVIDIA card, a missing sensor or another unread fact is said as not readable, never guessed.",
         "surface": "both",
         "covers": ["brain.model.pc-help"],
     },
@@ -819,10 +819,10 @@ FEATURES = (
         "id": "goals",
         "group": "Notes and files",
         "title": "Goals",
-        "what": "Plans you edit, with a weekly check-in and steps marked done one at a time.",
-        "where": "Brain, Work, Goals.",
-        "asks": "Accepting a drafted goal raises one card. Marking a step done does not.",
-        "limit": "A drafted goal waits for one card; marking a step done does not undo it by itself.",
+        "what": "Goals kept on this PC: your own words plus a short editable plan of at most 7 steps, with a weekly deterministic check-in.",
+        "where": "Brain, Work, Goals. Ask in chat for a short plan if you want one drafted first.",
+        "asks": "Accepting a drafted goal raises one approval card under change_own_config; ticking a step and the weekly check-in raise no card. Every acting step still needs its own card.",
+        "limit": "No automatic progress tracking: a step is met when you tick it, or where it names a project benchmark, when that number reaches its target on a read/check-in - nothing is ticked silently. At most 9 steps and 20 goals; the plan is a nudge, not a scheduler entry.",
         "surface": "both",
         "covers": ["brain.work.goals", "projects"],
     },
@@ -1280,10 +1280,10 @@ FEATURES = (
         "id": "shortcuts",
         "group": "The PC itself",
         "title": "Keyboard shortcuts",
-        "what": "Every shortcut in one list, and a key of your own for each one.",
-        "where": "Settings, Shortcuts.",
+        "what": "Every PC shortcut in one measured list: 11 bindable Jarvis actions - Alt+Space the Jarvis bar, Alt+Shift+N quick note, Alt+Shift+S Look at this, Alt+Shift+X stop everything, Alt+Shift+W widget, Alt+Shift+F floating face, Alt+Shift+C clipboard history, Alt+Shift+T talk-to-type, Super+Shift+J attach the clipboard; Watch with me and Jarvis Live ship unbound - plus the notes editor's own formatting keys.",
+        "where": "PC: Settings, Shortcuts has the global keys and lets you change each one. The notes editor's Ctrl+B bold, Ctrl+I italic, Ctrl+K wikilink, Ctrl+E code, Ctrl+Shift+X strikethrough, Ctrl+Shift+Q quote, Ctrl+2/3 headings and Ctrl+Shift+7/8/9 lists work inside the Notes plate only.",
         "asks": "No card.",
-        "limit": "A key another program already owns is refused, with the reason.",
+        "limit": "Global keys can be changed in Settings, Shortcuts; a key another program already owns is refused, with the reason. The notes editor's keys are fixed. The phone has no keyboard shortcuts - they are on the PC.",
         "surface": "desktop",
         "surface_reason": "It is the PC keyboard's own shortcut list, with a key of your own for each, and the phone has no keyboard shortcuts to list.",
         "covers": ["settings.shortcuts", "how-it-talks", "pc-at-a-glance"],
@@ -1397,10 +1397,22 @@ FEATURES = (
         "what": "Nine presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
         "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
-        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands.",
+        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands. The Cloud row beside these nine is a separate cloud service choice, described in its own row.",
         "surface": "both",
         "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],
+    },
+    {
+        "id": "cloud-escalation",
+        "group": "The PC itself",
+        "title": "Cloud (DeepSeek API)",
+        "what": "Send a hard question to the one cloud API service you chose - DeepSeek by default - after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
+        "where": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
+        "asks": "Applying the Cloud row raises ONE change_own_config card; so does turning the standing switch on. Turning it off is instant. Every privacy gate still runs first, and the monthly money limit still applies.",
+        "limit": "One cloud service at a time. Its key lives in Windows Credential Manager (presence only is shown, never the key or a fragment), is never logged or echoed, and goes only to that service's own host. No key, no monthly limit or no usable model means no cloud turn. Email, files, credentials, stored memory, a picture, your screen, a private question or a tainted conversation never go. The newest message's own words are what is sent, not the earlier conversation. A chat answer is from the local model unless a cloud turn was allowed; the UI says so on the card.",
+        "surface": "both",
+        "aliases": ["cloud", "cloud api", "deepseek api", "escalate to the cloud", "try the cloud model"],
+        "covers": [],
     },
     {
         "id": "second-card",
@@ -1751,10 +1763,10 @@ FEATURES = (
         "id": "android-builder",
         "group": "The PC itself",
         "title": "Build the Android app in a project task",
-        "what": "Build the Android app in a project task and install the APK over the cable - two separate approvals.",
-        "where": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
-        "asks": "Two risky cards, each with its exact command: one for the build (app_build_android) and one for the install (app_install_android).",
-        "limit": "Only a project already set up for the Android app; it needs the SDK/JDK on this PC and a cable, and it never publishes to Play.",
+        "what": "Build a small Android app from your own index.html/app.js/app.css in a project task, with the Gradle build and the adb install behind their own two approval cards.",
+        "where": "In a project task, say 'build the Android app' or 'build my app and put it on my phone'. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
+        "asks": "Two risky cards, each with the exact command: app_build_android for the build and app_install_android for the install.",
+        "limit": "Only the fixed WebView template (no hand-written Kotlin/manifest, no permissions) in a project task. Needs the Android SDK, a Java 17 JDK and the Gradle wrapper files; the install needs adb and a USB cable with debugging. A first build downloads Gradle and the Android Gradle plugin. No release signing, no Play Store, no adb shell and no uninstall.",
         "surface": "both",
         "aliases": ["android build", "build the android app"],
         "covers": ["android-builder"],

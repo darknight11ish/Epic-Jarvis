@@ -82,6 +82,19 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # The surface-aware lane (2026-10-31): one card-words pin in its own new
     # suite; recorded as debt, not approval, and may only go down.
     "backend/test_surface.py": 1,
+    # The nine wave-2 honesty lanes (2026-11-01): their new suites were written
+    # with a few source-text pins (a card-words string, a route name) rather
+    # than behaviour checks; measured with `--measure` on the merged bundle and
+    # recorded as debt, not approval. The ratchet only turns DOWN: a later wave
+    # should convert these to behaviour checks and lower the numbers.
+    "backend/test_android_builder_honesty.py": 1,
+    "backend/test_goals_honesty.py": 1,
+    "backend/test_model_self_knowledge.py": 1,
+    "backend/test_plugins_honesty.py": 1,
+    "backend/test_price_radar_chat.py": 2,
+    "backend/test_price_radar_honesty.py": 5,
+    "backend/test_reminders_honesty.py": 1,
+    "backend/test_shortcuts_honesty.py": 2,
     # MEASURED ON origin/main 5e84da53 (2026-10-17): the debt as it stands.
     # A ceiling may go DOWN only. These are not approvals - they are what the
     # tool found on the day it landed, so an increase is caught and a

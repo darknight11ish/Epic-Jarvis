@@ -570,6 +570,9 @@ SHIPPED = (
     # using the graphics card - read-only, answered without the model;
     # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
     "jarvis_pc_help.py",
+    # Read-only PC facts (2026-10-31): the same readers as PC help, put
+    # together for the chat answers about disk/RAM/CPU/GPU/uptime/current model.
+    "jarvis_pc_facts.py",
     # Tutorials and the FAQ (owner, 2026-10-05; docs/TUTORIALS-DESIGN.md): one
     # catalogue and the owner's reading progress, read by both apps -
     # GET /api/tutorials, POST /api/tutorials/progress, GET /api/faq
@@ -1445,6 +1448,12 @@ SHIPPED = (
     # exactly the old behaviour. The same entry is at the end of the script's
     # $SHIPPED.
     "jarvis_surface.py",
+    # What Jarvis is running and what it could run (jarvis_model_knowledge.py,
+    # 2026-10-31): the current model and preset, the other local models, their
+    # measured speeds and honest limits, and the ONE-card switch and preset-apply
+    # doors - the same jarvis_models.switch_to and jarvis_presets.apply_from_body
+    # the Models page and the preset card already use. Shipped whole, no route.
+    "jarvis_model_knowledge.py",
 )
 
 

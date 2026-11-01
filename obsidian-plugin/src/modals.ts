@@ -7,9 +7,10 @@
  * the Jarvis window is done by polling `GET /api/notes/change` / the capture
  * status route, and the dialog says exactly what it is doing.
  */
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Setting } from "obsidian";
 import type JarvisNotesPlugin from "./main";
-import { clip, shortError } from "./protocol";
+import { accessibleName, busy, liveRegion } from "./a11y";
+import { clip, isRefusalKind, shortError } from "./protocol";
 import type { WriteKind } from "./types";
 
 const CARD_HINT =
@@ -49,8 +50,10 @@ export class AskModal extends Modal {
       });
       text.inputEl.rows = 4;
       text.inputEl.addClass("jarvis-question");
+      accessibleName(text.inputEl, "Question");
     });
     const answer = contentEl.createEl("div", { cls: "jarvis-answer" });
+    liveRegion(answer);
     answer.setText("Ask when ready.");
     new Setting(contentEl).addButton((button) =>
       button
@@ -58,6 +61,7 @@ export class AskModal extends Modal {
         .setCta()
         .onClick(async () => {
           button.setDisabled(true);
+          busy(answer, true);
           answer.setText("Asking the local Jarvis\u2026");
           try {
             const outcome = await this.plugin.client.askJarvis(
@@ -68,11 +72,14 @@ export class AskModal extends Modal {
             answer.setText(
               outcome.kind === "ok" ? outcome.answer : "Could not ask Jarvis: " + outcome.message,
             );
-            if (outcome.kind === "error") new Notice(outcome.message, 8000);
+            liveRegion(answer, outcome.kind === "ok" ? "polite" : "assertive");
           } catch (error) {
             answer.setText("Could not ask Jarvis: " + shortError(error));
+            liveRegion(answer, "assertive");
           } finally {
             button.setDisabled(false);
+            busy(answer, false);
+            button.buttonEl.focus();
           }
         }),
     );
@@ -97,29 +104,40 @@ export class CaptureModal extends Modal {
         this.text = value;
       });
       area.inputEl.rows = 6;
+      accessibleName(area.inputEl, "What to capture");
     });
     const said = contentEl.createEl("div", { cls: "jarvis-answer" });
+    liveRegion(said);
     new Setting(contentEl).addButton((button) =>
       button
         .setButtonText("Capture")
         .setCta()
         .onClick(async () => {
           button.setDisabled(true);
+          busy(said, true);
           said.setText("Sending to the local Jarvis\u2026");
           try {
             const outcome = await this.plugin.client.captureToDaily(this.text);
             said.setText(outcome.message);
+            liveRegion(said, outcome.kind === "filed" || outcome.kind === "waiting" ? "polite" : "assertive");
             if (outcome.kind === "waiting" && outcome.jobId) {
+              // Stop saying "busy" before the long wait: aria-busy would defer
+              // the very messages that tell the owner to answer the card on the PC.
+              busy(said, false);
               said.setText(outcome.message + " Checking\u2026");
               const final = await this.plugin.client.pollCapture(outcome.jobId, (message) =>
                 said.setText(message + " Checking\u2026"),
               );
               said.setText(final.message);
+              liveRegion(said, final.kind === "filed" ? "polite" : "assertive");
             }
           } catch (error) {
             said.setText("Not captured: " + shortError(error));
+            liveRegion(said, "assertive");
           } finally {
             button.setDisabled(false);
+            busy(said, false);
+            button.buttonEl.focus();
           }
         }),
     );
@@ -146,10 +164,14 @@ export class ReplaceModal extends Modal {
     contentEl.createEl("p", { cls: "jarvis-hint", text: CARD_HINT });
     new Setting(contentEl)
       .setName("Selected words")
-      .setDesc("This exact text is what Jarvis will replace (one whole-word occurrence).")
+      .setDesc(this.replacePreviewDescription())
       .addTextArea((area) => {
         area.setValue(clip(this.selection, 400));
-        area.setDisabled(true);
+        // Read-only, not disabled: a disabled control cannot receive focus, so a
+        // screen-reader user could not read back what is about to be replaced.
+        area.inputEl.readOnly = true;
+        area.inputEl.setAttribute("aria-readonly", "true");
+        accessibleName(area.inputEl, "Selected words (read only)");
         area.inputEl.rows = 2;
       });
     new Setting(contentEl).setName("Replace it with").addTextArea((area) => {
@@ -157,36 +179,51 @@ export class ReplaceModal extends Modal {
         this.newText = value;
       });
       area.inputEl.rows = 4;
+      accessibleName(area.inputEl, "Replacement words");
     });
     this.resultEl = contentEl.createEl("div", { cls: "jarvis-answer" });
+    liveRegion(this.resultEl);
     new Setting(contentEl).addButton((button) =>
       button
         .setButtonText("Ask Jarvis to replace it")
         .setCta()
         .onClick(async () => {
           if (!this.newText.trim()) {
-            new Notice("Type the replacement words first.");
+            this.showResult("Type the replacement words first.", "error");
             return;
           }
           button.setDisabled(true);
+          // No aria-busy around performWrite: it waits for the card on the PC,
+          // which can take minutes, and busy would defer the live updates that
+          // tell the owner a card is waiting.
           const show = (message: string, kind?: WriteKind): void => this.showResult(message, kind);
           try {
             await this.plugin.performWrite(
               "Asking Jarvis to replace the selection in " + this.path,
               (sha) => this.plugin.client.replaceOnce(this.path, this.selection, this.newText, sha),
               show,
+              this.path,
             );
           } finally {
             button.setDisabled(false);
+            button.buttonEl.focus();
           }
         }),
     );
+  }
+
+  /** Say truthfully whether the read-only preview is the whole target or its first 400 characters. */
+  private replacePreviewDescription(): string {
+    return this.selection.length > 400
+      ? "The first 400 characters of the exact text Jarvis will replace (one whole-word occurrence)."
+      : "This exact text is what Jarvis will replace (one whole-word occurrence).";
   }
 
   private showResult(message: string, kind?: WriteKind): void {
     if (!this.resultEl) return;
     this.resultEl.setText(message);
     this.resultEl.setAttribute("data-kind", kind ?? "");
+    liveRegion(this.resultEl, isRefusalKind(kind) ? "assertive" : "polite");
   }
 }
 
@@ -206,36 +243,44 @@ export class TagModal extends Modal {
     new Setting(contentEl)
       .setName("Tag")
       .setDesc("One tag, without the #: letters, numbers, _ - or /; at least one letter.")
-      .addText((text) =>
-        text.setPlaceholder("recipes").onChange((value) => {
+      .addText((text) => {
+        accessibleName(text.inputEl, "Tag name");
+        return text.setPlaceholder("recipes").onChange((value) => {
           this.tag = value;
-        }),
-      );
+        });
+      });
     this.resultEl = contentEl.createEl("div", { cls: "jarvis-answer" });
+    liveRegion(this.resultEl);
     new Setting(contentEl).addButton((button) =>
       button
         .setButtonText("Ask Jarvis to add the tag")
         .setCta()
         .onClick(async () => {
           if (!this.tag.trim()) {
-            new Notice("Type a tag name first.");
+            this.showResult("Type a tag name first.", "error");
             return;
           }
           button.setDisabled(true);
+          // No aria-busy around performWrite: the card wait can take minutes.
           try {
             await this.plugin.performWrite(
               "Asking Jarvis to tag " + this.path,
               (sha) => this.plugin.client.addTag(this.path, this.tag, sha),
-              (message, kind) => {
-                if (!this.resultEl) return;
-                this.resultEl.setText(message);
-                this.resultEl.setAttribute("data-kind", kind ?? "");
-              },
+              (message, kind) => this.showResult(message, kind),
+              this.path,
             );
           } finally {
             button.setDisabled(false);
+            button.buttonEl.focus();
           }
         }),
     );
+  }
+
+  private showResult(message: string, kind?: WriteKind): void {
+    if (!this.resultEl) return;
+    this.resultEl.setText(message);
+    this.resultEl.setAttribute("data-kind", kind ?? "");
+    liveRegion(this.resultEl, isRefusalKind(kind) ? "assertive" : "polite");
   }
 }

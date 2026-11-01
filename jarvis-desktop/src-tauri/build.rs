@@ -804,6 +804,11 @@ fn main() {
             "notes_read",
             "notes_save",
             "notes_save_status",
+            // Wave 4: rename or move ONE note (raises the same ONE card,
+            // follows its job, and never approves anything from here).
+            "notes_rename",
+            "notes_move",
+            "notes_change_status",
             // Deep questions (backend/big-model.patch): read the recent ones
             // and their answers, and ask one. No card per question - the
             // switch was approved - and asking is held on a stale link.

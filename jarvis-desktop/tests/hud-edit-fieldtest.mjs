@@ -424,6 +424,14 @@ async function changeEverything(page, before) {
  * be needed there - the revert counts how many needed it, and reports it.
  */
 async function chooseRegion(page, id, region, { mustBeReachable = false } = {}) {
+  // The 2026-10-31 simplification puts a card's controls in the Cards tab's
+  // selected-card editor; select the card first so its own "Move to" select is
+  // the visible one, then drive it exactly as the owner does.
+  await page.evaluate((cardId) => {
+    const pick = document.querySelector(`[data-hud-edit-card-pick="${cardId}"]`);
+    if (pick && pick.getAttribute("aria-pressed") !== "true") pick.click();
+  }, id);
+  await page.waitForTimeout(40);
   const visible = await page.locator(`[data-hud-edit-region="${id}"]`).isVisible();
   if (mustBeReachable) assert.equal(visible, true, `the "Move to" select for ${id} is not on screen`);
   if (visible) {

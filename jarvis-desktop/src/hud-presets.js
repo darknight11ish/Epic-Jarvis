@@ -1000,6 +1000,26 @@ export function mountHudPresets(options = {}) {
     return button;
   }
 
+  /** Mark ONE row as the chosen one: a rectangle on screen, and the word in the
+   *  accessible name only (the owner's request, 2026-10-31 - "(chosen)" after
+   *  every chosen name made the list noisy; a rectangle is what a chosen row
+   *  should look like).
+   *
+   *  The visible label never carries "(chosen)": the state is the
+   *  `.hud-presets-item.is-chosen` border drawn by the page's own stylesheet,
+   *  and `aria-current="true"` tells a screen reader which row it is. The word
+   *  stays in `aria-label`, so a reader still hears it without it being drawn.
+   *  One helper for all three lists (model presets, the Cloud row and the cloud
+   *  providers), so they cannot drift apart. */
+  function markChosen(button, hintText) {
+    button.classList.add("is-chosen");
+    button.setAttribute("aria-current", "true");
+    const visible = (button.textContent || "").trim();
+    const hint = String(hintText || button.title || "").trim();
+    button.setAttribute("aria-label",
+      hint ? `${visible} (chosen). ${hint}` : `${visible} (chosen)`);
+  }
+
   function section(heading) {
     const box = el(doc, "div", "hud-presets-group");
     const title = el(doc, "p", "hud-presets-head", heading);
@@ -1060,11 +1080,11 @@ export function mountHudPresets(options = {}) {
         continue;
       }
       const button = menuItem(
-        `${row.title}${row.chosen ? " (chosen)" : ""}${asking ? " - asking..." : ""}`,
+        `${row.title}${asking ? " - asking..." : ""}`,
         row.focus,
         () => { pickModelPreset(row.id, row.title); },
       );
-      if (row.chosen) button.setAttribute("aria-current", "true");
+      if (row.chosen) markChosen(button, row.focus);
       // The id in the DOM, so a person tabbing through and the tests both see
       // which row a button is - never read back as the chosen state, which is
       // the PC's answer alone.
@@ -1084,19 +1104,20 @@ export function mountHudPresets(options = {}) {
    *  the provider submenu. The mark is the PC's `cloud.provider`. */
   function renderCloudRow(cloud) {
     const asking = pcBusy.preset === "cloud";
+    const hint = cloud.providers.length
+      ? "Choose the API service the cloud turns use"
+      : "No API service is connected on this PC yet";
     const button = menuItem(
-      `Cloud${cloud.provider ? ` - ${cloud.provider}` : ""}${cloud.chosen ? " (chosen)" : ""}`
+      `Cloud${cloud.provider ? ` - ${cloud.provider}` : ""}`
         + `${asking ? " - asking..." : ""}${cloudOpen ? " - open" : ""}`,
-      cloud.providers.length
-        ? "Choose the API service the cloud turns use"
-        : "No API service is connected on this PC yet",
+      hint,
       () => { toggleCloud(!cloudOpen); },
     );
     button.setAttribute("aria-haspopup", "true");
     button.setAttribute("aria-expanded", cloudOpen ? "true" : "false");
     button.setAttribute("aria-controls", "hud-presets-cloud-menu");
     button.dataset.cloudAction = "open";
-    if (cloud.chosen) button.setAttribute("aria-current", "true");
+    if (cloud.chosen) markChosen(button, hint);
     return button;
   }
 
@@ -1148,13 +1169,14 @@ export function mountHudPresets(options = {}) {
         continue;
       }
       const asking = pcBusy.preset === "cloud" && pcBusy.provider === row.id;
+      const hint = [row.host, row.model, state].filter((bit) => bit).join(" - ");
       const button = menuItem(
-        `${row.name}${row.chosen ? " (chosen)" : ""}${asking ? " - asking..." : ""}`,
-        [row.host, row.model, state].filter((bit) => bit).join(" - "),
+        `${row.name}${asking ? " - asking..." : ""}`,
+        hint,
         () => { pickCloudProvider(row); },
       );
       button.dataset.provider = row.id;
-      if (row.chosen) button.setAttribute("aria-current", "true");
+      if (row.chosen) markChosen(button, hint);
       // A service the PC says is not ready is not clickable - the same rule as
       // a heavy preset, and the reason is on the line below it. Waiting is NOT
       // a disabled state: the row keeps the keyboard focus and its own guard.
@@ -1269,7 +1291,7 @@ export function mountHudPresets(options = {}) {
   /** A stable identity for one menu control, so a rebuild can put the keyboard
    *  focus back on the SAME row instead of dropping it on <body> (2026-10-27
    *  HUD audit P2-2). Built from the row's own DATA, never from its position
-   *  and never from its visible text: a row that becomes "General (chosen)"
+   *  and never from its visible text: a row that becomes the chosen one
    *  after the PC answers is still the same row, and using its text as the key
    *  lost the focus on exactly the action the owner had just taken. */
   function focusKey(node) {

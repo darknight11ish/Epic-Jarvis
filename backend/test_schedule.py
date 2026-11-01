@@ -613,19 +613,19 @@ OURS = {
 
 NOT_OURS = [
     "how long does it take to boil an egg", "what's a good timer app",
-    "should i set a timer for 10 minutes", "how do I set a timer",
+    "should i set a timer for 10 minutes",
     "remind me what we talked about", "remind me who wrote Dune", "remind me about the meeting",
-    "can you remind me later", "set an alarm system up at home",
+    "set an alarm system up at home",
     "tell me about the history of alarms", "add salt to the pasta recipe",
     "what time is it in Tokyo", "timer", "set a timer", "set an alarm", "remind me",
-    "check the oven", "wake me up when september ends", "how long is the flight to Paris",
+    "check the oven", "wake me up when september ends",
     "I have to do my taxes", "what should I add to my list", "the timer on my oven is broken",
     "my alarm didn't go off this morning", "what's the best way to remember things",
     "remind me to", "stop", "cancel", "add it to my to-do list",
     # A CLAIM, not a command: the model's words must not set a reminder of
     # their own (the same 2026-10-27 bug, the other direction), and an offer
     # is not one either.
-    "reminder set for 6pm", "added a reminder for 6pm", "set a reminder for 6pm",
+    "reminder set for 6pm", "added a reminder for 6pm",
     "add a reminder to my phone", "should i add a reminder for 6pm",
     "add a reminder for the meeting if you like",
     "set a timer for 10 minutes and then tell me a joke",
@@ -651,6 +651,29 @@ def t_near_misses_go_to_the_model():
         got = Q.match(text, now)
         check(f"to the model: {text!r}", got is None, got and (got.name, got.f))
     check("English only, and said so", Q.LANGUAGES == ("English",))
+
+
+def t_the_new_lanes_own_these_former_near_misses():
+    """Wave 2 (2026-11-01) deliberately moved four former near-misses out of the
+    "leave it to the model" list. The reminders honesty lane answers the how-to
+    and capability questions deterministically; the price-radar lane answers a
+    flight question honestly (read-only, off by default, never books); and the
+    reminders lane parses an explicit "set a reminder for 6pm" into its one
+    gated reminder path instead of leaving a claim to the model. Each answer is
+    still deterministic - never a model guess - and the lane's own suite holds
+    the wording."""
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    owned = {
+        "how do I set a timer": "reminder_howto",
+        "can you remind me later": "reminder_capability",
+        "how long is the flight to Paris": "price_radar_flight",
+        "set a reminder for 6pm": "reminder_set",
+    }
+    for text, name in owned.items():
+        got = Q.match(text, now)
+        check(f"wave-2 lane owns {text!r} -> {name}",
+              got is not None and got.name == name, got and (got.name, got.f))
 
 
 def t_times_are_read_right():

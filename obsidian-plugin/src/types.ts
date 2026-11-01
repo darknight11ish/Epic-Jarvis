@@ -97,6 +97,30 @@ export interface TemplateListOutcome {
 }
 
 /**
+ * The plugin's own connection state, one value per honest status-bar sentence.
+ * `unknown` means the first status check has not finished (or has not run).
+ */
+export type StatusKind =
+  | "unknown"
+  | "no-token"
+  | "connected"
+  | "unreachable"
+  | "token-refused"
+  | "not-deployed"
+  | "http";
+
+/**
+ * The first-run setup checklist the panel shows until the plugin is connected.
+ * Pure data, so the honesty of every state can be tested without Obsidian.
+ */
+export interface FirstRunChecklist {
+  heading: string;
+  steps: string[];
+  /** The one next thing to do for the current state ("" once connected). */
+  next: string;
+}
+
+/**
  * The minimal shape of an HTTP answer this plugin reasons about.
  * `requestUrl`'s response has `status`, `json` (a getter that throws on bad
  * JSON) and `text`; the client narrows it to this before parsing.

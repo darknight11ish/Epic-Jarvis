@@ -929,7 +929,7 @@
     {
      "asks": "Yes, every question",
      "id": "cloud_model",
-     "line": "Jarvis may offer to send one question to a cloud model (jarvis-escalate). It goes only if you say yes to that one question, and never with your memory, a picture, or a conversation that has read private or outside text.",
+     "line": "Jarvis may offer to send one question to a cloud model (jarvis-escalate). It goes only after you allow it - a yes for that one question, or the standing escalation switch if it is on - and never with your memory, a picture, or a conversation that has read private or outside text.",
      "name": "Cloud model",
      "on": true,
      "state": "on",

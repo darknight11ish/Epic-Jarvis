@@ -274,18 +274,17 @@ def ask(text: str):
 def t_create_makes_one_note_and_undo_removes_it():
     reset_vault()
     code, out, gate = do_create("Shopping.md", "milk\neggs\n")
-    check("create: the route answers saved", code == 200 and out.get("state") == "saved",
-          f"{code} {out}")
+    # OWNER DECISION 2026-10-31: a brand-new note is CARD-FREE. It is additive
+    # and cannot destroy content, so it must not raise, or wait for, a card.
+    check("create: the route answers created, card-free",
+          code == 200 and out.get("state") == "created", f"{code} {out}")
     body = read_bytes("Shopping.md")
     check("create: the file holds exactly the text sent", body == b"milk\neggs\n", body)
-    check("create: ONE card was asked, under edit_vault_note", len(gate.calls) == 1
-          and gate.calls[0][0] == E.ACTION, gate.calls)
-    prompt, detail = gate.calls[0][2], gate.calls[0][1]
-    check("create: the card names the file and says what changes",
-          "Shopping.md" in prompt and detail.get("path") == "Shopping.md"
-          and detail.get("action"), (prompt, detail))
-    check("create: the answer says the owner can undo it",
-          "You can undo it" in str(out.get("message")), out.get("message"))
+    check("create: NO card was asked (the owner's decision, 2026-10-31)",
+          gate.calls == [], gate.calls)
+    check("create: the answer names the file and says it can be undone",
+          "Shopping.md" in str(out.get("message"))
+          and "You can undo it" in str(out.get("message")), out.get("message"))
     rid = str(out.get("receipt") or "")
     if RC is None:
         skip("create: undo receipt walk", "jarvis_receipts is not on this tree")
@@ -322,13 +321,14 @@ def t_create_refuses_bad_paths_and_a_list_body():
 
 
 def t_create_denied_writes_nothing_and_no_receipt():
+    # A Deny has nothing to refuse now: a brand-new note asks no card at all.
     reset_vault()
     gate = Gate(allowed=False, outcome="denied")
     code, out, _g = do_create("Denied.md", "nope", gate=gate)
-    check("create: a Deny answers denied", out.get("state") == "denied", f"{code} {out}")
-    check("create: ... with the module's own refusal words",
-          "You said no, so the note was not created." in str(out.get("message")), out)
-    check("create: ... writes no file", not (VAULT / "Denied.md").exists())
+    check("create: a brand-new note asks NO card, so a Deny refuses nothing",
+          code == 200 and out.get("state") == "created" and gate.calls == [],
+          f"{code} {out} {gate.calls}")
+    check("create: ... and the note really is written", (VAULT / "Denied.md").is_file())
 
 
 def t_create_is_one_path_and_respects_protection():
@@ -536,16 +536,25 @@ def t_waiting_limit_and_one_path_bodies():
     slow = Gate(delay=0.9)
     set_gate(slow)
     ids = []
+    # The waiting limit belongs to the CARDED writes; creates are card-free and
+    # do not wait, so this fills the queue with appends (still one card each).
     for i in range(E.MAX_WAITING):
-        code, out = E.handle_create({"path": f"Wait{i}.md", "text": "x"},
+        rel = f"Wait{i}.md"
+        write_note(rel, "x\n")
+        expected = sha(read_bytes(rel))
+        code, out = E.handle_append({"path": rel, "text": "y",
+                                     "expected_sha256": expected},
                                     gate_check=slow, wait_s=0.02)
         ids.append((code, out))
-    check("limits: the first writes wait for their cards",
+    check("limits: the first carded writes wait for their cards",
           all(c == 202 and o.get("state") == "waiting" for c, o in ids),
           [(c, o.get("state")) for c, o in ids])
-    code, out = E.handle_create({"path": "Over.md", "text": "x"},
+    write_note("Over.md", "x\n")
+    expected = sha(read_bytes("Over.md"))
+    code, out = E.handle_append({"path": "Over.md", "text": "y",
+                                 "expected_sha256": expected},
                                 gate_check=slow, wait_s=0.02)
-    check("limits: the next one is refused as 429 with the number",
+    check("limits: the next carded write is refused as 429 with the number",
           code == 429 and str(E.MAX_WAITING) in str(out.get("error")), f"{code} {out}")
     for code, out in ids:
         jid = out.get("id")
@@ -553,6 +562,7 @@ def t_waiting_limit_and_one_path_bodies():
             wait_job(jid, timeout=5.0)
     for i in range(E.MAX_WAITING):
         (VAULT / f"Wait{i}.md").unlink(missing_ok=True)
+    (VAULT / "Over.md").unlink(missing_ok=True)
 
 
 # --------------------------------------------------------------------------
@@ -622,24 +632,217 @@ def t_chat_batch_and_hidden_are_refused_without_a_card():
           and "one note at a time" in got.reply, got.reply if got else "model")
     check("chat: ... and asks no card and writes nothing", gate.calls == []
           and (VAULT / "Shopping.md").read_text(encoding="utf-8") == "old\n", gate.calls)
-    # hidden lists: a fixed line, no title, no card
+    # hidden lists: a brand-new note is still card-free and additive, so it is
+    # created - but the reply must name no title, no file, and no card is asked.
     old_hidden = Q._calendar_hidden
     try:
         Q._calendar_hidden = lambda: (True, "Words hidden.")
         hidden_gate = Gate()
         set_gate(hidden_gate)
-        for text in ("create a note called Secret", "add milk to my Shopping note",
-                     "add tag x to my Shopping note"):
+        got = ask("create a note called Secret")
+        check("chat hidden: a new note is created card-free",
+              got is not None and got.intent == "note_created"
+              and hidden_gate.calls == [], got.intent if got else "model")
+        check("chat hidden: ... the reply counts the note and names no title",
+              got is not None and "Created one note" in got.reply
+              and "Secret" not in got.reply, got.reply if got else "")
+        check("chat hidden: ... and the file is really written",
+              (VAULT / "Secret.md").exists())
+        for text in ("add milk to my Shopping note", "add tag x to my Shopping note"):
             got = ask(text)
-            check(f"chat hidden: {text!r} refuses with no card",
+            check(f"chat hidden: {text!r} still refuses the carded change",
                   got is not None and got.intent == "note_write_hidden"
                   and hidden_gate.calls == [], got.intent if got else "model")
-            check("chat hidden: ... no title and nothing written",
-                  got is not None and "Secret" not in got.reply
-                  and "Shopping" not in got.reply
-                  and not (VAULT / "Secret.md").exists(), got.reply if got else "")
+            check("chat hidden: ... no title and nothing changed",
+                  got is not None and "Shopping" not in got.reply, got.reply if got else "")
     finally:
         Q._calendar_hidden = old_hidden
+
+
+# --------------------------------------------------------------------------
+# 4b. CARD-FREE CREATE CHAT SHAPES + WHERE-IS-MY-VAULT (2026-10-31 follow-up)
+# --------------------------------------------------------------------------
+def t_cardfree_create_chat_shapes():
+    reset_vault()
+    gate = Gate()
+    set_gate(gate)
+    shapes = ("write a note for me about the gym trip",
+              "write me a note about milk and eggs",
+              "make a new note called Gym with went to the gym yesterday",
+              "create a note called Shopping and put milk in it")
+    for said in shapes:
+        got = ask(said)
+        check(f"chat card-free: {said!r} creates a note",
+              got is not None and got.intent == "note_created",
+              got.intent if got else "model")
+        check("chat card-free: ... the answer says it can be undone",
+              got is not None and "You can undo it" in got.reply,
+              got.reply if got else "")
+    files = sorted(p.name for p in VAULT.glob("*.md"))
+    check("chat card-free: every shape wrote a note", len(files) == len(shapes), files)
+    check("chat card-free: NO card was asked for any create", gate.calls == [], gate.calls)
+    gym = VAULT / "Gym.md"
+    check("chat card-free: named create holds the owner's words",
+          gym.is_file() and "went to the gym yesterday" in gym.read_text(encoding="utf-8"),
+          gym.read_text(encoding="utf-8") if gym.is_file() else "missing")
+    shopping = VAULT / "Shopping.md"
+    check("chat card-free: 'and put ... in it' becomes the body",
+          shopping.is_file() and "milk" in shopping.read_text(encoding="utf-8"))
+
+
+def t_cardfree_capability_creates_nothing():
+    reset_vault()
+    gate = Gate()
+    set_gate(gate)
+    for said in ("can you write a note?", "write a note for me"):
+        got = ask(said)
+        check(f"chat capability: {said!r} answers yes and creates nothing",
+              got is not None and got.intent == "note_create_capability"
+              and "Yes" in got.reply, got.intent if got else "model")
+    check("chat capability: NO card, no file, no model fallthrough",
+          gate.calls == [] and not list(VAULT.glob("*.md")),
+          [p.name for p in VAULT.glob("*.md")])
+
+
+def t_where_is_my_vault_and_last_note():
+    reset_vault()
+    set_gate(Gate())
+    Q._LAST_FILED.clear()
+    for said in ("where is my vault?", "which folder are my notes in?",
+                 "where do you save my notes?", "where are my notes?"):
+        got = ask(said)
+        check(f"chat location: {said!r} names the vault",
+              got is not None and got.intent == "note_location"
+              and str(VAULT) in got.reply, got.reply if got else "model")
+        check("chat location: ... read-only, no 'Nothing was done' footer",
+              got is not None and "Nothing was actually done" not in got.reply,
+              got.reply if got else "")
+    got = ask("what folder is it in?")
+    check("chat location: with no last note it says so honestly",
+          got is not None and got.intent == "note_location"
+          and "cannot see which note" in got.reply, got.reply if got else "")
+    check("chat location: ... and never offers to search the files",
+          got is not None and "search" not in got.reply.lower()
+          and "access" not in got.reply.lower(), got.reply if got else "")
+    got = ask("what folder is Chrome in?")
+    check("chat location: 'what folder is Chrome in' is NOT a vault question",
+          got is None or got.intent != "note_location", got.intent if got else "model")
+    create = ask("create a note called Gym with gym yesterday")
+    check("chat location: the create succeeded before the follow-up",
+          create is not None and create.intent == "note_created",
+          create.intent if create else "model")
+    got = ask("what folder is it in?")
+    made = sorted(p.name for p in VAULT.glob("*.md"))
+    check("chat location: after a create it names the exact file it wrote",
+          got is not None and bool(made) and made[0] in got.reply
+          and str(VAULT) in got.reply,
+          f"{got.reply if got else ''} files={made}")
+    got = ask("where did that note go?")
+    check("chat location: 'where did that note go?' names the same file",
+          got is not None and bool(made) and made[0] in got.reply,
+          f"{got.reply if got else ''} files={made}")
+
+
+def t_where_is_my_vault_hidden_names_no_note():
+    reset_vault()
+    set_gate(Gate())
+    old = Q._calendar_hidden
+    try:
+        Q._calendar_hidden = lambda: (True, "Words hidden.")
+        got = ask("where did that note go?")
+        check("chat location hidden: vault only, no note title or file",
+              got is not None and got.intent == "note_location"
+              and str(VAULT) in got.reply and ".md" not in got.reply,
+              got.reply if got else "model")
+    finally:
+        Q._calendar_hidden = old
+
+
+def t_create_round3_invariants():
+    """Gemini round-3 ruling 2: the five invariants of a card-free create."""
+    reset_vault()
+    # 1. strict collision refusal, case-insensitive on Windows (and explicit on
+    #    a case-sensitive filesystem): "gym.md" may not create beside "Gym.md".
+    code, out, gate = do_create("Gym.md", "first")
+    check("round3: the first create is card-free", code == 200
+          and out.get("state") == "created" and gate.calls == [], out)
+    code, out, gate = do_create("gym.md", "second")
+    check("round3: a same-name/different-case collision is a 409",
+          code == 409 and out.get("state") == "exists", f"{code} {out}")
+    check("round3: ... the first note is byte-for-byte untouched",
+          (VAULT / "Gym.md").read_text(encoding="utf-8") == "first")
+    check("round3: ... and no card was asked", gate.calls == [], gate.calls)
+    # 2. body-size cap: 64 KB is the most a card-free create writes.
+    exact = "a" * (E.CARD_FREE_MAX_BYTES - 8)
+    code, out = E.handle_create({"path": "Exact.md", "text": exact})
+    check("round3: a note just under the 64 KB cap is created",
+          code == 200 and out.get("state") == "created", f"{code} {out}")
+    code, out = E.handle_create({"path": "Big.md",
+                                 "text": "a" * (E.CARD_FREE_MAX_BYTES + 16)})
+    check("round3: a note over the 64 KB cap is a 413, no card, no file",
+          code == 413 and not (VAULT / "Big.md").exists(), f"{code} {out}")
+    # 3. card-free ONLY for a direct owner write: after outside text, a
+    #    background job, or another client keeps the old ONE-card path.
+    for i, (kwargs, why) in enumerate((
+        ({"provenance": "after_outside_text", "client": "hud"}, "after outside text"),
+        ({"provenance": "background", "client": "hud"}, "a background job"),
+        ({"provenance": "typed", "client": "phone"}, "a non-HUD client"),
+    )):
+        gate = Gate(delay=0.9)
+        set_gate(gate)
+        rel = f"CARDED{i}.md"
+        code, out = E.handle_create({"path": rel, "text": "x"},
+                                    gate_check=gate, wait_s=0.02, **kwargs)
+        check(f"round3: {why} still asks its ONE card",
+              code == 202 and out.get("state") == "waiting"
+              and len(gate.calls) == 1, f"{kwargs} {code} {out} {gate.calls}")
+        check(f"round3: ... and {why} writes no file before the yes",
+              not (VAULT / rel).exists())
+        wait_job(out.get("id"), timeout=5.0)
+        (VAULT / rel).unlink(missing_ok=True)
+    # 4. direct owner writing in the HUD is the one card-free case.
+    gate = Gate()
+    code, out = E.handle_create({"path": "Owner.md", "text": "x"},
+                                gate_check=gate, provenance="typed", client="hud")
+    check("round3: a direct owner HUD write is card-free",
+          code == 200 and out.get("state") == "created" and gate.calls == [],
+          f"{code} {out} {gate.calls}")
+    # 5. the chat path obeys the same rule: a tainted turn forces the card.
+    old_taint = Q._note_write_tainted
+    try:
+        Q._note_write_tainted = lambda: "after_outside_text"
+        gate = Gate(delay=3.0)
+        set_gate(gate)
+        got = ask("write a note for me about the gym")
+        check("round3: chat after outside text still asks its card",
+              got is not None and got.intent == "note_create_waiting"
+              and len(gate.calls) == 1, (got.intent if got else "model") + f" {gate.calls}")
+        check("round3: ... and creates no file before the yes",
+              not any(p.name.startswith("the gym") for p in VAULT.glob("*.md")))
+    finally:
+        Q._note_write_tainted = old_taint
+
+
+def t_create_round3_refusals_are_the_contract():
+    """The refusals that must survive card-free mode (ruling 2)."""
+    reset_vault()
+    for bad in ("../escape.md", "/abs.md", "C:/x.md", ".obsidian/x.md",
+                "notes/../../escape.md", "picture.png", "notes/.hidden.md",
+                ".git/config.md"):
+        code, out = E.handle_create({"path": bad, "text": "x"})
+        check(f"round3: {bad!r} is refused with no write", code == 400,
+              f"{code} {out}")
+    try:
+        target = VAULT / "Outside"
+        target.mkdir(exist_ok=True)
+        link = VAULT / "linkdir"
+        if not link.exists():
+            os.symlink(str(target), str(link), target_is_directory=True)
+        code, out = E.handle_create({"path": "linkdir/x.md", "text": "x"})
+        check("round3: a symlinked folder is refused", code in (400, 403),
+              f"{code} {out}")
+    except (OSError, NotImplementedError):
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -687,6 +890,12 @@ TESTS = [
     t_chat_create_and_the_daily_note_still_owns_its_own_shapes,
     t_chat_append_and_tag_paths,
     t_chat_batch_and_hidden_are_refused_without_a_card,
+    t_cardfree_create_chat_shapes,
+    t_cardfree_capability_creates_nothing,
+    t_where_is_my_vault_and_last_note,
+    t_where_is_my_vault_hidden_names_no_note,
+    t_create_round3_invariants,
+    t_create_round3_refusals_are_the_contract,
     t_twins_and_docs_agree,
 ]
 

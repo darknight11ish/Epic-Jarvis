@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "30ef1defcf9f57c7f21095d5546f41b2d9d84e6885c062893fc8a8fd591b38d5",
-  "feature_count": 167,
+  "source_sha256": "987b9bb491d340bb7a5f716864fb5ec9b00d371d727151f81bdf2f3b6109f1e3",
+  "feature_count": 168,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
     "Settings-Only (By Design — Security Boundary)",
@@ -1840,6 +1840,22 @@
       "where_desktop": "focus-presets",
       "where_phone": "All features and abilities",
       "note": "Still being wired (owner: Session B): typed control works; no phone Settings location",
+      "not_a_control": true
+    },
+    {
+      "id": "cloud-escalation",
+      "title": "Cloud (DeepSeek API)",
+      "group": "The PC itself",
+      "surface": "both",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "status": "not-a-setting",
+      "label_note": "",
+      "example": "turn on Cloud (DeepSeek API)",
+      "example_ok": true,
+      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
+      "where_desktop": "All features and abilities",
+      "where_phone": "All features and abilities",
+      "note": "",
       "not_a_control": true
     },
     {
