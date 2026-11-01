@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "4fe7299223cf04d7e07838ca5b19f8f595b31a7719e03ca7624c41016c35e8da",
+  "source_sha256": "30ef1defcf9f57c7f21095d5546f41b2d9d84e6885c062893fc8a8fd591b38d5",
   "feature_count": 167,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -921,14 +921,14 @@ export const FEATURE_DIRECTORY = {
     },
     {
       "id": "notes-editor",
-      "title": "Browse and edit your notes",
+      "title": "Create and customize your notes",
       "group": "Notes and files",
       "surface": "both",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "status": "not-a-setting",
       "label_note": "",
-      "example": "turn on Browse and edit your notes",
-      "example_ok": false,
+      "example": "turn on Create and customize your notes",
+      "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
