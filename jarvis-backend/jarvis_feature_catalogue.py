@@ -3,7 +3,7 @@
 The owner's feature list, as data: 168 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 559ebcaf46ffc357c1a0a78d3cd2c9ba685152815e012d6e93149bc31aa2d01a); the apps' Features pages read their own
+`features/features.json` (sha256 09eb52dfa484d8db23285eebf3bf7833456495e760a2b53bbacda7a2efbaea06); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "559ebcaf46ffc357c1a0a78d3cd2c9ba685152815e012d6e93149bc31aa2d01a"
+SOURCE_SHA256 = "09eb52dfa484d8db23285eebf3bf7833456495e760a2b53bbacda7a2efbaea06"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -697,7 +697,7 @@ FEATURES = (
         "title": "Create and customize your notes",
         "what": "Browse, search, create, extend, surgically change, rename and move notes in your Obsidian vault from the PC or the phone, and use the PC editor's formatting toolbar and templates.",
         "where": "The PC's Brain \u2192 Memory \u2192 Notes; the phone's Brain \u2192 What Jarvis knows about you \u2192 Notes. The create, customize, rename and move sentences work in chat on either app.",
-        "asks": "Reading and searching ask nothing. Creating a note, adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
+        "asks": "Reading and searching ask nothing. Creating a BRAND-NEW note from your own typed or spoken words in the HUD asks no card at all (it is additive, and one Undo removes exactly the new file; after a turn that read outside text, or from a background job, it still asks its one card); adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
         "limit": "Obsidian vault only, one note per request; no deleting a note or a line, no bulk edits, no moving outside the vault, no folder renames and no cloud sync. A note change waits while the turn has read outside text.",
         "surface": "both",
         "aliases": ["notes editor", "the notes editor", "vault editor", "customize a note", "create a note", "notes toolbar"],
