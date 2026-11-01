@@ -197,8 +197,38 @@ def test_prompt_line():
         F.collect = saved
 
 
+def test_cpu_name_and_live_gpu():
+    normal = facts(
+        disks=[{"drive": "C:", "total_bytes": 930 * GIB, "free_bytes": 41 * GIB}],
+        memory={"total_bytes": 32 * GIB, "available_bytes": 16 * GIB},
+        cards=[{"name": "NVIDIA RTX 2080 SUPER (GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10) C:\\Users\\pcadmin\\x",
+                "total_mib": 8192, "free_mib": 4096, "used_mib": 4096,
+                "load_percent": 23, "temp_c": 41}],
+    )
+    normal["cpu"] = {"cores": 24, "name": "12th Gen Intel(R) Core(TM) i7-12700K"}
+    cpu = F.answer("cpu", facts=normal)
+    check("the CPU model name is read and said", "12th Gen Intel(R) Core(TM) i7-12700K" in cpu
+          and "24 logical cores" in cpu and "not recorded" not in cpu, cpu)
+    gpu = F.answer("gpu", facts=normal)
+    check("live GPU temperature, utilisation and used/total VRAM are said",
+          "8.0 GB of graphics memory" in gpu and "4.0 GB used" in gpu
+          and "4.0 GB free" in gpu and "23% busy" in gpu and "41 °C" in gpu, gpu)
+    check("a GPU name strips its UUID and user path", "GPU-" not in gpu
+          and "3f2a9c1e-7b1d" not in gpu and "C:\\Users" not in gpu
+          and "pcadmin" not in gpu, gpu)
+    no_name = facts(cards=normal["cards"])
+    no_name["cpu"] = {"cores": 24, "name": ""}
+    check("no CPU name still says not recorded, never a guess",
+          "not recorded" in F.answer("cpu", facts=no_name))
+    no_live = facts(cards=[{"name": "NVIDIA RTX 2080 SUPER", "total_mib": 8192,
+                            "free_mib": 4096}])
+    check("a card without a live health reading says the memory only",
+          "4.0 GB free" in F.answer("gpu", facts=no_live)
+          and "°C" not in F.answer("gpu", facts=no_live))
+
+
 def main():
-    for fn in (test_answers, test_privacy, test_quick_shapes, test_prompt_line):
+    for fn in (test_answers, test_cpu_name_and_live_gpu, test_privacy, test_quick_shapes, test_prompt_line):
         print("\n---", fn.__name__, "---")
         fn()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

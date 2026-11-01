@@ -15969,8 +15969,8 @@ second one. Nothing is written, changed, sent, gated or learned.
 |---|---|
 | "how much storage does my computer have available?" / "how much space is free on my C: drive?" | every fixed drive's own total/free bytes, as `C: has 41.0 GB free of 930 GB (4% free).` |
 | "how much RAM do I have / is free?" | GlobalMemoryStatusEx total and available bytes |
-| "what CPU do I have?" | the real logical core count; the CPU's NAME is not read anywhere, so it is said "not recorded" and never invented |
-| "what GPU do I have?" | nvidia-smi's card names and VRAM (temperature/load only where that same reader has them); no nvidia-smi = said plainly |
+| "what CPU do I have?" | the CPU model name from Windows' registry (or `platform.processor()`), plus the real logical core count; a name that cannot be read is said "not recorded", never invented |
+| "what GPU do I have?" | nvidia-smi's card names, live temperature, percent busy and VRAM used/free/total (where that same reader has them); no nvidia-smi = said plainly; serials/UUIDs/paths are stripped |
 | "how long has this PC been on?" | GetTickCount64, said in days and hours |
 | "is my disk getting full?" | the C: free space against `jarvis_storage.MIN_FREE_AFTER_DOWNLOAD` (25 GB) and `MIN_FREE_TO_START` (3 GB), the same margins the model chooser uses, with what they mean |
 
