@@ -201,10 +201,13 @@ FORMAT_PATH = "/api/notes/format"
 REPLACE_PATH = "/api/notes/replace"
 CUSTOMIZE_PATH = "/api/notes/customize"
 TEMPLATES_PATH = "/api/notes/templates"
+RENAME_PATH = "/api/notes/rename"
+MOVE_PATH = "/api/notes/move"
 CHANGE_PATH = "/api/notes/change"
 GET_PATHS = (LIST_PATH, READ_PATH, SAVE_PATH, CHANGE_PATH, TEMPLATES_PATH)
 POST_PATHS = (SAVE_PATH, CREATE_PATH, APPEND_PATH, TAG_PATH,
-              INSERT_PATH, FORMAT_PATH, REPLACE_PATH, CUSTOMIZE_PATH)
+              INSERT_PATH, FORMAT_PATH, REPLACE_PATH, CUSTOMIZE_PATH,
+              RENAME_PATH, MOVE_PATH)
 
 #: A tag is one Obsidian tag name without the `#`: letters, digits, `_`, `-`
 #: and `/` (nested tags), at least one non-digit, never a space. 64 characters
@@ -2326,6 +2329,635 @@ def handle_customize(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
                              gate_check, wait_s, by, extra)
 
 
+# ---------------------------------------------------------------------------
+#   Wave 4 - rename or move ONE note, keeping its links working (2026-10-31)
+# ---------------------------------------------------------------------------
+# The owner's "flexibility" decision. A rename/move is one note's PATH change
+# plus the links that named it, so the plan is read-only, the card names the
+# file and the link counts, and ONE approval writes the move plus only those
+# link bytes. Every changed/moved note is copied through the File Guardian
+# first and ONE batch Undo puts every byte and path back. Code fences and
+# inline code are never rewritten.
+
+RENAME_PATH = "/api/notes/rename"
+MOVE_PATH = "/api/notes/move"
+RENAME_RECEIPT = "notes_rename"
+MOVE_RECEIPT = "notes_move"
+MAX_LINK_SCAN = 2000
+_BAD_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WIKI_LINK = re.compile(r"(!?)\[\[([^\]\n]+)\]\]")
+_MD_LINK = re.compile(r"(!?)\[([^\]\n]*)\]\(\s*(?P<target><[^>\n]+>|[^)\s]+)(?P<tail>[^)\n]*)\)")
+_INLINE_CODE = re.compile(r"(`+)([^\n]*?)\1")
+
+for _kind, _words in {
+    "rename": {
+        "denied": "You said no, so the note was not renamed and no link was changed.",
+        "timed_out": "Nobody answered the approval card in time, so the note was not renamed and no link was changed.",
+        "refused": "The approval gate refused it, so the note was not renamed and no link was changed.",
+    },
+    "move": {
+        "denied": "You said no, so the note was not moved and no link was changed.",
+        "timed_out": "Nobody answered the approval card in time, so the note was not moved and no link was changed.",
+        "refused": "The approval gate refused it, so the note was not moved and no link was changed.",
+    },
+}.items():
+    _REFUSED_WRITE.setdefault(_kind, {}).update(_words)
+
+
+def _safe_filename(raw) -> tuple:
+    """`(new .md filename, why)` - ONE filename, never a path."""
+    text = str(raw or "").strip().strip('"').strip("'").strip("`")
+    if text.lower().endswith(".md"):
+        text = text[:-3].strip()
+    if not text:
+        return "", "what should the new name be?"
+    if text.startswith(".") or text.endswith((" ", ".")):
+        return "", "a note name cannot start with a dot or end with a space or dot"
+    if _BAD_FILENAME.search(text):
+        return "", "a note name cannot contain < > : \" / \\ | ? * or a control character"
+    if len(text) > 120:
+        return "", "that note name is longer than the editor's 120-character limit"
+    return text + ".md", ""
+
+
+def _folder_parts(raw) -> tuple:
+    """`(relative folder parts, why)` - inside the vault, not hidden."""
+    text = str(raw or "").strip().strip('"').strip("'").strip("`").replace("\\", "/")
+    if not text:
+        return [], "which folder should it move to?"
+    if os.path.isabs(text) or re.match(r"^[A-Za-z]:", text):
+        return [], "that folder is outside your Obsidian vault"
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    if not parts:
+        return [], "which folder should it move to?"
+    if ".." in parts:
+        return [], "that folder is outside your Obsidian vault"
+    if any(p.startswith(".") for p in parts):
+        return [], "that folder is hidden, and the notes editor does not change hidden folders"
+    if any(_BAD_FILENAME.search(p) for p in parts):
+        return [], "that folder name contains a character a filename cannot hold"
+    return parts, ""
+
+
+def _folder_full(vault: Path, parts: list) -> Path:
+    return vault.joinpath(*parts)
+
+
+def _folder_is_safe(vault: Path, full: Path) -> bool:
+    """Every existing component from the vault down is a real directory."""
+    try:
+        cur = vault
+        rel = os.path.relpath(str(full), str(vault)).replace("\\", "/")
+        for part in rel.split("/"):
+            if part in ("", "."):
+                continue
+            cur = cur / part
+            if cur.exists() and (_is_link_or_reparse(cur) or not cur.is_dir()):
+                return False
+        return _inside(vault, full)
+    except (OSError, ValueError):
+        return False
+
+
+def _case_exists(parent: Path, name: str) -> bool:
+    try:
+        want = name.casefold()
+        return any(p.name.casefold() == want for p in parent.iterdir())
+    except OSError:
+        return True
+
+
+def _code_ranges(text: str) -> list:
+    """Character ranges for fenced blocks and inline code, where links do not change."""
+    ranges = list(_fence_ranges(text))
+    for m in _INLINE_CODE.finditer(text):
+        ranges.append((m.start(), m.end()))
+    ranges.sort()
+    return ranges
+
+
+def _in_ranges(pos: int, ranges: list) -> bool:
+    return any(a <= pos < b for a, b in ranges)
+
+
+def _scan_vault_notes(vault: Path):
+    """[(rel, full, old bytes, text)] for readable .md notes, or (None, why)."""
+    out = []
+    try:
+        paths = sorted(p for p in vault.rglob("*.md") if p.is_file())
+    except OSError as exc:                                  # noqa: BLE001
+        return None, f"the vault could not be read ({type(exc).__name__})"
+    if len(paths) > MAX_LINK_SCAN:
+        return None, (f"the vault has more than {MAX_LINK_SCAN} notes, and the link "
+                      "plan would take too long; nothing was changed")
+    P = _protection()
+    for path in paths:
+        try:
+            rel = os.path.relpath(str(path), str(vault)).replace("\\", "/")
+        except ValueError:
+            continue
+        parts = rel.split("/")
+        if any(part.startswith(".") for part in parts[:-1]):
+            continue
+        if _is_link_or_reparse(path):
+            continue
+        if P is not None and P.path_refusal(str(path), write=False):
+            continue
+        try:
+            if os.stat(str(path)).st_size > MAX_FILE_BYTES:
+                continue
+            old = _read_bytes(path)
+            text = old.decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        out.append((rel, path, old, text))
+    return out, ""
+
+
+def _wiki_target(inner: str, source_rel: str, target_rel: str, kind: str):
+    """The new `[[...]]` inner text, or None when this link is not the note."""
+    cut = len(inner)
+    for mark in ("|", "#"):
+        at = inner.find(mark)
+        if at != -1:
+            cut = min(cut, at)
+    core, suffix = inner[:cut], inner[cut:]
+    if not core:
+        return None
+    segments = core.replace("\\", "/").split("/")
+    old_stem = Path(source_rel).stem
+    new_stem = Path(target_rel).stem
+    if kind == "rename":
+        last = segments[-1]
+        stem = last[:-3] if last.lower().endswith(".md") else last
+        if stem.casefold() != old_stem.casefold():
+            return None
+        segments[-1] = new_stem + (".md" if last.lower().endswith(".md") else "")
+    else:
+        # Wikilinks name a note by title; a move does not change its title. Only
+        # a path-style wikilink that named the old path is rewritten.
+        if "/" not in core:
+            return None
+        norm = os.path.normpath(core).replace("\\", "/")
+        candidates = {source_rel.casefold(), source_rel[:-3].casefold()
+                      if source_rel.lower().endswith(".md") else source_rel.casefold()}
+        if norm.casefold() not in candidates:
+            return None
+        segments = target_rel.replace("\\", "/").split("/")
+        if segments[-1].lower().endswith(".md"):
+            segments[-1] = segments[-1][:-3]
+    return "/".join(segments) + suffix
+
+
+def _markdown_target(raw: str, note_rel: str, source_rel: str, target_rel: str):
+    """The new markdown link target for this note, or None if it is not the note."""
+    bracketed = raw.startswith("<") and raw.endswith(">")
+    target = raw[1:-1] if bracketed else raw
+    if not target or target.startswith(("#", "/", "//")) or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", target):
+        return None
+    core, sep, anchor = target.partition("#")
+    if not core:
+        return None
+    note_dir = os.path.dirname(note_rel).replace("\\", "/")
+    if core.startswith("/"):
+        resolved = core.lstrip("/")
+    elif core.startswith("./"):
+        resolved = os.path.normpath(os.path.join(note_dir, core[2:])).replace("\\", "/")
+    else:
+        resolved = os.path.normpath(os.path.join(note_dir, core)).replace("\\", "/")
+    want = source_rel.casefold()
+    got = resolved.casefold()
+    if got != want and got != (want[:-3] if want.endswith(".md") else want):
+        return None
+    new_core = os.path.relpath(target_rel, note_dir or ".").replace("\\", "/")
+    if core.startswith("./") and not new_core.startswith("./"):
+        new_core = "./" + new_core
+    if bracketed:
+        new_core = "<" + new_core + ">"
+    return new_core + (sep + anchor if sep else "")
+
+
+def _link_plan(vault: Path, source_rel: str, target_rel: str, kind: str):
+    """(plan files, update count, note count, why). Read-only."""
+    notes, why = _scan_vault_notes(vault)
+    if notes is None:
+        return None, 0, 0, why
+    files = []
+    updates = 0
+    for rel, full, old, text in notes:
+        ranges = _code_ranges(text)
+        changed = {"count": 0}
+
+        def wiki(m):
+            if _in_ranges(m.start(), ranges):
+                return m.group(0)
+            inner = _wiki_target(m.group(2), source_rel, target_rel, kind)
+            if inner is None:
+                return m.group(0)
+            changed["count"] += 1
+            return m.group(1) + "[[" + inner + "]]"
+
+        def markdown(m):
+            if _in_ranges(m.start(), ranges):
+                return m.group(0)
+            tail = m.group("tail") or ""
+            target = _markdown_target(m.group("target"), rel, source_rel, target_rel)
+            if target is None:
+                return m.group(0)
+            changed["count"] += 1
+            return m.group(1) + "[" + m.group(2) + "](" + target + tail + ")"
+
+        new_text = _WIKI_LINK.sub(wiki, text)
+        # The positions moved after the wiki replacements, so recompute the
+        # code ranges before checking markdown links for fenced/inline code.
+        ranges = _code_ranges(new_text)
+        new_text = _MD_LINK.sub(markdown, new_text)
+        if changed["count"]:
+            new_bytes = new_text.encode("utf-8")
+            if len(new_bytes) > MAX_FILE_BYTES:
+                return None, 0, 0, (f"{rel} would grow over the {MAX_FILE_BYTES} byte "
+                                   f"limit while its links are updated; nothing was changed")
+            files.append({"rel": rel, "full": str(full), "old": old,
+                          "new": new_bytes, "sha_before": _sha256(old),
+                          "sha_after": _sha256(new_bytes)})
+            updates += changed["count"]
+    return files, updates, len(files), ""
+
+
+def _plan_batch(kind: str, body: dict, *, gate_check=None) -> tuple:
+    """`(plan dict, error tuple)`; every refusal happens before any card."""
+    raw, why = _one_path(body)
+    if why:
+        return None, _error(400, why, state="refused")
+    source_full, source_rel, why = _resolve_note(raw)
+    if why:
+        return None, _error(400, why, state="refused")
+    if not source_rel.lower().endswith(".md"):
+        return None, _error(400, "Rename and move work on .md notes only; this note is not one.",
+                            state="refused")
+    if any(part.startswith(".") for part in source_rel.split("/")):
+        return None, _error(403, "that note is in the hidden part of your vault, so nothing was changed.",
+                            state="refused")
+    if not source_full.is_file():
+        return None, _error(404, f"There is no note at {source_rel} in your Obsidian vault.",
+                            state="refused")
+    _P = _protection()
+    if _P is not None:
+        said = _P.path_refusal(str(source_full), write=True)
+        if said:
+            return None, _error(403, said, state="refused")
+    vault, why = _vault()
+    if vault is None:
+        return None, _error(503, "Nothing was changed: " + why + ".", state="refused")
+    old = _read_bytes(source_full)
+    source_sha = _sha256(old)
+    if kind == "rename":
+        filename, why = _safe_filename(body.get("title") or body.get("new_title")
+                                       or body.get("new_name"))
+        if why:
+            return None, _error(400, why, state="refused")
+        parent = os.path.dirname(source_rel).replace("\\", "/").strip("/")
+        target_rel = (parent + "/" + filename) if parent else filename
+        target_folder_rel = parent
+        create_folder = False
+    else:
+        parts, why = _folder_parts(body.get("folder") or body.get("target_folder")
+                                   or body.get("folder_path"))
+        if why:
+            return None, _error(400, why, state="refused")
+        target_folder_rel = "/".join(parts)
+        folder_full = _folder_full(vault, parts)
+        if not _folder_is_safe(vault, folder_full):
+            return None, _error(400, "that folder is not a real folder inside your Obsidian vault",
+                                state="refused")
+        create_folder = bool(body.get("create_folder") or body.get("create"))
+        if not folder_full.is_dir() and not create_folder:
+            return None, _error(
+                400, (f'There is no folder "{target_folder_rel}" in your Obsidian vault, so '
+                      'nothing was moved. Say "create the folder" if you want it made.'),
+                state="refused")
+        if folder_full.exists() and not folder_full.is_dir():
+            return None, _error(400, "that path is a file, not a folder", state="refused")
+        if _P is not None:
+            said = _P.path_refusal(str(folder_full), write=True)
+            if said:
+                return None, _error(403, said, state="refused")
+        target_rel = (target_folder_rel + "/" + os.path.basename(source_rel)) if target_folder_rel else os.path.basename(source_rel)
+    target_full = vault.joinpath(*target_rel.split("/"))
+    target_parent = target_full.parent
+    if not _inside(vault, target_full) or not _inside(vault, target_parent):
+        return None, _error(400, "the destination is outside your Obsidian vault", state="refused")
+    if target_rel.casefold() == source_rel.casefold():
+        return None, (200, {"ok": True, "state": "unchanged", "path": source_rel,
+                            "message": "That is already the note's name."})
+    if not _folder_is_safe(vault, target_parent):
+        return None, _error(400, "the destination folder is not a safe folder in your vault",
+                            state="refused")
+    if target_parent.exists() and _case_exists(target_parent, target_full.name):
+        return None, _error(409, f"There is already a note at {target_rel}, so nothing was changed.",
+                            state="refused")
+    # Creating a folder is only ever done when the owner explicitly said so.
+    created_folders = []
+    if create_folder:
+        cur = vault
+        for part in target_parent.relative_to(vault).parts:
+            cur = cur / part
+            if not cur.exists():
+                created_folders.append(os.path.relpath(str(cur), str(vault)).replace("\\", "/"))
+    files, updates, notes_n, why = _link_plan(vault, source_rel, target_rel, kind)
+    if files is None:
+        return None, _error(400, why + " Nothing was changed.", state="refused")
+    if kind == "rename":
+        new_stem = Path(target_rel).stem.casefold()
+        old_stem = Path(source_rel).stem.casefold()
+        others = []
+        for other_rel, _full, _old, _text in (_scan_vault_notes(vault)[0] or []):
+            if other_rel.casefold() != source_rel.casefold() \
+                    and Path(other_rel).stem.casefold() == new_stem:
+                others.append(other_rel)
+        if others:
+            return None, _error(409, ("There is already another note with that name in your "
+                                      "vault, so nothing was renamed."), state="refused")
+    source_changed = next((f for f in files if f["rel"] == source_rel), None)
+    target_data = source_changed["new"] if source_changed else old
+    plan = {
+        "kind": kind, "vault": str(vault), "source": source_rel,
+        "target": target_rel, "source_sha": source_sha,
+        "target_sha": _sha256(target_data), "target_data": target_data,
+        "source_unchanged": source_changed is None,
+        "files": files, "updates": updates, "notes": notes_n,
+        "created_folders": created_folders,
+        "hidden": _hidden_lists(),
+    }
+    plan["preview"] = _batch_preview(plan)
+    return plan, None
+
+
+def _batch_preview(plan: dict) -> str:
+    verb = "renames" if plan["kind"] == "rename" else "moves"
+    created = " and creates the folder" if plan["created_folders"] else ""
+    if plan["hidden"]:
+        return (f"This {verb} a note{created} and updates {plan['updates']} link(s) in "
+                f"{plan['notes']} note(s).")
+    if plan["updates"]:
+        return (f"This {verb} {plan['source']} to {plan['target']}{created} and updates "
+                f"{plan['updates']} link(s) in {plan['notes']} note(s).")
+    return f"This {verb} {plan['source']} to {plan['target']}{created}. It has no links to update."
+
+
+def _batch_prompt_detail(plan: dict) -> tuple:
+    created = " and create the folder" if plan["created_folders"] else ""
+    if plan["hidden"]:
+        prompt = (f"{plan['kind']} a note in your Obsidian vault{created} and update "
+                  f"{plan['updates']} link(s) in {plan['notes']} note(s)")
+        detail = {"action": "rename a note" if plan["kind"] == "rename" else "move a note",
+                  "updates": plan["updates"], "notes": plan["notes"],
+                  "hidden_lists": True, "undo": True, "deletes": False}
+        return prompt, detail
+    prompt = (f"{plan['kind']} {plan['source']} to {plan['target']} in your Obsidian "
+              f"vault{created} and update {plan['updates']} link(s) in {plan['notes']} note(s)")
+    detail = {"path": plan["source"], "target": plan["target"],
+              "action": "rename a note" if plan["kind"] == "rename" else "move a note",
+              "updates": plan["updates"], "notes": plan["notes"],
+              "undo": True, "deletes": False,
+              "creates_folder": bool(plan["created_folders"])}
+    return prompt, detail
+
+
+def _batch_verify(plan: dict) -> str:
+    """Empty when the plan still matches the disk; else plain words."""
+    vault, why = _vault()
+    if vault is None:
+        return "The Obsidian vault could not be found, so nothing was changed."
+    source = vault.joinpath(*plan["source"].split("/"))
+    if not source.is_file() or _is_link_or_reparse(source):
+        return f"{plan['source']} is no longer in your Obsidian vault, so nothing was changed."
+    try:
+        if _sha256(_read_bytes(source)) != plan["source_sha"]:
+            return f"{plan['source']} changed while the card waited, so nothing was changed."
+    except OSError:
+        return f"{plan['source']} could not be re-read, so nothing was changed."
+    target = Path(plan["vault"]).joinpath(*plan["target"].split("/"))
+    if target.parent.exists() and (target.exists() or _case_exists(target.parent, target.name)):
+        return f"There is already a note at {plan['target']}, so nothing was changed."
+    if not target.parent.exists() and not plan.get("created_folders"):
+        return "The destination folder disappeared, so nothing was changed."
+    for entry in plan["files"]:
+        full = Path(entry["full"])
+        if not full.is_file() or _is_link_or_reparse(full):
+            return f"{entry['rel']} is no longer there, so nothing was changed."
+        want = entry["sha_before"]
+        try:
+            if _sha256(_read_bytes(full)) != want:
+                return f"{entry['rel']} changed while the card waited, so nothing was changed."
+        except OSError:
+            return f"{entry['rel']} could not be re-read, so nothing was changed."
+    return ""
+
+
+def _write_new_file(full: Path, data: bytes) -> None:
+    fd = os.open(str(full), os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                 | getattr(os, "O_BINARY", 0), 0o644)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+    except Exception:
+        try:
+            os.unlink(str(full))
+        except OSError:
+            pass
+        raise
+
+
+def _batch_restore_before(before: dict) -> None:
+    """Undo the whole batch from its own copies. Best effort, never raises."""
+    try:
+        backup = Path(str(before.get("backup_dir") or ""))
+        source = str(before.get("source") or "")
+        target = str(before.get("target") or "")
+        vault = Path(str(before.get("vault") or ""))
+        if not backup.is_dir() or not source or not target:
+            return
+        target_full = vault.joinpath(*target.split("/"))
+        source_full = vault.joinpath(*source.split("/"))
+        if target_full.is_file():
+            try:
+                os.unlink(str(target_full))
+            except OSError:
+                return
+        for row in before.get("files") or []:
+            rel = str(row.get("rel") or "")
+            name = str(row.get("backup") or "")
+            if not rel or not name:
+                continue
+            data = (backup / name).read_bytes()
+            full = vault.joinpath(*rel.split("/"))
+            _write_note(full, data)
+        for rel in sorted((before.get("created_folders") or []), reverse=True):
+            full = vault.joinpath(*str(rel).split("/"))
+            try:
+                if full.is_dir() and not any(full.iterdir()):
+                    os.rmdir(str(full))
+            except OSError:
+                pass
+    except Exception:                                       # noqa: BLE001
+        return
+
+
+def _batch_worker(job_id: str, plan: dict, gate_check) -> None:
+    kind = plan["kind"]
+    try:
+        prompt, detail = _batch_prompt_detail(plan)
+        verdict = gate_check(ACTION, detail, prompt)
+        if not getattr(verdict, "allowed", False):
+            outcome = str(getattr(verdict, "outcome", "refused") or "refused")
+            state = "denied" if outcome in ("denied", "timed_out") else "failed"
+            _finish(job_id, state=state, outcome=outcome,
+                    message=_REFUSED_WRITE.get(kind, {}).get(
+                        outcome, "The approval gate refused it, so nothing was changed."))
+            _audit(kind + "_refused", {"job": job_id, "outcome": outcome})
+            return
+        why = _batch_verify(plan)
+        if why:
+            _finish(job_id, state="failed", message=why)
+            _audit(kind + "_failed", {"job": job_id, "why": "changed"})
+            return
+        vault = Path(plan["vault"])
+        source_full = vault.joinpath(*plan["source"].split("/"))
+        target_full = vault.joinpath(*plan["target"].split("/"))
+        snap_files = [(plan["source"], source_full)]
+        for row in plan["files"]:
+            if row["rel"] != plan["source"]:
+                snap_files.append((row["rel"], Path(row["full"])))
+        snaps = []
+        for rel, full in snap_files:
+            snap = _snapshot(full, rel)
+            if not snap.get("ok"):
+                _finish(job_id, state="failed",
+                        message=("Nothing was changed, because a copy of "
+                                 f"{rel} could not be saved first: "
+                                 + str(snap.get("words") or snap.get("error") or "no copy was made")))
+                _audit(kind + "_failed", {"job": job_id, "why": "guardian"})
+                return
+            snaps.append({"rel": rel, "snapshot": snap})
+        backup = Path(tempfile.mkdtemp(prefix="jarvis-notes-batch-"))
+        backup_rows = []
+        for i, (rel, full) in enumerate(snap_files):
+            old = _read_bytes(full)
+            name = f"{i}.bin"
+            (backup / name).write_bytes(old)
+            backup_rows.append({"rel": rel, "backup": name, "sha256": _sha256(old)})
+        before = {"kind": kind, "vault": str(vault), "source": plan["source"],
+                  "target": plan["target"], "target_sha": plan["target_sha"],
+                  "files": backup_rows, "created_folders": plan["created_folders"],
+                  "backup_dir": str(backup)}
+        try:
+            import jarvis_receipts as R
+            rid = R.record(RENAME_RECEIPT if kind == "rename" else MOVE_RECEIPT,
+                           plan["preview"], before=before,
+                           after={"target": plan["target"], "updates": plan["updates"],
+                                  "notes": plan["notes"]},
+                           undo=lambda: _batch_restore_before(before))
+        except Exception:                                   # noqa: BLE001
+            rid = ""
+        if not rid:
+            _finish(job_id, state="failed",
+                    message="Nothing was changed, because an undo receipt could not be recorded first.")
+            _audit(kind + "_failed", {"job": job_id, "why": "receipt"})
+            return
+        created = []
+        try:
+            for rel in plan["created_folders"]:
+                full = vault.joinpath(*rel.split("/"))
+                full.mkdir(parents=False, exist_ok=True)
+                created.append(rel)
+            for row in plan["files"]:
+                if row["rel"] == plan["source"]:
+                    continue
+                _write_note(Path(row["full"]), row["new"])
+            if plan["source_unchanged"]:
+                os.replace(str(source_full), str(target_full))
+            else:
+                _write_new_file(target_full, plan["target_data"])
+                os.unlink(str(source_full))
+            _finish(job_id, state="saved", sha256=plan["target_sha"],
+                    target=plan["target"], updates=plan["updates"],
+                    notes=plan["notes"], receipt=rid,
+                    message=plan["preview"] + " You can undo it.")
+            _audit(kind + "d", {"job": job_id, "updates": plan["updates"],
+                                "notes": plan["notes"]})
+        except Exception as exc:                            # noqa: BLE001
+            _batch_restore_before(before)
+            _finish(job_id, state="failed",
+                    message=(f"The {kind} failed ({type(exc).__name__}), so the copies "
+                             "that were saved first were put back."))
+            _audit(kind + "_failed", {"job": job_id, "why": "write"})
+    except Exception as exc:                                # noqa: BLE001
+        _finish(job_id, state="failed",
+                message=f"The {kind} failed ({type(exc).__name__}), so nothing was changed.")
+        _audit(kind + "_failed", {"job": job_id, "why": "exception"})
+
+
+def _start_batch_job(kind: str, plan: dict, gate_check, wait_s: float, by: str) -> tuple:
+    with _lock:
+        waiting = sum(1 for j in _jobs.values() if j.get("state") == "waiting")
+        if waiting >= MAX_WAITING:
+            return _error(429, (f"{MAX_WAITING} note changes are already waiting for "
+                                "approval - answer those cards first, then ask this one."),
+                          state="refused")
+        job_id = "notebatch_" + kind + "_" + secrets.token_hex(8)
+        _jobs[job_id] = {"id": job_id, "kind": kind, "state": "waiting",
+                         "path": plan["source"], "target": plan["target"],
+                         "updates": plan["updates"], "notes": plan["notes"],
+                         "message": plan["preview"], "created": time.time(),
+                         "updated": time.time(), "by": by}
+        while len(_jobs) > MAX_JOBS:
+            oldest = min(_jobs, key=lambda k: _jobs[k]["created"])
+            _jobs.pop(oldest, None)
+    thread = threading.Thread(target=_batch_worker,
+                              args=(job_id, plan, gate_check or _gate_check),
+                              name="jarvis-note-" + kind, daemon=True)
+    thread.start()
+    thread.join(max(0.0, float(wait_s)))
+    code, out = change_status(job_id)
+    if out.get("state") == "waiting":
+        out["id"] = job_id
+    return (202 if out.get("state") == "waiting" else 200), out
+
+
+def handle_rename(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                  by: str = "") -> tuple:
+    """POST /api/notes/rename: same folder, new title, links preserved, one card."""
+    if not isinstance(body, dict):
+        return _error(400, "Need a JSON object with path and title.", state="refused")
+    plan, err = _plan_batch("rename", body, gate_check=gate_check)
+    if err is not None:
+        return err
+    return _start_batch_job("rename", plan, gate_check, wait_s, by)
+
+
+def handle_move(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
+                by: str = "") -> tuple:
+    """POST /api/notes/move: into an existing (or explicitly created) folder."""
+    if not isinstance(body, dict):
+        return _error(400, "Need a JSON object with path and folder.", state="refused")
+    plan, err = _plan_batch("move", body, gate_check=gate_check)
+    if err is not None:
+        return err
+    return _start_batch_job("move", plan, gate_check, wait_s, by)
+
+
+try:
+    import jarvis_receipts as _RENAME_RC
+    _RENAME_RC.register_restorer(RENAME_RECEIPT, _batch_restore_before)
+    _RENAME_RC.register_restorer(MOVE_RECEIPT, _batch_restore_before)
+except Exception:                                           # noqa: BLE001
+    pass
+
+
+
 def change_status(job_id: str) -> tuple:
     """GET /api/notes/change?id=: waiting / saved / denied / failed, never text."""
     jid = str(job_id or "").strip()
@@ -2350,6 +2982,9 @@ def change_status(job_id: str) -> tuple:
         out["receipt"] = job["receipt"]
     if job.get("snapshot"):
         out["snapshot"] = job["snapshot"]
+    for key in ("target", "updates", "notes"):
+        if job.get(key) is not None:
+            out[key] = job[key]
     return 200, out
 
 
@@ -2440,6 +3075,10 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 code, out = handle_replace(body)
             elif route == CUSTOMIZE_PATH:
                 code, out = handle_customize(body)
+            elif route == RENAME_PATH:
+                code, out = handle_rename(body)
+            elif route == MOVE_PATH:
+                code, out = handle_move(body)
             else:
                 code, out = handle_save(body)
         except Exception as exc:                            # noqa: BLE001
@@ -2451,8 +3090,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
     return ("  notes-edit  browse and read any Obsidian note; save, create, "
-            "append and tag ONE note per request (one approval card each, undo "
-            "receipt)")
+            "append, tag, rename and move ONE note per request (one approval "
+            "card each, undo receipt); a rename/move also updates the links to it")
 
 
 def _reset_for_tests() -> None:
