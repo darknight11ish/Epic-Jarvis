@@ -1619,6 +1619,10 @@ class MainActivity : FragmentActivity() {
         // The spending table's id under that answer (an id only; the table is
         // fetched and held in memory by the screen that draws it).
         val answerTableId by chat.tableId.collectAsState()
+        // When the answer on screen finished (ms since the epoch, memory only).
+        // The per-answer menu shows it as its first, read-only line - the
+        // desktop HUD's own line in the same place (2026-11-01).
+        val answerAt by chat.answerAt.collectAsState()
         // The conversation the next question carries (ChatHistory). Only its
         // size is shown; memory only, like the question itself.
         val conversation by chat.history.collectAsState()
@@ -3850,6 +3854,10 @@ class MainActivity : FragmentActivity() {
                             usedIds = usedIds,
                             topicsLeftOut = topicsLeftOut,
                             answerTurnId = answerTurnId,
+                            // When that answer finished, for the per-answer
+                            // menu's first, read-only line (the desktop HUD's
+                            // own line in the same place).
+                            answerAtMs = answerAt,
                             answerTableId = answerTableId,
                             crisisAnswer = crisisAnswer,
                             cloudOffer = cloudOffer,

@@ -6557,10 +6557,66 @@ function sampleReply(){
     "window and your messages will get real answers.";
 }
 
+// The owner's field test, 2026-11-01: he typed "was this answer right?" into
+// this box and the model answered it as a question. It is not a question for
+// the model - it is the very thing the caret menu under each finished answer
+// asks ("Was this answer right?"), so it belongs in that menu.
+//
+// This recognises the FEW ways he says it, and nothing else. A miss only means
+// the words go to the model exactly as they always did; a false match would
+// swallow a real question that happens to start the same way ("was that right
+// about the weather?"), and swallowing a real question is the worse mistake.
+// So the whole sentence has to match one of the listed asks.
+function answerMarkAsk(text){
+  // Lower-case, one space between words, no sentence punctuation at the end,
+  // so "  Was  this answer RIGHT?  " reads as "was this answer right".
+  let said = String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+  said = said.replace(/[?!.]+$/, "").trim();
+  // "hey jarvis, was this right" and "jarvis was this right" are the same ask.
+  said = said.replace(/^(?:hey\s+jarvis|jarvis)[\s,]+/, "").trim();
+  // The whole short list: this/that answer, the last/previous answer, and the
+  // two that leave out the word answer. Nothing else - never "was my answer
+  // right", "is this answer right", "was the answer correct" or "was this
+  // right for you"; those are questions, not marks.
+  return /^(?:was (?:this|that)(?: answer)? right|was (?:the last|the previous) answer right)$/
+    .test(said);
+}
+
 let SEND_INFLIGHT = null;
 async function send(){
   const text = $("input").value.trim();
   if(!text) return;
+  // The owner's field test, 2026-11-01: "was this answer right?" typed here
+  // reached the model, which answered it as a question. It is an answer MARK,
+  // so it opens the last answer's caret menu instead. Checked BEFORE the turn
+  // is cleared, the box is emptied, a bubble is drawn or anything is sent -
+  // no chat turn, no history, and the PC never hears the words. Enter and the
+  // Send button both call this function, so both routes are covered here.
+  if(answerMarkAsk(text)){
+    // Exactly what a normal send does to the box, and nothing more.
+    $("input").value = "";
+    $("input").style.height = "auto";
+    // hud_bootstrap.js (section 6) builds one real caret under every FINISHED
+    // answer, so the newest one is the last caret in the log. Clicking it is
+    // the owner's own way to open the menu, which keeps the menu's own focus
+    // handling (focus goes to its first item).
+    const carets = document.querySelectorAll("#log .jarvis-answer-caret");
+    const last = carets[carets.length - 1];
+    if(last){
+      // Deferred by one event-loop turn. When Send was clicked, this code is
+      // running INSIDE that click, and hud_bootstrap's outside-click listener
+      // closes an open menu when that same click finishes travelling up to the
+      // document. Opening it immediately would show the menu for no time at
+      // all. It is still the same caret and the same click, one tick later.
+      setTimeout(() => last.click(), 0);
+      return;
+    }
+    // No finished answer yet (nothing asked, or still streaming): say so in
+    // the page's own "system" voice - never in Jarvis's voice, which would be
+    // inventing an answer - and send nothing.
+    addMessage("system", "There is no answer on screen yet, so there is nothing to mark.");
+    return;
+  }
   // CLEARED AT THE START OF EVERY TURN, and this is not tidiness. `turnRoute`
   // is module-level so the reply handler can hand it to the private-speech rule,
   // and nothing cleared it - so once ONE turn carried a sensitive route, every

@@ -29558,6 +29558,25 @@ No route, no card, no tool and no setting is added or changed by any of this.
 The phone still cannot open a window on the PC, and a phone answer carries no
 route field that would pretend otherwise.
 
+- **The question "where am I talking from?" is answered from this fact, never by
+  the model** (added 2026-11-01; the field test found the desktop HUD answering
+  it as a physical-location question - "I don't have access to your location
+  data or GPS" - and the phone right only by luck of its model). A deterministic
+  lane in `jarvis_quick.py` matches only whole-sentence surface questions
+  ("where am I talking from", "where am I talking to you from", "which app am I
+  using", "what device am I on", "am I on my phone or pc" and the close shapes)
+  and answers with one of three sentences: the desktop sentence ("You are
+  talking to me from the desktop program on your PC."), the phone sentence
+  ("You are talking to me from the Jarvis app on your Android phone."), or -
+  when the request carried no header at all - the honest unknown sentence
+  ("This request did not say which app it came from, so I cannot tell whether
+  you are talking to me from the phone or the desktop program."). Near misses
+  ("where am I", "where am I located", "where is my phone", "which app can use
+  the second card") keep their old path on purpose: a miss costs a model answer,
+  a hijack would break a real question. It is read-only: no card, no route, no
+  write; `backend/test_surface_origin.py` proves the three sentences, the
+  deterministic repeat and every near miss.
+
 ### 173.4 One-sided? No.
 
 Both clients send the header and both apps' routes are named in the answers, so
