@@ -5333,6 +5333,31 @@ _REMINDER_HOWTO_HOW_RX = re.compile(
 #: should I say?" / "what do I say to use Galaxy": this one only answers when
 #: the sentence also names a reminder, timer or alarm.
 _REMINDER_HOWTO_SAY_RX = re.compile(r"what\s+(?:do|should)\s+i\s+say\b")
+#: A real "set a timer / set a reminder / set an alarm" request, however politely
+#: led in ("can you kindly set a timer for five minutes"): the ACTION path owns
+#: it and the capability answer must never swallow it (test_voice_reflex,
+#: 2026-11-01 integration).
+_REMINDER_ACTION_RX = re.compile(
+    r"\b(?:set|create|make|add|start)\s+(?:me\s+)?(?:a|an|the|another|my)?\s*"
+    r"(?:reminder|timer|alarm)s?\b")
+#: ... and it carries a REAL time or duration, in words or digits. A bare
+#: "can you set a timer?" stays a capability question (test_reminders_honesty);
+#: "set a timer for five minutes" is the action path's (test_voice_reflex).
+_REMINDER_ACTION_TIME_RX = re.compile(
+    r"\b(?:for|in)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|an?)\b|"
+    r"\b\d+\s*(?:seconds?|minutes?|hours?|days?)\b|"
+    r"\b(?:second|minute|hour|half\s+an\s+hour)\b|"
+    r"\b(?:at|by)\s+\d|"
+    r"\b(?:tomorrow|tonight|today|noon|midnight|morning|afternoon|evening)\b|"
+    r"\b(?:every|each)\s+(?:day|morning|afternoon|evening|week|monday|tuesday|"
+    r"wednesday|thursday|friday|saturday|sunday)\b")
+#: The nouns of OTHER features. "how do I set up a calendar connection" names
+#: one of these and no reminder at all, so it is the connect/calendar card's
+#: question, not a reminder how-to (test_calendar_answer, 2026-11-01).
+_OTHER_TOPIC_RX = re.compile(
+    r"\b(?:calendar|connect(?:ion|ed|ing|s)?|account|accounts|notes?|vault|email|"
+    r"file|files|wifi|bluetooth|home\s+assistant)\b")
 
 
 def _reminders_question(raw) -> Optional[Intent]:
@@ -5350,6 +5375,10 @@ def _reminders_question(raw) -> Optional[Intent]:
     # A Settings sentence ("turn on Reminder sounds", "turn off ... notifications")
     # belongs to the feature-control grammar, not to this capability family.
     if re.match(r"(?:turn|switch)\s+(?:on|off)\b|\b(?:enable|disable)\b", text):
+        return None
+    # "open settings, sound" is the Settings no-route answer's sentence, not a
+    # question about what a reminder sounds like (test_jarvis_open, 2026-11-01).
+    if re.match(r"open\s+(?:jarvis\s+)?settings\b", text):
         return None
     if _REMINDER_REAL_TIME.search(text):
         return None                         # the real set_reminder/timer path keeps it
@@ -5372,6 +5401,10 @@ def _reminders_question(raw) -> Optional[Intent]:
         return None
     if _REMINDER_CLOSED_RX.search(text):
         return Intent("reminder_closed", {"surface": "closed"})
+    # A question whose nouns are another feature's and which never says reminder,
+    # timer or alarm is that feature's question, not this family's (2026-11-01).
+    if not _REMINDER_WORDS.search(text) and _OTHER_TOPIC_RX.search(text):
+        return None
     # "What should I say?" is the sayable list's own question, so the SAY shape
     # only answers when the sentence also names a reminder, timer or alarm.
     # "how do I ask for one?" (a follow-up) keeps the HOW shape unconditionally.
@@ -5384,6 +5417,14 @@ def _reminders_question(raw) -> Optional[Intent]:
         return Intent("reminder_sound", {"surface": "sound"})
     if _REMINDER_NOTIFY_RX.search(text):
         return Intent("reminder_notify", {"surface": "notify"})
+    # A REAL set request - it names timer/reminder/alarm AND a time or duration,
+    # even politely led in - is the action path's, never the capability answer
+    # (test_voice_reflex, 2026-11-01 integration). A bare "can you set a timer?"
+    # stays here: it is the capability question the honesty lane answers.
+    if (_REMINDER_ACTION_RX.search(text)
+            and (_REMINDER_REAL_TIME.search(text)
+                 or _REMINDER_ACTION_TIME_RX.search(text))):
+        return None
     if _REMINDER_WORDS.search(text) and re.search(
             r"\bcan\s+you\b|\bcould\s+you\b|\bdo\s+you\b", text):
         return Intent("reminder_capability", {"surface": "capability"})
@@ -5946,9 +5987,11 @@ def _goals_question(raw) -> Optional[Intent]:
         return None
     if re.search(r"\b(?:track|tracking)\s+(?:my\s+)?(?:package|order|parcel|time|spending|sleep)\b", text):
         return None
-    # "what does Goals do" / "tell me about Goals" is the feature guide's
-    # question, not this family's capability answer (2026-11-01 integration).
-    if _asks_about_a_named_feature(text, str(raw or "")):
+    # "what does Goals do" / "tell me about Goals" is THIS family's own answer
+    # (goal_about names the card rule); only a question about ANOTHER named
+    # feature steps aside for the feature guide (2026-11-01 integration).
+    if (_asks_about_a_named_feature(text, str(raw or ""))
+            and not re.search(r"\bgoals?\b", text)):
         return None
     if _GOAL_STATE_RX.search(text):
         m = _GOAL_STATE_RX.search(text)
