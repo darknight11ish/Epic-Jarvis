@@ -164,6 +164,7 @@ import ast
 import json
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -181,6 +182,56 @@ MENU_PLACES = (
 )
 TUTORIALS_PY = ROOT / "backend" / "jarvis_tutorials.py"
 SETTINGS_REGISTRY = ROOT / "backend" / "jarvis_settings_registry.py"
+JARVIS_API = ROOT / "docs" / "JARVIS-API.md"
+FRAMEWORK_TOML = ROOT / "backend" / "rebuilt" / "jarvis-framework.toml"
+
+#: Rule 8: what a row may point at as evidence. A FILE that exists, a SYMBOL
+#: that is really defined inside the file named before it, or a ROUTE the API
+#: doc really lists. Never a line number: this repository is worked in parallel
+#: worktrees and the lines move under every edit, so a line is not evidence of
+#: anything - only the file, the symbol and the route are.
+_PATH_ANCHOR = re.compile(
+    r"(?<![\w/.-])((?:backend|jarvis-desktop|jarvis-client|jarvis-backend|docs|"
+    r"tools|features|contract|scripts|plugins)/[\w./-]+\.(?:py|mjs|js|kt|rs|md|"
+    r"json|toml|html|css|ps1))", re.I)
+_ROUTE_ANCHOR = re.compile(r"/api/[A-Za-z0-9_./{}:<>-]+")
+_LINE_ANCHOR = re.compile(
+    r"\b[\w./-]+\.(?:py|mjs|js|kt|rs|md|json|toml|html|css|ps1):\d+")
+_SYMBOL_ANCHOR = re.compile(r"`([a-z_][a-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)`")
+
+#: Rule 9: a row that says its feature raises an approval card must name the
+#: GATE ACTION that card is written under (`gate` in features.json), and that
+#: action must resolve to tier `ask` in the shipped settings. A card in the
+#: prose and no action behind it is a claim nothing can check; an action whose
+#: tier is `auto`/`never` means the sentence is false.
+_CARD_CLAIM = re.compile(
+    r"(?<![A-Za-z])(?:one approval card|one card|"
+    r"raises (?:(?:a|an|one)\s+)?(?:approval\s+)?card|asks you first|"
+    r"(?<!what )asks first)", re.I)
+#: Phrases that make a nearby "card"/"asks" sentence a NEGATIVE claim ("no card
+#: to look", "raises no card", "asks nothing") - those need no gate action.
+_CARD_NEGATIVE = re.compile(
+    r"\b(?:no|never|not|nothing|without|none)\b", re.I)
+
+#: Rule 9's recorded gaps: rows that claim a card whose gate action has not been
+#: mapped to a real action yet. It is a measured work list, not a pass, and it
+#: empties itself: a row that gains `gate` fails until its line is deleted, a
+#: row whose prose stops claiming a card fails the same way, and an id that is
+#: no longer a row fails too.
+CARD_GATE_GAP = {
+    "memory-waiting": "the per-fact card is raised by the memory store's own pending queue, "
+    "not by an action in [autonomy.tiers]; the exact gate name is not recorded yet",
+    "memory-people": "Forget on a fact is memory-store code, and its gate action is not "
+    "recorded in the shipped tiers",
+    "between-us": "Forget on a fact is memory-store code, and its gate action is not "
+    "recorded in the shipped tiers",
+    "sensitive-facts": "the per-fact sensitive card is the memory store's pending queue, "
+    "not an action in [autonomy.tiers]",
+    "quiz": "the YouTube quiz link's card is raised by the quiz module; its gate action "
+    "is not recorded in the shipped tiers",
+    "approvals": "the approvals row is the card mechanism itself; its prose describes "
+    "the general shape, not one feature's gate action",
+}
 
 #: The groups, in the order both apps draw them (docs/FEATURES-LIST-DESIGN.md).
 GROUPS = [
@@ -936,13 +987,242 @@ def pending_problems(got: list) -> list:
             for name, why in sorted(REASON_PENDING.items()) if name not in one_sided]
 
 
+def _row_text(row: dict) -> str:
+    """The four sentences a person reads, joined for the evidence scan."""
+    return " ".join(str(row.get(k, "")) for k in ("what", "where", "asks", "limit"))
+
+
+def _documented_routes(root: Path = ROOT) -> set:
+    """Every route shape this repository really carries, punctuation stripped.
+
+    The API doc is the first witness, but a plugin route can be documented in
+    its own design note (`docs/DOCKER-INTEGRATION-DESIGN.md`) and defined in its
+    shipped module (`backend/jarvis_docker.py`'s PATH_* constants) rather than
+    in JARVIS-API.md - all three are real evidence that the route exists. A
+    route none of them carries is invented or undocumented, and either way the
+    row is not answerable.
+    """
+    routes = set()
+    folders = [root / "docs", root / "backend"]
+    files = []
+    for folder in folders:
+        if folder.is_dir():
+            files.extend(sorted(folder.glob("*.md"))[:200])
+            files.extend(sorted(folder.glob("*.py"))[:300])
+    for path in files:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in re.finditer(r"/api/[A-Za-z0-9_./{}<>:-]+", text):
+            routes.add(m.group(0).rstrip(".,;`"))
+    return routes
+
+
+def _route_is_documented(anchor: str, routes: set) -> bool:
+    anchor = anchor.rstrip(".,;`")
+    for route in routes:
+        if route == anchor or route.startswith(anchor + "/") or route.startswith(anchor):
+            return True
+    return False
+
+
+def _symbol_is_real(module: str, symbol: str, root: Path = ROOT) -> bool:
+    """Is `module.symbol` really defined in the module named?"""
+    for folder, suffix in (("backend", ".py"), ("jarvis-backend", ".py"),
+                           ("jarvis-desktop/src", ".js")):
+        path = root / folder / (module + suffix)
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        pattern = (r"\bdef\s+" + re.escape(symbol) + r"\b"
+                   r"|\bclass\s+" + re.escape(symbol) + r"\b"
+                   r"|\b(?:const|let|var|function)\s+" + re.escape(symbol) + r"\b"
+                   r"|^" + re.escape(symbol) + r"\s*[:=]")
+        if re.search(pattern, text, re.M):
+            return True
+    return False
+
+
+def anchor_problems(rows: list, root: Path = ROOT) -> list:
+    """Rule 8: file, symbol and route evidence is real; a line number never is.
+
+    This is the rule that makes a feature row answerable: the sentence can say
+    "the memory plate" only if it also names where that is, and the thing it
+    names must exist in this tree. The API doc is the route evidence; a route
+    the doc does not list is either undocumented or invented, and both have to
+    be fixed before the row is trusted.
+    """
+    bad = []
+    routes = _documented_routes(root)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fid = row.get("id", "?")
+        text = _row_text(row)
+        line = _LINE_ANCHOR.search(text)
+        if line:
+            bad.append(f"{fid}: names {line.group(0)!r} as evidence - a line "
+                       "number is not evidence (it moves under every edit); name "
+                       "the file and the symbol or route instead")
+        for m in _PATH_ANCHOR.finditer(text):
+            path = m.group(1).rstrip(".,;")
+            if not (root / path).is_file():
+                bad.append(f"{fid}: names {path!r}, which is not a file in this tree")
+        for m in _ROUTE_ANCHOR.finditer(text):
+            route = m.group(0).rstrip(".,;`")
+            if not _route_is_documented(route, routes):
+                bad.append(f"{fid}: names route {route!r}, which docs/JARVIS-API.md "
+                           "does not list - document it or fix the row")
+        for m in _SYMBOL_ANCHOR.finditer(text):
+            module, symbol = m.group(1), m.group(2)
+            if not _symbol_is_real(module, symbol, root):
+                bad.append(f"{fid}: names `{module}.{symbol}`, but no {module} file in "
+                           "this tree defines it")
+    return bad
+
+
+def lesson_anchor_problems(rows: list, lessons=None) -> list:
+    """Rule 9's first half (Gemini round 2, ruling 6): a row's lesson must exist.
+
+    Every row may carry `lesson_id` (the one lesson the page's own "Learn
+    this" button opens). It must name a lesson that really exists in
+    `backend/jarvis_tutorials.py`; a made-up or renamed lesson id fails. The
+    lessons a row names through `covers` are checked by the reverse-completeness
+    rules already; this makes the row's PRIMARY lesson an explicit anchor.
+    """
+    known = set(lesson_ids() if lessons is None else lessons)
+    bad = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fid = row.get("id", "?")
+        lid = row.get("lesson_id")
+        if lid is None:
+            continue
+        if not isinstance(lid, str) or not lid.strip():
+            bad.append(f"{fid}: `lesson_id` is empty - name the one lesson this "
+                       "row's Learn button opens, or delete the field")
+        elif lid not in known:
+            bad.append(f"{fid}: `lesson_id` names {lid!r}, which is not a lesson in "
+                       f"backend/jarvis_tutorials.py ({len(known)} lessons) - name a "
+                       "real lesson or fix the catalogue")
+    return bad
+
+
+def settings_covers_problems(rows: list, known_settings=None) -> list:
+    """Rule 9's second half (Gemini round 2, ruling 6): `settings.*` is real.
+
+    A `settings.*` token in `covers` is a claim that the row is reachable from a
+    named row in one app's Settings/menu registry. Those ids are read from the
+    two real registries (`menu-catalog.js`, `MenuPlaces.kt`); an invented
+    `settings.something` fails rather than sitting in the list as a dead pointer.
+    """
+    known = set()
+    if known_settings is not None:
+        known = set(known_settings)
+    else:
+        known = set(desktop_menu_ids()) | set(phone_menu_ids())
+    bad = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fid = row.get("id", "?")
+        for cid in row.get("covers") or []:
+            if isinstance(cid, str) and cid.startswith("settings.") and cid not in known:
+                bad.append(f"{fid}: covers names {cid!r}, which is not a settings/menu "
+                           "id in the desktop menu catalogue or the phone's "
+                           "MenuPlaces.kt - name a real row or drop the token")
+    return bad
+
+
+def card_claim(row: dict) -> bool:
+    """Does this row's prose positively promise an approval card?
+
+    Sentences, not the whole field: "No card to look. Forget on a fact asks
+    first" is a negative and a positive side by side, and the positive half is
+    a real claim. A negative word only cancels a phrase when it comes BEFORE it
+    ("never asks first", "no card"); a qualifier after it ("one card ... never
+    by voice") does not.
+    """
+    text = _row_text(row)
+    for sentence in re.split(r"(?<=[.;])\s+", text):
+        for m in _CARD_CLAIM.finditer(sentence):
+            before = sentence[max(0, m.start() - 25):m.start()].lower()
+            if _CARD_NEGATIVE.search(before):
+                continue
+            return True
+    return False
+
+
+def _gate_tiers(root: Path = ROOT) -> dict:
+    try:
+        data = tomllib.loads((root / "backend" / "rebuilt" / "jarvis-framework.toml")
+                             .read_text(encoding="utf-8"))
+        return dict(data.get("autonomy", {}).get("tiers", {}))
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+
+def gate_problems(rows: list, root: Path = ROOT, gaps=None, tiers=None) -> list:
+    """Rule 9: a promised card names the gate action it is written under, and
+    that action is really a card (`ask`) in the shipped settings.
+
+    `tiers` is for the suite: it can hand the rule a synthetic tier map instead
+    of writing a fake repository tree (the sandbox's temp folder is not always
+    writable)."""
+    gaps = CARD_GATE_GAP if gaps is None else gaps
+    bad = []
+    tiers = _gate_tiers(root) if tiers is None else tiers
+    by_id = {}
+    for row in rows:
+        if isinstance(row, dict):
+            by_id[row.get("id")] = row
+    for fid in gaps:
+        row = by_id.get(fid)
+        if row is None:
+            bad.append(f"CARD_GATE_GAP names `{fid}`, which is not a feature row "
+                       "any more - delete the line")
+        elif not card_claim(row):
+            bad.append(f"CARD_GATE_GAP names `{fid}`, whose prose no longer claims a "
+                       "card - delete the gap line")
+        elif row.get("gate"):
+            bad.append(f"CARD_GATE_GAP names `{fid}`, but the row has `gate` now - "
+                       "delete the gap line (the card has an action behind it)")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fid = row.get("id", "?")
+        gate = row.get("gate")
+        claims = card_claim(row)
+        if claims and not gate and fid not in gaps:
+            bad.append(f"{fid}: says it raises an approval card, but names no `gate` "
+                       "action - add the gate action the card is written under, or "
+                       "record it in CARD_GATE_GAP with the reason")
+        if not claims and gate:
+            bad.append(f"{fid}: carries `gate` but its prose claims no card - delete "
+                       "the field (or fix the sentence it was meant to back)")
+        for action in gate or []:
+            if not isinstance(action, str) or not action:
+                bad.append(f"{fid}: `gate` has an empty/non-string entry")
+            elif action not in tiers:
+                bad.append(f"{fid}: `gate` names {action!r}, which is not an action in "
+                           "the shipped [autonomy.tiers] - name a real action")
+            elif str(tiers[action]) != "ask":
+                bad.append(f"{fid}: `gate` names {action!r}, whose tier is "
+                           f"{tiers[action]!r}, not 'ask' - the card sentence is false")
+    return bad
+
+
 def problems() -> list:
     """Everything wrong, in one list, each line naming what to fix."""
     got = entries()
     known = known_ids()
     return (field_problems(got) + phantom_covers(got, known) + uncovered(got, known)
             + internal_problems(known) + copy_problems() + teaching_problems(got, known)
-            + lesson_problems(got) + pending_problems(got) + keyword_problems(got))
+            + lesson_problems(got) + pending_problems(got) + keyword_problems(got)
+            + anchor_problems(got) + gate_problems(got)
+            + lesson_anchor_problems(got) + settings_covers_problems(got))
 
 
 def main() -> int:
@@ -973,6 +1253,15 @@ def main() -> int:
          f"recorded teaching gap - {keyworded} with `must_mention`, "
          f"{len(TEACHING_GAP)} recorded as a teaching gap",
          keyword_problems(got)),
+        ("every file, symbol and route a row names is real, and no row names a "
+         "line number as evidence", anchor_problems(got)),
+        (f"every row that claims a card names the gate action behind it, and that "
+         f"action really resolves to tier ask ({len(CARD_GATE_GAP)} recorded gap(s))",
+         gate_problems(got)),
+        (f"every row's `lesson_id` names a real lesson in jarvis_tutorials.py "
+         f"({len(lessons)} lessons)", lesson_anchor_problems(got)),
+        ("every `settings.*` token in `covers` is a real settings/menu id in one "
+         "app's registry", settings_covers_problems(got)),
     ]
     failed = 0
     for name, bad in checks:
@@ -1002,6 +1291,21 @@ def main() -> int:
     if TEACHING_GAP:
         print("teaching gaps (a work list for the lessons, not a pass): "
               + ", ".join(sorted(TEACHING_GAP)))
+    lesson_rows = [e for e in got if isinstance(e, dict) and e.get("lesson_id")]
+    settings_tokens = sorted({c for e in got if isinstance(e, dict)
+                              for c in (e.get("covers") or [])
+                              if isinstance(c, str) and c.startswith("settings.")})
+    print(f"{len(lesson_rows)} rows name a primary `lesson_id` "
+          f"({len(lessons)} lessons in jarvis_tutorials.py); "
+          f"{len(settings_tokens)} distinct `settings.*` covers tokens, all real")
+    claimed = [e.get("id") for e in got if isinstance(e, dict) and card_claim(e)]
+    gated = [e.get("id") for e in got if isinstance(e, dict) and card_claim(e) and e.get("gate")]
+    print(f"{len(gated)} of {len(claimed)} card-claiming features name their gate action; "
+          f"{len(CARD_GATE_GAP)} recorded in CARD_GATE_GAP as not yet mapped (a work "
+          "list, not a pass)")
+    if CARD_GATE_GAP:
+        print("card gate gaps (a work list for the catalogue, not a pass): "
+              + ", ".join(sorted(CARD_GATE_GAP)))
     unclaimed = sorted(lessons - set(by_lesson) - set(LESSON_UNCOVERED))
     if unclaimed:
         print("lessons no feature names (FAILED above, listed so the fix is one line each): "

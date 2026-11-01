@@ -26,7 +26,8 @@
     "must_mention": [
       "prompt",
       "coach"
-    ]
+    ],
+    "lesson_id": "how-it-talks"
   },
   {
     "id": "talk-button",
@@ -43,7 +44,8 @@
     "must_mention": [
       "talk button",
       "hold"
-    ]
+    ],
+    "lesson_id": "phone-talking"
   },
   {
     "id": "wake-word",
@@ -61,7 +63,11 @@
     "must_mention": [
       "hey",
       "hands-free"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "talking"
   },
   {
     "id": "read-aloud",
@@ -79,7 +85,8 @@
     "must_mention": [
       "aloud",
       "read out"
-    ]
+    ],
+    "lesson_id": "talking"
   },
   {
     "id": "spoken-style",
@@ -96,7 +103,8 @@
     "must_mention": [
       "spoken",
       "short"
-    ]
+    ],
+    "lesson_id": "how-it-talks"
   },
   {
     "id": "voice-training",
@@ -112,7 +120,11 @@
     ],
     "must_mention": [
       "voice print"
-    ]
+    ],
+    "gate": [
+      "better_voice_enable"
+    ],
+    "lesson_id": "how-it-talks"
   },
   {
     "id": "voice-check",
@@ -130,7 +142,11 @@
     "must_mention": [
       "voice print",
       "checked"
-    ]
+    ],
+    "gate": [
+      "lower_the_voice_check_bar"
+    ],
+    "lesson_id": "how-it-talks"
   },
   {
     "id": "custom-voices",
@@ -147,7 +163,12 @@
     ],
     "must_mention": [
       "custom voices"
-    ]
+    ],
+    "gate": [
+      "better_voice_enable",
+      "change_own_config"
+    ],
+    "lesson_id": "how-it-talks"
   },
   {
     "id": "manner",
@@ -170,7 +191,8 @@
     "must_mention": [
       "personality",
       "dials"
-    ]
+    ],
+    "lesson_id": "how-it-talks"
   },
   {
     "id": "write-like-me",
@@ -232,7 +254,8 @@
     "must_mention": [
       "live",
       "back-and-forth"
-    ]
+    ],
+    "lesson_id": "talking"
   },
   {
     "id": "live-extras",
@@ -253,7 +276,8 @@
     "must_mention": [
       "headset",
       "resume"
-    ]
+    ],
+    "lesson_id": "talking"
   },
   {
     "id": "talk-to-type",
@@ -271,7 +295,11 @@
     ],
     "covers": [
       "how-it-talks"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "how-it-talks"
   },
   {
     "id": "chat-thread",
@@ -292,7 +320,8 @@
     ],
     "must_mention": [
       "chat history"
-    ]
+    ],
+    "lesson_id": "records"
   },
   {
     "id": "temporary-chat",
@@ -356,7 +385,11 @@
     "must_mention": [
       "briefing",
       "morning"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "coming-up",
@@ -373,7 +406,8 @@
     ],
     "must_mention": [
       "coming up"
-    ]
+    ],
+    "lesson_id": "timers-reminders"
   },
   {
     "id": "today",
@@ -390,7 +424,8 @@
     ],
     "must_mention": [
       "today"
-    ]
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "widgets",
@@ -408,7 +443,8 @@
     "must_mention": [
       "widget",
       "describe"
-    ]
+    ],
+    "lesson_id": "home-overview"
   },
   {
     "id": "jobs",
@@ -426,7 +462,8 @@
     "must_mention": [
       "jobs",
       "background"
-    ]
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "now",
@@ -446,7 +483,8 @@
     ],
     "must_mention": [
       "right now"
-    ]
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "attention-budget",
@@ -468,7 +506,8 @@
     "must_mention": [
       "interrupt",
       "budget"
-    ]
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "focus",
@@ -487,7 +526,8 @@
     "must_mention": [
       "focus session",
       "quiet"
-    ]
+    ],
+    "lesson_id": "focus-sessions"
   },
   {
     "id": "media-transport",
@@ -509,7 +549,8 @@
     "must_mention": [
       "pause",
       "next"
-    ]
+    ],
+    "lesson_id": "media-transport"
   },
   {
     "id": "memory-tab",
@@ -527,7 +568,8 @@
     "must_mention": [
       "facts",
       "learns"
-    ]
+    ],
+    "lesson_id": "memory"
   },
   {
     "id": "memory-saved",
@@ -546,7 +588,8 @@
     "must_mention": [
       "saved",
       "facts"
-    ]
+    ],
+    "lesson_id": "memory"
   },
   {
     "id": "memory-waiting",
@@ -565,7 +608,8 @@
     "must_mention": [
       "wait for your yes",
       "facts"
-    ]
+    ],
+    "lesson_id": "memory"
   },
   {
     "id": "memory-known",
@@ -584,7 +628,8 @@
     "must_mention": [
       "knows",
       "forget"
-    ]
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "memory-people",
@@ -603,7 +648,8 @@
     "must_mention": [
       "people",
       "forget"
-    ]
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "people-dossier",
@@ -633,7 +679,8 @@
     ],
     "must_mention": [
       "keep in mind"
-    ]
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "between-us",
@@ -650,7 +697,8 @@
     ],
     "must_mention": [
       "between us"
-    ]
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "topics",
@@ -667,7 +715,8 @@
     ],
     "must_mention": [
       "topic"
-    ]
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "memory-learning",
@@ -687,7 +736,11 @@
     "must_mention": [
       "switches",
       "automatically"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "memory"
   },
   {
     "id": "wiki",
@@ -705,7 +758,11 @@
     "must_mention": [
       "wiki",
       "obsidian"
-    ]
+    ],
+    "gate": [
+      "wiki_update"
+    ],
+    "lesson_id": "notes-and-wiki"
   },
   {
     "id": "deep-questions",
@@ -722,7 +779,8 @@
     ],
     "must_mention": [
       "deep questions"
-    ]
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "memory-as-of",
@@ -744,7 +802,8 @@
     "must_mention": [
       "true from",
       "date"
-    ]
+    ],
+    "lesson_id": "memory"
   },
   {
     "id": "import-chats",
@@ -762,7 +821,8 @@
     "must_mention": [
       "bring in old chats",
       "export"
-    ]
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "history",
@@ -782,7 +842,11 @@
     ],
     "must_mention": [
       "chat history"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "records"
   },
   {
     "id": "chat-tags",
@@ -801,7 +865,12 @@
     "must_mention": [
       "tags",
       "tagging"
-    ]
+    ],
+    "gate": [
+      "chat_tags_suggest_on",
+      "chat_card_pin"
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "forget-range",
@@ -820,7 +889,11 @@
     "must_mention": [
       "time frame",
       "forget"
-    ]
+    ],
+    "gate": [
+      "memory_forget_range"
+    ],
+    "lesson_id": "memory"
   },
   {
     "id": "galaxy",
@@ -837,7 +910,8 @@
     ],
     "must_mention": [
       "galaxy"
-    ]
+    ],
+    "lesson_id": "memory-lists"
   },
   {
     "id": "media-read",
@@ -876,7 +950,8 @@
     "must_mention": [
       "where",
       "put"
-    ]
+    ],
+    "lesson_id": "places"
   },
   {
     "id": "look-at-this",
@@ -893,7 +968,8 @@
     ],
     "must_mention": [
       "look at this"
-    ]
+    ],
+    "lesson_id": "screens-and-pictures"
   },
   {
     "id": "watch-with-me",
@@ -909,7 +985,8 @@
     ],
     "must_mention": [
       "watch with me"
-    ]
+    ],
+    "lesson_id": "screens-and-pictures"
   },
   {
     "id": "picture-mode",
@@ -925,7 +1002,11 @@
     ],
     "must_mention": [
       "picture mode"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "screens-and-pictures"
   },
   {
     "id": "photo-reminder",
@@ -938,7 +1019,8 @@
     "surface": "both",
     "covers": [
       "screens-and-pictures"
-    ]
+    ],
+    "lesson_id": "screens-and-pictures"
   },
   {
     "id": "live-camera",
@@ -952,7 +1034,8 @@
     "surface_reason": "The phone's camera only: a PC webcam mostly sees the owner's face and room (the owner's answers of 2026-09-28, docs/LIVE-DESIGN.md section 5; docs/ARCHITECTURE.md section 8).",
     "covers": [
       "phone-live"
-    ]
+    ],
+    "lesson_id": "phone-live"
   },
   {
     "id": "quiz",
@@ -985,7 +1068,8 @@
     "must_mention": [
       "ask for a picture",
       "everyday"
-    ]
+    ],
+    "lesson_id": "screens-and-pictures"
   },
   {
     "id": "search-audio-video",
@@ -1007,7 +1091,11 @@
       "index",
       "recordings"
     ],
-    "surface_reason": "The index lives on this PC and has a PC Settings card; the phone has no recordings-index screen."
+    "surface_reason": "The index lives on this PC and has a PC Settings card; the phone has no recordings-index screen.",
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "search-audio-video"
   },
   {
     "id": "decks",
@@ -1036,7 +1124,8 @@
     ],
     "must_mention": [
       "note"
-    ]
+    ],
+    "lesson_id": "notes-and-wiki"
   },
   {
     "id": "notes-editor",
@@ -1059,7 +1148,11 @@
       "obsidian",
       "approval card",
       "2 mib"
-    ]
+    ],
+    "gate": [
+      "edit_vault_note"
+    ],
+    "lesson_id": "notes-editor"
   },
   {
     "id": "folders",
@@ -1076,7 +1169,11 @@
     ],
     "must_mention": [
       "folders"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "documents-and-search"
   },
   {
     "id": "documents",
@@ -1097,7 +1194,8 @@
     "must_mention": [
       "document",
       "pdf"
-    ]
+    ],
+    "lesson_id": "documents-and-search"
   },
   {
     "id": "tutorials",
@@ -1117,7 +1215,8 @@
     "must_mention": [
       "tutorials",
       "faq"
-    ]
+    ],
+    "lesson_id": "set-up-jarvis-card"
   },
   {
     "id": "pc-help",
@@ -1143,6 +1242,9 @@
     "surface": "both",
     "covers": [
       "settings.web-search"
+    ],
+    "gate": [
+      "change_own_config"
     ]
   },
   {
@@ -1156,6 +1258,9 @@
     "surface": "both",
     "covers": [
       "settings.browser-engine"
+    ],
+    "gate": [
+      "change_own_config"
     ]
   },
   {
@@ -1172,7 +1277,11 @@
       "brain.watch.watchlist",
       "work-and-attention",
       "limits-and-notes"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "chatbot",
@@ -1190,7 +1299,11 @@
     ],
     "must_mention": [
       "chatbot"
-    ]
+    ],
+    "gate": [
+      "chatbot_session"
+    ],
+    "lesson_id": "money-and-health"
   },
   {
     "id": "support",
@@ -1207,6 +1320,9 @@
     ],
     "covers": [
       "brain.work.support"
+    ],
+    "gate": [
+      "support_chat"
     ]
   },
   {
@@ -1225,7 +1341,11 @@
     "must_mention": [
       "project",
       "benchmarks"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "projects"
   },
   {
     "id": "goals",
@@ -1243,7 +1363,11 @@
     "must_mention": [
       "goal",
       "check-in"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "projects"
   },
   {
     "id": "progress",
@@ -1260,7 +1384,8 @@
     ],
     "must_mention": [
       "chart"
-    ]
+    ],
+    "lesson_id": "projects"
   },
   {
     "id": "file-from-pc",
@@ -1286,7 +1411,11 @@
       "approval card",
       "ten minutes",
       "download"
-    ]
+    ],
+    "gate": [
+      "send_file_to_phone"
+    ],
+    "lesson_id": "file-from-pc"
   },
   {
     "id": "notion-import",
@@ -1308,7 +1437,11 @@
       "notion",
       "export"
     ],
-    "surface_reason": "The import writes into an Obsidian vault on this PC; the phone has no Notion-import screen."
+    "surface_reason": "The import writes into an Obsidian vault on this PC; the phone has no Notion-import screen.",
+    "gate": [
+      "import_notion_export"
+    ],
+    "lesson_id": "notion-import"
   },
   {
     "id": "vault-organizer",
@@ -1329,7 +1462,11 @@
       "vault",
       "plan"
     ],
-    "surface_reason": "The vault is on this PC, so the organizer is PC-only; the phone has no vault-organizer screen."
+    "surface_reason": "The vault is on this PC, so the organizer is PC-only; the phone has no vault-organizer screen.",
+    "gate": [
+      "organize_obsidian_vault"
+    ],
+    "lesson_id": "vault-organizer"
   },
   {
     "id": "spending",
@@ -1347,7 +1484,8 @@
     "must_mention": [
       "spending",
       "summaries"
-    ]
+    ],
+    "lesson_id": "money-and-health"
   },
   {
     "id": "retirement",
@@ -1365,7 +1503,8 @@
     "must_mention": [
       "retirement",
       "what-if"
-    ]
+    ],
+    "lesson_id": "money-and-health"
   },
   {
     "id": "chatbot-money",
@@ -1384,7 +1523,11 @@
     "must_mention": [
       "keys",
       "monthly"
-    ]
+    ],
+    "gate": [
+      "raise_api_limit"
+    ],
+    "lesson_id": "money-and-health"
   },
   {
     "id": "sensitive-facts",
@@ -1402,7 +1545,8 @@
     "must_mention": [
       "health",
       "money"
-    ]
+    ],
+    "lesson_id": "money-and-health"
   },
   {
     "id": "crisis-help",
@@ -1421,7 +1565,8 @@
     "must_mention": [
       "crisis",
       "helplines"
-    ]
+    ],
+    "lesson_id": "money-and-health"
   },
   {
     "id": "parking",
@@ -1442,7 +1587,8 @@
     "must_mention": [
       "parking",
       "calendar"
-    ]
+    ],
+    "lesson_id": "parking"
   },
   {
     "id": "home-status",
@@ -1460,7 +1606,11 @@
     "must_mention": [
       "house",
       "home assistant"
-    ]
+    ],
+    "gate": [
+      "enable_reading_tool"
+    ],
+    "lesson_id": "home-devices"
   },
   {
     "id": "lights",
@@ -1477,7 +1627,11 @@
     "must_mention": [
       "lights",
       "plugs"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "home-devices"
   },
   {
     "id": "locks",
@@ -1494,7 +1648,11 @@
     "must_mention": [
       "locks",
       "doors"
-    ]
+    ],
+    "gate": [
+      "home_control"
+    ],
+    "lesson_id": "home-devices"
   },
   {
     "id": "calendar",
@@ -1512,7 +1670,11 @@
     "must_mention": [
       "calendar",
       "read-only"
-    ]
+    ],
+    "gate": [
+      "enable_reading_tool"
+    ],
+    "lesson_id": "home-calendar-email"
   },
   {
     "id": "jarvis-calendar",
@@ -1542,7 +1704,11 @@
     "must_mention": [
       "weather",
       "sky"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "home-devices"
   },
   {
     "id": "email-read",
@@ -1558,7 +1724,11 @@
     ],
     "must_mention": [
       "reading email"
-    ]
+    ],
+    "gate": [
+      "enable_reading_tool"
+    ],
+    "lesson_id": "home-calendar-email"
   },
   {
     "id": "email-send",
@@ -1576,7 +1746,11 @@
     "must_mention": [
       "sending",
       "recipients"
-    ]
+    ],
+    "gate": [
+      "send_email"
+    ],
+    "lesson_id": "home-calendar-email"
   },
   {
     "id": "email-drafts",
@@ -1590,7 +1764,11 @@
     "surface_reason": "A draft is written into your mail account's Drafts folder by the PC's backend after the card is answered on the PC; the phone has no Drafts card.",
     "covers": [
       "home-calendar-email"
-    ]
+    ],
+    "gate": [
+      "draft_email"
+    ],
+    "lesson_id": "home-calendar-email"
   },
   {
     "id": "inbox-tidy",
@@ -1603,7 +1781,11 @@
     "surface": "both",
     "covers": [
       "home-calendar-email"
-    ]
+    ],
+    "gate": [
+      "tidy_inbox"
+    ],
+    "lesson_id": "home-calendar-email"
   },
   {
     "id": "news-and-page-watches",
@@ -1619,7 +1801,11 @@
       "brain.work.coming-up",
       "home-calendar-email",
       "work-and-attention"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "home-calendar-email"
   },
   {
     "id": "connection",
@@ -1640,7 +1826,11 @@
     "must_mention": [
       "pairing",
       "key"
-    ]
+    ],
+    "gate": [
+      "pair_device"
+    ],
+    "lesson_id": "phone-pairing"
   },
   {
     "id": "devices",
@@ -1659,7 +1849,11 @@
     "must_mention": [
       "devices",
       "paired"
-    ]
+    ],
+    "gate": [
+      "unretire_shared_key"
+    ],
+    "lesson_id": "phone-pairing"
   },
   {
     "id": "phone-notifications",
@@ -1678,7 +1872,11 @@
     "must_mention": [
       "notifications",
       "read"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "phone-notifications"
   },
   {
     "id": "phone-watch",
@@ -1696,7 +1894,11 @@
     ],
     "must_mention": [
       "smartwatch"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "phone-extras"
   },
   {
     "id": "phone-floating",
@@ -1718,7 +1920,8 @@
     "must_mention": [
       "floating",
       "always-on-top"
-    ]
+    ],
+    "lesson_id": "phone-extras"
   },
   {
     "id": "phone-pip",
@@ -1733,7 +1936,8 @@
     "covers": [
       "settings.pip-mode",
       "phone-extras"
-    ]
+    ],
+    "lesson_id": "phone-extras"
   },
   {
     "id": "phone-tiles",
@@ -1753,7 +1957,8 @@
     "must_mention": [
       "tiles",
       "quick"
-    ]
+    ],
+    "lesson_id": "phone-extras"
   },
   {
     "id": "phone-screen-rate",
@@ -1771,7 +1976,8 @@
     ],
     "must_mention": [
       "refresh rate"
-    ]
+    ],
+    "lesson_id": "phone-extras"
   },
   {
     "id": "also-on-phone",
@@ -1787,7 +1993,8 @@
     ],
     "must_mention": [
       "also on my phone"
-    ]
+    ],
+    "lesson_id": "home-overview"
   },
   {
     "id": "find-phone",
@@ -1803,7 +2010,8 @@
     ],
     "must_mention": [
       "ring my phone"
-    ]
+    ],
+    "lesson_id": "home-overview"
   },
   {
     "id": "phone-limits",
@@ -1822,7 +2030,11 @@
     "must_mention": [
       "bulk",
       "speech-to-text"
-    ]
+    ],
+    "gate": [
+      "switch_model"
+    ],
+    "lesson_id": "phone-limits"
   },
   {
     "id": "appearance",
@@ -1842,7 +2054,8 @@
     "must_mention": [
       "face",
       "expressions"
-    ]
+    ],
+    "lesson_id": "faces"
   },
   {
     "id": "crash-notes",
@@ -1861,7 +2074,8 @@
     "must_mention": [
       "crash",
       "hang"
-    ]
+    ],
+    "lesson_id": "limits-and-notes"
   },
   {
     "id": "faces",
@@ -1878,7 +2092,8 @@
     "must_mention": [
       "animals",
       "face"
-    ]
+    ],
+    "lesson_id": "faces"
   },
   {
     "id": "animal-options",
@@ -1896,7 +2111,8 @@
     "must_mention": [
       "animal options",
       "sharpness"
-    ]
+    ],
+    "lesson_id": "faces"
   },
   {
     "id": "first-run",
@@ -1919,7 +2135,8 @@
     "must_mention": [
       "first day",
       "switches"
-    ]
+    ],
+    "lesson_id": "set-up-jarvis-card"
   },
   {
     "id": "setup-questionnaire",
@@ -1936,6 +2153,9 @@
     ],
     "covers": [
       "settings.setup-questionnaire"
+    ],
+    "gate": [
+      "change_own_config"
     ]
   },
   {
@@ -1957,7 +2177,8 @@
     ],
     "must_mention": [
       "show or hide menus"
-    ]
+    ],
+    "lesson_id": "brain"
   },
   {
     "id": "shortcuts",
@@ -1976,7 +2197,8 @@
     ],
     "must_mention": [
       "hotkey"
-    ]
+    ],
+    "lesson_id": "how-it-talks"
   },
   {
     "id": "models",
@@ -1997,7 +2219,11 @@
     "must_mention": [
       "models",
       "everyday"
-    ]
+    ],
+    "gate": [
+      "switch_model"
+    ],
+    "lesson_id": "model-page"
   },
   {
     "id": "compute",
@@ -2016,7 +2242,8 @@
     "must_mention": [
       "compute",
       "layers"
-    ]
+    ],
+    "lesson_id": "hardware"
   },
   {
     "id": "skills",
@@ -2034,7 +2261,8 @@
     ],
     "must_mention": [
       "skill"
-    ]
+    ],
+    "lesson_id": "model-page"
   },
   {
     "id": "model-memory",
@@ -2053,7 +2281,8 @@
     "must_mention": [
       "memory",
       "everyday model"
-    ]
+    ],
+    "lesson_id": "model-page"
   },
   {
     "id": "notifications",
@@ -2071,7 +2300,8 @@
     "must_mention": [
       "urgent",
       "alerts"
-    ]
+    ],
+    "lesson_id": "phone-notifications"
   },
   {
     "id": "start-jarvis",
@@ -2090,7 +2320,8 @@
     ],
     "must_mention": [
       "starting jarvis"
-    ]
+    ],
+    "lesson_id": "limits-and-notes"
   },
   {
     "id": "work-tab",
@@ -2107,7 +2338,8 @@
     ],
     "must_mention": [
       "work tab"
-    ]
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "job-list",
@@ -2129,7 +2361,8 @@
     "must_mention": [
       "jobs",
       "step"
-    ]
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "hardware",
@@ -2147,7 +2380,8 @@
     "must_mention": [
       "hardware",
       "measured"
-    ]
+    ],
+    "lesson_id": "hardware"
   },
   {
     "id": "focus-presets",
@@ -2164,6 +2398,9 @@
     ],
     "covers": [
       "settings.focus-presets"
+    ],
+    "gate": [
+      "switch_model"
     ]
   },
   {
@@ -2186,7 +2423,11 @@
     ],
     "must_mention": [
       "second card"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "hardware"
   },
   {
     "id": "big-model",
@@ -2204,7 +2445,11 @@
     "must_mention": [
       "big model",
       "slow"
-    ]
+    ],
+    "gate": [
+      "change_own_config"
+    ],
+    "lesson_id": "hardware"
   },
   {
     "id": "updates",
@@ -2218,7 +2463,8 @@
     "covers": [
       "settings.updates",
       "limits-and-notes"
-    ]
+    ],
+    "lesson_id": "limits-and-notes"
   },
   {
     "id": "tool-updates",
@@ -2233,7 +2479,8 @@
     "covers": [
       "settings.tool-updates",
       "model-page"
-    ]
+    ],
+    "lesson_id": "model-page"
   },
   {
     "id": "settings-file",
@@ -2256,7 +2503,8 @@
     "must_mention": [
       "settings file",
       "logs"
-    ]
+    ],
+    "lesson_id": "limits-and-notes"
   },
   {
     "id": "backend-supports",
@@ -2273,7 +2521,8 @@
     ],
     "must_mention": [
       "backend supports"
-    ]
+    ],
+    "lesson_id": "model-page"
   },
   {
     "id": "about",
@@ -2287,7 +2536,8 @@
     "covers": [
       "settings.about",
       "intro"
-    ]
+    ],
+    "lesson_id": "intro"
   },
   {
     "id": "hud-window",
@@ -2306,7 +2556,8 @@
     "must_mention": [
       "hud",
       "window"
-    ]
+    ],
+    "lesson_id": "pc-at-a-glance"
   },
   {
     "id": "backup",
@@ -2327,7 +2578,12 @@
     "must_mention": [
       "backup",
       "recovery code"
-    ]
+    ],
+    "gate": [
+      "change_own_config",
+      "restore_backup"
+    ],
+    "lesson_id": "backups"
   },
   {
     "id": "accounts",
@@ -2346,7 +2602,8 @@
     "must_mention": [
       "keys",
       "token"
-    ]
+    ],
+    "lesson_id": "money-and-health"
   },
   {
     "id": "reach",
@@ -2366,7 +2623,12 @@
     ],
     "must_mention": [
       "folders"
-    ]
+    ],
+    "gate": [
+      "enable_reading_tool",
+      "loosen_what_asks_first"
+    ],
+    "lesson_id": "documents-and-search"
   },
   {
     "id": "undo",
@@ -2383,7 +2645,8 @@
     ],
     "must_mention": [
       "put back"
-    ]
+    ],
+    "lesson_id": "work-and-attention"
   },
   {
     "id": "past-approvals",
@@ -2405,7 +2668,8 @@
     "must_mention": [
       "decided",
       "read-only"
-    ]
+    ],
+    "lesson_id": "records"
   },
   {
     "id": "limits",
@@ -2426,7 +2690,11 @@
     "must_mention": [
       "frequency",
       "limits"
-    ]
+    ],
+    "gate": [
+      "raise_a_limit"
+    ],
+    "lesson_id": "limits-and-notes"
   },
   {
     "id": "settings-by-asking",
@@ -2437,7 +2705,10 @@
     "asks": "Only a change that loosens a rule, or turns on something that reads or reaches more: that raises ONE approval card - Windows Hello where that setting already asks for it - and nothing changes until you answer it. A cosmetic change (the prompt coach, humour, the voice following the face, making pictures, this PC's own notification switches) happens at once, with no card.",
     "limit": "It changes Jarvis's own switches and nothing else - never a file, a folder, a key or anything outside. A switch it has no way to reach (App lock, the Windows Hello memory-list switch, the theme, the floating face, starting with Windows) is answered in words that say where to change it by hand: nothing is changed and no card is raised. A turn shaped by a web page, an email or a file Jarvis read changes nothing at all, so a page cannot talk it into a setting change. It is on out of the box (the owner's decision of 2026-10-13) - to take it back off, drop \"change_setting\" from the tool list in the settings file; see backend/README.md.",
     "surface": "both",
-    "covers": []
+    "covers": [],
+    "gate": [
+      "change_own_config"
+    ]
   },
   {
     "id": "start-the-model-lane",
@@ -2489,7 +2760,8 @@
     "must_mention": [
       "clipboard",
       "cleanups"
-    ]
+    ],
+    "lesson_id": "clipboard-time-machine"
   },
   {
     "id": "file-history",
@@ -2507,6 +2779,9 @@
     ],
     "covers": [
       "guardian_history"
+    ],
+    "gate": [
+      "undo_action"
     ]
   },
   {
@@ -2526,7 +2801,10 @@
       "reminder that opens",
       "run a task from a reminder"
     ],
-    "covers": []
+    "covers": [],
+    "gate": [
+      "schedule_action"
+    ]
   },
   {
     "id": "thinking-levels",
@@ -2547,7 +2825,8 @@
     "must_mention": [
       "quick",
       "deep"
-    ]
+    ],
+    "lesson_id": "thinking-levels"
   },
   {
     "id": "calculator",
@@ -2568,7 +2847,8 @@
     "must_mention": [
       "arithmetic",
       "calculator"
-    ]
+    ],
+    "lesson_id": "calculator"
   },
   {
     "id": "open-programs",
@@ -2589,7 +2869,8 @@
     "must_mention": [
       "program",
       "panel"
-    ]
+    ],
+    "lesson_id": "open-programs"
   },
   {
     "id": "github-research",
@@ -2610,7 +2891,8 @@
     "must_mention": [
       "github",
       "library"
-    ]
+    ],
+    "lesson_id": "github-research"
   },
   {
     "id": "computer-control",
@@ -2630,7 +2912,8 @@
     "must_mention": [
       "click",
       "type"
-    ]
+    ],
+    "lesson_id": "computer-control"
   },
   {
     "id": "browser-control",
@@ -2650,7 +2933,8 @@
     "must_mention": [
       "tab",
       "element"
-    ]
+    ],
+    "lesson_id": "browser-control"
   },
   {
     "id": "shell-commands",
@@ -2671,7 +2955,8 @@
     "must_mention": [
       "shell",
       "command"
-    ]
+    ],
+    "lesson_id": "shell-commands"
   },
   {
     "id": "read-web-page",
@@ -2692,7 +2977,8 @@
     "must_mention": [
       "page",
       "read"
-    ]
+    ],
+    "lesson_id": "read-web-page"
   },
   {
     "id": "reverse-engineering",
@@ -2712,7 +2998,8 @@
     "must_mention": [
       "binary",
       "program"
-    ]
+    ],
+    "lesson_id": "reverse-engineering"
   },
   {
     "id": "android-builder",
@@ -2733,7 +3020,8 @@
     "must_mention": [
       "gradle",
       "apk"
-    ]
+    ],
+    "lesson_id": "android-builder"
   },
   {
     "id": "docker-containers",
@@ -2755,7 +3043,8 @@
       "container",
       "docker"
     ],
-    "surface_reason": "Docker runs on this PC only; the phone has no Docker screen."
+    "surface_reason": "Docker runs on this PC only; the phone has no Docker screen.",
+    "lesson_id": "docker-containers"
   },
   {
     "id": "approvals",
@@ -2776,7 +3065,8 @@
     "must_mention": [
       "card",
       "approve"
-    ]
+    ],
+    "lesson_id": "asks-first"
   },
   {
     "id": "what-asks-first",
@@ -2796,7 +3086,12 @@
     "must_mention": [
       "asks",
       "stricter"
-    ]
+    ],
+    "gate": [
+      "change_own_config",
+      "loosen_what_asks_first"
+    ],
+    "lesson_id": "asks-first"
   },
   {
     "id": "app-lock",
@@ -2811,7 +3106,8 @@
       "settings.security",
       "when-something-is-wrong",
       "phone-limits"
-    ]
+    ],
+    "lesson_id": "when-something-is-wrong"
   },
   {
     "id": "captcha-handoff",
@@ -2827,7 +3123,11 @@
       "settings.handoff-front",
       "asks-first",
       "phone-approvals"
-    ]
+    ],
+    "gate": [
+      "handoff_keep_offering"
+    ],
+    "lesson_id": "asks-first"
   },
   {
     "id": "stale-link",
@@ -2841,7 +3141,8 @@
     "covers": [
       "safety.stale-link",
       "when-something-is-wrong"
-    ]
+    ],
+    "lesson_id": "when-something-is-wrong"
   },
   {
     "id": "stop-everything",
@@ -2860,7 +3161,8 @@
     "must_mention": [
       "halts",
       "hotkey"
-    ]
+    ],
+    "lesson_id": "pc-at-a-glance"
   },
   {
     "id": "trust",
@@ -2881,7 +3183,8 @@
     "must_mention": [
       "audit",
       "records"
-    ]
+    ],
+    "lesson_id": "records"
   },
   {
     "id": "rush-latch",
@@ -2895,7 +3198,8 @@
     "covers": [
       "brain.trust.rush-latch",
       "when-something-is-wrong"
-    ]
+    ],
+    "lesson_id": "when-something-is-wrong"
   },
   {
     "id": "outside-text",
@@ -2916,7 +3220,8 @@
     ],
     "must_mention": [
       "outside text"
-    ]
+    ],
+    "lesson_id": "asks-first"
   },
   {
     "id": "settings-entry",
@@ -2946,6 +3251,10 @@
     ],
     "covers": [
       "settings.sandbox"
+    ],
+    "gate": [
+      "change_own_config",
+      "sandbox_file_run"
     ]
   },
   {
@@ -2975,7 +3284,12 @@
       "blocked",
       "read-only",
       "executable"
-    ]
+    ],
+    "gate": [
+      "protect_item",
+      "unprotect_item"
+    ],
+    "lesson_id": "protected-items"
   },
   {
     "id": "propose-plan",
@@ -2996,7 +3310,11 @@
     "must_mention": [
       "plan",
       "card"
-    ]
+    ],
+    "gate": [
+      "run_plan"
+    ],
+    "lesson_id": "propose-plan"
   },
   {
     "id": "card-summary",
@@ -3017,7 +3335,8 @@
     "must_mention": [
       "short",
       "explain more"
-    ]
+    ],
+    "lesson_id": "card-summary"
   },
   {
     "id": "receipts",
@@ -3038,6 +3357,7 @@
     "must_mention": [
       "receipt",
       "undo"
-    ]
+    ],
+    "lesson_id": "receipts"
   }
 ]
