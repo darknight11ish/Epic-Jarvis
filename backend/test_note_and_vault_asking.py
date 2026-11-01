@@ -113,11 +113,13 @@ class Verdict:
 
 
 GATE = {"tainted": False, "allowed": True, "outcome": "approved",
-        "tier": "auto", "calls": [], "explode": False}
+        "tier": "auto", "calls": [], "cards": [], "explode": False,
+        "gate_pending": []}
 
 
 def gate_check(action, detail=None, prompt="", **kwargs):
     GATE["calls"].append(action)
+    GATE["cards"].append((action, detail, prompt))
     if GATE["explode"]:
         raise RuntimeError("gate exploded")
     if GATE["tainted"] and action != "write_notes_after_outside_text":
@@ -130,6 +132,7 @@ def gate_check(action, detail=None, prompt="", **kwargs):
 GATE_MODULE = types.ModuleType("jarvis_gate")
 GATE_MODULE.check = gate_check
 GATE_MODULE.taint_active = lambda: bool(GATE["tainted"])
+GATE_MODULE.pending = lambda: list(GATE.get("gate_pending") or [])
 sys.modules["jarvis_gate"] = GATE_MODULE
 
 import jarvis_note_capture as NC  # noqa: E402
@@ -181,7 +184,7 @@ def reset_vault() -> None:
 def reset_gate(*, tainted=False, allowed=True, outcome="approved",
                tier="auto") -> None:
     GATE.update(tainted=tainted, allowed=allowed, outcome=outcome, tier=tier,
-                calls=[], explode=False)
+                calls=[], cards=[], explode=False, gate_pending=[])
 
 
 def reset_all(*, organizer_on=False, tainted=False) -> None:
@@ -423,6 +426,319 @@ def t_turning_it_on_raises_the_existing_one_card():
     check("... and raises no second card", GATE["calls"] == [], GATE["calls"])
 
 
+def t_a_stale_switch_card_is_cleared_and_a_fresh_one_is_raised():
+    """THE LIVE BUG (2026-10-31): the in-memory marker outlived the real card.
+
+    Plant a marker as a raise leaves it, let the gate's pending list say the
+    card is still there (status must stay waiting), then simulate its timeout /
+    dismissal (the gate's list no longer has it). The status must say not
+    waiting, and the next "turn on" must raise a FRESH card and turn on.
+    """
+    reset_all()
+    # RAISE the card for real, but never let the fake gate's decide run (the
+    # live window was dismissed / timed out without an answer).
+    GATE.update(allowed=True, outcome="approved", tier="ask", calls=[],
+                gate_pending=[])
+    code, raised = V.request_enabled(True, gate=gate_check,
+                                     tier_of=lambda action: "ask",
+                                     spawn=lambda fn: None)
+    check("the card is really raised and marked waiting",
+          code == 202 and raised.get("waiting") is True, (code, raised))
+    # While the gate lists the switch card, the marker must stay waiting.
+    GATE["gate_pending"] = [{"id": "gate-card-1", "action": V.SWITCH_ACTION,
+                             "prompt": V.SWITCH_CARD,
+                             "detail": {"setting": "vault_organizer_enabled"}}]
+    live = V.switch_status()
+    check("a card the gate still lists keeps the marker waiting",
+          live.get("waiting") is True and live.get("pending", {}).get("id") == raised.get("pending_id"),
+          live)
+    # The gate's own expiry bounds it even while a row lingers with no time left.
+    GATE["gate_pending"] = [{"id": "gate-card-1", "action": V.SWITCH_ACTION,
+                             "prompt": V.SWITCH_CARD,
+                             "detail": {"setting": "vault_organizer_enabled"},
+                             "expires_in": 0}]
+    expired = V.switch_status()
+    check("... and a matching card with no time left is not waited for",
+          expired.get("waiting") is False, expired)
+    # The card times out / its window is dismissed: the gate no longer lists it.
+    GATE["gate_pending"] = []
+    stale = V.switch_status()
+    check("a marker with no card in the gate is no longer 'waiting'",
+          stale.get("waiting") is False, stale)
+    check("... and the status route says the same",
+          V.handle_get(V.STATUS_PATH)[1].get("waiting") is False,
+          V.handle_get(V.STATUS_PATH)[1])
+    # A new turn-on must raise a fresh card rather than say one is waiting.
+    GATE.update(allowed=True, outcome="approved", tier="ask", calls=[])
+    got = ask("turn on the vault organizer")
+    deadline = time.time() + 5.0
+    while time.time() < deadline and not V.enabled():
+        time.sleep(0.02)
+    check("a new turn-on raises a fresh change_own_config card",
+          got is not None and got.intent == "vault_organizer_on"
+          and GATE["calls"] == ["change_own_config"], GATE["calls"])
+    check("... and it really turns on after the fresh yes", V.enabled(),
+          V.switch_status())
+    check("... with no stale marker left", V.switch_status().get("waiting") is False,
+          V.switch_status())
+    V.reset_for_tests()
+
+
+def t_the_plan_is_read_only_and_names_the_apply_door():
+    reset_all(organizer_on=True)
+    (VAULT / "Welcome.md").write_text("# Welcome\n\nThe boiler was serviced.\n",
+                                      encoding="utf-8")
+    (VAULT / "Garden").mkdir(exist_ok=True)
+    (VAULT / "Garden" / "Gnomes.md").write_text(
+        "# Gnomes\n\nThree gnomes by the shed.\n", encoding="utf-8")
+    before = tree(VAULT)
+    got = ask("plan my vault")
+    check("the ON plan question runs the READ-ONLY plan",
+          got is not None and got.intent == "vault_organizer_plan",
+          got.intent if got else "the model")
+    reply = got.reply if got else ""
+    check("... with the scheme words and the counts",
+          "without moving a single file" in reply and "note(s) read" in reply,
+          reply[:500])
+    check("... saying nothing has changed yet",
+          "Nothing has been changed yet." in reply, reply[:500])
+    check("... naming the ONE-card / never-deletes apply",
+          "ONE approval card" in reply and "never deleted" in reply, reply[:500])
+    check("... and the chat apply door it names is the real shape",
+          'apply the plan' in reply and "apply the plan" in reply.lower(),
+          reply[:500])
+    check("no card was raised and the vault is byte-for-byte unchanged",
+          GATE["calls"] == [] and tree(VAULT) == before,
+          (GATE["calls"], tree(VAULT)))
+
+
+def t_apply_the_plan_raises_the_writers_one_card_and_nothing_more():
+    reset_all(organizer_on=True)
+    (VAULT / "Welcome.md").write_text("# Welcome\n\nThe boiler was serviced.\n",
+                                      encoding="utf-8")
+    plan_reply = ask("organize my notes")
+    check("a plan exists before the apply (so this is the stored plan)",
+          plan_reply is not None and plan_reply.intent == "vault_organizer_plan",
+          plan_reply.intent if plan_reply else "the model")
+    before = tree(VAULT)
+    saved_tier, saved_copy = FW.action_tier, V.COPY_DEFAULT
+    try:
+        FW.action_tier = lambda action: "ask"
+        V.COPY_DEFAULT = False
+        # DENY: the writer's card is raised, and the denial writes nothing.
+        GATE.update(allowed=False, outcome="denied", tier="ask", calls=[])
+        denied = ask("apply the plan")
+        check("'apply the plan' reaches the writer's own intent",
+              denied is not None and denied.intent == "vault_organizer_apply",
+              denied.intent if denied else "the model")
+        check("... raises exactly the writer's ONE card",
+              GATE["calls"] == [V.GATE_ACTION], GATE["calls"])
+        check("... returns the module's own denial words",
+              "denied" in (denied.reply or "").lower()
+              and "nothing changed" in (denied.reply or "").lower(),
+              (denied.reply if denied else "")[:320])
+        check("... and a denied apply leaves the vault untouched",
+              tree(VAULT) == before, tree(VAULT))
+        # APPROVE: one card, then exactly what the plan promised, no deletions.
+        GATE.update(allowed=True, outcome="approved", tier="ask", calls=[])
+        approved = ask("organize my vault now")
+        check("'organize my vault now' is the apply, not a second plan",
+              approved is not None and approved.intent == "vault_organizer_apply",
+              approved.intent if approved else "the model")
+        check("... with exactly one writer card",
+              GATE["calls"] == [V.GATE_ACTION], GATE["calls"])
+        body = approved.reply if approved else ""
+        check("... and the module's own organized words",
+              "Organized" in body and "Nothing was deleted" in body, body[:400])
+        check("... and the vault really changed only after the yes",
+              tree(VAULT) != before, tree(VAULT)[:4])
+    finally:
+        FW.action_tier, V.COPY_DEFAULT = saved_tier, saved_copy
+        V.reset_for_tests()
+
+
+def t_scoped_plan_is_read_only_and_counts_only():
+    reset_all(organizer_on=True)
+    for name, body in (("Welcome.md", "# Welcome\n\nSome words.\n"),
+                       ("Alpha.md", "# Alpha\n\nMore words.\n"),
+                       ("Beta.md", "# Beta\n\nOther words.\n")):
+        (VAULT / name).write_text(body, encoding="utf-8")
+    before = tree(VAULT)
+    one = ask("organize just my Welcome note")
+    check("a pick-a-set ask is the scoped plan",
+          one is not None and one.intent == "vault_organizer_scoped",
+          one.intent if one else "the model")
+    reply = one.reply if one else ""
+    check("... with a selected-note count and nothing changed yet",
+          "A scoped plan for 1 selected note(s)" in reply
+          and "Nothing has been changed yet." in reply, reply[:600])
+    check("... naming the one-card apply and that only the picked notes change",
+          "ONE approval card" in reply and "only the notes you picked" in reply.lower(),
+          reply[:600])
+    check("... and naming no note title at all (counts only)", "Welcome" not in reply,
+          reply[:600])
+    check("... with no card and the vault byte-identical",
+          GATE["calls"] == [] and tree(VAULT) == before, GATE["calls"])
+    two = ask("organize these notes: Welcome, Alpha")
+    check("the owner's named-list shape is the scoped plan too",
+          two is not None and two.intent == "vault_organizer_scoped",
+          two.intent if two else "the model")
+    reply2 = two.reply if two else ""
+    check("... counting the two picked notes", "2 selected note(s)" in reply2,
+          reply2[:600])
+    check("... still naming neither title", "Welcome" not in reply2
+          and "Alpha" not in reply2, reply2[:600])
+    check("... with no card and the vault unchanged",
+          GATE["calls"] == [] and tree(VAULT) == before, GATE["calls"])
+    names = ask("reorganize a specific set of notes")
+    check("a specific-set ask with no names asks for the names",
+          names is not None and names.intent == "vault_organizer_scoped"
+          and "Name the notes to organize" in (names.reply or ""),
+          (names.reply if names else "the model")[:320])
+    check("... and changes nothing", GATE["calls"] == [] and tree(VAULT) == before,
+          GATE["calls"])
+
+
+def t_scoped_refusals_and_hidden_lists_are_honest():
+    reset_all(organizer_on=True)
+    (VAULT / "Welcome.md").write_text("# Welcome\n\nSome words.\n", encoding="utf-8")
+    before = tree(VAULT)
+    for text, want in (
+            ("organize these notes: Nope",
+             "not a real .md file in this vault"),
+            ("organize these notes: ../outside.md", "outside the vault")):
+        got = ask(text)
+        check(f"{text!r} keeps the scoped intent and says the truth",
+              got is not None and got.intent == "vault_organizer_scoped"
+              and want in (got.reply or ""),
+              (got.reply if got else "the model")[:360])
+        check("... with no card and the vault untouched",
+              GATE["calls"] == [] and tree(VAULT) == before, GATE["calls"])
+    # Hidden lists: the same plan, but the reply names no note title.
+    pv = types.ModuleType("jarvis_private_view")
+    pv.effective = lambda **k: {"app_locked": False, "hide_memory_lists": True,
+                                "locked": True}
+    pv.withheld_words = lambda **k: (
+        'Hidden while "Hide memory lists and chat history" is on.')
+    pv.state = lambda: {"app_locked": False, "hide_memory_lists": True}
+    saved = sys.modules.get("jarvis_private_view")
+    sys.modules["jarvis_private_view"] = pv
+    try:
+        hidden = ask("organize just my Welcome note")
+        reply = hidden.reply if hidden else ""
+        check("while the hidden lists are on, the scoped plan is counts only",
+              hidden is not None and hidden.intent == "vault_organizer_scoped"
+              and "A scoped plan for 1 selected note(s)" in reply, reply[:700])
+        check("... and names no note title", "Welcome" not in reply, reply[:700])
+        check("... and says why the titles are withheld",
+              "Hide memory lists" in reply, reply[:700])
+        check("... with no card and the vault untouched",
+              GATE["calls"] == [] and tree(VAULT) == before, GATE["calls"])
+        # The apply card is counts-only too (the module's scoped card).
+        GATE.update(allowed=True, outcome="approved", tier="ask", calls=[],
+                    cards=[])
+        saved_tier, saved_copy = FW.action_tier, V.COPY_DEFAULT
+        FW.action_tier = lambda a: "ask"
+        V.COPY_DEFAULT = False
+        try:
+            applied = ask("apply the plan")
+        finally:
+            FW.action_tier, V.COPY_DEFAULT = saved_tier, saved_copy
+        check("the hidden-mode apply still raises the one scoped card",
+              applied is not None and applied.intent == "vault_organizer_apply"
+              and GATE["calls"] == [V.GATE_ACTION], GATE["calls"])
+        if GATE["cards"]:
+            card_text = str((GATE["cards"][-1][1] or {}).get("text") or "")
+            check("... and the card shows counts, never the hidden title",
+                  "selected note" in card_text and "Welcome" not in card_text,
+                  card_text[:700])
+        check("... and applying after the hidden plan says its selected words",
+              "selected note(s)" in (applied.reply or ""),
+              (applied.reply if applied else "")[:500])
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_private_view", None)
+        else:
+            sys.modules["jarvis_private_view"] = saved
+    V.reset_for_tests()
+
+
+def t_scoped_apply_denies_cleanly_then_writes_only_the_selection():
+    reset_all(organizer_on=True)
+    for name, body in (("Welcome.md", "# Welcome\n\nSome words.\n"),
+                       ("Alpha.md", "# Alpha\n\nMore words.\n"),
+                       ("Beta.md", "# Beta\n\nOther words.\n")):
+        (VAULT / name).write_text(body, encoding="utf-8")
+    plan_reply = ask("organize these notes: Welcome, Alpha")
+    check("(set-up) the scoped plan is shown",
+          plan_reply is not None and plan_reply.intent == "vault_organizer_scoped",
+          plan_reply.intent if plan_reply else "the model")
+    before = tree(VAULT)
+    saved_tier, saved_copy = FW.action_tier, V.COPY_DEFAULT
+    FW.action_tier = lambda a: "ask"
+    V.COPY_DEFAULT = False
+    try:
+        GATE.update(allowed=False, outcome="denied", tier="ask", calls=[],
+                    cards=[])
+        denied = ask("apply the plan")
+        check("a denied scoped apply is the module's denial",
+              denied is not None and denied.intent == "vault_organizer_apply"
+              and "denied" in (denied.reply or "").lower()
+              and "nothing changed" in (denied.reply or "").lower(),
+              (denied.reply if denied else "the model")[:360])
+        check("... one writer card, no more",
+              GATE["calls"] == [V.GATE_ACTION], GATE["calls"])
+        check("... and the vault tree is byte-identical", tree(VAULT) == before)
+        GATE.update(allowed=True, outcome="approved", tier="ask", calls=[],
+                    cards=[])
+        approved = ask("organize my vault now")
+        check("the approved scoped apply is the writer's selected words",
+              approved is not None and approved.intent == "vault_organizer_apply"
+              and "selected note(s)" in (approved.reply or "")
+              and "Nothing was deleted" in (approved.reply or ""),
+              (approved.reply if approved else "the model")[:500])
+        check("... exactly one scoped card",
+              GATE["calls"] == [V.GATE_ACTION], GATE["calls"])
+        if GATE["cards"]:
+            detail = GATE["cards"][-1][1] or {}
+            card_text = str(detail.get("text") or "")
+            check("... the card says scoped/selected and names no note",
+                  detail.get("scoped") is True and detail.get("selected") == 2
+                  and "Welcome" not in card_text and "Alpha" not in card_text
+                  and "Beta" not in card_text, (detail, card_text[:500]))
+        after = tree(VAULT)
+        changed = {rel for rel, _sha in after if (rel, _sha) not in before}
+        check("... only the selected notes changed", changed <= {"Welcome.md", "Alpha.md"},
+              changed)
+        check("... the unselected note is byte-identical",
+              {rel: sha for rel, sha in after if rel == "Beta.md"}
+              == {rel: sha for rel, sha in before if rel == "Beta.md"})
+        check("... and no MOC or Vault Home was created",
+              not any("_MOC - " in rel or rel == "00 - Vault Home.md"
+                      for rel, _sha in after),
+              [r[0] for r in after])
+    finally:
+        FW.action_tier, V.COPY_DEFAULT = saved_tier, saved_copy
+        V.reset_for_tests()
+
+
+def t_tidy_it_for_real_and_off_apply_keep_their_truth():
+    reset_all()
+    off = ask("tidy it for real")
+    check("'tidy it for real' with the organizer OFF is the honest off answer",
+          off is not None and off.intent == "vault_organizer_apply"
+          and "vault organizer is off" in (off.reply or "").lower(),
+          (off.reply if off else "")[:320])
+    check("... naming the one-card turn-on door",
+          "turn on the vault organizer" in (off.reply or "")
+          and "one approval card" in (off.reply or ""), (off.reply if off else "")[:320])
+    check("... with no card raised", GATE["calls"] == [], GATE["calls"])
+    check("'organize my vault now' is the acting apply intent",
+          Q.match("organize my vault now") is not None
+          and Q.match("organize my vault now").name == "vault_organizer_apply")
+    V.reset_for_tests()
+
+
 # --------------------------------------------------------------------------
 # 6. The invented capabilities get honest refusals
 # --------------------------------------------------------------------------
@@ -506,10 +822,12 @@ def t_no_over_capture_of_reminders_desks_or_reading():
 # 8. Registration: read-only vs acting, and no new tool
 # --------------------------------------------------------------------------
 def t_the_read_only_intents_are_registered_the_repo_way():
-    for name in ("vault_organizer_plan", "note_change_refused",
-                 "obsidian_style_refused", "note_make_refused"):
+    for name in ("vault_organizer_plan", "vault_organizer_scoped",
+                 "note_change_refused", "obsidian_style_refused",
+                 "note_make_refused"):
         check(f"{name!r} is a read-only answer", name in Q.READ_ONLY_INTENTS)
-    for name in ("note_made", "note_make_waiting", "vault_organizer_on"):
+    for name in ("note_made", "note_make_waiting", "vault_organizer_on",
+                 "vault_organizer_apply"):
         check(f"{name!r} is NOT read-only", name not in Q.READ_ONLY_INTENTS)
     check("a note write is dispatched as its own acting intent",
           Q.match("make a note: x") is not None

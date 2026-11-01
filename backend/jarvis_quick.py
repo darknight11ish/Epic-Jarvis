@@ -8379,12 +8379,42 @@ _NOTE_READ_PATTERNS = (
 #: The organizer, in the owner's words. It is a real, built, off-by-default
 #: planner; this path only reports its state or shows its read-only preview.
 _VAULT_TIDY = re.compile(
-    r"(?:organi[sz]e|tidy|sort|clean\s+up|declutter)\s+"
+    r"(?:organi[sz]e|tidy|sort|clean\s+up|declutter|plan)\s+"
     r"(?:my\s+|the\s+)?(?:obsidian\s+)?(?:vault|notes?)\b"
-    r"|(?:organi[sz]e)\s+(?:my\s+|the\s+)?obsidian\b")
+    r"|(?:organi[sz]e|plan)\s+(?:my\s+|the\s+)?obsidian\b")
+#: "apply the plan", "organize my vault now", "tidy it for real" - the WRITER
+#: half of the organizer, through the module's own one-card apply route. The
+#: words deliberately differ from the read-only plan shapes above: "now" and
+#: "for real" ask for the card, not another preview.
+_VAULT_APPLY = re.compile(
+    r"(?:apply|use|do)\s+(?:the\s+|that\s+|this\s+)?"
+    r"(?:plan|organi[sz]ation|changes?)\b.*"
+    r"|apply\s+it\b.*"
+    r"|(?:organi[sz]e|tidy)\s+(?:my\s+|the\s+)?(?:obsidian\s+)?"
+    r"(?:vault|notes?)\s+now\b.*"
+    r"|(?:organi[sz]e|tidy)\s+it\s+for\s+real\b.*"
+    r"|go\s+ahead\s+and\s+(?:organi[sz]e|tidy|apply)\b.*")
+#: "organize just my Welcome note", "reorganize a specific set of notes" - the
+#: organizer has NO per-note mode: it plans the whole vault and applies one
+#: card for the whole batch. These get that truth plainly, never a pretend
+#: scoped plan. The lookahead keeps it to notes/vault asks, so "organize just my
+#: desktop icons" is still the model's.
+_VAULT_SCOPED = re.compile(
+    r"(?:re)?organi[sz]e\s+(?:just|only)\s+"
+    r"(?:my\s+|the\s+|these\s+|those\s+)?(?P<set>.+?)\s+notes?\b.*"
+    r"|(?:re)?organi[sz]e\s+(?:these|those)\s+notes?\s*[:,-]?\s*"
+    r"(?P<these>.*)"
+    r"|(?:re)?organi[sz]e\s+(?:a\s+specific|a\s+particular)\s+"
+    r"(?:set\s+of\s+)?notes?\s*[:,-]?\s*(?P<specific>.*)"
+    r"|(?:re)?organi[sz]e\s+(?:one|this|that)\s+notes?\s*[:,-]?\s*"
+    r"(?P<single>.+)")
 _ORGANIZER_ON = re.compile(
     r"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?vault\s+organi[sz]er"
     r"|enable\s+(?:the\s+|my\s+)?vault\s+organi[sz]er")
+#: The last plan THIS chat session showed, so "apply the plan" uses the plan
+#: the owner just looked at rather than a silently different one. In memory
+#: only; the module also keeps its own capped plan memory.
+_ORGANIZER_LAST_PLAN: dict = {}
 #: Obsidian's own theme/CSS/templates/plugins are not Jarvis's to change, and
 #: never were - asked about, the model used to invent them.
 _STYLE_WORD = re.compile(
@@ -8403,6 +8433,26 @@ def _obsidian_style_refused(s: str) -> bool:
             and _STYLE_VERB.match(s) is not None)
 
 
+def _organizer_selection(raw) -> list:
+    """The note names in a pick-a-set sentence, in the owner's order.
+
+    "Welcome and Alpha", "Welcome, Alpha", "the Welcome note" and "Work/Alpha"
+    all become names; quotes are stripped and a trailing "note(s)" is dropped.
+    An empty list means the owner named no notes - the runner then asks for
+    names rather than guessing a selection.
+    """
+    text = str(raw or "").strip().strip('"\'`')
+    parts = re.split(r"\s*(?:,|;|&|\band\b)\s*", text) if text else []
+    out: list = []
+    for part in parts:
+        name = part.strip().strip('"\'`')
+        name = re.sub(r"^(?:the|my|these|those)\s+", "", name, flags=re.I)
+        name = re.sub(r"\s+notes?$", "", name, flags=re.I).strip()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
 def _note_asking(s: str) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours)."""
     for rx in (_DAILY_NOTE_ADD, _NOTE_TEXT_COLON, _NOTE_THIS, _JOT_DOWN,
@@ -8418,6 +8468,13 @@ def _note_asking(s: str) -> Optional[Intent]:
     for rx in _NOTE_READ_PATTERNS:
         if rx.fullmatch(s):
             return Intent("note_read_honest")
+    if _VAULT_APPLY.fullmatch(s):
+        return Intent("vault_organizer_apply")
+    m = _VAULT_SCOPED.match(s)
+    if m:
+        raw = next((g for g in m.groupdict().values() if g is not None), "")
+        return Intent("vault_organizer_scoped",
+                      {"names": _organizer_selection(raw)})
     if _VAULT_TIDY.match(s):
         return Intent("vault_organizer_plan")
     if _ORGANIZER_ON.fullmatch(s):
@@ -8467,9 +8524,29 @@ ORGANIZER_AWAITING = (
     "until you approve it; nothing is planned or changed before then.")
 #: The organizer's answer says how the WRITER would behave, in words the module
 #: itself uses ("never deletes", "one card"): one card for the whole batch, and
-#: no note is ever removed.
-ORGANIZER_APPLY_NOTE = ("Applying it asks for ONE approval card for the whole "
-                        "batch, and a note is never deleted.")
+#: no note is ever removed. The apply door is named because the plan is read-only
+#: and the owner would otherwise not know what to say next.
+ORGANIZER_APPLY_NOTE = (
+    "Applying it asks for ONE approval card for the whole batch, and a note is "
+    "never deleted. Say \"apply the plan\" when you are ready.")
+#: The pick-a-set door (owner decision, 2026-10-31): a selected plan, counts
+#: only (safe while the hidden lists are on), one card for the selected batch.
+ORGANIZER_SCOPED_OFF = (
+    "The vault organizer is off, so nothing is planned. It is off by default "
+    "and turning it on is one approval card. Say \"turn on the vault organizer\" "
+    "and I will raise that card.")
+ORGANIZER_SCOPED_NEEDS_NAMES = (
+    "Name the notes to organize, for example \"organize these notes: Welcome, "
+    "Alpha\". Nothing was changed.")
+ORGANIZER_SCOPED_APPLY_NOTE = (
+    "Applying it asks for ONE approval card for the whole selected batch; only "
+    "those notes are written, no note is ever deleted, and one Undo restores "
+    "exactly that batch. Say \"apply the plan\" when you are ready.")
+#: The apply answer when the switch is OFF: its own off truth plus the door.
+ORGANIZER_APPLY_OFF = (
+    "The vault organizer is off, so there is nothing to apply. It is off by "
+    "default and turning it on is one approval card. Say \"turn on the vault "
+    "organizer\" and I will raise that card.")
 
 
 def _note_make_gate(action: str, detail: dict, prompt: str):
@@ -8539,12 +8616,39 @@ def _run_obsidian_style_refused() -> Result:
     return Result(OBSIDIAN_STYLE_REFUSAL, "obsidian_style_refused")
 
 
+def _remember_organizer_plan(body: dict) -> dict:
+    """Keep the plan the owner just saw, so "apply the plan" applies THAT one."""
+    plan_id = str((body or {}).get("plan_id") or "").strip()
+    digest = str((body or {}).get("digest") or "").strip()
+    if not plan_id or not digest:
+        return {}
+    plan = {"plan_id": plan_id, "digest": digest, "at": time.time(),
+            "scoped": bool((body or {}).get("scoped")),
+            "scope": list((body or {}).get("scope") or [])}
+    _ORGANIZER_LAST_PLAN.clear()
+    _ORGANIZER_LAST_PLAN.update(plan)
+    return plan
+
+
+def _organizer_plan_body(plan: dict) -> dict:
+    """The plan request that reproduces the plan the owner saw.
+
+    A scoped plan must stay scoped through a re-plan (a module restart, or an
+    apply more than 30 minutes later); a whole-vault plan sends no paths.
+    """
+    if plan.get("scoped"):
+        return {"paths": list(plan.get("scope") or [])}
+    return {}
+
+
 def _run_vault_organizer_plan(peer=None, local=None) -> Result:
     """The organizer's real state or its READ-ONLY plan - never a promise.
 
     Off: the module's own route answer (`why`) is quoted, plus that turning it
     on is one card and the plan changes nothing. On: the module's own plan
-    description (scheme words and counts) plus how the writer would behave.
+    description (scheme words and counts) plus how the writer would behave and
+    the "apply the plan" door. The plan is remembered in memory so the apply
+    answer uses the plan the owner just looked at.
     """
     try:
         import jarvis_vault_organizer as V
@@ -8558,6 +8662,7 @@ def _run_vault_organizer_plan(peer=None, local=None) -> Result:
                       "vault_organizer_plan")
     body = body if isinstance(body, dict) else {}
     if body.get("ok") and str(body.get("said") or "").strip():
+        _remember_organizer_plan(body)
         return Result(str(body["said"]).strip() + "\n\n" + ORGANIZER_APPLY_NOTE,
                       "vault_organizer_plan")
     said = str(body.get("why") or body.get("error") or "").strip()
@@ -8569,6 +8674,135 @@ def _run_vault_organizer_plan(peer=None, local=None) -> Result:
                       '"turn on the vault organizer" and I will raise that one '
                       "approval card.", "vault_organizer_plan")
     return Result(said + " Nothing was changed.", "vault_organizer_plan")
+
+
+def _run_vault_organizer_scoped(f: dict, peer=None, local=None) -> Result:
+    """"organize just my Welcome note" - the READ-ONLY scoped plan, not a card.
+
+    The selection is passed to the module's own plan route (`paths`), which
+    validates it and plans tags for only those notes. The reply names no note
+    title while the app's hidden-lists mode is on (counts only). With the
+    organizer OFF the honest off answer and the one-card turn-on door are kept.
+    """
+    try:
+        import jarvis_vault_organizer as V
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(ORGANIZER_MISSING, "vault_organizer_scoped")
+    if not V.enabled():
+        return Result(ORGANIZER_SCOPED_OFF, "vault_organizer_scoped")
+    names = [str(n) for n in (f.get("names") or []) if str(n).strip()]
+    if not names:
+        return Result(ORGANIZER_SCOPED_NEEDS_NAMES, "vault_organizer_scoped")
+    hidden, withheld = _calendar_hidden()
+    try:
+        _code, body = V.handle_post(V.PLAN_PATH, {"paths": names},
+                                    peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result(f"The vault organizer could not make a scoped plan "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "vault_organizer_scoped")
+    body = body if isinstance(body, dict) else {}
+    if body.get("ok") and str(body.get("said") or "").strip():
+        _remember_organizer_plan(body)
+        reply = str(body["said"]).strip() + "\n\n"
+        if hidden and withheld:
+            # The module's scoped words are counts only; the withheld sentence
+            # explains why, and no note title is ever added.
+            reply += withheld + "\n\n"
+        return Result(reply + ORGANIZER_SCOPED_APPLY_NOTE,
+                      "vault_organizer_scoped")
+    said = str(body.get("why") or body.get("error") or "").strip()
+    if not said:
+        said = ("The vault organizer could not plan that selection, so nothing "
+                "was changed.")
+    if body.get("enabled") is False:
+        said += "\n\n" + ORGANIZER_SCOPED_OFF
+    return Result(said, "vault_organizer_scoped")
+
+
+def _run_vault_organizer_apply(peer=None, local=None) -> Result:
+    """"apply the plan" / "organize my vault now" - the WRITER's one card.
+
+    The writer route is the module's own (`ORGANIZE_PATH`), with the plan_id and
+    digest of the plan the owner just looked at; its words are returned
+    unchanged. A denied card returns the module's own denial and writes nothing.
+    If no chat plan is remembered (new process, or "organize my vault now"
+    first), a read-only plan is made first and then the same writer card is
+    raised, so this is still ONE card and never a silent write. A remembered
+    SCOPED plan is re-planned with the same selected paths, never widened to
+    the whole vault.
+    """
+    try:
+        import jarvis_vault_organizer as V
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(ORGANIZER_MISSING, "vault_organizer_apply")
+    if not V.enabled():
+        return Result(ORGANIZER_APPLY_OFF, "vault_organizer_apply")
+    used_stored = bool(_ORGANIZER_LAST_PLAN)
+    plan = dict(_ORGANIZER_LAST_PLAN)
+    if not plan or time.time() - float(plan.get("at") or 0) > 30 * 60:
+        try:
+            _code, pbody = V.handle_post(V.PLAN_PATH, _organizer_plan_body(plan),
+                                         peer=peer, local=local)
+        except Exception as exc:            # noqa: BLE001
+            return Result(f"The vault organizer could not make a plan "
+                          f"({type(exc).__name__}), so nothing was changed.",
+                          "vault_organizer_apply")
+        pbody = pbody if isinstance(pbody, dict) else {}
+        if not (pbody.get("ok") and _remember_organizer_plan(pbody)):
+            said = str(pbody.get("why") or pbody.get("error") or "").strip()
+            if not said:
+                said = "The vault organizer could not make a plan, so nothing was changed."
+            if pbody.get("enabled") is False:
+                said += "\n\n" + ORGANIZER_APPLY_OFF
+            return Result(said, "vault_organizer_apply")
+        plan = dict(_ORGANIZER_LAST_PLAN)
+    body = _organizer_apply_once(V, plan, peer, local)
+    if not (body.get("ok") is True) and used_stored:
+        why = str(body.get("why") or body.get("words") or "").lower()
+        if "not in memory" in why or "no longer" in why:
+            # The module restarted (or forgot the plan) while this chat kept
+            # its copy. Make the same read-only plan again, then raise the
+            # writer's one card for it - no second card, no silent write.
+            try:
+                _code, pbody = V.handle_post(V.PLAN_PATH,
+                                             _organizer_plan_body(plan),
+                                             peer=peer, local=local)
+            except Exception as exc:        # noqa: BLE001
+                return Result(f"The vault organizer could not make a plan "
+                              f"({type(exc).__name__}), so nothing was changed.",
+                              "vault_organizer_apply")
+            pbody = pbody if isinstance(pbody, dict) else {}
+            if pbody.get("ok") and _remember_organizer_plan(pbody):
+                plan = dict(_ORGANIZER_LAST_PLAN)
+                body = _organizer_apply_once(V, plan, peer, local)
+    if body.get("ok") is True:
+        _ORGANIZER_LAST_PLAN.clear()
+        return Result(str(body.get("said") or body.get("words")
+                          or "The vault organizer finished the plan."),
+                      "vault_organizer_apply")
+    said = str(body.get("why") or body.get("words") or body.get("error")
+               or "").strip()
+    if not said:
+        said = "The vault organizer did not apply the plan."
+    if body.get("enabled") is False:
+        said += "\n\n" + ORGANIZER_APPLY_OFF
+    return Result(said, "vault_organizer_apply")
+
+
+def _organizer_apply_once(V, plan: dict, peer=None, local=None) -> dict:
+    """One call to the module's WRITER route, which raises its ONE card."""
+    try:
+        _code, body = V.handle_post(
+            V.ORGANIZE_PATH,
+            {"plan_id": str(plan.get("plan_id") or ""),
+             "digest": str(plan.get("digest") or "")},
+            peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return {"ok": False,
+                "why": f"the writer could not run ({type(exc).__name__}), "
+                       f"so nothing was changed"}
+    return body if isinstance(body, dict) else {}
 
 
 def _run_vault_organizer_on(peer=None, local=None) -> Result:
@@ -10797,6 +11031,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
                 else _run_obsidian_style_refused())
     if n == "vault_organizer_plan":
         return _run_vault_organizer_plan(peer, local)
+    if n == "vault_organizer_scoped":
+        return _run_vault_organizer_scoped(f, peer, local)
+    if n == "vault_organizer_apply":
+        return _run_vault_organizer_apply(peer, local)
     if n == "vault_organizer_on":
         return _run_vault_organizer_on(peer, local)
     import jarvis_schedule as S
@@ -11415,7 +11653,7 @@ READ_ONLY_INTENTS = frozenset({
     # WRITE results (`note_made`, `note_make_waiting`) are deliberately NOT
     # here: the daily note may have changed, so the old record goes; a note that
     # was refused wrote nothing, so `note_make_refused` is read-only.
-    "vault_organizer_plan", "note_change_refused",
+    "vault_organizer_plan", "vault_organizer_scoped", "note_change_refused",
     "obsidian_style_refused", "note_make_refused", "note_read_honest",
     # main's feature answers (2026-10-31, #1030): the capability answer reads
     # the catalogue and changes nothing, so it must not clear "cancel that".
