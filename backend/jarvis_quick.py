@@ -1169,6 +1169,9 @@ def _match(text, now: float) -> Optional[Intent]:
     # notes read/search (2026-10-31) before the older note-honesty
     # shapes: 'read my note <title>' is a real read now.
     got = _notes_chat(s)
+    # A rename/move is read from the RAW sentence first, so a new title keeps
+    # its capital letters ("Home", not the lowercased matching form "home").
+    got = _note_rename_move_asking(text)
     if got is not None:
         return got
     got = _note_asking(s)
@@ -8613,6 +8616,24 @@ _NOTE_WRITE_BATCH = re.compile(
     r"(?:all|every|each|both)\b.*\bnotes?\b.*"
     r"|(?:add|append|write|tag|label)\s+(?:it\s+)?to\s+(?:my|the)\s+"
     r"(?:whole|entire)\s+(?:obsidian\s+)?vault\b.*")
+#: Rename and move, wave 4. The note name is required in a familiar shape; a
+#: plain "move my reminder to 5pm" (no note word and no "into") stays the
+#: scheduler's, and a folder named after "into" is fine.
+_NOTE_RENAME = re.compile(
+    r"(?:rename|retitle)\s+(?:my\s+|the\s+)?note\s+(?P<name>.+?)\s+"
+    r"(?:to|as)\s+(?P<new>.+)$"
+    r"|(?:rename|retitle)\s+(?:my\s+|the\s+)?(?P<name2>.+?)"
+    r"(?:\s+note)?\s+(?:to|as)\s+(?P<new2>.+)$")
+_NOTE_MOVE = re.compile(
+    r"move\s+(?:my\s+|the\s+)?(?P<name>.+?)\s+note\s+(?:to|into)\s+"
+    r"(?:the\s+|my\s+|a\s+)?(?P<folder>.+?)(?:\s+folder)?"
+    r"(?:\s+and\s+(?P<extra>create|make|fix|update)\b.*)?$"
+    r"|move\s+(?:the\s+)?note\s+(?P<name2>.+?)\s+(?:to|into)\s+"
+    r"(?:the\s+|my\s+|a\s+)?(?P<folder2>.+?)(?:\s+folder)?"
+    r"(?:\s+and\s+(?P<extra2>create|make|fix|update)\b.*)?$"
+    r"|move\s+(?:my\s+|the\s+)?(?P<name3>.+?)\s+into\s+"
+    r"(?:the\s+|my\s+|a\s+)?(?P<folder3>.+?)(?:\s+folder)?"
+    r"(?:\s+and\s+(?P<extra3>create|make|fix|update)\b.*)?$")
 #: The module's own sentences, so the fast path never invents a promise.
 NOTE_WRITE_BATCH_SAID = (
     "I change one note at a time, so nothing was written: name ONE note, like "
@@ -8682,7 +8703,7 @@ def _find_note(rel: str):
         return None, "not_found", ""
     if len(found) > 1:
         names = "; ".join(p for p, _t in found[:6])
-        return None, ("That name matches more than one note (" + names + "), so "
+        return None, (f"That name matches {len(found)} notes (" + names + "), so "
                       "nothing was changed - say the note's folder and name, like "
                       "\"add milk to my Shopping note in 02 - Areas\"."), ""
     return found[0][0], "", found[0][1]
@@ -8790,6 +8811,71 @@ def _run_note_tag(f: dict) -> Result:
         said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
         return Result(said, "note_tag_refused")
     return _note_write_result(body, "note_tagged", "note_tag_waiting", "note_tag_refused")
+
+
+def _run_note_rename(f: dict) -> Result:
+    """\"rename my X to Y\" - one note, one card, links preserved, undo."""
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    new = str(f.get("new") or "").strip()
+    if not name or not new:
+        return Result('Say it as "rename my Welcome note to Home".', "note_rename_refused")
+    paths = _note_title_paths(name)
+    if len(paths) > 1:
+        return Result(f"That name matches {len(paths)} notes (" + "; ".join(paths[:6])
+                      + "), so nothing was changed - say the note's folder and name.",
+                      "note_rename_refused")
+    path, why, _title = _find_note(_note_path_for(name))
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_rename_refused")
+        return Result(why, "note_rename_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_rename({"path": path, "title": new},
+                                     by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be renamed ({type(exc).__name__}), so nothing was changed.",
+                      "note_rename_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_rename_refused")
+    return _note_write_result(body, "note_renamed", "note_rename_waiting",
+                              "note_rename_refused")
+
+
+def _run_note_move(f: dict) -> Result:
+    """\"move my X into Folder\" - one note, links preserved, one card, undo."""
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    folder = str(f.get("folder") or "").strip()
+    if not name or not folder:
+        return Result('Say it as "move my Welcome note into Projects".', "note_move_refused")
+    paths = _note_title_paths(name)
+    if len(paths) > 1:
+        return Result(f"That name matches {len(paths)} notes (" + "; ".join(paths[:6])
+                      + "), so nothing was changed - say the note's folder and name.",
+                      "note_move_refused")
+    path, why, _title = _find_note(_note_path_for(name))
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_move_refused")
+        return Result(why, "note_move_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_move({"path": path, "folder": folder,
+                                    "create_folder": bool(f.get("create"))},
+                                   by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be moved ({type(exc).__name__}), so nothing was changed.",
+                      "note_move_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_move_refused")
+    return _note_write_result(body, "note_moved", "note_move_waiting",
+                              "note_move_refused")
 
 
 
@@ -9080,12 +9166,91 @@ def _run_template_list() -> Result:
 
 
 
+def _note_title_paths(name: str) -> list:
+    """Every note whose title matches `name`, for the rename/move ambiguity rule."""
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_list("")
+    except Exception:                       # noqa: BLE001
+        return []
+    if code != 200 or not isinstance(body, dict):
+        return []
+    stem = _note_path_for(str(name or "")).rsplit("/", 1)[-1].lower()
+    if stem.endswith((".md", ".txt")):
+        stem = stem.rsplit(".", 1)[0]
+    if not stem:
+        return []
+    found = []
+    for row in (body.get("notes") or []):
+        path = str(row.get("path") or "")
+        title = str(row.get("title") or "")
+        if path and (title.casefold() == stem or path.rsplit("/", 1)[-1].rsplit(".", 1)[0].casefold() == stem):
+            found.append(path)
+    return found
+
+
+def _rename_move_overcapture(name: str, folder: str = "") -> bool:
+    """True for sentences that belong to the surgical/customization lane."""
+    text = (name + " " + folder).lower()
+    if re.search(r"\b(heading|section|line|property|tag)s?\b", text):
+        return True
+    return name.strip().lower().startswith(("in the ", "in my ", "from "))
+
+
+def _note_rename_move_asking(raw: str) -> Optional[Intent]:
+    """Read a rename/move from the raw sentence, keeping the title's case."""
+    s = str(raw or "").strip().rstrip("?.!").strip()
+    m = _NOTE_RENAME.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or "").strip()
+        new = (m.group("new") or m.group("new2") or "").strip()
+        if name and new and not _rename_move_overcapture(name):
+            return Intent("note_rename", {"name": name, "new": new})
+    m = _NOTE_MOVE.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or m.group("name3") or "").strip()
+        folder = (m.group("folder") or m.group("folder2") or m.group("folder3") or "").strip()
+        extra = (m.group("extra") or m.group("extra2") or m.group("extra3") or "").lower()
+        if name and folder and not _rename_move_overcapture(name, folder):
+            return Intent("note_move", {"name": name, "folder": folder,
+                                        "create": extra in ("create", "make")})
+    return None
+
+
 def _note_asking(s: str) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours)."""
     if _NOTE_WRITE_BATCH.fullmatch(s):
         return Intent("notes_batch_refused")
     if _NOTE_DELETE_LINE.fullmatch(s):
         return Intent("note_delete_refused")
+    m = _NOTE_RENAME.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or "").strip()
+        new = (m.group("new") or m.group("new2") or "").strip()
+        if name and new and not _rename_move_overcapture(name):
+            return Intent("note_rename", {"name": name, "new": new})
+    m = _NOTE_MOVE.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or m.group("name3") or "").strip()
+        folder = (m.group("folder") or m.group("folder2") or m.group("folder3") or "").strip()
+        extra = (m.group("extra") or m.group("extra2") or m.group("extra3") or "").lower()
+        if name and folder and not _rename_move_overcapture(name, folder):
+            return Intent("note_move", {"name": name, "folder": folder,
+                                        "create": extra in ("create", "make")})
+    m = _NOTE_RENAME.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or "").strip()
+        new = (m.group("new") or m.group("new2") or "").strip()
+        if name and new and not _rename_move_overcapture(name):
+            return Intent("note_rename", {"name": name, "new": new})
+    m = _NOTE_MOVE.fullmatch(s)
+    if m:
+        name = (m.group("name") or m.group("name2") or m.group("name3") or "").strip()
+        folder = (m.group("folder") or m.group("folder2") or m.group("folder3") or "").strip()
+        extra = (m.group("extra") or m.group("extra2") or m.group("extra3") or "").lower()
+        if name and folder and not _rename_move_overcapture(name, folder):
+            return Intent("note_move", {"name": name, "folder": folder,
+                                        "create": extra in ("create", "make")})
     m = _NOTE_CREATE_NAMED.fullmatch(s)
     if m:
         return Intent("note_create", {"name": m.group("name").strip(),
@@ -11911,6 +12076,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_append(f)
     if n == "note_tag":
         return _run_note_tag(f)
+    if n == "note_rename":
+        return _run_note_rename(f)
+    if n == "note_move":
+        return _run_note_move(f)
     if n == "template_list":
         return _run_template_list()
     if n == "template_create":

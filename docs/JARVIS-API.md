@@ -29043,6 +29043,80 @@ Guardian copy first, an atomic write, one Undo, no deletions.
   another heading, bulk/`these lines` edits (the exact-match rule cannot be
   kept), reciprocal links (one link per request), highlighting (non-standard).
 
+### 170.10 Rename and move ONE note, keeping its links working (wave 4, added 2026-10-31)
+
+The owner's next flexibility item: *"rename and move notes with link
+preservation"*. A rename or move is one note's PATH change plus only the link
+text that named it, so the plan is read-only, the card names the file and the
+counts, and ONE approval writes the move and those link bytes. The module is
+still `jarvis_notes_edit.py`; the existing `edit_vault_note` action, one
+ordinary card, the File Guardian copy and one Undo are used. No route deletes a
+note or changes any byte outside the link target.
+
+| route | body | answer |
+|---|---|---|
+| `POST /api/notes/rename` | `{"path": "<rel>", "title": "<new name>"}` | 202 `{"ok": true, "state": "waiting", "id": "<job>", "target": "<new rel>"}`; `GET /api/notes/change?id=` says `saved` / `denied` / `failed` |
+| `POST /api/notes/move` | `{"path": "<rel>", "folder": "<rel folder>", "create_folder": false}` | the same shape; `create_folder` must be exactly true to make a missing folder |
+| both | `new_title` / `new_name` and `target_folder` accepted as aliases | the same |
+
+- **Validation before any card.** The source must be a real `.md` note, a
+  regular file, not a link/junction, not hidden and not protected; the new name
+  must be one filename (no `/`, `\`, `..`, `:` or other path character), at most
+  120 characters, not dot-leading, and the target folder must be inside the
+  vault, real, not hidden and not protected. Rename refuses a name already used
+  by another note; move refuses a file already at the destination. Moving to a
+  missing folder is refused with the words "say create the folder" unless
+  `create_folder` is explicitly true; a folder is never created as a side
+  effect.
+- **Link preservation, exactly.** Before the card the module scans every
+  readable `.md` note in the vault (never protected/hidden text) and builds the
+  changes it would make:
+  - wikilinks `[[old]]`, `[[old|alias]]`, `[[old#section]]` and embeds
+    `![[old]]` are rewritten to the new title on rename; a path-style wikilink
+    `[[folder/old]]` is rewritten on either rename or move;
+  - relative Markdown links such as `[x](old.md)` or `[x](folder/old.md#part)`
+    are resolved from the linking note's folder and rewritten only when they
+    really point at the old note; titles, anchors and angle brackets are kept;
+  - a move keeps a bare `[[old]]` alone because the title did not change
+    (Obsidian resolves it by title), and rewrites only links that named the old
+    path;
+  - **fenced code blocks and inline code are never touched** (the rule is
+    stated in this section and pinned by a test). Links inside them stay
+    byte-identical.
+  Only the matched link text changes; every other byte of every note is kept.
+  The card says the old path -> new path and "updates N link(s) in M note(s)";
+  when lists are visible it also names up to the first three affected note
+  filenames (`Index.md, Projects.md (+2 more)`), and when there are no links it
+  says so and the action is just the file rename/move. While the hidden lists
+  hide private words the card carries counts only and names no file at all.
+- **The write is one batch.** After approval the worker re-checks the source and
+  every link-note hash (a note that changed while the card waited refuses, with
+  no write), asks the File Guardian for a copy of the source and of every note
+  it will change, records ONE undo receipt, writes the link notes, and then
+  atomically moves the source note. A failure puts every copy back; the answer
+  says "You can undo it." ONE Undo restores every original byte and path, and
+  removes a folder the batch created if it is empty.
+- **Chat.** `"rename my Welcome note to Home"`, `"move my Welcome note to
+  Archive"`, `"move Welcome into Projects and fix the links"` and
+  `"move my Welcome note into Archive and create the folder"` are deterministic
+  (no model). The reply gives the same preview counts as the card and the ONE
+  card follows; a denied/expired card writes nothing. A name matching more than
+  one note is refused with the count and no card. A hidden-lists state refuses
+  with no title and no card.
+- **Not built, said plainly:** deleting a note, moving outside the vault,
+  renaming or moving folders, renaming a note onto an existing name, cloud sync,
+  moving several notes at once, updating links inside protected or hidden notes,
+  and following links to remote URLs. The chat says these are not built instead
+  of pretending.
+
+The module's twin `jarvis-backend/jarvis_notes_edit.py` is byte-identical, and
+`backend/test_notes_rename_move.py` proves the temp-vault matrix: rename/move
+success and exact bytes, collision, no links, alias/section/embed/Markdown links,
+fenced and inline-code skips, one batch Undo byte-equality, deny/expiry/guardian
+failure/TOCTOU writing nothing, protected/hidden/symlink/`..` refusals, hidden
+cards, preview sentences and over-capture. It uses a fake gate and a temporary
+vault; the real desktop/phone cards are covered by the field check.
+
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and
