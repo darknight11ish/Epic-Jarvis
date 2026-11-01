@@ -1109,7 +1109,14 @@ import {
         announce(ARCHIVED_NOT_CONTINUED);
         return;
       }
-      if (typeof talk.open !== "function") {
+      // The page's own host may be defined AFTER this module mounted (a stale
+      // or re-ordered page), so look once more here rather than refuse a door
+      // that really exists. The host's `open` is the page's own addMessage /
+      // S.conversationId path - this module never invents a second chat.
+      var host = root && root.hudHistoryHost ? root.hudHistoryHost : null;
+      var opener = talk && typeof talk.open === "function" ? talk.open
+        : host && typeof host.open === "function" ? function (c) { host.open(c); } : null;
+      if (typeof opener !== "function") {
         announce("This window cannot open a chat on its own - open the Brain's History tab.");
         return;
       }
@@ -1132,7 +1139,7 @@ import {
           return;
         }
         state.current = text(conv.id) || row.id;
-        talk.open(conv);
+        opener(conv);
         setOpen(false);
       }, function (error) {
         announce("That chat could not be opened: " + String((error && error.message) || error));
@@ -1140,11 +1147,14 @@ import {
     }
 
     function newChat() {
-      if (typeof talk.newChat !== "function") {
+      var host = root && root.hudHistoryHost ? root.hudHistoryHost : null;
+      var starter = talk && typeof talk.newChat === "function" ? talk.newChat
+        : host && typeof host.newChat === "function" ? function () { host.newChat(); } : null;
+      if (typeof starter !== "function") {
         announce("This window cannot start a new chat on its own - open the Brain's History tab.");
         return;
       }
-      talk.newChat();
+      starter();
       state.current = typeof talk.current === "function" ? talk.current() : "";
       setOpen(false);
     }

@@ -6518,9 +6518,18 @@ function attachRecall(node, trace){
   $("log").scrollTop = $("log").scrollHeight;
 }
 
-function addMessage(role, text){
+function addMessage(role, text, at){
   const el = document.createElement("div");
   el.className = "msg " + role;
+  // The turn's own time, when the PC sent one (a kept chat's turns carry
+  // `at`, unix seconds - the same moment History shows). It rides on the
+  // message so the answer menu can say WHEN that answer was produced, and it
+  // is a data attribute rather than visible text: the history row already
+  // shows the relative age, and the menu shows the exact date and time.
+  if (at !== undefined && at !== null && String(at) !== "") {
+    const seconds = Number(at);
+    if (Number.isFinite(seconds) && seconds > 0) el.setAttribute("data-at", String(Math.round(seconds)));
+  }
   const who = role === "user" ? "you" : role === "jarvis" ? "jarvis"
             : role === "sample" ? "sample reply \u00b7 not from jarvis" : "system";
   el.innerHTML = `<div class="who">${who}</div><div class="body"></div>`;
@@ -12581,8 +12590,12 @@ window.hudHistoryHost = {
     turns.forEach(function (t) {
       const turn = t && typeof t === "object" ? t : {};
       const words = typeof turn.text === "string" ? turn.text : "";
+      // The turn's own `at` (unix seconds, JARVIS-API §18) rides with the
+      // bubble, so the answer menu's timestamp is the HISTORY time, not the
+      // moment the row was clicked.
+      const when = turn.at !== undefined && turn.at !== null ? turn.at : null;
       if (turn.role === "user") {
-        addMessage("user", words);
+        addMessage("user", words, when);
         if (!record) {
           S.messages.push({
             role: "user",
@@ -12591,7 +12604,7 @@ window.hudHistoryHost = {
           });
         }
       } else if (turn.role === "assistant") {
-        addMessage("jarvis", words);
+        addMessage("jarvis", words, when);
         if (!record) S.messages.push({ role: "assistant", content: words });
       }
     });
