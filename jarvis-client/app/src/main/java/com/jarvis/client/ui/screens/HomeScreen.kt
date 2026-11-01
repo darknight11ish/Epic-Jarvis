@@ -690,6 +690,16 @@ data class HomeState(
      */
     val security: com.jarvis.client.data.Security = com.jarvis.client.data.Security(),
     /**
+     * This phone's signed-approval state, or null when it has not been read
+     * (or could not be). It is what makes the line under Approve tell the truth
+     * for a risky card: with signed approvals off / needing turning on again /
+     * waiting for the PC's yes, pressing Approve shows the offer notice instead
+     * of a fingerprint prompt (DEF-022, fixed 2026-10-31;
+     * [com.jarvis.client.data.SecurityRules.approveCheckWords]). Null is the
+     * prompt case - the PLAIN path still runs the local check.
+     */
+    val signedApprovals: com.jarvis.client.net.SignedApproval.State? = null,
+    /**
      * The PC's own approval-card setting (net/CardSummary): "start short" (the
      * default) draws each card's short summary with an "Explain more" control,
      * "always show everything" draws the whole card. Cosmetic, read from the
@@ -1682,6 +1692,7 @@ private fun ConversationList(
                     onAmend = { note -> actions.onAmend(item.id, note) },
                     swipeAllowed = state.swipeDecides,
                     security = state.security,
+                    signedApprovals = state.signedApprovals,
                     pictureHidden = state.memoryHidden,
                     showFooter = state.pending.size == 1,
                     // UI-AUDIT-2026-09-26 item 6: a new card fades in, and the
@@ -2083,47 +2094,12 @@ private fun ModelLaneLines(
                 )
             }
         }
-        // And what JARVIS did about it by itself (the owner's decision of
-        // 2026-10-14: "Also restart the lane automatically when it dies").
-        // NOT gated on `modelDown`, which is the whole point: the PC sends
-        // this sentence while the lane is UP as well - "it went down and
-        // Jarvis started it again" is news about a lane that is working, and
-        // it is the one place the owner can turn the automatic restart off, or
-        // back on - because a dead process cannot say whether it crashed or
-        // was stopped on purpose.
-        //
-        // The sentence is the PC's own, drawn verbatim: this screen composes
-        // nothing, so the phone, the Jarvis bar and the widget cannot come to
-        // three ways of saying one fact.
-        val autoWords = state.laneAutoFailure
-            ?: com.jarvis.client.net.ModelLane.notice(state.modelLane)
-        if (autoWords.isNotEmpty()) {
-            Text(
-                autoWords,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (state.laneAutoFailure != null) {
-                    chrome.warnInk
-                } else {
-                    chrome.textMid
-                },
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        val autoSwitch = com.jarvis.client.net.ModelLane
-            .switchWords(state.modelLane)
-        if (autoSwitch.isNotEmpty()) {
-            Quiet(
-                text = autoSwitch,
-                enabled = !state.laneAutoBusy && state.laneAutoFailure == null,
-                color = chrome.textMid,
-                onClick = {
-                    com.jarvis.client.net.ModelLane
-                        .switchAsks(state.modelLane)
-                        ?.let(actions.onSetLaneAuto)
-                },
-            )
-        }
+        // The automatic-restart sentence and its switch moved to Settings
+        // ("The local model" card, ModelLaneSection.kt) on 2026-10-31, after
+        // the owner's screenshot: the paragraph and its button sat at the top
+        // of Home permanently, and he asked for them to live in Settings
+        // instead. Home keeps only the Start button above, which appears ONLY
+        // while the lane is really down - it is not permanent wording.
     }
 }
 

@@ -694,9 +694,19 @@ function Get-DesktopRelease($Endpoint) {
 # release over it would replace newer code with older. `git merge-base
 # --is-ancestor` answers it exactly - ONE DIRECTION AT A TIME:
 #
-#   'same'          the release was built from this exact commit
+#   'same'          the release was built from this exact commit, and this
+#                   folder has no uncommitted changes on top of it
+#   'dirty'         this folder stands ON the release's commit but its tracked
+#                   files have uncommitted changes (staged or not), so a build
+#                   from this folder is NOT the release and installing the
+#                   release over it would silently replace that work: build
 #   'release-ahead' this folder does not have that commit (or has it only on a
-#                   branch that is not this one), so the release is newer
+#                   branch that is not this one), so the release is newer - and
+#                   the folder is CLEAN, so installing it replaces nothing
+#   'release-ahead-dirty'
+#                   the same, but the folder BEHIND the release has uncommitted
+#                   changes: installing the release over them would silently
+#                   replace that work, so build instead (DEF-020's other half)
 #   'local-ahead'   the release's commit IS in this folder's history and this
 #                   folder has moved past it: a genuinely newer local build,
 #                   which the release would downgrade
@@ -716,6 +726,24 @@ function Get-DesktopRelease($Endpoint) {
 #
 # The two directions are two separate commands on purpose: one call can never
 # tell 'same' from 'ahead', which is exactly what the old code could not see.
+#
+# DEF-020 (found 2026-10-30, fixed 2026-10-31): the commit being equal is not
+# the FILES being equal. A folder standing ON the released commit can carry
+# uncommitted work - the state a developer's checkout is in all day - and
+# installing the signed release over it silently replaces that work. The same
+# data-loss shape exists in the other direction: a folder BEHIND the release,
+# with uncommitted work, would have the released build installed over it. So
+# `git status --porcelain --untracked-files=no` is asked ONCE, before the
+# identity questions, and used in both places a release could be installed
+# over uncommitted work:
+#
+#   equality  -> 'dirty'               (build)
+#   behind    -> 'release-ahead-dirty' (build)
+#
+# any tracked change (staged or not, including a deletion) makes the folder
+# dirty. Untracked files are ignored on purpose: they are build output and
+# scratch, and a build does not ship them. If `git status` itself fails, the
+# folder counts as dirty - the clean state is never assumed.
 function Get-LocalVsRelease($Repo, $Commit) {
     if (-not $Commit) { return 'unknown' }
     if (-not (Test-Path -LiteralPath (Join-Path $Repo '.git'))) { return 'unknown' }
@@ -723,10 +751,21 @@ function Get-LocalVsRelease($Repo, $Commit) {
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
+        # One question, two uses: are this folder's TRACKED files changed?
+        # Asked before the identity questions so both install branches can see
+        # it. A failed `git status` counts as dirty: never assume clean.
+        $dirtyLines = @(& git -C $Repo status --porcelain --untracked-files=no 2>&1)
+        $dirty = $LASTEXITCODE -ne 0
+        if (-not $dirty) {
+            $dirty = @($dirtyLines | Where-Object { "$_".Trim() -ne '' }).Count -gt 0
+        }
         $rel = @(& git -C $Repo rev-parse --verify --quiet "$Commit^{commit}" 2>&1)
         if ($LASTEXITCODE -ne 0 -or $rel.Count -eq 0) {
             # This PC does not have that commit at all, so the release is ahead
-            # of this folder (or comes from a history it does not share).
+            # of this folder (or comes from a history it does not share). If
+            # the folder has uncommitted work, installing the release would
+            # replace it - so build instead and let the caller say why.
+            if ($dirty) { return 'release-ahead-dirty' }
             return 'release-ahead'
         }
         $relSha = "$($rel[0])".Trim()
@@ -734,11 +773,24 @@ function Get-LocalVsRelease($Repo, $Commit) {
         if ($LASTEXITCODE -ne 0 -or $head.Count -eq 0) { return 'unknown' }
         $headSha = "$($head[0])".Trim()
         # Equal FIRST: this is the case the old check could not see.
-        if ($headSha -eq $relSha) { return 'same' }
+        if ($headSha -eq $relSha) {
+            # DEF-020: equality is the COMMIT, and this folder is the working
+            # tree. Uncommitted work on top of the released commit means a
+            # build from this folder is not the release, and the release would
+            # replace that work - so build, and say why.
+            if ($dirty) { return 'dirty' }
+            return 'same'
+        }
         $null = & git -C $Repo merge-base --is-ancestor $relSha $headSha 2>&1
         if ($LASTEXITCODE -eq 0) { return 'local-ahead' }
         $null = & git -C $Repo merge-base --is-ancestor $headSha $relSha 2>&1
-        if ($LASTEXITCODE -eq 0) { return 'release-ahead' }
+        if ($LASTEXITCODE -eq 0) {
+            # Behind the release. A CLEAN folder installs it (the update path,
+            # unchanged); uncommitted work must be built instead, never
+            # replaced - the same data-loss shape as the equality case.
+            if ($dirty) { return 'release-ahead-dirty' }
+            return 'release-ahead'
+        }
         return 'unknown'
     } finally {
         $ErrorActionPreference = $prev
@@ -1284,14 +1336,27 @@ if ($SkipDesktop) {
                 Info "'The desktop installer, and the update signing key'"
             } else {
                 Ok "published desktop version: $($release.Version)"
-                # Which route, and why, is decided by ancestry - see
-                # Get-LocalVsRelease. Only a folder that has moved PAST the
-                # release keeps its own build; a folder standing ON the
+                # Which route, and why, is decided by commit ancestry and the
+                # working tree - see Get-LocalVsRelease.
+                # Only a folder that has moved PAST the release, or that has
+                # uncommitted work on top of it (while ON or BEHIND the
+                # release), keeps its own build; a CLEAN folder standing ON the
                 # release's commit installs the signed release, because that
-                # release is exactly this code.
+                # release is exactly this code - and so does a CLEAN folder
+                # behind it, which is the ordinary update path.
                 if ($release.Commit) {
                     $where = Get-LocalVsRelease $RepoRoot $release.Commit
-                    if ($where -eq 'local-ahead') {
+                    if ($where -eq 'dirty') {
+                        Warn "this folder is at the released commit $($release.Commit), but it has uncommitted"
+                        Info "changes on top of it - so this is not the released code, and using the release"
+                        Info "would replace those changes. Building this folder instead, so they are kept"
+                        $release = $null
+                    } elseif ($where -eq 'release-ahead-dirty') {
+                        Warn "this folder is behind the released code, but it has uncommitted changes -"
+                        Info "installing the release would replace those changes. Building this folder instead,"
+                        Info "so they are kept"
+                        $release = $null
+                    } elseif ($where -eq 'local-ahead') {
                         Info "this folder has moved past $($release.Commit) (your own build of newer"
                         Info "code), so installing that release over it would go backwards - building instead"
                         $release = $null

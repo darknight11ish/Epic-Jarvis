@@ -2721,8 +2721,13 @@ that keeps it:
   nor when it happens.) The phone's card now says **"Approve asks for your
   fingerprint or PIN."**, or "Approve asks for your fingerprint." under
   "Fingerprint only", from `SecurityRules.approveCheckWords` - which reads the
-  same two things the check itself reads (`approvalNeedsCheck` and
-  `Security.method`), so it cannot promise a check that will not run, and it is
+  settings the check itself reads (`approvalNeedsCheck`, `Security.method`)
+  and, for a risky card, the signed-approval state that decides between the
+  prompt and the offer path (`SignedApproval.pathFor`; DEF-022, fixed
+  2026-10-31: without it the line promised a fingerprint prompt while Approve
+  only showed the offer notice and sent nothing). With signed approvals off it
+  says "Approve asks you to turn signed approvals on first...", so it cannot
+  promise a check that will not run. It is
   drawn only where there is an Approve to press (never on a PC-only card, whose
   Approve is not drawn at all, nor on a `needsChoice` one). It is the phone's
   alone because the phone's check is the app's own prompt and the owner asked to

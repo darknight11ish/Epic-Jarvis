@@ -9202,12 +9202,28 @@ def _note_asking(s: str) -> Optional[Intent]:
         return Intent("note_replace", {"name": m.group("name").strip(),
                                        "old": m.group("old").strip(),
                                        "new": m.group("new").strip()})
+    # Only a sentence that actually says "note" is a note append: the same
+    # shape is the timer ("add 5 minutes to the timer"), the scheduler
+    # ("add a reminder to my phone") and the focus session's ("add 15 minutes
+    # to my focus session"), and those own their words. A named list keeps its
+    # grammar too ("add milk to my shopping list").
+    _says_note = re.search(r"\bnotes?\b", s, re.I) is not None
+
+    def _named_note_exists(name: str) -> bool:
+        try:
+            path, _why, _title = _find_note(_note_path_for(name))
+            return path is not None
+        except Exception:                   # noqa: BLE001 - older tree
+            return False
+
     m = _NOTE_APPEND_COLON.fullmatch(s)
-    if m and not _list_owns_name(m.group("name")):
+    if (m and (_says_note or _named_note_exists(m.group("name")))
+            and not _list_owns_name(m.group("name"))):
         return Intent("note_append", {"name": m.group("name").strip(),
                                       "text": m.group("text").strip()})
     m = _NOTE_APPEND_PLAIN.fullmatch(s)
-    if m and not _list_owns_name(m.group("name")):
+    if (m and (_says_note or _named_note_exists(m.group("name")))
+            and not _list_owns_name(m.group("name"))):
         return Intent("note_append", {"name": m.group("name").strip(),
                                       "text": m.group("text").strip()})
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):

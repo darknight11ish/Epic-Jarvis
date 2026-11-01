@@ -294,7 +294,10 @@ _NOTION_ID = re.compile(r"\s+[0-9a-f]{32}(?=(?:_all)?(?:\.[A-Za-z0-9]{1,8})?$)")
 # So the store draws the boundary itself now:
 #
 #   * `mark_outside(text)` - invisible characters and chat markers folded
-#     away, and the store's own label in front, on every text it returns.
+#     away, and the store's own label in front, on every text it returns -
+#     the `text`, every search `snippet`, the part `title` and every
+#     `contents` line a multi-part read returns (DEF-019, 2026-10-31: the
+#     title and contents used to come back raw).
 #     (Folding reuses jarvis_content_risk.normalise, the same function
 #     jarvis_calendar and jarvis_watch call; without that module the text is
 #     returned as it is, the same fail-closed shape those two use.)
@@ -343,16 +346,35 @@ def outside_findings(text) -> list:
 
 
 def _mark_answer(out) -> dict:
-    """One read/search answer, marked as outside text: every returned SNIPPET
-    and TEXT word through `mark_outside`, the flag set, and a plain warning
-    line when the scanner matched. Paths and names are left exactly as they
-    are - a caller must still be able to open what was found."""
+    """One read/search answer, marked as outside text: every returned SNIPPET,
+    TEXT word, part TITLE and CONTENTS line through `mark_outside`, the flag
+    set, and a plain warning line when the scanner matched. Paths and names are
+    left exactly as they are - a caller must still be able to open what was
+    found."""
     if not isinstance(out, dict) or out.get("ok") is not True:
         return out
     texts = []
     if "text" in out:
         out["text"] = mark_outside(out["text"])
         texts.append(out["text"])
+    # DEF-019 (fixed 2026-10-31): a read() answer also carries the document's
+    # own part TITLE, and for a multi-part document a CONTENTS list built from
+    # those titles. Both are the file's words exactly like `text`, so they get
+    # the same fold + label - otherwise the store's promise ("every word
+    # returned is marked") is false for them, and a caller that is not the
+    # agent would receive a title and a contents line raw.
+    if "title" in out:
+        out["title"] = mark_outside(out["title"])
+        texts.append(out["title"])
+    contents = out.get("contents")
+    if isinstance(contents, list):
+        marked = []
+        for line in contents:
+            line = mark_outside(line)
+            if isinstance(line, str) and line:
+                texts.append(line)
+            marked.append(line)
+        out["contents"] = marked
     for row in out.get("results") or []:
         if isinstance(row, dict) and isinstance(row.get("snippet"), str):
             row["snippet"] = mark_outside(row["snippet"])

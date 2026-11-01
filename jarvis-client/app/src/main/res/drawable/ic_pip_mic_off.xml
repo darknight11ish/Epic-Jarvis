@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PiP Live's mute control, shown while the microphone is ON (2026-10-31):
+     a microphone with a slash, meaning the tap turns the mic off. The Compose
+     Icon tints it with the app's own text colour. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,14 a3,3 0 0,0 3,-3 v-6 a3,3 0 0,0 -6,0 v3 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17,11 a5,5 0 0,1 -10,0 H5 a7,7 0 0,0 6,6.92 V21 h2 v-3.08 A7,7 0 0,0 19,11 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4.27,3 L3,4.27 19.73,21 21,19.73 4.27,3 Z" />
+</vector>

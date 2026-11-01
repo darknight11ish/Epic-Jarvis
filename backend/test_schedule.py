@@ -1171,6 +1171,18 @@ def t_the_models_tools():
               res.get(AG.OUTSIDE_FIELD) == AG.OUTSIDE_LABEL, res)
         check("... and it is recorded as a read, so a note write after it waits for a "
               "person", bool(look.note_needs_a_person()), look.note_needs_a_person())
+        # DEF-018 finding 1 (fixed 2026-10-31): the SAME watch, after that read,
+        # used to refuse the reminder asked for in the same answer ("what's
+        # coming up, and remind me to call Mum at 6"). The schedule guard
+        # ignores only the coming_up read; a note write still waits.
+        res, _ = call("set_reminder", {"text": "call Mum", "when": "tomorrow at 6pm"}, look)
+        check("the reminder asked for in the SAME turn as coming_up is set (finding 1)",
+              res.get("ok") is True, res)
+        check("... and only that read is exempt: a NOTE write on the same watch still waits",
+              bool(look.note_needs_a_person())
+              and look.note_needs_a_person(ignore_read=("coming_up",)) == "",
+              (look.note_needs_a_person(),
+               look.note_needs_a_person(ignore_read=("coming_up",))))
         check("the sentence that asked is marked as a command for the learner",
               w.s.was_command("please sort this out"))
         n = len(w.s.listed())

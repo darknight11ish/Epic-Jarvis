@@ -407,7 +407,10 @@ class LimitsTest {
         // (.dsh-scratch/PROTECTED-ITEMS-2026-10-31/CONTRACT.md) at 18 - so
         // every number below them moved down by two, and SettingsJumpTest holds
         // the whole map to the row the screen really draws.
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 30"))
+        // 31, not 30, since 2026-10-31: "The local model" (the moved automatic-
+        // restart card) sits right after Quick Settings tiles, so every number
+        // below it moved down by one more.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 31"))
     }
 
     // ------------------------------------------- a time of day, and the PC's

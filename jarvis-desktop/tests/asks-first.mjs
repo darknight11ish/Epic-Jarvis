@@ -302,7 +302,8 @@ await check("Settings: every group and row in the PC's words and order", async (
   const page = await settings(C.pc_shipped);
   const text = await page.locator("#asks-first").innerText();
   const ids = await page.locator("#af-groups li").evaluateAll((els) => els.map((e) => e.dataset.asks));
-  const boxes = await page.locator("#af-groups input[type=checkbox]").evaluateAll(
+  const boxes = await page.locator(
+    "#af-groups input[type=checkbox], #af-tools input[type=checkbox]").evaluateAll(
     (els) => els.map((e) => e.id));
   const errors = page.__errors;
   await page.close();
@@ -312,7 +313,8 @@ await check("Settings: every group and row in the PC's words and order", async (
     for (const r of g.rows) assert.ok(text.includes(`${r.title} - ${r.says}`), r.id);
   }
   assert.deepEqual(boxes.sort(), [...CASES.switchable.map((a) => `af-${a}`),
-    ...CASES.tools_switchable.map((a) => `af-tool-${a}`), "af-lights"].sort());
+    ...CASES.tools_switchable.map((a) => `af-tool-${a}`), "af-lights",
+    "af-vault-organizer"].sort());
   assert.ok(text.includes(LIGHTS_LABEL));
   assert.deepEqual(errors, []);
 });
