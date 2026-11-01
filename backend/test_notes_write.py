@@ -758,6 +758,93 @@ def t_where_is_my_vault_hidden_names_no_note():
         Q._calendar_hidden = old
 
 
+def t_create_round3_invariants():
+    """Gemini round-3 ruling 2: the five invariants of a card-free create."""
+    reset_vault()
+    # 1. strict collision refusal, case-insensitive on Windows (and explicit on
+    #    a case-sensitive filesystem): "gym.md" may not create beside "Gym.md".
+    code, out, gate = do_create("Gym.md", "first")
+    check("round3: the first create is card-free", code == 200
+          and out.get("state") == "created" and gate.calls == [], out)
+    code, out, gate = do_create("gym.md", "second")
+    check("round3: a same-name/different-case collision is a 409",
+          code == 409 and out.get("state") == "exists", f"{code} {out}")
+    check("round3: ... the first note is byte-for-byte untouched",
+          (VAULT / "Gym.md").read_text(encoding="utf-8") == "first")
+    check("round3: ... and no card was asked", gate.calls == [], gate.calls)
+    # 2. body-size cap: 64 KB is the most a card-free create writes.
+    exact = "a" * (E.CARD_FREE_MAX_BYTES - 8)
+    code, out = E.handle_create({"path": "Exact.md", "text": exact})
+    check("round3: a note just under the 64 KB cap is created",
+          code == 200 and out.get("state") == "created", f"{code} {out}")
+    code, out = E.handle_create({"path": "Big.md",
+                                 "text": "a" * (E.CARD_FREE_MAX_BYTES + 16)})
+    check("round3: a note over the 64 KB cap is a 413, no card, no file",
+          code == 413 and not (VAULT / "Big.md").exists(), f"{code} {out}")
+    # 3. card-free ONLY for a direct owner write: after outside text, a
+    #    background job, or another client keeps the old ONE-card path.
+    for i, (kwargs, why) in enumerate((
+        ({"provenance": "after_outside_text", "client": "hud"}, "after outside text"),
+        ({"provenance": "background", "client": "hud"}, "a background job"),
+        ({"provenance": "typed", "client": "phone"}, "a non-HUD client"),
+    )):
+        gate = Gate(delay=0.9)
+        set_gate(gate)
+        rel = f"CARDED{i}.md"
+        code, out = E.handle_create({"path": rel, "text": "x"},
+                                    gate_check=gate, wait_s=0.02, **kwargs)
+        check(f"round3: {why} still asks its ONE card",
+              code == 202 and out.get("state") == "waiting"
+              and len(gate.calls) == 1, f"{kwargs} {code} {out} {gate.calls}")
+        check(f"round3: ... and {why} writes no file before the yes",
+              not (VAULT / rel).exists())
+        wait_job(out.get("id"), timeout=5.0)
+        (VAULT / rel).unlink(missing_ok=True)
+    # 4. direct owner writing in the HUD is the one card-free case.
+    gate = Gate()
+    code, out = E.handle_create({"path": "Owner.md", "text": "x"},
+                                gate_check=gate, provenance="typed", client="hud")
+    check("round3: a direct owner HUD write is card-free",
+          code == 200 and out.get("state") == "created" and gate.calls == [],
+          f"{code} {out} {gate.calls}")
+    # 5. the chat path obeys the same rule: a tainted turn forces the card.
+    old_taint = Q._note_write_tainted
+    try:
+        Q._note_write_tainted = lambda: "after_outside_text"
+        gate = Gate(delay=3.0)
+        set_gate(gate)
+        got = ask("write a note for me about the gym")
+        check("round3: chat after outside text still asks its card",
+              got is not None and got.intent == "note_create_waiting"
+              and len(gate.calls) == 1, (got.intent if got else "model") + f" {gate.calls}")
+        check("round3: ... and creates no file before the yes",
+              not any(p.name.startswith("the gym") for p in VAULT.glob("*.md")))
+    finally:
+        Q._note_write_tainted = old_taint
+
+
+def t_create_round3_refusals_are_the_contract():
+    """The refusals that must survive card-free mode (ruling 2)."""
+    reset_vault()
+    for bad in ("../escape.md", "/abs.md", "C:/x.md", ".obsidian/x.md",
+                "notes/../../escape.md", "picture.png", "notes/.hidden.md",
+                ".git/config.md"):
+        code, out = E.handle_create({"path": bad, "text": "x"})
+        check(f"round3: {bad!r} is refused with no write", code == 400,
+              f"{code} {out}")
+    try:
+        target = VAULT / "Outside"
+        target.mkdir(exist_ok=True)
+        link = VAULT / "linkdir"
+        if not link.exists():
+            os.symlink(str(target), str(link), target_is_directory=True)
+        code, out = E.handle_create({"path": "linkdir/x.md", "text": "x"})
+        check("round3: a symlinked folder is refused", code in (400, 403),
+              f"{code} {out}")
+    except (OSError, NotImplementedError):
+        pass
+
+
 # --------------------------------------------------------------------------
 # 5. THE RECORDS
 # --------------------------------------------------------------------------
@@ -807,6 +894,8 @@ TESTS = [
     t_cardfree_capability_creates_nothing,
     t_where_is_my_vault_and_last_note,
     t_where_is_my_vault_hidden_names_no_note,
+    t_create_round3_invariants,
+    t_create_round3_refusals_are_the_contract,
     t_twins_and_docs_agree,
 ]
 

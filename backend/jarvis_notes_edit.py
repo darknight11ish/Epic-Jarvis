@@ -169,6 +169,10 @@ ACTION = "edit_vault_note"
 #: read (413) and for a save (413): a card the owner cannot read is not an
 #: approval, and a whole-vault editor is not a file manager.
 MAX_FILE_BYTES = 2 * 1024 * 1024
+#: A CARD-FREE create is capped far below that (Gemini round-3 ruling 2): a new
+#: note is unattended, additive work, so 64 KB of words is the most it writes
+#: without a card. Anything larger goes through the carded path.
+CARD_FREE_MAX_BYTES = 64 * 1024
 
 #: At most this many notes are returned by one list; `truncated` says more
 #: exist. Sorted newest first, so the cut keeps the notes most likely wanted.
@@ -1324,9 +1328,32 @@ def _create_now(full: Path, rel: str, data: bytes) -> tuple:
     the module's own words.
     """
     import jarvis_receipts as R
+    # Gemini round-3 ruling 2: the card-free payload is capped at 64 KB. A
+    # bigger note is a bigger change than an unattended write should be.
+    if len(data) > CARD_FREE_MAX_BYTES:
+        return 413, {"ok": False, "state": "refused", "path": rel,
+                     "error": (f"A brand-new note is capped at {CARD_FREE_MAX_BYTES} "
+                               f"bytes here and that one is {len(data)} bytes, so "
+                               "nothing was created; use the notes editor for a "
+                               "bigger note.")}
     if full.exists():
         return 409, {"ok": False, "state": "exists", "path": rel,
                      "error": f"There is already a note at {rel}, so nothing was created."}
+    # On Windows a name is case-insensitive: "gym.md" and "Gym.md" are the SAME
+    # note, but a case-sensitive filesystem would let a second one appear. Look
+    # for a name-equal sibling before the O_EXCL write either way (ruling 2).
+    try:
+        key = full.name.casefold()
+        parent = full.parent
+        if parent.is_dir():
+            for sibling in parent.iterdir():
+                if sibling.name.casefold() == key:
+                    return 409, {"ok": False, "state": "exists", "path": rel,
+                                 "error": (f"There is already a note at {sibling.name} "
+                                           f"(same name, different case) so nothing "
+                                           "was created.")}
+    except OSError:
+        pass
     try:
         vault, _why = _vault()
         parent_real = Path(os.path.realpath(str(full.parent)))
@@ -1396,13 +1423,16 @@ def _one_path(body) -> tuple:
 
 
 def handle_create(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
-                  by: str = "") -> tuple:
-    """POST /api/notes/create: exactly one new note, NO card, undo by receipt.
+                  by: str = "", provenance: str = "typed",
+                  client: str = "hud") -> tuple:
+    """POST /api/notes/create: exactly one new note, ONE card unless owner-direct.
 
-    Card-free since the owner's decision of 2026-10-31: a new note is additive
-    and can never destroy content. The collision/protection/hidden/path checks
-    above run before anything is written, exactly as they did when this route
-    raised a card; every OTHER note change still raises its one card.
+    Gemini round-3 ruling 2 (2026-10-31): card-free is allowed ONLY for a
+    direct owner write - provenance "typed" or "voice" AND the HUD client. A
+    write after outside text (`after_outside_text`), a background job, or any
+    other client keeps the old ONE-card path. A brand-new note is still
+    additive: the vault/protected/hidden/reserved/collision checks and the undo
+    receipt are unchanged, and every OTHER note change keeps its card.
     """
     raw, why = _one_path(body)
     if why:
@@ -1435,10 +1465,17 @@ def handle_create(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
     if full.exists():
         return _error(409, f"There is already a note at {rel2}, so nothing was created.",
                       state="exists")
-    # OWNER DECISION 2026-10-31: creating a brand-new note is card-free
-    # (additive: it cannot destroy existing content). The receipt/undo and the
-    # collision/protection/hidden checks above stay exactly as they were, and
-    # every other note write keeps its one card.
+    # OWNER DECISION 2026-10-31: creating a brand-new note is card-free - but
+    # ONLY when the owner is writing directly in the HUD (typed or voice).
+    # After outside text, a background job, or another client, the ONE-card
+    # path stays (Gemini round-3 ruling 2).
+    body_prov = str((body or {}).get("provenance") or provenance or "typed").strip().lower()
+    body_client = str((body or {}).get("client") or client or "").strip().lower()
+    owner_direct = body_prov in ("typed", "voice") and body_client == "hud"
+    if not owner_direct:
+        return _start_change_job("create", full, rel2, data, "", vault,
+                                 gate_check, wait_s, by,
+                                 {"provenance": body_prov, "client": body_client})
     return _create_now(full, rel2, data)
 
 
@@ -3283,7 +3320,15 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             body = None
         try:
             if route == CREATE_PATH:
-                code, out = handle_create(body)
+                _hdr_client = ""
+                try:
+                    _hdr_client = str(self.headers.get("X-Jarvis-Client") or "")
+                except Exception:                       # noqa: BLE001
+                    _hdr_client = ""
+                code, out = handle_create(
+                    body,
+                    client=_hdr_client.strip().lower() or "hud",
+                    provenance=str((body or {}).get("provenance") or "typed"))
             elif route == APPEND_PATH:
                 code, out = handle_append(body)
             elif route == TAG_PATH:

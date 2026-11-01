@@ -8880,6 +8880,16 @@ def _run_note_create_capability() -> Result:
     return Result(NOTE_CREATE_CAPABLE_SAID, "note_create_capability")
 
 
+def _note_write_tainted() -> str:
+    """"typed" when the owner is writing directly; "after_outside_text" when
+    the conversation has read outside text (Gemini round-3 ruling 2: only the
+    direct owner write is card-free; a tainted turn keeps the one card)."""
+    try:
+        return "after_outside_text" if bool(_gate_module().taint_active()) else "typed"
+    except Exception:                       # noqa: BLE001 - fail closed
+        return "after_outside_text"
+
+
 def _run_note_create(f: dict) -> Result:
     hidden = _notes_write_hidden()
     name = str(f.get("name") or "").strip()
@@ -8896,7 +8906,9 @@ def _run_note_create(f: dict) -> Result:
                       "note_create_refused")
     try:
         import jarvis_notes_edit as E
-        code, body = E.handle_create({"path": path, "text": text}, by="chat", wait_s=1.5)
+        code, body = E.handle_create({"path": path, "text": text}, by="chat",
+                                     provenance=_note_write_tainted(),
+                                     client="hud", wait_s=1.5)
     except Exception as exc:                # noqa: BLE001
         if hidden:
             return Result("The note could not be created, so nothing was created.",
