@@ -1,0 +1,29 @@
+{
+  "name": "jarvis-notes-bridge",
+  "version": "0.1.1",
+  "description": "Obsidian plugin: ask the local Jarvis about the note or selection you are reading, and drive note edits through Jarvis's own one-card routes. Read-only in the vault: the plugin never writes a note and never approves a card.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs --watch",
+    "build": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/protocol.test.mjs tests/templates.test.mjs tests/safety.test.mjs",
+    "test:sandbox": "node --experimental-test-isolation=none --test tests/protocol.test.mjs tests/templates.test.mjs tests/safety.test.mjs",
+    "check": "npm run typecheck && npm run build && npm test"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "jarvis"
+  ],
+  "license": "CC-BY-NC-SA-4.0",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.24.0",
+    "obsidian": "^1.14.0",
+    "typescript": "^5.6.0"
+  }
+}
