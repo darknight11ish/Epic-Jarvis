@@ -28956,6 +28956,73 @@ words.
   list is a 400 with "One note at a time, please", and the chat refuses "all my
   notes"/"every note" in words before any card.
 
+### 170.8 Surgical edits, wave 2: under a heading, at an anchor, formatting, replace (added 2026-10-31)
+
+The owner's follow-up to wave 1: *"add something to a part of the note ... very
+specific (add something before this part, or in bold)"*. Three routes, ONE
+action each, the same single-file shape as the save:
+
+| route | body | what it does |
+|---|---|---|
+| `POST /api/notes/insert` | `{"path", "text", "mode": "under_heading"\|"before"\|"after", "target", "expected_sha256"}` | adds ONE line under the ONE heading whose title matches exactly (case-insensitive), at the END of that section (after its last non-empty line, before the next heading of the same or a higher level); or before/after the ONE line whose text contains the literal anchor exactly once |
+| `POST /api/notes/format` | `{"path", "target", "style": "bold"\|"italic", "action": "add"\|"remove", "expected_sha256"}` | wraps ONE exact occurrence in `**`/`*`, or unwraps one matching pair; refuses a match inside a fenced code block and a span already wrapped (that is a no-op with no card) |
+| `POST /api/notes/replace` | `{"path", "old", "new", "expected_sha256"}` | replaces ONE literal occurrence whose word edges are whole words (a match inside a longer word refuses and says so); never a regex |
+
+- **One exact match or refuse.** Zero or several matching headings/anchors/spans
+  get a plain sentence NAMING the count, before any card; nothing is guessed.
+- **The card shows the exact change.** The gate's detail carries a bounded
+  `preview` (`before`/`after`, plus where it lands). While the hidden lists hide
+  the words the preview is `{"counts_only": true, "changes": 1}` and the chat
+  refuses the request before a card is raised at all.
+- **Undo and safety.** The File Guardian copy is taken AFTER the card and BEFORE
+  the write; the sha256 the request started from is checked at the request and
+  again after the card (TOCTOU); a Deny/expiry/refused gate writes nothing; one
+  Undo restores the exact bytes. Line endings (LF/CRLF), blank lines and the
+  anchor's own bytes are preserved. No deletion exists in these routes.
+- **Chat sentences, no model:** `add <text> under the <Heading> heading in my
+  <note>`, `add <text> before/after <anchor> in my <note>`, `make <text> bold`
+  / `put <text> in italic` / `unbold <text> in my <note>`, `replace <old> with
+  <new> in my <note>`. A plain `add milk to my <note>` still appends at the end
+  (wave 1); an ordinary "make it bold" with no note is still the model's.
+
+### 170.9 Customization, wave 3: one route for the exact edits (added 2026-10-31)
+
+Beyond wave 2's insert/format/replace, ONE action route carries the owner's
+"really enhance customizability" edits. Every action keeps the wave-2 shape:
+one exact match or a plain refusal, ONE `edit_vault_note` card showing the exact
+before/after (or counts only while the hidden lists hide the words), the File
+Guardian copy first, an atomic write, one Undo, no deletions.
+
+| route | body | action values |
+|---|---|---|
+| `POST /api/notes/customize` | `{"path", "action", "expected_sha256", ...}` | `format` (`style`: bold/italic/strike/code, `format_action`: add/remove, `target`); `line` (`line_action`: bullet/number/checklist/quote/heading/plain/untick, `target` = the whole line, `level` for a heading); `rename_heading` (`old`, `new`); `new_section` (`heading`, optional `text`, `level`); `set_property`/`remove_property` (`key`, `value`); `link` (`note`, optional `heading`); `save_template` (`name` optional) |
+| `GET /api/notes/templates` | - | `{"ok", "count", "templates": [names only], "why"}` - never any template text |
+
+- **Exactness.** A line shape needs ONE line equal to `target` after stripping
+  its ends; a heading rename needs ONE heading with that title; a property needs
+  at most one `key:` line; a link refuses a second identical link. Zero or
+  several matches refuse in plain words with the count, before any card.
+- **Properties** are written as YAML: `true`/`false` and numbers stay bare,
+  anything else is a quoted string. Only that one line changes; every other byte
+  (other properties, order, line endings, body) is kept. Malformed front matter
+  is refused, never repaired.
+- **Line shapes** keep the line's indentation, blank lines and line endings:
+  bullet `- `, numbered `1. `, checklist `- [ ] `, quote `> `, heading `#`..`######`;
+  `plain` removes one leading shape; `untick` only changes `- [x]` to `- [ ]`.
+  "these lines"/batch and "move under a heading" are NOT built: the answer says
+  so plainly instead of pretending.
+- **Templates.** Built-ins: workout log (`Warm-up`/`Session`/`Cool-down`/`Notes`,
+  checkboxes), meeting notes for a topic, daily journal, project note. They are
+  created through the existing create route (ONE card, collision refused,
+  receipt Undo). "Save my <note> as a template" writes ONE new `.md` in the
+  Templates plugin's folder from `.obsidian/templates.json`, else
+  `<vault>/Templates/`; an existing template is a 409, never overwritten.
+  "List my templates" reads names only; while the hidden lists hide words the
+  chat refuses with no names and no card.
+- **Not built, said plainly:** deleting a line/note, moving a line under
+  another heading, bulk/`these lines` edits (the exact-match rule cannot be
+  kept), reciprocal links (one link per request), highlighting (non-standard).
+
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and

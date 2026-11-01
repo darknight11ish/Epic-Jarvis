@@ -8295,19 +8295,19 @@ _NOTE_CREATE_NAMED = re.compile(
     r"\s+(?:called|named|titled)\s+(?P<name>.+?)"
     r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+))?$")
 _NOTE_APPEND_COLON = re.compile(
-    r"(?:add|append)\s+(?:this\s+)?to\s+(?:my|the)\s+(?P<name>.+?)\s+note"
-    r"\s*[:,-]\s*(?P<text>.+)$")
+    r"(?:add|append)\s+(?:this\s+)?to\s+(?:my|the)\s+(?P<name>.+?)"
+    r"(?:\s+note)?\s*[:,-]\s*(?P<text>.+)$")
 _NOTE_APPEND_PLAIN = re.compile(
     r"(?:add|append|write)\s+(?P<text>.+?)\s+(?:to|into|at\s+the\s+end\s+of)\s+"
-    r"(?:my|the)\s+(?P<name>.+?)\s+note\b.*")
+    r"(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s*$")
 _NOTE_TAG_ADD = re.compile(
     r"(?:add|put)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+(?:to|on)\s+"
-    r"(?:my|the)\s+(?P<name>.+?)\s+note\b.*")
+    r"(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s*$")
 _NOTE_TAG_REMOVE = re.compile(
     r"(?:remove|delete|take)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+from\s+"
-    r"(?:my|the)\s+(?P<name>.+?)\s+note\b.*")
+    r"(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s*$")
 _NOTE_TAG_WITH = re.compile(
-    r"(?:tag|label)\s+(?:my|the)\s+(?P<name>.+?)\s+note\s+with\s+"
+    r"(?:tag|label)\s+(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s+with\s+"
     r"(?P<tag>[#A-Za-z0-9_/-]+)\b.*")
 #: Several notes at once: refused, never quietly done to the first one.
 _NOTE_WRITE_BATCH = re.compile(
@@ -8319,6 +8319,15 @@ _NOTE_WRITE_BATCH = re.compile(
 NOTE_WRITE_BATCH_SAID = (
     "I change one note at a time, so nothing was written: name ONE note, like "
     "\"add milk to my Shopping note\".")
+NOTE_DELETE_SAID = (
+    "Deleting a line or a note is not built, so nothing was changed. I can add, "
+    "format, replace, tag, rename a heading or move a line into a section - say "
+    "one of those.")
+_NOTE_DELETE_LINE = re.compile(
+    r"(?:delete|remove|erase|trash)\s+(?:this|that|the|my)\s+"
+    r"(?:line|lines|sentence|paragraph)\b.*")
+
+
 NOTE_HIDDEN_SAID = (
     "Your lists are hidden on this PC, so I did not open or change a note. "
     "Tap Show and confirm it is you, then ask again.")
@@ -8486,10 +8495,299 @@ def _run_note_tag(f: dict) -> Result:
 
 
 
+
+#: The wave-2 SURGICAL edits (2026-10-31): add a line under ONE heading, add a
+#: line before/after ONE literal anchor, wrap ONE span in bold/italic (or
+#: unwrap it), and replace ONE exact occurrence. Each is one file, one card,
+#: with the exact before/after shown on the card. The matchers require the
+#: sentence to name the note ("in my workout log"), so an ordinary "make it
+#: bold" is still the model's, and "add milk to my workout log" keeps the
+#: wave-1 append-at-end door.
+_NOTE_SURGICAL_UNDER = re.compile(
+    r"(?:add|put)\s+(?P<text>.+?)\s+(?:under|underneath)\s+(?:the\s+)?"
+    r"(?P<head>.+?)\s+heading\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_SURGICAL_SECTION = re.compile(
+    r"(?:add|put)\s+(?P<text>.+?)\s+(?:to|in)\s+(?:the\s+)?"
+    r"(?P<head>.+?)\s+section\s+of\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_SURGICAL_ANCHOR = re.compile(
+    r"(?:add|put)\s+(?P<text>.+?)\s+(?P<mode>before|after)\s+(?:the\s+)?"
+    r"(?P<anchor>.+?)(?:\s+line)?\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_FORMAT_ADD = re.compile(
+    r"(?:make|put|set)\s+(?P<target>.+?)\s+(?:in\s+)?(?P<style>bold|italic|strikethrough|strike|code)"
+    r"\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_FORMAT_REMOVE = re.compile(
+    r"(?:remove\s+(?:the\s+)?(?P<style>bold|italic|strikethrough|strike|code)\s+from|un(?P<style2>bold|italic))"
+    r"\s+(?P<target>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_REPLACE = re.compile(
+    r"(?:replace|change)\s+(?P<old>.+?)\s+(?:with|to)\s+(?P<new>.+?)"
+    r"\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+
+NOTE_SURGICAL_HIDDEN = (
+    "Your lists are hidden on this PC, so I did not open or change a note. "
+    "Tap Show and confirm it is you, then ask again.")
+NOTE_SURGICAL_NO_NOTE = (
+    "I could not find a note called \"{name}\" in your Obsidian vault. "
+    "Nothing was changed - open the Brain window's Notes plate to check the name.")
+
+
+def _surgical_note(name: str):
+    """`(path, sha, why)` for a note the owner named in a surgical sentence."""
+    path, why, _title = _find_note(_note_path_for(str(name or "")))
+    if path is None:
+        if why == "not_found":
+            return None, "", NOTE_SURGICAL_NO_NOTE.format(name=name)
+        return None, "", why
+    sha, why = _note_read_for_write(path)
+    if why:
+        return None, "", why
+    return path, sha, ""
+
+
+def _run_note_insert(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _surgical_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_insert_refused")
+    mode = str(f.get("mode") or "under_heading")
+    target = str(f.get("target") or "").strip()
+    text = str(f.get("text") or "").strip()
+    if not text or not target:
+        return Result('Say what to add and where, like "add stretch under the Warm-up '
+                      'heading in my workout log".', "note_insert_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_insert({"path": path, "text": text, "mode": mode,
+                                      "target": target, "expected_sha256": sha},
+                                     by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The line could not be added ({type(exc).__name__}), so nothing was changed.",
+                      "note_insert_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_insert_refused")
+    return _note_write_result(body, "note_inserted", "note_insert_waiting", "note_insert_refused")
+
+
+def _run_note_format(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _surgical_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_format_refused")
+    style = str(f.get("style") or "").strip().lower()
+    action = str(f.get("action") or "add").strip().lower()
+    target = str(f.get("target") or "").strip()
+    if not target or style not in ("bold", "italic"):
+        return Result('Say what to format and how, like "make squats bold in my workout log".',
+                      "note_format_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_format({"path": path, "target": target, "style": style,
+                                      "action": action, "expected_sha256": sha},
+                                     by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The text could not be formatted ({type(exc).__name__}), so nothing was changed.",
+                      "note_format_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_format_refused")
+    return _note_write_result(body, "note_formatted", "note_format_waiting", "note_format_refused")
+
+
+def _run_note_replace(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _surgical_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_replace_refused")
+    old = str(f.get("old") or "")
+    new = str(f.get("new") or "")
+    if not old or not new:
+        return Result('Say it as "replace squats with lunges in my workout log".',
+                      "note_replace_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_replace({"path": path, "old": old, "new": new,
+                                       "expected_sha256": sha},
+                                      by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The words could not be replaced ({type(exc).__name__}), so nothing was changed.",
+                      "note_replace_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_replace_refused")
+    return _note_write_result(body, "note_replaced", "note_replace_waiting", "note_replace_refused")
+
+
+
+
+#: Wave 3 (2026-10-31): the owner's "really enhance customizability" ask. One
+#: deterministic sentence per capability, all ending in the note's name ("in my
+#: workout log"), all through the one /api/notes/customize route, so every edit
+#: keeps the wave-2 card, preview, guardian copy and undo.
+_NOTE_LINE_BULLET = re.compile(
+    r"(?:turn|make|change|put)\s+(?P<text>.+?)\s+(?:into|to|as)\s+a\s+bullet"
+    r"(?:\s+point)?\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_ADD_BULLET = re.compile(
+    r"(?:add|put)\s+a\s+bullet\s+(?:for|to)\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+"
+    r"(?P<name>.+?)\s*$")
+_NOTE_LINE_CHECK = re.compile(
+    r"(?:turn|make|change|put)\s+(?P<text>.+?)\s+(?:into|to|as)\s+a\s+checklist"
+    r"(?:\s+item)?\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_CHECKBOX = re.compile(
+    r"(?:add|put)\s+a\s+checkbox\s+(?:for|to)\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+"
+    r"(?P<name>.+?)\s*$")
+_NOTE_LINE_QUOTE = re.compile(
+    r"(?:turn|make|change|put)\s+(?P<text>.+?)\s+(?:into|to)\s+a\s+quote"
+    r"\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_NUMBER = re.compile(
+    r"number\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_HEADING = re.compile(
+    r"(?:turn|make|change)\s+(?P<text>.+?)\s+(?:into|to|a|as)\s+(?P<hashes>#{1,6})?\s*"
+    r"heading\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_TICK = re.compile(
+    r"tick\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_UNTICK = re.compile(
+    r"untick\s+(?P<text>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINE_PLAIN = re.compile(
+    r"(?:turn\s+(?P<text1>.+?)\s+back\s+(?:into|to)\s+plain\s+text|"
+    r"remove\s+the\s+(?:bullet|number|checkbox|checklist|heading|quote)\s+from\s+"
+    r"(?P<text2>.+?))\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_NEW_SECTION = re.compile(
+    r"(?:add|put)\s+(?:a\s+)?(?:new\s+)?section\s+(?:called|named|titled)?\s*"
+    r"(?P<heading>.+?)\s+(?:to|in)\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_RENAME_HEADING = re.compile(
+    r"(?:rename|change)\s+the\s+(?P<old>.+?)\s+heading\s+(?:to|into)\s+"
+    r"(?P<new>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_SET_PROPERTY = re.compile(
+    r"(?:set|add\s+property)\s+(?P<key>[A-Za-z0-9_.-]+)\s+"
+    r"(?:to|with\s+value|with)\s+(?P<value>.+?)\s+in\s+(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_REMOVE_PROPERTY = re.compile(
+    r"remove\s+the\s+(?P<key>[A-Za-z0-9_.-]+)\s+property\s+(?:from|in)\s+"
+    r"(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_LINK = re.compile(
+    r"(?:add\s+a\s+link\s+to|link)\s+(?P<target>.+?)\s+(?:in|from)\s+"
+    r"(?:my|the)\s+(?P<name>.+?)\s*$")
+_NOTE_TEMPLATE_CREATE = re.compile(
+    r"create\s+(?:a\s+|an\s+)?(?P<kind>workout\s+log|meeting\s+notes|daily\s+journal|"
+    r"journal|project\s+note)"
+    r"(?:\s+(?:for|about)\s+(?P<subject>.+?))?\s*$")
+_NOTE_TEMPLATE_SAVE = re.compile(
+    r"save\s+(?:my\s+|the\s+)?(?P<name>.+?)(?:\s+note)?\s+as\s+a\s+template"
+    r"(?:\s+(?:called|named)\s+(?P<tname>.+?))?\s*$")
+_NOTE_TEMPLATE_LIST = re.compile(
+    r"(?:list|show)\s+my\s+templates|what\s+templates\s+do\s+i\s+have")
+
+
+def _wave3_note(name: str):
+    path, why, _title = _find_note(_note_path_for(str(name or "")))
+    if path is None:
+        if why == "not_found":
+            return None, "", NOTE_SURGICAL_NO_NOTE.format(name=name)
+        return None, "", why
+    sha, why = _note_read_for_write(path)
+    return (path, sha, "") if not why else (None, "", why)
+
+
+def _run_note_customize(f: dict, action: str, card: str) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _wave3_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "note_customize_refused")
+    body = {"path": path, "action": action, "expected_sha256": sha}
+    body.update({k: v for k, v in f.items() if k not in ("name", "intent")})
+    try:
+        import jarvis_notes_edit as E
+        code, out = E.handle_customize(body, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be changed ({type(exc).__name__}), so nothing was changed.",
+                      "note_customize_refused")
+    if code not in (200, 202):
+        said = str((out or {}).get("error") or "Nothing was changed.") if isinstance(out, dict) else "Nothing was changed."
+        return Result(said, "note_customize_refused")
+    return _note_write_result(out, "note_customized", "note_customize_waiting",
+                              "note_customize_refused")
+
+
+def _run_template_create(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    try:
+        import jarvis_notes_edit as E
+        title, body = E.builtin_template(str(f.get("kind") or ""),
+                                         str(f.get("subject") or ""))
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The template could not be made ({type(exc).__name__}), so nothing was created.",
+                      "template_create_refused")
+    if not title:
+        return Result(body, "template_create_refused")
+    import datetime
+    name = title
+    subject = str(f.get("subject") or "").strip()
+    if subject:
+        name = name + " - " + subject
+    elif f.get("kind") in ("journal",):
+        name = name + " - " + datetime.date.today().isoformat()
+    path = _note_path_for(name)
+    try:
+        code, out = E.handle_create({"path": path, "text": body}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be created ({type(exc).__name__}), so nothing was created.",
+                      "template_create_refused")
+    if code not in (200, 202):
+        said = str((out or {}).get("error") or "Nothing was created.") if isinstance(out, dict) else "Nothing was created."
+        return Result(said, "template_create_refused")
+    return _note_write_result(out, "template_created", "template_create_waiting",
+                              "template_create_refused")
+
+
+def _run_template_save(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    path, sha, why = _wave3_note(str(f.get("name") or ""))
+    if path is None:
+        return Result(why, "template_save_refused")
+    body = {"path": path, "action": "save_template", "expected_sha256": sha}
+    if str(f.get("tname") or "").strip():
+        body["name"] = str(f.get("tname")).strip()
+    try:
+        import jarvis_notes_edit as E
+        code, out = E.handle_customize(body, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The template could not be saved ({type(exc).__name__}), so nothing was saved.",
+                      "template_save_refused")
+    if code not in (200, 202):
+        said = str((out or {}).get("error") or "Nothing was saved.") if isinstance(out, dict) else "Nothing was saved."
+        return Result(said, "template_save_refused")
+    return _note_write_result(out, "template_saved", "template_save_waiting",
+                              "template_save_refused")
+
+
+def _run_template_list() -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_SURGICAL_HIDDEN, "note_write_hidden")
+    try:
+        import jarvis_notes_edit as E
+        names, why = E.list_templates()
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The templates could not be read ({type(exc).__name__}).",
+                      "template_list_refused")
+    if why:
+        return Result("I could not read your templates: " + why, "template_list_refused")
+    if not names:
+        return Result("You have no templates yet.", "template_listed")
+    return Result("Your templates: " + ", ".join(names) + ".", "template_listed")
+
+
+
 def _note_asking(s: str) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours)."""
     if _NOTE_WRITE_BATCH.fullmatch(s):
         return Intent("notes_batch_refused")
+    if _NOTE_DELETE_LINE.fullmatch(s):
+        return Intent("note_delete_refused")
     m = _NOTE_CREATE_NAMED.fullmatch(s)
     if m:
         return Intent("note_create", {"name": m.group("name").strip(),
@@ -8509,6 +8807,103 @@ def _note_asking(s: str) -> Optional[Intent]:
             text = m.group("text").strip()
             if text:
                 return Intent("note_make", {"text": text})
+    if _NOTE_TEMPLATE_LIST.fullmatch(s):
+        return Intent("template_list")
+    m = _NOTE_TEMPLATE_SAVE.fullmatch(s)
+    if m:
+        return Intent("template_save", {"name": m.group("name").strip(),
+                                        "tname": (m.group("tname") or "").strip()})
+    m = _NOTE_TEMPLATE_CREATE.fullmatch(s)
+    if m:
+        kind = m.group("kind").replace(" ", "")
+        if kind in ("workoutlog",):
+            kind = "workout"
+        elif kind in ("meetingnotes",):
+            kind = "meeting"
+        elif kind in ("dailyjournal", "journal"):
+            kind = "journal"
+        elif kind in ("projectnote",):
+            kind = "project"
+        return Intent("template_create", {"kind": kind,
+                                          "subject": (m.group("subject") or "").strip()})
+    m = _NOTE_NEW_SECTION.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "new_section",
+                                         "heading": m.group("heading").strip()})
+    m = _NOTE_RENAME_HEADING.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "rename_heading",
+                                         "old": m.group("old").strip(),
+                                         "new": m.group("new").strip()})
+    m = _NOTE_SET_PROPERTY.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "set_property",
+                                         "key": m.group("key").strip(),
+                                         "value": m.group("value").strip()})
+    m = _NOTE_REMOVE_PROPERTY.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "remove_property",
+                                         "key": m.group("key").strip()})
+    m = _NOTE_LINK.fullmatch(s)
+    if m:
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "link",
+                                         "note": m.group("target").strip()})
+    line_map = [
+        (_NOTE_LINE_BULLET, "bullet"), (_NOTE_LINE_ADD_BULLET, "bullet"),
+        (_NOTE_LINE_CHECK, "checklist"), (_NOTE_LINE_CHECKBOX, "checklist"),
+        (_NOTE_LINE_QUOTE, "quote"), (_NOTE_LINE_NUMBER, "number"),
+        (_NOTE_LINE_TICK, "tick"), (_NOTE_LINE_UNTICK, "untick"),
+        (_NOTE_LINE_PLAIN, "plain"),
+    ]
+    for rx, kind in line_map:
+        m = rx.fullmatch(s)
+        if m:
+            text = (m.groupdict().get("text") or m.groupdict().get("text1")
+                    or m.groupdict().get("text2") or "").strip()
+            return Intent("note_customize", {"name": m.group("name").strip(),
+                                             "op": "line", "line_action": kind,
+                                             "target": text})
+    m = _NOTE_LINE_HEADING.fullmatch(s)
+    if m:
+        hashes = m.group("hashes") or "##"
+        return Intent("note_customize", {"name": m.group("name").strip(),
+                                         "op": "line", "line_action": "heading",
+                                         "target": m.group("text").strip(),
+                                         "level": len(hashes)})
+    m = _NOTE_SURGICAL_UNDER.fullmatch(s) or _NOTE_SURGICAL_SECTION.fullmatch(s)
+    if m:
+        return Intent("note_insert", {"name": m.group("name").strip(),
+                                      "target": m.group("head").strip(),
+                                      "text": m.group("text").strip(),
+                                      "mode": "under_heading"})
+    m = _NOTE_SURGICAL_ANCHOR.fullmatch(s)
+    if m:
+        return Intent("note_insert", {"name": m.group("name").strip(),
+                                      "target": m.group("anchor").strip(),
+                                      "text": m.group("text").strip(),
+                                      "mode": m.group("mode").strip().lower()})
+    m = _NOTE_FORMAT_ADD.fullmatch(s)
+    if m:
+        return Intent("note_format", {"name": m.group("name").strip(),
+                                      "target": m.group("target").strip(),
+                                      "style": m.group("style").strip().lower(),
+                                      "action": "add"})
+    m = _NOTE_FORMAT_REMOVE.fullmatch(s)
+    if m:
+        style = (m.group("style") or m.group("style2") or "").strip().lower()
+        return Intent("note_format", {"name": m.group("name").strip(),
+                                      "target": m.group("target").strip(),
+                                      "style": style, "action": "remove"})
+    m = _NOTE_REPLACE.fullmatch(s)
+    if m:
+        return Intent("note_replace", {"name": m.group("name").strip(),
+                                       "old": m.group("old").strip(),
+                                       "new": m.group("new").strip()})
     m = _NOTE_APPEND_COLON.fullmatch(s)
     if m:
         return Intent("note_append", {"name": m.group("name").strip(),
@@ -10624,10 +11019,32 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_append(f)
     if n == "note_tag":
         return _run_note_tag(f)
+    if n == "template_list":
+        return _run_template_list()
+    if n == "template_create":
+        return _run_template_create(f)
+    if n == "template_save":
+        return _run_template_save(f)
+    if n == "note_customize":
+        op = str(f.get("op") or "")
+        card = {"line": "change one line in", "new_section": "add a new section to",
+                "rename_heading": "rename a heading in",
+                "set_property": "set a property in",
+                "remove_property": "remove a property from",
+                "link": "add a link in"}.get(op, "change one part of")
+        return _run_note_customize(f, op, card)
+    if n == "note_insert":
+        return _run_note_insert(f)
+    if n == "note_format":
+        return _run_note_format(f)
+    if n == "note_replace":
+        return _run_note_replace(f)
     if n == "notes_batch_refused":
         return Result(NOTE_WRITE_BATCH_SAID, "notes_batch_refused")
     if n == "note_write_hidden":
         return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    if n == "note_delete_refused":
+        return Result(NOTE_DELETE_SAID, "note_delete_refused")
     if n == "note_read_honest":
         return _run_note_read_honest()
     if n in ("note_change_refused", "obsidian_style_refused"):
