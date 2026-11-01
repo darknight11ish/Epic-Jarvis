@@ -3002,7 +3002,7 @@
       "name": "Write a note for you",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Say \"note this\" in chat (2026-10-31) or use the quick-note key Alt+Shift+N to open the bar ready to file one.",
+      "where": "Say \"note this\" in chat (2026-10-31) or press Alt+Shift+N (one of the PC's changeable shortcuts in Settings, Shortcuts) to open the bar ready to file one. The notes editor's own Ctrl+B and friends work inside the editor.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -5662,7 +5662,7 @@
       "name": "Keyboard shortcuts",
       "group": "The PC itself",
       "surface": "desktop",
-      "where": "Settings, Shortcuts.",
+      "where": "PC: Settings, Shortcuts has the global keys and lets you change each one. The notes editor's Ctrl+B bold, Ctrl+I italic, Ctrl+K wikilink, Ctrl+E code, Ctrl+Shift+X strikethrough, Ctrl+Shift+Q quote, Ctrl+2/3 headings and Ctrl+Shift+7/8/9 lists work inside the Notes plate only.",
       "control": {
         "type": "refused",
         "setting_keys": [],

@@ -1185,6 +1185,15 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- keyboard shortcuts, from the RAW sentence (2026-10-31 honesty fix) --
+    # The owner asked and the model answered "I don't have any keyboard
+    # shortcuts myself... that's up to your OS settings", which is false: the
+    # desktop ships 11 bindable hotkeys and the notes editor has its own keys.
+    # This fast path answers from the measured tables before any action path.
+    got = _shortcuts_question(text)
+    if got is not None:
+        return got
+
     # --- (a) actionable quick paths FIRST (2026-10-31 integration) ----------
     # A real action beats an "off" answer: the note writer, the organizer and
     # the local-calendar read are owned here, before any honesty sentence.
@@ -4822,6 +4831,281 @@ def _feature_capabilities(s: str) -> Optional[Intent]:
         area = next((got for got in m.groups() if got), "")
         if area:
             return Intent("feature_capabilities", {"words": area})
+    return None
+
+
+
+# --------------------------------------------------------------------------
+# Keyboard shortcuts (2026-10-31 honesty fix)
+#
+# MEASURED, never invented. The PC list is `jarvis-desktop/src-tauri/src/
+# hotkeys.rs` `ACTIONS` (11 bindable actions); the notes-editor keys are
+# `jarvis-desktop/src/notes.js` `SHORTCUTS`/`TOOLBAR`; the bar and chat keys
+# are `jarvis-desktop/src/main.js`'s keydown contract and the Brain window's
+# own handlers. `backend/test_shortcuts_honesty.py` reads those source files
+# and fails if these tables drift, so a new key cannot silently be missed by
+# the fast path. The phone has no keyboard shortcuts, and saying otherwise is
+# the bug this fixes.
+# --------------------------------------------------------------------------
+
+#: (id, key, what it does, where it works) for every bindable PC action.
+#: An empty key is a real state: the action ships unbound until the owner
+#: picks one in Settings -> Shortcuts. Default keys only, exactly as shipped.
+SHORTCUT_ACTIONS = (
+    ("toggle_quickbar", "Alt+Space", "show or hide the Jarvis bar", "anywhere on the PC"),
+    ("ingest_clipboard", "Super+Shift+J", "attach whatever is on the clipboard to the bar", "anywhere on the PC"),
+    ("capture_screen", "Alt+Shift+S", "look at the window in front, once", "anywhere on the PC"),
+    ("quick_note", "Alt+Shift+N", "open the Jarvis bar ready to file a quick note", "anywhere on the PC"),
+    ("toggle_widget", "Alt+Shift+W", "show or hide the widget", "anywhere on the PC"),
+    ("stop_everything", "Alt+Shift+X", "stop Jarvis talking and anything it is doing, at once", "anywhere on the PC"),
+    ("toggle_floating", "Alt+Shift+F", "show or hide the floating face", "anywhere on the PC"),
+    ("talk_to_type", "Alt+Shift+T", "hold it and speak, then let go; Jarvis types what you said", "anywhere on the PC, once Talk-to-type is on"),
+    ("toggle_watch", "", "start or stop Watch with me", "anywhere on the PC, off until you pick a key"),
+    ("toggle_live", "", "start or end Jarvis Live", "anywhere on the PC, off until you pick a key"),
+    ("clipboard_time_machine", "Alt+Shift+C", "open the clipboard history drawer at the Jarvis bar", "anywhere on the PC"),
+)
+
+#: The label each unbound action is called by when it has no key yet.
+SHORTCUT_ACTION_LABELS = {
+    "toggle_watch": "start or stop Watch with me",
+    "toggle_live": "start or end Jarvis Live",
+}
+
+#: (key, action) inside the NOTES EDITOR only, exactly as the editor binds it.
+SHORTCUT_NOTES_EDITOR = (
+    ("Ctrl+B", "bold"),
+    ("Ctrl+I", "italic"),
+    ("Ctrl+K", "wikilink"),
+    ("Ctrl+E", "inline code"),
+    ("Ctrl+Shift+X", "strikethrough"),
+    ("Ctrl+Shift+Q", "quote"),
+    ("Ctrl+Shift+7", "numbered list"),
+    ("Ctrl+Shift+8", "bullet list"),
+    ("Ctrl+Shift+9", "checklist"),
+    ("Ctrl+2", "heading 2"),
+    ("Ctrl+3", "heading 3"),
+)
+
+#: The words a named-shortcut question may use, mapped to the real answer.
+#: Every entry names a key above (or the real unbound state); nothing guesses.
+SHORTCUT_NAMES = {
+    "bar": "toggle_quickbar", "jarvis bar": "toggle_quickbar",
+    "quickbar": "toggle_quickbar", "spotlight": "toggle_quickbar",
+    "open jarvis": "toggle_quickbar", "show jarvis": "toggle_quickbar",
+    "hide jarvis": "toggle_quickbar", "summon jarvis": "toggle_quickbar",
+    "clipboard": "ingest_clipboard", "attach the clipboard": "ingest_clipboard",
+    "look at this": "capture_screen", "look at the screen": "capture_screen",
+    "screen": "capture_screen",
+    "quick note": "quick_note", "note": "quick_note", "new note": "quick_note",
+    "widget": "toggle_widget",
+    "stop everything": "stop_everything", "stop": "stop_everything",
+    "floating face": "toggle_floating", "floating": "toggle_floating",
+    "talk to type": "talk_to_type", "talk-to-type": "talk_to_type",
+    "dictation": "talk_to_type",
+    "watch with me": "toggle_watch", "watch": "toggle_watch",
+    "jarvis live": "toggle_live", "live": "toggle_live",
+    "clipboard history": "clipboard_time_machine",
+}
+
+#: The notes editor's own names, answered with "inside the notes editor".
+SHORTCUT_NOTES_NAMES = {
+    "bold": "Ctrl+B",
+    "italic": "Ctrl+I",
+    "wikilink": "Ctrl+K", "link": "Ctrl+K", "wiki link": "Ctrl+K",
+    "inline code": "Ctrl+E", "code": "Ctrl+E",
+    "strikethrough": "Ctrl+Shift+X",
+    "quote": "Ctrl+Shift+Q",
+    "numbered list": "Ctrl+Shift+7", "number list": "Ctrl+Shift+7",
+    "bullet list": "Ctrl+Shift+8", "bullets": "Ctrl+Shift+8",
+    "checklist": "Ctrl+Shift+9",
+    "heading 2": "Ctrl+2", "h2": "Ctrl+2",
+    "heading 3": "Ctrl+3", "h3": "Ctrl+3",
+}
+
+_SHORTCUTS_LIST_RX = re.compile(
+    r"(?:what|which)\s+(?:are\s+)?(?:your\s+|the\s+)?(?:keyboard\s+)?shortcuts?"
+    r"(?:\s+(?:do\s+you\s+have|are\s+there|have\s+you\s+got))?\s*$"
+    r"|what\s+shortcuts\s+do\s+you\s+have\s*$"
+    r"|(?:do\s+you\s+have|have\s+you\s+got)\s+(?:any\s+)?(?:keyboard\s+)?shortcuts?"
+    r"|keyboard\s+shortcuts?\s+(?:list|please)\s*$")
+_SHORTCUTS_OPEN_RX = re.compile(
+    r"(?:how\s+(?:do|can)\s+i\s+(?:open|summon|call|show)\s+(?:you|jarvis)\b.*keyboard|"
+    r"(?:keyboard\s+)?shortcut\s+(?:to|for)\s+(?:open|summon|show|call)\s+(?:you|jarvis)\b|"
+    r"(?:open|summon)\s+(?:you|jarvis)\s+with\s+(?:the\s+)?keyboard)")
+_SHORTCUTS_QUICK_NOTE_RX = re.compile(
+    r"(?:what|which)\s+(?:is\s+)?(?:the\s+)?(?:keyboard\s+)?shortcut\s+(?:for|to)\s+"
+    r"(?:a\s+|the\s+)?quick[\s-]?note\b|"
+    r"(?:what|which)\s+(?:is\s+)?(?:the\s+)?quick[\s-]?note\s+(?:shortcut|key)\b|"
+    r"shortcut\s+(?:makes|for)\s+(?:a\s+)?quick[\s-]?note\b|"
+    r"quick[\s-]?note\s+shortcut\b")
+_SHORTCUTS_CHANGE_RX = re.compile(
+    r"(?:can\s+i|how\s+(?:do|can)\s+i|do\s+i)\s+(?:change|remap|rebind|edit)\s+"
+    r"(?:the\s+|my\s+|your\s+)?(?:keyboard\s+)?shortcuts?\b|"
+    r"are\s+(?:the\s+|your\s+)?(?:keyboard\s+)?shortcuts\s+(?:changeable|configurable|customi[sz]able)\b")
+_SHORTCUT_FOR_RX = re.compile(r"^(?:what(?:'s|\s+is)\s+the\s+|what\s+is\s+the\s+|the\s+)?"
+                              r"shortcut\s+(?:for|to)\s+(.+?)\s*$")
+_SHORTCUT_MAKES_RX = re.compile(r"^(?:what|which)\s+shortcut\s+(?:makes|does|is)\s+(.+?)\s*$")
+
+#: Things whose shortcuts belong to Windows or another program, never to Jarvis.
+_SHORTCUT_NOT_OURS = re.compile(
+    r"\b(?:chrome|edge|firefox|browser|windows|word|excel|powerpoint|outlook|"
+    r"close|minimi[sz]e|maximi[sz]e|shutdown|shut\s+down|restart|task\s+manager|"
+    r"screenshot\s+tool|snipping\s+tool|copy\s+text|paste\s+text|select\s+all)\b")
+
+
+def _shortcut_desktop_list() -> str:
+    """The measured PC list, in plain words, for the desktop."""
+    unbound = [a for a in SHORTCUT_ACTIONS if not a[1]]
+    bound = [a for a in SHORTCUT_ACTIONS if a[1]]
+    parts = ["Yes - the Jarvis Desktop on this PC has real keyboard shortcuts."]
+    parts.append("Global keys (they work in any program; change them in Settings, Shortcuts):")
+    for _id, key, what, where in bound:
+        parts.append("- " + key + ": " + what + " (" + where + ").")
+    if unbound:
+        parts.append("These have no key until you pick one in Settings, Shortcuts: "
+                     + "; ".join(SHORTCUT_ACTION_LABELS.get(a[0], a[0]) for a in unbound) + ".")
+    parts.append("In the notes editor only: "
+                 + ", ".join(k + " " + what for k, what in SHORTCUT_NOTES_EDITOR) + ".")
+    parts.append("In the Jarvis bar: Enter sends, Shift+Enter adds a line, hold Space or Enter "
+                 "on the mic to talk, and Esc dismisses. In the chat window Ctrl+Enter asks a "
+                 "Deep question.")
+    parts.append("The phone has no keyboard shortcuts; the shortcuts are on the PC.")
+    return " ".join(parts)
+
+
+def _shortcut_phone_list() -> str:
+    """The same truth, surface-aware, for the phone."""
+    return ("The keyboard shortcuts are on the PC running Jarvis Desktop, not on the phone. "
+            "On the PC, Alt+Space shows or hides the Jarvis bar, Alt+Shift+N opens a quick note, "
+            "and Settings, Shortcuts has the full list and lets you change each global key. "
+            "The notes editor's Ctrl+B, Ctrl+I and the rest work inside the notes editor. "
+            "The phone has no keyboard shortcuts of its own.")
+
+
+def _shortcut_action_words(action_id: str) -> str:
+    for _id, key, what, _where in SHORTCUT_ACTIONS:
+        if _id == action_id:
+            if not key:
+                suggestion = " (the hint suggests Alt+Shift+V)" if action_id == "toggle_watch" else (
+                    " (the hint suggests Alt+Shift+L)" if action_id == "toggle_live" else "")
+                return (SHORTCUT_ACTION_LABELS.get(action_id, action_id)
+                        + " has no key until you pick one in Settings, Shortcuts" + suggestion)
+            return key + " " + what
+    return ""
+
+
+def _run_shortcuts(name: str, f: dict, surface: str) -> "Result":
+    """Read-only, deterministic answers built from the measured tables."""
+    if name == "shortcuts_list":
+        return Result(_shortcut_phone_list() if surface == "phone" else _shortcut_desktop_list(),
+                      "shortcuts_list")
+    if name == "shortcuts_open":
+        if surface == "phone":
+            return Result("Press Alt+Space on the PC to show or hide the Jarvis bar - that is how "
+                          "you open Jarvis with the keyboard. The phone has no keyboard shortcut "
+                          "of its own.", "shortcuts_open")
+        return Result("Press Alt+Space anywhere on the PC to show or hide the Jarvis bar - that is "
+                      "how you open Jarvis with the keyboard. You can change it in Settings, "
+                      "Shortcuts.", "shortcuts_open")
+    if name == "shortcuts_quick_note":
+        if surface == "phone":
+            return Result("The quick-note key is on the PC: Alt+Shift+N opens the Jarvis bar ready "
+                          "to file a note. The phone has no keyboard shortcut of its own.",
+                          "shortcuts_quick_note")
+        return Result("Alt+Shift+N opens the Jarvis bar ready to file a quick note. You can change "
+                      "that key in Settings, Shortcuts.", "shortcuts_quick_note")
+    if name == "shortcuts_change":
+        if surface == "phone":
+            return Result("Keyboard shortcuts are changed on the PC: Settings, Shortcuts. The "
+                          "phone has no keyboard shortcuts of its own.", "shortcuts_change")
+        return Result("Yes. On the PC open Settings, Shortcuts: every global key can be changed, "
+                      "and a key another program already owns is refused with the reason. The "
+                      "notes editor's own keys (Ctrl+B and the rest) work inside the notes editor "
+                      "and are not configurable. The phone has no keyboard shortcuts.",
+                      "shortcuts_change")
+    if name == "shortcuts_named":
+        action_id = str(f.get("action") or "")
+        words = _shortcut_action_words(action_id)
+        if surface == "phone":
+            return Result("That shortcut is on the PC: " + words + ". The phone has no keyboard "
+                          "shortcut of its own.", "shortcuts_named")
+        return Result("That shortcut is " + words + ". It is a Jarvis Desktop key on the PC; you "
+                      "can change the global ones in Settings, Shortcuts.", "shortcuts_named")
+    if name == "shortcuts_notes_named":
+        key = str(f.get("key") or "")
+        what = str(f.get("what") or "")
+        if surface == "phone":
+            return Result(key + " is " + what + " inside the notes editor on the PC. The phone has "
+                          "no keyboard shortcuts.", "shortcuts_notes_named")
+        return Result(key + " is " + what + " inside the notes editor only; those keys are fixed. "
+                      "Global Jarvis keys are changed in Settings, Shortcuts.", "shortcuts_notes_named")
+    if name == "shortcuts_unknown":
+        words = str(f.get("words") or "").strip()
+        return Result("There isn't a Jarvis shortcut for \"" + words + "\". The nearest real ones "
+                      "are Alt+Shift+N for a quick note, Alt+Space for the Jarvis bar, and Ctrl+B "
+                      "for bold inside the notes editor. A shortcut belonging to Windows or another "
+                      "program is not Jarvis's.", "shortcuts_unknown")
+    return Result(_shortcut_phone_list() if surface == "phone" else _shortcut_desktop_list(),
+                  "shortcuts_list")
+
+
+def _known_shortcut_name(target: str):
+    """(intent name, fields) for a named shortcut, or None when not ours."""
+    t = " ".join(str(target or "").lower().strip(" ?.!").split())
+    if not t:
+        return None
+    if t in SHORTCUT_NAMES:
+        return Intent("shortcuts_named", {"action": SHORTCUT_NAMES[t]})
+    for name, action_id in SHORTCUT_NAMES.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", t):
+            return Intent("shortcuts_named", {"action": action_id})
+    if t in SHORTCUT_NOTES_NAMES:
+        return Intent("shortcuts_notes_named",
+                      {"key": SHORTCUT_NOTES_NAMES[t], "what": t})
+    for name, key in SHORTCUT_NOTES_NAMES.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", t):
+            return Intent("shortcuts_notes_named", {"key": key, "what": name})
+    return None
+
+
+def _shortcuts_question(raw) -> Optional[Intent]:
+    """Keyboard-shortcut questions, read off the RAW sentence (2026-10-31).
+
+    Deterministic and source-measured: the list comes from the same tables the
+    test compares to `hotkeys.rs`/`notes.js`, so the model can never again say
+    Jarvis has none. Over-capture is deliberate: a shortcut that belongs to
+    Windows or another program ("shortcut to close Chrome") falls through to
+    the model, and the tests pin that.
+    """
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if _SHORTCUTS_CHANGE_RX.search(text):
+        # "can I change Keyboard shortcuts" is the FEATURE row's own question
+        # (Settings directory): let the feature guide answer it. "can I change
+        # the shortcuts?" - the owner's actual phrasing - stays ours.
+        if re.search(r"\bkeyboard shortcuts\b", text):
+            return None
+        return Intent("shortcuts_change")
+    if _SHORTCUTS_QUICK_NOTE_RX.search(text):
+        return Intent("shortcuts_quick_note")
+    if _SHORTCUTS_OPEN_RX.search(text):
+        return Intent("shortcuts_open")
+    if _SHORTCUTS_LIST_RX.fullmatch(text) or re.fullmatch(
+            r"(?:what|which)\s+(?:are\s+)?your\s+(?:keyboard\s+)?shortcuts?", text):
+        return Intent("shortcuts_list")
+    m = _SHORTCUT_FOR_RX.fullmatch(text) or _SHORTCUT_MAKES_RX.fullmatch(text)
+    if m:
+        target = m.group(1).strip(" \"'")
+        if _SHORTCUT_NOT_OURS.search(target):
+            return None                     # Windows/another program owns it: model/OS
+        got = _known_shortcut_name(target)
+        if got is not None:
+            return got
+        # A named key that is not real: say so plainly, name the nearest real
+        # ones. Only for shortcut questions, never for a general "shortcut".
+        return Intent("shortcuts_unknown", {"words": target})
     return None
 
 
@@ -12322,6 +12606,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_honesty(f)
     if n == "honest_state":
         return _run_honest_state(f)
+    # Keyboard shortcuts (2026-10-31 honesty fix): fixed answers from the
+    # measured desktop tables; the phone is told the keys are on the PC. No
+    # card, no state read, no model.
+    if n in _SHORTCUT_INTENTS:
+        return _run_shortcuts(n, f, _client_surface(peer, local, client_surface))
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
     if n in ("update_ask", "update_notes"):
@@ -13021,8 +13310,16 @@ UNDO_NOTHING_SAID = "Nothing of mine to cancel."
 #: an intent added later, and forgotten here, keeps the old safe behaviour
 #: (the record is dropped, so "cancel that" can never take back something the
 #: owner did not just do).
+#: The keyboard-shortcut answers (2026-10-31): fixed words from measured tables.
+_SHORTCUT_INTENTS = frozenset({
+    "shortcuts_list", "shortcuts_open", "shortcuts_quick_note", "shortcuts_change",
+    "shortcuts_named", "shortcuts_notes_named", "shortcuts_unknown",
+})
+
 READ_ONLY_INTENTS = frozenset({
-    "alarm_list", "animal_ask", "approval_where", "briefing_list", "briefing_now",
+    "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
+    "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
+    "shortcuts_unknown", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
     # fixed answer that reads this PC's own settings and connects nothing, so it
