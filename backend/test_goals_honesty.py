@@ -85,7 +85,11 @@ def test_capability_and_list():
         r = ask("how do I add a goal?")
         check("adding/updating is explained", r is not None and r.intent == "goal_update"
               and "Brain, Work, Goals" in r.reply, r.reply if r else "model")
-        r = ask("what does the goals feature do?")
+        # Wave-2 integration (2026-11-01): "what does the goals feature do?" is
+        # the FEATURE GUIDE's question (all 168 catalogue rows must answer
+        # through it), so this lane's own explanation is asked with the phrasing
+        # the guide does not claim - and must still name its card rule.
+        r = ask("how does goal tracking work?")
         check("the feature explanation names the card rule", r is not None and r.intent == "goal_about"
               and "one" in r.reply.lower() and "card" in r.reply.lower(), r.reply if r else "model")
     finally:

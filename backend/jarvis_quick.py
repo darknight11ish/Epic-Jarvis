@@ -5987,11 +5987,11 @@ def _goals_question(raw) -> Optional[Intent]:
         return None
     if re.search(r"\b(?:track|tracking)\s+(?:my\s+)?(?:package|order|parcel|time|spending|sleep)\b", text):
         return None
-    # "what does Goals do" / "tell me about Goals" is THIS family's own answer
-    # (goal_about names the card rule); only a question about ANOTHER named
-    # feature steps aside for the feature guide (2026-11-01 integration).
-    if (_asks_about_a_named_feature(text, str(raw or ""))
-            and not re.search(r"\bgoals?\b", text)):
+    # "what does Goals do" / "tell me about Goals" is the feature guide's own
+    # explanation (all 168 catalogue rows must answer through it); the family's
+    # goal_about answer stays for a phrasing the guide does not claim
+    # (2026-11-01 integration).
+    if _asks_about_a_named_feature(text, str(raw or "")):
         return None
     if _GOAL_STATE_RX.search(text):
         m = _GOAL_STATE_RX.search(text)
