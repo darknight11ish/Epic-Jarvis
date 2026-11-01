@@ -1199,17 +1199,113 @@
   }
 
   /* ---------------------------------------------------------------- *
-   * 6. Right or wrong: the mark on one answer (feedback.patch)
+   * 6. The answer menu: one caret per Jarvis answer (the owner's request,
+   *    2026-10-31)
    *
-   * Under the answer the id belongs to - the next "jarvis" message the page
-   * adds to #log - two small buttons. One answer, one mark; pressing the
-   * one already on takes it back. Sent through Rust's `mark_answer` - the same
-   * command the Jarvis bar uses, which checks the id and the mark and adds
-   * the token (the page has none). A backend without the route answers
-   * 404/503, `mark_answer` says `available: false`, and the buttons remove
-   * themselves, quietly. A mark changes no memory; it only counts.
+   * THE OWNER'S WORDS: "I don't want the 'Was this answer right? Right/Wrong'
+   * option always showing; have a caret menu button next to each Jarvis
+   * dialogue on the desktop HUD that includes things like 'was the answer
+   * right?', 'read out loud', and the other options that should come with a
+   * dialogue response from Jarvis."
+   *
+   * So the always-visible row is gone. Each FINISHED Jarvis answer gets one
+   * small caret ("Answer options"); opening it shows only REAL per-answer
+   * actions:
+   *
+   *   - Right / Wrong: the SAME feedback path as the old row - Rust's
+   *     `mark_answer`, the command the Jarvis bar uses, which checks the id
+   *     and the mark and adds the token (the page has none). One answer, one
+   *     mark; pressing the one already on takes it back. A backend without the
+   *     route answers 404/503, `mark_answer` says `available: false`, and the
+   *     menu removes itself, quietly. A mark changes no memory; it only counts.
+   *   - Read out loud: clicks the page's OWN `.speak-answer` button when it
+   *     exists - the one voice path the page's automatic read-aloud uses (the
+   *     same voice, rate, pitch and the shell's local-voices-only rule), which
+   *     exists only when the owner's read-aloud setting and the page's privacy
+   *     rule allow it. This file creates no second speaker.
+   *   - Copy answer: the answer's own words, through the clipboard; the item
+   *     says "Copied." in place, never a toast.
+   *
+   * NOT listed: any "open in History" jump. The desktop has a History view,
+   * but it has no per-answer or per-conversation door from this HUD, so this
+   * menu does not invent one. Nothing else is invented either.
+   *
+   * One menu at a time; Esc and an outside click close it; focus goes into the
+   * menu on open and back to the caret on Esc; arrow keys move between items.
    * ---------------------------------------------------------------- */
   var awaitingTurn = null;
+  /** The one open answer menu, or null. One at a time (owner's request). */
+  var openAnswerTools = null;
+
+  function closeAnswerMenu(focusCaret) {
+    if (!openAnswerTools) return;
+    var tools = openAnswerTools;
+    openAnswerTools = null;
+    tools.classList.remove("is-open");
+    tools.menu.hidden = true;
+    tools.caret.setAttribute("aria-expanded", "false");
+    if (focusCaret && tools.caret.focus) tools.caret.focus();
+  }
+
+  /** Put the keyboard in the menu (its first usable item). */
+  function focusFirstItem(tools) {
+    for (var i = 0; i < tools.items.length; i++) {
+      var item = tools.items[i];
+      if (item && !item.hidden && !item.disabled && item.focus) {
+        item.focus();
+        return;
+      }
+    }
+  }
+
+  function openAnswerMenu(tools) {
+    if (openAnswerTools === tools) {
+      closeAnswerMenu(true);
+      return;
+    }
+    closeAnswerMenu(false);
+    openAnswerTools = tools;
+    // The page grows the per-answer speaker AFTER the answer finishes (its
+    // read-aloud setting and privacy rule decide), so read the live DOM each
+    // time the menu opens: the item appears only when the real speaker exists.
+    tools.refresh();
+    tools.classList.add("is-open");
+    tools.menu.hidden = false;
+    tools.caret.setAttribute("aria-expanded", "true");
+    focusFirstItem(tools);
+  }
+
+  // ONE menu, closed by Esc, an outside click, or its own caret again. Added
+  // once for the whole page (the injected script runs once).
+  if (document.addEventListener) {
+    document.addEventListener("click", function (event) {
+      if (!openAnswerTools) return;
+      for (var node = event && event.target; node; node = node.parentNode) {
+        if (node === openAnswerTools) return;
+      }
+      closeAnswerMenu(false);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (!openAnswerTools) return;
+      var key = (event && (event.key || event.keyCode)) || "";
+      if (key === "Escape" || key === "Esc" || key === 27) {
+        if (event.preventDefault) event.preventDefault();
+        closeAnswerMenu(true);
+        return;
+      }
+      if (key === "ArrowDown" || key === "ArrowUp" || key === 40 || key === 38) {
+        if (event.preventDefault) event.preventDefault();
+        var items = openAnswerTools.items.filter(function (item) {
+          return item && !item.hidden && !item.disabled;
+        });
+        if (!items.length) return;
+        var at = items.indexOf(document.activeElement);
+        var step = (key === "ArrowDown" || key === 40) ? 1 : -1;
+        var next = at < 0 ? 0 : (at + step + items.length) % items.length;
+        items[next].focus();
+      }
+    });
+  }
 
   function expectAnswer(turnId) {
     awaitingTurn = turnId;
@@ -1222,7 +1318,7 @@
           var node = added[j];
           if (node.nodeType === 1 && node.classList.contains("msg") && node.classList.contains("jarvis")) {
             watch.disconnect();
-            if (awaitingTurn === turnId) attachMark(node, turnId);
+            if (awaitingTurn === turnId) attachAnswerTools(node, turnId);
             return;
           }
         }
@@ -1233,66 +1329,145 @@
     setTimeout(function () { watch.disconnect(); }, 120000);
   }
 
-  function attachMark(msg, turnId) {
-    var row = document.createElement("div");
-    row.className = "jarvis-mark";
-    row.setAttribute("role", "group");
-    row.setAttribute("aria-label", "Was this answer right?");
-    var q = document.createElement("span");
-    q.textContent = "Was this answer right?";
-    var right = document.createElement("button");
-    right.type = "button";
-    right.textContent = "Right";
-    var wrong = document.createElement("button");
-    wrong.type = "button";
-    wrong.textContent = "Wrong";
+  /** The caret menu under ONE finished Jarvis answer. */
+  function attachAnswerTools(msg, turnId) {
+    var tools = document.createElement("div");
+    tools.className = "jarvis-answer-tools";
+    var caret = document.createElement("button");
+    caret.type = "button";
+    caret.className = "jarvis-answer-caret";
+    caret.setAttribute("aria-label", "Answer options");
+    caret.setAttribute("aria-haspopup", "menu");
+    caret.setAttribute("aria-expanded", "false");
+    caret.textContent = "\u25BE";
+    var menu = document.createElement("div");
+    menu.className = "jarvis-answer-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Answer options");
+    menu.hidden = true;
+    tools.caret = caret;
+    tools.menu = menu;
+    tools.items = [];
     var current = "none";
-    function paint() {
-      right.setAttribute("aria-pressed", String(current === "right"));
-      wrong.setAttribute("aria-pressed", String(current === "wrong"));
+    var busy = false;
+    var answer = "";
+    var readItem = null;
+    var copyItem = null;
+
+    function item(label, onPick, role) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "jarvis-answer-item";
+      button.setAttribute("role", role || "menuitem");
+      button.textContent = label;
+      button.addEventListener("click", function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        if (event && event.stopPropagation) event.stopPropagation();
+        onPick(button);
+      });
+      menu.appendChild(button);
+      tools.items.push(button);
+      return button;
     }
+
+    /** What the menu shows right now: the answer exists, the page's real
+     *  speaker exists, and one mark at most. Called on every open. */
+    tools.refresh = function () {
+      var speaker = msg.querySelector ? msg.querySelector(".speak-answer") : null;
+      if (readItem) readItem.hidden = !(speaker && answer);
+      if (copyItem) copyItem.hidden = !answer;
+    };
+
+    function paintMarks() {
+      right.setAttribute("aria-checked", String(current === "right"));
+      wrong.setAttribute("aria-checked", String(current === "wrong"));
+    }
+
     function send(mark) {
+      if (busy || !shellInvoke) return;
       var next = current === mark ? "none" : mark;
-      if (!shellInvoke) return;
+      busy = true;
       right.disabled = wrong.disabled = true;
       shellInvoke("mark_answer", { turnId: turnId, mark: next })
         .then(function (reply) {
           if (reply && reply.available === false) {
-            row.remove();
+            if (tools.parentNode) tools.parentNode.removeChild(tools);
             return;
           }
           current = next;
         })
         .catch(function () { /* leave it as it was */ })
         .then(function () {
+          busy = false;
           right.disabled = wrong.disabled = false;
-          paint();
+          paintMarks();
         });
     }
-    right.addEventListener("click", function () { send("right"); });
-    wrong.addEventListener("click", function () { send("wrong"); });
-    paint();
-    row.appendChild(q);
-    row.appendChild(right);
-    row.appendChild(wrong);
-    msg.appendChild(row);
-    // Only on an answer that FINISHED. A streamed answer's message is added
-    // empty and filled as it arrives, so the mark used to appear at once -
-    // and stayed on an answer that was then cut off and labelled
-    // "[interrupted]", inviting a right/wrong verdict on half a reply. The
-    // page sets data-state="done" when the answer ends properly and
-    // "interrupted" when it does not; until then the row is hidden.
+
+    var q = document.createElement("p");
+    q.className = "jarvis-answer-question";
+    q.textContent = "Was this answer right?";
+    menu.appendChild(q);
+    var right = item("Right", function () { send("right"); }, "menuitemradio");
+    var wrong = item("Wrong", function () { send("wrong"); }, "menuitemradio");
+    readItem = item("Read out loud", function () {
+      var speaker = msg.querySelector ? msg.querySelector(".speak-answer") : null;
+      if (!speaker) return;
+      speaker.click();
+      closeAnswerMenu(true);
+    });
+    copyItem = item("Copy answer", function (button) {
+      if (!answer) return;
+      function done() {
+        button.textContent = "Copied.";
+        setTimeout(function () { button.textContent = "Copy answer"; }, 1400);
+      }
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(answer).then(done, function () {
+            button.textContent = "Could not copy.";
+          });
+        } else {
+          button.textContent = "Could not copy.";
+        }
+      } catch (err) {
+        button.textContent = "Could not copy.";
+      }
+    });
+    paintMarks();
+
+    caret.addEventListener("click", function (event) {
+      if (event && event.stopPropagation) event.stopPropagation();
+      if (openAnswerTools === tools) closeAnswerMenu(true);
+      else openAnswerMenu(tools);
+    });
+
+    var built = false;
+    function build() {
+      if (built) return;
+      built = true;
+      // Captured BEFORE the caret and menu are appended, so "Copy answer" gets
+      // the answer's own words and not this menu's labels.
+      answer = String(msg.textContent || "").replace(/^\s+|\s+$/g, "");
+      tools.refresh();
+      tools.appendChild(caret);
+      tools.appendChild(menu);
+      msg.appendChild(tools);
+    }
+
+    // Only on an answer that FINISHED. The page sets data-state="done" when the
+    // answer ends properly and "interrupted" when it does not; an interrupted
+    // answer gets no menu (the old row could invite a verdict on half a reply).
     function settle() {
       var st = msg.dataset ? msg.dataset.state : "";
       if (st === "done") {
-        row.hidden = false;
+        build();
         return true;
       }
       if (st === "interrupted") {
-        row.remove();
+        if (tools.parentNode) tools.parentNode.removeChild(tools);
         return true;
       }
-      row.hidden = true;
       return false;
     }
     if (!settle() && typeof MutationObserver !== "undefined") {
