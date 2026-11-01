@@ -1170,6 +1170,13 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- plug-ins, before the reminder capability family (2026-10-31): "how
+    # do I add a plugin" is a plug-in question, not "how do I ask for a
+    # reminder".
+    got = _plugins_question(text)
+    if got is not None:
+        return got
+
     # --- timers, alarms and reminders, capability questions only (2026-10-31)
     # The owner asked "can you make a reminder for me" and the model said it
     # could not set a system alarm and could only note reminders in a calendar -
@@ -5002,6 +5009,244 @@ def _run_reminders(name: str, surface: str) -> "Result":
                       "Coming up and the HUD's Reminders panel." + suffix, "reminder_howto")
     return Result("Yes - see Brain, Work, Coming up for timers, alarms and reminders on this PC.",
                   "reminder_capability")
+
+
+
+# --------------------------------------------------------------------------
+# Drop-in plug-ins: the measured catalogue (2026-10-31 honesty fix)
+#
+# The live owner asked "what plug-ins do you have integrated into you?" and
+# the model said it had no plug-ins, only built-in capabilities. False: the
+# loader (backend/jarvis_plugins.py) imports every folder in jarvis_plugins\
+# beside jarvis_hud.py and calls its own install(); plugins/ready/ holds 45
+# drop-in modules and plugins/loader/README.md documents it. This table is
+# generated from those folders' own plugin.json summaries and pinned by
+# backend/test_plugins_honesty.py, so a plug-in cannot silently vanish from
+# the answer. The installed state is read at runtime from jarvis_plugins.discover().
+# --------------------------------------------------------------------------
+
+PLUGIN_CATALOGUE = (
+    ('android-builder', 'Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for th...'),
+    ('antislop', "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buz..."),
+    ('auto-router', 'estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and a...'),
+    ('brain-reads', "the Brain's read-only routes (the Brain upgrades, and a chat's facts)."),
+    ('card-prefs', 'how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.'),
+    ('chatbot-limits-hud', "the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app."),
+    ('chatbot-routes', 'the routes both apps use to have Jarvis talk to an AI chatbot for the owner.'),
+    ('decks', 'review decks.'),
+    ('docker', "the containers on Jarvis's OWN list, and start/stop for them."),
+    ('documents', '"Folders Jarvis may look in": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part...'),
+    ('goals', '"Goals with one card per step".'),
+    ('google-calendar', 'Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time...'),
+    ('history-import', '"Bring in chats from ChatGPT, Claude, Gemini or DeepSeek".'),
+    ('jarvis-calendar', "Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch tur..."),
+    ('live', 'Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no "hey Jarvis" between turns.'),
+    ('media-index', 'searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (...'),
+    ('media', '"pause", "next song", "what\'s playing": play, pause, next, previous and now-playing for whatever is playing on this PC (Spotify, a browser tab, or...'),
+    ('model-lanes', 'the button that starts the model lane that is down.'),
+    ('model-recommendations', 'suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies.'),
+    ('news', 'news headlines in the morning briefing, from RSS/Atom feed addresses the owner names.'),
+    ('notes-edit', 'browse, open and edit any note in your Obsidian vault, from the desktop or the phone: one approval card per save, a File Guardian copy first, and t...'),
+    ('notion-obsidian', 'bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attac...'),
+    ('photo-reminder', '"Photo to reminder": a picture in, a PROPOSED reminder out. Nothing is set up here.'),
+    ('picture-card', '"which card draws the pictures, and what the chat does about it".'),
+    ('pictures', '"ask for a picture, and keep it" (the owner\'s decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and maki...'),
+    ('progress', "the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-..."),
+    ('projects', 'Projects, steps 1 and 2.'),
+    ('protected-items', 'a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card...'),
+    ('quiz', '"Quiz me on a text".'),
+    ('receipts', 'action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back.'),
+    ('retirement', 'the retirement what-if calculator.'),
+    ('sandbox', "the data and maths sandbox's own switch: GET/POST /api/sandbox, so both apps can read it and ask to turn it on (one approval card) or off (at once)."),
+    ('screen-attach', '"look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it.'),
+    ('secret-handoff', 'the host half of the owner-secret hand-off.'),
+    ('self-improve', "two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling..."),
+    ('send-file', "send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaq..."),
+    ('setup', 'the setup questionnaire: a guided path through settings that already exist.'),
+    ('skill-hub', "the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and..."),
+    ('sky', 'the sun, the moon and the weather behind the animal faces and the robot (which counts as an animal face for every option).'),
+    ('spending', '"How much did I spend on food last month?", added up from a bank export the owner dropped into a folder Jarvis may look in.'),
+    ('tool-updates', '"Check for tool updates", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newe...'),
+    ('tutorials', "Tutorials and the FAQ, for both apps, with the owner's progress."),
+    ('vault-organizer', 'plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the own...'),
+    ('vault', 'a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value.'),
+    ('voiceprint', "Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it..."),
+)
+
+
+def _plugin_entries():
+    """The installed drop-in folders on THIS PC, or None when unreadable."""
+    try:
+        import jarvis_plugins as P
+        return list(P.discover())
+    except Exception:                       # noqa: BLE001 - module absent/broken
+        return None
+
+
+def _plugin_names():
+    return [name for name, _summary in PLUGIN_CATALOGUE]
+
+
+def _plugin_purpose(name: str) -> str:
+    for n, summary in PLUGIN_CATALOGUE:
+        if n == name:
+            return summary
+    return ""
+
+
+def _plugin_installed_names(entries) -> list:
+    if entries is None:
+        return None
+    out = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        if e.get("error"):
+            continue
+        folder = str(e.get("folder") or e.get("name") or e.get("module") or "")
+        if not folder:
+            continue
+        out.append(folder)
+    return out
+
+
+def _plugin_list_sentence(installed) -> str:
+    names = _plugin_names()
+    if installed is None:
+        head = ("Yes - Jarvis has a real drop-in plug-in system: " + str(len(names)) +
+                " optional plug-ins are in the catalogue, each a folder under jarvis_plugins "
+                "beside jarvis_hud.py. I cannot read the plug-in folder on this PC from here, "
+                "so I cannot say which are installed right now.")
+    elif installed:
+        listed = installed[:8]
+        more = len(installed) - len(listed)
+        head = ("Yes - Jarvis has a real drop-in plug-in system, and " + str(len(installed)) +
+                " plug-in(s) are installed on this PC: " +
+                ", ".join(listed) + ((" and " + str(more) + " more") if more else "") + ".")
+    else:
+        head = ("Jarvis has a real drop-in plug-in system - " + str(len(names)) +
+                " plug-ins are in the catalogue - but none are installed on this PC right now.")
+    parts = [head]
+    sample = names[:10]
+    parts.append("The catalogue has " + str(len(names)) + " plug-ins; the first ten: " +
+                 ", ".join(sample) + ".")
+    if len(names) > len(sample):
+        parts.append("There are " + str(len(names) - len(sample)) + " more.")
+    parts.append("A plug-in is a folder under jarvis_plugins beside jarvis_hud.py; the loader "
+                 "imports its module and calls its own install() at start-up. Add one with "
+                 "scripts/add-plugin.ps1 -Name <name>, then restart Jarvis. The loader itself "
+                 "raises no approval card; an installed plug-in's own feature keeps its own one card.")
+    return " ".join(parts)
+
+
+def _plugin_install_sentence() -> str:
+    return ("Yes. On the PC, add a plug-in with scripts/add-plugin.ps1 -Name <name> (it copies "
+            "the folder from plugins/ready/), or copy the folder into jarvis_plugins\\ beside "
+            "jarvis_hud.py yourself, then restart Jarvis - the loader imports it at start-up. "
+            "To switch one off, remove its folder or put a file named disabled in it, and restart. "
+            "The loader itself raises no card; the plug-in's own feature keeps its own approval "
+            "card where it has one. The phone cannot install or remove plug-ins: it uses the "
+            "features once they are installed on the PC.")
+
+
+def _plugin_installed_sentence(name: str, installed) -> str:
+    wanted = " ".join(str(name or "").lower().split())
+    for n in _plugin_names():
+        if n.lower() == wanted or wanted == n.lower().replace("-", " "):
+            if installed is None:
+                return ("I cannot read the plug-in folder on this PC from here, so I cannot say "
+                        "whether " + n + " is installed right now. It is in the catalogue.")
+            if installed and n in installed:
+                return ("Yes, " + n + " is installed on this PC. " + _plugin_purpose(n) +
+                        " It is a folder under jarvis_plugins; restart Jarvis if it is not loaded.")
+            return ("No, " + n + " is not installed on this PC right now, though it is in the "
+                    "catalogue: " + _plugin_purpose(n) + " Add it with scripts/add-plugin.ps1 "
+                    "-Name " + n + ", then restart Jarvis.")
+    import difflib
+    near = difflib.get_close_matches(wanted.replace(" ", "-"), _plugin_names(), n=3, cutoff=0.4)
+    if not near:
+        near = _plugin_names()[:3]
+    return ("There isn't a Jarvis plug-in called \"" + str(name) + "\". The nearest real ones are " +
+            ", ".join(near) + ".")
+
+
+def _plugins_question(raw) -> Optional[Intent]:
+    """Plug-in capability questions, from the RAW sentence (2026-10-31)."""
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    # Not Jarvis's plug-ins: Obsidian, browsers, editors, WordPress, etc.
+    if re.search(r"\b(?:obsidian|chrome|firefox|edge|browser|vscode|visual studio|wordpress|"
+                 r"vst|audio|after effects|premiere|photoshop|figma|blender)\b", text):
+        return None
+    if "plug-in" not in text and "plugin" not in text:
+        return None
+    if re.search(r"\b(?:turn|switch)\s+(?:on|off)\b|\b(?:enable|disable)\b", text):
+        return None
+    if re.search(r"\b(?:what|which)\b.*\b(?:plug-?ins?)\b.*\b(?:integrated|installed|ready)\b", text) \
+            or re.search(r"\b(?:integrated|built)\b.*\bplug-?ins?\b", text) \
+            or re.search(r"\b(?:what|which)\s+plug-?ins?\b", text) \
+            or re.search(r"\bplug-?ins?\b.*\b(?:do you have|have you got|are installed|available)\b", text):
+        m = re.search(r"\b(?:what does|what is|what's|describe|explain)\s+(?:the\s+)?"
+                      r"[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?\s+plug-?in\b", text)
+        if m:
+            return Intent("plugin_about", {"name": m.group("name")})
+        m = re.search(r"\b(?:what does|what is|what's|describe|explain)\s+(?:the\s+)?"
+                      r"plug-?in\s+[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?(?:\s+do)?\b", text)
+        if m:
+            return Intent("plugin_about", {"name": m.group("name")})
+        m = re.search(r"\b(?:is|are)\s+(?:the\s+)?[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?\s+"
+                      r"(?:plug-?in\s+)?(?:installed|ready|enabled)\b", text)
+        if m:
+            return Intent("plugin_state", {"name": m.group("name")})
+        if re.search(r"\b(?:can i|how do i|how can i|where do i)\b.*\b(?:install|add|enable|remove)\b", text):
+            return Intent("plugin_install")
+        if re.search(r"\b(?:what does|what is|what's|describe|explain)\b", text):
+            m = re.search(r"plug-?in\s+(?:called\s+)?[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40})", text)
+            if m:
+                return Intent("plugin_about", {"name": m.group("name")})
+        return Intent("plugin_list")
+    if re.search(r"\b(?:can i|how do i|how can i|where do i)\b.*\b(?:install|add|enable)\b.*"
+                 r"\bplug-?in\b", text):
+        return Intent("plugin_install")
+    m = re.search(r"\b(?:what does|what is|what's|describe|explain)\s+(?:the\s+)?"
+                  r"[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?\s+plug-?in\b", text)
+    if m:
+        return Intent("plugin_about", {"name": m.group("name")})
+    m = re.search(r"\b(?:is|are)\s+(?:the\s+)?[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?\s+"
+                  r"plug-?in\s+(?:installed|ready|enabled)\b", text)
+    if m:
+        return Intent("plugin_state", {"name": m.group("name")})
+    m = re.search(r"\b(?:what does|what is|what's|describe|explain)\s+(?:the\s+)?"
+                  r"plug-?in\s+[\"']?(?P<name>[a-z0-9][a-z0-9 -]{0,40}?)[\"']?(?:\s+do)?\b", text)
+    if m:
+        return Intent("plugin_about", {"name": m.group("name")})
+    return None
+
+
+def _run_plugins(name: str, f: dict, surface: str) -> "Result":
+    installed = _plugin_installed_names(_plugin_entries())
+    if name == "plugin_list":
+        if surface == "phone":
+            return Result("Jarvis's plug-ins are installed and managed on the PC, not on the phone - "
+                          "the phone uses the feature once it is installed there. " +
+                          _plugin_list_sentence(installed), "plugin_list")
+        return Result(_plugin_list_sentence(installed), "plugin_list")
+    if name == "plugin_state":
+        return Result(_plugin_installed_sentence(str(f.get("name") or ""), installed), "plugin_state")
+    if name == "plugin_about":
+        target = str(f.get("name") or "")
+        for n, summary in PLUGIN_CATALOGUE:
+            if n.lower().replace("-", " ") == target.lower() or n.lower() == target.lower():
+                return Result(n + ": " + summary, "plugin_about")
+        import difflib
+        near = difflib.get_close_matches(target.replace(" ", "-"), _plugin_names(), n=3, cutoff=0.4)
+        return Result("There isn't a Jarvis plug-in called \"" + target + "\". The nearest real ones "
+                      "are " + ", ".join(near or _plugin_names()[:3]) + ".", "plugin_about")
+    if name == "plugin_install":
+        return Result(_plugin_install_sentence(), "plugin_install")
+    return Result(_plugin_list_sentence(installed), "plugin_list")
 
 
 def _feature_capability_question(raw) -> Optional[Intent]:
@@ -12228,6 +12473,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_honest_state(f)
     if n in _REMINDER_INTENTS:
         return _run_reminders(n, _client_surface(peer, local, client_surface))
+    if n in _PLUGIN_INTENTS:
+        return _run_plugins(n, f, _client_surface(peer, local, client_surface))
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
     if n in ("update_ask", "update_notes"):
@@ -12927,6 +13174,9 @@ UNDO_NOTHING_SAID = "Nothing of mine to cancel."
 #: an intent added later, and forgotten here, keeps the old safe behaviour
 #: (the record is dropped, so "cancel that" can never take back something the
 #: owner did not just do).
+#: The plug-in answers (2026-10-31): fixed words, no card.
+_PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plugin_install"})
+
 #: The reminders capability answers (2026-10-31): fixed words, no card.
 _REMINDER_INTENTS = frozenset({
     "reminder_capability", "reminder_popup", "reminder_sound", "reminder_notify",
@@ -12934,6 +13184,7 @@ _REMINDER_INTENTS = frozenset({
 })
 
 READ_ONLY_INTENTS = frozenset({
+    "plugin_list", "plugin_state", "plugin_about", "plugin_install",
     "alarm_list", "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
