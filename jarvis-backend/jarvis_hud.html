@@ -1766,6 +1766,20 @@ html[data-hud-shell="split-stage"] #rail-right{
   overflow-y:auto; padding:18px 14px;
   border-left:1px solid var(--line-hot);
   background:linear-gradient(180deg, var(--plate), var(--void));
+  /* OPAQUE BASE UNDER THAT GRADIENT (owner's report, 2026-10-31: "words on
+     top of words" - the Today/Coming up/Right now/Settings cards showed
+     through the Telemetry panel). The dark theme's window tokens are
+     translucent on purpose for the window itself (theme.css:
+     --bg-window: rgba(4,7,12,.86), --surface-1: rgba(10,17,25,.9)), and
+     --void/--plate alias them, so this panel's own gradient mixed with
+     whatever the stage painted behind it. --surface-sunken is the theme's
+     opaque surface in all three themes (#04070c dark, rgb(228,233,240)
+     light, rgb(0,0,0) high contrast), so the panel is now solid while every
+     colour still comes from the owner's theme - no hard-coded colour here.
+     Same for the Approvals, Reminders and Memory panels: they all draw in
+     this one rail, so one rule keeps all four opaque. The Galaxy view is
+     untouched (it does not use this rail). */
+  background-color:var(--surface-sunken);
   box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .5);
 }
 html[data-hud-shell="split-stage"][data-hud-tab="telemetry"] #rail-right,
@@ -2346,6 +2360,15 @@ body[data-hud-edit="on"] .hud-card-hidden .hud-card-body{display:none;}
   .hud-presets-item:hover{
     border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .08); color:var(--ice);
   }
+  /* The chosen preset is a RECTANGLE, not the word "(chosen)" (owner's request,
+     2026-10-31: every chosen name grew a noisy suffix). The visible label is
+     the name alone; this border plus aria-current carries the state, and the
+     word lives only in the item's accessible name. One rule, so the model
+     presets, the Cloud row and the cloud providers all wear the same box. */
+  .hud-presets-item.is-chosen{
+    border-color:var(--ice); background:rgb(var(--accent-rgb) / .10); color:var(--ice);
+  }
+  .hud-presets-item.is-chosen:hover{border-color:var(--ice);}
   /* A11Y-2026-10-27 (finding 5): was part of the hover rule above, with
      `outline:none` on the shared selector list, so a keyboard reader of the
      Layouts menu had colour alone. Split, so hover no longer suppresses a

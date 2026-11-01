@@ -2280,6 +2280,18 @@ await check("Cockpit keeps the grid rail with no drawer toggle, and Studio's tab
   assert.equal(await page.evaluate(() =>
     document.getElementById("rail-right").getBoundingClientRect().width > 1), true,
     "Studio's Telemetry tab no longer shows the rail");
+  // Opaque, not translucent (owner's report, 2026-10-31: the Today/Coming up/
+  // Right now/Settings words showed THROUGH this panel - "words on top of
+  // words"). The dark theme's --plate/--void are rgba, so the panel must put
+  // the theme's opaque surface token under its own gradient.
+  const stagePanel = await page.evaluate(() => {
+    const style = getComputedStyle(document.getElementById("rail-right"));
+    return { colour: style.backgroundColor, image: style.backgroundImage };
+  });
+  assert.match(stagePanel.colour, /^rgb\(\d+, \d+, \d+\)$/,
+    `the Telemetry stage panel is not opaque: ${stagePanel.colour}`);
+  assert.match(stagePanel.image, /linear-gradient/,
+    "the Telemetry stage panel lost its own theme gradient");
   await page.close();
   assert.deepEqual(problems, []);
 });
@@ -2774,32 +2786,56 @@ await check("while App lock / hidden memory lists are on, the Memory tab lists n
   assert.deepEqual(problems, []);
 });
 
-await check("a HUD answer with an id gets a right/wrong mark, sent through the shell", async () => {
+await check("a HUD answer gets a caret menu, not a permanent right/wrong row", async () => {
   const turnId = "0123456789abcdef0123456789abcdef";
   const { page, problems, marks } = await openHud(browser,
     { jarvis: false, ollama: true, proxy: false, turnId });
   await send(page, "hi");
-  const mark = page.locator("#log .msg.jarvis .jarvis-mark");
-  assert.equal(await mark.count(), 1, "no mark under the answer");
-  await mark.locator("button", { hasText: "Wrong" }).click();
+  assert.equal(await page.locator("#log .msg.jarvis .jarvis-mark").count(), 0,
+    "the old always-visible right/wrong row is still drawn");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  assert.equal(await tools.count(), 1, "no caret under the answer");
+  const caret = tools.locator(".jarvis-answer-caret");
+  assert.equal(await caret.getAttribute("aria-label"), "Answer options");
+  assert.equal(await caret.getAttribute("aria-haspopup"), "menu");
+  const menu = tools.locator(".jarvis-answer-menu");
+  assert.equal(await menu.isVisible(), false, "the answer menu is visible before it is opened");
+  await caret.click();
+  await page.waitForTimeout(150);
+  assert.equal(await menu.isVisible(), true, "the caret did not open the answer menu");
+  assert.equal(await page.locator("#log .jarvis-answer-menu:visible").count(), 1,
+    "more than one answer menu opened");
+  // The menu heading is styled uppercase by CSS (hud-link.css text-transform); a\n  // case-sensitive regex reads the transformed text and fails on the case. Assert\n  // the sentence case-insensitively so the visual style stays.\n  assert.match(await menu.innerText(), /was this answer right\?/i);
+  assert.match(await menu.innerText(), /Read out loud|Copy answer/);
+  await menu.locator("button", { hasText: "Wrong" }).click();
   await page.waitForTimeout(300);
   assert.deepEqual(marks, [{ turn_id: turnId, mark: "wrong" }]);
-  assert.equal(await mark.locator("button", { hasText: "Wrong" }).getAttribute("aria-pressed"), "true");
+  assert.equal(await menu.locator("button", { hasText: "Wrong" }).getAttribute("aria-checked"), "true");
+  // Esc closes and puts the keyboard back on the caret.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  assert.equal(await menu.isVisible(), false, "Esc did not close the answer menu");
+  assert.equal(await page.evaluate(() => document.activeElement &&
+    document.activeElement.classList.contains("jarvis-answer-caret")), true,
+    "Esc did not return focus to the caret");
   await page.close();
   assert.deepEqual(problems, []);
 });
 
-await check("no id, no HUD mark; and a backend without the route removes it", async () => {
+await check("no id, no caret menu; and a backend without the route removes it", async () => {
   const plain = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   await send(plain.page, "hi");
-  assert.equal(await plain.page.locator(".jarvis-mark").count(), 0);
+  assert.equal(await plain.page.locator(".jarvis-answer-tools").count(), 0);
   await plain.page.close();
   const { page } = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
     turnId: "0123456789abcdef0123456789abcdef", markRoute: false });
   await send(page, "hi");
-  await page.locator(".jarvis-mark button", { hasText: "Right" }).click();
+  await page.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  await page.locator(".jarvis-answer-menu button", { hasText: "Right" }).click();
   await page.waitForTimeout(300);
-  assert.equal(await page.locator(".jarvis-mark").count(), 0, "the mark stayed after a 404");
+  assert.equal(await page.locator(".jarvis-answer-tools").count(), 0,
+    "the caret menu stayed after a 404");
   await page.close();
 });
 

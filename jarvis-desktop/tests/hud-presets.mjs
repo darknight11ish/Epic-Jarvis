@@ -822,7 +822,9 @@ async function menuReport(page) {
       heading: (group.querySelector(".hud-presets-head") || {}).textContent || "",
       items: [...group.querySelectorAll('[role="menuitem"]')].map((b) => ({
         text: b.textContent.trim(),
+        label: b.getAttribute("aria-label") || "",
         chosen: b.getAttribute("aria-current") === "true",
+        chosenClass: b.classList.contains("is-chosen"),
         preset: b.dataset.preset || "",
         personality: b.dataset.personality || "",
         disabled: b.disabled === true,
@@ -841,19 +843,24 @@ async function menuReport(page) {
     return {
       title: (menu.querySelector(".hud-presets-title") || {}).textContent || "",
       aria: menu.getAttribute("aria-label"),
+      text: menu.textContent,
       headings: groups.map((g) => g.heading),
       groups,
       model: rows("Focus presets").filter((row) => row.preset),
       blocked: blocked("Focus presets"),
       cloudRow: cloudRow ? {
         text: cloudRow.textContent.trim(),
+        label: cloudRow.getAttribute("aria-label") || "",
         chosen: cloudRow.getAttribute("aria-current") === "true",
+        chosenClass: cloudRow.classList.contains("is-chosen"),
         expanded: cloudRow.getAttribute("aria-expanded"),
       } : null,
       providers: cloudBox ? [...cloudBox.querySelectorAll("[data-provider]")].map((b) => ({
         id: b.dataset.provider,
         text: b.textContent.trim(),
+        label: b.getAttribute("aria-label") || "",
         chosen: b.getAttribute("aria-current") === "true",
+        chosenClass: b.classList.contains("is-chosen"),
         disabled: b.disabled === true,
       })) : [],
       providerNotes: cloudBox ? [...cloudBox.querySelectorAll(".hud-presets-empty")].map((p) => p.textContent) : [],
@@ -877,6 +884,17 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
   const { page, problems } = await openHud(browser, { chosen: "general" });
   await openPresetMenu(page);
   const menu = await menuReport(page);
+  // The chosen row's rectangle is drawn from the page's own stylesheet, not
+  // from a word in its label (owner's request, 2026-10-31).
+  const box = await page.evaluate(() => {
+    const chosen = document.querySelector('#hud-presets-menu [role="menuitem"][data-preset].is-chosen');
+    const other = document.querySelector('#hud-presets-menu [role="menuitem"][data-preset]:not(.is-chosen)');
+    const look = (node) => {
+      const s = getComputedStyle(node);
+      return { colour: s.borderTopColor, width: s.borderTopWidth, bg: s.backgroundColor };
+    };
+    return { chosen: chosen ? look(chosen) : null, other: other ? look(other) : null };
+  });
   await page.close();
   assert.equal(menu.title, "Presets", "the menu did not take the owner's name for it");
   assert.equal(menu.aria, "Presets", "the menu's name for a screen reader is not Presets");
@@ -888,14 +906,31 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
   const live = FIXTURE.presets.filter((p) => p.heavy_mode !== true);
   assert.deepEqual(menu.model.map((r) => r.preset), live.map((p) => p.id),
     "the menu does not list the PC's applicable presets in its order");
-  assert.deepEqual(menu.model.map((r) => r.text.replace(/ \(chosen\)$/, "")),
-    live.map((p) => p.title), "the presets' titles are not the PC's own");
+  assert.deepEqual(menu.model.map((r) => r.text), live.map((p) => p.title),
+    "the presets' visible labels are not the PC's own titles");
   assert.deepEqual(menu.blocked.map((r) => r.preset), ["coding"],
     `the heavy preset is not drawn as unavailable: ${JSON.stringify(menu.blocked)}`);
   assert.match(menu.blocked[0].text, /needs both cards at once as one pooled lane/,
     `the PC's own heavy-mode sentence is missing: ${menu.blocked[0].text}`);
   assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["general"],
     "the chosen mark is not the PC's chosen_preset");
+  // The chosen item is a rectangle (class + border), and the word "(chosen)"
+  // exists only in its accessible name - never in the visible label.
+  const marked = menu.model.filter((r) => r.chosen);
+  assert.equal(marked.length, 1, "not exactly one preset is marked chosen");
+  assert.equal(marked[0].chosenClass, true, "the chosen row has no is-chosen class");
+  assert.ok(!marked[0].text.includes("(chosen)"),
+    `the chosen row's visible label still says (chosen): ${marked[0].text}`);
+  assert.match(marked[0].label, /\(chosen\)/,
+    `the chosen row's accessible name lost the word chosen: ${marked[0].label}`);
+  assert.equal(menu.model.filter((r) => r.chosenClass).length, 1,
+    "more than one row wears the chosen class");
+  assert.ok(!menu.text.includes("(chosen)"),
+    "a visible (chosen) word is drawn somewhere in the menu");
+  assert.ok(box.chosen, "the chosen row has no computed style to check");
+  assert.equal(box.chosen.width, "1px", "the chosen row's rectangle is not a border");
+  assert.notEqual(box.chosen.colour, box.other.colour,
+    "the chosen row's rectangle is not visibly different from a plain row");
   assert.deepEqual(menu.people.map((r) => r.personality),
     PERSONALITIES.personalities.map((p) => p.id),
     "the menu does not list the PC's ten personalities in its order");
@@ -968,6 +1003,10 @@ await check("the Cloud row sits after the nine and opens the PC's providers with
     `the submenu does not list the PC's providers: ${JSON.stringify(open.providers)}`);
   assert.deepEqual(open.providers.filter((p) => p.chosen).map((p) => p.id), [],
     "a provider was marked chosen before the PC named one");
+  assert.equal(open.providers.filter((p) => p.chosenClass).length, 0,
+    "a provider already wears the chosen rectangle");
+  assert.ok(!open.text.includes("(chosen)"),
+    "a visible (chosen) word is drawn before any provider is chosen");
   assert.match(open.providerNotes.join(" "), /no key is saved on this PC/i,
     `the PC's own reason for the unusable service is missing: ${JSON.stringify(open.providerNotes)}`);
   assert.deepEqual(open.keyLines, ["py -3 jarvis_chatbot_api.py key groq"],
@@ -992,6 +1031,19 @@ await check("picking a provider is ONE apply with the provider id, marked from t
     "the chosen provider is not the PC's refetched `cloud.provider`");
   assert.equal(menu.cloudRow.chosen, true, "the Cloud row is not marked from the PC's answer");
   assert.match(menu.cloudRow.text, /DeepSeek \(API\)/, menu.cloudRow.text);
+  // The same rectangle as the model presets, and no visible "(chosen)" word.
+  const markedProvider = menu.providers.filter((p) => p.chosen);
+  assert.equal(markedProvider.length, 1, "not exactly one provider is marked chosen");
+  assert.equal(markedProvider[0].chosenClass, true,
+    "the chosen provider has no is-chosen class");
+  assert.ok(!markedProvider[0].text.includes("(chosen)"),
+    `the chosen provider's visible label still says (chosen): ${markedProvider[0].text}`);
+  assert.match(markedProvider[0].label, /\(chosen\)/,
+    `the chosen provider's accessible name lost the word chosen: ${markedProvider[0].label}`);
+  assert.equal(menu.cloudRow.chosenClass, true,
+    "the chosen Cloud row has no is-chosen class");
+  assert.ok(!menu.text.includes("(chosen)"),
+    "a visible (chosen) word is drawn in the Cloud section");
   // It is an APPLY, so it asks for the PC's ONE card; the page approves nothing.
   assert.deepEqual(state.decisions, [], "the page approved the card itself");
   assert.deepEqual(problems, []);
