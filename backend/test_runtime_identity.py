@@ -17,11 +17,53 @@ WHAT THIS PROVES:
 """
 from __future__ import annotations
 
+import atexit
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+
+# THIS SUITE'S OWN EMPTY CONFIG FOLDER, and why it is here (Gemini review item
+# 5, 2026-11-01).
+#
+# Three checks below assert that dress_messages() leaves an ordinary prompt
+# ALONE. It does - unless this PC has a Cloud provider chosen, in which case
+# jarvis_agent.with_cloud_state_note() adds "The Cloud preset is set to
+# DeepSeek (api.deepseek.com, model deepseek-flash); ..." as a system message.
+# That line is CORRECT (owner-reported bug 2026-10-31: the local model denied
+# an API the owner had chosen), and because it lands at position 0 the rules
+# block is put in front of it too, so the list comes back with three messages
+# where this suite expects one. CI has no owner config and stays green; the
+# owner's workstation fails a suite that is really about the runtime line.
+#
+# The provider lives in cloud-choice.json in the JARVIS settings folder
+# (~/.openjarvis by default, read through jarvis_presets._config_dir), so that
+# folder is made empty for this process BEFORE the product is imported - so
+# nothing can cache ~/.openjarvis first - the way test_schedule.py and
+# test_manner.py do it. Nothing is written to the owner's real config, and the
+# setting is put back on the way out.
+#
+# MEASURED, 2026-11-01, this PC, origin/main c1b5c5236: with the live folder
+# (OPENJARVIS_CONFIG_DIR unset) this suite was 12 passed, 1 failed
+# ("dress_messages with no surface keeps the old prompt bytes"); with the
+# folder empty it is 13 passed, 0 failed.
+_CFG = tempfile.TemporaryDirectory(prefix="jarvis-runtime-identity-cfg-")
+_SAVED_CONFIG_DIR = os.environ.get("OPENJARVIS_CONFIG_DIR")
+os.environ["OPENJARVIS_CONFIG_DIR"] = _CFG.name
+
+
+def _restore_config_dir():
+    if _SAVED_CONFIG_DIR is None:
+        os.environ.pop("OPENJARVIS_CONFIG_DIR", None)
+    else:
+        os.environ["OPENJARVIS_CONFIG_DIR"] = _SAVED_CONFIG_DIR
+    _CFG.cleanup()
+
+
+atexit.register(_restore_config_dir)
 
 import jarvis_agent as AG  # noqa: E402
 
