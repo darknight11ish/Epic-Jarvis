@@ -63,6 +63,12 @@ check("four tabs, Cards first, each with tab/tabpanel wiring", () => {
   assert.ok(JS.includes('editTab = "cards"'), "Cards is not the default tab");
   assert.match(JS, /doc\.body\.setAttribute\("data-hud-edit-tab", editTab\)/,
     "the active tab is not on the body for the stylesheet");
+  // The body ALSO carries data-hud-edit-tab, so the delegated tab branch must
+  // match a real role=tab button, not any ancestor. Matching <body> there
+  // swallowed Done/Reset/Discard as "switch to Cards" and kept edit mode on
+  // (CI hud-edit-fieldtest: A(d)/A(f)/B(d)/B(f) timeouts, then cascades).
+  assert.match(JS, /closest\('\[data-hud-edit-tab\]\[role="tab"\]'\)/,
+    "the tab branch can match <body> again and swallow the bar's other buttons");
 });
 
 check("cards: their controls stay clickable on the canvas; a picked card's SAME tools move into the bar", () => {

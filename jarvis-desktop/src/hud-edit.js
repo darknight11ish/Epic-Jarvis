@@ -1922,7 +1922,12 @@ export function mountHudEditor(options = {}) {
     barEl.addEventListener("click", (event) => {
       const target = event.target && event.target.closest ? event.target : null;
       if (!target) return;
-      const tab = target.closest("[data-hud-edit-tab]");
+      // The active tab is ALSO on <body> as `data-hud-edit-tab` (for the page's
+      // stylesheet). The tab branch must therefore match a real tab BUTTON, not
+      // any ancestor carrying the attribute: `closest("[data-hud-edit-tab]")`
+      // matched <body> for every click in the bar, so Done/Reset/Discard were
+      // swallowed as "switch to the Cards tab" and edit mode never closed.
+      const tab = target.closest('[data-hud-edit-tab][role="tab"]');
       if (tab) { setEditTab(tab.getAttribute("data-hud-edit-tab")); return; }
       const pick = target.closest("[data-hud-edit-card-pick]");
       if (pick) {
