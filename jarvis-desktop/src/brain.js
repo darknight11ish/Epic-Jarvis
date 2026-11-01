@@ -4825,6 +4825,13 @@ function paintNotes() {
     onSave: saveNotesNote,
     onReload: reloadNotesNote,
     onClose: closeNotesNote,
+    // Formatting/toolbar edits belong to the page; a repaint must keep them.
+    onDraft: (text) => {
+      if (notes.open) notes.open = { ...notes.open, text };
+    },
+    // A vault template is read through the same notes_read command as any
+    // note; the menu only inserts its words in the box, never writes a file.
+    readTemplate: readNotesTemplate,
   }, { el, row, button });
   wireNotesSearch();
 }
@@ -4847,6 +4854,12 @@ function wireNotesSearch() {
 function renderNotesPlate() {
   paintNotes();
   if (IS_TAURI && !notes.loading && Date.now() - notes.at > NOTES_READ_MS) loadNotes();
+}
+
+/** Read one vault template through the notes editor's existing read command. */
+async function readNotesTemplate(path) {
+  const note = readNote(await invoke("notes_read", { path }));
+  return note.text;
 }
 
 /** Open one note into the editor. Opening only reads. */
