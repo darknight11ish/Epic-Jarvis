@@ -448,13 +448,13 @@ def main(argv=None):
     # from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
-        LAB_COMMAND: 94, LAB_ALWAYS: 12,
+        LAB_COMMAND: 95, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/94/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/16/95/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/16/94/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 43/2/16/95/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.

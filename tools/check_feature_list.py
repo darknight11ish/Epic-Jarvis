@@ -299,6 +299,7 @@ LESSON_EXEMPT = {
     "restart-the-model-lane": "automatic and nothing to press; the line says what Jarvis did, in its own words",
     "data-sandbox": "one switch in Settings whose card says what it does; the PC's own line says what the last card did",
     "focus-presets": "the preset card explains itself in the PC's own words; its one action stays disabled until the lane/apply patch, so a lesson would teach a button that does nothing yet",
+    "cloud-escalation": "the Cloud row's own apply card and the one standing-switch card say what they change, where the key lives and what still must not leave; the fixed chat answers now do the teaching, so a separate lesson would repeat the cards",
     "write-like-me": "the training screen it would teach is the next UI slice; this row is the catalogue half, so a lesson now would teach a screen that is not built yet",
     "setup-questionnaire": "the card explains itself: fourteen questions in the owner's own words, a read-only plan naming each effect, and one Apply that asks twice; a lesson would repeat the card",
     "reminder-actions": "the Reminders lesson was written before a reminder could carry an action and does not teach it; this is a work item for the teaching side, and until then the HUD's own Then row says, in one sentence under the field, what will happen when the reminder goes off",

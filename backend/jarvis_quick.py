@@ -1152,6 +1152,15 @@ def _match(text, now: float) -> Optional[Intent]:
     if not s or len(s) > 400 or "\n" in s:
         return None
 
+    # --- the cloud/API honesty questions (2026-10-31) -----------------------
+    # These come before the feature answers: the owner asked the local model
+    # and got "I have no connection to any external API" while the Cloud
+    # preset was chosen and its DeepSeek key was saved. They read the PC's
+    # real state and never a key.
+    got = _cloud_honesty_prompt(s)
+    if got is not None:
+        return got
+
     # --- a question about Jarvis's OWN features, from the raw sentence -------
     # The capability questions (2026-10-31, the pass-9 field test) are read
     # BEFORE the tidied sentence, because "can you add something to my
@@ -5376,6 +5385,279 @@ _PICTURES = re.compile(
     r"(?:make|draw|create|generate|paint)\s+(?:me\s+)?(?:a\s+|an\s+)?"
     r"(?:picture|image|drawing)\b.*")
 _NOTE_NAMES = "notes, the Notes plate, or Obsidian itself"
+
+#: The cloud/API honesty questions (2026-10-31, owner-reported). The local
+#: model denied that any external API existed while the Cloud preset was
+#: chosen and its key was saved (owner's screenshots); these ten shapes are
+#: answered from the PC's real state below, with no model, and never with a
+#: key or a fragment of one.
+_CLOUD_CONNECTED = re.compile(
+    r"(?:are|do)\s+you\s+(?:have\s+(?:a\s+)?(?:connection|access)\s+to|connect(?:ed)?\s+to|"
+    r"use|using)\s+(?:my\s+|the\s+|a\s+)?(?:deepseek(?:\s+api)?|cloud(?:\s+api)?|api)\b.*")
+_CLOUD_HAVE_KEY = re.compile(
+    r"(?:do|did)\s+you\s+(?:have|got|get|keep|store)\s+(?:my\s+|the\s+|a\s+)?"
+    r"(?:deepseek|cloud)?\s*(?:api\s+)?key\b.*")
+_CLOUD_USING = re.compile(
+    r"(?:are|is)\s+(?:you|jarvis)\s+(?:using|on)\s+the\s+cloud\b.*")
+_CLOUD_WHICH_ANSWER = re.compile(
+    r"(?:is|was)\s+(?:this|that|the\s+last)\s+answer\s+(?:from|by)\s+"
+    r"(?:deepseek|the\s+cloud|the\s+local\s+model|the\s+model\s+on\s+this\s+pc)\b.*")
+_CLOUD_HOW_ESCALATE = re.compile(
+    r"how\s+(?:do|can|should)\s+i\s+(?:escalate|send|move|pass)\s+"
+    r"(?:something|this|that|a\s+question|it)\s+(?:to|into)\s+the\s+cloud\b.*")
+_CLOUD_WHAT_SENT = re.compile(
+    r"what\s+(?:gets|is)\s+sent\s+(?:when|if)\s+(?:you|jarvis)\s+(?:use|uses|using)\s+the\s+cloud\b.*"
+    r"|what\s+goes\s+to\s+the\s+cloud\b.*")
+_CLOUD_NEVER_SENT = re.compile(
+    r"what\s+(?:never\s+gets\s+sent|is\s+never\s+sent|does\s+not\s+go|doesn't\s+go)\b.*")
+_CLOUD_CALL_API = re.compile(
+    r"(?:can\s+you\s+)?(?:call|use|query|access|reach)\s+(?:the\s+)?"
+    r"(?:deepseek|cloud)\s+api\b.*")
+_CLOUD_ON_OFF = re.compile(
+    r"is\s+the\s+cloud\s+(?:on|off|enabled|disabled)\b.*")
+_CLOUD_PROVIDER = re.compile(
+    r"(?:which|what)\s+(?:provider|service|api)\s+(?:is|does)\s+the\s+cloud\s+"
+    r"(?:preset\s+)?(?:using|use)\b.*")
+
+
+def _cloud_facts() -> dict:
+    """The real cloud state, or a safe empty one - never a key."""
+    try:
+        import jarvis_presets as P
+        return P.cloud_state()
+    except Exception:                                       # noqa: BLE001
+        return {"available": False, "provider": "", "provider_name": "",
+                "company": "", "host": "", "model": "", "key_saved": None,
+                "ready": "", "escalate": False, "escalate_why": "",
+                "deepseek_key_saved": None}
+
+
+def _cloud_who(st: dict) -> str:
+    return (f"{st.get('company') or st.get('provider_name') or 'the cloud service'}"
+            f" ({st.get('host') or 'its host'}, model {st.get('model') or 'not named'})")
+
+
+def _cloud_readiness(st: dict) -> str:
+    return ("It can be used now." if not st.get("ready")
+            else "It cannot be used right now: " + str(st.get("ready")).rstrip(".") + ".")
+
+
+def _cloud_honesty_prompt(s: str) -> Optional[Intent]:
+    """One fixed, state-read answer for a cloud/API question - no model."""
+    shape = ""
+    if _CLOUD_USING.fullmatch(s):
+        shape = "using"
+    elif _CLOUD_CONNECTED.fullmatch(s) or _CLOUD_CALL_API.fullmatch(s):
+        shape = "call" if _CLOUD_CALL_API.fullmatch(s) else "connected"
+    elif _CLOUD_HAVE_KEY.fullmatch(s):
+        shape = "key"
+    elif _CLOUD_WHICH_ANSWER.fullmatch(s):
+        shape = "which_answer"
+    elif _CLOUD_HOW_ESCALATE.fullmatch(s):
+        shape = "how"
+    elif _CLOUD_WHAT_SENT.fullmatch(s):
+        shape = "sent"
+    elif _CLOUD_NEVER_SENT.fullmatch(s):
+        shape = "never"
+    elif _CLOUD_ON_OFF.fullmatch(s):
+        shape = "on_off"
+    elif _CLOUD_PROVIDER.fullmatch(s):
+        shape = "provider"
+    if not shape:
+        return None
+    return Intent("cloud_honesty", {"shape": shape})
+
+
+def _run_cloud_honesty(f: dict) -> Result:
+    """The fixed cloud/API answer, read from the real PC state."""
+    shape = str(f.get("shape") or "")
+    st = _cloud_facts()
+    provider = st.get("provider") or ""
+    who = _cloud_who(st)
+    deepseek_saved = st.get("deepseek_key_saved")
+    chosen_is_deepseek = provider == "deepseek_api"
+    key = st.get("key_saved")
+    if shape == "connected":
+        if not provider:
+            if deepseek_saved:
+                return Result(
+                    "Not connected, no. Your DeepSeek API key is saved on this PC, but "
+                    "no cloud service is chosen: choose the Cloud row in the Presets "
+                    "menu and pick DeepSeek (API) first. Until then every answer is "
+                    "written by the model on this PC.", "cloud_honesty")
+            return Result(
+                "Not connected, no. No cloud API service is chosen on this PC and no "
+                "DeepSeek API key is saved, so every answer is written by the model on "
+                "this PC. The Cloud row in the Presets menu is where a service is chosen.",
+                "cloud_honesty")
+        if not chosen_is_deepseek:
+            return Result(
+                f"Not to DeepSeek, no. The cloud service chosen on this PC is {who}."
+                + (" A DeepSeek API key is also saved, but DeepSeek is not the chosen "
+                   "service." if deepseek_saved else "")
+                + " Nothing is sent to any of them without your yes.", "cloud_honesty")
+        if key is False:
+            return Result(
+                f"Not yet, no. {who} is the chosen cloud service, but no DeepSeek API "
+                "key is saved on this PC, so no question can be sent to it. The key is "
+                "added in Windows Credential Manager, on the PC only, and I never show "
+                "or repeat it.", "cloud_honesty")
+        if key is None:
+            return Result(
+                f"The Cloud preset is set to {who}, but this PC cannot read Windows "
+                "Credential Manager, so I cannot say whether its key is saved. Nothing "
+                "is sent to it without your yes.", "cloud_honesty")
+        if st.get("ready"):
+            return Result(
+                f"Partly, no. {who} is the chosen cloud service and its key is saved, "
+                f"but it cannot be used right now: {str(st['ready']).rstrip('.')}. "
+                "Nothing is sent to it until that is fixed.", "cloud_honesty")
+        escalate = (st.get("escalate") and
+                    " The standing escalation switch is ON, so a hard question may go "
+                    "there without asking you first after every privacy gate." or
+                    " The standing escalation switch is OFF, so each cloud turn needs "
+                    "your yes.")
+        return Result(
+            f"Yes. {who} is the chosen cloud service, its key is saved in Windows "
+            f"Credential Manager, and it can be used now. Nothing is sent to it until "
+            f"a question is allowed: the Try the cloud model button, a standing "
+            f"switch, or your explicit request. Email, files, credentials, stored "
+            f"memory, pictures, your screen and a tainted conversation never go.{escalate}",
+            "cloud_honesty")
+    if shape == "key":
+        if deepseek_saved is True:
+            return Result(
+                "Yes - a DeepSeek API key is saved on this PC, in Windows Credential "
+                "Manager. I never show it, repeat it, log it or put any part of it in "
+                "an answer. It is sent only to DeepSeek's own API host when you allow "
+                "a cloud turn.", "cloud_honesty")
+        if deepseek_saved is False:
+            return Result(
+                "No. No DeepSeek API key is saved on this PC. The key is added in "
+                "Windows Credential Manager, on the PC only, and I never show or "
+                "repeat it.", "cloud_honesty")
+        return Result(
+            "I cannot tell right now: this PC cannot read Windows Credential Manager. "
+            "I never show or repeat a key, and nothing is sent anywhere without your "
+            "yes.", "cloud_honesty")
+    if shape == "using":
+        preset = (f"The Cloud preset is set to {who}." if provider else
+                  "No cloud service is chosen on this PC.")
+        switch = ("The standing escalation switch is ON, so a hard question can go "
+                  "without a per-question yes after every privacy gate." if st.get("escalate")
+                  else "The standing escalation switch is OFF, so each cloud turn needs a yes.")
+        if provider and key is True and not st.get("ready"):
+            line = f"{preset} Its key is saved and {_cloud_readiness(st).lower()} {switch}"
+        elif provider:
+            line = f"{preset} Its key is {('not saved' if key is False else 'not readable')}; nothing can be sent to it. {switch}"
+        else:
+            line = f"{preset} {switch}"
+        return Result(
+            "This answer is written on this PC, not by a cloud service. " + line
+            + " Choosing the Cloud preset does not send by itself; the cloud is used "
+              "only for an allowed turn, and every privacy gate runs first.",
+            "cloud_honesty")
+    if shape == "which_answer":
+        return Result(
+            "This answer is written on this PC. I cannot read a label on an earlier "
+            "answer to say which model wrote it; a cloud turn is used only when you "
+            "press Try the cloud model, the standing switch is on, or you explicitly "
+            "ask to send that question to the cloud. The preset alone never switches "
+            "the answer to DeepSeek.", "cloud_honesty")
+    if shape == "how":
+        if not provider:
+            first = ("First choose the Cloud row in the Presets menu and pick a provider "
+                     "whose key is saved on this PC; ")
+        else:
+            first = f"{who} is already the chosen cloud service; "
+        return Result(
+            first +
+            "then either press Try the cloud model under an answer that offers it, or "
+            "turn on \"escalate to the cloud when the work is too complex\" (ONE card; "
+            "off is instant), or say \"send this to the cloud\" for one question. Every "
+            "privacy gate, the monthly money limit and the one cloud lane still run "
+            "first; I never send a cloud turn without one of those doors.",
+            "cloud_honesty")
+    if shape == "sent":
+        return Result(
+            "When a cloud turn is allowed, the service you chose receives the newest "
+            "message's own words only (not earlier conversation), plus its model name "
+            "and the answer-length cap. The key goes in the request header to that "
+            "service's own host. Never sent: email, files, credentials, stored memory, "
+            "a picture, your screen, a private question, a pasted secret or a "
+            "conversation that has read outside text. The monthly money limit still "
+            "applies.", "cloud_honesty")
+    if shape == "never":
+        return Result(
+            "Email, files, credentials and stored memory always stay on the local "
+            "model; that is the project's first rule. A cloud turn is explicit opt-in "
+            "and every privacy gate runs first, so a private question, a tainted "
+            "conversation, a picture, your screen, a pasted secret or a file also never "
+            "go to the cloud. The key lives in Windows Credential Manager, is never "
+            "logged or echoed, and goes only to its own service's host.",
+            "cloud_honesty")
+    if shape == "call":
+        if not provider:
+            return Result(
+                "Not this way, no: no cloud service is chosen on this PC, so there is "
+                "no DeepSeek API call I can make. Choose the Cloud row and a provider "
+                "first; then a cloud turn still needs your yes or the standing switch, "
+                "and every privacy gate runs first.", "cloud_honesty")
+        if not chosen_is_deepseek:
+            return Result(
+                f"Not DeepSeek: the chosen cloud service is {who}. "
+                + ("A DeepSeek key is saved, but DeepSeek is not the chosen service. "
+                   if deepseek_saved else "")
+                + "I can use the cloud only through an allowed cloud turn, never as a "
+                  "silent API call on my own.", "cloud_honesty")
+        if key is not True or st.get("ready"):
+            return Result(
+                f"Not right now, no. {who} is chosen, but " +
+                ("its key is not saved" if key is False else
+                 "this PC cannot read whether its key is saved" if key is None else
+                 "it cannot be used") +
+                (f": {str(st['ready']).rstrip('.')}" if st.get("ready") else "") +
+                ". Nothing is sent anywhere without your yes.", "cloud_honesty")
+        return Result(
+            f"I can, but only through a cloud turn you allow: press Try the cloud model "
+            f"under a hard answer, say \"send this to the cloud\", or turn on the "
+            f"standing switch. {who} is ready and its key is saved in Windows Credential "
+            f"Manager; I never call its API silently and never send email, files, "
+            f"credentials, stored memory, pictures or your screen.", "cloud_honesty")
+    if shape == "on_off":
+        bits = []
+        if provider:
+            bits.append(f"The Cloud preset is chosen: {who}.")
+            bits.append("Its key is " + ("saved." if key is True else
+                                        "not saved." if key is False else
+                                        "not readable."))
+            bits.append("It " + ("can be used now." if not st.get("ready")
+                                  else "cannot be used right now: " + str(st.get("ready")).rstrip(".") + "."))
+        else:
+            bits.append("No cloud service is chosen on this PC.")
+        bits.append("The standing escalation switch is " +
+                    ("ON." if st.get("escalate") else "OFF."))
+        bits.append("The Cloud preset is a service choice, not a live connection; "
+                    "nothing is sent until a cloud turn is allowed.")
+        return Result(" ".join(bits), "cloud_honesty")
+    if shape == "provider":
+        if provider:
+            return Result(
+                f"The cloud preset is using {who}. Its key is " +
+                ("saved on this PC." if key is True else
+                 "not saved yet." if key is False else "not readable here.") +
+                ("" if not st.get("ready") else " It cannot be used right now: "
+                 + str(st.get("ready")).rstrip(".") + "."), "cloud_honesty")
+        if deepseek_saved:
+            return Result(
+                "No cloud provider is chosen; a DeepSeek API key is saved but not "
+                "selected. Choose the Cloud row and DeepSeek (API) in the Presets menu.",
+                "cloud_honesty")
+        return Result(
+            "No cloud provider is chosen on this PC. The Cloud row in the Presets menu "
+            "is where one is picked, and it lists the services whose keys are saved.",
+            "cloud_honesty")
+    return Result("That is not something I can do from chat here.", "honest_chat")
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -10664,6 +10946,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_local_calendar_read(f, now)
     if n == "honest_chat":
         return _run_honest_chat(f)
+    if n == "cloud_honesty":
+        return _run_cloud_honesty(f)
     if n == "honest_state":
         return _run_honest_state(f)
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the

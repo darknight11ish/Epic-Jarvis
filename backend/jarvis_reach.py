@@ -658,8 +658,9 @@ def _cloud_model(ctx: Ctx) -> dict:
         where = ", ".join(provs) if provs else "the cloud service named in its settings"
         return _row("cloud_model", name, "on", where, "Yes, every question",
                     f"Jarvis may offer to send one question to a cloud model ({', '.join(lanes)}). "
-                    f"It goes only if you say yes to that one question, and never with your "
-                    f"memory, a picture, or a conversation that has read private or outside text.")
+                    f"It goes only after you allow it - a yes for that one question, or the "
+                    f"standing escalation switch if it is on - and never with your memory, a "
+                    f"picture, or a conversation that has read private or outside text.")
     st = _cloud_lane_status()
     lanes = st.get("lanes") or []
     ready = [r for r in lanes if r.get("ready")]
@@ -684,9 +685,10 @@ def _cloud_model(ctx: Ctx) -> dict:
                 f"Each lane means a real service and model - {_join(models)} - reached through "
                 f"that service's own official API with the key saved on this PC, with the "
                 f"same monthly money limit as any other chatbot conversation. A lane whose "
-                f"limit is reached is not offered at all. It goes only if you say yes to that "
-                f"one question, and never with your memory, a picture, or a conversation that "
-                f"has read private or outside text." + note)
+                f"limit is reached is not offered at all. It goes only after you allow it - a "
+                f"yes for that one question, or the standing escalation switch if it is on - "
+                f"and never with your memory, a picture, or a conversation that has read "
+                f"private or outside text." + note)
 
 
 def _search_where(provider: Optional[str], url: str) -> str:
