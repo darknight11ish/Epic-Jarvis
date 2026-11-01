@@ -5,7 +5,8 @@
 WHY THIS EXISTS. `tools/model_tryout/Modelfile.jarvis-qwen35-9b` is a profile
 to build and try (Upgrade 3C). Its whole value is that it is Jarvis's own
 wrapper with ONE model name changed - and the part that must never drift is the
-SYSTEM block: 1,610 characters of invariants that reach the model only when
+SYSTEM block: 4,523 characters of invariants (1,610 until 2026-11-01, when
+six capability-honesty lines joined it) that reach the model only when
 this file says them. A paraphrase would still *look* right and would silently
 drop an invariant (the "never claim an action was taken" line, the privacy
 line), so the block is COPIED from backend/jarvis-primary.Modelfile by the
@@ -119,8 +120,8 @@ def t_the_system_block_is_jarvis_bes_own_word_for_word():
     check("both files have a SYSTEM block", a is not None and b is not None)
     check("the profile's SYSTEM block is BYTE-IDENTICAL to jarvis-primary's",
           a == b, f"primary {len(a or '')} chars, profile {len(b or '')} chars")
-    check("...and it is the 1,610-character invariants block, not a stub",
-          len(b or "") == 1610, f"{len(b or '')} chars")
+    check("...and it is the 4,523-character invariants block, not a stub",
+          len(b or "") == 4523, f"{len(b or '')} chars")
     # The lines a paraphrase would quietly drop.
     for phrase in ("Never claim an action was taken that was not.",
                    "Anything recalled about the owner is private and stays on this machine.",
