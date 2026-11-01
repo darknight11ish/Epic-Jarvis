@@ -1535,6 +1535,13 @@ def _match(text, now: float) -> Optional[Intent]:
         return got
 
     # --- (c) the feature discussion/introspection shapes --------------------
+    # "Can I edit the HUD in the jarvis app?" (2026-10-31, the owner's
+    # screenshot: the model said Jarvis had no built-in method, which is false
+    # about the product). Answered HERE, before the feature guide, and only when
+    # the request says it is the phone - see `_hud_edit`.
+    got = _hud_edit(s)
+    if got is not None:
+        return got
     # "What is <feature>?", "is <feature> on?", "how do I turn it on/off?" and
     # "turn on <feature>" (2026-10-20). AFTER the settings block on purpose:
     # every setting already worded keeps its own path, card rule and words, and
@@ -8588,6 +8595,61 @@ def _run_vault_organizer_on(peer=None, local=None) -> Result:
     if not said:
         said = "The vault organizer could not be turned on."
     return Result(said if said.endswith(".") else said + ".", "vault_organizer_on")
+#: What "open the Brain / open Jarvis settings" says when the owner is talking
+#: from the PHONE (2026-10-31, the surface requirement). The phone cannot open
+#: a window on the PC; its own Brain and Settings are real doors in its own app,
+#: so the answer names those and says where the PC's window opens. No new
+#: route, no new field - these are the two apps' own names ("Brain" in the
+#: phone's bottom row, "Settings" beside it).
+PHONE_OPEN_WORDS = {
+    "brain": ("You are asking from the phone. The Brain is in the phone app: tap Brain on "
+              "Home. The PC's own Brain window opens on the PC."),
+    "jarvis": ("You are asking from the phone. Your phone's own settings are in the app: tap "
+               "Settings on Home. The PC's Jarvis settings window opens on the PC - ask me "
+               "there for the PC's settings."),
+}
+
+#: What "can I edit the HUD in the jarvis app?" says from the PHONE (2026-10-31,
+#: the owner's screenshot: the model had answered "Jarvis does not currently
+#: offer a built-in method...", which is false about the product - the HUD's
+#: layout is edited on the PC, where the doors below really exist). The phone
+#: has no HUD-layout control; its own look is Appearance, and every thing named
+#: here is an existing door of one app or the other - no route is invented.
+HUD_EDIT_PHONE = (
+    "The HUD's layout is edited on the PC, not from the phone app: on the desktop, "
+    "Settings has \"Edit HUD in the window\", and the HUD's own header has \"Edit HUD\". "
+    "What you can change here on the phone is this app's own look - Appearance, for the "
+    "theme, the face, face size, text size and spacing.")
+
+#: Matches the questions the owner asks about changing the HUD's layout/look.
+#: Deliberately narrow: a sentence about the HUD that is not about editing it
+#: ("what is the HUD?") keeps its existing path (the feature guide).
+_HUD_EDIT = re.compile(
+    r"(?:(?:can|could|how\s+do|how\s+can|how\s+do\s+i|where\s+do\s+i|where\s+can\s+i|"
+    r"i\s+want\s+to|i'?d\s+like\s+to|let\s+me)\s+)?(?:i\s+)?"
+    r"(?:edit|change|customi[sz]e|adjust|move|rearrange|redesign)\s+"
+    r"(?:the\s+|my\s+|this\s+)?(?:jarvis\s+)?(?:hud|heads?[-\s]?up\s+display)"
+    r"(?:\s+(?:layout|look|arrangement|widgets?|plates?))?"
+    r"(?:\s+(?:in|on|from)\s+(?:the\s+)?(?:jarvis\s+app|this\s+app|my\s+phone|android))?"
+    r"|(?:the\s+|my\s+)?(?:jarvis\s+)?hud(?:'s)?\s+layout"
+    r"(?:\s+(?:in|on|from)\s+(?:the\s+)?(?:jarvis\s+app|this\s+app|my\s+phone|android))?")
+
+
+def _hud_edit(s: str) -> Optional[Intent]:
+    """"can I edit the HUD in the jarvis app?" - answered ONLY from the phone.
+
+    With no header (or from the desktop) this returns None and the old path is
+    unchanged: the owner's requirement is that the PHONE's answer be true, and
+    the desktop already has the doors this sentence names. Answering nothing
+    new elsewhere is the no-over-capture half.
+    """
+    if not _HUD_EDIT.fullmatch(s):
+        return None
+    try:
+        import jarvis_surface as S
+    except Exception:
+        return None
+    return Intent("hud_edit") if S.current() == S.PHONE else None
 
 
 def _open(s: str) -> Optional[Intent]:
@@ -8910,17 +8972,32 @@ def _parking_lookup(s: str, now: Optional[float] = None) -> Optional[Intent]:
 def _client_surface(peer, local, given: Optional[str] = None) -> str:
     """Which words an answer should use: "hud" or "phone".
 
-    `given` wins when a caller really knows (the tests, and any future caller
-    that does read the header). Otherwise a request that plainly did NOT come
-    from this PC gets the phone's short form - `jarvis_owner_check.from_this_pc`
-    is the project's own answer to "is this the PC", with its documented
-    "cannot be placed counts as this PC" rule, so nothing here is stricter or
-    looser than every PC-only action already is. A path that cannot ask at all
-    gets the fuller answer: a shorter one might drop something a client needed,
-    and a longer one never breaks a client.
+    THE HEADER WINS WHEN IT IS THERE (2026-10-31, the owner's "Jarvis knows
+    which app I am talking from" requirement): the shipped origin gate reads
+    `X-Jarvis-Surface` once per request into `jarvis_surface`, so a request
+    that says it is the Android app gets the phone's words and a request that
+    says it is the desktop program gets the PC's. `given` still wins over both
+    (the tests, and a future caller that really knows).
+
+    Otherwise a request that plainly did NOT come from this PC gets the
+    phone's short form - `jarvis_owner_check.from_this_pc` is the project's own
+    answer to "is this the PC", with its documented "cannot be placed counts as
+    this PC" rule, so nothing here is stricter or looser than every PC-only
+    action already is. A path that cannot ask at all gets the fuller answer: a
+    shorter one might drop something a client needed, and a longer one never
+    breaks a client. With no header anywhere, the old inference is unchanged.
     """
     if given:
         return "phone" if str(given).strip().lower() == "phone" else "hud"
+    try:
+        import jarvis_surface as S
+        surface = S.current()
+        if surface == S.PHONE:
+            return "phone"
+        if surface == S.DESKTOP:
+            return "hud"
+    except Exception:
+        pass
     try:
         import jarvis_owner_check as OC
         if OC.from_this_pc(peer, local) is False:
@@ -10910,6 +10987,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # (commands.rs, stream_chat, for its floating face); this file does
         # not know or care which app asked.
         return Result("Here you go.", n)
+    if n == "hud_edit":
+        # Matched only when the request came from the phone (`_hud_edit`): the
+        # HUD's layout is the PC's, and the sentence names the PC's real doors.
+        return Result(HUD_EDIT_PHONE, n)
     if n == "approval_where":
         # A typed (or spoken) word cannot approve anything - rule 4 - so this
         # answers the question the owner is really asking: where IS the
@@ -10958,11 +11039,30 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
             # it. Nothing is opened, so nothing may be claimed.
             return Result(opened.said, n)
         here = True
+        phone = False
         try:
-            import jarvis_owner_check as OC
-            here = bool(OC.from_this_pc(peer, local))
+            import jarvis_surface as S
+            surface = S.current()
+            if surface == S.PHONE:
+                phone = True
+                here = False
+            elif surface == S.DESKTOP:
+                here = True
         except Exception:
-            here = True
+            phone = False
+        if not phone:
+            try:
+                import jarvis_owner_check as OC
+                here = bool(OC.from_this_pc(peer, local))
+            except Exception:
+                here = True
+        if phone and opened.kind in ("brain", "jarvis"):
+            # 2026-10-31, the owner's "Jarvis knows which app I am talking
+            # from" requirement: the phone cannot open a window on the PC, and
+            # its own Brain / Settings are real doors of its own. The words
+            # name those, and NO route field rides with the answer (there is
+            # nothing for the phone to open on the PC).
+            return Result(PHONE_OPEN_WORDS[opened.kind], n)
         if opened.kind == "brain":
             # Jarvis's own window (2026-10-31): "open the second brain",
             # "open history", "open tutorials", "open my notes". The route's

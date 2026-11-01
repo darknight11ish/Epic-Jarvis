@@ -579,12 +579,27 @@ def origin_ok(handler, served_origins) -> bool:
     No Origin at all elsewhere: the request must carry `X-Jarvis-Client:
     hud`, which forces a CORS preflight and so cannot be produced by a
     drive-by simple request.
+
+    SURFACE (2026-10-31, the owner's requirement that Jarvis knows whether he
+    is talking from the Android app or the desktop program): this is the one
+    gate every chat request already passes through, so it also reads
+    `X-Jarvis-Surface` ONCE for the request and keeps it on the request's own
+    thread (`jarvis_surface.remember`). That header decides words only; it is
+    not authentication, never a secret, and its absence is `unknown` - exactly
+    the old behaviour. A failed read is ignored and cannot change the answer.
     """
     try:
         origin = (handler.headers.get("Origin") or "").rstrip("/")
         client = handler.headers.get(_HUD_CLIENT_HEADER)
     except Exception:                    # no headers object: refuse, never guess
         return False
+    try:
+        import jarvis_surface
+        jarvis_surface.remember(getattr(handler, "headers", None))
+    except Exception:
+        # A missing or older module, or odd headers: surface stays `unknown`,
+        # which is the old behaviour. It must never be a reason to refuse.
+        pass
     if origin:
         if origin in (served_origins or ()):
             return True

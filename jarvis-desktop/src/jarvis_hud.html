@@ -4062,9 +4062,13 @@ const JARVIS = window.JARVIS = (() => {
     },
     url(path){ return (base || "") + path; },
     headers(extra){
-      const h = Object.assign({"X-Jarvis-Client": "hud"}, extra || {});
+      const h = Object.assign({"X-Jarvis-Client": "hud",
+                               "X-Jarvis-Surface": "desktop"}, extra || {});
       // X-Jarvis-Client is NOT authentication - it only forces a preflight.
       // The token is the thing that actually protects the backend.
+      // X-Jarvis-Surface only says WHICH app is asking (2026-10-31), so
+      // Jarvis's answers can name this program's routes; it too proves
+      // nothing and is never a secret.
       if (token) h["X-Jarvis-Token"] = token;
       return h;
     },

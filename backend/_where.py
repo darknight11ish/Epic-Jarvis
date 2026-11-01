@@ -1435,6 +1435,16 @@ SHIPPED = (
     # or through a link - is refused before any card. The same entry is at the
     # end of the script's $SHIPPED.
     "jarvis_notes_edit.py",
+    # Which app the owner is talking from (jarvis_surface.py, 2026-10-31; the
+    # owner's requirement that Jarvis knows whether it is the Android app or the
+    # desktop program and tailors its answers): shipped whole, no patch of its
+    # own. The shipped origin gate (jarvis_owner_check.origin_ok) reads the
+    # `X-Jarvis-Surface` header once per request and keeps it on that request's
+    # thread; jarvis_quick, jarvis_feature_guide and jarvis_agent use it. It is
+    # NOT authentication, never a secret, and a missing header is `unknown` -
+    # exactly the old behaviour. The same entry is at the end of the script's
+    # $SHIPPED.
+    "jarvis_surface.py",
 )
 
 

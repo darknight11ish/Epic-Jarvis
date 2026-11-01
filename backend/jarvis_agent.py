@@ -9489,11 +9489,27 @@ def with_rules_first(msgs: list) -> list:
     memory-prefix.patch, does not end up with two). Every other list - starting
     with a user message, or with any other system message - gets the rules in
     front, exactly once. `keep_rules_first` runs after this and finds the rules
-    already first, so the two cannot fight and the block cannot double up."""
+    already first, so the two cannot fight and the block cannot double up.
+
+    THE SURFACE SENTENCE (2026-10-31, the owner's requirement that Jarvis knows
+    whether he is talking from the Android app or the desktop program): when
+    the request's `X-Jarvis-Surface` header was read by the shipped origin gate
+    (`jarvis_surface`), one system line says which app is asking - right after
+    the rules, so the rules stay first. No header, no line: an older client, a
+    script or a test gets exactly the list it got before."""
     if (msgs and isinstance(msgs[0], dict) and msgs[0].get("role") == "system"
             and msgs[0].get("content") == LANE_SYSTEM):
-        return list(msgs)
-    return [{"role": "system", "content": LANE_SYSTEM}] + list(msgs)
+        rules = list(msgs)
+    else:
+        rules = [{"role": "system", "content": LANE_SYSTEM}] + list(msgs)
+    try:
+        import jarvis_surface
+        note = jarvis_surface.sentence()
+    except Exception:
+        note = ""
+    if not note:
+        return rules
+    return [rules[0], {"role": "system", "content": note}] + rules[1:]
 
 
 # --------------------------------------------------------------------------
