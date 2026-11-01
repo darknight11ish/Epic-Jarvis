@@ -1185,6 +1185,9 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _goals_question(text)
     if got is not None:
         return got
+    got = _price_radar_flight_question(text, now)
+    if got is not None:
+        return got
     got = _price_radar_question(text)
     if got is not None:
         return got
@@ -5607,6 +5610,156 @@ def _run_price_radar(name: str, state: dict) -> "Result":
                       "the items it reads. It is read-only and never buys, and there is no chat "
                       "lookup route or app screen yet.", "price_radar_track")
     return Result("The price and flight radar is read-only and off by default.", "price_radar_state")
+
+
+
+# --------------------------------------------------------------------------
+# The read-only, switch-gated flight lookup chat door (2026-10-31, ruling 3).
+#
+# OFF: say so and offer "turn on price radar" (the ordinary change_own_config
+# card; never approved here). ON: run the existing engine
+# (jarvis_price_radar.PriceStore + check_route) for one route/dates. The answer
+# ALWAYS ends with the approved disclaimer; a changed/empty page or a network
+# error is a one-line notice, never an invented price. No booking path exists.
+# --------------------------------------------------------------------------
+
+PRICE_RADAR_DISCLAIMER = "Experimental read-only check; Jarvis cannot book or hold tickets"
+PRICE_RADAR_OFF_SAID = (
+    "The price and flight radar is OFF by default, so I did not search. Say "
+    "\"turn on price radar\" and I will raise its one change_own_config approval card; "
+    "I never approve it for you. Once it is on I can run a read-only price check.")
+PRICE_RADAR_NOTICE = ("I could not read a price for that route just now - the public page may have "
+                      "changed or returned nothing. Nothing was booked or held.")
+
+_CITY_IATA = {
+    "las vegas": "LAS", "seattle": "SEA", "new york": "JFK", "los angeles": "LAX",
+    "san francisco": "SFO", "chicago": "ORD", "miami": "MIA", "boston": "BOS",
+    "denver": "DEN", "paris": "CDG", "london": "LHR", "tokyo": "NRT",
+    "reykjavik": "KEF", "dublin": "DUB", "rome": "FCO", "madrid": "MAD",
+    "berlin": "BER", "amsterdam": "AMS", "dubai": "DXB", "sydney": "SYD",
+}
+_PRICE_MONTHS = {m: i + 1 for i, m in enumerate(
+    ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))}
+_PRICE_DATE = re.compile(
+    r"(?P<mon>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
+    r"dec(?:ember)?)\.?\s+(?P<day>\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(?P<year>\d{4}))?")
+
+
+def _price_date(s: str, now: float):
+    """One month/day (optional year) -> ISO date string, or ''."""
+    m = _PRICE_DATE.search(s or "")
+    if not m:
+        return ""
+    try:
+        import time as _t
+        year = int(m.group("year") or _t.localtime(now).tm_year)
+        mon = _PRICE_MONTHS[m.group("mon")[:3]]
+        day = int(m.group("day"))
+        if not (1 <= day <= 31 and 1 <= mon <= 12):
+            return ""
+        return "%04d-%02d-%02d" % (year, mon, day)
+    except Exception:                       # noqa: BLE001
+        return ""
+
+
+def _price_flight_parts(s: str, now: float):
+    """(origin, destination, depart, return) strings from a flight sentence."""
+    text = " ".join(str(s or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not re.search(r"\b(?:flight|flights|airfare|ticket|tickets)\b", text):
+        return None
+    if re.search(r"\b(?:price\s+of|cost\s+of)\b.*\b(?:milk|bread|coffee|house|car|gas)\b", text):
+        return None
+    origin = destination = ""
+    dates_rx = r"\s+(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}|(?:on|for|leaving|departing|between|from)\b)"
+    m = re.search(r"\bfrom\s+(?P<a>[a-z ]{2,30}?)\s+to\s+(?P<b>[a-z ]{2,30}?)" + dates_rx + r"|\bfrom\s+(?P<a2>[a-z ]{2,30}?)\s+to\s+(?P<b2>[a-z ]{2,30}?)(?:[,.]|$)", text)
+    if not m:
+        m = re.search(r"\bto\s+(?P<b>[a-z ]{2,30}?)" + dates_rx + r"|\bto\s+(?P<b2>[a-z ]{2,30}?)(?:[,.]|$)", text)
+    if m:
+        origin = (m.groupdict().get("a") or m.groupdict().get("a2") or "").strip()
+        destination = (m.groupdict().get("b") or m.groupdict().get("b2") or "").strip()
+    if not destination:
+        return None
+    dates = []
+    for dm in _PRICE_DATE.finditer(text):
+        iso = _price_date(dm.group(0), now)
+        if iso and (not dates or iso != dates[-1]):
+            dates.append(iso)
+    depart = dates[0] if dates else ""
+    ret = dates[1] if len(dates) > 1 else ""
+    return (origin, destination, depart, ret)
+
+
+def _price_radar_engine_lookup(origin: str, dest: str, depart: str, return_date: str) -> dict:
+    """Run the REAL engine for one route. Tests monkeypatch this boundary."""
+    import jarvis_price_radar as R
+    store = R.PriceStore()
+    route = store.add_route(origin, dest, depart, return_date=(return_date or None),
+                            cabin="economy", max_stops=None)
+    return R.check_route(store, route)
+
+
+def _price_radar_fares(answer: dict, origin: str, dest: str, depart: str, return_date: str) -> str:
+    snap = (answer or {}).get("snapshot") or {}
+    if not (answer or {}).get("ok") or not snap.get("ok"):
+        return PRICE_RADAR_NOTICE
+    cents = snap.get("lowest_price_cents")
+    if not isinstance(cents, int) or cents <= 0:
+        return PRICE_RADAR_NOTICE
+    price = "$%d" % (cents // 100)
+    bits = [price]
+    if snap.get("airline"):
+        bits.append(str(snap["airline"]))
+    stops = snap.get("stops")
+    if stops == 0:
+        bits.append("nonstop")
+    elif isinstance(stops, int):
+        bits.append("%d stop%s" % (stops, "" if stops == 1 else "s"))
+    mins = snap.get("duration_minutes")
+    if isinstance(mins, int) and mins > 0:
+        bits.append("%dh%02dm" % (mins // 60, mins % 60))
+    window = depart + ((" to " + return_date) if return_date else "")
+    return ("Experimental read-only check: lowest fare I can read from %s to %s (%s) is %s." %
+            (origin, dest, window, ", ".join(bits)))
+
+
+def _run_price_radar_flight(f: dict) -> "Result":
+    state = _price_radar_state()
+    if not state.get("available"):
+        return Result("The price and flight radar is not installed on this PC.", "price_radar_flight")
+    if not state.get("enabled"):
+        return Result(PRICE_RADAR_OFF_SAID, "price_radar_flight")
+    origin = str(f.get("origin") or "")
+    dest = str(f.get("dest") or "")
+    depart = str(f.get("depart") or "")
+    ret = str(f.get("return") or "")
+    if not origin:
+        return Result("Which airport are you flying from? Say e.g. \"search flights from Seattle to "
+                      "Las Vegas on Nov 26\" - or say \"turn on price radar\" first if I said it is off.",
+                      "price_radar_flight")
+    if not depart:
+        return Result("Which date should I check? Say e.g. \"search flights from Seattle to Las Vegas "
+                      "on Nov 26\".", "price_radar_flight")
+    try:
+        answer = _price_radar_engine_lookup(origin, dest, depart, ret)
+    except Exception:                       # noqa: BLE001 - network/page/parse
+        return Result(PRICE_RADAR_NOTICE + " " + PRICE_RADAR_DISCLAIMER, "price_radar_flight")
+    body = _price_radar_fares(answer, origin, dest, depart, ret)
+    return Result(body + " " + PRICE_RADAR_DISCLAIMER, "price_radar_flight")
+
+
+def _price_radar_flight_question(raw, now: float = 0.0) -> Optional[Intent]:
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    if not re.search(r"\b(?:search|find|check|look\s+up|show)\b.*\b(?:flights?|airfare|tickets?)\b", text) \
+            and not re.search(r"\bflights?\s+(?:from|to)\b", text):
+        return None
+    parts = _price_flight_parts(text, now)
+    if parts is None:
+        return None
+    origin, destination, depart, ret = parts
+    return Intent("price_radar_flight", {"origin": origin, "dest": destination,
+                                         "depart": depart, "return": ret})
 
 
 _PRICE_RADAR_BOOK_RX = re.compile(
@@ -12888,6 +13041,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_android(n, _android_state())
     if n in _GOAL_INTENTS:
         return _run_goals(n, f, _client_surface(peer, local, client_surface))
+    if n == "price_radar_flight":
+        return _run_price_radar_flight(f)
     if n in _PRICE_RADAR_INTENTS:
         return _run_price_radar(n, _price_radar_state())
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
