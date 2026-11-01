@@ -748,9 +748,19 @@ def t_tidy_it_for_real_and_off_apply_keep_their_truth():
 def t_rename_and_delete_are_refused_in_plain_words():
     reset_all()
     before = tree(VAULT)
-    for text in ("rename my note Welcome to Home",
-                 "delete my note Welcome",
-                 "remove the shopping note"):
+    # Wave 4 (2026-10-31) made rename/move a real capability: on an empty vault
+    # it is the real "could not find that note" refusal, not the old
+    # "the editor does not rename" sentence (which is still true of create and
+    # delete). Nothing is written either way.
+    got = ask("rename my note Welcome to Home")
+    check("'rename my note Welcome to Home' is the real note-rename refusal",
+          got is not None and got.intent == "note_rename_refused",
+          got.intent if got else "the model")
+    reply = got.reply if got else ""
+    check("... saying the note was not found and nothing was written",
+          "could not find a note" in reply and "Nothing was written" in reply,
+          reply[:300])
+    for text in ("delete my note Welcome", "remove the shopping note"):
         got = ask(text)
         check(f"{text!r} is the notes-editor refusal",
               got is not None and got.intent == "note_change_refused",

@@ -1166,12 +1166,12 @@ def _match(text, now: float) -> Optional[Intent]:
     # the local-calendar read are owned here, before any honesty sentence.
     # (The note lane's capture path really files even when the note TOOL is
     # off; the honesty lane's old note_write off-answer is retired.)
-    # notes read/search (2026-10-31) before the older note-honesty
-    # shapes: 'read my note <title>' is a real read now.
-    got = _notes_chat(s)
     # A rename/move is read from the RAW sentence first, so a new title keeps
     # its capital letters ("Home", not the lowercased matching form "home").
     got = _note_rename_move_asking(text)
+    # notes read/search (2026-10-31) before the older note-honesty
+    # shapes: 'read my note <title>' is a real read now.
+    got = _notes_chat(s)
     if got is not None:
         return got
     got = _note_asking(s)
