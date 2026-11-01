@@ -40,9 +40,12 @@ owner's file:
    ONE card through the module's own `handle_post` switch route (its
    `change_own_config` action); the answer says the switch stays off until the
    owner approves, and it really stays off until the fake gate says yes.
-7. THE INVENTED CAPABILITIES GET HONEST REFUSALS, word for word: create/rename/
-   delete a note (the notes editor's own limit), and Obsidian theme/CSS/
-   templates/customisation ("not one of my features"). No card and no write.
+7. THE REFUSALS STAY HONEST, and the new WRITES are the wave-1 slice: rename
+   and delete a note are still refused word for word (the notes editor's own
+   limit), Obsidian theme/CSS/templates/customisation stays "not one of my
+   features", and "create a new note called Shopping" now really creates ONE
+   note through the notes-editor route (one edit_vault_note card, no overwrite,
+   undo receipt) instead of promising.
 8. NO OVER-CAPTURE: "remind me to call Sam at 5pm" stays a reminder, "organize
    my desk" is still the model's, "what does my Welcome note say?" is not a
    note write, and the two earlier lanes' fixes still hold ("what can I change
@@ -742,11 +745,10 @@ def t_tidy_it_for_real_and_off_apply_keep_their_truth():
 # --------------------------------------------------------------------------
 # 6. The invented capabilities get honest refusals
 # --------------------------------------------------------------------------
-def t_create_rename_delete_are_refused_in_plain_words():
+def t_rename_and_delete_are_refused_in_plain_words():
     reset_all()
     before = tree(VAULT)
-    for text in ("create a new note called Shopping",
-                 "rename my note Welcome to Home",
+    for text in ("rename my note Welcome to Home",
                  "delete my note Welcome",
                  "remove the shopping note"):
         got = ask(text)
@@ -763,6 +765,36 @@ def t_create_rename_delete_are_refused_in_plain_words():
           (GATE["calls"], tree(VAULT)))
     check("... and no daily note was made", not TODAY_NOTE.exists(),
           str(TODAY_NOTE))
+
+
+def t_create_is_now_a_real_write_and_never_overwrites():
+    """Wave 1: 'create a new note called X' makes ONE note, one card, no clobber."""
+    reset_all()
+    GATE.update(allowed=True, outcome="approved")
+    got = ask("create a new note called Shopping")
+    check("'create a new note called Shopping' is the create path",
+          got is not None and got.intent == "note_created",
+          got.intent if got else "the model")
+    created = VAULT / "Shopping.md"
+    check("... and the note really exists", created.is_file(), str(created))
+    reply = got.reply if got else ""
+    check("... in the module's own words, naming the file and undo",
+          reply.lower().startswith("created shopping.md")
+          and "you can undo it" in reply.lower(), reply[:300])
+    check("... after ONE edit_vault_note card",
+          GATE["calls"] == ["edit_vault_note"], GATE["calls"])
+    # a second create of the same note is refused and never overwrites
+    created.write_text("keep me\n", encoding="utf-8")
+    GATE.update(calls=[])
+    before = created.read_bytes()
+    got = ask("create a new note called Shopping")
+    check("a create over an existing note is refused",
+          got is not None and got.intent == "note_create_refused",
+          got.intent if got else "the model")
+    check("... in plain words, and nothing was overwritten",
+          "already a note" in (got.reply or "") and created.read_bytes() == before,
+          (got.reply if got else "")[:300])
+    check("... and it asked NO card", GATE["calls"] == [], GATE["calls"])
 
 
 def t_obsidian_themes_css_and_templates_are_not_features():
@@ -805,8 +837,8 @@ def t_no_over_capture_of_reminders_desks_or_reading():
     check("'organize my desk' is still the model's", got is None,
           (got.intent if got else "")[:120])
     got = ask("what does my Welcome note say?")
-    check("a note-reading question is the honest door, not a write or a claim",
-          got is not None and got.intent == "note_read_honest",
+    check("a note-reading question is the note reader, not a write or a claim",
+          got is not None and got.intent == "note_read",
           got.intent if got else "the model")
     got = ask("what can I change in settings")
     check("the settings-help lane still wins for its own phrase",
@@ -842,24 +874,35 @@ def t_the_read_only_intents_are_registered_the_repo_way():
         pass
 
 
-def t_note_reading_questions_say_the_real_door_and_never_claim_a_read():
-    """The audit's "I have located your notes" with no tool run: never again."""
+def t_note_reading_questions_really_read_or_say_they_cannot():
+    """The old "chat does not read note text" refusal is replaced (2026-10-31):
+    the chat now really reads one note, and on an empty vault it says honestly
+    that no such note exists - never the audit's "I have located your notes"
+    with no read behind it."""
     reset_all()
     before = tree(VAULT)
-    for phrase in ("what does my Welcome note say?",
-                   "find my notes about vault",
-                   "search my notes for the boiler",
-                   "read my Welcome note"):
+    for phrase in ("what does my Welcome note say?", "read my Welcome note"):
         got = ask(phrase)
-        check(f"{phrase!r} is the honest note-reading answer",
-              got is not None and got.intent == "note_read_honest",
+        check(f"{phrase!r} goes to the note reader",
+              got is not None and got.intent == "note_read",
               got.intent if got else "the model")
         reply = got.reply if got else ""
-        check("... saying chat does not read note text today",
-              "Chat does not read note text today." in reply, reply[:260])
-        check("... naming the real door, the Notes plate",
-              "Notes plate" in reply and "Brain window" in reply, reply[:300])
-        check("... never claiming it located or read the note",
+        check("... and on an empty vault says it cannot find that note",
+              "could not find a note called" in reply, reply[:260])
+        check("... never claiming it located or read a note",
+              "located" not in reply.lower() and "I read" not in reply,
+              reply[:260])
+    for phrase in ("find my notes about vault", "search my notes for the boiler"):
+        got = ask(phrase)
+        check(f"{phrase!r} goes to the note search",
+              got is not None and got.intent == "note_search",
+              got.intent if got else "the model")
+        reply = got.reply if got else ""
+        check("... and on an empty vault says no notes match",
+              "No notes in your vault match" in reply, reply[:260])
+        check("... naming the real door, the Notes plate editor",
+              "notes editor" in reply, reply[:300])
+        check("... never claiming it located or read a note",
               "located" not in reply.lower() and "I read" not in reply,
               reply[:260])
     check("no card was raised and the vault is unchanged",
