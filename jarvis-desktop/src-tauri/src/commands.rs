@@ -5639,6 +5639,126 @@ pub async fn notes_save_status(app: AppHandle, id: String) -> Result<serde_json:
     notes_answer(status, &body, "/api/notes/save")
 }
 
+/// Renames ONE note: `POST /api/notes/rename`, body `{"path","title"}`.
+/// The PC raises its ONE ordinary `edit_vault_note` card and answers `202`
+/// with a job id; the default answer is `waiting`, and nothing is renamed and
+/// no link is changed until the owner answers that card. Held on a stale link
+/// like Save (rule 4).
+#[tauri::command]
+pub async fn notes_rename(
+    app: AppHandle,
+    path: String,
+    title: String,
+) -> Result<serde_json::Value, String> {
+    let path = path.trim();
+    let title = title.trim();
+    if path.is_empty() {
+        return Err("say which note to rename".to_string());
+    }
+    if title.is_empty() {
+        return Err("say the note's new name".to_string());
+    }
+    notes_change(
+        app,
+        "/api/notes/rename",
+        serde_json::json!({
+            "path": path,
+            "title": title,
+        }),
+        "rename",
+    )
+    .await
+}
+
+/// Moves ONE note: `POST /api/notes/move`, body `{"path","folder",
+/// "create_folder"}`. `create_folder` must be exactly true to make a missing
+/// folder; the folder is never created as a side effect. Same one card and
+/// `waiting` answer as a rename.
+#[tauri::command]
+pub async fn notes_move(
+    app: AppHandle,
+    path: String,
+    folder: String,
+    create_folder: bool,
+) -> Result<serde_json::Value, String> {
+    let path = path.trim();
+    let folder = folder.trim();
+    if path.is_empty() {
+        return Err("say which note to move".to_string());
+    }
+    notes_change(
+        app,
+        "/api/notes/move",
+        serde_json::json!({
+            "path": path,
+            "folder": folder,
+            "create_folder": create_folder,
+        }),
+        "move",
+    )
+    .await
+}
+
+/// How a rename or move is going: `GET /api/notes/change?id=`. `state` is
+/// `waiting` (the card is up), `saved`, `denied` or `failed`, with the PC's
+/// own sentence in `message`; `target` is the new path once it is saved and
+/// `receipt` is the ONE undo entry.
+#[tauri::command]
+pub async fn notes_change_status(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("that change has no id to look up".to_string());
+    }
+    let query = format!("/api/notes/change?id={}", encode_path_segment(id));
+    let response = jarvis_client(Some(NOTES_TIMEOUT))?
+        .get(format!("{}{query}", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/notes/change`: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    notes_answer(status, &body, "/api/notes/change")
+}
+
+/// POSTs one rename/move to the PC's own route. Kept in one place so both
+/// commands have exactly the same stale-link rule, JSON body and answer
+/// reading; no approval is possible from here.
+async fn notes_change(
+    app: AppHandle,
+    route: &str,
+    payload: serde_json::Value,
+    verb: &str,
+) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(format!(
+            "the event stream is stale, so a {verb} cannot be asked for until it reconnects"
+        ));
+    }
+    let response = jarvis_client(Some(NOTES_TIMEOUT))?
+        .post(format!("{}{route}", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("the {verb} could not be sent: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    notes_answer(status, &body, route)
+}
+
 /// Reads one of the notes routes' answers.
 ///
 /// * `200`/`202` with a JSON object is the answer: the list, the note, or the

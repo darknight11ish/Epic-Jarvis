@@ -1188,6 +1188,9 @@ permissions = [
   "allow-notes-read",
   "allow-notes-save",
   "allow-notes-save-status",
+  "allow-notes-rename",
+  "allow-notes-move",
+  "allow-notes-change-status",
 ]
 
 # Deep questions (backend/big-model.patch): the big model answers one

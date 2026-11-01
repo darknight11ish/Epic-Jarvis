@@ -182,6 +182,167 @@ export async function saveNote(invoke, { path, text, expectedSha256 }, onSay,
   return said;
 }
 
+/* ==========================================================================
+   Rename and move ONE note (wave 4, 2026-10-31)
+
+   Two small chrome controls in the editor. Each asks the PC's own existing
+   route - `POST /api/notes/rename` / `POST /api/notes/move` - with exactly the
+   body the chat uses; the PC raises its ONE ordinary approval card, and the
+   editor follows the job with `GET /api/notes/change?id=`. This page approves
+   nothing, saves nothing itself and has no second write path: a rename or a
+   move happens only after the card is answered on the PC, and the module's own
+   sentence says what happened (including "You can undo it.").
+   ========================================================================== */
+
+/** A note's title from its path: the filename without its extension. */
+export function titleOf(path) {
+  const name = String(path || "").split("/").pop() || "";
+  return name.replace(/\.(md|txt)$/i, "");
+}
+
+/** The exact body `POST /api/notes/rename` takes (no extra fields). */
+export function renameBody({ path, title } = {}) {
+  return { path: String(path || ""), title: String(title || "").trim() };
+}
+
+/** The exact body `POST /api/notes/move` takes; `create_folder` is a real boolean. */
+export function moveBody({ path, folder, createFolder } = {}) {
+  return {
+    path: String(path || ""),
+    folder: String(folder || "").trim(),
+    create_folder: createFolder === true,
+  };
+}
+
+/** Every folder the note list proves exists, plus the vault's top level (""). */
+export function folderChoices(notes = []) {
+  const found = new Set([""]);
+  for (const note of Array.isArray(notes) ? notes : []) {
+    const parts = String((note && note.path) || "").split("/");
+    parts.pop();
+    let sofar = "";
+    for (const part of parts) {
+      if (!part) continue;
+      sofar = sofar ? `${sofar}/${part}` : part;
+      found.add(sofar);
+    }
+  }
+  return [...found].sort((a, b) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)));
+}
+
+/**
+ * Words for one rename/move answer, as `{ text, tone, final, state, target }`.
+ * The four states are the module's: `waiting` (the card is up - not a finish),
+ * `saved` (the only state that reads as changed; the sentence is the module's,
+ * including "You can undo it."), `denied` (said no or expired - nothing
+ * changed) and `failed` (nothing changed; its own words). Never composed
+ * beyond the default when the PC sent none.
+ */
+export function describeChange(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  const state = typeof a.state === "string" ? a.state : "";
+  const said = (typeof a.message === "string" && a.message.trim()) || "";
+  const error = (typeof a.error === "string" && a.error.trim()) || "";
+  const target = typeof a.target === "string" ? a.target : "";
+  switch (state) {
+    case "waiting":
+      return {
+        text: said || "Waiting for your approval on the PC - nothing is renamed or moved, and no link changes, until you answer its ONE card.",
+        tone: null, final: false, state, target,
+      };
+    case "saved":
+      return { text: said || "Done. You can undo it.", tone: "ok", final: true, state, target };
+    case "denied":
+      return {
+        text: said || "You said no, so the note was not renamed or moved and no link was changed.",
+        tone: "bad", final: true, state, target,
+      };
+    case "failed":
+      return {
+        text: said || error || "The change could not be written, so every note is as it was.",
+        tone: "bad", final: true, state, target,
+      };
+    default:
+      return {
+        text: "The PC answered, but did not say how the change went. Open the note again to see what is on disk.",
+        tone: "bad", final: true, state, target,
+      };
+  }
+}
+
+/**
+ * Asks for one rename or move, then follows the card's job until it ends,
+ * calling `onSay` with each `describeChange` answer. Resolves to the last one.
+ * Uses only the notes editor's own commands; it never calls a save route, a
+ * pending/approval route, or anything that decides a card.
+ */
+export async function changeNote(invoke, { kind, path, title, folder, createFolder }, onSay,
+                                  { pollMs = POLL_MS, giveUpMs = GIVE_UP_MS,
+                                    maxFailedPolls = MAX_FAILED_POLLS,
+                                    linkDown = () => false } = {}) {
+  let said;
+  let job;
+  try {
+    job = kind === "rename"
+      ? await invoke("notes_rename", renameBody({ path, title }))
+      : await invoke("notes_move", moveBody({ path, folder, createFolder }));
+  } catch (error) {
+    said = { text: String((error && error.message) || error), tone: "bad", final: true, state: "", target: "" };
+    onSay(said);
+    return said;
+  }
+  said = describeChange(job);
+  onSay(said);
+  const id = job && job.id;
+  const started = Date.now();
+  let failed = 0;
+  let skipping = false;
+  while (!said.final && id) {
+    await sleep(pollMs);
+    if (Date.now() - started > giveUpMs) {
+      said = { text: "Still waiting for the card on the PC. Nothing is changed until you answer it.",
+        tone: null, final: true, state: "waiting", target: said.target };
+      onSay(said);
+      break;
+    }
+    let down = false;
+    try { down = Boolean(linkDown()); } catch { down = false; }
+    if (down) {
+      if (!skipping) {
+        skipping = true;
+        onSay({ text: "Waiting for the link to the PC to come back. The card carries on there.",
+          tone: null, final: false, state: "waiting", target: said.target });
+      }
+      continue;
+    }
+    skipping = false;
+    try {
+      said = describeChange(await invoke("notes_change_status", { id }));
+      failed = 0;
+    } catch (error) {
+      failed += 1;
+      const why = String((error && error.message) || error);
+      said = failed >= maxFailedPolls
+        ? { text: `Lost track of the change (${why}). Check the card, then open the note to see what is on disk.`,
+          tone: "bad", final: true, state: "", target: said.target }
+        : { text: `Could not ask the PC how the change is going (${why}). Trying again.`,
+          tone: null, final: false, state: "waiting", target: said.target };
+    }
+    onSay(said);
+  }
+  return said;
+}
+
+/** Rename one note through the PC's ONE card. */
+export function renameNote(invoke, { path, title }, onSay, options = {}) {
+  return changeNote(invoke, { kind: "rename", path, title }, onSay, options);
+}
+
+/** Move one note through the PC's ONE card; `createFolder` is explicit. */
+export function moveNote(invoke, { path, folder, createFolder }, onSay, options = {}) {
+  return changeNote(invoke, { kind: "move", path, folder, createFolder }, onSay, options);
+}
+
 /** A note's size in words: "812 B", "4.1 kB". */
 function sizeWords(n) {
   const v = Number(n) || 0;
@@ -651,7 +812,79 @@ export function renderNotes(container, plate, ui) {
       title: "Reads the note from disk again, throwing away your unsaved words in the box.",
     }));
     actions.append(button("Close", () => plate.onClose(), { title: "Puts the list back." }));
-    box.append(actions);
+    // Rename / Move (wave 4, 2026-10-31): two small chrome controls beside
+    // Save. Each asks the PC's existing route, shows the PC's own words, and
+    // follows the same ONE card; this window approves nothing and writes no
+    // file. Disabled when the note has no path (nothing to rename or move).
+    const canChange = Boolean(open.path) && !plate.saving && !plate.changing
+      && !(said && said.final === false);
+    const changeBox = el("div", "notes-change");
+    changeBox.hidden = true;
+    const baseTitle = titleOf(open.path);
+    const rename = button("Rename…", () => {
+      changeBox.replaceChildren();
+      changeBox.append(el("p", "notes-help",
+        "Rename this note. The PC raises ONE approval card; nothing is renamed, and no link changes, until you answer it there."));
+      const input = el("input", "field notes-rename-title");
+      input.type = "text";
+      input.value = baseTitle;
+      input.maxLength = 120;
+      input.setAttribute("aria-label", "The note's new name");
+      const go = button("Rename note", () => {
+        const title = input.value.trim();
+        if (!title) {
+          input.setAttribute("aria-invalid", "true");
+          input.focus();
+          return;
+        }
+        input.removeAttribute("aria-invalid");
+        if (plate.onRename) plate.onRename(title);
+      }, { title: "Asks the PC to rename this note. ONE card on the PC decides; this window never approves it." });
+      go.disabled = !canChange;
+      changeBox.append(input, go);
+      changeBox.hidden = false;
+      input.focus();
+      input.select();
+    }, { title: "Rename this note on the PC - its ONE card decides, and links are kept." });
+    rename.disabled = !canChange;
+    const move = button("Move…", () => {
+      changeBox.replaceChildren();
+      changeBox.append(el("p", "notes-help",
+        "Move this note into another folder in your vault. The PC raises ONE approval card; nothing moves, and no link changes, until you answer it there."));
+      const select = el("select", "field notes-move-folder");
+      select.setAttribute("aria-label", "The folder to move the note into");
+      for (const folder of folderChoices(v.notes)) {
+        const option = el("option", null, folder === "" ? "Top level (no folder)" : folder);
+        option.value = folder;
+        select.append(option);
+      }
+      const fresh = el("input", "field notes-move-new");
+      fresh.type = "text";
+      fresh.placeholder = "New folder name (optional)";
+      fresh.setAttribute("aria-label", "A new folder name, if you want one");
+      const createLabel = el("label", "check notes-move-create");
+      const create = el("input");
+      create.type = "checkbox";
+      createLabel.append(create, el("span", null, "Create it if it does not exist"));
+      const go = button("Move note", () => {
+        const typed = fresh.value.trim();
+        if (typed && !create.checked) {
+          fresh.setAttribute("aria-invalid", "true");
+          fresh.focus();
+          return;
+        }
+        fresh.removeAttribute("aria-invalid");
+        const folder = typed || select.value;
+        if (plate.onMove) plate.onMove(folder, typed ? create.checked : false);
+      }, { title: "Asks the PC to move this note. ONE card on the PC decides; this window never approves it." });
+      go.disabled = !canChange;
+      changeBox.append(select, fresh, createLabel, go);
+      changeBox.hidden = false;
+      select.focus();
+    }, { title: "Move this note on the PC - its ONE card decides, and links are kept." });
+    move.disabled = !canChange;
+    actions.append(rename, move);
+    box.append(actions, changeBox);
     container.append(box);
     return;
   }
