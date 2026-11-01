@@ -8,8 +8,8 @@
     "build": "node esbuild.config.mjs",
     "typecheck": "tsc --noEmit",
     "check:build-drift": "node tests/check-build-drift.mjs",
-    "test": "node --test tests/protocol.test.mjs tests/templates.test.mjs tests/safety.test.mjs tests/fake-jarvis.test.mjs",
-    "test:sandbox": "node --experimental-test-isolation=none --test tests/protocol.test.mjs tests/templates.test.mjs tests/safety.test.mjs tests/fake-jarvis.test.mjs",
+    "test": "node --test tests/protocol.test.mjs tests/templates.test.mjs tests/safety.test.mjs tests/accessibility.test.mjs tests/fake-jarvis.test.mjs",
+    "test:sandbox": "node --experimental-test-isolation=none --test tests/protocol.test.mjs tests/templates.test.mjs tests/safety.test.mjs tests/accessibility.test.mjs tests/fake-jarvis.test.mjs",
     "check": "npm run typecheck && npm run check:build-drift && npm test"
   },
   "keywords": [

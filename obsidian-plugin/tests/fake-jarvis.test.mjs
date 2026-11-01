@@ -34,6 +34,7 @@ import * as protocol from "../src/protocol.ts";
 // destructure. The transport below documents the shape it takes instead.
 const {
   DEFAULT_BACKEND,
+  FIRST_RUN_STEPS,
   ProtocolError,
   ROUTES,
   UNREACHABLE_MESSAGE,
@@ -45,6 +46,7 @@ const {
   chatRequest,
   createNoteRequest,
   customizeLineRequest,
+  firstRunChecklist,
   formatRequest,
   httpErrorMessage,
   insertRequest,
@@ -61,6 +63,7 @@ const {
   replaceRequest,
   requireToken,
   shortError,
+  shouldPoll,
   tagRequest,
   templatesRequest,
 } = protocol;
@@ -295,7 +298,7 @@ function answer(state, entry, body) {
     if (!job) {
       return {
         status: 404,
-        body: { ok: false, error: "There is no note change with that id on this PC." },
+        body: { ok: false, error: "There is no note save with that id on this PC." },
       };
     }
     job.polls = (job.polls || 0) + 1;
@@ -521,7 +524,11 @@ async function handle(state, req, res) {
   }
 
   try {
-    const reply = answer(state, entry, entry.body);
+    // `mode:"fixed"` gives one answer for every route: one request per instance,
+    // so the one fixed answer is the one being mapped. The loopback/header/token
+    // checks above and the body parse already ran, so this cannot hide a
+    // malformed request - it only answers the shape the test is about.
+    const reply = state.mode === "fixed" ? state.answer : answer(state, entry, entry.body);
     return json(res, reply.status, reply.body);
   } catch (error) {
     if (!(error instanceof BadBody)) throw error;
@@ -542,16 +549,25 @@ const liveServers = [];
  *                  use, `{ok:false,error:"Not Found"}`)
  *   "unauthorized" every route is 401 `{ok:false,error:"bad or missing X-Jarvis-Token"}`
  *   "badJson"      every route answers 200 with a body that is not JSON
+ *   "fixed"        every route answers `answer` (`{status, body}`) verbatim, for
+ *                  the answers the "ok" server must never produce on a route:
+ *                  one instance, one request, one answer to map. The middleware
+ *                  checks and the body parse still run first, so a bad request is
+ *                  still a 400 and still a recorded violation.
  */
 async function startFakeJarvis(options = {}) {
   const state = {
     mode: options.mode ?? "ok",
     token: options.token ?? TOKEN,
     notFoundBody: options.notFoundBody ?? { ok: false, error: "Not Found" },
+    answer: options.answer ?? null,
     requests: [],
     violations: [],
     jobs: makeJobs(),
   };
+  if (state.mode === "fixed" && !state.answer) {
+    throw new Error('the "fixed" mode needs an `answer` ({status, body}) to give');
+  }
   const server = http.createServer((req, res) => {
     handle(state, req, res).catch((error) => {
       note(state, { method: req.method || "GET", url: req.url || "/" }, "the fake server threw: " + shortError(error));
@@ -564,6 +580,7 @@ async function startFakeJarvis(options = {}) {
     server.listen(0, "127.0.0.1", resolve);
   });
 
+  let closing = null;
   const fake = {
     baseUrl: "http://127.0.0.1:" + server.address().port,
     token: state.token,
@@ -571,11 +588,18 @@ async function startFakeJarvis(options = {}) {
     requests: state.requests,
     violations: state.violations,
     state,
-    close: () =>
-      new Promise((resolve, reject) => {
-        server.closeAllConnections();
-        server.close((error) => (error ? reject(error) : resolve()));
-      }),
+    // Closing is idempotent. The "lost contact" test closes one instance itself
+    // and then afterEach closes every instance it recorded; a second
+    // server.close() would call back with ERR_SERVER_NOT_RUNNING.
+    close: () => {
+      if (!closing) {
+        closing = new Promise((resolve, reject) => {
+          server.closeAllConnections();
+          server.close((error) => (error ? reject(error) : resolve()));
+        });
+      }
+      return closing;
+    },
   };
   liveServers.push(fake);
   return fake;
@@ -696,6 +720,138 @@ describe("first run, before the notes-editor backend deploy", () => {
     assert.equal(typeof shortError(error), "string");
     assert.ok(shortError(error).length > 0);
     assert.ok(!shortError(error).includes(UNREACHABLE_MESSAGE));
+  });
+
+  test("the first-run checklist is three plain steps, and it is gone only when the connection is proven", () => {
+    // A missing step is a dead end and a fourth step is a second thing to do at
+    // once: the checklist is the whole beginner path. Step 3 is the check that
+    // proves the address and the token, so it has to name the button.
+    assert.equal(FIRST_RUN_STEPS.length, 3);
+    for (const step of FIRST_RUN_STEPS) {
+      assert.ok(step.trim().length > 0, "every step must have words in it");
+    }
+    assert.match(FIRST_RUN_STEPS[2], /Test connection/);
+
+    // Once connected there is nothing left to do, so the panel shows no checklist.
+    assert.deepEqual(firstRunChecklist(true, "connected"), { heading: "", steps: [], next: "" });
+
+    // A missing token outranks "connected": without one, no status check can have
+    // proven anything, so hiding the checklist here would leave a beginner stuck
+    // on a panel whose buttons all refuse.
+    const tokenless = firstRunChecklist(false, "connected");
+    assert.equal(tokenless.heading, "First run");
+    assert.equal(tokenless.steps.length, 3);
+    assert.ok(tokenless.next.length > 0);
+
+    // Setup guidance is the most likely place to print the token by accident, and
+    // it must never offer to approve a card: cards are answered in Jarvis, never
+    // in this plugin.
+    for (const status of [
+      "unknown",
+      "no-token",
+      "connected",
+      "unreachable",
+      "token-refused",
+      "not-deployed",
+      "http",
+    ]) {
+      for (const hasToken of [true, false]) {
+        const checklist = firstRunChecklist(hasToken, status);
+        const said = [checklist.next, ...checklist.steps].join("\n");
+        assert.ok(!said.includes(TOKEN), status + " must not print the token");
+        assert.ok(!said.includes("token-2f6a9c"), status + " must not print the token's tail either");
+        assert.ok(!/approve/i.test(said), status + " must never offer to approve a card in the plugin");
+      }
+    }
+  });
+
+  test("every connection state says the ONE next thing to do", () => {
+    // One status, one next action. These key phrases are what make each state
+    // actionable; a state that says nothing, or says two things, is a dead end.
+    const cases = [
+      { status: "unknown", phrase: /checking/ },
+      { status: "no-token", phrase: /step 1/ },
+      { status: "unreachable", phrase: /desktop app running/ },
+      { status: "token-refused", phrase: /refused the token/ },
+      { status: "not-deployed", phrase: /notes-editor backend deploy/ },
+      { status: "http", phrase: /Test connection/ },
+    ];
+    for (const item of cases) {
+      const checklist = firstRunChecklist(true, item.status);
+      assert.equal(checklist.heading, "First run", item.status + " still needs the checklist");
+      assert.equal(checklist.steps.length, 3, item.status + " keeps all three steps");
+      assert.match(checklist.next, item.phrase, item.status + " must name the one next action");
+    }
+    // The 404 is the pre-deploy state, and saying it is not the owner's fault is
+    // the difference between a bug report and a five-minute wait for a deploy.
+    assert.match(firstRunChecklist(true, "not-deployed").next, /not a mistake/);
+    // No token at all is the FIRST thing to fix, whatever the last check said:
+    // "no token" and "no token, and nothing answered" must not give two answers.
+    assert.equal(firstRunChecklist(false, "unreachable").next, firstRunChecklist(true, "no-token").next);
+  });
+
+  test("the first-run guidance agrees with the plugin's own status words", () => {
+    // The checklist must not invent a second vocabulary for a problem the plugin
+    // already has an honest sentence about. The sentences are built here from the
+    // same pure helpers the panel uses, so the test cross-references the plugin's
+    // words instead of retyping them.
+    const noTokenError = (() => {
+      try {
+        requireToken("");
+        return "";
+      } catch (error) {
+        return error.message;
+      }
+    })();
+    assert.match(noTokenError, /No Jarvis token yet/);
+    assert.match(noTokenError, /Settings -> Jarvis notes bridge/);
+    assert.match(firstRunChecklist(false, "no-token").next, /step 1/);
+    assert.ok(
+      FIRST_RUN_STEPS[0].includes("Settings -> Jarvis notes bridge"),
+      "step 1 must send the owner to the same setting the token error names",
+    );
+
+    // "unreachable" is the plugin's own sentence about the desktop app: the
+    // guidance has to send the owner to the same check, not a new one.
+    assert.match(UNREACHABLE_MESSAGE, /Could not reach the local Jarvis/);
+    assert.match(UNREACHABLE_MESSAGE, /running on this PC/);
+    assert.match(firstRunChecklist(true, "unreachable").next, /running on this PC/);
+
+    // "not-deployed" is the plugin's 404 mapping; both must name the same deploy.
+    const notDeployed = httpErrorMessage(404, { ok: false });
+    assert.match(notDeployed, /HTTP 404/);
+    assert.match(notDeployed, /notes-editor backend deploy/);
+    assert.match(firstRunChecklist(true, "not-deployed").next, /notes-editor backend deploy/);
+    assert.match(firstRunChecklist(true, "not-deployed").next, /HTTP 404/);
+
+    // "token-refused" is the plugin's 401 mapping; both must blame the token.
+    assert.match(httpErrorMessage(401, { ok: false }), /token/i);
+    assert.match(firstRunChecklist(true, "token-refused").next, /refused the token/);
+
+    // And the checked states line up with the plugin's own "is a token set?",
+    // decided by requireToken rather than by a boolean this test invents.
+    const hasToken = (token) => {
+      try {
+        requireToken(token);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    assert.equal(hasToken(""), false);
+    assert.equal(hasToken("tok"), true);
+    for (const status of [
+      "unknown",
+      "no-token",
+      "connected",
+      "unreachable",
+      "token-refused",
+      "not-deployed",
+      "http",
+    ]) {
+      const shown = firstRunChecklist(hasToken("tok"), status).heading !== "";
+      assert.equal(shown, status !== "connected", status + " is hidden only when connected");
+    }
   });
 });
 
@@ -974,5 +1130,437 @@ describe("answers that are not a Jarvis answer", () => {
 
     // A 401 with no sentence of its own still points at the setting that holds it.
     assert.match(httpErrorMessage(401, { ok: false }), /Settings -> Jarvis notes bridge/);
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* 6. A write answer that is not a plain save: the card this panel cannot  */
+/*    follow, the state word it does not know, and the refusals            */
+/* ---------------------------------------------------------------------- */
+
+describe("a write answer that is not a plain save", () => {
+  test("202 waiting with no change id is still waiting, but the panel says it cannot follow the card", async () => {
+    // A card that cannot be followed is still a card. Without an id there is
+    // nothing to poll, so the panel must say that instead of starting a wait that
+    // can never end - shouldPoll is the question the panel actually asks.
+    const fake = await startFakeJarvis({
+      mode: "fixed",
+      answer: { status: 202, body: { ok: true, state: "waiting" } },
+    });
+    const { status, body } = await send(fake, insertRequest(NOTE_PATH, "Bought milk", "Session", SHA_A));
+    assert.equal(status, 202);
+    assert.equal(fake.requests.at(-1).body.path, NOTE_PATH, "the fixed answer is given to a real write request");
+
+    const outcome = interpretWriteReply(status, body);
+    assert.equal(outcome.kind, "waiting");
+    assert.equal(outcome.jobId, "");
+    assert.match(outcome.message, /cannot follow the card/);
+    assert.equal(shouldPoll(outcome), false, "no id means there is nothing to check");
+    assert.equal(outcome.sha256, "");
+  });
+
+  test("a 200 with a state word this plugin does not know is an error, never a save", async () => {
+    // The dangerous shape: HTTP said fine, so a mapping that trusts the status
+    // would call it saved. "applied" is not a word this plugin knows, so it has to
+    // say what it cannot say instead of guessing.
+    const fake = await startFakeJarvis({
+      mode: "fixed",
+      answer: { status: 200, body: { ok: true, state: "applied", path: NOTE_PATH } },
+    });
+    const { status, body } = await send(fake, formatRequest(NOTE_PATH, "spark", "bold", "add", SHA_A));
+    assert.equal(status, 200);
+
+    const outcome = interpretWriteReply(status, body);
+    assert.equal(outcome.kind, "error");
+    assert.notEqual(outcome.kind, "saved", "an unknown state word must never read as saved");
+    assert.match(outcome.message, /state "applied"/);
+    assert.match(outcome.message, /cannot say the change was saved/);
+    assert.equal(outcome.sha256, "", "an unknown state word must not become a new hash");
+  });
+
+  test("a 409 conflict with no current hash is a conflict, and nothing is offered as one", async () => {
+    // A create carries no version to compare against (createNoteRequest sends no
+    // expected_sha256), so a conflict it reports has no current hash to hand back.
+    // The panel must report the conflict it was given and must not invent a hash
+    // for a note it never read.
+    const fake = await startFakeJarvis({
+      mode: "fixed",
+      answer: {
+        status: 409,
+        body: {
+          ok: false,
+          state: "conflict",
+          path: "Exists.md",
+          message: "A note already exists at Exists.md, so nothing was created.",
+        },
+      },
+    });
+    const { status, body } = await send(fake, createNoteRequest("Exists.md", "# New\n"));
+    assert.equal(status, 409);
+
+    const outcome = interpretWriteReply(status, body);
+    assert.equal(outcome.kind, "conflict");
+    assert.equal(outcome.sha256, "", "nothing was written, so there is no new hash");
+    assert.equal(outcome.currentSha256, "", "this refusal named no current hash to offer");
+    assert.equal(outcome.message, "A note already exists at Exists.md, so nothing was created.");
+  });
+
+  test("a 400 refusal is an error in the backend's words, and never the word saved", async () => {
+    // A refused body is a refusal, not a failed save: the reason is the useful
+    // part, and a sentence claiming a save would send the owner looking for a
+    // change that does not exist.
+    const fake = await startFakeJarvis({
+      mode: "fixed",
+      answer: { status: 400, body: { ok: false, state: "refused", error: "the line is empty" } },
+    });
+    const { status, body } = await send(fake, insertRequest(NOTE_PATH, "", "Session", SHA_A));
+    assert.equal(status, 400);
+    assert.equal(fake.requests.at(-1).body.text, "", "the request the plugin really sent had an empty line");
+
+    const outcome = interpretWriteReply(status, body);
+    assert.equal(outcome.kind, "error");
+    assert.match(outcome.message, /the line is empty/);
+    assert.ok(!/saved/i.test(outcome.message), "a refusal must not read as a save");
+    assert.equal(outcome.sha256, "");
+  });
+
+  test("an HTTP error on a write route is an error, in the backend's words when it sent any", async () => {
+    // Each status is a different fix: 403 the note is protected, 413 the note is
+    // too big, 429 a queue of cards is full, 503 the vault is unreachable, 500
+    // something broke. Only 429 and 500 arrive with no sentence of their own, so
+    // those two must fall back to the plugin's plain words.
+    const cases = [
+      {
+        status: 403,
+        body: { ok: false, error: "this note is protected from Jarvis" },
+        keeps: "this note is protected from Jarvis",
+      },
+      {
+        status: 413,
+        body: {
+          ok: false,
+          message: "The new text is 900000 bytes, over the 262144 byte limit this editor saves.",
+        },
+        keeps: "over the 262144 byte limit",
+      },
+      { status: 429, body: {}, says: /busy/ },
+      {
+        status: 503,
+        body: { ok: false, error: "No note was saved: the Obsidian vault is not set up." },
+        keeps: "the Obsidian vault is not set up",
+      },
+      { status: 500, body: {}, says: /HTTP 500/ },
+    ];
+    for (const item of cases) {
+      const fake = await startFakeJarvis({ mode: "fixed", answer: { status: item.status, body: item.body } });
+      const { status, body } = await send(fake, insertRequest(NOTE_PATH, "Bought milk", "Session", SHA_A));
+      assert.equal(status, item.status);
+      const outcome = interpretWriteReply(status, body);
+      const at = "HTTP " + item.status;
+      assert.equal(outcome.kind, "error", at + " must be an error, not a result");
+      assert.equal(outcome.httpStatus, item.status);
+      assert.equal(outcome.sha256, "", at + " wrote nothing, so no new hash");
+      if (item.keeps) {
+        assert.ok(
+          outcome.message.includes(item.keeps),
+          at + " must keep the backend's own sentence: " + outcome.message,
+        );
+      }
+      if (item.says) assert.match(outcome.message, item.says, at + " must fall back to the plugin's own words");
+    }
+  });
+
+  test("a 401 on a write route names the token, and the sentence never contains it", async () => {
+    // The existing 401 test covers the template list; a write is the route that
+    // matters most, because a refused write must not look like a stored change.
+    // The sentence may name the token; it must never print it.
+    const fake = await startFakeJarvis({ mode: "unauthorized" });
+    const wrongToken = "wrong-token-for-a-write-route";
+    const { status, body } = await send(fake, insertRequest(NOTE_PATH, "Bought milk", "Session", SHA_A), {
+      token: wrongToken,
+    });
+    assert.equal(status, 401);
+    assert.equal(fake.requests.at(-1).token, wrongToken, "the plugin sent the token it was configured with");
+
+    const outcome = interpretWriteReply(status, body);
+    assert.equal(outcome.kind, "error");
+    assert.match(outcome.message, /token/i);
+    assert.match(outcome.message, /bad or missing X-Jarvis-Token/);
+    assert.ok(!outcome.message.includes(wrongToken), "an error sentence must never contain the token itself");
+    assert.equal(outcome.sha256, "");
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* 7. The status poll: how one card ended, and what happens when it cannot */
+/*    be asked at all                                                      */
+/* ---------------------------------------------------------------------- */
+
+describe("a status poll that cannot report a save", () => {
+  test("denied, failed and conflict keep the backend's sentence and its own kind", async () => {
+    // These are final answers from the PC, not guesses: the panel must keep the
+    // backend's words verbatim and stop checking. A wrong kind here is the
+    // difference between "you said no" and "Jarvis broke".
+    const cases = [
+      { state: "denied", message: "You said no, so nothing was changed." },
+      { state: "failed", message: "Jarvis could not write a.md: the file is read-only." },
+      { state: "conflict", message: "The note changed while the card waited, so nothing was written." },
+    ];
+    for (const item of cases) {
+      const fake = await startFakeJarvis({
+        mode: "fixed",
+        answer: {
+          status: 200,
+          body: { ok: false, state: item.state, path: NOTE_PATH, message: item.message },
+        },
+      });
+      const { status, body } = await send(fake, changeStatusRequest("job-insert"));
+      assert.equal(status, 200);
+      const outcome = interpretStatusReply(status, body);
+      assert.equal(outcome.kind, item.state, item.state + " must keep its own kind");
+      assert.equal(outcome.message, item.message, item.state + " must keep the backend's sentence");
+      assert.equal(outcome.sha256, "", "a write that did not land reports no new hash");
+      assert.equal(shouldPoll(outcome), false, item.state + " is final, so the checks stop");
+    }
+  });
+
+  test("an id the backend does not know is an error with the backend's sentence, and the waiting stops", async () => {
+    // The normal fake answers an id it never made with the documented 404. The
+    // plugin must not keep waiting on it: a 404 can never turn into an answer.
+    const fake = await startFakeJarvis();
+    const { status, body } = await send(fake, changeStatusRequest("job-never-existed"));
+    assert.equal(status, 404);
+    const outcome = interpretStatusReply(status, body);
+    assert.equal(outcome.kind, "error");
+    assert.equal(outcome.message, "There is no note save with that id on this PC.");
+    assert.equal(shouldPoll(outcome), false, "a 404 must stop the checks, not restart them");
+  });
+
+  test("a 2xx with no state at all is an error that says the change ended without saying how", async () => {
+    // HTTP 200 is not an outcome: without a state word the plugin cannot report a
+    // save, and saying nothing would leave the owner guessing.
+    const fake = await startFakeJarvis({
+      mode: "fixed",
+      answer: { status: 200, body: { ok: true, path: NOTE_PATH } },
+    });
+    const { status, body } = await send(fake, changeStatusRequest("job-insert"));
+    assert.equal(status, 200);
+    const outcome = interpretStatusReply(status, body);
+    assert.equal(outcome.kind, "error");
+    assert.equal(outcome.message, "Jarvis answered without saying how the change ended.");
+  });
+
+  test("losing the server between the write and the status check rejects instead of inventing an answer", async () => {
+    // The closest safe stand-in for "contact was lost while checking the card":
+    // the same port stops answering. This is the transport layer under client.ts's
+    // unreachable-message wrap and the panel's own "Lost contact" sentence (both
+    // files import `obsidian` and cannot be loaded here), so what is proven is
+    // that the failure REJECTS rather than resolving into an invented outcome, and
+    // that no sentence about it says "saved".
+    const fake = await startFakeJarvis();
+    const posted = await send(fake, insertRequest(NOTE_PATH, "Bought milk", "Session", SHA_A));
+    const waiting = interpretWriteReply(posted.status, posted.body);
+    assert.equal(waiting.kind, "waiting");
+    assert.equal(shouldPoll(waiting), true, "the normal answer names a job, so the panel would start checking");
+
+    await fake.close();
+    const error = await send(fake, changeStatusRequest(waiting.jobId)).then(
+      () => {
+        throw new Error("expected the status check to fail once its server was gone");
+      },
+      (caught) => caught,
+    );
+    const said = shortError(error);
+    assert.equal(typeof said, "string");
+    assert.ok(said.length > 0, "a lost connection must reach the screen with words in it");
+    assert.ok(!/saved/i.test(said), "losing contact must never read as a saved write");
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* 8. Capture: filed, or honestly not filed                                */
+/* ---------------------------------------------------------------------- */
+
+describe("a capture that was not filed", () => {
+  test("denied, failed and timed_out are not_filed with the backend's own words", async () => {
+    // A 2xx that names a terminal state is the dangerous shape: HTTP said fine,
+    // the state says it did not happen. The capture status route sets ok:false for
+    // every state it reports other than filed/waiting (the ok:false branch maps
+    // those the same way), so this pins the words themselves - the part a shared
+    // interpreter could get wrong - and none of them may become "filed".
+    const cases = [
+      { state: "denied", message: "You said no, so nothing was written." },
+      { state: "failed", message: "Not filed: the Obsidian vault could not be opened." },
+      { state: "timed_out", message: "Nobody answered the approval card in time, so nothing was written." },
+    ];
+    for (const item of cases) {
+      const fake = await startFakeJarvis({
+        mode: "fixed",
+        answer: {
+          status: 200,
+          body: { ok: true, id: "job-capture", state: item.state, message: item.message },
+        },
+      });
+      const { status, body } = await send(fake, captureStatusRequest("job-capture"));
+      assert.equal(status, 200);
+      const outcome = interpretCaptureReply(status, body);
+      assert.equal(outcome.kind, "not_filed", item.state + " was not filed, whatever HTTP said");
+      assert.equal(outcome.message, item.message, item.state + " must keep the backend's sentence");
+    }
+  });
+
+  test("a 2xx with an unknown state word is not filed, and names the word it could not read", async () => {
+    // "saved" is a write state, not a capture state. Guessing it means filed would
+    // tell the owner their words are in today's note when nothing proved it, so the
+    // plugin must say which word it did not understand.
+    const fake = await startFakeJarvis({
+      mode: "fixed",
+      answer: { status: 200, body: { ok: true, state: "saved", id: "job-capture" } },
+    });
+    const { status, body } = await send(fake, captureStatusRequest("job-capture"));
+    assert.equal(status, 200);
+    const outcome = interpretCaptureReply(status, body);
+    assert.notEqual(outcome.kind, "filed");
+    assert.equal(outcome.kind, "not_filed");
+    assert.match(outcome.message, /state "saved"/);
+    assert.match(outcome.message, /does not know/);
+    assert.ok(!/^Filed/.test(outcome.message), "the message must not open by saying it was filed");
+  });
+
+  test("a capture status 404 for an unknown id is an error with the route's sentence", async () => {
+    // A 404 only means this PC has no record of that job: Jarvis may have been
+    // restarted after filing, so claiming "not filed" would say something this
+    // plugin cannot know. It must keep the route's sentence and stop checking.
+    const fake = await startFakeJarvis({
+      mode: "fixed",
+      answer: { status: 404, body: { ok: false, error: "no note with that id on this PC" } },
+    });
+    const { status, body } = await send(fake, captureStatusRequest("job-capture"));
+    assert.equal(status, 404);
+    const outcome = interpretCaptureReply(status, body);
+    assert.equal(outcome.kind, "error");
+    assert.notEqual(outcome.kind, "not_filed", "an unknown id is not proof that nothing was filed");
+    assert.equal(outcome.message, "no note with that id on this PC");
+    assert.equal(outcome.httpStatus, 404);
+    assert.equal(outcome.jobId, "");
+  });
+
+  test("capture waiting with no status id says it cannot follow it", async () => {
+    // The same shape as a write route: a card with no id cannot be checked, so the
+    // dialog must say that rather than reporting a filing it cannot see.
+    const fake = await startFakeJarvis({
+      mode: "fixed",
+      answer: {
+        status: 202,
+        body: { ok: true, state: "waiting", message: "Waiting for your approval." },
+      },
+    });
+    const { status, body } = await send(fake, captureRequest("Remember the milk"));
+    assert.equal(status, 202);
+    const outcome = interpretCaptureReply(status, body);
+    assert.equal(outcome.kind, "waiting");
+    assert.equal(outcome.jobId, "");
+    assert.ok(outcome.message.includes("Waiting for your approval."));
+    assert.match(outcome.message, /cannot follow it/);
+    assert.notEqual(outcome.kind, "filed");
+  });
+});
+
+/* ---------------------------------------------------------------------- */
+/* 9. Chat, read and templates: the backend's words, or the plugin's own   */
+/*    honest sentence                                                      */
+/* ---------------------------------------------------------------------- */
+
+describe("answers the panel must not round up into success", () => {
+  test("chat keeps the backend's reason instead of inventing an empty answer", async () => {
+    // A refusal and an empty answer are different things: "too long" tells the
+    // owner what to do, "empty answer" sends them looking for a bug.
+    const cases = [
+      {
+        status: 503,
+        body: { ok: false, error: "the model is still loading" },
+        keeps: "the model is still loading",
+      },
+      {
+        status: 200,
+        body: { ok: false, error: "that question is too long" },
+        keeps: "that question is too long",
+        notSays: "empty answer",
+      },
+      { status: 200, body: { choices: [] }, keeps: "empty answer" },
+    ];
+    for (const item of cases) {
+      const fake = await startFakeJarvis({ mode: "fixed", answer: { status: item.status, body: item.body } });
+      const { status, body } = await send(fake, chatRequest("What is this note about?", "Note: a.md", NOTE_PATH));
+      const outcome = interpretChatReply(status, body);
+      assert.equal(outcome.kind, "error", "HTTP " + item.status + " must not become an answer");
+      assert.equal(outcome.answer, "", "an error carries no answer text");
+      assert.ok(outcome.message.includes(item.keeps), "the message must say: " + item.keeps);
+      if (item.notSays) {
+        assert.ok(!outcome.message.includes(item.notSays), "a refusal must not read as an empty answer");
+      }
+    }
+  });
+
+  test("read keeps the backend's reason, and refuses an answer with no hash", async () => {
+    // A read with no sha256 cannot safely start an edit: every surgical write
+    // needs the hash it started from, so the panel must stop here instead of
+    // offering buttons that would be refused as conflicts.
+    const cases = [
+      {
+        status: 404,
+        body: { ok: false, error: "no such note: Missing.md" },
+        keeps: "no such note: Missing.md",
+      },
+      { status: 200, body: { ok: true, path: NOTE_PATH, text: NOTE_TEXT }, noHash: true },
+      { status: 200, body: { ok: false, error: "the note is locked" }, keeps: "the note is locked" },
+    ];
+    for (const item of cases) {
+      const fake = await startFakeJarvis({ mode: "fixed", answer: { status: item.status, body: item.body } });
+      const { status, body } = await send(fake, readNoteRequest(NOTE_PATH));
+      const outcome = interpretReadReply(status, body);
+      assert.equal(outcome.kind, "error");
+      assert.equal(outcome.sha256, "", "an error must never hand out a hash");
+      if (item.keeps) {
+        assert.ok(outcome.message.includes(item.keeps), "the message must keep: " + item.keeps);
+      }
+      if (item.noHash) {
+        assert.match(outcome.message, /hash/);
+        assert.match(outcome.message, /cannot be made/);
+        assert.equal(outcome.text, "", "no text is offered for an edit that cannot be made");
+      }
+    }
+  });
+
+  test("templates: a list that is not a list, a refusal, and a 503 all become honest errors", async () => {
+    // The panel lists names. A string where a list should be must not read as "no
+    // templates" (the owner would think their vault is empty), and a 503 must name
+    // the vault, because that is the part the owner can fix.
+    const cases = [
+      {
+        status: 200,
+        body: { ok: true, count: 1, templates: "daily" },
+        says: /template list was not a list/,
+      },
+      {
+        status: 200,
+        body: { ok: false, message: "the templates folder is missing" },
+        keeps: "the templates folder is missing",
+      },
+      { status: 503, body: {}, says: /HTTP 503/, vault: true },
+    ];
+    for (const item of cases) {
+      const fake = await startFakeJarvis({ mode: "fixed", answer: { status: item.status, body: item.body } });
+      const { status, body } = await send(fake, templatesRequest());
+      const outcome = interpretTemplatesReply(status, body);
+      assert.equal(outcome.kind, "error");
+      assert.deepEqual(outcome.names, [], "an error never lists a guessed name");
+      assert.equal(outcome.why, "");
+      if (item.keeps) {
+        assert.ok(outcome.message.includes(item.keeps), "the message must keep: " + item.keeps);
+      }
+      if (item.says) assert.match(outcome.message, item.says);
+      if (item.vault) assert.match(outcome.message, /vault/);
+    }
   });
 });

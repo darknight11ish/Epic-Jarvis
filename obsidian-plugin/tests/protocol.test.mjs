@@ -17,6 +17,7 @@ import * as protocol from "../src/protocol.ts";
 
 const {
   DEFAULT_BACKEND,
+  FIRST_RUN_STEPS,
   MAX_CONTEXT_CHARS,
   ProtocolError,
   WAITING_CARD_MESSAGE,
@@ -24,6 +25,7 @@ const {
   buildHeaders,
   buildUrl,
   clip,
+  firstRunChecklist,
   headingLabel,
   httpErrorMessage,
   interpretCaptureReply,
@@ -33,6 +35,7 @@ const {
   interpretTemplatesReply,
   interpretWriteReply,
   isLoopbackUrl,
+  isRefusalKind,
   lineContaining,
   normalizeBackendUrl,
   obsidianOpenUri,
@@ -281,18 +284,21 @@ describe("parseJsonBody", () => {
 });
 
 describe("httpErrorMessage", () => {
-  test("401/403 name the token and prefer the backend's own sentence", () => {
+  test("401 names the token; 403 keeps its own reason without blaming the token", () => {
     const expired = httpErrorMessage(401, { message: "token expired at 20:12" });
     assert.match(expired, /token/i);
     assert.match(expired, /token expired at 20:12/);
     assert.match(expired, /401/);
 
-    const wrong = httpErrorMessage(403, { error: "wrong secret" });
-    assert.match(wrong, /token/i);
-    assert.match(wrong, /wrong secret/);
+    // On this backend a 403 is the protected-note refusal, not a bad token.
+    const protectedNote = httpErrorMessage(403, { error: "that note is protected from edits" });
+    assert.match(protectedNote, /that note is protected from edits/);
+    assert.match(protectedNote, /403/);
+    assert.ok(!/refused the token/i.test(protectedNote), "a 403 is not a token refusal");
 
     assert.match(httpErrorMessage(401, {}), /token/i);
-    assert.match(httpErrorMessage(403, {}), /token/i);
+    assert.match(httpErrorMessage(403, {}), /403/);
+    assert.ok(!/token/i.test(httpErrorMessage(403, {})), "a 403 with no sentence must not blame the token");
     assert.match(httpErrorMessage(401, { why: "header missing" }), /header missing/);
   });
 
@@ -812,5 +818,125 @@ describe("a capture state of failed is not filed", () => {
   test("state filed still maps to filed", () => {
     const outcome = interpretCaptureReply(200, { ok: true, state: "filed", message: "Filed." });
     assert.equal(outcome.kind, "filed");
+  });
+});
+
+describe("honest answers for the awkward shapes", () => {
+  test("a waiting card with no change id says it cannot be followed", () => {
+    const outcome = interpretWriteReply(202, {
+      ok: true,
+      state: "waiting",
+      message: "Waiting for your approval card.",
+    });
+    assert.equal(outcome.kind, "waiting");
+    assert.equal(outcome.jobId, "");
+    assert.match(outcome.message, /cannot follow the card/);
+    assert.equal(shouldPoll(outcome), false, "without an id there is nothing to poll");
+  });
+
+  test("an unknown write state is an error, not a save", () => {
+    const outcome = interpretWriteReply(200, { ok: true, state: "applied", path: "a.md" });
+    assert.equal(outcome.kind, "error");
+    assert.match(outcome.message, /applied/);
+    assert.match(outcome.message, /cannot say the change was saved/);
+    assert.equal(outcome.sha256, "");
+  });
+
+  test("a capture 404 is an error naming the route's sentence, never not_filed", () => {
+    const outcome = interpretCaptureReply(404, {
+      ok: false,
+      error: "no note with that id on this PC",
+    });
+    assert.equal(outcome.kind, "error");
+    assert.match(outcome.message, /no note with that id on this PC/);
+    assert.equal(outcome.httpStatus, 404);
+    assert.equal(outcome.jobId, "");
+  });
+
+  test("an unknown capture state is not filed, and names the word it saw", () => {
+    const outcome = interpretCaptureReply(200, { ok: true, state: "saved", id: "job-1" });
+    assert.equal(outcome.kind, "not_filed");
+    assert.match(outcome.message, /saved/);
+    assert.match(outcome.message, /not counted as filed/);
+  });
+
+  test("a capture waiting card with no id says it cannot be followed", () => {
+    const outcome = interpretCaptureReply(202, { ok: true, state: "waiting" });
+    assert.equal(outcome.kind, "waiting");
+    assert.equal(outcome.jobId, "");
+    assert.match(outcome.message, /cannot follow it/);
+  });
+
+  test("a 2xx capture with no state word still counts as filed (the live route's own shape)", () => {
+    const outcome = interpretCaptureReply(200, { ok: true, message: "Filed in today's note." });
+    assert.equal(outcome.kind, "filed");
+  });
+
+  test("a chat answer that says ok:false keeps its own reason", () => {
+    const outcome = interpretChatReply(200, { ok: false, error: "that question is too long" });
+    assert.equal(outcome.kind, "error");
+    assert.equal(outcome.message, "that question is too long");
+  });
+
+  test("a template list that is not a list is an error, not an empty list", () => {
+    const outcome = interpretTemplatesReply(200, { ok: true, count: 1, templates: "daily" });
+    assert.equal(outcome.kind, "error");
+    assert.deepEqual(outcome.names, []);
+    assert.match(outcome.message, /not a list/);
+  });
+
+  test("isRefusalKind names the four kinds a screen reader must hear as a refusal", () => {
+    for (const kind of ["error", "failed", "denied", "conflict"]) {
+      assert.equal(isRefusalKind(kind), true, kind);
+    }
+    for (const kind of ["saved", "waiting", "unchanged", undefined]) {
+      assert.equal(isRefusalKind(kind), false, String(kind));
+    }
+  });
+});
+
+describe("firstRunChecklist states", () => {
+  test("there are exactly three setup steps and the third is the connection check", () => {
+    assert.equal(FIRST_RUN_STEPS.length, 3);
+    assert.match(FIRST_RUN_STEPS[2], /Test connection/);
+  });
+
+  test("no checklist state tells the reader to approve a card or claims a measure", () => {
+    const statuses = ["unknown", "no-token", "unreachable", "token-refused", "not-deployed", "http"];
+    for (const status of statuses) {
+      for (const hasToken of [true, false]) {
+        const checklist = firstRunChecklist(hasToken, status);
+        const whole = checklist.heading + " " + checklist.steps.join(" ") + " " + checklist.next;
+        assert.ok(!/approve/i.test(whole), "the checklist must never suggest approving a card");
+        assert.ok(!/tested|verified/i.test(whole), "no state may claim a test was run");
+      }
+    }
+  });
+
+  test("connected means no checklist at all", () => {
+    assert.deepEqual(firstRunChecklist(true, "connected"), { heading: "", steps: [], next: "" });
+  });
+
+  test("every not-yet-connected state says the one next action", () => {
+    const expected = [
+      ["unknown", /checking/],
+      ["unreachable", /desktop app running/],
+      ["token-refused", /refused the token/],
+      ["not-deployed", /notes-editor backend deploy/],
+      ["http", /Test connection/],
+    ];
+    for (const [status, phrase] of expected) {
+      const checklist = firstRunChecklist(true, status);
+      assert.equal(checklist.heading, "First run", status);
+      assert.equal(checklist.steps.length, 3, status);
+      assert.match(checklist.next, phrase, status);
+    }
+    const noToken = firstRunChecklist(false, "connected");
+    assert.equal(noToken.steps.length, 3);
+    assert.match(noToken.next, /step 1/);
+  });
+
+  test("the deploy state says plainly that it is not the reader's mistake", () => {
+    assert.match(firstRunChecklist(true, "not-deployed").next, /not a mistake you made/);
   });
 });

@@ -12,10 +12,12 @@
 import type {
   CaptureOutcome,
   ChatOutcome,
+  FirstRunChecklist,
   HeadingRef,
   NoteContext,
   RawAnswer,
   ReadOutcome,
+  StatusKind,
   TemplateListOutcome,
   WriteKind,
   WriteOutcome,
@@ -61,6 +63,16 @@ export const WAITING_CARD_MESSAGE =
 
 /** How long the panel keeps checking one waiting card before it stops (10 minutes). */
 export const POLL_MAX_ATTEMPTS = 240;
+
+/**
+ * The first-run setup steps, in order. The third one is the check that proves
+ * the address and the token, so the panel never has to guess.
+ */
+export const FIRST_RUN_STEPS: readonly string[] = [
+  "Open Settings -> Jarvis notes bridge.",
+  "Pick the Obsidian secret that holds your Jarvis token (preferred), or paste the token into the clearly-marked fallback field in a test vault.",
+  "Press Test connection. It should say Connected.",
+];
 
 /** A typed error with a stable kind, so the client can tell "unreadable" from "no token". */
 export class ProtocolError extends Error {
@@ -144,6 +156,66 @@ export function requireToken(token: string): string {
   return value;
 }
 
+/**
+ * The first-run checklist for the current connection state: the three steps,
+ * and the ONE next thing to do. It disappears only when the backend is
+ * connected, so the panel never leaves a beginner guessing where they are.
+ */
+export function firstRunChecklist(hasToken: boolean, status: StatusKind): FirstRunChecklist {
+  const steps = [...FIRST_RUN_STEPS];
+  if (!hasToken || status === "no-token") {
+    return {
+      heading: "First run",
+      steps,
+      next: "Start at step 1: this panel needs a Jarvis token before Ask, Capture or any edit can work.",
+    };
+  }
+  if (status === "connected") {
+    return { heading: "", steps: [], next: "" };
+  }
+  if (status === "unreachable") {
+    return {
+      heading: "First run",
+      steps,
+      next:
+        "The token is set. Step 3 failed because nothing answered: is the Jarvis desktop app running on this PC? " +
+        "Start it, then press Test connection again.",
+    };
+  }
+  if (status === "token-refused") {
+    return {
+      heading: "First run",
+      steps,
+      next:
+        "Step 3 failed because Jarvis refused the token: copy it again in full (about 43 characters), " +
+        "then press Test connection.",
+    };
+  }
+  if (status === "not-deployed") {
+    return {
+      heading: "First run",
+      steps,
+      next:
+        "The address and token are fine, but this backend does not have the notes routes yet (HTTP 404). " +
+        "That is not a mistake you made: they arrive with the notes-editor backend deploy. Ask and Capture work until then.",
+    };
+  }
+  if (status === "http") {
+    return {
+      heading: "First run",
+      steps,
+      next:
+        "Step 3 got an unexpected answer: open Settings -> Jarvis notes bridge and read the exact line " +
+        "under Test connection.",
+    };
+  }
+  return {
+    heading: "First run",
+    steps,
+    next: "Jarvis is checking the connection now. Step 3 is the manual version of that check.",
+  };
+}
+
 function tryParseJson(value: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(value);
@@ -210,10 +282,18 @@ export function boundedText(raw: string, max: number): { text: string; truncated
 export function httpErrorMessage(status: number, body: Record<string, unknown>): string {
   const data = object(body);
   const said = text(data.message) || text(data.error) || text(data.why);
-  if (status === 401 || status === 403) {
+  if (status === 401) {
     return said
-      ? "Jarvis refused the token (HTTP " + status + "): " + said
-      : "Jarvis refused the request (HTTP " + status + "). Check the token in Settings -> Jarvis notes bridge.";
+      ? "Jarvis refused the token (HTTP 401): " + said
+      : "Jarvis refused the token (HTTP 401). Check the token in Settings -> Jarvis notes bridge.";
+  }
+  if (status === 403) {
+    // 403 is NOT the token here: on this backend it is the protected-note
+    // refusal (backend/jarvis_notes_edit.py). Blaming the token would send the
+    // owner to fix the one thing that is working.
+    return said
+      ? "Jarvis refused the request (HTTP 403): " + said
+      : "Jarvis refused the request (HTTP 403). The backend did not send a reason.";
   }
   if (status === 404) {
     return (
@@ -276,7 +356,20 @@ export function interpretWriteReply(status: number, body: Record<string, unknown
     return baseOutcome("error", httpErrorMessage(status, data), status, data);
   }
   if (state === "waiting" || status === 202) {
-    return baseOutcome("waiting", said || WAITING_CARD_MESSAGE, status, data);
+    const message = said || WAITING_CARD_MESSAGE;
+    // A card that cannot be followed is still a card: say so, do not pretend the
+    // panel can report how it ended. Without an id there is nothing to poll.
+    if (!text(data.id)) {
+      return baseOutcome(
+        "waiting",
+        message +
+          " Jarvis did not send a change id, so this panel cannot follow the card: " +
+          "answer it in Jarvis, then reopen this panel to see the outcome.",
+        status,
+        data,
+      );
+    }
+    return baseOutcome("waiting", message, status, data);
   }
   if (state === "conflict" || status === 409) {
     return baseOutcome(
@@ -303,9 +396,21 @@ export function interpretWriteReply(status: number, body: Record<string, unknown
     if (state === "unchanged") {
       return baseOutcome("unchanged", said || "Nothing needed changing.", status, data);
     }
+    if (state === "saved" || !state) {
+      return baseOutcome(
+        "saved",
+        said || "Jarvis says it saved the change. You can undo it in Jarvis.",
+        status,
+        data,
+      );
+    }
+    // A 2xx with a state word this plugin does not know must not be read as
+    // "saved": only the two documented success states above can say that.
     return baseOutcome(
-      "saved",
-      said || "Jarvis says it saved the change. You can undo it in Jarvis.",
+      "error",
+      "Jarvis answered with the state \"" +
+        state +
+        "\", which this plugin does not know, so it cannot say the change was saved.",
       status,
       data,
     );
@@ -371,6 +476,19 @@ export function interpretChatReply(status: number, body: Record<string, unknown>
       message: httpErrorMessage(status, data),
     };
   }
+  // A 2xx that says ok:false is a refusal, not an empty answer: keep the
+  // backend's own reason instead of inventing "empty answer".
+  if (data.ok === false) {
+    return {
+      kind: "error",
+      answer: "",
+      message:
+        text(data.error) ||
+        text(data.message) ||
+        text(data.why) ||
+        "Jarvis refused to answer this question.",
+    };
+  }
   const choices = Array.isArray(data.choices) ? data.choices : [];
   const first = object(choices[0]);
   const message = object(first.message);
@@ -432,10 +550,35 @@ export function interpretCaptureReply(status: number, body: Record<string, unkno
       httpStatus: status,
     };
   }
+  // A non-2xx answer is an error BEFORE the `ok:false` branch below. A 404 for an
+  // unknown capture id only means this PC has no record of that job (the backend
+  // may have been restarted, and the words may even have been filed before that),
+  // so reporting "not_filed" would claim something the plugin cannot know.
+  if (status < 200 || status >= 300) {
+    return {
+      kind: "error",
+      message: httpErrorMessage(status, data),
+      jobId: text(data.id),
+      httpStatus: status,
+    };
+  }
   if (status === 202 || state === "waiting") {
+    const message = said || WAITING_CARD_MESSAGE;
+    // No status id means this dialog cannot check how the capture ended; saying
+    // so is honest, and it never labels an unchecked capture as filed.
+    if (!text(data.id)) {
+      return {
+        kind: "waiting",
+        message:
+          message +
+          " Jarvis did not send a status id, so this dialog cannot follow it: answer the card in Jarvis, then check today's note.",
+        jobId: "",
+        httpStatus: status,
+      };
+    }
     return {
       kind: "waiting",
-      message: said || WAITING_CARD_MESSAGE,
+      message,
       jobId: text(data.id),
       httpStatus: status,
     };
@@ -468,9 +611,18 @@ export function interpretCaptureReply(status: number, body: Record<string, unkno
     };
   }
   if (status >= 200 && status < 300) {
+    // Only `filed` or an answer with no state word counts as filed (the live
+    // capture route answers with a sentence only). Any other 2xx state word is
+    // unknown, so it is reported as NOT filed rather than guessed as success.
     return {
-      kind: "filed",
-      message: said || "Captured into today's note in your Obsidian vault.",
+      kind: "not_filed",
+      message:
+        said ||
+        (state
+          ? "Not captured: Jarvis reported the state \"" +
+            state +
+            "\", which this plugin does not know, so this is not counted as filed."
+          : "Not captured: Jarvis did not say the capture was filed."),
       jobId: text(data.id),
       httpStatus: status,
     };
@@ -495,7 +647,20 @@ export function interpretTemplatesReply(status: number, body: Record<string, unk
       httpStatus: status,
     };
   }
-  const raw = Array.isArray(data.templates) ? data.templates : [];
+  const listed: unknown = data.templates;
+  if (listed !== undefined && listed !== null && !Array.isArray(listed)) {
+    // A template list that is not a list must not read as "no templates": the
+    // panel lists names, and guessing them from a malformed answer would be a lie.
+    return {
+      kind: "error",
+      names: [],
+      why: "",
+      message:
+        "Jarvis answered but its template list was not a list, so this plugin will not guess the template names.",
+      httpStatus: status,
+    };
+  }
+  const raw = Array.isArray(listed) ? listed : [];
   const names: string[] = [];
   for (const item of raw) {
     if (typeof item === "string" && item.trim()) names.push(item.trim());
@@ -560,6 +725,11 @@ export function pollGaveUpMessage(): string {
     "Still waiting for the card on the PC. This plugin stopped checking after 10 minutes; " +
     "answer or dismiss the card in Jarvis, then reopen the Jarvis panel to see the outcome."
   );
+}
+
+/** True when a write outcome means the change did NOT happen (a refusal, not a result). */
+export function isRefusalKind(kind: WriteKind | undefined): boolean {
+  return kind === "error" || kind === "failed" || kind === "denied" || kind === "conflict";
 }
 
 /** True when an outcome means a card exists and its status should be polled. */

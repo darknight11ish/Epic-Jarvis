@@ -694,3 +694,167 @@ the build of src/ in THIS tree; it says nothing about Obsidian loading it. Every
 item in the UNTESTED list above remains untested (never opened in Obsidian,
 never installed in a vault, no live backend request, no real card flow), and the
 fake-Jarvis suite drives a stand-in server, not the real backend.
+
+
+ROUND 3B - HONESTY AND ACCESSIBILITY HARDENING (2026-10-31 PT / 2026-11-01 UTC)
+-----------------------------------------------------------------------------
+Appended on the same stacked branch, on top of ROUND 3 (local commit 0b53cd2cf,
+remote head 929076b5). Version stays 0.1.3. Nothing in PR #1056 is changed, no
+workflow file is edited, nothing is pushed and no new PR is opened by this round:
+it is the "continue improving inside obsidian-plugin/" work the Lead asked for
+while main is frozen.
+
+WHAT ROUND 3B CHANGES (all inside obsidian-plugin/ plus the same one changelog
+fragment outside it)
+  Honesty of the reply interpreters (src/protocol.ts)
+    - A waiting card with NO change id (write route, and capture) still reads
+      "waiting", but the sentence now says the panel cannot follow it and to
+      answer it in Jarvis. Before, it read like a card the panel could report on.
+    - A 2xx with an unknown write state word is an ERROR ("cannot say the change
+      was saved"), never "saved"; an unknown capture state word is "not_filed"
+      and names the word, never "filed".
+    - Non-2xx answers are mapped BEFORE `ok:false` in capture: a 404 for an
+      unknown capture job id used to claim "not_filed" although the PC merely
+      has no record of that job (Jarvis may have restarted after filing). It is
+      now an error carrying the route's sentence. Found by the independent test
+      agent, not by reading the code.
+    - `httpErrorMessage`: only 401 blames the token. 403 is the protected-note
+      refusal on this backend (backend/jarvis_notes_edit.py), so it now reads
+      "Jarvis refused the request (HTTP 403)" with the backend's own reason;
+      blaming the token sent the owner to fix the one thing that was working.
+    - A 2xx chat answer with `ok:false` keeps the backend's reason instead of
+      being reported as an "empty answer".
+    - A templates answer whose `templates` is not a list is an error, not an
+      empty list ("we will not guess the template names").
+    - The fake's unknown-change-id 404 now uses the backend's real sentence
+      ("There is no note save with that id on this PC.",
+      backend/jarvis_notes_edit.py:732).
+  First-run checklist (src/protocol.ts, src/types.ts, src/main.ts, src/panel.ts)
+    - NEW pure `firstRunChecklist(hasToken, statusKind)` and FIRST_RUN_STEPS:
+      three numbered steps plus the ONE next action for the current state. It is
+      shown in the panel until the backend answers Connected and disappears
+      once connected; `StatusKind` is now a typed value published by the status
+      refresh, so "the panel needs to update" is a value, not string matching.
+    - The panel re-renders when the status KIND changes (e.g. Test connection
+      succeeds), so the checklist disappears without switching notes.
+  Accessibility (new src/a11y.ts + panel/settings/modals/main/styles changes)
+    - NEW src/a11y.ts helpers: accessibleName, liveRegion (role="status" polite /
+      role="alert" assertive, aria-live, aria-atomic), group, busy, hint.
+    - Accessible names on every control the plugin creates itself (panel text
+      boxes/selects/path box, settings fields, all five dialog fields), named
+      groups for the ask/capture row and the selection buttons.
+    - Live regions for: ask answer, write result, Test connection result,
+      template preview, every dialog answer/result, the non-loopback warning,
+      the first-run next step, the panel status line and the status bar.
+      Refusals are role="alert"; aria-busy is used only for the immediate
+      request, deliberately NOT across the long card wait (busy would defer the
+      sentence that tells the owner to answer the card).
+    - Focus is given back after every action that disables its own button; the
+      panel refuses to rebuild while a field in it has focus; command-palette
+      failures are explained in the panel's live result line when the panel is
+      open; the replace dialog's selected words are read-only (focusable) rather
+      than disabled; "Jarvis only" template options are reachable by keyboard
+      (Create stays disabled and the preview says why); a cut list says "… and N
+      more, not shown"; a clipped replace preview says "first 400 characters".
+    - Independent READ-ONLY accessibility audit (separate agent, static review
+      only) of the panel/settings/dialogs/styles: verdict no blocker; 2 majors
+      (focus dropped by every action, selection buttons permanently disabled
+      from a stale one-time selection read) and 5 minors + 5 nits, all fixed in
+      this round (F1 template preview live, F2 busy scoped, F3 duplicate
+      Notices removed, F4 alert-level refusals, F5 palette feedback live, F6
+      focus restored, F7 stale selection gating removed, F8 template options
+      reachable, F9 rebuild guard, F10 heading/path readability, F11 truncation
+      count, F12 replace-preview truth).
+  Tests
+    - tests/accessibility.test.mjs: 20 tests, pure helper checks plus source
+      pins that the UI still uses the helpers where it matters.
+    - tests/fake-jarvis.test.mjs: 23 -> 43 tests (20 new): every remaining
+      honesty shape above against a real local HTTP server, the first-run
+      checklist block, and a mid-flow server close. No existing assertion was
+      weakened; the one temporary BLOCKED case (capture 404) was fixed in src
+      first and is now pinned.
+    - tests/protocol.test.mjs: 78 -> 92 (14 new: the awkward shapes, first-run
+      checklist states, isRefusalKind).
+
+MEASURED ON THE ROUND-3B TREE (from obsidian-plugin\, 2026-10-31 23:40 PT)
+  npm run typecheck (tsc --noEmit)      exit 0
+  npm run build (esbuild)               exit 0, main.js 89,226 bytes
+  node --check main.js                  exit 0
+  node tests/check-build-drift.mjs      exit 0
+      "Build-drift check OK: main.js is byte-identical after a fresh build
+       (37be608c1567f64a566ed3831e5dd99dc5ee2887501e174c14bb59173fc72fc6)."
+    negative proof (one byte appended to main.js):
+      injected before: 533B8ADF6C6B96DC648F9EAEF47F2B878BC81C0DE016F55536F5AF21F22787DA
+      check exit 1:    "BUILD-DRIFT CHECK FAILED: obsidian-plugin/main.js is not
+                        the build of src/."
+      restored by the check's rebuild: YES (hash back to 37BE608C...)
+  tests (one-process form; plain `node --test` is BLOCKED in this sandbox
+  because it forks a process per file - spawn EPERM - an environment limit, not
+  a test failure):
+    node --experimental-test-isolation=none --test tests/protocol.test.mjs \
+         tests/templates.test.mjs tests/safety.test.mjs \
+         tests/accessibility.test.mjs tests/fake-jarvis.test.mjs
+      tests/protocol.test.mjs         92 tests, 92 pass, 0 fail
+      tests/templates.test.mjs        17 tests, 17 pass, 0 fail
+      tests/safety.test.mjs           12 tests, 12 pass, 0 fail
+      tests/accessibility.test.mjs    20 tests, 20 pass, 0 fail
+      tests/fake-jarvis.test.mjs      43 tests, 43 pass, 0 fail
+      combined                       184 tests, 184 pass, 0 fail, exit 0
+
+  bundle greps (main.js), all ZERO (17 forbidden strings):
+      /api/approve, /api/deny, vault.modify, vault.create, vault.delete,
+      replaceSelection, obsidian://new, obsidian://daily, obsidian://unique,
+      obsidian://append, obsidian://prepend, Authorization, "Bearer ",
+      localStorage, fetch(, console., token-2f6a9c (the test fixture token)
+  bundle greps, present as required:
+      the 9 notes-route path literals + /api/chat                    present
+      obsidian://open?vault=                                          exactly 1
+  tracked files under obsidian-plugin/ after this commit       28
+      (26 from ROUND 3 + src/a11y.ts + tests/accessibility.test.mjs)
+  tracked *.zip files                                          0
+  tracked dist/ files                                          0
+  repo checkers (from the worktree root), all exit 0:
+      python -B tools/roll_changelog.py --check       33 fragments, all well-formed
+      python -B tools/check_parity.py                 no undecided drift
+      python -B tools/check_zero_jargon.py --check    ok, no new user-facing
+                                                      developer words over baseline
+      python -B tools/check_no_scratch_in_the_tree.py 4 passed, 0 failed
+  .github/workflows/                           NOT edited by this round
+
+AUDIT NOTES
+  - This round's independent accessibility audit was static/read-only. It did
+    NOT run a screen reader and did NOT open Obsidian, because the plugin has
+    never been loaded there; its line numbers refer to the 23:24:58 revision.
+    The audit's remaining caveat is the SecretComponent row: Obsidian's own
+    component supplies its own name, and this lane cannot inspect it from here.
+    That stays in the UNTESTED list, not in a pass.
+  - Every claim above is about the attributes and source pins the plugin asks
+    for, not about what Obsidian's webview renders or a screen reader says.
+
+ARTIFACT, MEASURED (REBUILT after all edits, README included)
+  main.js: 89,226 bytes, SHA-256
+    37BE608C1567F64A566ED3831E5DD99DC5EE2887501E174C14BB59173FC72FC6
+  package: jarvis-obsidian-plugin-0.1.3.zip (lane scratch
+  .dsh-scratch\OBSIDIAN-PACKAGING-2026-10-31\, NOT committed; supersedes the
+  100,353-byte package recorded in ROUND 3)
+      bytes:   121,426
+      SHA-256: F5CB9921CDEFCDF7A6F7226853D74A952141D93613C80F5D885BF5FD5609946A
+      entries: 26 (runtime files at the root of jarvis-notes-bridge/, docs,
+      source/build files and the five test files; no BUILD-VERIFICATION.txt, no
+      .gitignore, no node_modules, no cache, no zip inside the zip)
+      every entry's SHA-256 was compared against its source file: 0 mismatches.
+  Earlier packages, whose exact bytes no longer change:
+      0.1.2: 86,666 bytes, SHA-256
+        7FA8BE04ADF83ED3BA50826C32D95F249B7164743D349D85F08479A5CB1EE5E6
+      0.1.1: 80,765 bytes, SHA-256
+        52504033CD3D6529129C868623109D013D17FABE40F2CB104F0AD03685146AB1
+  The README/fragment still do not hard-code the 0.1.3 hash: a zip cannot contain
+  a truthful hash of itself.
+
+UNTESTED, STILL NOT A PASS: nothing in this round was run inside Obsidian. No
+screen reader was used, no keyboard was driven through the panel or dialogs, the
+first-run checklist has never been drawn in a real sidebar, the SecretStorage
+picker is untouched, no live backend was asked for anything, and no real card
+flow was driven. The fake-Jarvis suite is a stand-in server. The full UNTESTED
+list above stands unchanged.
+
