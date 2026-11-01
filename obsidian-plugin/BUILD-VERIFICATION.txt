@@ -564,3 +564,133 @@ MEASURED ON THE ROUND-2 TREE (Lead, 2026-10-31, from obsidian-plugin\)
 UNTESTED, STILL NOT A PASS: no Obsidian window was opened and no live card flow
 was driven, so F1/F2/F4 are fixed by code review and tests of the pure parts, not
 by clicking in Obsidian. The earlier UNTESTED list stands unchanged.
+
+
+ROUND 3 - GEMINI RULING 6 PACKAGING AND THE FAKE-JARVIS INTEGRATION SUITE (2026-10-31)
+---------------------------------------------------------------------------------------
+This section is appended on the stacked branch
+`feat/obsidian-plugin-packaging-drift-2026-10-31`, which sits on top of the 0.1.2
+branch (PR #1056 head). It implements Gemini round-3 ruling 6 on plugin packaging
+and continues the integration tests. Version 0.1.3. Nothing in #1056 is changed.
+
+WHAT ROUND 3 CHANGED (inside obsidian-plugin/ plus one changelog fragment)
+  - The committed bundle stays, on purpose: obsidian-plugin/main.js is still the
+    file Obsidian loads, so the owner can copy the folder without building. It is
+    NOT gitignored.
+  - NEW build-drift check `npm run check:build-drift` ->
+    `node tests/check-build-drift.mjs`. It hashes the committed main.js, rebuilds
+    it with `node esbuild.config.mjs`, hashes it again, and exits 1 if the file
+    changed at all (zero drift). The exact CI step a lane could add to the
+    informational `audit` job is proposed in the README and below; NO workflow
+    file is edited by this branch.
+  - NEW `.gitignore` entries: `*.zip` and `dist/`. No packaged binary is tracked.
+    Packages are built into the lane scratch folder and their sizes/SHA-256 are
+    recorded here (tests/ has a new check-build-drift.mjs; the fake-Jarvis suite
+    is added below).
+  - NEW fake-Jarvis integration suite `tests/fake-jarvis.test.mjs` (node:http
+    server on 127.0.0.1:0, closed after each test) driving the plugin's real
+    request builders and reply interpreters (extracted into src/protocol.ts) over
+    the wave-2 routes and the first-run checklist.
+  - `src/protocol.ts` gained the pure RouteRequest builders (readNote, templates,
+    chat, capture + status, insert, format, replace, customize line, tag, create,
+    change status); `src/client.ts` now builds every request through them, so the
+    integration tests exercise the exact bodies the plugin sends.
+  - Version 0.1.3 in manifest.json, package.json, package-lock.json and
+    versions.json.
+
+RULING-6 COMPLIANCE, MEASURED (from the worktree root)
+  tracked files under obsidian-plugin/                26 (24 from 0.1.2 + the two
+                                                     new test files; plus the
+                                                     changelog fragment outside)
+  required tracked files present                      manifest.json, main.js,
+                                                     src/main.ts, styles.css
+  tracked *.zip files                                 0
+  tracked dist/ files                                 0
+  `git check-ignore -v obsidian-plugin/foo.zip`       obsidian-plugin/.gitignore:9:*.zip
+  `git check-ignore -v obsidian-plugin/dist/bundle.js` obsidian-plugin/.gitignore:10:dist/
+  `git check-ignore obsidian-plugin/main.js`          (no output: main.js is tracked)
+
+BUILD-DRIFT CHECK, MEASURED (both directions)
+  positive: `npm run check:build-drift` -> exit 0
+    "Build-drift check OK: main.js is byte-identical after a fresh build
+     (014d4980728afe22bdcfd6125d3b00045b39d7d194b6b17cbd63f504257b59ff)."
+  negative: one byte appended to main.js, then the check -> exit 1
+    "BUILD-DRIFT CHECK FAILED: obsidian-plugin/main.js is not the build of src/."
+    committed before: d7b3deadf762002d76383bd0c78fa89123a5df1c12d8209b8edab98a12941e37
+    rebuilt now:      014d4980728afe22bdcfd6125d3b00045b39d7d194b6b17cbd63f504257b59ff
+    (the check's own rebuild restored the correct bundle; the injected byte was
+     the negative-test proof, not a real drift)
+  So the check was PROVEN to fail when main.js and src/ disagree, not only to
+  pass when they agree.
+
+CI STEP PROPOSED (documented, deliberately NOT added to .github/workflows/ by
+this change - the Lead owns workflows). Put it in the informational `audit` job
+after checkout and the Node setup step; Node 20 is enough for this step (only the
+node tests below need Node 22.18+):
+
+  - name: Obsidian plugin build drift
+    run: |
+      cd obsidian-plugin
+      npm ci --no-audit --no-fund
+      npm run check:build-drift
+
+TESTS, MEASURED (commands from obsidian-plugin\; plain `node --test` is BLOCKED
+in this sandbox because it forks a process per file - spawn EPERM - so the
+record uses the one-process form below; that is an environment limit, not a
+test failure):
+  node --experimental-test-isolation=none --test tests/protocol.test.mjs \
+       tests/templates.test.mjs tests/safety.test.mjs tests/fake-jarvis.test.mjs
+      tests/protocol.test.mjs      78 tests, 78 pass, 0 fail
+      tests/templates.test.mjs     17 tests, 17 pass, 0 fail
+      tests/safety.test.mjs        12 tests, 12 pass, 0 fail
+      tests/fake-jarvis.test.mjs   23 tests, 23 pass, 0 fail
+      combined                    130 tests, 130 pass, 0 fail, exit 0
+
+  What the fake-Jarvis suite covers: every surgical body carries a 64-hex
+  expected_sha256; read-then-insert (waiting -> saved); format saved; replace
+  conflict with current_sha256; customize unchanged; tag saved; create waiting ->
+  saved (no sha, correctly); capture waiting -> filed; chat answer; templates
+  names; wrong token 401 mapped without printing the token; pre-deploy 404
+  mapping; a path with spaces, `&` and a non-ASCII character round-trips
+  (`Folder/My Note & More é.md` -> %20/%26/%C3%A9); invalid JSON is an unreadable
+  error; the first-run checklist (no token gives the Settings sentence, default
+  backend is loopback, `hud` + `desktop` headers on every request). Every request
+  also asserts it reached a loopback peer with the configured token, and a fake
+  server violation fails the test.
+  Two honest nuances found by the suite author, recorded instead of hidden:
+    - a FastAPI-shaped 404 (`{"detail":"Not Found"}`) maps to the helpful
+      "notes edit routes arrive with the notes-editor backend deploy" sentence,
+      but a 404 carrying its own `error`/`message` keeps the backend's words
+      (that is the intended precedence);
+    - the 401 fixture is the one documented exception to "assert the token on
+      every request", because a server that demands the right token cannot also
+      answer 401; it still records the token that was sent, so the test proves
+      the plugin sent exactly its configured token and the error message names
+      the token without containing its value.
+
+ARTIFACT, MEASURED
+  main.js: 78,225 bytes, SHA-256
+    014D4980728AFE22BDCFD6125D3B00045B39D7D194B6B17CBD63F504257B59FF
+  package: jarvis-obsidian-plugin-0.1.3.zip (REBUILT after the README/fragment
+  edits so the zip carries this tree's documents; kept in the lane scratch
+  folder .dsh-scratch\OBSIDIAN-PACKAGING-2026-10-31\, NOT committed)
+      bytes:   100,353
+      SHA-256: 860BCD10493E6CE58ABD8363109176E569C48002D629164D530F3380D1A39368
+      entries: 24 (runtime files at the root of jarvis-notes-bridge/, docs,
+      source/build files and the four test files; no node_modules, no cache, no
+      zip inside the zip)
+  Earlier packages, whose exact bytes no longer change:
+      0.1.2: 86,666 bytes, SHA-256
+        7FA8BE04ADF83ED3BA50826C32D95F249B7164743D349D85F08479A5CB1EE5E6
+      0.1.1: 80,765 bytes, SHA-256
+        52504033CD3D6529129C868623109D013D17FABE40F2CB104F0AD03685146AB1
+  The README and the changelog fragment deliberately do NOT hard-code the 0.1.3
+  hash: a zip cannot contain a truthful hash of itself, so the current package's
+  size and SHA-256 live only here (this file is not inside the zip) and in the
+  report.
+
+UNTESTED, STILL NOT A PASS: the build-drift check proves the committed bundle is
+the build of src/ in THIS tree; it says nothing about Obsidian loading it. Every
+item in the UNTESTED list above remains untested (never opened in Obsidian,
+never installed in a vault, no live backend request, no real card flow), and the
+fake-Jarvis suite drives a stand-in server, not the real backend.

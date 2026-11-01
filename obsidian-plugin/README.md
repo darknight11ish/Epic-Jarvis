@@ -15,7 +15,7 @@ Windows PC.
 |---|---|
 | Plugin id | `jarvis-notes-bridge` |
 | Display name | Jarvis notes bridge |
-| Version | `0.1.2` |
+| Version | `0.1.3` |
 | Needs Obsidian | `1.13.0` or newer |
 | Runs on | Desktop only |
 | Talks to | the Jarvis backend on this PC, default `http://127.0.0.1:4719` |
@@ -219,15 +219,17 @@ characters of the reason.
 ## What is proven, and what is not tested
 
 **Checks this folder offers.** Run them yourself; a green run is the proof, not
-this table.
+this table - the table says what each command checks, and reports no test count
+and no CI result.
 
 | Command | What it checks |
 |---|---|
 | `npm run typecheck` | The TypeScript source type-checks. |
 | `npm run build` | `esbuild.config.mjs` bundles `src/` into the `main.js` Obsidian loads. |
-| `npm test` | The node tests in `tests/` (`protocol`, `templates`, `safety`). Needs Node 22.18 or newer, because they read the TypeScript source directly. |
+| `npm run check:build-drift` | Rebuilds `main.js` and fails if the committed file changes - proves the committed bundle is exactly the build of `src/`. |
+| `npm test` | The node tests in `tests/`: the pure protocol/template helpers, the source-text safety proofs, and the fake-Jarvis integration suite. Needs Node 22.18 or newer, because the tests read the TypeScript source directly. |
 | `npm run test:sandbox` | The same tests in one process, for a locked-down environment that refuses the child processes `node --test` starts (it fails there with `spawn EPERM`; that is the environment, not a test). |
-| `npm run check` | Type-check, build, then `npm test`, in order. |
+| `npm run check` | Type-check, the build-drift check, then `npm test`, in order. |
 | the greps in [SECURITY.md](SECURITY.md) | The shipped `main.js` contains no approve, no deny and no direct vault write. |
 
 **Not tested.** Said plainly, so nobody reads this document as a field report:
@@ -240,6 +242,29 @@ this table.
 - polling `/api/notes/change`;
 - the status bar;
 - vaults larger than the context bounds.
+
+None of that changes with the new tests (the fake-Jarvis suite still runs
+against a stand-in server, not the real backend or Obsidian).
+
+## For CI: the build-drift step (proposed, not added here)
+
+**This change does not edit the repository's workflow file.** The step below is
+what a CI lane could add to the informational `audit` job, after that job's
+checkout and Node setup steps. It is a proposal, not a check that runs today,
+and no CI result is claimed here.
+
+```yaml
+- name: Obsidian plugin build drift
+  run: |
+    cd obsidian-plugin
+    npm ci --no-audit --no-fund
+    npm run check:build-drift
+```
+
+Node 20 is enough for this one step; only the node tests need Node 22.18 or
+newer. The step takes seconds, and it fails when someone edits `src/` or
+`main.js` without rebuilding the other one, so a stale bundle cannot reach the
+owner by accident.
 
 ## Known limits
 
@@ -291,6 +316,25 @@ folder, the folder is ready to copy without building.
 Then follow [INSTALL.md](INSTALL.md). Do not copy it into the live vault until
 the Lead or the owner says so.
 
+### Packaged binaries are not in this repository
+
+`*.zip` and `dist/` are gitignored in `obsidian-plugin/.gitignore`. A package is
+built into a scratch or release folder and is never committed. The size and
+SHA-256 value of each package built so far are recorded in
+[BUILD-VERIFICATION.txt](BUILD-VERIFICATION.txt); a SHA-256 is a fingerprint of
+the file, so changing one byte changes the value.
+
+| Package | Size and SHA-256 (recorded in BUILD-VERIFICATION.txt) |
+|---|---|
+| `jarvis-obsidian-plugin-0.1.3.zip` (this tree) | recorded there after the package is built - the exact size and SHA-256 are a fingerprint of the built file, so they are kept out of this table to avoid a package that hashes its own description |
+| `jarvis-obsidian-plugin-0.1.2.zip` | 86,666 bytes, SHA-256 `7FA8BE04ADF83ED3BA50826C32D95F249B7164743D349D85F08479A5CB1EE5E6` |
+| `jarvis-obsidian-plugin-0.1.1.zip` (kept for history) | 80,765 bytes, SHA-256 `52504033CD3D6529129C868623109D013D17FABE40F2CB104F0AD03685146AB1` |
+
+Only the source, `manifest.json`, the committed `main.js`, `styles.css` and the
+document and settings files in this folder are tracked. `main.js` is committed
+on purpose: it is the file Obsidian loads, so the folder can be copied without
+building. Do not delete it from the tree and do not add it to `.gitignore`.
+
 ### Where the source lives
 
 `main.ts` used to be one file. It is split now, and `esbuild.config.mjs` bundles
@@ -310,11 +354,17 @@ the pieces back into the single `main.js` Obsidian loads.
 
 ## What changed in the repository
 
-This plugin is additive. **This folder is the only tree change.** No existing
+The plugin's first release was additive: it added this folder, and no existing
 shipped file was modified - no source, no document, no workflow. The one other
-change that belongs to this work is the release note,
+change that belonged to it is the release note,
 `changelog.d/2026-10-31-obsidian-plugin.md`, which is how this project records a
 user-visible change.
+
+The packaging follow-up (2026-10-31) stays inside this folder: it changes this
+plugin's own source, build and test files, adds the build-drift check and the
+fake-Jarvis suite, and records the packages' sizes and SHA-256 values in
+`BUILD-VERIFICATION.txt`. It edits no workflow; its one file outside the folder
+is `changelog.d/2026-10-31-obsidian-plugin-packaging.md`.
 
 The reason Obsidian-only is written in this README rather than in
 `docs/ARCHITECTURE.md` section 8 is the same: this change does not edit that
