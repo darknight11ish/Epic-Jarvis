@@ -29167,6 +29167,16 @@ worst-case line - the bytes leave the PC for the phone and the phone can keep a
 copy after downloading it. Nothing about that is looser than the tier row; it
 is the same safe side the protection cards use.
 
+The same sentence works **in chat without the model tool being enabled**: a
+deterministic fast-path shape ("send me the file invoice.pdf", "send
+invoice.pdf to my phone", "send the file invoice.pdf to my phone", "find the
+file invoice.pdf and send it to my phone", "send me invoice.pdf from my
+Downloads") calls this section's own `prepare()` and raises this same card
+under the same action. No new route, no new tool, no new permission: the module
+still searches, refuses and words everything, the fast path never approves
+anything, and its answer is the card's own sentence plus "Nothing is sent until
+you approve the card."
+
 ### 172.3 Named limits (all of them)
 
 - **one file per card**, one card at a time;

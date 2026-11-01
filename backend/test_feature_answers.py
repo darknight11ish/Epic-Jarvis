@@ -744,8 +744,8 @@ def t_settings_shaped_features_answer_from_their_own_rows():
     """The audit's settings-ish names resolve and quote the catalogue row."""
     cases = {
         "tell me about quiet hours": ("notifications", "Notifications"),
-        "tell me about thinking level": ("attention-budget",
-                                         "How much Jarvis may interrupt you"),
+        "tell me about thinking level": ("thinking-levels",
+                                         "Thinking levels"),
         "tell me about memories": ("memory-saved", "Facts Jarvis saved by itself"),
         "tell me about personality presets": ("manner", "How Jarvis talks"),
     }

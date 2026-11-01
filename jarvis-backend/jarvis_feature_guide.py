@@ -187,7 +187,7 @@ def _tokens(text) -> tuple:
 _OWNER_ALIASES = {
     "today": ("today board",),
     "notifications": ("quiet hours", "notification settings", "do not disturb"),
-    "attention-budget": ("thinking level", "interruption level"),
+    "attention-budget": ("interruption level",),
     "memory-saved": ("memories", "saved memories"),
     "memory-known": ("what you remember about me", "memory list"),
 }
@@ -1705,6 +1705,211 @@ def overview(words="") -> dict:
 
 
 # --------------------------------------------------------------------------
+#   Detail shapes: "explain X in detail", "how do I use X", "what does X
+#   need", "is X private", "why is X on/off", "what can go wrong", "what is
+#   X like", "can X do Y" (2026-10-31, the owner's depth ask)
+# --------------------------------------------------------------------------
+# Every sentence is made from the row's OWN fields plus the state the guide
+# already reads for the control matrix. Nothing is inferred: a row with no
+# recorded limit says so, a row with no privacy note says so, and "can X do Y"
+# answers only when Y's own words are in X's row.
+
+def _detail_bad(words):
+    """(row, None) or (None, the ready group/ambiguous/unknown answer)."""
+    got = find(str(words or ""), loose=True)
+    if got["kind"] == "feature":
+        return got["row"], None
+    if got["kind"] == "group":
+        return None, {"ok": True, "kind": "group", "group": got["group"],
+                      "features": [{"id": r["id"], "title": r["title"]}
+                                   for r in got["rows"]],
+                      "words": _group_words(got["group"], got["rows"])
+                      + " " + CAPABILITY_TAIL}
+    if got["kind"] == "ambiguous":
+        return None, _discussion_ambiguous(got["rows"])
+    return None, _discussion_unknown()
+
+
+def _detail_state(row: dict) -> str:
+    """The row's approved label, plus the live switch state when it has one."""
+    return (f"Its state: {status_label(row)}. "
+            + _state_clause(_switch_state_rows(row)))
+
+
+def _detail_needs(row: dict) -> str:
+    """What the row itself says it needs to be used: its place and ask rule."""
+    where = str(row.get("where") or "").strip()
+    asks = str(row.get("asks") or "").strip()
+    return (f"What it needs: {settings_path_words(row)}; "
+            f"{where} Does it ask first? {asks}")
+
+
+def detail(words) -> dict:
+    """"Explain X in detail" / "tell me everything about X" - every own field."""
+    if CATALOGUE is None:
+        return {"ok": False, "kind": "missing",
+                "words": "The feature list is not installed on this PC, so I cannot read it."}
+    row, bad = _detail_bad(words)
+    if bad is not None:
+        return bad
+    if row is None:
+        return _detail_bad(words)[1]
+    parts = [
+        f"{row['title']}.",
+        str(row.get("what") or "").strip(),
+        f"Where it lives: {str(row.get('where') or '').strip()}",
+        f"How to use it: {change_words(row)} {example_phrase_words(row)}",
+        f"Does it ask first? {str(row.get('asks') or '').strip()}",
+        f"The honest limit: {_limit_words(row)}",
+        _detail_state(row),
+        f"Which app(s): {surface_words(row)} "
+        f"(the feature list's surface field: {str(row.get('surface') or '').strip()})",
+        _detail_needs(row),
+        f"(Feature list group: {row['group']}.)",
+        CAPABILITY_TAIL,
+    ]
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": "\n\n".join(p for p in parts if p and p.strip())}
+
+
+def example(words) -> dict:
+    """"What do I say to use X?" / "give me an example of X" - the row's example."""
+    row, bad = _detail_bad(words)
+    if bad is not None:
+        return bad
+    if row is None:
+        return _detail_bad(words)[1]
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": (f"{row['title']}. {example_phrase_words(row)} "
+                      f"Where: {str(row.get('where') or '').strip()} "
+                      f"Does it ask first? {str(row.get('asks') or '').strip()} "
+                      f"The honest limit: {_limit_words(row)} "
+                      + CAPABILITY_TAIL)}
+
+
+def is_private(words) -> dict:
+    """"Is X private?" - only what the row's own words say about privacy."""
+    row, bad = _detail_bad(words)
+    if bad is not None:
+        return bad
+    if row is None:
+        return _detail_bad(words)[1]
+    markers = ("private", "never leaves", "encrypted", "on this pc", "local",
+               "never uploaded", "never learned", "outside text", "sensitive",
+               "phone only", "app lock", "never shown", "kept")
+    own = " ".join(str(row.get(k) or "") for k in ("what", "where", "asks", "limit"))
+    hits = [m for m in markers if m in own.lower()]
+    if hits:
+        words = (f"{row['title']}. The feature list's own privacy words are: "
+                 f"Where: {str(row.get('where') or '').strip()} "
+                 f"Does it ask first? {str(row.get('asks') or '').strip()} "
+                 f"The honest limit: {_limit_words(row)}")
+    else:
+        words = (f"{row['title']}. The feature list records no separate privacy "
+                 f"note for it. Its own words: "
+                 f"Where: {str(row.get('where') or '').strip()} "
+                 f"Does it ask first? {str(row.get('asks') or '').strip()} "
+                 f"The honest limit: {_limit_words(row)}")
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": words + " " + CAPABILITY_TAIL}
+
+
+def needs(words) -> dict:
+    """"What does X need / require?" - only the row's own Where/Settings/asks."""
+    row, bad = _detail_bad(words)
+    if bad is not None:
+        return bad
+    if row is None:
+        return _detail_bad(words)[1]
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": (f"{row['title']}. {_detail_needs(row)} "
+                      f"Which app(s): {surface_words(row)} "
+                      f"The honest limit: {_limit_words(row)} "
+                      + CAPABILITY_TAIL)}
+
+
+def why_state(words) -> dict:
+    """"Why is X on/off?" - the row's own state, label and ask/limit words."""
+    row, bad = _detail_bad(words)
+    if bad is not None:
+        return bad
+    if row is None:
+        return _detail_bad(words)[1]
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": (f"{row['title']}. {_detail_state(row)} "
+                      f"Does it ask first? {str(row.get('asks') or '').strip()} "
+                      f"The honest limit: {_limit_words(row)} "
+                      + CAPABILITY_TAIL)}
+
+
+def goes_wrong(words) -> dict:
+    """"What can go wrong with X?" - its own honest limit, never an invention."""
+    row, bad = _detail_bad(words)
+    if bad is not None:
+        return bad
+    if row is None:
+        return _detail_bad(words)[1]
+    limit = str(row.get("limit") or "").strip()
+    if not limit:
+        words = (f"{row['title']}. The feature list records no limit for it, so I "
+                 f"cannot name what can go wrong. Its own words: "
+                 f"Where: {str(row.get('where') or '').strip()} "
+                 f"Does it ask first? {str(row.get('asks') or '').strip()}")
+    else:
+        words = (f"{row['title']}. The honest limit: {limit} "
+                 f"Does it ask first? {str(row.get('asks') or '').strip()}")
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": words + " " + CAPABILITY_TAIL}
+
+
+def can_do(words, capability) -> dict:
+    """"Can X do Y?" - only if Y's own words are in X's row text."""
+    row, bad = _detail_bad(words)
+    if bad is not None:
+        return bad
+    if row is None:
+        return _detail_bad(words)[1]
+    want = tuple(w for w in _tokens(capability) if w not in _STOP)
+    if not want:
+        return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                "words": (f"{row['title']}. Say what ability you mean and I will "
+                          f"look only in that feature's own words. "
+                          f"The honest limit: {_limit_words(row)} "
+                          + CAPABILITY_TAIL)}
+    own = (str(row.get("what") or ""), str(row.get("where") or ""),
+           str(row.get("asks") or ""), str(row.get("limit") or ""))
+    if _contains_all(_tokens(" ".join(own)), want):
+        hits = [s for s in own if s.strip() and _contains_all(_tokens(s), want)]
+        return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                "words": (f"{row['title']}. The feature list's own words: "
+                          + " ".join(hits)
+                          + f" The honest limit: {_limit_words(row)} "
+                          + CAPABILITY_TAIL)}
+    return {"ok": True, "kind": "not_listed", "feature": _feature_facts(row),
+            "words": (f"{row['title']}. That is not listed as part of "
+                      f"{row['title']}. The honest limit: {_limit_words(row)} "
+                      f"Does it ask first? {str(row.get('asks') or '').strip()} "
+                      + CAPABILITY_TAIL)}
+
+
+def is_like(words) -> dict:
+    """"What is X like?" - the row's what/where/limit plus its state."""
+    row, bad = _detail_bad(words)
+    if bad is not None:
+        return bad
+    if row is None:
+        return _detail_bad(words)[1]
+    return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+            "words": (f"{row['title']}. {str(row.get('what') or '').strip()} "
+                      f"Where: {str(row.get('where') or '').strip()} "
+                      f"Does it ask first? {str(row.get('asks') or '').strip()} "
+                      f"The honest limit: {_limit_words(row)} "
+                      f"{_detail_state(row)} "
+                      f"Which app(s): {surface_words(row)} "
+                      + CAPABILITY_TAIL)}
+
+
+# --------------------------------------------------------------------------
 #   "Is it on?": a feature, or a plain setting the registry already names
 # --------------------------------------------------------------------------
 
@@ -1928,6 +2133,26 @@ REASON_CODES = ("command", "no-command", "credentials", "app-local",
 #: a silent omission, and also fails if an id named here IS controllable
 #: (that would be a stale excuse). The reasons say WHY, not "not supported".
 NO_COMMAND_REASON = {
+    "media-transport": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "parking": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "places": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "thinking-levels": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "calculator": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "open-programs": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "github-research": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "computer-control": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "browser-control": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "shell-commands": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "read-web-page": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "propose-plan": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "reverse-engineering": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "android-builder": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "docker-containers": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "card-summary": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "receipts": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "search-audio-video": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "notion-import": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    "vault-organizer": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     # The three planned Switchable rows (2026-10-23) still need an allowlist
     # reason for matrix_rows_without_reason(); their label stays Switchable and
     # their row status stays planned, so this reason is reported, not a hidden pass.

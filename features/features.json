@@ -67,9 +67,9 @@
     "id": "read-aloud",
     "group": "Talking",
     "title": "Jarvis reads its answers aloud",
-    "what": "The answer is spoken as well as shown. A finished answer can be read out again from its own speaker button.",
+    "what": "Jarvis reads its answers aloud, in the voice you chose; a finished answer can be read out again from its own speaker button.",
     "where": "On by default: a question asked by voice gets a spoken answer, and no switch turns that off. Settings, Voice, \"Answers that use what Jarvis remembers\" and \"Answers that use sensitive saved facts\" choose whether those answers are read aloud or kept on screen. Settings, HUD, \"Read-aloud buttons on answers\" adds the speaker to each finished answer - it does not turn read-aloud on or off.",
-    "asks": "No card.",
+    "asks": "No card to read aloud; an answer that used a sensitive fact stays on screen unless you allow it in Settings.",
     "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
     "surface": "both",
     "covers": [
@@ -85,9 +85,9 @@
     "id": "spoken-style",
     "group": "Talking",
     "title": "Short answers to spoken questions",
-    "what": "Questions asked by voice get an answer written to be heard - a short first sentence, no lists.",
+    "what": "How spoken answers are phrased: short, natural and without markdown.",
     "where": "It happens on its own for anything you ask by voice.",
-    "asks": "No card.",
+    "asks": "No card: the spoken style changes wording only, never what Jarvis does.",
     "limit": "Typed questions are unchanged, and a spoken answer can still be long if you ask for more.",
     "surface": "both",
     "covers": [
@@ -201,8 +201,8 @@
       "ai slop"
     ],
     "covers": [
-    "settings.manner"
-  ]
+      "settings.manner"
+    ]
   },
   {
     "id": "interrupt",
@@ -379,10 +379,10 @@
     "id": "today",
     "group": "Talking",
     "title": "Today",
-    "what": "Your own cards for the day, in one place.",
+    "what": "Your own cards for the day in one place, gathered from the lists the PC already keeps.",
     "where": "Brain, Work, Today.",
     "asks": "No card; adding one is held while the connection is catching up.",
-    "limit": "",
+    "limit": "It only gathers cards the PC's own lists already hold; a card added while the connection catches up follows that card's own rule.",
     "surface": "both",
     "covers": [
       "brain.work.today",
@@ -414,10 +414,10 @@
     "id": "jobs",
     "group": "Talking",
     "title": "Background jobs",
-    "what": "The long jobs Jarvis is running, and whether they finished.",
+    "what": "The long jobs Jarvis is running, whether they finished, and the one button that stops a running one.",
     "where": "Brain, Work, Background jobs.",
     "asks": "No card to look; stopping one never asks.",
-    "limit": "",
+    "limit": "Only jobs the PC itself started; closing the list does not stop one, and stopping a running job never asks.",
     "surface": "both",
     "covers": [
       "brain.work.jobs",
@@ -432,10 +432,10 @@
     "id": "now",
     "group": "Talking",
     "title": "What Jarvis is doing right now",
-    "what": "The state Jarvis is in, each step it is taking, and anything it noticed by itself.",
+    "what": "The state Jarvis is in, each step it is taking, and anything it noticed by itself, from the PC's own modules.",
     "where": "Brain, Now.",
     "asks": "No card.",
-    "limit": "",
+    "limit": "Only what the PC's own modules report; it does not predict what will happen next.",
     "surface": "both",
     "covers": [
       "brain.tab.now",
@@ -455,7 +455,7 @@
     "what": "The interruption budget, and the day's brief of what needs you.",
     "where": "Brain, Now, Attention budget. The brief appears in the Jarvis bar.",
     "asks": "Muting is instant, and approves nothing.",
-    "limit": "",
+    "limit": "The budget can mute interruptions; it approves nothing and cannot make Jarvis act.",
     "surface": "both",
     "aliases": [
       "attention budget",
@@ -487,6 +487,28 @@
     "must_mention": [
       "focus session",
       "quiet"
+    ]
+  },
+  {
+    "id": "media-transport",
+    "group": "Talking",
+    "title": "Play or pause what is on this PC",
+    "what": "Pause, play, skip to the next or previous song or video, and ask what is playing.",
+    "where": "Say the object with the action - \"pause the music\", \"next song\", \"what's playing\". Bare \"pause\" while a focus session is running is the focus session's; it controls the media session already playing on the PC.",
+    "asks": "No card: it controls only the player that is already playing on this PC.",
+    "limit": "It can only control a media session Windows reports; a player Windows does not expose, or a hidden tab, is not touched.",
+    "surface": "both",
+    "covers": [
+      "media-transport"
+    ],
+    "aliases": [
+      "music",
+      "pause the music",
+      "what's playing"
+    ],
+    "must_mention": [
+      "pause",
+      "next"
     ]
   },
   {
@@ -617,10 +639,10 @@
     "id": "between-us",
     "group": "Memory",
     "title": "Between us",
-    "what": "Inside jokes and shared references, from your own words only.",
+    "what": "Inside jokes and shared references, from your own words only, kept with your memory.",
     "where": "Brain, Memory, Between us.",
     "asks": "Forget asks first, like any other fact.",
-    "limit": "",
+    "limit": "Only from your own words; shared references are memory-like and hide with the memory lists.",
     "surface": "both",
     "covers": [
       "brain.memory.between-us",
@@ -637,7 +659,7 @@
     "what": "A mode for each topic of what Jarvis learns.",
     "where": "Brain, Memory, Topics.",
     "asks": "The PC raises the only cards here; every change is held while the connection is catching up.",
-    "limit": "",
+    "limit": "A topic changes what Jarvis learns; the PC raises the cards and every change waits while the connection catches up.",
     "surface": "both",
     "covers": [
       "brain.memory.topics",
@@ -671,10 +693,10 @@
     "id": "wiki",
     "group": "Memory",
     "title": "The wiki Jarvis builds",
-    "what": "A wiki made from documents you give Jarvis.",
+    "what": "A wiki built from documents you give Jarvis, with pages it keeps up to date as you add more.",
     "where": "Brain, Memory, Wiki.",
     "asks": "Adding a document raises one card.",
-    "limit": "",
+    "limit": "Built only from documents you give it; it does not read the web on its own.",
     "surface": "both",
     "covers": [
       "brain.memory.wiki",
@@ -706,7 +728,7 @@
     "id": "memory-as-of",
     "group": "Memory",
     "title": "What did I believe on this date?",
-    "what": "Ask what a fact said on a past day.",
+    "what": "Ask what a fact said on a past day and see the answer it gave before.",
     "where": "Brain, Memory, What did I believe on this date?",
     "asks": "No card.",
     "limit": "It needs the connection live.",
@@ -836,6 +858,27 @@
     ]
   },
   {
+    "id": "places",
+    "group": "Memory",
+    "title": "Where did I put things",
+    "what": "Remember where you put something from your own words - \"the spare key is under the blue pot\" - and answer \"where did I put the key?\".",
+    "where": "Just tell Jarvis where something is, then ask where you put it; both are your own words.",
+    "asks": "No card for an ordinary place; a sensitive place - a spare key, a home-security detail - waits for your yes, like any sensitive fact.",
+    "limit": "Only what you told it in your own words; it does not look through the house or the files, and forgetting it is Memory's own Forget.",
+    "surface": "both",
+    "covers": [
+      "places"
+    ],
+    "aliases": [
+      "where did i put",
+      "where are my things"
+    ],
+    "must_mention": [
+      "where",
+      "put"
+    ]
+  },
+  {
     "id": "look-at-this",
     "group": "Screen and pictures",
     "title": "Look at this",
@@ -945,10 +988,32 @@
     ]
   },
   {
+    "id": "search-audio-video",
+    "group": "Screen and pictures",
+    "title": "Search what was said in audio and video",
+    "what": "Keep the words it reads from recordings and videos in a searchable index on this PC, so they can be searched later.",
+    "where": "Settings, Searchable recordings and videos (the media index); it only looks inside folders already listed for Jarvis.",
+    "asks": "It is on by default - your decision of 2026-10-19. Turning it off is instant, and turning it back on raises one card.",
+    "limit": "Only folders already listed; it stores readable words on this PC, never the audio or video itself, and the words are never learned as a fact. Delete removes the stored words for good.",
+    "surface": "desktop",
+    "covers": [
+      "search-audio-video"
+    ],
+    "aliases": [
+      "audio search",
+      "video search"
+    ],
+    "must_mention": [
+      "index",
+      "recordings"
+    ],
+    "surface_reason": "The index lives on this PC and has a PC Settings card; the phone has no recordings-index screen."
+  },
+  {
     "id": "decks",
     "group": "Notes and files",
     "title": "My study decks",
-    "what": "Questions you kept, asked again on a schedule the PC works out.",
+    "what": "Questions you kept, asked again on a schedule the PC works out from your answers.",
     "where": "Brain, Work, My study decks.",
     "asks": "No card.",
     "limit": "The words hide with the private lists.",
@@ -962,7 +1027,7 @@
     "group": "Notes and files",
     "title": "Write a note for you",
     "what": "Jarvis writes a note into Obsidian, Logseq or Joplin.",
-    "where": "Say \"note this\", or use the quick-note key Alt+Shift+N to open the bar ready to file one.",
+    "where": "Say \"note this\" in chat (2026-10-31) or use the quick-note key Alt+Shift+N to open the bar ready to file one.",
     "asks": "No card normally. In a turn where Jarvis has read an email, a page or a file, writing a note raises one.",
     "limit": "Only the note apps this PC is set up for. With App lock on, adding a note to a running task needs an unlock first.",
     "surface": "both",
@@ -1020,7 +1085,7 @@
     "what": "Jarvis reads a document you point it at and answers questions about it.",
     "where": "Put the file in a folder Jarvis may look in, then ask about it.",
     "asks": "Reading needs no card. Writing a note back after reading it raises one, as any note write after outside text does.",
-    "limit": "",
+    "limit": "Only files in a folder Jarvis may look in; text from a document is outside text and is never learned as a fact.",
     "surface": "both",
     "aliases": [
       "ask about a pdf",
@@ -1098,7 +1163,7 @@
     "group": "Notes and files",
     "title": "What's new on GitHub",
     "what": "You name a topic and Jarvis searches GitHub for it on a schedule, then tells you what is new and what moved.",
-    "where": "Ask \"what's new on GitHub?\" to read it; the list is on the Brain's Watch tab.",
+    "where": "The list is on the Brain's Watch tab - it never comes to find you, so open Watch to read it.",
     "asks": "Adding a topic raises one card.",
     "limit": "It never comes to find you - you ask. A repository page is text from a stranger: it is scanned first, and a flagged one is listed with the reason instead of being handed to a model.",
     "surface": "both",
@@ -1166,10 +1231,10 @@
     "id": "goals",
     "group": "Notes and files",
     "title": "Goals",
-    "what": "Plans you edit, with a weekly check-in.",
+    "what": "Plans you edit, with a weekly check-in and steps marked done one at a time.",
     "where": "Brain, Work, Goals.",
     "asks": "Accepting a drafted goal raises one card. Marking a step done does not.",
-    "limit": "",
+    "limit": "A drafted goal waits for one card; marking a step done does not undo it by itself.",
     "surface": "both",
     "covers": [
       "brain.work.goals",
@@ -1222,6 +1287,49 @@
       "ten minutes",
       "download"
     ]
+  },
+  {
+    "id": "notion-import",
+    "group": "Notes and files",
+    "title": "Import a Notion export into an Obsidian vault",
+    "what": "Turn a Notion export into an Obsidian vault: ids off names, properties as frontmatter, one card, Undo.",
+    "where": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
+    "asks": "Preview is free; the import raises one card and keeps an Undo.",
+    "limit": "One export at a time into one vault; it does not create a Notion workspace and does not delete the source export.",
+    "surface": "desktop",
+    "covers": [
+      "notion-import"
+    ],
+    "aliases": [
+      "notion import",
+      "import a notion export"
+    ],
+    "must_mention": [
+      "notion",
+      "export"
+    ],
+    "surface_reason": "The import writes into an Obsidian vault on this PC; the phone has no Notion-import screen."
+  },
+  {
+    "id": "vault-organizer",
+    "group": "Notes and files",
+    "title": "Organize an Obsidian vault",
+    "what": "Plan a tidy-up of an Obsidian vault - tags, Map-of-Content notes and a Vault Home - then one card writes it.",
+    "where": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
+    "asks": "Off until one card turns it on; the plan is a read-only dry run, then ONE card for the whole batch and one Undo.",
+    "limit": "Off by default and no screen yet - it is run from the API/runbook; one vault this PC is set up for, and it never deletes a note.",
+    "surface": "desktop",
+    "covers": [
+      "vault-organizer"
+    ],
+    "aliases": [
+      "vault organizer"
+    ],
+    "must_mention": [
+      "vault",
+      "plan"
+    ],
+    "surface_reason": "The vault is on this PC, so the organizer is PC-only; the phone has no vault-organizer screen."
   },
   {
     "id": "spending",
@@ -1316,12 +1424,33 @@
     ]
   },
   {
+    "id": "parking",
+    "group": "Money and health",
+    "title": "What a parking stay costs, and free parking",
+    "what": "Work out what a parking stay would cost, minute by minute, and find free parking near a place.",
+    "where": "Ask \"how much is parking at ...\" or \"free parking near ...\". \"Parking for my next event\" prices the parking around the next calendar event that has a place; it never adds or edits an event.",
+    "asks": "A cost answer raises no card; it reads the calendar's next event with a place, and never writes to the calendar.",
+    "limit": "Uses public parking data for the address; a private car park or a tariff it cannot read is said plainly, never guessed.",
+    "surface": "both",
+    "covers": [
+      "parking"
+    ],
+    "aliases": [
+      "parking costs",
+      "free parking"
+    ],
+    "must_mention": [
+      "parking",
+      "calendar"
+    ]
+  },
+  {
     "id": "home-status",
     "group": "Home",
     "title": "Ask how the house is",
     "what": "Sensors and devices: whether something is on, open or warm.",
     "where": "Just ask (\"is the garage door open?\"), once Home Assistant is set up on the PC.",
-    "asks": "No card to read.",
+    "asks": "No card to read. To offer the home reading tool at all, turn it on first on the PC in Settings, What asks first (one card plus Windows Hello).",
     "limit": "Plain http is allowed only inside your own networks, and the token is kept as safely as a password.",
     "surface": "both",
     "covers": [
@@ -1373,7 +1502,7 @@
     "title": "Read your own calendar",
     "what": "Jarvis reads your calendar so it can answer what is coming up.",
     "where": "Settings, Accounts - the private calendar link (\"Secret address in iCal format\"). Then just ask.",
-    "asks": "Read-only. Loosening it from the settings file is PC-only and raises one card plus Windows Hello.",
+    "asks": "Read-only. Offer the calendar reading tool first on the PC in Settings, What asks first (one card plus Windows Hello). Loosening it from the settings file is PC-only and raises one card plus Windows Hello.",
     "limit": "The link is kept as safely as a password: never logged, never shown, and sent nowhere but Google.",
     "surface": "desktop",
     "surface_reason": "The private calendar link is read from the PC's Accounts settings by the PC's own backend, and the phone has no calendar-link card of its own.",
@@ -1421,7 +1550,7 @@
     "title": "Jarvis reads your email",
     "what": "It can answer questions about your mail, and tell you when a named sender writes.",
     "where": "Ask (\"any mail from Sam?\"), once the mail server is filled in at Settings, Accounts.",
-    "asks": "Reading needs no card. \"Tell me when\" for a named sender is set up with one card.",
+    "asks": "Reading needs no card once the email reading tool is offered. Offer it first on the PC in Settings, What asks first (one card plus Windows Hello). \"Tell me when\" for a named sender is set up with one card.",
     "limit": "Text from an email is outside text: it never makes Jarvis act on its own and is never learned as a fact.",
     "surface": "both",
     "covers": [
@@ -1456,7 +1585,7 @@
     "what": "A written reply can be put in your own Drafts folder for you to finish.",
     "where": "Ask Jarvis to draft it, then answer the card.",
     "asks": "One card every time, showing the full draft, before any text goes to the folder.",
-    "limit": "",
+    "limit": "Writes only to your own Drafts folder after one card; it never sends anything.",
     "surface": "desktop",
     "surface_reason": "A draft is written into your mail account's Drafts folder by the PC's backend after the card is answered on the PC; the phone has no Drafts card.",
     "covers": [
@@ -1558,7 +1687,7 @@
     "what": "Whether Jarvis's notifications also show on a compatible watch.",
     "where": "Settings, Smartwatch notifications.",
     "asks": "Every notification stays on the phone by default. Letting them all show on a watch raises a card; turning it off is instant.",
-    "limit": "",
+    "limit": "Watch notifications follow the phone's own apps; every kind is off until you allow it, and the PC's notifications never go to the watch.",
     "surface": "phone",
     "surface_reason": "A smartwatch pairs with a phone, never with a Windows PC - there is nothing on the desktop for this to mean (docs/ARCHITECTURE.md section 8).",
     "covers": [
@@ -1834,7 +1963,7 @@
     "id": "shortcuts",
     "group": "The PC itself",
     "title": "Keyboard shortcuts",
-    "what": "Every shortcut in one list, and a key of your own for each.",
+    "what": "Every shortcut in one list, and a key of your own for each one.",
     "where": "Settings, Shortcuts.",
     "asks": "No card.",
     "limit": "A key another program already owns is refused, with the reason.",
@@ -1874,10 +2003,10 @@
     "id": "compute",
     "group": "The PC itself",
     "title": "Compute",
-    "what": "The plan for your graphics cards, and which model runs where.",
+    "what": "The plan for your graphics cards, which model runs where, and what the second card is for.",
     "where": "Brain, Model, Compute.",
     "asks": "No card.",
-    "limit": "",
+    "limit": "A plan for the graphics cards, not a change; moving a model to another card is the model switch's own card.",
     "surface": "both",
     "covers": [
       "brain.model.compute",
@@ -1911,7 +2040,7 @@
     "id": "model-memory",
     "group": "The PC itself",
     "title": "Memory on the Model page",
-    "what": "A short summary of what Jarvis remembers, shown beside the models.",
+    "what": "A short summary of what Jarvis remembers, shown beside the models on the Model page.",
     "where": "Brain, Model, Memory.",
     "asks": "No card.",
     "limit": "Hides with the other memory lists.",
@@ -1967,10 +2096,10 @@
     "id": "work-tab",
     "group": "The PC itself",
     "title": "The Work tab",
-    "what": "The container for focus, chatbots, today, widgets, goals, quiz and the rest.",
+    "what": "The container for focus, chatbots, today, widgets, goals, quiz and the rest; each has its own screen and rules.",
     "where": "Brain, Work.",
     "asks": "No card.",
-    "limit": "",
+    "limit": "A container of screens, not a permission; every task inside keeps its own cards.",
     "surface": "both",
     "covers": [
       "brain.tab.work",
@@ -2084,7 +2213,7 @@
     "what": "Whether a newer build of this app exists, and installing it.",
     "where": "Settings, Updates. On the phone it is \"Check for new versions\" on Platform checks, under This app. Each app checks its own release page.",
     "asks": "Nothing installs by itself - you press to install, then to restart.",
-    "limit": "",
+    "limit": "Each app checks its own release page; installing never starts by itself, and a version it cannot read is said plainly.",
     "surface": "both",
     "covers": [
       "settings.updates",
@@ -2113,7 +2242,7 @@
     "what": "The folded card at the end of Settings: start Jarvis with Windows, the log folder, the crash notes.",
     "where": "Settings, More options.",
     "asks": "Starting with Windows is one tap; the log folder only opens a folder.",
-    "limit": "",
+    "limit": "Starting with Windows is one login setting; the logs and crash notes open folders, they never upload.",
     "surface": "desktop",
     "surface_reason": "The settings file, the log folder and starting with Windows are the PC's own files and startup, and the phone has none of them.",
     "aliases": [
@@ -2150,10 +2279,10 @@
     "id": "about",
     "group": "The PC itself",
     "title": "About Jarvis",
-    "what": "The version, the licences and the credits.",
+    "what": "The version, the licences and the credits, with nothing to change.",
     "where": "Settings, About Jarvis. On the phone it is the end of Help.",
     "asks": "No card.",
-    "limit": "",
+    "limit": "Only reads the version, licences and credits; it changes nothing.",
     "surface": "both",
     "covers": [
       "settings.about",
@@ -2400,6 +2529,235 @@
     "covers": []
   },
   {
+    "id": "thinking-levels",
+    "group": "The PC itself",
+    "title": "Thinking levels",
+    "what": "Choose Off, Quick, Deep or Auto thinking for the running model: how much it reasons before it answers.",
+    "where": "Settings, Thinking levels; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
+    "asks": "Changes take effect at once and need no card; both apps show one row for each running model.",
+    "limit": "Per running model - switching model or lane can change which level applies, and the level cannot make a model see more than its context allows.",
+    "surface": "both",
+    "covers": [
+      "thinking-levels"
+    ],
+    "aliases": [
+      "thinking level",
+      "thinking levels"
+    ],
+    "must_mention": [
+      "quick",
+      "deep"
+    ]
+  },
+  {
+    "id": "calculator",
+    "group": "The PC itself",
+    "title": "Do arithmetic",
+    "what": "Jarvis does arithmetic accurately instead of a language model guessing the sum.",
+    "where": "Just ask a sum - \"what is 18% of 240?\" - the model uses the calculator tool.",
+    "asks": "No card: it is arithmetic only.",
+    "limit": "Only arithmetic the calculator tool supports; it does not run arbitrary code or maths that needs a library the tool does not have.",
+    "surface": "both",
+    "covers": [
+      "calculator"
+    ],
+    "aliases": [
+      "calculator",
+      "arithmetic"
+    ],
+    "must_mention": [
+      "arithmetic",
+      "calculator"
+    ]
+  },
+  {
+    "id": "open-programs",
+    "group": "The PC itself",
+    "title": "Open a program or Windows panel by name",
+    "what": "Open a program or a Windows panel from your own words - \"open Notion\", \"open settings\", \"open Jarvis settings\".",
+    "where": "Just say \"open ...\"; the app opens the program this PC's Start menu finds, or the named Windows panel.",
+    "asks": "No card to open a program; opening is looked up on this PC, never guessed.",
+    "limit": "Only programs this PC's Start menu finds and the Windows panels named; an ambiguous name is asked back, and nothing is typed into the program.",
+    "surface": "both",
+    "covers": [
+      "open-programs"
+    ],
+    "aliases": [
+      "open a program",
+      "open programs"
+    ],
+    "must_mention": [
+      "program",
+      "panel"
+    ]
+  },
+  {
+    "id": "github-research",
+    "group": "The PC itself",
+    "title": "Find and grade a library on GitHub",
+    "what": "Search GitHub for a coding idea, read the candidates and grade them for this project.",
+    "where": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+    "asks": "Off until its line is added by hand to the settings file; reading public pages needs no card once it is offered.",
+    "limit": "Off by default; public GitHub only, no private repo and no token beyond what you configured; it reads pages, it does not install anything.",
+    "surface": "both",
+    "covers": [
+      "github-research"
+    ],
+    "aliases": [
+      "github research",
+      "github search"
+    ],
+    "must_mention": [
+      "github",
+      "library"
+    ]
+  },
+  {
+    "id": "computer-control",
+    "group": "The PC itself",
+    "title": "Click and type in another program",
+    "what": "Click and type in another Windows program by naming its controls.",
+    "where": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+    "asks": "Off until its line is added by hand to the settings file; each action is one approved call.",
+    "limit": "Off by default; it can only use controls the accessibility tree exposes, never a hidden window, and it does not type passwords.",
+    "surface": "both",
+    "covers": [
+      "computer-control"
+    ],
+    "aliases": [
+      "computer control"
+    ],
+    "must_mention": [
+      "click",
+      "type"
+    ]
+  },
+  {
+    "id": "browser-control",
+    "group": "The PC itself",
+    "title": "Drive one browser tab",
+    "what": "Drive one browser tab by naming page elements - click, type, read the page.",
+    "where": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+    "asks": "Off until its line is added by hand to the settings file; each action is one approved call on the tab you named.",
+    "limit": "Off by default; one tab, elements it can name, no other tab and no downloads.",
+    "surface": "both",
+    "covers": [
+      "browser-control"
+    ],
+    "aliases": [
+      "browser control"
+    ],
+    "must_mention": [
+      "tab",
+      "element"
+    ]
+  },
+  {
+    "id": "shell-commands",
+    "group": "The PC itself",
+    "title": "Run one shell command",
+    "what": "Run one shell command on this PC and return its output.",
+    "where": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+    "asks": "Off until its line is added by hand to the settings file; one approved call per command.",
+    "limit": "Off by default; one command and its own output, nothing interactive - it can change files, so keep it off unless you need it.",
+    "surface": "both",
+    "covers": [
+      "shell-commands"
+    ],
+    "aliases": [
+      "shell command",
+      "command line"
+    ],
+    "must_mention": [
+      "shell",
+      "command"
+    ]
+  },
+  {
+    "id": "read-web-page",
+    "group": "The PC itself",
+    "title": "Read one web page out loud",
+    "what": "Fetch the one page you named and read its words out loud.",
+    "where": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
+    "asks": "Every read shows the exact address on its own card before anything is fetched. What comes back is outside text - never learned, never acted on.",
+    "limit": "Off by default; one page, no links followed, and the page is read only as outside text.",
+    "surface": "both",
+    "covers": [
+      "read-web-page"
+    ],
+    "aliases": [
+      "read a web page",
+      "read a page"
+    ],
+    "must_mention": [
+      "page",
+      "read"
+    ]
+  },
+  {
+    "id": "reverse-engineering",
+    "group": "The PC itself",
+    "title": "Inspect a program or app statically",
+    "what": "Statically inspect a program, app or binary and report what it does - strings, imports, structure.",
+    "where": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
+    "asks": "Off by default; every investigation is one approved call.",
+    "limit": "Off by default; static inspection only - it does not run the program, and a packed or protected binary may tell it little.",
+    "surface": "both",
+    "covers": [
+      "reverse-engineering"
+    ],
+    "aliases": [
+      "reverse engineering"
+    ],
+    "must_mention": [
+      "binary",
+      "program"
+    ]
+  },
+  {
+    "id": "android-builder",
+    "group": "The PC itself",
+    "title": "Build the Android app in a project task",
+    "what": "Build the Android app in a project task and install the APK over the cable - two separate approvals.",
+    "where": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
+    "asks": "Two risky cards, each with its exact command: one for the build (app_build_android) and one for the install (app_install_android).",
+    "limit": "Only a project already set up for the Android app; it needs the SDK/JDK on this PC and a cable, and it never publishes to Play.",
+    "surface": "both",
+    "covers": [
+      "android-builder"
+    ],
+    "aliases": [
+      "android build",
+      "build the android app"
+    ],
+    "must_mention": [
+      "gradle",
+      "apk"
+    ]
+  },
+  {
+    "id": "docker-containers",
+    "group": "The PC itself",
+    "title": "Docker containers Jarvis ships",
+    "what": "List the Docker containers Jarvis ships (such as its own SearXNG) and start or stop one.",
+    "where": "Routes only, no app page: GET /api/docker/containers and /api/docker/service. The Docker plugin ships the containers.",
+    "asks": "Starting a container is the give-more direction and must ask (tier ask); stopping is the give-less direction and is instant unless your settings make it ask. Listing is free.",
+    "limit": "Only the containers Jarvis itself ships; it never pulls a new image.",
+    "surface": "desktop",
+    "covers": [
+      "docker-containers"
+    ],
+    "aliases": [
+      "docker",
+      "containers"
+    ],
+    "must_mention": [
+      "container",
+      "docker"
+    ],
+    "surface_reason": "Docker runs on this PC only; the phone has no Docker screen."
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",
@@ -2618,6 +2976,68 @@
       "read-only",
       "executable"
     ]
+  },
+  {
+    "id": "propose-plan",
+    "group": "Safety",
+    "title": "A short plan of several steps, one card",
+    "what": "Propose a short plan of several steps and show the plan as one approval card before anything runs.",
+    "where": "Ask for a plan; the plan card is one, then each risky step or result-filled step gets its own card before it runs.",
+    "asks": "The plan itself is one card; a risky or result-filled step asks again on its own card.",
+    "limit": "A plan is a proposal, never an action; it does not run by itself, and only steps the tools actually support are proposed.",
+    "surface": "both",
+    "covers": [
+      "propose-plan"
+    ],
+    "aliases": [
+      "propose a plan",
+      "short plan"
+    ],
+    "must_mention": [
+      "plan",
+      "card"
+    ]
+  },
+  {
+    "id": "card-summary",
+    "group": "Safety",
+    "title": "A short card, then Explain more",
+    "what": "Approval cards can open short with an Explain more button, or show everything at once; both apps read the same setting.",
+    "where": "Settings, Approval cards; both apps read /api/card-prefs.",
+    "asks": "No card to read or expand a card; the setting is stored on this PC.",
+    "limit": "Only how much of a card is shown at first, not whether it asks or what it does. Start short is the default; Always full is the other choice.",
+    "surface": "both",
+    "covers": [
+      "card-summary"
+    ],
+    "aliases": [
+      "card summary",
+      "explain more"
+    ],
+    "must_mention": [
+      "short",
+      "explain more"
+    ]
+  },
+  {
+    "id": "receipts",
+    "group": "Safety",
+    "title": "A receipt for every change",
+    "what": "Every action that changed something leaves a receipt with one Undo for that change.",
+    "where": "No screen of its own: the receipts are routes only - GET /api/receipts for the list and POST /api/receipts/<receipt_id>/undo for Undo. The owner-facing Undo is the button on the action card; the Brain's separate Undo shelf is a different feature.",
+    "asks": "No card to read a receipt; the action's own card has already happened, and Undo uses that receipt.",
+    "limit": "Only actions that changed something; a read never makes one, and Undo lasts as long as the receipt's own window.",
+    "surface": "both",
+    "covers": [
+      "receipts"
+    ],
+    "aliases": [
+      "receipts",
+      "action receipts"
+    ],
+    "must_mention": [
+      "receipt",
+      "undo"
+    ]
   }
-
 ]
