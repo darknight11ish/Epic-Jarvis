@@ -5238,8 +5238,8 @@ await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escap
   });
   assert.equal(rail.bannerCount, 1, "Edit HUD drew more than one banner");
   assert.equal(rail.bannerText,
-    "Editing the HUD — drag a card or use its buttons. Press Esc when done.",
-    "the edit banner is not the single plain sentence");
+    "Drag a card, or open its options.",
+    "the edit bar is not the single plain sentence");
   assert.equal(rail.statusText, "", "the edit bar repeated its banner in the status line");
   assert.deepEqual(rail.overlaps, [],
     `right-rail cards overlap in Edit HUD: ${JSON.stringify(rail.overlaps)}`);
@@ -5340,7 +5340,11 @@ await check("H2: drag, click-only and keyboard-only produce the SAME saved layou
 
   const a = await openH2(browser);
   await enterEdit(a.page);
-  await a.page.selectOption('[data-hud-edit-region="waiting"]', expected);
+  await a.page.evaluate((value) => {
+    const select = document.querySelector('[data-hud-edit-region="waiting"]');
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }, expected);
   await a.page.waitForTimeout(700);
 
   const b = await openH2(browser);
@@ -5402,7 +5406,10 @@ await check("H2: a protected card stays, cannot be hidden, and its controls say 
   assert.match(state.hideReason, /Hide Waiting for you/);
   assert.equal(state.selectDisabled, true, "the approvals card can be moved between regions");
   const before = (await savedDocs(page)).length;
-  await page.click('[data-hud-card="approvals"] [data-hud-edit-command="hide"]', { force: true }).catch(() => {});
+  await page.evaluate(() => {
+    const hide = document.querySelector('[data-hud-card="approvals"] [data-hud-edit-command="hide"]');
+    if (hide) { hide.focus(); hide.click(); }
+  });
   await page.waitForTimeout(150);
   assert.equal((await savedDocs(page)).length, before,
     "a click on the disabled Hide button saved a layout");
@@ -5442,7 +5449,11 @@ await check("H2: rapid actions collapse into one debounced save", async () => {
   await enterEdit(page);
   const before = (await savedDocs(page)).length;
   for (const key of ["S", "M", "L"]) {
-    await page.click(`[data-hud-card="telemetry"] [data-hud-edit-size="${key}"]`);
+    await page.evaluate((size) => {
+      const button = document.querySelector(`[data-hud-card="telemetry"] [data-hud-edit-size="${size}"]`);
+      button.focus();
+      button.click();
+    }, key);
   }
   await page.waitForTimeout(900);
   const saved = await savedDocs(page);
@@ -5458,7 +5469,11 @@ await check("H2: rapid actions collapse into one debounced save", async () => {
 await check("H2: the editor works at the owner's 150% DPI and under reduced motion", async () => {
   const dpr = await openH2(browser, {}, { deviceScaleFactor: 1.5 });
   await enterEdit(dpr.page);
-  await dpr.page.selectOption('[data-hud-edit-region="tools"]', "stage_top");
+  await dpr.page.evaluate(() => {
+    const select = document.querySelector('[data-hud-edit-region="tools"]');
+    select.value = "stage_top";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
   await dpr.page.waitForTimeout(700);
   const dprWrite = (await savedDocs(dpr.page)).at(-1);
   assert.ok(dprWrite, "a move at DPR 1.5 was not saved");

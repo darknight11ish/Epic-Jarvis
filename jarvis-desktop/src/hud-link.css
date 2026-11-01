@@ -151,6 +151,19 @@
   display: none !important;
 }
 
+/* WHEN the answer was produced (the caret menu's first line, 2026-10-31):
+   read-only - not a button, not focusable, not part of the arrow-key walk.
+   Quiet, like the answer's own age. */
+.jarvis-answer-when {
+  margin: 2px 6px 4px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+
 /* The live link line under the brand. */
 #jarvis-link-line[data-tone="warn"],
 #jarvis-link-line[data-tone="bad"] {

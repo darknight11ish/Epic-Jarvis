@@ -1234,8 +1234,26 @@
    * menu on open and back to the caret on Esc; arrow keys move between items.
    * ---------------------------------------------------------------- */
   var awaitingTurn = null;
+  /** When the answer's turn was asked/arrived (unix seconds), so an answer
+   *  whose page bubble carries no PC timestamp still shows the nearest real
+   *  moment - never the time the menu was opened. */
+  var awaitingAt = 0;
   /** The one open answer menu, or null. One at a time (owner's request). */
   var openAnswerTools = null;
+
+  /** "Sat 31 Oct, 21:10" in the owner's own local time. Plain and read-only. */
+  function answerWhenWords(unixSeconds) {
+    var d = new Date(Number(unixSeconds) * 1000);
+    if (!d || isNaN(d.getTime())) return "";
+    try {
+      return d.toLocaleString([], {
+        weekday: "short", day: "2-digit", month: "short",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      });
+    } catch (err) {
+      return d.toLocaleString();
+    }
+  }
 
   function closeAnswerMenu(focusCaret) {
     if (!openAnswerTools) return;
@@ -1309,6 +1327,8 @@
 
   function expectAnswer(turnId) {
     awaitingTurn = turnId;
+    awaitingAt = Math.round(Date.now() / 1000);
+    var answerAt = awaitingAt;
     var log = document.getElementById("log");
     if (!log || typeof MutationObserver === "undefined") return;
     var watch = new MutationObserver(function (records) {
@@ -1318,7 +1338,7 @@
           var node = added[j];
           if (node.nodeType === 1 && node.classList.contains("msg") && node.classList.contains("jarvis")) {
             watch.disconnect();
-            if (awaitingTurn === turnId) attachAnswerTools(node, turnId);
+            if (awaitingTurn === turnId) attachAnswerTools(node, turnId, answerAt);
             return;
           }
         }
@@ -1330,7 +1350,7 @@
   }
 
   /** The caret menu under ONE finished Jarvis answer. */
-  function attachAnswerTools(msg, turnId) {
+  function attachAnswerTools(msg, turnId, answerAt) {
     var tools = document.createElement("div");
     tools.className = "jarvis-answer-tools";
     var caret = document.createElement("button");
@@ -1449,6 +1469,24 @@
       // Captured BEFORE the caret and menu are appended, so "Copy answer" gets
       // the answer's own words and not this menu's labels.
       answer = String(msg.textContent || "").replace(/^\s+|\s+$/g, "");
+      // WHEN this answer was produced, as a first READ-ONLY line in the menu.
+      // Prefer the PC's own turn time (a kept chat's `at`, which the page puts
+      // on the bubble as data-at); a live answer has no per-turn timestamp in
+      // the route, so it uses the moment the turn arrived (captured in
+      // expectAnswer) - never the time this menu was opened.
+      var when = 0;
+      try {
+        var rawWhen = msg.dataset ? msg.dataset.at : "";
+        if (rawWhen && /^\d+$/.test(String(rawWhen))) when = Number(rawWhen);
+      } catch (err) { /* no PC time: fall through to the arrival time */ }
+      if (!when) when = Number(answerAt) || 0;
+      if (when) {
+        var stamp = document.createElement("p");
+        stamp.className = "jarvis-answer-when";
+        stamp.setAttribute("role", "presentation");
+        stamp.textContent = answerWhenWords(when);
+        menu.insertBefore(stamp, menu.firstChild);
+      }
       tools.refresh();
       tools.appendChild(caret);
       tools.appendChild(menu);

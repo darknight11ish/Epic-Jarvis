@@ -128,4 +128,32 @@ check("the menu only appears on a FINISHED answer, never on an interrupted one",
     "the answer's own words are not captured before the caret is appended");
 });
 
+check("the menu's first line is WHEN the answer was produced, read-only", () => {
+  assert.match(SECTION, /function answerWhenWords\(unixSeconds\)/,
+    "there is no timestamp formatter");
+  assert.match(SECTION, /weekday: "short", day: "2-digit", month: "short",\s*hour: "2-digit", minute: "2-digit"/,
+    "the timestamp is not the plain date AND time the owner asked for");
+  assert.match(SECTION, /toLocaleString/,
+    "the timestamp is not shown in the owner's local time");
+  assert.match(SECTION, /menu\.insertBefore\(stamp, menu\.firstChild\)/,
+    "the timestamp is not the first line of the menu");
+  assert.match(SECTION, /stamp\.setAttribute\("role", "presentation"\)/,
+    "the timestamp is not exposed as a read-only line");
+  assert.ok(!/items\.push\(stamp\)/.test(SECTION),
+    "the timestamp was put in the arrow-key/action list");
+  assert.doesNotMatch(SECTION, /item\("Sat|item\(answerWhenWords/,
+    "the timestamp was built as an action item");
+});
+
+check("the timestamp uses the turn's real time, not the time the menu opened", () => {
+  assert.match(SECTION, /msg\.dataset \? msg\.dataset\.at : ""/,
+    "the answer bubble's own PC timestamp is not read");
+  assert.match(SECTION, /if \(!when\) when = Number\(answerAt\) \|\| 0;/,
+    "there is no fallback to the answer's own arrival time");
+  assert.match(SECTION, /awaitingAt = Math\.round\(Date\.now\(\) \/ 1000\);/,
+    "the arrival time is not captured when the turn is asked");
+  assert.doesNotMatch(SECTION, /Date\.now\(\) \/ 1000\);\s*var stamp|answerWhenWords\(Math\.round\(Date\.now\(\)/,
+    "the timestamp is computed when the menu opens instead of from the turn");
+});
+
 console.log(`\n${passed} passed, 0 skipped, 0 failed`);
