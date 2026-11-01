@@ -4938,6 +4938,36 @@ _FEAT_CAN_DO = re.compile(
 _FEAT_LIKE = re.compile(
     r"what\s+is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+like")
 
+#: The shapes that ASK ABOUT a named feature - the feature guide's own
+#: vocabulary, kept as one tuple so the honesty families that run BEFORE the
+#: guide can step aside on a question about another feature (2026-11-01
+#: integration). Without this, "tell me about Ring my phone" became a
+#: reminder-sound answer (the word "ring"), "how do I set Galaxy up" a reminder
+#: how-to, and "what does Goals do" a goals answer.
+_FEATURE_QUESTION_SHAPES = (
+    _FEATURE_STATE, _FEATURE_WHAT, _FEATURE_USE, _FEATURE_WHERE,
+    _FEATURE_LIMITS, _FEATURE_ASKS, _FEATURE_APP, _FEATURE_WHY,
+    _FEATURE_CHANGE, _FEATURE_DIFFERENCE, _FEATURE_ON_OFF, _FEAT_DETAIL,
+    _FEAT_HOW_USE, _FEAT_EXAMPLE, _FEAT_PRIVATE, _FEAT_NEEDS, _FEAT_WHY_STATE,
+    _FEAT_WRONG, _FEAT_CAN_DO, _FEAT_LIKE,
+)
+
+
+def _asks_about_a_named_feature(text: str, raw: str = "") -> bool:
+    """Is `text` a feature question that resolves to a real catalogue row?
+
+    Asked by the honesty families (reminders, goals) that the fast path runs
+    BEFORE the feature guide. True means "the guide owns this sentence, return
+    None and let it answer". The exact-name gate is the guide's own, so a
+    sentence that names no row still keeps the honesty answer.
+    """
+    if not any(rx.search(text) for rx in _FEATURE_QUESTION_SHAPES):
+        return False
+    try:
+        return _feature_guide(text, raw) is not None
+    except Exception:                                       # noqa: BLE001
+        return False
+
 
 def _feature_capabilities(s: str) -> Optional[Intent]:
     """Capability questions the feature list can answer, or None (2026-10-31)."""
@@ -5293,9 +5323,16 @@ _REMINDER_NOTIFY_RX = re.compile(
 _REMINDER_CLOSED_RX = re.compile(
     r"\b(?:app|jarvis|computer|pc)\b.*\b(?:closed|off|shut\s*down|not\s+running)\b|"
     r"\beven\s+if\b.*\bclosed\b")
-_REMINDER_HOWTO_RX = re.compile(
-    r"\bhow\s+(?:do|can|should)\s+i\s+(?:ask|set|make|create|add)\b|"
-    r"what\s+(?:do|should)\s+i\s+say\b")
+#: "how do I ask for a reminder?" / "how do I set a timer up". The HOW shape is
+#: the family's even when the object is a pronoun ("how do I ask for one?", a
+#: follow-up); a named feature's "how do I set X up" has already stepped aside
+#: in `_asks_about_a_named_feature`.
+_REMINDER_HOWTO_HOW_RX = re.compile(
+    r"\bhow\s+(?:do|can|should)\s+i\s+(?:ask|set|make|create|add)\b")
+#: "what do I say to set a reminder?" - but NOT the sayable list's own "What
+#: should I say?" / "what do I say to use Galaxy": this one only answers when
+#: the sentence also names a reminder, timer or alarm.
+_REMINDER_HOWTO_SAY_RX = re.compile(r"what\s+(?:do|should)\s+i\s+say\b")
 
 
 def _reminders_question(raw) -> Optional[Intent]:
@@ -5328,9 +5365,18 @@ def _reminders_question(raw) -> Optional[Intent]:
     # question that merely mentions the phone still gets this family's answer.
     if _PHONE_TIMER.fullmatch(text) or _PHONE_STATE.fullmatch(text):
         return None
+    # A question about a NAMED feature is the feature guide's, not this
+    # family's: "tell me about Ring my phone" carries "ring", and "how do I set
+    # Galaxy up" carries "set", but both are feature questions (2026-11-01).
+    if _asks_about_a_named_feature(text, str(raw or "")):
+        return None
     if _REMINDER_CLOSED_RX.search(text):
         return Intent("reminder_closed", {"surface": "closed"})
-    if _REMINDER_HOWTO_RX.search(text):
+    # "What should I say?" is the sayable list's own question, so the SAY shape
+    # only answers when the sentence also names a reminder, timer or alarm.
+    # "how do I ask for one?" (a follow-up) keeps the HOW shape unconditionally.
+    if (_REMINDER_HOWTO_HOW_RX.search(text)
+            or (_REMINDER_HOWTO_SAY_RX.search(text) and _REMINDER_WORDS.search(text))):
         return Intent("reminder_howto", {"surface": "howto"})
     if _REMINDER_POPUP_RX.search(text):
         return Intent("reminder_popup", {"surface": "popup"})
@@ -5899,6 +5945,10 @@ def _goals_question(raw) -> Optional[Intent]:
     if re.search(r"\b(?:company|business|football|game|score|sales|team|project)\s+goals?\b", text):
         return None
     if re.search(r"\b(?:track|tracking)\s+(?:my\s+)?(?:package|order|parcel|time|spending|sleep)\b", text):
+        return None
+    # "what does Goals do" / "tell me about Goals" is the feature guide's
+    # question, not this family's capability answer (2026-11-01 integration).
+    if _asks_about_a_named_feature(text, str(raw or "")):
         return None
     if _GOAL_STATE_RX.search(text):
         m = _GOAL_STATE_RX.search(text)
