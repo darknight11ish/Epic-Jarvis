@@ -10432,7 +10432,10 @@ def _note_write_result(body, ok_intent: str, wait_intent: str, why_intent: str):
     body = body if isinstance(body, dict) else {}
     said = str(body.get("message") or "").strip()
     state = str(body.get("state") or "")
-    if state in ("saved", "unchanged"):
+    # "created" is the card-free create's own success state (2026-10-31): the
+    # note did not exist, so there was nothing to compare - it is a success,
+    # not a refusal. Every other caller still reports "saved"/"unchanged".
+    if state in ("saved", "unchanged", "created"):
         return Result(said or "Done.", ok_intent)
     if state == "waiting":
         return Result(said or "Waiting for your approval card.", wait_intent)

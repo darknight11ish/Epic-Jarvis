@@ -778,7 +778,9 @@ def t_rename_and_delete_are_refused_in_plain_words():
 
 
 def t_create_is_now_a_real_write_and_never_overwrites():
-    """Wave 1: 'create a new note called X' makes ONE note, one card, no clobber."""
+    """Wave 1: 'create a new note called X' makes ONE note, no card since the
+    owner's 2026-10-31 decision (a brand-new note is additive and undoable;
+    a collision is still refused and an edit still asks its one card), no clobber."""
     reset_all()
     GATE.update(allowed=True, outcome="approved")
     got = ask("create a new note called Shopping")
@@ -791,8 +793,8 @@ def t_create_is_now_a_real_write_and_never_overwrites():
     check("... in the module's own words, naming the file and undo",
           reply.lower().startswith("created shopping.md")
           and "you can undo it" in reply.lower(), reply[:300])
-    check("... after ONE edit_vault_note card",
-          GATE["calls"] == ["edit_vault_note"], GATE["calls"])
+    check("... with NO card (card-free create, owner's decision 2026-10-31)",
+          GATE["calls"] == [], GATE["calls"])
     # a second create of the same note is refused and never overwrites
     created.write_text("keep me\n", encoding="utf-8")
     GATE.update(calls=[])
