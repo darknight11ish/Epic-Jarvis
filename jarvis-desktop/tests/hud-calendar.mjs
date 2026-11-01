@@ -49,6 +49,16 @@
  *      array - is refused IN WORDS and draws nothing. It is never read as "an
  *      available calendar with no events", and a write the PC did not confirm
  *      with `{"ok": true}` is never reported as saved.
+ *   9. THE DAYLIGHT-SAVING DAY (2026-11-01 and 2026-03-08, fixed dates with an
+ *      explicit "now"): a timed event's state is right on a 23- or 25-hour
+ *      local day, because its moment is built from the day's own calendar
+ *      components and not from local midnight plus absolute milliseconds. The
+ *      old arithmetic moved every event an hour on those two days - this PC
+ *      read an event at 12:14 as 11:14 and called it "past" five minutes after
+ *      it started - and used to hide, because the other cases are built from
+ *      the real clock and only failed ON the transition day. All-day events,
+ *      an hour-long event with no end time, one that crosses midnight and a
+ *      multi-day event whose last day is the transition day are covered.
  *
  * NOT here: the real WebView2 window (a rebuild and install after merge), the
  * store itself (backend/test_local_calendar.py), and a real PC's events.
@@ -576,6 +586,111 @@ await check("a timed event is past, now or upcoming - and that is the only state
   assert.equal(api.stateOf(at(120)), "upcoming");
   assert.equal(api.stateOf(at(-5)), "now");
   assert.deepEqual(["past", "now", "upcoming"].includes(api.stateOf(at(0))), true);
+});
+
+/* ── 2b. THE DAYLIGHT-SAVING DAY (2026-11-01, 2026-03-08) ────────────────────
+ *
+ * The HUD's event moment used to be LOCAL MIDNIGHT PLUS THE CLOCK TIME IN
+ * ABSOLUTE MILLISECONDS (the page's old `dayStart()`), and a daylight-saving
+ * day is 23 or 25 local hours long, so on the two transition days every event
+ * read ONE HOUR OUT: on 2026-11-01 an event at 12:14 was computed as 11:14 and
+ * said "past" five minutes after it began (the one failure this suite reported
+ * on this PC), and on 2026-03-08 it was computed an hour late and said
+ * "upcoming". The check above could not see it: it builds its fixtures from the
+ * real clock, so it only failed ON the transition day itself, and CI (UTC, no
+ * daylight saving) can never fail it.
+ *
+ * THESE CASES ARE FIXED DATES with an explicit "now", so they are identical on
+ * every run of the year, and they drive the real page helper (`stateOf`) - no
+ * copy of the arithmetic. Each "now" is the TRUE local instant, built from
+ * local calendar components, which is the time the owner's clock shows.
+ *
+ * HONEST LIMIT: on a PC whose zone has no daylight saving (CI runs in UTC) the
+ * old and the new arithmetic come out the same number, so nothing here can fail
+ * there. What they fix is the hiding: on THIS PC they now fail on any day of
+ * the year, not only on the two transition days. */
+const onDay = (day, hhmm) => {
+  const [y, m, d] = day.split("-").map(Number);
+  const [h, min] = hhmm.split(":").map(Number);
+  return new Date(y, m - 1, d, h, min, 0).getTime();
+};
+const timedOn = (day, time, endTime) => event({
+  id: "c0123456789", title: "Dentist", allDay: false,
+  date: day, endDate: day, time, endTime,
+});
+/* The two transition days, and two ordinary ones beside them so a case that
+   would pass anywhere cannot hide a case that only the transition days expose. */
+const DST_FALL_BACK = "2026-11-01";   // 25 local hours long
+const DST_SPRING_FORWARD = "2026-03-08"; // 23 local hours long
+const PLAIN_DAYS = ["2026-11-02", "2026-07-15"];
+
+await check("an event keeps its clock time on a daylight-saving day", () => {
+  const { api } = live;
+  for (const day of [DST_FALL_BACK, DST_SPRING_FORWARD, ...PLAIN_DAYS]) {
+    const ev = timedOn(day, "05:30", "06:00");
+    assert.equal(api.stateOf(ev, onDay(day, "05:25")), "upcoming",
+      `${day}: not yet started at 05:25, but said otherwise`);
+    assert.equal(api.stateOf(ev, onDay(day, "05:30")), "now",
+      `${day}: an event at 05:30 is not "now" at 05:30 - the moment is shifted`);
+    assert.equal(api.stateOf(ev, onDay(day, "05:35")), "now",
+      `${day}: five minutes after 05:30 the event is not "now" (the reported bug)`);
+    assert.equal(api.stateOf(ev, onDay(day, "05:59")), "now", `${day}: 05:59`);
+    assert.equal(api.stateOf(ev, onDay(day, "06:00")), "past", `${day}: 06:00`);
+    assert.equal(api.stateOf(ev, onDay(day, "06:35")), "past", `${day}: 06:35`);
+  }
+});
+
+await check("an event with no end time lasts one hour of the clock on a DST day", () => {
+  const { api } = live;
+  const fall = timedOn(DST_FALL_BACK, "12:14", "");
+  assert.equal(api.stateOf(fall, onDay(DST_FALL_BACK, "12:19")), "now",
+    "an event at 12:14 is not happening five minutes later on 2026-11-01");
+  assert.equal(api.stateOf(fall, onDay(DST_FALL_BACK, "13:13")), "now");
+  assert.equal(api.stateOf(fall, onDay(DST_FALL_BACK, "13:14")), "past",
+    "the hour it lasts was measured in absolute milliseconds, not on the clock");
+  const spring = timedOn(DST_SPRING_FORWARD, "12:14", "");
+  assert.equal(api.stateOf(spring, onDay(DST_SPRING_FORWARD, "12:13")), "upcoming");
+  assert.equal(api.stateOf(spring, onDay(DST_SPRING_FORWARD, "12:19")), "now");
+  assert.equal(api.stateOf(spring, onDay(DST_SPRING_FORWARD, "13:14")), "past");
+});
+
+await check("an event that crosses midnight on a DST day still ends an hour later", () => {
+  const { api } = live;
+  const ev = timedOn(DST_FALL_BACK, "23:30", ""); // no end time: ends 00:30
+  assert.equal(api.stateOf(ev, onDay(DST_FALL_BACK, "23:55")), "now",
+    "an event at 23:30 on 2026-11-01 was read as already over at 23:55");
+  assert.equal(api.stateOf(ev, onDay("2026-11-02", "00:00")), "now");
+  assert.equal(api.stateOf(ev, onDay("2026-11-02", "00:29")), "now");
+  assert.equal(api.stateOf(ev, onDay("2026-11-02", "00:30")), "past");
+});
+
+await check("an all-day event covers its whole local day, 23 or 25 hours long", () => {
+  const { api } = live;
+  const fall = event({ date: DST_FALL_BACK, endDate: DST_FALL_BACK, allDay: true });
+  assert.equal(api.stateOf(fall, onDay(DST_FALL_BACK, "00:00")), "now");
+  assert.equal(api.stateOf(fall, onDay(DST_FALL_BACK, "23:59")), "now",
+    "the 25-hour day's last hour was already outside the event");
+  assert.equal(api.stateOf(fall, onDay("2026-11-02", "00:00")), "past");
+  const spring = event({ date: DST_SPRING_FORWARD, endDate: DST_SPRING_FORWARD, allDay: true });
+  assert.equal(api.stateOf(spring, onDay(DST_SPRING_FORWARD, "22:00")), "now");
+  assert.equal(api.stateOf(spring, onDay(DST_SPRING_FORWARD, "23:59")), "now");
+  assert.equal(api.stateOf(spring, onDay("2026-03-09", "00:00")), "past");
+});
+
+await check("a multi-day event's last day is read on that day's own clock", () => {
+  const { api } = live;
+  // It began on 30 October, so its whole span is "now"; what the transition
+  // can move is its END, on the last day.
+  const ev = event({
+    date: "2026-10-30", endDate: DST_FALL_BACK, allDay: false,
+    time: "09:00", endTime: "10:00",
+  });
+  assert.equal(api.stateOf(ev, onDay(DST_FALL_BACK, "09:00")), "now");
+  assert.equal(api.stateOf(ev, onDay(DST_FALL_BACK, "09:30")), "now",
+    "a multi-day event was read as over an hour early on the transition day");
+  assert.equal(api.stateOf(ev, onDay(DST_FALL_BACK, "09:59")), "now");
+  assert.equal(api.stateOf(ev, onDay(DST_FALL_BACK, "10:00")), "past",
+    "the end on the last day was shifted an hour by the transition");
 });
 
 await check("the three views draw their own words, and only one is open at a time", async () => {

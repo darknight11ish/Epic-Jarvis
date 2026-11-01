@@ -11133,18 +11133,25 @@ subscribe();
       return isoOf(d);
     }
     function dayOfWeek(iso) { return toDate(iso).getDay(); }
-    /** Midnight at the start of a `YYYY-MM-DD`, as epoch milliseconds.
+    /** The local moment of `HH:MM` on a `YYYY-MM-DD`, as epoch milliseconds.
      *
      *  `toDate` anchors at NOON on purpose: that is the safe anchor when only
      *  the day matters, because a daylight-saving jump can never move noon onto
-     *  another date. An event's MOMENT needs midnight though - 12:00 plus a
-     *  14:30 start is 02:30 the next morning, which read every event as
-     *  "upcoming" - so the anchor is dropped here, once, and both moments are
-     *  computed from it. */
-    function dayStart(iso) {
-      var d = toDate(iso);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
+     *  another date. An event's MOMENT needs its own clock time, so the anchor
+     *  is dropped here - and the time is built from the DATE'S OWN COMPONENTS,
+     *  never as midnight plus the clock's minutes in absolute milliseconds.
+     *  A daylight-saving day is 23 or 25 local hours long, so midnight + 08:00
+     *  lands on 07:00 or 09:00 by the clock the owner reads: on 2026-11-01 an
+     *  event at 12:14 was computed as 11:14 and read "past" five minutes after
+     *  it began. `new Date(y, m, d, h, min)` asks the PC for that local time on
+     *  that local day - when the event really happens, every day.
+     *
+     *  `mins` may be 24 * 60: JS rolls hour 24 over to the next local midnight,
+     *  the end of an all-day event's last day. */
+    function dayAt(iso, mins) {
+      var p = String(iso).split("-");
+      return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]),
+        Math.floor(mins / 60), mins % 60, 0).getTime();
     }
     function startOfWeek(iso) { return addDays(iso, -dayOfWeek(iso)); }
     function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
@@ -11355,13 +11362,13 @@ subscribe();
     }
     function startMoment(ev) {
       var mins = ev.allDay ? 0 : (ev.time ? minutesOf(ev.time) : 0);
-      return dayStart(ev.date) + mins * 60000;
+      return dayAt(ev.date, mins);
     }
     function endMoment(ev) {
       var span = spanOf(ev);
       var mins = ev.allDay ? 24 * 60 : (ev.endTime ? minutesOf(ev.endTime)
         : (ev.time ? minutesOf(ev.time) + 60 : 24 * 60));
-      return dayStart(span.end) + mins * 60000;
+      return dayAt(span.end, mins);
     }
     /** "past" (it has ended), "now" (it is happening), "upcoming". */
     function eventState(ev, now) {
