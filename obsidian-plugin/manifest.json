@@ -1,7 +1,7 @@
 {
   "id": "jarvis-notes-bridge",
   "name": "Jarvis notes bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minAppVersion": "1.13.0",
   "description": "Ask your local Jarvis about the note or selection you are reading, and drive note edits through Jarvis's own one-card routes. It never writes the vault itself and never approves a card.",
   "author": "Epic-Jarvis field test",
