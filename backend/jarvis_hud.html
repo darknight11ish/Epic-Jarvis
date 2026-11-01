@@ -2103,6 +2103,58 @@ html[data-hud-shell="center-core"] .composer{
 .hud-edit-bar[hidden]{display:none;}
 .hud-edit-words{font-family:var(--f-mono); font-size:11px; color:var(--text);}
 .hud-edit-status{font-family:var(--f-mono); font-size:10.5px; color:var(--dim); flex:1; min-width:120px;}
+/* ---- EDIT HUD, simplified (owner's request, 2026-10-31: "the edit hud needs
+ * to be way more simplified with the options under menu tabs instead of
+ * everything all at once") --------------------------------------------------
+ * The bar keeps the four whole-edit controls and gains four tabs. The cards'
+ * OWN control rows are moved (same elements, same handlers) into the ONE
+ * selected-card editor in the Cards tab, so nothing is dropped and nothing is
+ * re-implemented. On the canvas only the card itself is drawn while editing. */
+.hud-edit-title{font-family:var(--f-hud); font-size:12px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ice);}
+.hud-edit-tabs{display:flex; gap:2px; flex-basis:100%; margin-top:2px;
+  border-bottom:1px solid var(--line);}
+.hud-edit-tab{font:inherit; font-family:var(--f-mono); font-size:10.5px;
+  letter-spacing:.06em; color:var(--dim); background:transparent; border:0;
+  border-bottom:2px solid transparent; padding:5px 10px; cursor:pointer;}
+.hud-edit-tab:hover{color:var(--text);}
+.hud-edit-tab:focus-visible{outline:2px solid var(--ice); outline-offset:-2px;}
+.hud-edit-tab[aria-selected="true"]{color:var(--ice); border-bottom-color:var(--ice);}
+.hud-edit-panes{flex-basis:100%; display:block; max-height:min(34vh, 300px);
+  overflow-y:auto; padding:6px 0 2px;}
+.hud-edit-pane[hidden]{display:none !important;}
+.hud-edit-pane-said{margin:4px 0; font-family:var(--f-mono); font-size:10.5px;
+  line-height:1.45; color:var(--dim);}
+.hud-edit-pane-head{margin:8px 0 3px; font-family:var(--f-mono); font-size:10px;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--dimmer);}
+.hud-edit-pane-name{font-family:var(--f-mono); font-size:11px; color:var(--text);}
+.hud-edit-pane-tag{margin:0 2px 0 6px; font-size:9.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ice);}
+.hud-edit-card-list{display:flex; flex-direction:column; gap:1px;}
+.hud-edit-card-row{display:flex; align-items:center; flex-wrap:wrap; gap:4px;
+  padding:1px 0;}
+.hud-edit-card-pick{font:inherit; font-family:var(--f-mono); font-size:11px;
+  text-align:left; color:var(--text); background:transparent; border:1px solid transparent;
+  border-radius:3px; padding:3px 8px; cursor:pointer; flex:1 1 160px;
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.hud-edit-card-pick:hover{color:var(--ice); border-color:var(--line-hot);}
+.hud-edit-card-pick:focus-visible{outline:2px solid var(--ice); outline-offset:-2px;}
+.hud-edit-card-pick.is-selected{color:var(--ice); border-color:var(--ice);}
+.hud-edit-card-state{margin-left:6px; font-size:9.5px; text-transform:uppercase;
+  letter-spacing:.08em; color:var(--dimmer);}
+.hud-edit-card-controls{margin-top:6px; padding-top:6px; border-top:1px solid var(--line);}
+.hud-edit-card-controls .hud-card-tools{display:flex; flex-wrap:wrap; gap:4px;}
+.hud-edit-preset-name{font-family:var(--f-mono); font-size:11px; color:var(--text);
+  border:1px solid transparent; border-radius:3px; padding:3px 8px; flex:1 1 140px;}
+.hud-edit-preset-name.is-chosen{color:var(--ice); border-color:var(--ice);}
+.hud-edit-panel-group{margin:2px 0 6px;}
+.hud-edit-pane-btn{font-family:var(--f-mono); font-size:10.5px;}
+/* While a stage panel or the edit UI is up, a card's own control row is in the
+   bar, never drawn on the canvas - that is the "everything at once" the owner
+   asked to end. The row is the SAME element, so the handlers are unchanged. */
+body[data-hud-edit="on"] .hud-card .hud-card-tools{display:none !important;}
+body[data-hud-edit="on"] .hud-card[data-hud-edit-selected="true"]{
+  outline:2px solid var(--ice); outline-offset:-2px;}
 .hud-region{display:grid; grid-template-columns:repeat(12, minmax(0, 1fr)); gap:0; align-content:start; min-height:0;}
 .hud-region:empty{display:none;}
 .hud-region-left{margin-top:6px;}

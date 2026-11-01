@@ -447,8 +447,14 @@ await check("H3-PM-2: Ambient's left rail is a drawer, not an unreachable hidden
   // in edit mode, and a full-width Ambient stage with a visible Controls pill.
   assert.match(editSrc, /hud-edit-banner/, "the edit bar has no .hud-edit-banner");
   assert.match(editSrc,
-    /Editing the HUD — drag a card or use its buttons\. Press Esc when done\./,
-    "the edit banner is not the single plain sentence");
+    /Drag a card, or open its options\./,
+    "the edit bar is not the single plain sentence");
+  // 2026-10-31: the bar is a slim header plus tabs; the card controls live in
+  // the Cards tab's selected-card editor, so the tab strip must be in the code.
+  for (const tab of ["cards", "presets", "panels", "advanced"]) {
+    assert.match(editSrc, new RegExp(`"${tab}", `),
+      `the ${tab} tab is missing from the edit bar`);
+  }
   assert.match(page,
     /#rail-right \.hud-card\{[^}]*flex-shrink:0/,
     "edit-mode right-rail cards can shrink and overlap");
