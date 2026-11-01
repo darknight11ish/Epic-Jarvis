@@ -28,13 +28,18 @@ WHAT IS AVAILABLE TODAY (measured from the tree):
   * the storage safety margin: jarvis_storage.MIN_FREE_AFTER_DOWNLOAD (25 GB)
     and MIN_FREE_TO_START (3 GB), the numbers the model chooser already uses.
 
-WHAT IS NOT AVAILABLE: a CPU model name, a non-NVIDIA GPU, temperatures/loads
-for a card nvidia-smi cannot see, and any fact from a source this PC does not
-have. Those say so plainly.
+WHAT IS NOT AVAILABLE: a non-NVIDIA GPU, temperatures/loads for a card
+nvidia-smi cannot see, and any fact from a source this PC does not have. Those
+say so plainly. The CPU model name is read from Windows' own registry (with
+`platform.processor()` as the fallback) and the live card temperature,
+utilisation and used/total VRAM come from the same nvidia-smi health reader PC
+help already uses; serials, UUIDs and user paths are stripped from names.
 """
 from __future__ import annotations
 
 import os
+import platform
+import re
 import shutil
 from typing import Optional
 
@@ -42,6 +47,46 @@ GIB = 1024 ** 3
 #: The drive the model chooser watches. C: on Windows; the first fixed drive
 #: on a machine without one.
 WATCH_DRIVE = "C:"
+
+_PATHISH = re.compile(r"(?:[A-Za-z]:\\[^\s,;]+|\\\\[^\s,;]+)")
+_UUIDISH = re.compile(
+    r"\b(?:GPU-)?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b")
+_SERIALISH = re.compile(r"\b(?:serial|s/n|uuid|guid)[:=#]?\s*[\w-]+", re.I)
+
+
+def _safe_name(raw) -> str:
+    """A card/CPU name without a serial, UUID or user path. Never raises."""
+    text = str(raw or "").strip()
+    text = _PATHISH.sub(" ", text)
+    text = _UUIDISH.sub(" ", text)
+    text = _SERIALISH.sub(" ", text)
+    return " ".join(text.split())[:120]
+
+
+def _read_cpu_name() -> str:
+    """Windows' ProcessorNameString, or platform.processor(), or "".
+
+    Standard library only: winreg is the same source Task Manager shows, and
+    platform.processor() is the fallback on another OS. No serial or path is
+    returned by either; _safe_name strips one if a driver ever adds it.
+    """
+    if os.name == "nt":
+        try:
+            import winreg
+            with winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as key:
+                value, _kind = winreg.QueryValueEx(key, "ProcessorNameString")
+                name = _safe_name(value)
+                if name:
+                    return name
+        except Exception:                                   # noqa: BLE001
+            pass
+    try:
+        return _safe_name(platform.processor())
+    except Exception:                                       # noqa: BLE001
+        return ""
 
 
 def _gb(n) -> str:
@@ -142,7 +187,7 @@ def collect(readers=None) -> dict:
         "memory": memory if isinstance(memory, dict) else None,
         "cards": cards if isinstance(cards, list) else None,
         "uptime": float(uptime) if isinstance(uptime, (int, float)) and not isinstance(uptime, bool) else None,
-        "cpu": {"cores": cores, "name": ""},        # name is not read anywhere
+        "cpu": {"cores": cores, "name": _read_cpu_name()},
         "model": model, "preset": preset,
         "watch_drive": (watch or {}).get("drive") if watch else "",
         "watch_free": free,
@@ -213,8 +258,11 @@ def answer(shape: str, *, drive: str = "", facts: Optional[dict] = None) -> str:
                 f"({_pct(100.0 * free / total)} free).")
     if shape == "cpu":
         cores = (f.get("cpu") or {}).get("cores")
+        name = _safe_name((f.get("cpu") or {}).get("name"))
         if not cores:
             return _missing("the processor")
+        if name:
+            return f"The processor is {name}, with {cores} logical cores."
         return (f"The processor reports {cores} logical cores. Its exact model name is not "
                 f"recorded by any reader on this PC, so I will not guess it.")
     if shape == "gpu":
@@ -223,18 +271,30 @@ def answer(shape: str, *, drive: str = "", facts: Optional[dict] = None) -> str:
             return _missing("the graphics cards")
         if not cards:
             return ("No NVIDIA graphics card answered this PC's nvidia-smi tool, so I have no "
-                    "graphics-card name or memory to report.")
+                    "graphics-card name, memory or live temperature to report.")
         parts = []
         for c in cards:
             if not isinstance(c, dict):
                 continue
-            name = str(c.get("name") or "a graphics card")
+            name = _safe_name(c.get("name")) or "a graphics card"
             total = c.get("total_mib")
             free = c.get("free_mib")
+            used = c.get("used_mib")
+            if not isinstance(used, (int, float)) and isinstance(total, (int, float)) and isinstance(free, (int, float)):
+                used = max(0.0, float(total) - float(free))
             if isinstance(total, (int, float)) and total > 0:
-                line = f"{name} has {_gb(float(total) * 1024 * 1024)} of graphics memory"
+                line = (f"{name} has {_gb(float(total) * 1024 * 1024)} of graphics memory")
+                if isinstance(used, (int, float)):
+                    line += f", with {_gb(float(used) * 1024 * 1024)} used"
                 if isinstance(free, (int, float)):
-                    line += f", with {_gb(float(free) * 1024 * 1024)} free"
+                    line += f" ({_gb(float(free) * 1024 * 1024)} free)"
+                live = []
+                if isinstance(c.get("load_percent"), (int, float)):
+                    live.append(f"{_pct(c['load_percent'])} busy")
+                if isinstance(c.get("temp_c"), (int, float)):
+                    live.append(f"{int(c['temp_c'])} °C")
+                if live:
+                    line += ", " + " and ".join(live)
                 parts.append(line + ".")
             else:
                 parts.append(f"{name} answered, but its memory size was not readable.")

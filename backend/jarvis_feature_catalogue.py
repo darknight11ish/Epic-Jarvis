@@ -3,7 +3,7 @@
 The owner's feature list, as data: 167 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 f394ea021cfc8102636822f70156640c585b6350bd622668871388eac3978c79); the apps' Features pages read their own
+`features/features.json` (sha256 69b4013a14e686e56d200c2d8f8594f1361cbdf9646e58bd54534754198fb67c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "f394ea021cfc8102636822f70156640c585b6350bd622668871388eac3978c79"
+SOURCE_SHA256 = "69b4013a14e686e56d200c2d8f8594f1361cbdf9646e58bd54534754198fb67c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -741,10 +741,10 @@ FEATURES = (
         "id": "pc-help",
         "group": "Notes and files",
         "title": "PC help",
-        "what": "Plain answers about this PC - how full the drives are, how much RAM is free, what CPU and graphics cards it has, how long it has been on, why it is slow or hot, and the current chat model and focus preset.",
+        "what": "Plain answers about this PC - how full the drives are, how much RAM is free, the CPU model name and cores, what graphics cards it has with their live temperature/utilisation/VRAM, how long it has been on, why it is slow or hot, and the current chat model and focus preset.",
         "where": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help. The same facts are answered straight in chat, on either app, when you ask about disk/storage, RAM, CPU, GPU or uptime.",
         "asks": "No card - it only reads.",
-        "limit": "The chat answers read the PC when you ask; the PC help card reads when you press Check now. Nothing is written, changed, sent or learned, and no user name or file path is included - drives are named by their letter only. A fact this PC cannot read (for example a CPU model name, a non-NVIDIA card or its temperature) is said as not readable, never guessed.",
+        "limit": "The chat answers read the PC when you ask; the PC help card reads when you press Check now. Nothing is written, changed, sent or learned, and no user name, file path, serial or UUID is included - drives are named by their letter only. A non-NVIDIA card, a missing sensor or another unread fact is said as not readable, never guessed.",
         "surface": "both",
         "covers": ["brain.model.pc-help"],
     },
