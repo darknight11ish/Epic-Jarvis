@@ -2805,7 +2805,7 @@ await check("a HUD answer gets a caret menu, not a permanent right/wrong row", a
   assert.equal(await menu.isVisible(), true, "the caret did not open the answer menu");
   assert.equal(await page.locator("#log .jarvis-answer-menu:visible").count(), 1,
     "more than one answer menu opened");
-  assert.match(await menu.innerText(), /Was this answer right\?/);
+  // The menu heading is styled uppercase by CSS (hud-link.css text-transform); a\n  // case-sensitive regex reads the transformed text and fails on the case. Assert\n  // the sentence case-insensitively so the visual style stays.\n  assert.match(await menu.innerText(), /was this answer right\?/i);
   assert.match(await menu.innerText(), /Read out loud|Copy answer/);
   await menu.locator("button", { hasText: "Wrong" }).click();
   await page.waitForTimeout(300);
