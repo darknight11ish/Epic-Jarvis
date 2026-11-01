@@ -3,7 +3,7 @@
 The owner's feature list, as data: 167 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 8cb9a0700ccea746cd64e54e4a73de051799f759b005eac51414c8cd159a9353); the apps' Features pages read their own
+`features/features.json` (sha256 c4bf6c789dd0d1654ab87396ddfd6f83d5db3b9936af4ee17384f6473fde90a3); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "8cb9a0700ccea746cd64e54e4a73de051799f759b005eac51414c8cd159a9353"
+SOURCE_SHA256 = "c4bf6c789dd0d1654ab87396ddfd6f83d5db3b9936af4ee17384f6473fde90a3"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -819,10 +819,10 @@ FEATURES = (
         "id": "goals",
         "group": "Notes and files",
         "title": "Goals",
-        "what": "Plans you edit, with a weekly check-in and steps marked done one at a time.",
-        "where": "Brain, Work, Goals.",
-        "asks": "Accepting a drafted goal raises one card. Marking a step done does not.",
-        "limit": "A drafted goal waits for one card; marking a step done does not undo it by itself.",
+        "what": "Goals kept on this PC: your own words plus a short editable plan of at most 7 steps, with a weekly deterministic check-in.",
+        "where": "Brain, Work, Goals. Ask in chat for a short plan if you want one drafted first.",
+        "asks": "Accepting a drafted goal raises ONE ordinary card; ticking a step and the weekly check-in raise NO card. Every acting step still needs its own card.",
+        "limit": "No automatic progress tracking: a step is met when you tick it, or where it names a project benchmark, when that number reaches its target on a read/check-in - nothing is ticked silently. At most 9 steps and 20 goals; the plan is a nudge, not a scheduler entry.",
         "surface": "both",
         "covers": ["brain.work.goals", "projects"],
     },
