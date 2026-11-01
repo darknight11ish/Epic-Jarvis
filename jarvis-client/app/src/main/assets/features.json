@@ -2723,10 +2723,10 @@
     "id": "android-builder",
     "group": "The PC itself",
     "title": "Build the Android app in a project task",
-    "what": "Build the Android app in a project task and install the APK over the cable - two separate approvals.",
-    "where": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
-    "asks": "Two risky cards, each with its exact command: one for the build (app_build_android) and one for the install (app_install_android).",
-    "limit": "Only a project already set up for the Android app; it needs the SDK/JDK on this PC and a cable, and it never publishes to Play.",
+    "what": "Build a small Android app from your own index.html/app.js/app.css in a project task, with the Gradle build and the adb install behind their own two approval cards.",
+    "where": "In a project task, say 'build the Android app' or 'build my app and put it on my phone'. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
+    "asks": "Two risky cards, each with the exact command: app_build_android for the build and app_install_android for the install.",
+    "limit": "Only the fixed WebView template (no hand-written Kotlin/manifest, no permissions) in a project task. Needs the Android SDK, a Java 17 JDK and the Gradle wrapper files; the install needs adb and a USB cable with debugging. A first build downloads Gradle and the Android Gradle plugin. No release signing, no Play Store, no adb shell and no uninstall.",
     "surface": "both",
     "covers": [
       "android-builder"
