@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 167 rows from features/features.json.
+The owner's feature list, as data: 168 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 9c2451319f92c3b82e282eaf638880a842b2267d437d9185af75a9e0d4060d36); the apps' Features pages read their own
+`features/features.json` (sha256 2451c6f2478455766a8d4e0153b82ad96b5e22bc6321fceb0e7f6b63ac9e4662); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "9c2451319f92c3b82e282eaf638880a842b2267d437d9185af75a9e0d4060d36"
+SOURCE_SHA256 = "2451c6f2478455766a8d4e0153b82ad96b5e22bc6321fceb0e7f6b63ac9e4662"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1397,10 +1397,22 @@ FEATURES = (
         "what": "Nine presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
         "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
-        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands.",
+        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands. The Cloud row beside these nine is a separate cloud service choice, described in its own row.",
         "surface": "both",
         "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],
+    },
+    {
+        "id": "cloud-escalation",
+        "group": "The PC itself",
+        "title": "Cloud (DeepSeek API)",
+        "what": "Send a hard question to the one cloud API service you chose - DeepSeek by default - after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
+        "where": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
+        "asks": "Applying the Cloud row raises ONE change_own_config card; so does turning the standing switch on. Turning it off is instant. Every privacy gate still runs first, and the monthly money limit still applies.",
+        "limit": "One cloud service at a time. Its key lives in Windows Credential Manager (presence only is shown, never the key or a fragment), is never logged or echoed, and goes only to that service's own host. No key, no monthly limit or no usable model means no cloud turn. Email, files, credentials, stored memory, a picture, your screen, a private question or a tainted conversation never go. The newest message's own words are what is sent, not the earlier conversation. A chat answer is from the local model unless a cloud turn was allowed; the UI says so on the card.",
+        "surface": "both",
+        "aliases": ["cloud", "cloud api", "deepseek api", "escalate to the cloud", "try the cloud model"],
+        "covers": [],
     },
     {
         "id": "second-card",

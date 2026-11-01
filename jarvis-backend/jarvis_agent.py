@@ -9782,6 +9782,53 @@ def tidy_assistant_whitespace(msgs: list) -> list:
     return out
 
 
+def cloud_state_note() -> Optional[str]:
+    """ONE honest line about the real cloud state, for every local prompt.
+
+    Owner-reported 2026-10-31: with the Cloud - DeepSeek (API) preset chosen and
+    the key saved, the local model told him "I have no connection to any
+    external API" and "no external connections or handoff paths". The rules
+    block says the assistant lives on this machine and says nothing false, but
+    it had no CURRENT state to work from. `jarvis_presets.cloud_state_line()`
+    reads the chosen provider, whether a key is saved (a bool, never a value),
+    readiness and the standing switch, and returns one redacted line. It adds
+    no secret and no message. A backend without the module still gets a safe
+    line: the model must not invent a connection either way.
+    """
+    try:
+        import jarvis_presets
+        state = jarvis_presets.cloud_state()
+        # No Cloud provider chosen: there is no connection to describe, and a
+        # line saying so on every prompt would bury the rules for no gain. The
+        # owner's bug is the chosen-preset case below.
+        if not state.get("provider"):
+            return None
+        line = str(jarvis_presets.cloud_state_line() or "").strip()
+    except Exception:                                       # noqa: BLE001
+        line = ""
+    return line or None
+
+
+def with_cloud_state_note(msgs: list) -> list:
+    """A new list with the cloud-state line as a system message.
+
+    Placed like the manner/focus notes - just before the newest user message,
+    never first - so the rules stay first and the line is current for this
+    answer. `msgs` itself is not changed; no line or no user message returns a
+    plain copy. It is added only to the request for THIS PC's model; the relay
+    (the one path to a cloud model) never sees it.
+    """
+    note = cloud_state_note()
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if note is None or not users:
+        return list(msgs)
+    at = users[-1]
+    msg = {"role": "system", "content": note}
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    next_time: str = "", spoken: bool = False, live: bool = False,
                    cut_off: str = "", crisis: bool = False,
@@ -9795,6 +9842,9 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # See the block above tidy_assistant_whitespace - the warm-up and the real
     # turn must both go through here, or their prefixes differ.
     out = tidy_assistant_whitespace(msgs)
+    # The real cloud connection state, so the local model cannot deny an API
+    # that is chosen and has a saved key (owner-reported bug, 2026-10-31).
+    out = with_cloud_state_note(out)
     # The owner's manner (warm or plain): wording only, never first, and
     # before the spoken note so that one is nearer the question.
     out = with_manner_note(out, manner, crisis=crisis)

@@ -24967,6 +24967,39 @@ Tests: `backend/test_presets_cloud.py`,
 gates, the patch round trip on the published base, and the automatic-turn
 fallback).
 
+**The chat now says the real cloud state (2026-10-31, owner-reported).** With
+the Cloud preset set to DeepSeek (API) and its key saved, the local model told
+the owner "I have no connection to any external API" and "no external
+connections or handoff paths". Both were false. Two additions fix it without
+moving any state, route, card or gate:
+
+- **The model's prompt.** Every local prompt (only when a Cloud provider is
+  chosen) carries ONE redacted system line from
+  `jarvis_presets.cloud_state_line()`: the chosen service, host and model;
+  whether its key is saved (a bool, never a value or fragment); whether it can
+  be used now and why not; and the standing switch. It also says that choosing
+  the preset sends nothing and that email, files, credentials, stored memory,
+  pictures, the screen and a tainted conversation never go. No key, message or
+  private text is in it. A backend with no chosen provider adds no line, so a
+  PC with no cloud set up keeps the old prompt byte for byte.
+- **The fixed chat answers.** Ten sentence shapes are answered with no model
+  from `jarvis_presets.cloud_state()` and `jarvis_chatbot_api`'s presence-only
+  key reads: "are you connected to my deepseek api?", "do you have my deepseek
+  key?", "are you using the cloud right now?", "is this answer from deepseek or
+  the local model?", "how do I escalate something to the cloud?", "what gets
+  sent when you use the cloud?", "what never gets sent?", "can you call the
+  deepseek api for this?", "is the cloud on/off?" and "which provider is the
+  cloud preset using?". They say the real provider/key/readiness/switch state,
+  never the key or a fragment, and quote the one privacy rule. A generic "what
+  is the cloud?" is not over-captured. The three real doors are named exactly:
+  the Try the cloud model button, the standing switch, and "send this to the
+  cloud" in the newest message.
+
+Tests: `backend/test_cloud_honesty_state.py` (40 checks: the system line in a
+stub prompt, all ten shapes in every state, no key in any answer, no model
+call, no over-capture). A chosen provider whose key is not saved, whose monthly
+limit is unset, or whose model cannot be used says so rather than pretending.
+
 ### 145.2 What a cloud answer is corrected with, and `cloud_refused` (added 2026-10-28)
 
 From the 2026-10-27 AI-safety audit (`.dsh-scratch/AUDITS-2026-10-27/partner-ai-safety.md`, H1 and M1). Two things changed about a cloud turn, and **no existing key moved or changed meaning** - the header gains ONE key, and only when it applies.

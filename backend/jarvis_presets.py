@@ -598,6 +598,106 @@ def cloud_view() -> dict:
             "escalate": {"on": escalate_on(), "why": escalate_why()}}
 
 
+def cloud_state() -> dict:
+    """The cloud facts the chat may state, read fresh and never including a key.
+
+    This is the ONE state read for the quick answers and the model's system
+    line (2026-10-31): the chosen provider, whether its key is saved (a bool,
+    never a value or a fragment), whether it can be used now and why not, the
+    standing escalation switch, and the DeepSeek key's presence separately
+    because the owner asks about that service by name. No network, no card and
+    no write; a missing module leaves the fields empty rather than guessing.
+    """
+    out = {"available": False, "provider": "", "provider_name": "",
+           "company": "", "host": "", "model": "", "key_saved": None,
+           "ready": "", "escalate": False, "escalate_why": "",
+           "deepseek_key_saved": None}
+    try:
+        import jarvis_chatbot_api as API
+    except Exception:                                       # noqa: BLE001
+        return out
+    out["available"] = True
+    try:
+        out["deepseek_key_saved"] = API.key_saved("deepseek_api")
+    except Exception:                                       # noqa: BLE001
+        out["deepseek_key_saved"] = None
+    pid = cloud_chosen()
+    out["provider"] = pid
+    try:
+        out["escalate"] = bool(escalate_on())
+        out["escalate_why"] = escalate_why()
+    except Exception:                                       # noqa: BLE001
+        pass
+    if pid and pid in API.PRESETS:
+        preset = API.PRESETS[pid]
+        out["provider_name"] = preset.name
+        out["company"] = preset.company
+        out["host"] = preset.host
+        try:
+            out["model"] = str(API.model_for(pid)[0] or preset.model)
+        except Exception:                                   # noqa: BLE001
+            out["model"] = preset.model
+        try:
+            out["key_saved"] = API.key_saved(pid)
+        except Exception:                                   # noqa: BLE001
+            out["key_saved"] = None
+        try:
+            out["ready"] = str(API.ready_for(pid) or "")
+        except Exception:                                   # noqa: BLE001
+            out["ready"] = "this PC could not say whether that service can be used"
+    return out
+
+
+def cloud_state_line() -> str:
+    """ONE redacted system line saying the real cloud state, for the model.
+
+    It names the chosen service, host and model and whether a key is saved; it
+    NEVER names a key value, a fragment or a message. It exists because the
+    local model was denying that any external API existed even with the Cloud
+    preset chosen and a DeepSeek key saved (owner-reported, 2026-10-31). The
+    line also carries the real privacy rule, so the model cannot claim either
+    that everything always leaves or that nothing can ever leave.
+    """
+    st = cloud_state()
+    if not st["available"]:
+        return ("The cloud state on this PC could not be read, so do not claim either that "
+                "you are connected to a cloud API or that no external connection exists. "
+                "Nothing is sent to a cloud service without the owner's yes.")
+    provider = st["provider"]
+    if not provider:
+        if st["deepseek_key_saved"]:
+            return ("No cloud API service is chosen on this PC, so no question can be sent "
+                    "to the cloud right now; a DeepSeek API key is saved, but choosing the "
+                    "Cloud row and a provider is the step. Every answer is written by the "
+                    "model on this PC unless a cloud turn is arranged and allowed.")
+        return ("No cloud API service is chosen on this PC, so no question can be sent to "
+                "the cloud; every answer is written by the model on this PC. A cloud turn "
+                "is possible only after the owner chooses the Cloud row and saves a key.")
+    who = f"{st['company']} ({st['host']}, model {st['model']})"
+    key = st["key_saved"]
+    if key is False:
+        return (f"The Cloud preset is set to {who}, but no {st['company']} API key is saved "
+                f"on this PC, so no question can be sent to it until one is added in "
+                f"Windows Credential Manager; answers stay on this PC.")
+    if key is None:
+        return (f"The Cloud preset is set to {who}, but this PC cannot read Windows "
+                f"Credential Manager, so whether that service can be used is unknown. "
+                f"Nothing is sent to it without the owner's yes.")
+    if st["ready"]:
+        return (f"The Cloud preset is set to {who}; its key is saved on this PC, but it "
+                f"cannot be used right now: {st['ready']} Nothing is sent to it.")
+    escalate = (" The standing escalation switch is ON, so a hard question may go there "
+                "without a per-question yes after every privacy gate; it is off at once."
+                if st["escalate"] else
+                " The standing escalation switch is OFF, so each cloud turn needs the "
+                "owner's yes.")
+    return (f"The Cloud preset is set to {who}; its key is saved on this PC and it can be "
+            f"used now. A question is sent there only when the owner allows it (the Try "
+            f"the cloud model button, a standing switch, or an explicit request), never "
+            f"with email, files, credentials, stored memory, a picture, a screen or a "
+            f"tainted conversation. Choosing the preset alone sends nothing.{escalate}")
+
+
 def cloud_preset_view() -> dict:
     """The Cloud row itself, in the SAME shape as a `Preset.view()`.
 
@@ -609,16 +709,17 @@ def cloud_preset_view() -> dict:
     return {
         "id": CLOUD_PRESET_ID, "title": "Cloud",
         "focus": "a second opinion from a service you have connected",
-        "what": ("Send hard questions to one of the cloud services whose key is saved on "
-                 "this PC, instead of answering them here. Each answer costs a little "
-                 "on that account."),
+        "what": ("Let Jarvis send a hard question to one of the cloud services whose key "
+                 "is saved on this PC, instead of answering it here. Choosing this row "
+                 "only chooses the service; it switches no answer and sends nothing by "
+                 "itself. Each answer costs a little on that account."),
         "cost": ("Every message goes to that company's own servers, under its terms, and "
                  "is billed to your account there. Jarvis stops before a message that "
                  "could pass the monthly money limit you set."),
-        "worse": ("Your words leave this PC. Anything private, tainted, a picture or your "
-                  "screen never goes - those gates run first and answer here. The answer "
-                  "is capped, so a thinking model may return its working-out instead of an "
-                  "answer."),
+        "worse": ("Your words leave this PC when a cloud turn is allowed. Anything private, "
+                  "tainted, a picture or your screen never goes - those gates run first and "
+                  "answer here. The answer is capped, so a thinking model may return its "
+                  "working-out instead of an answer."),
         "model": "",
         "lane": {"key": CLOUD_PRESET_ID, "card": "", "port": 0,
                  "words": "the cloud"},
