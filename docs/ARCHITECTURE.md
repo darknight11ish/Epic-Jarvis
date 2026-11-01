@@ -2695,6 +2695,21 @@ backend routes, in both directions; the rest are listed here only.
   half-built one on either. No new route is desktop- or phone-only and
   `tools/check_parity.py` classifies both routes as available to both.
 
+- **Routing a typed "was this answer right?" is the HUD page's and the phone's
+  alone, not the desktop's main chat window** (2026-11-01; the field-test gap:
+  the words were being sent to the model and answered conversationally instead
+  of opening the answer's own menu). The words ask for the caret menu under one
+  answer - the menu the owner asked for on 2026-10-27 - and that menu exists on
+  the HUD page and on the phone's answer actions. The desktop's main chat window
+  still draws the always-visible Right / Wrong row under a finished answer, so
+  there is no menu there to route to: the control is already on screen, the
+  words keep going to the model exactly as before, and nothing is missing. No
+  route and no permission is involved either way - both clients answer the
+  phrase locally and send nothing, and the phone keeps its own copy of the
+  allow-list (`net/AnswerMenuAsk.kt`) with the desktop HUD's in
+  `jarvis_hud.html`. A miss on either side is harmless by design (the words go
+  to the model as before); a hijack would not be, so only whole sentences match.
+
 **The approval card's remaining differences, after the 2026-10-28 parity slice**
 (the owner's ruling: *"the cards on android should match the cards on
 desktop"*). Everything a card *decides* is now the same on both apps: the title,
