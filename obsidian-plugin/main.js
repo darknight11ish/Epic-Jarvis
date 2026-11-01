@@ -26,6 +26,32 @@ __export(main_exports, {
 module.exports = __toCommonJS(main_exports);
 var import_obsidian5 = require("obsidian");
 
+// src/a11y.ts
+function accessibleName(el, name) {
+  const clean = (name != null ? name : "").trim();
+  if (!clean) throw new Error("an accessible name must not be empty");
+  el.setAttribute("aria-label", clean);
+}
+function liveRegion(el, politeness = "polite") {
+  el.setAttribute("role", politeness === "assertive" ? "alert" : "status");
+  el.setAttribute("aria-live", politeness);
+  el.setAttribute("aria-atomic", "true");
+}
+function group(el, name) {
+  const clean = (name != null ? name : "").trim();
+  if (!clean) throw new Error("a group name must not be empty");
+  el.setAttribute("role", "group");
+  el.setAttribute("aria-label", clean);
+}
+function busy(el, isBusy) {
+  el.setAttribute("aria-busy", isBusy ? "true" : "false");
+}
+function hint(el, text2) {
+  const clean = (text2 != null ? text2 : "").trim();
+  if (!clean) return;
+  el.setAttribute("title", clean);
+}
+
 // src/client.ts
 var import_obsidian = require("obsidian");
 
@@ -53,6 +79,11 @@ var ROUTES = {
 var UNREACHABLE_MESSAGE = "Could not reach the local Jarvis. Is the desktop Jarvis running on this PC?";
 var WAITING_CARD_MESSAGE = "A card is waiting on the PC. This plugin cannot approve cards: answer it in the Jarvis window on the PC.";
 var POLL_MAX_ATTEMPTS = 240;
+var FIRST_RUN_STEPS = [
+  "Open Settings -> Jarvis notes bridge.",
+  "Pick the Obsidian secret that holds your Jarvis token (preferred), or paste the token into the clearly-marked fallback field in a test vault.",
+  "Press Test connection. It should say Connected."
+];
 var ProtocolError = class extends Error {
   constructor(message, kind = "unreadable") {
     super(message);
@@ -107,6 +138,52 @@ function requireToken(token) {
   }
   return value;
 }
+function firstRunChecklist(hasToken, status) {
+  const steps = [...FIRST_RUN_STEPS];
+  if (!hasToken || status === "no-token") {
+    return {
+      heading: "First run",
+      steps,
+      next: "Start at step 1: this panel needs a Jarvis token before Ask, Capture or any edit can work."
+    };
+  }
+  if (status === "connected") {
+    return { heading: "", steps: [], next: "" };
+  }
+  if (status === "unreachable") {
+    return {
+      heading: "First run",
+      steps,
+      next: "The token is set. Step 3 failed because nothing answered: is the Jarvis desktop app running on this PC? Start it, then press Test connection again."
+    };
+  }
+  if (status === "token-refused") {
+    return {
+      heading: "First run",
+      steps,
+      next: "Step 3 failed because Jarvis refused the token: copy it again in full (about 43 characters), then press Test connection."
+    };
+  }
+  if (status === "not-deployed") {
+    return {
+      heading: "First run",
+      steps,
+      next: "The address and token are fine, but this backend does not have the notes routes yet (HTTP 404). That is not a mistake you made: they arrive with the notes-editor backend deploy. Ask and Capture work until then."
+    };
+  }
+  if (status === "http") {
+    return {
+      heading: "First run",
+      steps,
+      next: "Step 3 got an unexpected answer: open Settings -> Jarvis notes bridge and read the exact line under Test connection."
+    };
+  }
+  return {
+    heading: "First run",
+    steps,
+    next: "Jarvis is checking the connection now. Step 3 is the manual version of that check."
+  };
+}
 function tryParseJson(value) {
   try {
     const parsed = JSON.parse(value);
@@ -152,8 +229,11 @@ function boundedText(raw, max) {
 function httpErrorMessage(status, body) {
   const data = object(body);
   const said = text(data.message) || text(data.error) || text(data.why);
-  if (status === 401 || status === 403) {
-    return said ? "Jarvis refused the token (HTTP " + status + "): " + said : "Jarvis refused the request (HTTP " + status + "). Check the token in Settings -> Jarvis notes bridge.";
+  if (status === 401) {
+    return said ? "Jarvis refused the token (HTTP 401): " + said : "Jarvis refused the token (HTTP 401). Check the token in Settings -> Jarvis notes bridge.";
+  }
+  if (status === 403) {
+    return said ? "Jarvis refused the request (HTTP 403): " + said : "Jarvis refused the request (HTTP 403). The backend did not send a reason.";
   }
   if (status === 404) {
     return said || "Jarvis does not have this route yet (HTTP 404). The notes edit routes arrive with the notes-editor backend deploy.";
@@ -190,7 +270,16 @@ function interpretWriteReply(status, body) {
     return baseOutcome("error", httpErrorMessage(status, data), status, data);
   }
   if (state === "waiting" || status === 202) {
-    return baseOutcome("waiting", said || WAITING_CARD_MESSAGE, status, data);
+    const message = said || WAITING_CARD_MESSAGE;
+    if (!text(data.id)) {
+      return baseOutcome(
+        "waiting",
+        message + " Jarvis did not send a change id, so this panel cannot follow the card: answer it in Jarvis, then reopen this panel to see the outcome.",
+        status,
+        data
+      );
+    }
+    return baseOutcome("waiting", message, status, data);
   }
   if (state === "conflict" || status === 409) {
     return baseOutcome(
@@ -215,9 +304,17 @@ function interpretWriteReply(status, body) {
     if (state === "unchanged") {
       return baseOutcome("unchanged", said || "Nothing needed changing.", status, data);
     }
+    if (state === "saved" || !state) {
+      return baseOutcome(
+        "saved",
+        said || "Jarvis says it saved the change. You can undo it in Jarvis.",
+        status,
+        data
+      );
+    }
     return baseOutcome(
-      "saved",
-      said || "Jarvis says it saved the change. You can undo it in Jarvis.",
+      "error",
+      'Jarvis answered with the state "' + state + '", which this plugin does not know, so it cannot say the change was saved.',
       status,
       data
     );
@@ -276,6 +373,13 @@ function interpretChatReply(status, body) {
       message: httpErrorMessage(status, data)
     };
   }
+  if (data.ok === false) {
+    return {
+      kind: "error",
+      answer: "",
+      message: text(data.error) || text(data.message) || text(data.why) || "Jarvis refused to answer this question."
+    };
+  }
   const choices = Array.isArray(data.choices) ? data.choices : [];
   const first = object(choices[0]);
   const message = object(first.message);
@@ -330,10 +434,27 @@ function interpretCaptureReply(status, body) {
       httpStatus: status
     };
   }
+  if (status < 200 || status >= 300) {
+    return {
+      kind: "error",
+      message: httpErrorMessage(status, data),
+      jobId: text(data.id),
+      httpStatus: status
+    };
+  }
   if (status === 202 || state === "waiting") {
+    const message = said || WAITING_CARD_MESSAGE;
+    if (!text(data.id)) {
+      return {
+        kind: "waiting",
+        message: message + " Jarvis did not send a status id, so this dialog cannot follow it: answer the card in Jarvis, then check today's note.",
+        jobId: "",
+        httpStatus: status
+      };
+    }
     return {
       kind: "waiting",
-      message: said || WAITING_CARD_MESSAGE,
+      message,
       jobId: text(data.id),
       httpStatus: status
     };
@@ -364,8 +485,8 @@ function interpretCaptureReply(status, body) {
   }
   if (status >= 200 && status < 300) {
     return {
-      kind: "filed",
-      message: said || "Captured into today's note in your Obsidian vault.",
+      kind: "not_filed",
+      message: said || (state ? 'Not captured: Jarvis reported the state "' + state + '", which this plugin does not know, so this is not counted as filed.' : "Not captured: Jarvis did not say the capture was filed."),
       jobId: text(data.id),
       httpStatus: status
     };
@@ -388,7 +509,17 @@ function interpretTemplatesReply(status, body) {
       httpStatus: status
     };
   }
-  const raw = Array.isArray(data.templates) ? data.templates : [];
+  const listed = data.templates;
+  if (listed !== void 0 && listed !== null && !Array.isArray(listed)) {
+    return {
+      kind: "error",
+      names: [],
+      why: "",
+      message: "Jarvis answered but its template list was not a list, so this plugin will not guess the template names.",
+      httpStatus: status
+    };
+  }
+  const raw = Array.isArray(listed) ? listed : [];
   const names = [];
   for (const item of raw) {
     if (typeof item === "string" && item.trim()) names.push(item.trim());
@@ -427,6 +558,9 @@ function pollDelayMs(attempt) {
 }
 function pollGaveUpMessage() {
   return "Still waiting for the card on the PC. This plugin stopped checking after 10 minutes; answer or dismiss the card in Jarvis, then reopen the Jarvis panel to see the outcome.";
+}
+function isRefusalKind(kind) {
+  return kind === "error" || kind === "failed" || kind === "denied" || kind === "conflict";
 }
 function shouldPoll(outcome) {
   return outcome.kind === "waiting" && outcome.jobId !== "";
@@ -723,12 +857,15 @@ var AskModal = class extends import_obsidian2.Modal {
       });
       text2.inputEl.rows = 4;
       text2.inputEl.addClass("jarvis-question");
+      accessibleName(text2.inputEl, "Question");
     });
     const answer = contentEl.createEl("div", { cls: "jarvis-answer" });
+    liveRegion(answer);
     answer.setText("Ask when ready.");
     new import_obsidian2.Setting(contentEl).addButton(
       (button) => button.setButtonText("Ask Jarvis").setCta().onClick(async () => {
         button.setDisabled(true);
+        busy(answer, true);
         answer.setText("Asking the local Jarvis\u2026");
         try {
           const outcome = await this.plugin.client.askJarvis(
@@ -739,11 +876,14 @@ var AskModal = class extends import_obsidian2.Modal {
           answer.setText(
             outcome.kind === "ok" ? outcome.answer : "Could not ask Jarvis: " + outcome.message
           );
-          if (outcome.kind === "error") new import_obsidian2.Notice(outcome.message, 8e3);
+          liveRegion(answer, outcome.kind === "ok" ? "polite" : "assertive");
         } catch (error) {
           answer.setText("Could not ask Jarvis: " + shortError(error));
+          liveRegion(answer, "assertive");
         } finally {
           button.setDisabled(false);
+          busy(answer, false);
+          button.buttonEl.focus();
         }
       })
     );
@@ -764,27 +904,36 @@ var CaptureModal = class extends import_obsidian2.Modal {
         this.text = value;
       });
       area.inputEl.rows = 6;
+      accessibleName(area.inputEl, "What to capture");
     });
     const said = contentEl.createEl("div", { cls: "jarvis-answer" });
+    liveRegion(said);
     new import_obsidian2.Setting(contentEl).addButton(
       (button) => button.setButtonText("Capture").setCta().onClick(async () => {
         button.setDisabled(true);
+        busy(said, true);
         said.setText("Sending to the local Jarvis\u2026");
         try {
           const outcome = await this.plugin.client.captureToDaily(this.text);
           said.setText(outcome.message);
+          liveRegion(said, outcome.kind === "filed" || outcome.kind === "waiting" ? "polite" : "assertive");
           if (outcome.kind === "waiting" && outcome.jobId) {
+            busy(said, false);
             said.setText(outcome.message + " Checking\u2026");
             const final = await this.plugin.client.pollCapture(
               outcome.jobId,
               (message) => said.setText(message + " Checking\u2026")
             );
             said.setText(final.message);
+            liveRegion(said, final.kind === "filed" ? "polite" : "assertive");
           }
         } catch (error) {
           said.setText("Not captured: " + shortError(error));
+          liveRegion(said, "assertive");
         } finally {
           button.setDisabled(false);
+          busy(said, false);
+          button.buttonEl.focus();
         }
       })
     );
@@ -803,9 +952,11 @@ var ReplaceModal = class extends import_obsidian2.Modal {
     this.setTitle("Replace the selection through Jarvis");
     const { contentEl } = this;
     contentEl.createEl("p", { cls: "jarvis-hint", text: CARD_HINT });
-    new import_obsidian2.Setting(contentEl).setName("Selected words").setDesc("This exact text is what Jarvis will replace (one whole-word occurrence).").addTextArea((area) => {
+    new import_obsidian2.Setting(contentEl).setName("Selected words").setDesc(this.replacePreviewDescription()).addTextArea((area) => {
       area.setValue(clip(this.selection, 400));
-      area.setDisabled(true);
+      area.inputEl.readOnly = true;
+      area.inputEl.setAttribute("aria-readonly", "true");
+      accessibleName(area.inputEl, "Selected words (read only)");
       area.inputEl.rows = 2;
     });
     new import_obsidian2.Setting(contentEl).setName("Replace it with").addTextArea((area) => {
@@ -813,12 +964,14 @@ var ReplaceModal = class extends import_obsidian2.Modal {
         this.newText = value;
       });
       area.inputEl.rows = 4;
+      accessibleName(area.inputEl, "Replacement words");
     });
     this.resultEl = contentEl.createEl("div", { cls: "jarvis-answer" });
+    liveRegion(this.resultEl);
     new import_obsidian2.Setting(contentEl).addButton(
       (button) => button.setButtonText("Ask Jarvis to replace it").setCta().onClick(async () => {
         if (!this.newText.trim()) {
-          new import_obsidian2.Notice("Type the replacement words first.");
+          this.showResult("Type the replacement words first.", "error");
           return;
         }
         button.setDisabled(true);
@@ -832,14 +985,20 @@ var ReplaceModal = class extends import_obsidian2.Modal {
           );
         } finally {
           button.setDisabled(false);
+          button.buttonEl.focus();
         }
       })
     );
+  }
+  /** Say truthfully whether the read-only preview is the whole target or its first 400 characters. */
+  replacePreviewDescription() {
+    return this.selection.length > 400 ? "The first 400 characters of the exact text Jarvis will replace (one whole-word occurrence)." : "This exact text is what Jarvis will replace (one whole-word occurrence).";
   }
   showResult(message, kind) {
     if (!this.resultEl) return;
     this.resultEl.setText(message);
     this.resultEl.setAttribute("data-kind", kind != null ? kind : "");
+    liveRegion(this.resultEl, isRefusalKind(kind) ? "assertive" : "polite");
   }
 };
 var TagModal = class extends import_obsidian2.Modal {
@@ -854,16 +1013,18 @@ var TagModal = class extends import_obsidian2.Modal {
     this.setTitle("Tag this note through Jarvis");
     const { contentEl } = this;
     contentEl.createEl("p", { cls: "jarvis-hint", text: CARD_HINT });
-    new import_obsidian2.Setting(contentEl).setName("Tag").setDesc("One tag, without the #: letters, numbers, _ - or /; at least one letter.").addText(
-      (text2) => text2.setPlaceholder("recipes").onChange((value) => {
+    new import_obsidian2.Setting(contentEl).setName("Tag").setDesc("One tag, without the #: letters, numbers, _ - or /; at least one letter.").addText((text2) => {
+      accessibleName(text2.inputEl, "Tag name");
+      return text2.setPlaceholder("recipes").onChange((value) => {
         this.tag = value;
-      })
-    );
+      });
+    });
     this.resultEl = contentEl.createEl("div", { cls: "jarvis-answer" });
+    liveRegion(this.resultEl);
     new import_obsidian2.Setting(contentEl).addButton(
       (button) => button.setButtonText("Ask Jarvis to add the tag").setCta().onClick(async () => {
         if (!this.tag.trim()) {
-          new import_obsidian2.Notice("Type a tag name first.");
+          this.showResult("Type a tag name first.", "error");
           return;
         }
         button.setDisabled(true);
@@ -871,18 +1032,21 @@ var TagModal = class extends import_obsidian2.Modal {
           await this.plugin.performWrite(
             "Asking Jarvis to tag " + this.path,
             (sha) => this.plugin.client.addTag(this.path, this.tag, sha),
-            (message, kind) => {
-              if (!this.resultEl) return;
-              this.resultEl.setText(message);
-              this.resultEl.setAttribute("data-kind", kind != null ? kind : "");
-            },
+            (message, kind) => this.showResult(message, kind),
             this.path
           );
         } finally {
           button.setDisabled(false);
+          button.buttonEl.focus();
         }
       })
     );
+  }
+  showResult(message, kind) {
+    if (!this.resultEl) return;
+    this.resultEl.setText(message);
+    this.resultEl.setAttribute("data-kind", kind != null ? kind : "");
+    liveRegion(this.resultEl, isRefusalKind(kind) ? "assertive" : "polite");
   }
 };
 
@@ -993,16 +1157,23 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
   async render() {
     const el = this.bodyEl;
     if (!el) return;
+    if (el.contains(document.activeElement)) return;
     el.empty();
     el.addClass("jarvis-panel");
     this.resultEl = null;
     el.createEl("h4", { text: "Jarvis" });
-    el.createEl("p", { cls: "jarvis-status", text: this.plugin.statusText() });
-    if (!this.plugin.hasToken()) {
-      el.createEl("p", {
-        cls: "jarvis-warning",
-        text: "No Jarvis token yet. Open Settings -> Jarvis notes bridge, pick a SecretStorage secret (or paste the token in the fallback field), then press Test connection."
-      });
+    const statusLine = el.createEl("p", { cls: "jarvis-status", text: this.plugin.statusText() });
+    liveRegion(statusLine);
+    this.resultEl = el.createDiv({ cls: "jarvis-result" });
+    liveRegion(this.resultEl);
+    this.applyResult();
+    const checklist = firstRunChecklist(this.plugin.hasToken(), this.plugin.statusKind());
+    if (checklist.next) {
+      el.createEl("h5", { text: checklist.heading });
+      const steps = el.createEl("ol", { cls: "jarvis-checklist" });
+      for (const step of checklist.steps) steps.createEl("li", { text: step });
+      const next = el.createEl("p", { cls: "jarvis-warning", text: checklist.next });
+      liveRegion(next);
     }
     const context = await this.plugin.readNoteContext();
     if (!context) {
@@ -1012,8 +1183,6 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       });
       return;
     }
-    this.resultEl = el.createDiv({ cls: "jarvis-result" });
-    this.applyResult();
     el.createEl("h4", { text: context.title });
     el.createEl("p", { cls: "jarvis-path", text: context.path });
     this.section(el, "Headings", context.headings.map((heading) => headingLabel(heading)), 30);
@@ -1042,13 +1211,20 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     el.createEl("h5", { text: title + " (" + items.length + ")" });
     const list = el.createEl("ul", { cls: "jarvis-list" });
     for (const item of items.slice(0, cap)) list.createEl("li", { text: item });
-    if (items.length > cap) list.createEl("li", { text: "\u2026" });
+    if (items.length > cap) {
+      list.createEl("li", { text: "\u2026 and " + (items.length - cap) + " more, not shown" });
+    }
   }
   currentSelection() {
     var _a, _b;
     const view = this.app.workspace.getActiveViewOfType(import_obsidian3.MarkdownView);
     return ((_b = (_a = view == null ? void 0 : view.editor) == null ? void 0 : _a.getSelection()) != null ? _b : "").trim();
   }
+  /**
+   * Put one sentence into the panel's live result line. Public because the
+   * plugin entry point uses it to explain a command that could not start (for
+   * example "Open a note first.") inside a live region, not only in a toast.
+   */
   showResult(message, kind) {
     this.lastResultMessage = message;
     this.lastResultKind = kind;
@@ -1059,6 +1235,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     if (!this.resultEl) return;
     this.resultEl.setText(this.lastResultMessage);
     this.resultEl.setAttribute("data-kind", (_a = this.lastResultKind) != null ? _a : "");
+    liveRegion(this.resultEl, isRefusalKind(this.lastResultKind) ? "assertive" : "polite");
   }
   /* ------------------------------------------------------------------ */
   /* Wave 1: ask and capture                                             */
@@ -1069,17 +1246,21 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     input.rows = 3;
     input.value = this.question;
     input.placeholder = "What is unclear here? What should I link?";
+    accessibleName(input, "Ask a question about this note");
     input.addEventListener("input", () => {
       this.question = input.value;
     });
     const row = el.createDiv({ cls: "jarvis-row" });
+    group(row, "Ask and capture");
     const ask = row.createEl("button", { text: "Ask", cls: "mod-cta" });
     const capture = row.createEl("button", { text: "Capture selection" });
     const answer = el.createDiv({ cls: "jarvis-answer" });
+    liveRegion(answer);
     answer.setText(this.askAnswer);
     ask.addEventListener("click", () => {
       void (async () => {
         ask.disabled = true;
+        busy(answer, true);
         answer.setText("Asking the local Jarvis\u2026");
         try {
           const selection = boundedText(this.currentSelection(), MAX_SELECTION_CHARS);
@@ -1091,11 +1272,15 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
           );
           this.askAnswer = outcome.kind === "ok" ? outcome.answer : "Could not ask Jarvis: " + outcome.message;
           answer.setText(this.askAnswer);
+          liveRegion(answer, outcome.kind === "ok" ? "polite" : "assertive");
         } catch (error) {
           this.askAnswer = "Could not ask Jarvis: " + shortError(error);
           answer.setText(this.askAnswer);
+          liveRegion(answer, "assertive");
         } finally {
           ask.disabled = false;
+          busy(answer, false);
+          if (ask.isConnected) ask.focus();
         }
       })();
     });
@@ -1120,6 +1305,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     }
     el.createEl("p", { cls: "jarvis-label", text: "Insert under a heading" });
     const headingSelect = el.createEl("select", { cls: "dropdown jarvis-select" });
+    accessibleName(headingSelect, "Insert under which heading");
     if (context.headings.length) {
       for (const heading of context.headings) {
         const option = document.createElement("option");
@@ -1144,12 +1330,14 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     insertInput.rows = 2;
     insertInput.value = this.insertDraft;
     insertInput.placeholder = "One line to add at the end of that section";
+    accessibleName(insertInput, "Line to insert under the heading");
     insertInput.addEventListener("input", () => {
       this.insertDraft = insertInput.value;
     });
     const insertRow = el.createDiv({ cls: "jarvis-row" });
     const insertButton = insertRow.createEl("button", { text: "Insert under heading", cls: "mod-cta" });
     insertButton.disabled = context.headings.length === 0;
+    if (insertButton.disabled) hint(insertButton, "This note has no headings to insert under.");
     insertButton.addEventListener("click", () => {
       void this.insertUnderHeading(insertButton, headingSelect, insertInput);
     });
@@ -1167,21 +1355,23 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       });
     }
     const selectionRow = el.createDiv({ cls: "jarvis-row jarvis-row-wrap" });
+    group(selectionRow, "Edit the selection through Jarvis");
     const bold = selectionRow.createEl("button", { text: "Bold" });
     const italic = selectionRow.createEl("button", { text: "Italic" });
     const checklist = selectionRow.createEl("button", { text: "Checklist" });
     const replace = selectionRow.createEl("button", { text: "Replace\u2026" });
     const tag = selectionRow.createEl("button", { text: "Set tag\u2026" });
-    for (const button of [bold, italic, checklist, replace]) {
-      button.disabled = !selection && button !== replace;
-    }
-    replace.disabled = !selection;
+    accessibleName(bold, "Make the selection bold through Jarvis");
+    accessibleName(italic, "Make the selection italic through Jarvis");
+    accessibleName(checklist, "Turn the selection's line into a checklist item through Jarvis");
+    accessibleName(replace, "Replace the selection through Jarvis");
+    accessibleName(tag, "Set a tag on this note through Jarvis");
     bold.addEventListener("click", () => void this.formatSelection(bold, "bold"));
     italic.addEventListener("click", () => void this.formatSelection(italic, "italic"));
     checklist.addEventListener("click", () => void this.checklistLine(checklist));
     replace.addEventListener("click", () => {
       if (!editor) {
-        new import_obsidian3.Notice("Open a note with an editor first.");
+        this.showResult("Open a note with an editor first.", "error");
         return;
       }
       this.plugin.openReplace(editor);
@@ -1193,11 +1383,16 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       text: "Names come from Jarvis (read-only) and from the vault Templates folder. The note is created by Jarvis's create route, one card."
     });
     const templateSelect = el.createEl("select", { cls: "dropdown jarvis-select" });
+    accessibleName(templateSelect, "Template for a new note");
     const templatePreview = el.createDiv({ cls: "jarvis-template-preview" });
+    liveRegion(templatePreview);
+    accessibleName(templatePreview, "Template preview (read only)");
+    templatePreview.tabIndex = 0;
     const templatePath = document.createElement("input");
     templatePath.type = "text";
     templatePath.className = "jarvis-text";
     templatePath.placeholder = "New note path, vault-relative (for example project.md)";
+    accessibleName(templatePath, "New note path in the vault");
     templatePath.value = this.templateNotePathValue;
     templatePath.addEventListener("input", () => {
       this.templateNotePathValue = templatePath.value;
@@ -1216,11 +1411,11 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     const heading = headingSelect.value;
     const path = this.insertNotePath || this.plugin.activeFilePath();
     if (!text2) {
-      new import_obsidian3.Notice("Type the line to add first.");
+      this.showResult("Type the line to add first.", "error");
       return;
     }
     if (!heading || !path) {
-      new import_obsidian3.Notice("Pick a heading and open a note first.");
+      this.showResult("Pick a heading and open a note first.", "error");
       return;
     }
     if (this.plugin.activeFilePath() !== path) {
@@ -1240,17 +1435,18 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       );
     } finally {
       button.disabled = false;
+      if (button.isConnected) button.focus();
     }
   }
   async formatSelection(button, style) {
     const selection = this.currentSelection();
     const path = this.plugin.activeFilePath();
     if (!selection) {
-      new import_obsidian3.Notice("Select some text first.");
+      this.showResult("Select some text first.", "error");
       return;
     }
     if (!path) {
-      new import_obsidian3.Notice("Open a note first.");
+      this.showResult("Open a note first.", "error");
       return;
     }
     button.disabled = true;
@@ -1263,6 +1459,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       );
     } finally {
       button.disabled = false;
+      if (button.isConnected) button.focus();
     }
   }
   async checklistLine(button) {
@@ -1272,7 +1469,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
     const path = this.plugin.activeFilePath();
     const line = editor ? ((_b = editor.getLine(editor.getCursor("from").line)) != null ? _b : "").trim() : "";
     if (!line || !path) {
-      new import_obsidian3.Notice("Put the cursor on a line in a note first.");
+      this.showResult("Put the cursor on a line in a note first.", "error");
       return;
     }
     button.disabled = true;
@@ -1285,6 +1482,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       );
     } finally {
       button.disabled = false;
+      if (button.isConnected) button.focus();
     }
   }
   /* ------------------------------------------------------------------ */
@@ -1330,13 +1528,13 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       select.appendChild(option);
       preview.setText(backendWhy ? "Jarvis said: " + backendWhy : "");
       createButton.disabled = true;
+      hint(createButton, "No template can be read from this vault yet, so there is nothing to create.");
       return;
     }
     for (const choice of choices) {
       const option = document.createElement("option");
       option.value = choice.name;
       option.text = templateLabel(choice);
-      option.disabled = !canCreateFromTemplate(choice);
       select.appendChild(option);
     }
     const firstUsable = choices.find((choice) => canCreateFromTemplate(choice));
@@ -1354,10 +1552,15 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
         if (!name) {
           preview.setText("");
           createButton.disabled = true;
+          hint(createButton, "Pick a template first.");
           return;
         }
-        const chosen = select.selectedOptions[0];
-        createButton.disabled = !chosen || chosen.disabled;
+        const choice = choices.find((candidate) => candidate.name === name);
+        createButton.disabled = !choice || !canCreateFromTemplate(choice);
+        hint(
+          createButton,
+          createButton.disabled ? "That template's text cannot be read from this vault, so this plugin will not invent a body." : "Create this note through Jarvis's one card."
+        );
         const filePath = templateFilePath(this.plugin.settings.templatesFolder, name);
         try {
           const body = await this.readVaultTemplate(filePath);
@@ -1379,7 +1582,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
   async createFromTemplate(button, select, pathInput) {
     const name = select.value;
     if (!name) {
-      new import_obsidian3.Notice("Pick a template first.");
+      this.showResult("Pick a template first.", "error");
       return;
     }
     let body;
@@ -1401,6 +1604,7 @@ var JarvisPanel = class extends import_obsidian3.ItemView {
       );
     } finally {
       button.disabled = false;
+      if (button.isConnected) button.focus();
     }
   }
 };
@@ -1418,14 +1622,16 @@ var JarvisSettingsTab = class extends import_obsidian4.PluginSettingTab {
     containerEl.createEl("p", {
       text: "The Jarvis notes bridge talks to the Jarvis backend running on this PC. It never writes a note itself and it never approves a card: every edit goes through Jarvis's own one-card routes."
     });
-    new import_obsidian4.Setting(containerEl).setName("Jarvis backend URL").setDesc("The local backend only - usually http://127.0.0.1:4719.").addText(
-      (text2) => text2.setPlaceholder(DEFAULT_BACKEND).setValue(this.plugin.settings.backendUrl).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Jarvis backend URL").setDesc("The local backend only - usually http://127.0.0.1:4719.").addText((text2) => {
+      accessibleName(text2.inputEl, "Jarvis backend URL");
+      return text2.setPlaceholder(DEFAULT_BACKEND).setValue(this.plugin.settings.backendUrl).onChange(async (value) => {
         this.plugin.settings.backendUrl = value.trim();
         await this.plugin.saveSettings();
         refreshLoopbackWarning();
-      })
-    );
+      });
+    });
     const loopbackWarning = containerEl.createEl("p", { cls: "jarvis-warning" });
+    liveRegion(loopbackWarning);
     const refreshLoopbackWarning = () => {
       const url = this.plugin.settings.backendUrl || DEFAULT_BACKEND;
       loopbackWarning.setText(
@@ -1452,17 +1658,19 @@ var JarvisSettingsTab = class extends import_obsidian4.PluginSettingTab {
         cls: "jarvis-warning",
         text: "SecretStorage is not available in this Obsidian version; use the fallback token field below, or type the secret's name if your Obsidian stores secrets but cannot show the picker."
       });
-      new import_obsidian4.Setting(containerEl).setName("Token in SecretStorage - the secret's name").setDesc("The name only (not the token). Leave empty to use the fallback token below.").addText(
-        (text2) => text2.setPlaceholder("Jarvis token").setValue(this.plugin.settings.secretName).onChange(async (value) => {
+      new import_obsidian4.Setting(containerEl).setName("Token in SecretStorage - the secret's name").setDesc("The name only (not the token). Leave empty to use the fallback token below.").addText((text2) => {
+        accessibleName(text2.inputEl, "Token in SecretStorage - the secret's name");
+        return text2.setPlaceholder("Jarvis token").setValue(this.plugin.settings.secretName).onChange(async (value) => {
           this.plugin.settings.secretName = value.trim();
           await this.plugin.saveSettings();
-        })
-      );
+        });
+      });
     }
     new import_obsidian4.Setting(containerEl).setName("Fallback token (stored on this PC, not encrypted by Obsidian)").setDesc(
       "Only when SecretStorage is not used. This value is saved in this plugin's data.json in the vault's .obsidian folder. Fine for a test vault; prefer SecretStorage for your real vault. Never paste this token into a note."
     ).addText((text2) => {
       text2.inputEl.type = "password";
+      accessibleName(text2.inputEl, "Fallback token - stored on this PC, not encrypted by Obsidian");
       return text2.setPlaceholder("paste the Jarvis pairing token").setValue(this.plugin.settings.fallbackToken).onChange(async (value) => {
         this.plugin.settings.fallbackToken = value.trim();
         await this.plugin.saveSettings();
@@ -1470,17 +1678,20 @@ var JarvisSettingsTab = class extends import_obsidian4.PluginSettingTab {
     });
     new import_obsidian4.Setting(containerEl).setName("Templates folder").setDesc(
       "The vault folder this plugin lists templates from (read-only). Default: " + DEFAULT_TEMPLATES_FOLDER + "."
-    ).addText(
-      (text2) => text2.setPlaceholder(DEFAULT_TEMPLATES_FOLDER).setValue(this.plugin.settings.templatesFolder).onChange(async (value) => {
+    ).addText((text2) => {
+      accessibleName(text2.inputEl, "Templates folder");
+      return text2.setPlaceholder(DEFAULT_TEMPLATES_FOLDER).setValue(this.plugin.settings.templatesFolder).onChange(async (value) => {
         this.plugin.settings.templatesFolder = value.trim();
         await this.plugin.saveSettings();
-      })
-    );
+      });
+    });
     containerEl.createEl("h3", { text: "Connection" });
     const result = containerEl.createEl("p", { cls: "jarvis-hint" });
+    liveRegion(result);
     new import_obsidian4.Setting(containerEl).setName("Test connection").setDesc("Checks the token against a read-only Jarvis route (it does not call the model).").addButton(
       (button) => button.setButtonText("Test connection").onClick(async () => {
         result.setText("Testing\u2026");
+        busy(result, true);
         button.setDisabled(true);
         try {
           const answer = await this.plugin.client.testConnection();
@@ -1497,6 +1708,8 @@ var JarvisSettingsTab = class extends import_obsidian4.PluginSettingTab {
           );
         } finally {
           button.setDisabled(false);
+          busy(result, false);
+          button.buttonEl.focus();
           await this.plugin.refreshStatus();
         }
       })
@@ -1522,6 +1735,8 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     this.statusEl = null;
     this.statusBusy = false;
     this.lastStatus = "Jarvis: checking\u2026";
+    /** The same state as `lastStatus`, as a value the panel can act on. */
+    this.lastStatusKind = "unknown";
     /** One write at a time: a second card while the first waits is only confusing. */
     this.writeBusy = false;
   }
@@ -1592,7 +1807,7 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     });
     this.statusEl = this.addStatusBarItem();
     this.statusEl.setText(this.lastStatus);
-    this.statusEl.setAttribute("aria-label", "Jarvis connection");
+    liveRegion(this.statusEl);
     this.registerInterval(
       window.setInterval(() => void this.refreshStatus(), 6e4)
     );
@@ -1711,7 +1926,7 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     var _a, _b, _c;
     const context = await this.readNoteContext();
     if (!context) {
-      new import_obsidian5.Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     const selection = (_c = (_b = (_a = this.app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView)) == null ? void 0 : _a.editor) == null ? void 0 : _b.getSelection()) != null ? _c : "";
@@ -1726,7 +1941,7 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     var _a;
     const selection = ((_a = editor.getSelection()) != null ? _a : "").trim();
     if (!selection) {
-      new import_obsidian5.Notice("Select some text first.");
+      this.explain("Select some text first.");
       return;
     }
     const path = this.activeFilePath() || "this note";
@@ -1755,12 +1970,12 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     var _a;
     const selection = ((_a = editor.getSelection()) != null ? _a : "").trim();
     if (!selection) {
-      new import_obsidian5.Notice("Select the exact words to replace first.");
+      this.explain("Select the exact words to replace first.");
       return;
     }
     const path = this.activeFilePath();
     if (!path) {
-      new import_obsidian5.Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     new ReplaceModal(this.app, this, selection, path).open();
@@ -1768,7 +1983,7 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
   openTag() {
     const path = this.activeFilePath();
     if (!path) {
-      new import_obsidian5.Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     new TagModal(this.app, this, path).open();
@@ -1787,7 +2002,7 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
   async copyObsidianLink() {
     const path = this.activeFilePath();
     if (!path) {
-      new import_obsidian5.Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     const uri = obsidianOpenUri(this.app.vault.getName(), path);
@@ -1805,18 +2020,18 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     var _a;
     const selection = ((_a = editor.getSelection()) != null ? _a : "").trim();
     if (!selection) {
-      new import_obsidian5.Notice("Select some text first.");
+      this.explain("Select some text first.");
       return;
     }
     const path = this.activeFilePath();
     if (!path) {
-      new import_obsidian5.Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     await this.performWrite(
       "Asking Jarvis to make the selection " + style,
       (sha) => this.client.formatSpan(path, selection, style, "add", sha),
-      (message) => new import_obsidian5.Notice(message, 8e3),
+      (message, kind) => this.showFromCommand(message, kind),
       path
     );
   }
@@ -1824,18 +2039,18 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     var _a;
     const line = ((_a = editor.getLine(editor.getCursor("from").line)) != null ? _a : "").trim();
     if (!line) {
-      new import_obsidian5.Notice("Put the cursor on a line first.");
+      this.explain("Put the cursor on a line first.");
       return;
     }
     const path = this.activeFilePath();
     if (!path) {
-      new import_obsidian5.Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     await this.performWrite(
       "Asking Jarvis to turn that line into a checklist item",
       (sha) => this.client.customizeLine(path, "checklist", line, sha),
-      (message) => new import_obsidian5.Notice(message, 8e3),
+      (message, kind) => this.showFromCommand(message, kind),
       path
     );
   }
@@ -1960,14 +2175,57 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
       if (view instanceof JarvisPanel) void view.render();
     }
   }
+  /**
+   * Put one sentence into an open panel's live result line. Returns false when
+   * no panel is open, so the caller can fall back to a Notice.
+   *
+   * WHY: a toast is not reliably announced, and it disappears. The panel's
+   * result line is a live region, so a command that cannot start ("Open a note
+   * first.") is both heard and still readable afterwards.
+   */
+  tellPanel(message, kind = "error") {
+    let told = false;
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_JARVIS_PANEL)) {
+      const view = leaf.view;
+      if (view instanceof JarvisPanel) {
+        view.showResult(message, kind);
+        told = true;
+      }
+    }
+    return told;
+  }
+  /** Explain a failed command in the live panel line when one is open, else a Notice. */
+  explain(message, kind = "error") {
+    if (!this.tellPanel(message, kind)) new import_obsidian5.Notice(message);
+  }
+  /** One write update from a command: live panel line when open, else a Notice. */
+  showFromCommand(message, kind) {
+    if (!this.tellPanel(message, kind)) new import_obsidian5.Notice(message, 8e3);
+  }
   /* ------------------------------------------------------------------ */
   /* Status bar + Test connection                                        */
   /* ------------------------------------------------------------------ */
   renderStatus() {
     if (this.statusEl) this.statusEl.setText(this.lastStatus);
   }
+  /**
+   * Publish one honest status sentence. When the STATE changes (not just the
+   * wording), the open panel is re-rendered too, so its first-run checklist can
+   * disappear as soon as Test connection says Connected - the owner does not
+   * have to switch notes to see that they are done.
+   */
+  publishStatus(kind) {
+    const changed = kind !== this.lastStatusKind;
+    this.lastStatusKind = kind;
+    this.renderStatus();
+    if (changed) this.refreshPanels();
+  }
   statusText() {
     return this.lastStatus;
+  }
+  /** The same honest state as the status sentence, for the panel's first-run checklist. */
+  statusKind() {
+    return this.lastStatusKind;
   }
   /**
    * The status bar is an honest health check: a read-only GET that exists on
@@ -1979,25 +2237,33 @@ var JarvisNotesPlugin = class extends import_obsidian5.Plugin {
     try {
       if (!this.hasToken()) {
         this.lastStatus = "Jarvis: no token (Settings)";
-        this.renderStatus();
+        this.publishStatus("no-token");
         return;
       }
       try {
         const answer = await this.client.testConnection();
         if (answer.kind === "ok") {
           this.lastStatus = "Jarvis: connected";
-        } else if (answer.httpStatus === 401 || answer.httpStatus === 403) {
+          this.publishStatus("connected");
+        } else if (answer.httpStatus === 401) {
           this.lastStatus = "Jarvis: token refused";
+          this.publishStatus("token-refused");
+        } else if (answer.httpStatus === 403) {
+          this.lastStatus = "Jarvis: HTTP 403";
+          this.publishStatus("http");
         } else if (answer.httpStatus === 404) {
           this.lastStatus = "Jarvis: notes routes not deployed";
+          this.publishStatus("not-deployed");
         } else {
           this.lastStatus = "Jarvis: HTTP " + answer.httpStatus;
+          this.publishStatus("http");
         }
       } catch (error) {
         const said = shortError(error);
-        this.lastStatus = said.includes("Could not reach") ? "Jarvis: unreachable" : "Jarvis: " + said.slice(0, 60);
+        const unreachable = said.includes("Could not reach");
+        this.lastStatus = unreachable ? "Jarvis: unreachable" : "Jarvis: " + said.slice(0, 60);
+        this.publishStatus(unreachable ? "unreachable" : "http");
       }
-      this.renderStatus();
     } finally {
       this.statusBusy = false;
     }

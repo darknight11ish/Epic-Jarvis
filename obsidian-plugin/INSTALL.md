@@ -162,7 +162,9 @@ words:
 1. Open any note in the test vault.
 2. Click the speech-bubble ribbon icon on Obsidian's left edge. Hovering it says
    **Open the Jarvis panel**. The panel opens on the right and shows that note's
-   title, path, headings, links and frontmatter keys.
+   title, path, headings, links and frontmatter keys. If the plugin is not
+   connected yet, the panel starts with a short **First run** checklist and the
+   one next step; it disappears once **Test connection** says Connected.
 3. In the panel's ask box, type a question about the note and press **Ask**. The
    answer appears in the panel. The ask itself writes nothing; if Jarvis decides
    to do something, its own approval card appears on the PC, never here.

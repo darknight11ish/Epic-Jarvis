@@ -19,16 +19,16 @@
 
 .jarvis-panel h5 {
   margin: 1em 0 0.35em;
-  color: var(--text-muted);
-  font-size: 0.82em;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  /* Readable at a glance: normal case, normal colour, not the smallest text on
+     the panel. (The DOM text was always normal case; uppercase was CSS only.) */
+  color: var(--text-normal);
+  font-size: 0.9em;
 }
 
 .jarvis-path {
   margin: 0 0 0.6em;
-  color: var(--text-faint);
-  font-size: 0.8em;
+  color: var(--text-muted);
+  font-size: 0.85em;
   word-break: break-all;
 }
 
@@ -54,6 +54,29 @@
   margin: 0.8em 0 0.2em;
   font-size: 0.85em;
   color: var(--text-normal);
+}
+
+/* The first-run checklist: one numbered next-step list, readable at a glance. */
+.jarvis-checklist {
+  margin: 0.2em 0 0.4em 1.3em;
+  padding: 0;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.jarvis-checklist li {
+  margin: 0.15em 0;
+  overflow-wrap: anywhere;
+}
+
+/* Keyboard users must be able to see where they are, in addition to Obsidian's
+   own theme focus styles. */
+.jarvis-panel button:focus-visible,
+.jarvis-panel select:focus-visible,
+.jarvis-panel input:focus-visible,
+.jarvis-panel textarea:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
 }
 
 .jarvis-list {
