@@ -1575,7 +1575,7 @@
      "kind": "switch",
      "on": false,
      "title": "Organize an Obsidian vault",
-     "waiting": true,
+     "waiting": false,
      "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
     }
    },
@@ -3156,7 +3156,7 @@
      "kind": "switch",
      "on": false,
      "title": "Organize an Obsidian vault",
-     "waiting": true,
+     "waiting": false,
      "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
     }
    },
@@ -4732,7 +4732,7 @@
      "kind": "switch",
      "on": false,
      "title": "Organize an Obsidian vault",
-     "waiting": true,
+     "waiting": false,
      "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
     }
    },
@@ -6303,7 +6303,7 @@
      "kind": "switch",
      "on": false,
      "title": "Organize an Obsidian vault",
-     "waiting": true,
+     "waiting": false,
      "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
     }
    },
@@ -7874,7 +7874,7 @@
      "kind": "switch",
      "on": false,
      "title": "Organize an Obsidian vault",
-     "waiting": true,
+     "waiting": false,
      "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
     }
    },
@@ -9459,7 +9459,7 @@
      "kind": "switch",
      "on": false,
      "title": "Organize an Obsidian vault",
-     "waiting": true,
+     "waiting": false,
      "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
     }
    },
@@ -11035,7 +11035,7 @@
      "kind": "switch",
      "on": false,
      "title": "Organize an Obsidian vault",
-     "waiting": true,
+     "waiting": false,
      "what": "Plan a tidy-up of the Obsidian vault, then ONE card writes the whole batch; one Undo puts it back."
     }
    },

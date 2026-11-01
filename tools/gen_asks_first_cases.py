@@ -64,6 +64,15 @@ def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=Non
           search_every=False, tools_enabled=(), tool_waiting=None, lockdown=False,
           lockdown_waiting=False):
     AF._reset_for_tests()
+    # The vault organizer's switch keeps its own module-global pending state;
+    # clear it too, or every generated case would inherit the previous case's
+    # waiting card (2026-10-31, found by the desktop fixture test).
+    try:
+        import jarvis_vault_organizer as VO
+        VO._PENDING.clear()
+        VO._LAST_CARD.clear()
+    except Exception:                       # noqa: BLE001 - older tree
+        pass
     # The file's own tiers, and what Lockdown leaves of them (lockdown_tier).
     AF._file_tier = lambda a: tiers.get(a, "ask")
     AF._tier = lambda a: AF.lockdown_tier(a, tiers.get(a, "ask"))

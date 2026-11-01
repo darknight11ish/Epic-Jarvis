@@ -76,12 +76,24 @@ export const SWITCHABLE = Object.freeze([
  * 2026-09-27: "Reading tools ... can be switched on from the PC app, each
  * with a card plus Windows Hello; other tools stay in the settings file."
  */
-export const TOOLS_SWITCHABLE = Object.freeze(["calendar_read", "email_read", "notes_search",
-  "home_read"]);
+export const TOOLS_SWITCHABLE = Object.freeze([
+  // Tier A + Tier B (jarvis_asks_first.TOOLS_SWITCHABLE, 2026-10-31 tiered ruling)
+  "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
+  "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
+  "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
+  "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
+  "home_control", "my_spending", "retirement_whatif",
+]);
 export const TOOLS_LABEL = "Let the AI use this";
+export const TOOLS_DETAIL =
+  "Whether the AI model is offered each ability at all - a separate thing from whether it " +
+  "asks you first, above. Some tools have a switch here; the raw ones and the ones this " +
+  "slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE " +
+  "approval card and asks Windows Hello on this PC; turning it off is instant, from either " +
+  "app. Nothing here switches two tools at once.";
 export const TOOLS_PC_ONLY =
   "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
-  "first). It takes an approval card and Windows Hello.";
+  "first). It takes one approval card and Windows Hello.";
 
 /** Lockdown (2026-09-28): the PC's words (jarvis_asks_first.py LOCKDOWN_*). */
 export const LOCKDOWN_ACTION = "lockdown";
@@ -151,6 +163,7 @@ function readToolItem(i) {
   return {
     id: text(i.id),
     title: text(i.title),
+    group: text(i.group),
     on: i.on === true,
     waiting: i.waiting === true,
     last: last ? text(last.message) : "",
@@ -173,15 +186,38 @@ function readLockdown(k) {
   };
 }
 
-/** `view.tools` - the "Let the AI use this" switches, desktop only. */
+/** `view.tools` - the tiered "Let the AI use this" switches, desktop only. */
 function readTools(t) {
   if (!t || typeof t !== "object" || !Array.isArray(t.items)) {
-    return { canEnable: false, items: [] };
+    return { canEnable: false, items: [], groups: [], vault: null, notOffered: null };
   }
-  return {
-    canEnable: t.can_enable === true,
-    items: t.items.filter((i) => i && typeof i === "object").map(readToolItem),
-  };
+  const items = t.items.filter((i) => i && typeof i === "object").map(readToolItem);
+  const groups = Array.isArray(t.groups)
+    ? t.groups.filter((g) => g && typeof g === "object")
+      .map((g) => ({ title: text(g.title), ids: Array.isArray(g.ids) ? g.ids.map(text) : [] }))
+    : [];
+  const v = t.vault && typeof t.vault === "object" ? t.vault : null;
+  const vault = v ? {
+    id: text(v.id) || "vault_organizer",
+    kind: text(v.kind) || "switch",
+    title: text(v.title),
+    group: text(v.group),
+    what: text(v.what),
+    on: v.on === true,
+    waiting: v.waiting === true,
+    canEnable: v.can_enable === true,
+    last: v.last && typeof v.last === "object" ? text(v.last.message) : "",
+    lastOutcome: v.last && typeof v.last === "object" ? text(v.last.outcome) : "",
+  } : null;
+  const n = t.not_offered && typeof t.not_offered === "object" ? t.not_offered : null;
+  const labels = n && n.labels && typeof n.labels === "object" ? n.labels : {};
+  const notOffered = n ? {
+    tierC: Array.isArray(n.tier_c) ? n.tier_c.map(text) : [],
+    notThisSlice: Array.isArray(n.not_this_slice) ? n.not_this_slice.map(text) : [],
+    labels: Object.fromEntries(Object.entries(labels).map(([k, v]) => [k, text(v)])),
+    why: text(n.why),
+  } : null;
+  return { canEnable: t.can_enable === true, items, groups, vault, notOffered };
 }
 
 /**
@@ -283,11 +319,11 @@ export function switchView(row, view, live) {
 }
 
 /**
- * One "Let the AI use this" switch, on the four reading tools only:
- * {checked, disabled, lines}. Checked while offered, and while a card to
- * offer it waits. Unchecking it (OFF) is never held. Checking it (ON) needs
- * the PC to say this app may enable, a live link, and no other tool's card
- * waiting.
+ * One "Let the AI use this" switch, on every Tier A/Tier B tool: {checked,
+ * disabled, lines}. Checked while offered, and while a card to offer it waits.
+ * Unchecking it (OFF) is never held. Checking it (ON) needs the PC to say this
+ * app may enable (so the phone is read-only), a live link, and no other tool's
+ * card waiting.
  */
 export function toolSwitchView(item, tools, live) {
   if (!item) return null;
@@ -315,6 +351,68 @@ export function toolSwitchView(item, tools, live) {
   }
   if (item.last && item.lastOutcome !== "enabled" && !waitingHere) lines.push(item.last);
   return { checked, disabled, lines };
+}
+
+/**
+ * One "Let the AI use this" row's own switch for a tool item. The item carries
+ * its group, so the page can draw the tiered groups (Tier A + Tier B).
+ */
+export function toolGroupsView(tools) {
+  if (!tools || !Array.isArray(tools.items)) return [];
+  const byId = new Map(tools.items.map((i) => [i.id, i]));
+  const out = [];
+  for (const g of tools.groups || []) {
+    const items = g.ids.map((id) => byId.get(id)).filter(Boolean);
+    if (items.length) out.push({ title: g.title, items });
+  }
+  // Fall back to item.group when an older PC sends no groups: nothing is lost.
+  if (!out.length) {
+    const seen = new Map();
+    for (const item of tools.items) {
+      const title = item.group || "Tools";
+      if (!seen.has(title)) seen.set(title, { title, items: [] });
+      seen.get(title).items.push(item);
+    }
+    out.push(...seen.values());
+  }
+  return out;
+}
+
+/** The vault organizer's own switch: a separate row, not a [tools].enabled tool. */
+export function vaultSwitchView(vault, live) {
+  if (!vault) return null;
+  const waitingHere = vault.waiting === true;
+  const checked = vault.on || waitingHere;
+  const lines = [vault.what];
+  let disabled = false;
+  if (waitingHere) {
+    lines.push(WAITING);
+    disabled = true;
+  } else if (!vault.on) {
+    if (!vault.canEnable) {
+      lines.push(TOOLS_PC_ONLY);
+      disabled = true;
+    } else if (!live) {
+      lines.push(STALE);
+      disabled = true;
+    }
+  }
+  if (vault.last && vault.lastOutcome !== "enabled" && !waitingHere) lines.push(vault.last);
+  return { checked, disabled, lines };
+}
+
+/** The plain note naming every tool this slice does NOT offer in-app. */
+export function notOfferedView(tools) {
+  const n = tools && tools.notOffered;
+  if (!n || (!n.tierC.length && !n.notThisSlice.length)) return null;
+  const name = (id) => n.labels[id] || id.replace(/_/g, " ");
+  const parts = [];
+  if (n.tierC.length) parts.push("Never offered in the app: " + n.tierC.map(name).join(", ") + ".");
+  if (n.notThisSlice.length) {
+    parts.push("Not offered in-app by this slice: " + n.notThisSlice.map(name).join(", ") + ".");
+  }
+  if (n.why) parts.push(n.why);
+  return parts.join(" ");
 }
 
 /**
