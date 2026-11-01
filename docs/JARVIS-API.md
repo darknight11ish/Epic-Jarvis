@@ -29176,6 +29176,20 @@ note or changes any byte outside the link target.
   and following links to remote URLs. The chat says these are not built instead
   of pretending.
 
+- **The desktop plate's two controls (2026-10-31).** The Brain -> Notes editor's
+  chrome has **Rename…** and **Move…** beside Save, calling these same two
+  routes with exactly the bodies above (`{path, title}` and
+  `{path, folder, create_folder}`) and following the card with
+  `GET /api/notes/change?id=`. Rename is pre-filled with the current title and
+  is disabled when the note has no path. Move offers every folder the editor's
+  own note list proves exists (plus the vault's top level) and a new-folder
+  field whose **"Create it if it does not exist"** checkbox is the only way
+  `create_folder` can become true. The plate only asks and follows: it never
+  approves the card, never saves, shows the module's own waiting / denied /
+  failed / saved words (including "You can undo it."), and after a `saved`
+  change opens the note at its new path. The phone has no rename/move control
+  by this slice; its chat grammar calls the same routes.
+
 The module's twin `jarvis-backend/jarvis_notes_edit.py` is byte-identical, and
 `backend/test_notes_rename_move.py` proves the temp-vault matrix: rename/move
 success and exact bytes, collision, no links, alias/section/embed/Markdown links,

@@ -4788,7 +4788,7 @@ async function openWikiFolder() {
    ========================================================================== */
 
 const notes = { view: null, listError: "", open: null, openError: "", said: null,
-  saving: false, at: 0, loading: false };
+  saving: false, changing: false, at: 0, loading: false };
 /** The Memory tab repaints often; the list is re-read at most this often. */
 const NOTES_READ_MS = 15000;
 /** How long the search box rests before it asks the PC again. */
@@ -4825,6 +4825,9 @@ function paintNotes() {
     onSave: saveNotesNote,
     onReload: reloadNotesNote,
     onClose: closeNotesNote,
+    onRename: renameNotesNote,
+    onMove: moveNotesNote,
+    changing: notes.changing,
     // Formatting/toolbar edits belong to the page; a repaint must keep them.
     onDraft: (text) => {
       if (notes.open) notes.open = { ...notes.open, text };
@@ -4881,6 +4884,48 @@ async function reloadNotesNote() {
   if (!path) return;
   notes.open = null;
   await openNotesNote(path);
+}
+
+/**
+ * Rename or move the open note (wave 4, 2026-10-31). The PC's own route raises
+ * its ONE ordinary approval card; this window only asks and follows it, never
+ * approves it and never writes a file. On `saved` the new path is opened and
+ * the list re-read, so the editor is looking at the note's real name.
+ */
+async function changeNotesNote(kind, spec) {
+  const open = notes.open;
+  if (!open || !open.path || notes.changing || notes.saving) return;
+  notes.changing = true;
+  notes.said = {
+    text: kind === "rename" ? "Asking the PC to rename this note…" : "Asking the PC to move this note…",
+    tone: null, final: false, state: "",
+  };
+  paintNotes();
+  const run = kind === "rename" ? renameNote : moveNote;
+  const last = await run(invoke, { path: open.path, ...spec }, (said) => {
+    if (notes.said && notes.said.text === said.text && notes.said.final === said.final) return;
+    notes.said = said;
+    paintNotes();
+  }, { linkDown: () => !currentLink().connected });
+  notes.changing = false;
+  announce(`${open.path}: ${last.text}`, last.tone === "bad" ? "assertive" : "polite");
+  if (last.state === "saved" && last.target) {
+    await openNotesNote(last.target);
+    notes.said = last;
+    notes.at = 0;
+    await loadNotes();
+    paintNotes();
+    return;
+  }
+  paintNotes();
+}
+
+function renameNotesNote(title) {
+  return changeNotesNote("rename", { title });
+}
+
+function moveNotesNote(folder, createFolder) {
+  return changeNotesNote("move", { folder, createFolder: createFolder === true });
 }
 
 function closeNotesNote() {
