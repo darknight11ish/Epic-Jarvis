@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "4fe7299223cf04d7e07838ca5b19f8f595b31a7719e03ca7624c41016c35e8da",
+  "source_sha256": "264d585257f524273c4bf3a2b0ac099062a1417eeced57ac7df721ca3f17bcef",
   "feature_count": 167,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -916,14 +916,14 @@
     },
     {
       "id": "notes-editor",
-      "title": "Browse and edit your notes",
+      "title": "Create and customize your notes",
       "group": "Notes and files",
       "surface": "both",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "status": "not-a-setting",
       "label_note": "",
-      "example": "turn on Browse and edit your notes",
-      "example_ok": false,
+      "example": "turn on Create and customize your notes",
+      "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",

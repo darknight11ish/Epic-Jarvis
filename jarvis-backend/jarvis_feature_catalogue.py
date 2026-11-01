@@ -3,7 +3,7 @@
 The owner's feature list, as data: 167 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 1580d5e4bb0c95f52a85de17c1270b198f4ad07bb6a033d1932f9e69a7fd6b17); the apps' Features pages read their own
+`features/features.json` (sha256 8183e8944e627807fa0b506ed15e62e3335c5ad337b22558d64f12f5fa4ac6e4); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "1580d5e4bb0c95f52a85de17c1270b198f4ad07bb6a033d1932f9e69a7fd6b17"
+SOURCE_SHA256 = "8183e8944e627807fa0b506ed15e62e3335c5ad337b22558d64f12f5fa4ac6e4"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -267,10 +267,10 @@ FEATURES = (
         "id": "coming-up",
         "group": "Talking",
         "title": "Timers, alarms, reminders and lists",
-        "what": "Jarvis keeps your timers, alarms, reminders, to-do lists and the standby schedule.",
-        "where": "Just ask (\"remind me at six\"), or see them in Brain, Work, Coming up.",
+        "what": "Jarvis keeps your timers, alarms, reminders, to-do lists and the standby schedule on this PC, and shows them to the phone too.",
+        "where": "Just ask - \"remind me at six\", \"remind me in 30 minutes to check my phone\", \"make a reminder for 30 minutes from now\", \"set a timer for 10 minutes\" - or see them in Brain, Work, Coming up and the HUD's Reminders panel (#rail-reminders).",
         "asks": "A plain timer, a one-time reminder, a repeating reminder, an alarm and the standby schedule need no card. The morning briefing and \"tell me when\" raise one.",
-        "limit": "A late alarm rings only if it is at most 10 minutes late; after that it is a quiet note saying it was missed.",
+        "limit": "The PC is the clock. When one goes off, while Jarvis is running on the PC it shows a Windows notification: an alarm keeps ringing, a reminder or timer shows once. With the Jarvis app fully closed no notification appears then, but the job is kept and shows when it opens; a late alarm rings only if at most 10 minutes late, after that it is a quiet missed note. While the phone is connected to the PC the same job also shows an Android notification; the phone sets no alarm of its own. The morning briefing and \"tell me when\" raise one approval card.",
         "surface": "both",
         "covers": ["brain.work.coming-up", "timers-reminders"],
     },
