@@ -159,6 +159,12 @@ def t_rename_updates_wikilinks_embeds_aliases_sections_and_markdown_links():
           gate.calls and gate.calls[0][1].get("updates") == 5
           and gate.calls[0][1].get("target") == "Renamed.md",
           gate.calls[0][1] if gate.calls else None)
+    check("the card names the source, the target, its counts and the affected note",
+          gate.calls and "A.md to Renamed.md" in gate.calls[0][2]
+          and "5 link(s) in 1 note(s)" in gate.calls[0][2]
+          and "(B.md)" in gate.calls[0][2]
+          and gate.calls[0][1].get("changed_notes") == ["B.md"],
+          gate.calls[0][2] if gate.calls else None)
     check("one approval card only", len(gate.calls) == 1, gate.calls)
     rid = out.get("receipt")
     undo = R.undo(rid) if rid else {}
@@ -218,6 +224,41 @@ def t_collisions_and_bad_paths_are_refused_before_any_card():
     code, out = call(E.handle_move, {"path": "One.md", "folder": "../outside"}, gate)
     check("moving outside the vault is refused", code == 400 and gate.calls == [], (code, out))
     check("... and every refusal changed no byte", tree(VAULT) == [(p.relative_to(VAULT).as_posix(), sha(p.read_bytes())) for p in sorted(VAULT.rglob("*")) if p.is_file()])
+
+
+def t_card_discloses_only_the_first_three_affected_names():
+    reset()
+    write("A.md", "# A\n")
+    for i in range(1, 6):
+        write(f"N{i}.md", f"[[A]]\n")
+    gate = Gate()
+    code, out = call(E.handle_rename, {"path": "A.md", "title": "Many"}, gate)
+    prompt = gate.calls[0][2] if gate.calls else ""
+    check("the card shows three filenames and says how many more",
+          code == 200 and "(N1.md, N2.md, N3.md (+2 more))" in prompt
+          and gate.calls[0][1].get("changed_notes") == ["N1.md", "N2.md", "N3.md"]
+          and gate.calls[0][1].get("changed_notes_more") == 2, (code, prompt))
+    R.undo(out.get("receipt"))
+
+
+def t_hidden_lists_card_has_no_filenames():
+    reset()
+    write("A.md", "# A\n")
+    for name in ("B.md", "C.md"):
+        write(name, "[[A]]\n")
+    saved = E._hidden_lists
+    E._hidden_lists = lambda: True
+    gate = Gate()
+    try:
+        code, out = call(E.handle_rename, {"path": "A.md", "title": "Hidden"}, gate)
+    finally:
+        E._hidden_lists = saved
+    prompt = gate.calls[0][2] if gate.calls else ""
+    check("hidden lists keep counts only and name no note",
+          code == 200 and "2 link(s) in 2 note(s)" in prompt
+          and "B.md" not in prompt and "C.md" not in prompt and "A.md" not in prompt,
+          (code, prompt))
+    R.undo(out.get("receipt"))
 
 
 def t_move_can_create_a_folder_only_when_explicit():

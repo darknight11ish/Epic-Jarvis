@@ -29064,9 +29064,11 @@ note or changes any byte outside the link target.
     stated in this section and pinned by a test). Links inside them stay
     byte-identical.
   Only the matched link text changes; every other byte of every note is kept.
-  The card says "updates N link(s) in M note(s)"; when there are none it says
-  so and the action is just the file rename/move. While the hidden lists hide
-  private words the card carries counts only and names no file.
+  The card says the old path -> new path and "updates N link(s) in M note(s)";
+  when lists are visible it also names up to the first three affected note
+  filenames (`Index.md, Projects.md (+2 more)`), and when there are no links it
+  says so and the action is just the file rename/move. While the hidden lists
+  hide private words the card carries counts only and names no file at all.
 - **The write is one batch.** After approval the worker re-checks the source and
   every link-note hash (a note that changed while the card waited refuses, with
   no write), asks the File Guardian for a copy of the source and of every note

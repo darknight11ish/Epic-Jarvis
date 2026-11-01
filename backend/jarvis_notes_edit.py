@@ -2705,6 +2705,21 @@ def _batch_preview(plan: dict) -> str:
     return f"This {verb} {plan['source']} to {plan['target']}{created}. It has no links to update."
 
 
+def _changed_note_labels(plan: dict, limit: int = 3) -> list:
+    """The first few affected note filenames, in scan order, no duplicates."""
+    names = []
+    for row in plan["files"]:
+        rel = str(row.get("rel") or "")
+        if not rel or rel == plan["source"]:
+            continue
+        name = rel.rsplit("/", 1)[-1]
+        if name not in names:
+            names.append(name)
+        if len(names) >= limit:
+            break
+    return names
+
+
 def _batch_prompt_detail(plan: dict) -> tuple:
     created = " and create the folder" if plan["created_folders"] else ""
     if plan["hidden"]:
@@ -2714,13 +2729,23 @@ def _batch_prompt_detail(plan: dict) -> tuple:
                   "updates": plan["updates"], "notes": plan["notes"],
                   "hidden_lists": True, "undo": True, "deletes": False}
         return prompt, detail
+    labels = _changed_note_labels(plan)
+    more = max(0, plan["notes"] - len(labels))
+    shown = ""
+    if labels:
+        shown = " (" + ", ".join(labels) + (f" (+{more} more)" if more else "") + ")"
     prompt = (f"{plan['kind']} {plan['source']} to {plan['target']} in your Obsidian "
-              f"vault{created} and update {plan['updates']} link(s) in {plan['notes']} note(s)")
+              f"vault{created} and update {plan['updates']} link(s) in "
+              f"{plan['notes']} note(s){shown}")
     detail = {"path": plan["source"], "target": plan["target"],
               "action": "rename a note" if plan["kind"] == "rename" else "move a note",
               "updates": plan["updates"], "notes": plan["notes"],
               "undo": True, "deletes": False,
               "creates_folder": bool(plan["created_folders"])}
+    if labels:
+        detail["changed_notes"] = labels
+        if more:
+            detail["changed_notes_more"] = more
     return prompt, detail
 
 
