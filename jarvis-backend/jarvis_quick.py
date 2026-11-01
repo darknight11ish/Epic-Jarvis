@@ -1218,6 +1218,9 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _goals_question(text)
     if got is not None:
         return got
+    got = _price_radar_question(text)
+    if got is not None:
+        return got
 
     # --- timers, alarms and reminders, capability questions only (2026-10-31)
     # The owner asked "can you make a reminder for me" and the model said it
@@ -5838,6 +5841,138 @@ def _goals_question(raw) -> Optional[Intent]:
         return Intent("goal_capability")
     if re.search(r"\b(?:my\s+)?goals?\b", text) and re.search(r"\b(?:can you|do you|help|track)\b", text):
         return Intent("goal_capability")
+    return None
+
+
+
+# --------------------------------------------------------------------------
+# The price / flight radar (2026-10-31 honesty fix)
+#
+# Measured: backend/jarvis_price_radar.py (F1, owner-approved 2026-10-21) is a
+# READ-ONLY flight engine + SQLite price history. It reads Google Flights'
+# public search page (unofficial, experimental, can break), keeps target
+# prices/history, and has NO booking/cart/seat-hold/checkout path. It is OFF by
+# default (`[price_radar] enabled = false`); turning it on raises the ordinary
+# `change_own_config` approval card; there is no route, no app surface and no
+# chat lookup door yet. The live model said "I can't book or check real-time
+# flight availability directly... pull up travel sites", which is wrong about
+# reading prices: the engine exists, it is just off and unwired.
+# --------------------------------------------------------------------------
+
+PRICE_RADAR_TOML_KEY = "[price_radar] enabled"
+
+
+def _price_radar_state():
+    """{'available': bool, 'enabled': bool}; False/False when not installed."""
+    try:
+        import jarvis_price_radar as R
+        return {"available": True, "enabled": bool(R.enabled())}
+    except Exception:                       # noqa: BLE001 - module absent/broken
+        return {"available": False, "enabled": False}
+
+
+def _run_price_radar(name: str, state: dict) -> "Result":
+    available = bool(state.get("available"))
+    on = bool(state.get("enabled"))
+    if not available:
+        return Result("The price and flight radar is not installed on this PC. When it is, it is "
+                      "read-only and off by default.", "price_radar_state")
+    if name == "price_radar_state":
+        if on:
+            return Result("Yes - the price and flight radar is ON. It reads Google Flights' public "
+                          "search page (unofficial and experimental) and keeps a local price history; "
+                          "it never books, holds a seat or buys anything. There is no chat lookup "
+                          "route or app screen yet, so it cannot run a flight lookup from this "
+                          "conversation.", "price_radar_state")
+        return Result("No - the price and flight radar is OFF by default. It is read-only (it never "
+                      "books or buys), and it is turned on with `[price_radar] enabled = true` in the "
+                      "Jarvis settings file; that change raises the ordinary change_own_config "
+                      "approval card. There is no app screen or chat route for it yet.", "price_radar_state")
+    if name == "price_radar_about":
+        return Result("The price and flight radar is a read-only module on this PC: it reads Google "
+                      "Flights' public search page (unofficial, experimental, can change or break at "
+                      "any time) and keeps a local SQLite price history with target prices. It never "
+                      "books, holds a seat, adds to a cart or checks out; there is no such code path. "
+                      "It is off by default and has no chat route or app screen yet." +
+                      ("" if on else " It is off right now."), "price_radar_about")
+    if name == "price_radar_enable":
+        return Result("To turn on the price and flight radar, set `[price_radar] enabled = true` in "
+                      "Jarvis's settings file (the same file the other switches live in). That is a "
+                      "config change, so it raises the ordinary change_own_config approval card; "
+                      "turning it off is immediate. There is no app screen or chat route for it yet. "
+                      "It stays read-only: prices only, never a booking.", "price_radar_enable")
+    if name == "price_radar_book":
+        return Result("No - I cannot book a flight. The price and flight radar is read-only: it only "
+                      "reads public prices and keeps a local price history. It has no booking, cart, "
+                      "seat-hold or checkout code path at all, only that one read-only page request.",
+                      "price_radar_book")
+    if name == "price_radar_lookup":
+        base = ("I can read flight prices with the price and flight radar, but only when it is on. " +
+                ("It is ON right now. " if on else
+                 "It is OFF by default - set `[price_radar] enabled = true` in the settings file "
+                 "(that change raises the ordinary change_own_config card) - and " ) +
+                "there is no chat lookup route or app screen yet, so I cannot run a live lookup from "
+                "this conversation. When wired, it reads Google Flights' public search page "
+                "(unofficial and experimental, can break), returns prices only, and never books or "
+                "holds anything.")
+        return Result(base, "price_radar_lookup")
+    if name == "price_radar_track":
+        return Result("Yes - when the radar is on it keeps a local price history with target prices, "
+                      "so a price can be watched over time. It is read-only and never buys; it is "
+                      "OFF by default, has no chat route or app screen yet, and turning it on is the "
+                      "ordinary change_own_config card." if not on else
+                      "Yes - the radar is on and keeps a local price history with target prices for "
+                      "the items it reads. It is read-only and never buys, and there is no chat "
+                      "lookup route or app screen yet.", "price_radar_track")
+    return Result("The price and flight radar is read-only and off by default.", "price_radar_state")
+
+
+_PRICE_RADAR_BOOK_RX = re.compile(
+    r"\b(?:can|could|will|do)\s+you\s+(?:book|reserve|buy|purchase)\s+(?:me\s+)?(?:a\s+)?"
+    r"(?:flight|flights|ticket|tickets|seat|seats)\b|"
+    r"\bbook\s+(?:me\s+)?(?:a\s+)?(?:flight|ticket)s?\b")
+_PRICE_RADAR_ENABLE_RX = re.compile(
+    r"\bhow\s+(?:do|can)\s+i\s+(?:turn\s+on|enable|switch\s+on|start)\s+(?:the\s+)?"
+    r"(?:price\s*(?:and|or)?\s*flight\s*|flight\s*|price\s*)?radar\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+(?:turn\s+on|enable)\s+(?:flight|price)\s+(?:prices?|radar)\b|"
+    r"\bhow\s+(?:do|can)\s+i\s+(?:turn\s+on|enable|switch\s+on)\s+(?:the\s+)?"
+    r"flight\s+price\s+radar\b|"
+    r"\bis\s+the\s+(?:flight|price)\s+radar\s+(?:available|there)\b")
+_PRICE_RADAR_STATE_RX = re.compile(
+    r"\bis\s+(?:the\s+)?(?:price\s*(?:and|or)?\s*flight\s*|flight\s*|price\s*)?radar\s+"
+    r"(?:on|off|enabled|disabled|running)\b|"
+    r"\b(?:is|has)\s+(?:the\s+)?(?:flight|price)\s+radar\b")
+_PRICE_RADAR_TRACK_RX = re.compile(
+    r"\bcan\s+you\s+(?:track|watch|follow)\s+(?:a\s+|the\s+)?(?:flight\s+)?price\b|"
+    r"\b(?:track|watch)\s+(?:a\s+)?(?:flight\s+)?price\s+(?:for\s+me|over\s+time)\b")
+_PRICE_RADAR_ABOUT_RX = re.compile(
+    r"\bwhat\s+(?:does|is)\s+(?:the\s+)?(?:price\s*(?:and|or)?\s*flight\s*|flight\s*|price\s*)?"
+    r"radar\s+(?:do|for|about)?\b|"
+    r"\bwhat\s+is\s+the\s+(?:price|flight)\s+radar\b")
+_PRICE_RADAR_LOOKUP_RX = re.compile(
+    r"\bcan\s+you\s+(?:search|find|check|look\s+up)\s+(?:for\s+)?(?:me\s+)?(?:a\s+)?"
+    r"(?:flight|flights|airfare|flight\s+prices?)\b|"
+    r"\bcan\s+you\s+check\s+flight\s+prices?\b|"
+    r"\bcan\s+you\s+check\s+(?:the\s+)?prices?\s+of\s+flights?\b")
+
+
+def _price_radar_question(raw) -> Optional[Intent]:
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if _PRICE_RADAR_BOOK_RX.search(text):
+        return Intent("price_radar_book")
+    if _PRICE_RADAR_ENABLE_RX.search(text):
+        return Intent("price_radar_enable")
+    if _PRICE_RADAR_STATE_RX.search(text):
+        return Intent("price_radar_state")
+    if _PRICE_RADAR_TRACK_RX.search(text):
+        return Intent("price_radar_track")
+    if _PRICE_RADAR_ABOUT_RX.search(text):
+        return Intent("price_radar_about")
+    if _PRICE_RADAR_LOOKUP_RX.search(text):
+        return Intent("price_radar_lookup")
     return None
 
 
@@ -13351,6 +13486,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_android(n, _android_state())
     if n in _GOAL_INTENTS:
         return _run_goals(n, f, _client_surface(peer, local, client_surface))
+    if n in _PRICE_RADAR_INTENTS:
+        return _run_price_radar(n, _price_radar_state())
     # Updates in chat (2026-10-26): `desktop` is the app's own report of the
     # build that asked (commands.rs `chat_extras`), never the page's words.
     if n in ("update_ask", "update_notes"):
@@ -14056,6 +14193,10 @@ _SHORTCUT_INTENTS = frozenset({
     "shortcuts_named", "shortcuts_notes_named", "shortcuts_unknown",
 })
 
+#: The price/flight radar answers (2026-10-31): fixed words plus the real switch.
+_PRICE_RADAR_INTENTS = frozenset({"price_radar_state", "price_radar_about", "price_radar_enable",
+                                  "price_radar_book", "price_radar_lookup", "price_radar_track"})
+
 #: The goal answers (2026-10-31): fixed words plus the PC's real goal list.
 _GOAL_INTENTS = frozenset({"goal_capability", "goal_list", "goal_state", "goal_about", "goal_update"})
 
@@ -14075,10 +14216,12 @@ _REMINDER_INTENTS = frozenset({
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
-    "shortcuts_unknown", "goal_capability", "goal_list", "goal_state", "goal_about",
-    "goal_update", "android_capability", "android_howto", "android_needs",
-    "android_build_install", "plugin_list", "plugin_state", "plugin_about",
-    "plugin_install", "reminder_capability", "reminder_popup", "reminder_sound",
+    "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
+    "price_radar_book", "price_radar_lookup", "price_radar_track",
+    "goal_capability", "goal_list", "goal_state", "goal_about", "goal_update",
+    "android_capability", "android_howto", "android_needs", "android_build_install",
+    "plugin_list", "plugin_state", "plugin_about", "plugin_install",
+    "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
