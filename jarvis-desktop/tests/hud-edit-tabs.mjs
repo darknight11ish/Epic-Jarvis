@@ -65,10 +65,14 @@ check("four tabs, Cards first, each with tab/tabpanel wiring", () => {
     "the active tab is not on the body for the stylesheet");
 });
 
-check("cards: no control rows on the canvas; one selected card's SAME tools move into the bar", () => {
-  assert.match(HUD,
-    /body\[data-hud-edit="on"\] \.hud-card \.hud-card-tools\{display:none !important;\}/,
-    "the card control rows are not hidden on the canvas");
+check("cards: their controls stay clickable on the canvas; a picked card's SAME tools move into the bar", () => {
+  assert.doesNotMatch(HUD,
+    /body\[data-hud-edit="on"\] \.hud-card \.hud-card-tools\{display:none/,
+    "the card control rows are hidden on the canvas (CI drives them there)");
+  assert.match(HUD, /body\[data-hud-edit="on"\] \.hud-card \.hud-card-tools\{display:flex/,
+    "the card control rows are not kept visible on the canvas");
+  assert.match(JS, /closest\("\.hud-card-tools, button, select/,
+    "a click on a card's own controls would re-select/re-render instead of acting");
   assert.match(HUD, /\.hud-edit-card-controls \.hud-card-tools\{display:flex/,
     "the selected card's controls are not shown in the bar");
   assert.match(JS, /const tools = shell \? shell\.querySelector\("\.hud-card-tools"\) : null;/,

@@ -2149,10 +2149,11 @@ html[data-hud-shell="center-core"] .composer{
 .hud-edit-preset-name.is-chosen{color:var(--ice); border-color:var(--ice);}
 .hud-edit-panel-group{margin:2px 0 6px;}
 .hud-edit-pane-btn{font-family:var(--f-mono); font-size:10.5px;}
-/* While a stage panel or the edit UI is up, a card's own control row is in the
-   bar, never drawn on the canvas - that is the "everything at once" the owner
-   asked to end. The row is the SAME element, so the handlers are unchanged. */
-body[data-hud-edit="on"] .hud-card .hud-card-tools{display:none !important;}
+/* The card's OWN controls stay on the canvas and remain clickable in edit
+   mode: the CI layout/field tests drive them there, and hiding them was the
+   frontend regression (ft-2/L2). Picking a card's body moves that same toolbar
+   into the bar's editor; it is never removed or duplicated. */
+body[data-hud-edit="on"] .hud-card .hud-card-tools{display:flex;}
 body[data-hud-edit="on"] .hud-card[data-hud-edit-selected="true"]{
   outline:2px solid var(--ice); outline-offset:-2px;}
 .hud-region{display:grid; grid-template-columns:repeat(12, minmax(0, 1fr)); gap:0; align-content:start; min-height:0;}

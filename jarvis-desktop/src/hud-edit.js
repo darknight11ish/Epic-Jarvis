@@ -1840,6 +1840,13 @@ export function mountHudEditor(options = {}) {
    *  a click on one of its own controls still does what that control does. */
   function onEditCardClick(event) {
     if (!editing || !event || !event.target || !event.target.closest) return;
+    // A click on a card's OWN controls is that control's business: it must not
+    // re-render the bar or move the toolbar out from under the pointer. CI's
+    // rapid-action/debounce check and the field test both drive these buttons;
+    // only a click on the card itself picks the card.
+    if (event.target.closest(".hud-card-tools, button, select, input, textarea, a, [role='button']")) {
+      return;
+    }
     const shell = event.target.closest("[data-hud-card]");
     if (!shell) return;
     const id = shell.getAttribute("data-hud-card");
