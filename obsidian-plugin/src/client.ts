@@ -21,6 +21,14 @@ import { requestUrl } from "obsidian";
 import {
   buildHeaders,
   buildUrl,
+  captureRequest,
+  captureStatusRequest,
+  changeStatusRequest,
+  chatRequest,
+  createNoteRequest,
+  customizeLineRequest,
+  formatRequest,
+  insertRequest,
   interpretCaptureReply,
   interpretChatReply,
   interpretReadReply,
@@ -33,9 +41,13 @@ import {
   pollDelayMs,
   pollGaveUpMessage,
   ProtocolError,
+  readNoteRequest,
+  replaceRequest,
   requireToken,
   ROUTES,
   shortError,
+  tagRequest,
+  templatesRequest,
   UNREACHABLE_MESSAGE,
 } from "./protocol";
 import type {
@@ -112,7 +124,8 @@ export class JarvisClient {
 
   /** One note's text plus the sha256 of its bytes (the hash an edit starts from). */
   async readNote(path: string): Promise<ReadOutcome> {
-    const { status, body } = await this.send("GET", ROUTES.read, { path });
+    const request = readNoteRequest(path);
+    const { status, body } = await this.send(request.method, request.route, request.query);
     return interpretReadReply(status, body);
   }
 
@@ -121,23 +134,15 @@ export class JarvisClient {
     if (!(question ?? "").trim()) {
       throw new ProtocolError("Ask a question first.", "invalid");
     }
-    const content =
-      question.trim() +
-      "\n\nRead-only context from " +
-      notePath +
-      ":\n" +
-      contextText;
-    const { status, body } = await this.send("POST", ROUTES.chat, undefined, {
-      messages: [{ role: "user", content, provenance: "pasted" }],
-      stream: false,
-      auto: false,
-    });
+    const request = chatRequest(question, contextText, notePath);
+    const { status, body } = await this.send(request.method, request.route, request.query, request.body);
     return interpretChatReply(status, body);
   }
 
   /** Template names Jarvis knows (names only - the backend never returns template text). */
   async listTemplates(): Promise<TemplateListOutcome> {
-    const { status, body } = await this.send("GET", ROUTES.templates);
+    const request = templatesRequest();
+    const { status, body } = await this.send(request.method, request.route);
     return interpretTemplatesReply(status, body);
   }
 
@@ -155,28 +160,22 @@ export class JarvisClient {
     if (!(text ?? "").trim()) {
       throw new ProtocolError("Write what should be captured first.", "invalid");
     }
-    const { status, body } = await this.send("POST", ROUTES.capture, undefined, {
-      target: "obsidian",
-      text: text.trim(),
-    });
+    const request = captureRequest(text);
+    const { status, body } = await this.send(request.method, request.route, undefined, request.body);
     return interpretCaptureReply(status, body);
   }
 
   /** How one capture ended (a card can be answered on the PC after the first answer). */
   async captureStatus(jobId: string): Promise<CaptureOutcome> {
-    const { status, body } = await this.send("GET", ROUTES.captureStatus, { id: jobId });
+    const request = captureStatusRequest(jobId);
+    const { status, body } = await this.send(request.method, request.route, request.query);
     return interpretCaptureReply(status, body);
   }
 
   /** Add one line under the named heading of one note. */
   async insertUnderHeading(path: string, text: string, heading: string, expectedSha: string): Promise<WriteOutcome> {
-    const { status, body } = await this.send("POST", ROUTES.insert, undefined, {
-      path,
-      text,
-      mode: "under_heading",
-      target: heading,
-      expected_sha256: expectedSha,
-    });
+    const request = insertRequest(path, text, heading, expectedSha);
+    const { status, body } = await this.send(request.method, request.route, undefined, request.body);
     return interpretWriteReply(status, body);
   }
 
@@ -188,24 +187,15 @@ export class JarvisClient {
     action: "add" | "remove",
     expectedSha: string,
   ): Promise<WriteOutcome> {
-    const { status, body } = await this.send("POST", ROUTES.format, undefined, {
-      path,
-      target,
-      style,
-      action,
-      expected_sha256: expectedSha,
-    });
+    const request = formatRequest(path, target, style, action, expectedSha);
+    const { status, body } = await this.send(request.method, request.route, undefined, request.body);
     return interpretWriteReply(status, body);
   }
 
   /** Replace one exact, whole-word occurrence (the selection) with new words. */
   async replaceOnce(path: string, oldText: string, newText: string, expectedSha: string): Promise<WriteOutcome> {
-    const { status, body } = await this.send("POST", ROUTES.replace, undefined, {
-      path,
-      old: oldText,
-      new: newText,
-      expected_sha256: expectedSha,
-    });
+    const request = replaceRequest(path, oldText, newText, expectedSha);
+    const { status, body } = await this.send(request.method, request.route, undefined, request.body);
     return interpretWriteReply(status, body);
   }
 
@@ -216,13 +206,8 @@ export class JarvisClient {
     targetLine: string,
     expectedSha: string,
   ): Promise<WriteOutcome> {
-    const { status, body } = await this.send("POST", ROUTES.customize, undefined, {
-      path,
-      action: "line",
-      line_action: lineAction,
-      target: targetLine,
-      expected_sha256: expectedSha,
-    });
+    const request = customizeLineRequest(path, lineAction, targetLine, expectedSha);
+    const { status, body } = await this.send(request.method, request.route, undefined, request.body);
     return interpretWriteReply(status, body);
   }
 
@@ -230,25 +215,22 @@ export class JarvisClient {
   async addTag(path: string, tag: string, expectedSha: string): Promise<WriteOutcome> {
     const clean = (tag ?? "").trim().replace(/^#+/, "");
     if (!clean) throw new ProtocolError("Type a tag name first.", "invalid");
-    const { status, body } = await this.send("POST", ROUTES.tag, undefined, {
-      path,
-      tag: clean,
-      action: "add",
-      where: "auto",
-      expected_sha256: expectedSha,
-    });
+    const request = tagRequest(path, clean, expectedSha);
+    const { status, body } = await this.send(request.method, request.route, undefined, request.body);
     return interpretWriteReply(status, body);
   }
 
   /** Create ONE new note through the backend's create route (one card, collision refused). */
   async createNote(path: string, text: string): Promise<WriteOutcome> {
-    const { status, body } = await this.send("POST", ROUTES.create, undefined, { path, text });
+    const request = createNoteRequest(path, text);
+    const { status, body } = await this.send(request.method, request.route, undefined, request.body);
     return interpretWriteReply(status, body);
   }
 
   /** How one write ended: waiting / saved / denied / failed (409 conflict). */
   async changeStatus(jobId: string): Promise<WriteOutcome> {
-    const { status, body } = await this.send("GET", ROUTES.change, { id: jobId });
+    const request = changeStatusRequest(jobId);
+    const { status, body } = await this.send(request.method, request.route, request.query);
     return interpretStatusReply(status, body);
   }
 

@@ -36,6 +36,7 @@
  *     or the warned fallback setting, and is never logged or put in a URL.
  */
 import { Editor, MarkdownView, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { liveRegion } from "./a11y";
 import { JarvisClient } from "./client";
 import { AskModal, CaptureModal, ReplaceModal, TagModal } from "./modals";
 import { JarvisPanel, VIEW_TYPE_JARVIS_PANEL } from "./panel";
@@ -56,7 +57,14 @@ import {
 } from "./protocol";
 import { JarvisSettingsTab } from "./settings";
 import { DEFAULT_TEMPLATES_FOLDER } from "./templates";
-import type { HeadingRef, JarvisSettings, NoteContext, WriteKind, WriteOutcome } from "./types";
+import type {
+  HeadingRef,
+  JarvisSettings,
+  NoteContext,
+  StatusKind,
+  WriteKind,
+  WriteOutcome,
+} from "./types";
 
 const DEFAULT_SETTINGS: JarvisSettings = {
   backendUrl: DEFAULT_BACKEND,
@@ -74,6 +82,8 @@ export default class JarvisNotesPlugin extends Plugin {
   statusEl: HTMLElement | null = null;
   private statusBusy = false;
   private lastStatus = "Jarvis: checking\u2026";
+  /** The same state as `lastStatus`, as a value the panel can act on. */
+  private lastStatusKind: StatusKind = "unknown";
   /** One write at a time: a second card while the first waits is only confusing. */
   private writeBusy = false;
 
@@ -153,7 +163,9 @@ export default class JarvisNotesPlugin extends Plugin {
 
     this.statusEl = this.addStatusBarItem();
     this.statusEl.setText(this.lastStatus);
-    this.statusEl.setAttribute("aria-label", "Jarvis connection");
+    // A live region, so a change from "checking" to "connected" (or to a
+    // failure) is announced instead of silently changing some tiny text.
+    liveRegion(this.statusEl);
     this.registerInterval(
       window.setInterval(() => void this.refreshStatus(), 60000),
     );
@@ -292,7 +304,7 @@ export default class JarvisNotesPlugin extends Plugin {
   async askAboutActiveNote(): Promise<void> {
     const context = await this.readNoteContext();
     if (!context) {
-      new Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     const selection = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor?.getSelection() ?? "";
@@ -318,7 +330,7 @@ export default class JarvisNotesPlugin extends Plugin {
   askAboutSelection(editor: Editor): void {
     const selection = (editor.getSelection() ?? "").trim();
     if (!selection) {
-      new Notice("Select some text first.");
+      this.explain("Select some text first.");
       return;
     }
     const path = this.activeFilePath() || "this note";
@@ -354,12 +366,12 @@ export default class JarvisNotesPlugin extends Plugin {
   openReplace(editor: Editor): void {
     const selection = (editor.getSelection() ?? "").trim();
     if (!selection) {
-      new Notice("Select the exact words to replace first.");
+      this.explain("Select the exact words to replace first.");
       return;
     }
     const path = this.activeFilePath();
     if (!path) {
-      new Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     new ReplaceModal(this.app, this, selection, path).open();
@@ -368,7 +380,7 @@ export default class JarvisNotesPlugin extends Plugin {
   openTag(): void {
     const path = this.activeFilePath();
     if (!path) {
-      new Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     new TagModal(this.app, this, path).open();
@@ -389,7 +401,7 @@ export default class JarvisNotesPlugin extends Plugin {
   async copyObsidianLink(): Promise<void> {
     const path = this.activeFilePath();
     if (!path) {
-      new Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     const uri = obsidianOpenUri(this.app.vault.getName(), path);
@@ -407,18 +419,18 @@ export default class JarvisNotesPlugin extends Plugin {
   async formatSelection(editor: Editor, style: "bold" | "italic"): Promise<void> {
     const selection = (editor.getSelection() ?? "").trim();
     if (!selection) {
-      new Notice("Select some text first.");
+      this.explain("Select some text first.");
       return;
     }
     const path = this.activeFilePath();
     if (!path) {
-      new Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     await this.performWrite(
       "Asking Jarvis to make the selection " + style,
       (sha) => this.client.formatSpan(path, selection, style, "add", sha),
-      (message) => new Notice(message, 8000),
+      (message, kind) => this.showFromCommand(message, kind),
       path,
     );
   }
@@ -426,18 +438,18 @@ export default class JarvisNotesPlugin extends Plugin {
   async checklistSelectionLine(editor: Editor): Promise<void> {
     const line = (editor.getLine(editor.getCursor("from").line) ?? "").trim();
     if (!line) {
-      new Notice("Put the cursor on a line first.");
+      this.explain("Put the cursor on a line first.");
       return;
     }
     const path = this.activeFilePath();
     if (!path) {
-      new Notice("Open a note first.");
+      this.explain("Open a note first.");
       return;
     }
     await this.performWrite(
       "Asking Jarvis to turn that line into a checklist item",
       (sha) => this.client.customizeLine(path, "checklist", line, sha),
-      (message) => new Notice(message, 8000),
+      (message, kind) => this.showFromCommand(message, kind),
       path,
     );
   }
@@ -582,6 +594,36 @@ export default class JarvisNotesPlugin extends Plugin {
     }
   }
 
+  /**
+   * Put one sentence into an open panel's live result line. Returns false when
+   * no panel is open, so the caller can fall back to a Notice.
+   *
+   * WHY: a toast is not reliably announced, and it disappears. The panel's
+   * result line is a live region, so a command that cannot start ("Open a note
+   * first.") is both heard and still readable afterwards.
+   */
+  private tellPanel(message: string, kind: WriteKind = "error"): boolean {
+    let told = false;
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_JARVIS_PANEL)) {
+      const view = leaf.view;
+      if (view instanceof JarvisPanel) {
+        view.showResult(message, kind);
+        told = true;
+      }
+    }
+    return told;
+  }
+
+  /** Explain a failed command in the live panel line when one is open, else a Notice. */
+  private explain(message: string, kind: WriteKind = "error"): void {
+    if (!this.tellPanel(message, kind)) new Notice(message);
+  }
+
+  /** One write update from a command: live panel line when open, else a Notice. */
+  private showFromCommand(message: string, kind?: WriteKind): void {
+    if (!this.tellPanel(message, kind)) new Notice(message, 8000);
+  }
+
   /* ------------------------------------------------------------------ */
   /* Status bar + Test connection                                        */
   /* ------------------------------------------------------------------ */
@@ -590,8 +632,26 @@ export default class JarvisNotesPlugin extends Plugin {
     if (this.statusEl) this.statusEl.setText(this.lastStatus);
   }
 
+  /**
+   * Publish one honest status sentence. When the STATE changes (not just the
+   * wording), the open panel is re-rendered too, so its first-run checklist can
+   * disappear as soon as Test connection says Connected - the owner does not
+   * have to switch notes to see that they are done.
+   */
+  private publishStatus(kind: StatusKind): void {
+    const changed = kind !== this.lastStatusKind;
+    this.lastStatusKind = kind;
+    this.renderStatus();
+    if (changed) this.refreshPanels();
+  }
+
   statusText(): string {
     return this.lastStatus;
+  }
+
+  /** The same honest state as the status sentence, for the panel's first-run checklist. */
+  statusKind(): StatusKind {
+    return this.lastStatusKind;
   }
 
   /**
@@ -604,27 +664,34 @@ export default class JarvisNotesPlugin extends Plugin {
     try {
       if (!this.hasToken()) {
         this.lastStatus = "Jarvis: no token (Settings)";
-        this.renderStatus();
+        this.publishStatus("no-token");
         return;
       }
       try {
         const answer = await this.client.testConnection();
         if (answer.kind === "ok") {
           this.lastStatus = "Jarvis: connected";
-        } else if (answer.httpStatus === 401 || answer.httpStatus === 403) {
+          this.publishStatus("connected");
+        } else if (answer.httpStatus === 401) {
           this.lastStatus = "Jarvis: token refused";
+          this.publishStatus("token-refused");
+        } else if (answer.httpStatus === 403) {
+          // Not the token: the health check got a refusal it cannot explain.
+          this.lastStatus = "Jarvis: HTTP 403";
+          this.publishStatus("http");
         } else if (answer.httpStatus === 404) {
           this.lastStatus = "Jarvis: notes routes not deployed";
+          this.publishStatus("not-deployed");
         } else {
           this.lastStatus = "Jarvis: HTTP " + answer.httpStatus;
+          this.publishStatus("http");
         }
       } catch (error) {
         const said = shortError(error);
-        this.lastStatus = said.includes("Could not reach")
-          ? "Jarvis: unreachable"
-          : "Jarvis: " + said.slice(0, 60);
+        const unreachable = said.includes("Could not reach");
+        this.lastStatus = unreachable ? "Jarvis: unreachable" : "Jarvis: " + said.slice(0, 60);
+        this.publishStatus(unreachable ? "unreachable" : "http");
       }
-      this.renderStatus();
     } finally {
       this.statusBusy = false;
     }

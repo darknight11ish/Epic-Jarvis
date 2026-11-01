@@ -22,7 +22,8 @@ you first.** The plugin holds no approval power and writes no note.
   template file in your vault, to preview it.
 - Copy a **read-only** `obsidian://open` link to the active note - a link that
   only opens the note in Obsidian, never one that changes it.
-- Show a status item and a settings tab.
+- Show a status item and a settings tab, with a first-run checklist until the
+  connection is set up.
 
 That is the whole list. Everything it sends goes to the one backend address you
 configure.

@@ -10,6 +10,7 @@
  */
 import { App, PluginSettingTab, SecretComponent, Setting } from "obsidian";
 import type JarvisNotesPlugin from "./main";
+import { accessibleName, busy, liveRegion } from "./a11y";
 import { DEFAULT_BACKEND, isLoopbackUrl } from "./protocol";
 import { DEFAULT_TEMPLATES_FOLDER } from "./templates";
 
@@ -31,18 +32,20 @@ export class JarvisSettingsTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Jarvis backend URL")
       .setDesc("The local backend only - usually http://127.0.0.1:4719.")
-      .addText((text) =>
-        text
+      .addText((text) => {
+        accessibleName(text.inputEl, "Jarvis backend URL");
+        return text
           .setPlaceholder(DEFAULT_BACKEND)
           .setValue(this.plugin.settings.backendUrl)
           .onChange(async (value) => {
             this.plugin.settings.backendUrl = value.trim();
             await this.plugin.saveSettings();
             refreshLoopbackWarning();
-          }),
-      );
+          });
+      });
 
     const loopbackWarning = containerEl.createEl("p", { cls: "jarvis-warning" });
+    liveRegion(loopbackWarning);
     const refreshLoopbackWarning = (): void => {
       const url = this.plugin.settings.backendUrl || DEFAULT_BACKEND;
       loopbackWarning.setText(
@@ -84,15 +87,16 @@ export class JarvisSettingsTab extends PluginSettingTab {
       new Setting(containerEl)
         .setName("Token in SecretStorage - the secret's name")
         .setDesc("The name only (not the token). Leave empty to use the fallback token below.")
-        .addText((text) =>
-          text
+        .addText((text) => {
+          accessibleName(text.inputEl, "Token in SecretStorage - the secret's name");
+          return text
             .setPlaceholder("Jarvis token")
             .setValue(this.plugin.settings.secretName)
             .onChange(async (value) => {
               this.plugin.settings.secretName = value.trim();
               await this.plugin.saveSettings();
-            }),
-        );
+            });
+        });
     }
 
     new Setting(containerEl)
@@ -103,6 +107,7 @@ export class JarvisSettingsTab extends PluginSettingTab {
       )
       .addText((text) => {
         text.inputEl.type = "password";
+        accessibleName(text.inputEl, "Fallback token - stored on this PC, not encrypted by Obsidian");
         return text
           .setPlaceholder("paste the Jarvis pairing token")
           .setValue(this.plugin.settings.fallbackToken)
@@ -117,24 +122,27 @@ export class JarvisSettingsTab extends PluginSettingTab {
       .setDesc(
         "The vault folder this plugin lists templates from (read-only). Default: " + DEFAULT_TEMPLATES_FOLDER + ".",
       )
-      .addText((text) =>
-        text
+      .addText((text) => {
+        accessibleName(text.inputEl, "Templates folder");
+        return text
           .setPlaceholder(DEFAULT_TEMPLATES_FOLDER)
           .setValue(this.plugin.settings.templatesFolder)
           .onChange(async (value) => {
             this.plugin.settings.templatesFolder = value.trim();
             await this.plugin.saveSettings();
-          }),
-      );
+          });
+      });
 
     containerEl.createEl("h3", { text: "Connection" });
     const result = containerEl.createEl("p", { cls: "jarvis-hint" });
+    liveRegion(result);
     new Setting(containerEl)
       .setName("Test connection")
       .setDesc("Checks the token against a read-only Jarvis route (it does not call the model).")
       .addButton((button) =>
         button.setButtonText("Test connection").onClick(async () => {
           result.setText("Testing\u2026");
+          busy(result, true);
           button.setDisabled(true);
           try {
             const answer = await this.plugin.client.testConnection();
@@ -154,6 +162,8 @@ export class JarvisSettingsTab extends PluginSettingTab {
             );
           } finally {
             button.setDisabled(false);
+            busy(result, false);
+            button.buttonEl.focus();
             await this.plugin.refreshStatus();
           }
         }),

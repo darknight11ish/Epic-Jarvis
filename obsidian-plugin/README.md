@@ -15,7 +15,7 @@ Windows PC.
 |---|---|
 | Plugin id | `jarvis-notes-bridge` |
 | Display name | Jarvis notes bridge |
-| Version | `0.1.2` |
+| Version | `0.1.3` |
 | Needs Obsidian | `1.13.0` or newer |
 | Runs on | Desktop only |
 | Talks to | the Jarvis backend on this PC, default `http://127.0.0.1:4719` |
@@ -46,6 +46,7 @@ before the deploy they will honestly say the notes routes are not deployed yet
 | Capture | The command **Capture to today's note** opens a small box, prefilled with your selection. What you type is filed into today's daily note by the same route the desktop `#obs` capture uses. The panel has a **Capture selection** button for the same thing. |
 | Capture's answer | The box shows Jarvis's own sentence back, and says plainly: "This plugin cannot approve cards. If a card appears, answer it in the Jarvis window on the PC - nothing is written before you do." |
 | Status bar | On desktop, a small item at the bottom right of the window says what the connection is doing (table below). |
+| First-run checklist | Until the backend answers **Connected**, the panel opens with a short numbered **First run** list - open Settings, set the token, press Test connection - plus the ONE next action for the current state (unreachable, token refused, routes not deployed, or checking). It disappears once the connection is connected. |
 
 ### Wave 2 - small, structured edits
 
@@ -216,18 +217,63 @@ notes, and once a minute after that; **Test connection** repaints it too.
 If the check fails in some other way, the item shows `Jarvis:` and the first 60
 characters of the reason.
 
+## Keyboard and screen reader
+
+The panel is mostly text boxes the plugin creates itself. These properties are
+written into the code, and `tests/accessibility.test.mjs` pins them:
+
+- **Every control the panel creates is named.** The question box, heading
+  picker, insert box, template picker, path box and each selection button carry
+  a name a screen reader announces, so a visible paragraph above a box is not
+  the only label.
+- **Answers are announced.** The ask answer, the write result, the settings'
+  Test connection result, the template preview and every dialog's answer are
+  live regions. A refusal (`error`, `failed`, `denied`, `conflict`) is
+  `role="alert"` so it interrupts; a saved or waiting line is ordinary status.
+  The ask/capture/Test-connection answers say "busy" while their request runs,
+  so a wait is not silent - but deliberately **not** during the long card wait,
+  because busy would defer the very sentence that says to go answer the card.
+- **Focus is given back.** Each action disables its own button while a request
+  runs, and enables and re-focuses it afterwards, so Tab does not restart from
+  the top of the Obsidian window. The panel also refuses to rebuild while a
+  field in it has focus, so typing and the screen reader's place survive a
+  metadata update.
+- **Unavailable actions explain themselves in text.** An insert with no
+  headings, or a template whose text cannot be read, shows the reason in the
+  visible hint/tooltip. The selection buttons are deliberately **not** disabled
+  from a one-time selection read (selecting text does not re-render the panel);
+  pressing one with nothing selected refuses in the live result line with the
+  same words.
+- **The status bar is a live region**, so a change from `checking` to
+  `connected` (or to a failure) is announced instead of silently changing some
+  tiny text.
+- **A command that cannot start is explained in the panel's live result line**
+  when the panel is open (for example "Open a note first."), not only in a toast.
+
+The dialog that replaces a selection shows the words being replaced in a
+**read-only** field rather than a disabled one, so a keyboard user can still
+focus it and read it back; when the selection is longer than the 400 characters
+shown, the description says so.
+
+**Not tested:** these are the attributes the code asks for, not a screen
+reader's actual speech. Obsidian has never been opened with this plugin, so no
+screen reader was used against it and no keyboard was driven through it. That
+is on the "Not tested" list below, and it stays there.
+
 ## What is proven, and what is not tested
 
 **Checks this folder offers.** Run them yourself; a green run is the proof, not
-this table.
+this table - the table says what each command checks, and reports no test count
+and no CI result.
 
 | Command | What it checks |
 |---|---|
 | `npm run typecheck` | The TypeScript source type-checks. |
 | `npm run build` | `esbuild.config.mjs` bundles `src/` into the `main.js` Obsidian loads. |
-| `npm test` | The node tests in `tests/` (`protocol`, `templates`, `safety`). Needs Node 22.18 or newer, because they read the TypeScript source directly. |
+| `npm run check:build-drift` | Rebuilds `main.js` and fails if the committed file changes - proves the committed bundle is exactly the build of `src/`. |
+| `npm test` | The node tests in `tests/`: the pure protocol/template helpers, the source-text safety proofs, the accessibility pins, and the fake-Jarvis integration suite. Needs Node 22.18 or newer, because the tests read the TypeScript source directly. |
 | `npm run test:sandbox` | The same tests in one process, for a locked-down environment that refuses the child processes `node --test` starts (it fails there with `spawn EPERM`; that is the environment, not a test). |
-| `npm run check` | Type-check, build, then `npm test`, in order. |
+| `npm run check` | Type-check, the build-drift check, then `npm test`, in order. |
 | the greps in [SECURITY.md](SECURITY.md) | The shipped `main.js` contains no approve, no deny and no direct vault write. |
 
 **Not tested.** Said plainly, so nobody reads this document as a field report:
@@ -235,11 +281,36 @@ this table.
 - loading in Obsidian;
 - the SecretStorage / SecretComponent UI;
 - the right-side panel rendering;
+- with a screen reader or a keyboard only (the attributes are tested; how
+  Obsidian renders and announces them is not);
 - `requestUrl` from Obsidian's Electron process against the live backend;
 - real card flows (capture / insert / format / replace / customize / tag / create);
 - polling `/api/notes/change`;
 - the status bar;
 - vaults larger than the context bounds.
+
+None of that changes with the new tests (the fake-Jarvis suite still runs
+against a stand-in server, not the real backend or Obsidian).
+
+## For CI: the build-drift step (proposed, not added here)
+
+**This change does not edit the repository's workflow file.** The step below is
+what a CI lane could add to the informational `audit` job, after that job's
+checkout and Node setup steps. It is a proposal, not a check that runs today,
+and no CI result is claimed here.
+
+```yaml
+- name: Obsidian plugin build drift
+  run: |
+    cd obsidian-plugin
+    npm ci --no-audit --no-fund
+    npm run check:build-drift
+```
+
+Node 20 is enough for this one step; only the node tests need Node 22.18 or
+newer. The step takes seconds, and it fails when someone edits `src/` or
+`main.js` without rebuilding the other one, so a stale bundle cannot reach the
+owner by accident.
 
 ## Known limits
 
@@ -291,6 +362,25 @@ folder, the folder is ready to copy without building.
 Then follow [INSTALL.md](INSTALL.md). Do not copy it into the live vault until
 the Lead or the owner says so.
 
+### Packaged binaries are not in this repository
+
+`*.zip` and `dist/` are gitignored in `obsidian-plugin/.gitignore`. A package is
+built into a scratch or release folder and is never committed. The size and
+SHA-256 value of each package built so far are recorded in
+[BUILD-VERIFICATION.txt](BUILD-VERIFICATION.txt); a SHA-256 is a fingerprint of
+the file, so changing one byte changes the value.
+
+| Package | Size and SHA-256 (recorded in BUILD-VERIFICATION.txt) |
+|---|---|
+| `jarvis-obsidian-plugin-0.1.3.zip` (this tree) | recorded there after the package is built - the exact size and SHA-256 are a fingerprint of the built file, so they are kept out of this table to avoid a package that hashes its own description |
+| `jarvis-obsidian-plugin-0.1.2.zip` | 86,666 bytes, SHA-256 `7FA8BE04ADF83ED3BA50826C32D95F249B7164743D349D85F08479A5CB1EE5E6` |
+| `jarvis-obsidian-plugin-0.1.1.zip` (kept for history) | 80,765 bytes, SHA-256 `52504033CD3D6529129C868623109D013D17FABE40F2CB104F0AD03685146AB1` |
+
+Only the source, `manifest.json`, the committed `main.js`, `styles.css` and the
+document and settings files in this folder are tracked. `main.js` is committed
+on purpose: it is the file Obsidian loads, so the folder can be copied without
+building. Do not delete it from the tree and do not add it to `.gitignore`.
+
 ### Where the source lives
 
 `main.ts` used to be one file. It is split now, and `esbuild.config.mjs` bundles
@@ -303,18 +393,35 @@ the pieces back into the single `main.js` Obsidian loads.
 | `src/panel.ts` | The right-side panel. |
 | `src/settings.ts` | The settings tab. |
 | `src/modals.ts` | The ask, capture, replace and tag dialogs. |
-| `src/protocol.ts` | The shapes of what goes to Jarvis and what comes back. |
+| `src/protocol.ts` | The shapes of what goes to Jarvis and what comes back, plus the first-run checklist data. |
+| `src/a11y.ts` | The small accessibility helpers (names, live regions, groups, busy state). |
 | `src/templates.ts` | Template names and the read-only preview. |
 | `src/types.ts` | Shared TypeScript types. |
 | `tests/` | The node tests behind `npm test`. |
 
 ## What changed in the repository
 
-This plugin is additive. **This folder is the only tree change.** No existing
+The plugin's first release was additive: it added this folder, and no existing
 shipped file was modified - no source, no document, no workflow. The one other
-change that belongs to this work is the release note,
+change that belonged to it is the release note,
 `changelog.d/2026-10-31-obsidian-plugin.md`, which is how this project records a
 user-visible change.
+
+The packaging follow-up (2026-10-31) stays inside this folder: it changes this
+plugin's own source, build and test files, adds the build-drift check and the
+fake-Jarvis suite, and records the packages' sizes and SHA-256 values in
+`BUILD-VERIFICATION.txt`. It edits no workflow; its one file outside the folder
+is `changelog.d/2026-10-31-obsidian-plugin-packaging.md`.
+
+The honesty/accessibility hardening (2026-11-01, same branch) also stays inside
+this folder. It hardens the reply interpreters (a card with no change id is
+never followed blindly; unknown states are never reported as saved or filed;
+malformed read/chat/template answers keep the backend's own sentence instead of
+being guessed), turns the first-run checklist into tested data, adds
+`src/a11y.ts` with accessible names and live regions, and adds
+`tests/accessibility.test.mjs`. The leaf changelog fragment above is extended
+with it; no file outside this folder changes, and nothing here claims Obsidian
+was opened or a screen reader was used.
 
 The reason Obsidian-only is written in this README rather than in
 `docs/ARCHITECTURE.md` section 8 is the same: this change does not edit that
