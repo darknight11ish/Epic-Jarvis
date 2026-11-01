@@ -43,6 +43,7 @@ pub(crate) const ASKS_FIRST_PATH: &str = "/api/asks_first";
 const TIER_PATH: &str = "/api/asks_first/tier";
 const LIGHTS_PATH: &str = "/api/asks_first/lights";
 const TOOLS_PATH: &str = "/api/asks_first/tools";
+const VAULT_PATH: &str = "/api/vault/organizer/enabled";
 
 /// The actions the apps may switch - `jarvis_asks_first.SWITCHABLE`, word for
 /// word (tests/fixtures/asks-first-cases.json checks it). Grew from 7 to 12 on
@@ -250,6 +251,17 @@ pub async fn set_tool_enabled(
         return Err(STALE.to_string());
     }
     post(&app, TOOLS_PATH, body).await
+}
+
+/// The vault organizer's own switch - a separate route from the tool
+/// switches (`POST /api/vault/organizer/enabled`). ON is ONE card plus
+/// Windows Hello on the PC; OFF is instant. Desktop only.
+#[tauri::command]
+pub async fn set_vault_organizer_enabled(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    post(&app, VAULT_PATH, serde_json::json!({ "enabled": enabled })).await
 }
 
 #[cfg(test)]

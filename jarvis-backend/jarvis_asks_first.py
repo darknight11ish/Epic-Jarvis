@@ -378,35 +378,95 @@ SWITCHABLE = tuple(LOOSE)
 #: PC_ONLY_ACTIONS holds the same name.
 LOOSEN_ACTION = "loosen_what_asks_first"
 
-#: The four reading tools the owner may offer to the AI model at ALL, from
-#: the PC (CLAUDE.md, the owner's answer of 2026-09-27: "Reading tools
-#: (calendar, email, notes, home status) can be switched on from the PC app,
-#: each with a card plus Windows Hello; other tools stay in the settings
-#: file."). A DIFFERENT thing from LOOSE above: this changes [tools].enabled
-#: - whether the model is offered the tool at all - never [autonomy.tiers],
-#: which decides whether it asks first once offered. Each switches on its
-#: own, one card at a time, because the owner may want one offered without
-#: the others.
-TOOLS_SWITCHABLE = ("calendar_read", "email_read", "notes_search", "home_read")
+#: THE IN-APP SWITCH SURFACE, TIERED (Gemini's ruling, 2026-10-31, after the
+#: owner clicked for in-app switches: "not indiscriminate"). Only A and B are
+#: offered from inside the app; C and the unlisted tools stay settings-file
+#: choices:
+#:   TIER_A - added now: notes/search tools, the local-calendar list tools,
+#:            protection, GitHub research, send-one-file - plus calendar_read,
+#:            which already had an in-app switch (kept: no regression).
+#:   TIER_B - "Connected accounts & home", the owner's maximum-flexibility
+#:            section: email, home, spending and retirement tools.
+#:   TIER_C - NEVER offered in the app (raw/destructive/account tools).
+#:   TIER_UNLISTED - not offered in-app by this slice (named in the report and
+#:            the decisions fragment).
+TIER_A = (
+    "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
+    "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
+    "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
+)
+TIER_B = (
+    "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
+    "home_control", "my_spending", "retirement_whatif",
+)
+TIER_C = (
+    "shell_exec", "run_data_script", "control_computer", "control_phone",
+    "browser_control", "read_web_page", "connect_account", "rea_investigate",
+)
+TIER_UNLISTED = (
+    "calculator", "memory_search", "file_read", "web_search", "my_files",
+    "propose_plan", "change_setting", "feature_guide",
+)
+#: Only these are offered in-app.
+TOOLS_SWITCHABLE = TIER_A + TIER_B
+#: Known tools that are NOT offered in-app by this slice (C + unlisted).
+TOOLS_TOML_ONLY = TIER_C + TIER_UNLISTED
+#: The page's groups, in order; every switchable tool exactly once.
+TOOL_GROUPS = (
+    ("Notes and reading",
+     ("calendar_read", "notes_search", "append_obsidian_daily",
+      "create_joplin_note", "append_logseq_journal")),
+    ("Timers, lists and plans",
+     ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
+    ("Connected accounts & home", TIER_B),
+    ("Safety and sharing",
+     ("protect_from_jarvis", "github_search", "send_file_to_phone")),
+)
+GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
-#: TOOLS_SWITCHABLE holds the four rows' GATE ACTION names (what the pages and
-#: the approval card call them). [tools].enabled holds the model's TOOL names,
-#: and for one row the two differ: the gate action "email_read" is the tool
-#: "email_check" (jarvis_agent.TOOLS). Writing the action name into
-#: [tools].enabled switched nothing on (found 2026-09-30 by the settings
-#: audit). This maps each row to the tool name the model is really offered.
-TOOL_NAME = {"calendar_read": "calendar_read", "email_read": "email_check",
-             "notes_search": "notes_search", "home_read": "home_read"}
-#: Names an older build saved into [tools].enabled by mistake. Read as the real
-#: tool, so an owner who switched email on before the fix keeps what they chose.
+
+TOOL_NAME = {"email_read": "email_check"}
+#: Names an older build saved into [tools].enabled by mistake. Read as the
+#: real tool, so an owner who switched email on before the fix keeps what they
+#: chose.
 LEGACY_TOOL_NAMES = {"email_read": "email_check"}
-#: The real tool names of the four rows.
-SWITCHABLE_TOOL_NAMES = tuple(TOOL_NAME[a] for a in TOOLS_SWITCHABLE)
 
 
 def real_tool(name: str) -> str:
-    """The tool name behind a row id (or a legacy saved name)."""
+    """The model's tool name for a page row / an old saved name."""
     return TOOL_NAME.get(name) or LEGACY_TOOL_NAMES.get(name) or name
+
+
+#: The real tool names of every switchable row, legacy aliases resolved.
+SWITCHABLE_TOOL_NAMES = tuple(real_tool(t) for t in TOOLS_SWITCHABLE)
+
+
+def tool_label(tool: str) -> str:
+    """The tool's human label and what it does, from jarvis_reach's own words."""
+    real = real_tool(tool)
+    try:
+        import jarvis_reach as R
+        words = getattr(R, "TOOL_NAMES", {}).get(real)
+        if words:
+            return str(words)
+    except Exception:                        # noqa: BLE001 - module absent
+        pass
+    return real.replace("_", " ")
+
+
+TOOL_GROUPS = (
+    ("Notes and reading",
+     ("calendar_read", "notes_search", "append_obsidian_daily",
+      "create_joplin_note", "append_logseq_journal")),
+    ("Timers, lists and plans",
+     ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
+    ("Connected accounts & home", TIER_B),
+    ("Safety and sharing",
+     ("protect_from_jarvis", "github_search", "send_file_to_phone")),
+)
+GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
+
+
 
 
 def normalise_enabled(names) -> set:
@@ -1435,16 +1495,76 @@ def _here(here: Optional[bool], peer, local) -> bool:
 # ---------------------------------------------------------------------------
 
 TOOLS_LABEL = "Let the AI use this"
-TOOLS_DETAIL = ("Whether the AI model is offered each reading tool at all - a separate thing "
-               "from whether it asks you first, above. Turning one on shows an approval card "
-               "and asks Windows Hello, on this PC; turning it off is instant, from either "
-               "app. Every other tool can only be added by hand, in your settings file "
-               "(jarvis-framework.toml, [tools].enabled) - see backend/README.md.")
+TOOLS_DETAIL = ("Whether the AI model is offered each ability at all - a separate thing "
+               "from whether it asks you first, above. Some tools have a switch here; "
+               "the raw ones and the ones this slice leaves alone stay a settings-file "
+               "choice, listed below. Turning one on shows ONE approval card and asks "
+               "Windows Hello on this PC; turning it off is instant, from either app. "
+               "Nothing here switches two tools at once.")
 TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
-                "What asks first). It takes an approval card and Windows Hello.")
-TOOLS_NOT_ON_LIST = ("Only reading your calendar, email, notes and home status can be offered "
-                     "to the AI model from an app. Every other tool changes only in your "
-                     "settings file (jarvis-framework.toml, [tools].enabled).")
+                 "What asks first). It takes one approval card and Windows Hello.")
+TOOLS_NOT_ON_LIST = ("This PC does not know a tool by that name, so nothing was changed.")
+TOOLS_TOML_ONLY_NOTE = ("That tool is not offered from inside the app by this slice. Raw shell, "
+                        "computer and browser control, reading one web page, connecting an "
+                        "account and REA (which also needs its own [rea] enabled = true) stay a "
+                        "deliberate choice in your settings file on this PC "
+                        "(jarvis-framework.toml, [tools].enabled); calculator, memory_search, "
+                        "file_read, web_search, my_files, propose_plan, change_setting and "
+                        "feature_guide are not offered in-app by this slice either. Nothing was "
+                        "changed.")
+_TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
+_ENABLED_LINE = re.compile(
+    r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
+_QUOTED_ITEM = re.compile(r'"([^"\\]*)"|\'([^\']*)\'')
+TOOLS_HAND_EDIT = ("Your settings file (jarvis-framework.toml) is written in a way this page "
+                  "cannot change safely, so nothing was changed. Edit [tools] enabled by hand "
+                  "in Notepad, then restart Jarvis")
+
+
+LIGHTS_ACTION = "change_own_config"
+LIGHTS_ROW = "Switch lights, plugs and fans you name"
+LIGHTS_LABEL = "Lights, plugs and fans without a card"
+LIGHTS_DETAIL = ("When you name a light, plug or fan yourself - \"turn off the kitchen light\" "
+                 "- Jarvis switches it without an approval card. Locks, doors, alarms, covers "
+                 "and garage doors always ask, each with a card of its own, and so does "
+                 "everything after Jarvis has read outside text in the chat. Turning this on "
+                 "shows you an approval card first; turning it off happens at once.")
+LIGHTS_NOTE = "Asks first unless you turn on the switch below (off by default)."
+LIGHTS_WAITING = "Waiting for your yes on the approval card, on your PC or phone."
+LIGHTS_CARD = "\n".join([
+    "Let Jarvis switch lights, plugs and fans without a card?",
+    "",
+    "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis "
+    "will switch it on or off without an approval card. Only lights, plugs (Home Assistant "
+    "switches) and fans; only on, off or toggle; and only the ones your own words named in "
+    "that message.",
+    "",
+    "Locks, doors, alarms, covers, garage doors, valves, cameras, scenes and scripts always "
+    "get a card of their own. So does every change after Jarvis has read outside text (an "
+    "email, a web page, a file) in the chat, and anything you pasted or shared.",
+    "",
+    "Nothing leaves this PC except the switch itself, sent to your own Home Assistant. You "
+    "can turn this off at any time from either app, and that is instant.",
+    "",
+    "If you did not just do this, say no.",
+    "",
+    "If you say no: nothing changes - every change in your home still asks.",
+])
+LIGHTS_LAST_WORDS = {
+    "enabled": "You approved the card, so Jarvis switches the lights, plugs and fans you "
+               "name without a card.",
+    "denied": "The card was turned down, so every change in your home still asks.",
+    "timed_out": "Nobody answered the card in time, so every change in your home still asks.",
+    "refused": "Your PC's settings do not let this be approved, so every change in your home "
+               "still asks.",
+    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the setting could not be saved, so every change in your "
+              "home still asks.",
+}
+_LIGHTS_DAMAGED = ("the settings file for this page is damaged, so every change in your "
+                   "home asks. Turn \"Lights, plugs and fans without a card\" on again to "
+                   "rewrite it")
+
 
 TOOL_ENABLE_LAST_WORDS = {
     "enabled": "You approved the card, so the AI model is offered this tool.",
@@ -1468,50 +1588,47 @@ def tools_enabled_set() -> set:
 
 
 def tool_enable_card(tool: str) -> str:
-    # THE SAME RULE AS loosen_card() ABOVE, AND THE SAME BUG (2026-10-10).
-    # The card this builds is the `prompt` jarvis_gate.check() is handed, and
-    # the gate reads it for its own `_PROTECTED` names before the tier table:
-    # the old wording named jarvis-framework.toml, so `enable_reading_tool`
-    # was refused at tier "never" and no card was ever shown. The owner's
-    # audit log holds 21 of them, each paired with
-    # `asks_first.tools.card {"outcome": "refused"}`.
-    #
-    # Offering a reading tool to the model was therefore impossible from the
-    # app - the one thing this whole section exists to do. "your settings file
-    # on this PC" says the same thing plainer, and the exact line still shows.
+    """The ONE card's words for offering one tool to the AI model.
+
+    It says the tiered surface's honest facts: one tool, one card + Windows
+    Hello, each use is still decided by "Ask me first"; raw tools are not here;
+    send-one-file stays off by default because its chat request is the normal
+    door; REA keeps its own separate opt-in.
+    """
     real = real_tool(tool)
-    phrase = _title(tool)
-    phrase = phrase[:1].lower() + phrase[1:]
-    return "\n".join([
-        f"Offer \"{phrase}\" to the AI model?",
+    label = tool_label(tool)
+    lines = [
+        f'Offer this ability to the AI model: "{label}"?',
         "",
-        f"From now on the AI model may use this tool when it decides to - it can {phrase}. "
-        f"This changes one line of your settings file on this PC: "
-        f"\"{real}\" is added to [tools].enabled. Nothing else in it changes.",
+        "From now on the AI model may use this ability when it decides to. In plain "
+        f"words: {label}. This changes one line in your settings file on this PC; "
+        "nothing else changes.",
         "",
-        "This is separate from whether it asks you first: that is set above, in \"Ask me "
-        "first\", and is unchanged by this card.",
+        "This is separate from whether it asks you first: that is set above, in "
+        '"Ask me first", and is unchanged by this card.',
         "",
+        "It does not approve any use of the ability: each time the AI uses it, "
+        '"Ask me first" still decides whether you are asked.',
+        "",
+    ]
+    if real == "send_file_to_phone":
+        lines += ["Sending a file stays off by default on purpose: asking in chat "
+                  '(\"send me the file ...\") is the normal door and works without '
+                  "this switch. This switch only lets the AI model pick it on its own.",
+                  ""]
+    if real == "rea_investigate":
+        lines += ["REA also needs its own separate opt-in: [rea] enabled = true in "
+                  "your settings file. This card alone does not start it.",
+                  ""]
+    lines += [
         "Approving it needs Windows Hello on this PC. You can turn it off again at any time "
         "from either app, and that is instant.",
         "",
         "If you did not just do this, say no.",
         "",
-        "If you say no: nothing changes - the AI model is still not offered this tool.",
-    ])
-
-
-#: The [tools] table's header, and its one `enabled = [...]` line - the only
-#: shape this page can change safely (mirrors _HEADER/_ANY_HEADER/_KEY_LINE
-#: above, for a different table).
-_TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
-_ENABLED_LINE = re.compile(
-    r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
-_QUOTED_ITEM = re.compile(r'"([^"\\]*)"|\'([^\']*)\'')
-
-TOOLS_HAND_EDIT = ("Your settings file (jarvis-framework.toml) is written in a way this page "
-                  "cannot change safely, so nothing was changed. Edit [tools] enabled by hand "
-                  "in Notepad, then restart Jarvis")
+        "If you say no: nothing changes - the AI model is still not offered this ability.",
+    ]
+    return "\n".join(lines)
 
 
 def rewrite_tools(text: str, tool: str, on: bool, *, seed=()) -> str:
@@ -1743,7 +1860,11 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
             or not isinstance(body.get("tool"), str):
         return 400, {"ok": False, "error": 'need {"tool": "<name>", "enabled": true|false}'}
     tool, enabled = body["tool"], body["enabled"]
-    if tool not in TOOLS_SWITCHABLE:
+    real = real_tool(tool)
+    if not (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
+            or real in SWITCHABLE_TOOL_NAMES):
+        if real in TOOLS_TOML_ONLY or tool in TOOLS_TOML_ONLY:
+            return 403, {"ok": False, "error": TOOLS_TOML_ONLY_NOTE}
         return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
     now_on = real_tool(tool) in tools_enabled_set()
     if not enabled:
@@ -1797,74 +1918,61 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
                             "asks Windows Hello - and the AI model will be offered this tool."}
 
 
+def _vault_switch_status(here: bool) -> dict:
+    """The vault organizer's OWN switch - not a [tools].enabled toggle.
+
+    It already has its own ONE-card route (POST /api/vault/organizer/enabled)
+    and its own state; the switch page shows it beside the tool switches so the
+    owner can see it, but it is not in SWITCHABLE_TOOL_NAMES and the tool route
+    never accepts it.
+    """
+    try:
+        import jarvis_vault_organizer as VO
+        st = dict(VO.switch_status() or {})
+    except Exception:                               # noqa: BLE001
+        st = {}
+    return {"id": "vault_organizer", "kind": "switch",
+            "title": "Organize an Obsidian vault",
+            "group": "Notes and reading",
+            "on": bool(st.get("enabled")), "waiting": bool(st.get("waiting")),
+            "can_enable": bool(here),
+            "action": str(st.get("action") or "vault_organizer_enabled"),
+            "what": ("Plan a tidy-up of the Obsidian vault, then ONE card writes the "
+                     "whole batch; one Undo puts it back.")}
+
+
 def tools_status(*, here: bool = False) -> dict:
-    """The switch as the desktop shows it: {"label", "detail", "can_enable",
-    "items": [{"id", "title", "on", "waiting", "last"}, ...]}. Desktop only
-    (CLAUDE.md: no deep config editing on the phone) - the phone simply does
-    not read this key."""
+    """The switch list the desktop shows: every in-app switch, grouped.
+
+    Only TIER_A + TIER_B tools are here (the tiered ruling); the vault
+    organizer's own switch rides beside them as a different kind of row; and
+    the not-offered tools are named with the plain reason, so the page can say
+    what is deliberately not offered in-app.
+    """
     enabled = tools_enabled_set()
     with _T_LOCK:
         pending = dict(_T_STATE["pending"])
         last_all = dict(_T_STATE["last"])
+    pending_tool = real_tool(str(pending.get("tool") or "")) if pending else ""
     items = []
-    for tool in TOOLS_SWITCHABLE:
-        waiting = bool(pending) and pending.get("tool") == tool
-        last = dict(last_all) if last_all.get("tool") == tool else None
-        items.append({"id": tool, "title": _title(tool), "on": real_tool(tool) in enabled,
-                      "waiting": waiting, "last": last})
+    for title, tools in TOOL_GROUPS:
+        for tool in tools:
+            waiting = bool(pending) and pending_tool == real_tool(tool)
+            last = dict(last_all) if (last_all.get("tool")
+                                      and real_tool(str(last_all["tool"])) == real_tool(tool)) else None
+            items.append({"id": tool, "title": tool_label(tool), "group": title,
+                          "on": real_tool(tool) in enabled, "waiting": waiting,
+                          "last": last})
     return {"label": TOOLS_LABEL, "detail": TOOLS_DETAIL, "can_enable": bool(here),
-            "items": items}
-
-
-# ---------------------------------------------------------------------------
-# Lights, plugs and fans without a card
-# ---------------------------------------------------------------------------
-
-LIGHTS_ACTION = "change_own_config"
-LIGHTS_ROW = "Switch lights, plugs and fans you name"
-LIGHTS_LABEL = "Lights, plugs and fans without a card"
-LIGHTS_DETAIL = ("When you name a light, plug or fan yourself - \"turn off the kitchen light\" "
-                 "- Jarvis switches it without an approval card. Locks, doors, alarms, covers "
-                 "and garage doors always ask, each with a card of its own, and so does "
-                 "everything after Jarvis has read outside text in the chat. Turning this on "
-                 "shows you an approval card first; turning it off happens at once.")
-LIGHTS_NOTE = "Asks first unless you turn on the switch below (off by default)."
-LIGHTS_WAITING = "Waiting for your yes on the approval card, on your PC or phone."
-
-LIGHTS_CARD = "\n".join([
-    "Let Jarvis switch lights, plugs and fans without a card?",
-    "",
-    "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis "
-    "will switch it on or off without an approval card. Only lights, plugs (Home Assistant "
-    "switches) and fans; only on, off or toggle; and only the ones your own words named in "
-    "that message.",
-    "",
-    "Locks, doors, alarms, covers, garage doors, valves, cameras, scenes and scripts always "
-    "get a card of their own. So does every change after Jarvis has read outside text (an "
-    "email, a web page, a file) in the chat, and anything you pasted or shared.",
-    "",
-    "Nothing leaves this PC except the switch itself, sent to your own Home Assistant. You "
-    "can turn this off at any time from either app, and that is instant.",
-    "",
-    "If you did not just do this, say no.",
-    "",
-    "If you say no: nothing changes - every change in your home still asks.",
-])
-
-LIGHTS_LAST_WORDS = {
-    "enabled": "You approved the card, so Jarvis switches the lights, plugs and fans you "
-               "name without a card.",
-    "denied": "The card was turned down, so every change in your home still asks.",
-    "timed_out": "Nobody answered the card in time, so every change in your home still asks.",
-    "refused": "Your PC's settings do not let this be approved, so every change in your home "
-               "still asks.",
-    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
-    "failed": "It was approved, but the setting could not be saved, so every change in your "
-              "home still asks.",
-}
-_LIGHTS_DAMAGED = ("the settings file for this page is damaged, so every change in your "
-                   "home asks. Turn \"Lights, plugs and fans without a card\" on again to "
-                   "rewrite it")
+            "items": items,
+            "groups": [{"title": title, "ids": list(tools)}
+                       for title, tools in TOOL_GROUPS],
+            "vault": _vault_switch_status(here),
+            "not_offered": {
+                "tier_c": list(TIER_C), "not_this_slice": list(TIER_UNLISTED),
+                "labels": {tool: tool_label(tool) for tool in TOOLS_TOML_ONLY},
+                "why": TOOLS_TOML_ONLY_NOTE,
+            }}
 
 
 def settings_path() -> Path:

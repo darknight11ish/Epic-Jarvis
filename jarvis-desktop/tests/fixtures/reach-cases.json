@@ -36,7 +36,7 @@
     {
      "asks": "-",
      "id": "read_web_page",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"read_web_page\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can act for you, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can act for you. Add \"read_web_page\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Read one web page out loud",
      "on": false,
      "state": "off",
@@ -66,7 +66,7 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Set up on this PC, but the AI model is not offered it. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"send_email\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send email from your account, so it stays a step you take on the PC.",
+     "line": "Set up on this PC, but the AI model is not offered it yet. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Email (sending)",
      "on": false,
      "state": "off",
@@ -76,7 +76,7 @@
     {
      "asks": "-",
      "id": "email_tidy",
-     "line": "Set up on this PC, but the AI model is not offered it. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"tidy_inbox\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can change your mailbox (archive, star, move to Trash), so it stays a step you take on the PC.",
+     "line": "Set up on this PC, but the AI model is not offered it yet. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Email (tidying)",
      "on": false,
      "state": "off",
@@ -126,7 +126,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"github_search\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send search words to GitHub, so it stays a step you take on the PC.",
+     "line": "Off. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -166,7 +166,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_computer\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can click and type in other programs on this PC, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can click and type in other programs on this PC. Add \"control_computer\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -216,7 +216,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_phone\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can tap and type on your phone, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can tap and type on your phone. Add \"control_phone\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -226,7 +226,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"shell_exec\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can run commands on this PC, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can run commands on this PC. Add \"shell_exec\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -335,7 +335,7 @@
     {
      "asks": "-",
      "id": "read_web_page",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"read_web_page\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can act for you, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can act for you. Add \"read_web_page\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Read one web page out loud",
      "on": false,
      "state": "off",
@@ -425,7 +425,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"github_search\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send search words to GitHub, so it stays a step you take on the PC.",
+     "line": "Off. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -465,7 +465,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_computer\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can click and type in other programs on this PC, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can click and type in other programs on this PC. Add \"control_computer\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -475,7 +475,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"browser_control\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can open web pages and click and type in them, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can open web pages and click and type in them. Add \"browser_control\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -515,7 +515,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_phone\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can tap and type on your phone, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can tap and type on your phone. Add \"control_phone\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -525,7 +525,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"shell_exec\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can run commands on this PC, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can run commands on this PC. Add \"shell_exec\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -630,7 +630,7 @@
     {
      "asks": "-",
      "id": "read_web_page",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"read_web_page\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can act for you, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can act for you. Add \"read_web_page\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Read one web page out loud",
      "on": false,
      "state": "off",
@@ -660,7 +660,7 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Set up on this PC, but the AI model is not offered it. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"send_email\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send email from your account, so it stays a step you take on the PC.",
+     "line": "Set up on this PC, but the AI model is not offered it yet. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Email (sending)",
      "on": false,
      "state": "off",
@@ -670,7 +670,7 @@
     {
      "asks": "-",
      "id": "email_tidy",
-     "line": "Set up on this PC, but the AI model is not offered it. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"tidy_inbox\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can change your mailbox (archive, star, move to Trash), so it stays a step you take on the PC.",
+     "line": "Set up on this PC, but the AI model is not offered it yet. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Email (tidying)",
      "on": false,
      "state": "off",
@@ -720,7 +720,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"github_search\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send search words to GitHub, so it stays a step you take on the PC.",
+     "line": "Off. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -770,7 +770,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"browser_control\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can open web pages and click and type in them, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can open web pages and click and type in them. Add \"browser_control\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -810,7 +810,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_phone\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can tap and type on your phone, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can tap and type on your phone. Add \"control_phone\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -820,7 +820,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"shell_exec\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can run commands on this PC, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can run commands on this PC. Add \"shell_exec\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -1372,7 +1372,7 @@
     {
      "asks": "-",
      "id": "read_web_page",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"read_web_page\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can act for you, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can act for you. Add \"read_web_page\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Read one web page out loud",
      "on": false,
      "state": "off",
@@ -1462,7 +1462,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"github_search\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send search words to GitHub, so it stays a step you take on the PC.",
+     "line": "Off. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -1502,7 +1502,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_computer\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can click and type in other programs on this PC, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can click and type in other programs on this PC. Add \"control_computer\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -1512,7 +1512,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"browser_control\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can open web pages and click and type in them, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can open web pages and click and type in them. Add \"browser_control\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -1552,7 +1552,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_phone\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can tap and type on your phone, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can tap and type on your phone. Add \"control_phone\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -1562,7 +1562,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"shell_exec\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can run commands on this PC, so it stays a step you take on the PC.",
+     "line": "Off. It is not switched on from the app: raw shell, computer and browser control, reading one web page, connecting an account and REA stay a deliberate settings-file choice; REA also needs its own [rea] enabled = true. It can run commands on this PC. Add \"shell_exec\" to the [tools] enabled list in the settings file on this PC (jarvis-framework.toml) if you want the model offered it.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",

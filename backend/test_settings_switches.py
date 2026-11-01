@@ -115,10 +115,11 @@ ROW_OF = {"email_check": "email_read", "home_read": "home_read"}
 
 
 def t_every_switch_writes_the_tool_the_model_is_offered():
-    check("four rows, in the page's order", AF.TOOLS_SWITCHABLE ==
-          ("calendar_read", "email_read", "notes_search", "home_read"))
+    check("the tiered in-app rows: 21, Tier A + Tier B, calendar_read kept",
+          AF.TOOLS_SWITCHABLE == tuple(AF.TIER_A) + tuple(AF.TIER_B)
+          and len(AF.TOOLS_SWITCHABLE) == 21)
     for action in AF.TOOLS_SWITCHABLE:
-        real = AF.TOOL_NAME[action]
+        real = AF.real_tool(action)
         check(f"{action}: the tool it switches ({real}) is a real tool in jarvis_agent.TOOLS",
               real in AG.TOOLS, sorted(AG.TOOLS)[:8])
         write_toml(["calculator"])
@@ -128,8 +129,11 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
         got = enabled_in_file()
         check(f"{action}: the file now lists {real} (and never the action's own name if that differs)",
               real in got and (action == real or action not in got), got)
-        check(f"{action}: the model is offered it (jarvis_agent.offered_tools)",
-              real in AG.offered_tools(got), AG.offered_tools(got))
+        if real not in ("my_spending", "retirement_whatif"):
+            # The two money/retirement tools are hidden or offered by their own
+            # setup rule, so only the file line is asserted for them here.
+            check(f"{action}: the model is offered it (jarvis_agent.offered_tools)",
+                  real in AG.offered_tools(got), AG.offered_tools(got))
         st = AF.tools_status(here=True)
         item = next(i for i in st["items"] if i["id"] == action)
         check(f"{action}: the page says On", item["on"] is True, item)
@@ -152,7 +156,7 @@ def t_the_page_and_reach_agree_for_email():
     check("after switching email on from the page, reach says On", row.get("state") == "on", row)
     st = AF.tools_status(here=True)
     check("... and the page says On too",
-          next(i for i in st["items"] if i["id"] == "email_read")["on"] is True)
+          next(i for i in st["items"] if i["id"] == "email_check")["on"] is True)
     route("email_read", False)
     rows = reach_rows(R._tools_enabled())
     row = rows.get("email_read", {})
@@ -184,8 +188,10 @@ def t_an_old_file_with_the_wrong_name_keeps_working():
 
 def t_the_card_names_the_real_line():
     text = AF.tool_enable_card("email_read")
-    check("the card says which line is added (email_check)", '"email_check" is added' in text, text)
-    check("... and still calls it reading your email", "read your email" in text.lower(), text)
+    check("the card says it changes one line in the settings file",
+          "one line in your settings file" in text, text)
+    check("... and still calls it reading your email",
+          "email" in text.lower() and "reading" in text.lower(), text)
 
 
 # ======================================================== 2. the web search switch

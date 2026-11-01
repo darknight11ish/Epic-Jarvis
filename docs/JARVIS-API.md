@@ -7455,6 +7455,7 @@ routed); phone control; commands on this PC; plug-in programs (MCP, id
 big model.
 `tools` is the list the chat's tool loop offers the model
 (`jarvis_agent.offered_tools()` of `[tools].enabled`), in plain names.
+For a tool with an in-app switch (Tier A/B, §43), an Off row's own line says it switches on in Settings, What asks first; Tier C and the tools this slice leaves alone say it stays a settings-file choice (and why).
 
 Both apps show a row as "`name` - `state_words`", then, only when it is on,
 "Goes to: `where`" and "Asks you first: `asks`" (not when `asks` is "-"),
@@ -10298,86 +10299,105 @@ read `decodePendingRows` already uses for `pending`.
   queue's own skipped-row count.
 - **No paging.** The list shows whatever `history` sends in one read; there
   is no "load older" here, unlike Chat history's (§18) `before=`.
-## 43. Offering a reading tool to the AI model, from the PC (added 2026-09-27)
+## 43. In-app switches for tools the AI may use (tiered, 2026-10-31)
 
-The owner's answer (`CLAUDE.md`, 2026-09-27, the answers to
-`docs/OWNER-QUESTIONS-2026-09-27.md`): "Reading tools (calendar, email,
-notes, home status) can be switched on from the PC app, each with a card
-plus Windows Hello; other tools stay in the settings file." This is a
-DIFFERENT setting from §32's "Ask me first": that changes whether an
-offered tool asks first ([autonomy.tiers]); this changes whether the AI
-model is offered the tool AT ALL (`[tools].enabled` in
-`jarvis-framework.toml` - `jarvis_agent.offered_tools()` only ever offers a
-tool named there). Before this, the only way to add `calendar_read`,
-`email_read`, `notes_search` or `home_read` to `[tools].enabled` was to
-hand-edit the settings file; every other tool still is.
+The owner asked for in-app switches instead of hand-editing `[tools].enabled`
+for the tools that can be switched safely. Gemini's 2026-10-31 ruling made it
+**tiered, not indiscriminate**:
 
-Built into `backend/jarvis_asks_first.py` (shipped whole, no new module),
-the same PC-only, Windows-Hello shape as §32.3's loosening card:
+- **Tier A** (in-app now): `calendar_read`, `notes_search`,
+  `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`,
+  `set_timer`, `set_reminder`, `todo_add`, `todo_done`, `coming_up`,
+  `protect_from_jarvis`, `github_search`, `send_file_to_phone`.
+- **Tier B** ("Connected accounts & home", included because the owner clicked
+  for maximum flexibility): `email_check`, `send_email`, `draft_email`,
+  `tidy_inbox`, `home_read`, `home_control`, `my_spending`,
+  `retirement_whatif`.
+- **Tier C stays TOML-only and is NEVER exposed in-app:** `shell_exec`,
+  `run_data_script`, `control_computer`, `control_phone`, `browser_control`,
+  `read_web_page`, `connect_account`, `rea_investigate` - raw shell, computer
+  and browser control stay a deliberate settings-file choice, and REA also
+  needs its own `[rea] enabled = true`.
+- **Not offered in-app by this slice:** `calculator`, `memory_search`,
+  `file_read`, `web_search`, `my_files`, `propose_plan`, `change_setting`,
+  `feature_guide`.
+- The vault organizer's **own** switch (`POST /api/vault/organizer/enabled`)
+  rides in the same UI section as its own row; it is not a `[tools].enabled`
+  toggle.
+
+Every switch keeps the ruling's shape: ONE card plus Windows Hello, PC only,
+one tool at a time; OFF is instant from either app; the phone is read-only.
+Per-use action cards are unchanged - the card says each use still asks, the
+send-file card says it stays off by default because the deterministic chat
+request is the normal door, and the raw tools' own row in "What Jarvis can
+reach" says why they are not in the app.
+
+Built into `backend/jarvis_asks_first.py` (shipped whole, no new module), the
+same PC-only, Windows-Hello shape as §32.3's loosening card:
 `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any
-device but the PC. **Desktop only** (`CLAUDE.md`: no deep config editing on
-the phone) - see `docs/ARCHITECTURE.md` section 8.
+device but the PC. **Desktop only for changing** (`CLAUDE.md`: no deep config
+editing on the phone): the phone reads the same list but `can_enable` is false.
 
 ### 43.1 Route
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** for a tool off the four; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
-| (both) | **The row id is the GATE ACTION's name, not the tool's.** The four rows are `calendar_read`, `email_read`, `notes_search`, `home_read`; the tool the model is offered for the second is **`email_check`** (`jarvis_agent.TOOLS`). Until 2026-09-30 the switch wrote `"email_read"` into `[tools].enabled`, which offered nothing (the page said On, "What Jarvis can reach" said Off, and the tool was not there). Now `jarvis_asks_first.TOOL_NAME` maps each row to its tool, the file gets the tool's name, an old `"email_read"` entry is read as `email_check` (and removed when the switch is turned off), and `test_settings_switches.py` proves it end to end for all four rows | |
-| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app (Rust still refuses it on the phone - no screen calls it there), never held: it only narrows what the model may be offered. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the plain "not offered in-app by this slice" note for a Tier C or unlisted tool, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
+| (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. |
 
-Its state rides on `GET /api/asks_first` (§32.2), which now also carries:
+Its state rides on `GET /api/asks_first` (§32.2), which now carries:
 
 ```
-"tools": {"label": "Offer this to the AI model",
+"tools": {"label": "Let the AI use this",
           "detail": <the sentence above the switches>,
           "can_enable": bool,        true only for a request from this PC
-          "items": [{"id": "calendar_read", "title": "Read your calendar",
-                     "on": bool, "waiting": bool,
-                     "last": {"outcome", "tool", "message", "why", "at"}|null}, ...]}
+          "items": [{"id", "title", "group", "on", "waiting",
+                     "last": {"outcome", "tool", "message", "why", "at"}|null}, ...],
+          "groups": [{"title", "ids"}],          # the page's order
+          "vault": {"id": "vault_organizer", "kind": "switch", "title",
+                    "group", "on", "waiting", "can_enable", "action", "what"},
+          "not_offered": {"tier_c": [...], "not_this_slice": [...],
+                          "labels": {...}, "why": <the plain note>}}
 ```
 
-`items` always lists exactly the four (`jarvis_asks_first.TOOLS_SWITCHABLE`),
-in that order, whatever `here` is - the desktop greys the switch when
-`can_enable` is false or another one's card is waiting; OFF is never held.
-The phone reads the same `GET /api/asks_first` for §32's page and simply
-does not read this key.
+`items` lists exactly Tier A + Tier B (21 tools at 2026-10-31), grouped; `vault`
+is the vault organizer's separate switch; `not_offered` names every tool that is
+deliberately NOT in the app, so the page can say so. The phone reads the same
+`GET /api/asks_first` and simply does not toggle anything (`can_enable` false).
 
 ### 43.2 The card
 
 ```
-Offer "read your calendar" to the AI model?
+Offer this ability to the AI model: "Reading your calendar"?
 
-From now on the AI model may use this tool when it decides to - it can read
-your calendar. This changes one line of your settings file on this PC:
-"calendar_read" is added to [tools].enabled. Nothing else in it changes.
+From now on the AI model may use this ability when it decides to. In plain
+words: Reading your calendar. This changes one line in your settings file on
+this PC; nothing else changes.
 
-This is separate from whether it asks you first: that is set above, in "Ask
-me first", and is unchanged by this card.
+This is separate from whether it asks you first: that is set above, in "Ask me
+first", and is unchanged by this card.
 
-Approving it needs Windows Hello on this PC. You can turn it off again at
-any time from either app, and that is instant.
+It does not approve any use of the ability: each time the AI uses it, "Ask me
+first" still decides whether you are asked.
+
+[for send_file_to_phone:] Sending a file stays off by default on purpose:
+asking in chat ("send me the file ...") is the normal door and works without
+this switch. This switch only lets the AI model pick it on its own.
+
+Approving it needs Windows Hello on this PC. You can turn it off again at any
+time from either app, and that is instant.
 
 If you did not just do this, say no.
 
 If you say no: nothing changes - the AI model is still not offered this
-tool.
+ability.
 ```
 
-Its title: "Jarvis wants to offer a reading tool to the AI model"
-(`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the
-shipped `jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and
-`MUST_ASK` like `loosen_what_asks_first` (§32.3) - it always asks, and it is
-never itself on the switchable list.
-
-**Why this card does not name the settings file either (fixed 2026-10-10).**
-It had the same bug as §32.3's: the card IS the `prompt` the gate reads for
-its own `_PROTECTED` names, so naming `jarvis-framework.toml` got it refused
-at tier `never` and no card was ever shown - 21 `gate.refused_protected` lines
-for `enable_reading_tool` in the owner's audit log, each followed by
-`asks_first.tools.card {"outcome": "refused"}`. Offering a reading tool to the
-model from the app had therefore never worked. Both cards are now held against
-the gate's own list by `backend/test_asks_first.py`.
+Its title: "Jarvis wants to offer a tool to the AI model"
+(`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the shipped
+`jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`: it
+always asks, and it is never itself on the switchable list.
 
 ### 43.3 Writing `[tools].enabled`
 

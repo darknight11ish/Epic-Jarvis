@@ -492,6 +492,11 @@ CLASSIFICATION = {
     "/api/notes/list": ("ported", ""),
     "/api/notes/read": ("ported", ""),
     "/api/notes/save": ("ported", ""),
+    # The vault organizer's own switch (2026-10-31 tiered tool switches):
+    # the desktop Settings page toggles it through set_vault_organizer_enabled
+    # (asks_first.rs). ONE PC-only change_own_config card + Windows Hello; the
+    # phone has no organizer screen and never calls it (ARCHITECTURE section 8).
+    "/api/vault/organizer/enabled": ("deliberate", "The vault organizer's own switch: turning it on is ONE PC-only change_own_config card plus Windows Hello, and it only gates the organizer's read-only planner. Desktop: Settings, What asks first (asks_first.rs set_vault_organizer_enabled). Phone: none, deliberately - the vault is a folder on this PC and the phone has no organizer screen (ARCHITECTURE section 8)."),
     "/api/pending": ("ported", ""),
     "/api/pending/{id}/amend": ("ported", "A note on one waiting approval card; approves nothing (backend/task-control.patch). Desktop: amend_approval (commands.rs). Phone: JarvisApi.amend."),
     "/api/power": ("ported", ""),

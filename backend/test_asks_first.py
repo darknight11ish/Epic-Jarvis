@@ -858,9 +858,13 @@ def _treq(body, tools, *, here, tiers=None, gate=None, armed=True, spawn=None):
         AF.tools_enabled_set = keep
 
 
-def t_offering_a_reading_tool_is_a_different_thing_from_loosening():
-    check("the four reading tools, and only them",
-          AF.TOOLS_SWITCHABLE == ("calendar_read", "email_read", "notes_search", "home_read"))
+def t_offering_a_tool_is_a_different_thing_from_loosening():
+    check("the tiered in-app list is Tier A + Tier B, 21 tools, calendar_read kept",
+          AF.TOOLS_SWITCHABLE == tuple(AF.TIER_A) + tuple(AF.TIER_B)
+          and "calendar_read" in AF.TIER_A and len(AF.TOOLS_SWITCHABLE) == 21)
+    check("Tier C and the nine unlisted tools are NOT switchable in-app",
+          not (set(AF.TIER_C) | set(AF.TIER_UNLISTED)) & set(AF.TOOLS_SWITCHABLE),
+          (AF.TIER_C, AF.TIER_UNLISTED))
     check("its own action, always 'ask', never loosened by the tier mechanism above",
           AF.ENABLE_TOOL_ACTION in AF.HARD_LIMITS and AF.ENABLE_TOOL_ACTION in AF.MUST_ASK
           and AF.ENABLE_TOOL_ACTION not in AF.SWITCHABLE)
@@ -868,7 +872,7 @@ def t_offering_a_reading_tool_is_a_different_thing_from_loosening():
           AF.ENABLE_TOOL_ACTION in OC.PC_ONLY_ACTIONS)
     check("its card has a title in plain words",
           W.title_for(AF.ENABLE_TOOL_ACTION)
-          == "Jarvis wants to offer a reading tool to the AI model")
+          == "Jarvis wants to offer a tool to the AI model")
 
 
 def t_off_is_instant_from_either_app():
@@ -890,13 +894,26 @@ def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
     code, out = _treq({"tool": "calendar_read", "enabled": True}, tools, here=False)
     check("from the phone: 403, the PC only, nothing written",
           code == 403 and out.get("pc_only") is True and tools.writes == [], out)
-    for tool in ("send_email", "home_control", "shell_exec", "notes_read",
-                "append_obsidian_daily", "web_search", "nonsense"):
+    for tool in ("send_email", "home_control", "append_obsidian_daily",
+                 "github_search", "send_file_to_phone", "calendar_read"):
         tools = ToolsFile()
         code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
-        check(f"{tool}: cannot be offered from an app (403), nothing written",
-              code == 403 and tools.writes == [] and out["error"] == AF.TOOLS_NOT_ON_LIST,
-              (code, out))
+        check(f"{tool}: offered in-app from the PC with one card",
+              code == 202 and tools.writes == [(AF.real_tool(tool), True)],
+              (code, out, tools.writes))
+    # Tier C and the unlisted tools stay settings-file choices: 403 + why.
+    for tool in ("shell_exec", "run_data_script", "control_computer",
+                 "browser_control", "read_web_page", "connect_account",
+                 "rea_investigate", "calculator", "propose_plan"):
+        tools = ToolsFile()
+        code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
+        check(f"{tool}: not offered in-app (403), nothing written",
+              code == 403 and tools.writes == []
+              and out["error"] == AF.TOOLS_TOML_ONLY_NOTE, (code, out))
+    tools = ToolsFile()
+    code, out = _treq({"tool": "nonsense", "enabled": True}, tools, here=True)
+    check("an unknown tool: 403, the 'does not know that name' answer",
+          code == 403 and out["error"] == AF.TOOLS_NOT_ON_LIST, (code, out))
     tools = ToolsFile()
     code, out = _treq({"tool": "calendar_read", "enabled": True}, tools, here=True, armed=False)
     check("without the backend's own Windows Hello check: 503, nothing written",
@@ -914,10 +931,18 @@ def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
     check("from the PC: ONE card, enable_reading_tool", code == 202
           and [a for a, _, _ in asked] == [AF.ENABLE_TOOL_ACTION], (code, asked))
     card = asked[0][2] if asked else ""
-    check("the card says what, the exact line, Windows Hello, and what no means",
-          card.startswith("Offer \"read your calendar\" to the AI model?")
-          and '"calendar_read" is added to [tools].enabled' in card and "Windows Hello" in card
-          and "If you say no: nothing changes" in card, card)
+    check("the card says what, the one-line change, Windows Hello, each-use and what no means",
+          card.startswith('Offer this ability to the AI model: "')
+          and AF.tool_label('calendar_read') in card
+          and "changes one line in your settings file on this PC" in card
+          and "Ask me first" in card and "each time the AI uses it" in card
+          and "Windows Hello" in card and "If you say no: nothing changes" in card, card)
+    sf = AF.tool_enable_card("send_file_to_phone")
+    check("the send-file card says it is off by default and chat is the normal door",
+          "off by default" in sf and "asking in chat" in sf, sf)
+    rea = AF.tool_enable_card("rea_investigate")
+    check("REA's card says it needs its own [rea] opt-in too",
+          "[rea] enabled = true" in rea, rea)
     check("approved by a person: the tool is added",
           tools.writes == [("calendar_read", True)] and "calendar_read" in tools.on)
     check("... and the page says so", AF._T_STATE["last"].get("outcome") == "enabled")
@@ -962,11 +987,21 @@ def t_the_tools_status_and_the_page():
     AF.tools_enabled_set = tools.enabled
     try:
         st = AF.tools_status(here=True)
-        check("the label and the four items, one on", st["label"] == AF.TOOLS_LABEL
-              and st["can_enable"] is True
-              and sorted(i["id"] for i in st["items"]) == sorted(AF.TOOLS_SWITCHABLE)
+        check("the label, the 21 grouped items, the vault row and the not-offered list",
+              st["label"] == AF.TOOLS_LABEL and st["can_enable"] is True
+              and len(st["items"]) == 21
+              and [g["title"] for g in st["groups"]]
+              == [title for title, _tools in AF.TOOL_GROUPS]
+              and st["items"][0]["group"] == AF.TOOL_GROUPS[0][0]
               and next(i for i in st["items"] if i["id"] == "calendar_read")["on"] is True
-              and next(i for i in st["items"] if i["id"] == "email_read")["on"] is False, st)
+              and next(i for i in st["items"] if i["id"] == "email_check")["on"] is False
+              and st["vault"]["id"] == "vault_organizer"
+              and st["vault"]["can_enable"] is True
+              and set(st["not_offered"]["tier_c"]) == set(AF.TIER_C)
+              and set(st["not_offered"]["not_this_slice"]) == set(AF.TIER_UNLISTED)
+              and st["not_offered"]["why"] == AF.TOOLS_TOML_ONLY_NOTE, st)
+        check("the vault row is a separate switch, not a tool item",
+              all(i["id"] != "vault_organizer" for i in st["items"]))
         v = AF.view(here=False)
         check("the page's view carries it, can_enable false off the PC",
               v["tools"]["can_enable"] is False)
@@ -1132,7 +1167,7 @@ def t_the_gate_would_raise_both_cards_again():
     # would be handed: the card as the prompt, and the detail beside it.
     for label, card, setting in (("the loosening card", AF.loosen_card("calendar_read"),
                                   "calendar_read"),
-                                 ("the reading-tool card", AF.tool_enable_card("calendar_read"),
+                                 ("the tool card", AF.tool_enable_card("calendar_read"),
                                   "calendar_read")):
         detail = {"text": card, "what": "x", "setting": setting, "to": "auto",
                   "leaves_this_pc": False}
@@ -1153,10 +1188,10 @@ def t_the_gate_would_raise_both_cards_again():
     check("... and still names Windows Hello and what 'no' means",
           "Windows Hello" in card and "If you say no: nothing changes" in card, card)
     card = AF.tool_enable_card("calendar_read")
-    check("the reading-tool card still shows the exact line the owner is agreeing to",
-          '"calendar_read" is added to [tools].enabled' in card, card)
+    check("the tool card still shows the exact one-line change it agrees to",
+          "changes one line in your settings file on this PC" in card, card)
     check("... still says it is only your settings file that changes",
-          "your settings file on this PC" in card and "Nothing else in it changes" in card, card)
+          "your settings file on this PC" in card and "nothing else changes" in card, card)
     check("... and still names Windows Hello and what 'no' means",
           "Windows Hello" in card and "If you say no: nothing changes" in card, card)
 

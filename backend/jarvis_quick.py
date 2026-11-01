@@ -5009,11 +5009,15 @@ def _tool_off_words(subject: str, action: str) -> str:
     if AF is None:
         return (f"{subject} is switched off on this PC because the tool behind "
                 f"it is not offered to me.")
-    switchable = tuple(getattr(AF, "TOOLS_SWITCHABLE", ()) or ())
-    if action in switchable:
+    real = AF.real_tool(action) if hasattr(AF, "real_tool") else action
+    if real in tuple(getattr(AF, "SWITCHABLE_TOOL_NAMES", ()) or ()):
         pc_only = str(getattr(AF, "TOOLS_PC_ONLY", "") or "").strip()
         if pc_only:
             return f"{subject} is switched off on this PC. {pc_only}"
+    if real in tuple(getattr(AF, "TOOLS_TOML_ONLY", ()) or ()):
+        why = str(getattr(AF, "TOOLS_TOML_ONLY_NOTE", "") or "").strip()
+        if why:
+            return f"{subject} is switched off on this PC. {why}"
     not_listed = str(getattr(AF, "TOOLS_NOT_ON_LIST", "") or "").strip()
     head = (f"{subject} is switched off on this PC because the tool behind it "
             f"is not offered to me.")
@@ -6002,13 +6006,16 @@ def _run_honest_chat_extra(f: dict) -> Optional[Result]:
                       if item.get("title")]
         except Exception:
             titles = []
-        names = ", ".join(titles[:4]) or "calendar, email, notes and home status"
+        count = len(titles)
         return Result(
             "What asks first is Settings, What asks first. There you decide what "
-            "Jarvis may do without asking, and under \"" + label + "\" whether "
-            "the AI is offered each reading tool at all (" + names + "). Turning "
-            "one on is one approval card plus Windows Hello on this PC; turning "
-            "it off is instant.", "honest_chat")
+            "Jarvis may do without asking, and under \"" + label + "\" which "
+            "abilities the AI is offered at all: " + str(count) + " one-tool "
+            "switches, grouped. Turning one on is ONE approval card plus Windows "
+            "Hello on this PC; turning it off is instant. Raw shell, computer and "
+            "browser control, reading one web page, connecting an account and REA "
+            "are not offered in-app by this slice - they stay a settings-file "
+            "choice, and REA also needs its own [rea] enabled = true.", "honest_chat")
     if shape == "quiet_hours":
         return Result(_quiet_hours_words(), "honest_chat")
     if shape == "general_off":
@@ -6018,10 +6025,12 @@ def _run_honest_chat_extra(f: dict) -> Optional[Result]:
                           "right now.", "honest_chat")
         return Result(
             "On this PC these are switched off right now: " + "; ".join(items[:8])
-            + ". The four reading tools (calendar, email, notes and home status) "
-              "are turned on in Settings, What asks first under \"Let the AI use "
-              "this\" - one approval card plus Windows Hello. The other tools "
-              "change only in your settings file.", "honest_chat")
+            + ". The in-app switches are in Settings, What asks first under "
+            "\"Let the AI use this\" - one approval card plus Windows Hello, one "
+            "tool at a time. Raw shell, computer and browser control, reading one "
+            "web page, connecting an account and REA are not offered in-app; they "
+            "stay a settings-file choice, and REA also needs its own [rea] enabled "
+            "= true.", "honest_chat")
     return None
 
 

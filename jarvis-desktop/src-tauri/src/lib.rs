@@ -1292,6 +1292,7 @@ pub fn run() {
             asks_first::set_asks_first,
             asks_first::set_lights_without_card,
             asks_first::set_tool_enabled,
+            asks_first::set_vault_organizer_enabled,
             // Settings' "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the
             // owner's request of 2026-10-08): whether the coach is on, in the
             // PC's own words (a read), and the switch - at once in BOTH
