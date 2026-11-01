@@ -1185,6 +1185,17 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- which app is this? (2026-11-01 field test) --------------------------
+    # The desktop HUD answered "where am I talking from?" with "I don't have
+    # access to your location data or GPS", and the phone answered it right
+    # only by luck of its model. The request already names its app in
+    # X-Jarvis-Surface, read once by jarvis_surface (see `_client_surface`
+    # below), so this whole-sentence question is answered from that fact - no
+    # model and no location. A near-miss falls through to its old path.
+    got = _surface_origin(s)
+    if got is not None:
+        return got
+
     # --- a question about Jarvis's OWN features, from the raw sentence -------
     # The notes capability and location answers (2026-10-31 follow-up) are
     # exact, read-only shapes and must win over the generic capability lane.
@@ -12225,6 +12236,80 @@ def _run_model_switch(name) -> Result:
         return Result("The model switch could not be asked on this PC.", "model_switch")
 
 
+# --- which app the owner is talking from (2026-11-01 field test) -----------
+#
+# The owner asked the desktop HUD "where am I talking from?" and the model
+# answered as if it were a physical-location question ("I don't have access to
+# your location data or GPS"). The phone answered it correctly only by luck of
+# its model. The fact is already known: jarvis_surface reads the request's
+# X-Jarvis-Surface header once (see `_client_surface` below), so this lane
+# answers from that one fact - no model, no location, no guess.
+#
+# TIGHT ON PURPOSE. Only the whole-sentence shapes the owner used match. A
+# near-miss ("where am I", "where am I located", "where is my phone", "which
+# app can use the second card") keeps its old path: a location question goes
+# to the model, and an app/feature question goes to the feature guide. A miss
+# is harmless; a hijack would break a real question.
+SURFACE_ORIGIN_DESKTOP = "You are talking to me from the desktop program on your PC."
+SURFACE_ORIGIN_PHONE = "You are talking to me from the Jarvis app on your Android phone."
+SURFACE_ORIGIN_UNKNOWN = ("This request did not say which app it came from, so I "
+                          "cannot tell whether you are talking to me from the phone "
+                          "or the desktop program.")
+
+_SURFACE_ORIGIN_RX = re.compile(
+    # "where am i talking from", "... talking to you from", "... asking from",
+    # "... chatting from" - each optionally followed by "right now".
+    r"(?:where\s+am\s+i\s+(?:talking(?:\s+to\s+you)?|asking|chatting|speaking)\s+from"
+    # "which app am i using", "what device am i on", "which device am i talking from"
+    r"|(?:which|what)\s+(?:app|device)\s+am\s+i\s+(?:talking\s+from|using|on)"
+    # "am i on my phone or pc", "am i talking from the phone or the desktop"
+    r"|am\s+i\s+(?:on\s+(?:my\s+|the\s+)?|talking\s+from\s+(?:my\s+|the\s+)?)"
+    r"(?:phone|pc|desktop)\s+or\s+(?:my\s+|the\s+)?(?:phone|pc|desktop))"
+    r"(?:\s+right\s+now)?")
+
+
+def _surface_origin_normal(text) -> str:
+    """The matching form: lower case, one space between words, no trailing
+    punctuation, and no leading "hey"/"jarvis" - "Hey Jarvis, where am I
+    talking from?" is the same question as the plain one."""
+    t = str(text or "").lower().replace("\u2019", "'").replace("\u2018", "'")
+    t = " ".join(t.split())
+    t = re.sub(r"^(?:(?:hey|hi|ok|okay)\s+)?jarvis\b[\s,]*", "", t)
+    return t.strip(" \t.,!?;:")
+
+
+def _surface_origin(s: str) -> Optional[Intent]:
+    """The intent for a question about which app is asking, or None.
+
+    `s` is the tidied sentence `_match` already works on. Never a location
+    question: the regex is a closed list of surface words.
+    """
+    if _SURFACE_ORIGIN_RX.fullmatch(_surface_origin_normal(s)):
+        return Intent("surface_origin")
+    return None
+
+
+def _run_surface_origin() -> Result:
+    """Which app this request came from - jarvis_surface's one fact.
+
+    The header is read once per request by the same origin gate that already
+    allows the request, so this lane needs nothing else. With no header the
+    answer says so rather than guessing, and it never mentions GPS or a place.
+    """
+    try:
+        import jarvis_surface as S
+        surface = S.current()
+        phone = surface == S.PHONE
+        desktop = surface == S.DESKTOP
+    except Exception:                       # noqa: BLE001 - module absent
+        phone = desktop = False
+    if phone:
+        return Result(SURFACE_ORIGIN_PHONE, "surface_origin")
+    if desktop:
+        return Result(SURFACE_ORIGIN_DESKTOP, "surface_origin")
+    return Result(SURFACE_ORIGIN_UNKNOWN, "surface_origin")
+
+
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
     the owner's request of 2026-10-10), and Jarvis's own windows and places
@@ -14653,6 +14738,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_note_search(intent.f.get("needle") or "")
     if n == "note_open":
         return _run_note_open(intent.f.get("title") or "")
+    if n == "surface_origin":
+        # 2026-11-01 field test: "where am I talking from?" - answered from
+        # jarvis_surface's own header fact, never the model's guess at a place.
+        return _run_surface_origin()
     if n == "model_current":
         return _run_model_current()
     if n == "model_answerer":
@@ -15132,6 +15221,9 @@ READ_ONLY_INTENTS = frozenset({
     "feature_detail", "feature_can_do",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown", "setting_explain",
+    # Which app is asking (2026-11-01): it only reads jarvis_surface's own
+    # header fact, so it must not take away what "cancel that" would undo.
+    "surface_origin",
     # The local calendar read and the honest off / app-only / unbuilt
     # sentences (2026-10-31, pass 11): they read the real state and say it,
     # change nothing, so they must not take away what "cancel that" would undo.
