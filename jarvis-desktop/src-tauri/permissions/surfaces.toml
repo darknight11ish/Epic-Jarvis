@@ -724,6 +724,10 @@ permissions = [
   # Rust; OFF is at once. Rust refuses any tool off the short list before
   # sending; so does the PC. Desktop only.
   "allow-set-tool-enabled",
+  # The vault organizer's own switch (2026-10-31 tiered tool switches):
+  # ONE PC-only card + Windows Hello, OFF at once; a separate route from
+  # the tool switches and not a [tools].enabled toggle.
+  "allow-set-vault-organizer-enabled",
   # "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the owner's request of
   # 2026-10-08; backend jarvis_prompt_coach.py): whether the coach is on, in
   # the PC's own words (a read), and the switch - OFF by default. NEITHER

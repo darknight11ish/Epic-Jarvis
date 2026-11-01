@@ -9054,7 +9054,7 @@
       "name": "Organize an Obsidian vault",
       "group": "Notes and files",
       "surface": "desktop",
-      "where": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
+      "where": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -9065,7 +9065,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
+        "location": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
         "search": [
           "Organize an Obsidian vault"
         ],
@@ -9073,7 +9073,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
+        "location": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
         "search": [
           "organize an obsidian vault"
         ],

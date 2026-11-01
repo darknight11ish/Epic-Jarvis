@@ -1314,10 +1314,10 @@
     "id": "vault-organizer",
     "group": "Notes and files",
     "title": "Organize an Obsidian vault",
-    "what": "Plan a tidy-up of an Obsidian vault - tags, Map-of-Content notes and a Vault Home - then one card writes it.",
-    "where": "Off by default and PC-only; the plan is the vault-organizer plugin's API/runbook, not a screen yet - /api/vault/organize-plan and /api/vault/organize.",
-    "asks": "Off until one card turns it on; the plan is a read-only dry run, then ONE card for the whole batch and one Undo.",
-    "limit": "Off by default and no screen yet - it is run from the API/runbook; one vault this PC is set up for, and it never deletes a note.",
+    "what": "Tidy up an Obsidian vault - tags, Map-of-Content notes and a Vault Home - as a read-only plan first, then ONE card writes the whole batch.",
+    "where": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
+    "asks": "The plan is a read-only dry run and changes nothing - the chat says \"Nothing has been changed yet.\" Saying \"apply the plan\" raises ONE approval card for the whole batch, and denying it changes nothing.",
+    "limit": "Off by default and PC-only; no per-note mode outside the selection you name; one vault this PC is set up for. It never deletes a note, and one Undo puts the whole batch back.",
     "surface": "desktop",
     "covers": [
       "vault-organizer"

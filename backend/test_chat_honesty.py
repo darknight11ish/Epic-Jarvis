@@ -399,7 +399,7 @@ def t_off_tools_name_the_real_switch_and_gate():
     preply = phone.reply if phone is not None else ""
     check("phone control is not an app-switchable tool, said plainly",
           "switched off on this PC" in preply
-          and AF.TOOLS_NOT_ON_LIST in preply, preply)
+          and AF.TOOLS_TOML_ONLY_NOTE in preply, preply)
     old = Q._enabled_tools_turn
     Q._enabled_tools_turn = lambda: {"email_check", "home_read", "control_phone"}
     try:

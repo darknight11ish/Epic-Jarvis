@@ -8574,6 +8574,24 @@ _NOTE_CREATE_NAMED = re.compile(
     r"(?:create|make|start)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note"
     r"\s+(?:called|named|titled)\s+(?P<name>.+?)"
     r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+))?$")
+_LIST_NAMES_TO_LEAVE = frozenset({
+    "todo", "to-do", "to do", "todo list", "to-do list", "to do list",
+    "shopping list", "list",
+})
+
+
+def _list_owns_name(name: str) -> bool:
+    """True when "add X to my <name>" belongs to the named-list grammar.
+
+    The notes lane's append regex is general ("add TEXT to my NAME"); without
+    this guard it claimed "add milk to my shopping list" and "add milk to my
+    todo list". A named list always ends in "list" (or is one of the synonyms
+    above), so the list keeps its own path (2026-10-31 final-wave integration).
+    """
+    n = name.strip().strip("\"'").casefold()
+    return n in _LIST_NAMES_TO_LEAVE or n.endswith(" list")
+
+
 _NOTE_APPEND_COLON = re.compile(
     r"(?:add|append)\s+(?:this\s+)?to\s+(?:my|the)\s+(?P<name>.+?)"
     r"(?:\s+note)?\s*[:,-]\s*(?P<text>.+)$")
@@ -9185,11 +9203,11 @@ def _note_asking(s: str) -> Optional[Intent]:
                                        "old": m.group("old").strip(),
                                        "new": m.group("new").strip()})
     m = _NOTE_APPEND_COLON.fullmatch(s)
-    if m:
+    if m and not _list_owns_name(m.group("name")):
         return Intent("note_append", {"name": m.group("name").strip(),
                                       "text": m.group("text").strip()})
     m = _NOTE_APPEND_PLAIN.fullmatch(s)
-    if m:
+    if m and not _list_owns_name(m.group("name")):
         return Intent("note_append", {"name": m.group("name").strip(),
                                       "text": m.group("text").strip()})
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
@@ -12558,7 +12576,8 @@ READ_ONLY_INTENTS = frozenset({
     "honest_chat", "local_calendar_read", "honest_state",
     "features_group", "features_list", "focus_status", "identity_help", "list_clear",
     "lists_which", "lockdown_status", "media_next", "media_now", "media_pause",
-    "media_play", "media_previous", "missed", "news_list", "news_read", "next_time_list",
+    "media_play", "media_previous", "missed", "news_list", "news_read", "note_read", "note_search", "note_open",
+    "next_time_list",
     "next_up",
     # "can you process all my Notion notes into Obsidian?" (2026-10-28): a
     # fixed answer that reads nothing and imports nothing, so it must not

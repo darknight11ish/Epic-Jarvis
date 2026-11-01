@@ -23,7 +23,7 @@
 //!   stale link - the shape of every setting that trusts more.
 //! * [`set_tool_enabled`] - `POST /api/asks_first/tools {"tool", "enabled"}`
 //!   (the owner's answer of 2026-09-27): whether the AI model is offered
-//!   ONE of the four reading tools ([`TOOLS_SWITCHABLE`]) AT ALL - a
+//!   ONE of the Tier A/Tier B tools ([`TOOLS_SWITCHABLE`]) AT ALL - a
 //!   DIFFERENT thing from [`set_asks_first`], which is whether an offered
 //!   tool asks first. `enabled: true` is the PC only, one approval card
 //!   that needs Windows Hello, so it is held on a stale link; `enabled:
@@ -72,11 +72,33 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 /// Windows Hello on the PC, that turns it off (held on a stale link).
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
-/// The four reading tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. A
-/// DIFFERENT list from [`SWITCHABLE`], and desktop only.
-pub(crate) const TOOLS_SWITCHABLE: [&str; 4] =
-    ["calendar_read", "email_read", "notes_search", "home_read"];
+/// The Tier A + Tier B tools that may be OFFERED to the AI model at all from
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word (the
+/// 2026-10-31 tiered ruling, 21 tools). A DIFFERENT list from [`SWITCHABLE`],
+/// and desktop only; Tier C and the unlisted tools stay settings-file choices.
+pub(crate) const TOOLS_SWITCHABLE: [&str; 21] = [
+    "calendar_read",
+    "notes_search",
+    "append_obsidian_daily",
+    "create_joplin_note",
+    "append_logseq_journal",
+    "set_timer",
+    "set_reminder",
+    "todo_add",
+    "todo_done",
+    "coming_up",
+    "protect_from_jarvis",
+    "github_search",
+    "send_file_to_phone",
+    "email_check",
+    "send_email",
+    "draft_email",
+    "tidy_inbox",
+    "home_read",
+    "home_control",
+    "my_spending",
+    "retirement_whatif",
+];
 
 /// What a backend without `jarvis_asks_first.py` is told. The phone says
 /// the same (`AsksFirst.MISSING`), and so does the PC.
@@ -91,9 +113,21 @@ pub(crate) const NOT_ON_LIST: &str = "Only reading your calendar, email, notes, 
 
 /// A tool off [`TOOLS_SWITCHABLE`] - `jarvis_asks_first.TOOLS_NOT_ON_LIST`,
 /// word for word.
-pub(crate) const TOOLS_NOT_ON_LIST: &str = "Only reading your calendar, email, notes and home \
-     status can be offered to the AI model from an app. Every other tool changes only in your \
-     settings file (jarvis-framework.toml, [tools].enabled).";
+pub(crate) const TOOLS_NOT_ON_LIST: &str =
+    "This PC does not know a tool by that name, so nothing was changed.";
+
+/// A tool that is deliberately NOT offered in-app by this slice - Tier C (raw
+/// shell/computer/browser, web-page reading, account connections, REA) and the
+/// nine unlisted tools - `jarvis_asks_first.TOOLS_TOML_ONLY_NOTE`, word for
+/// word. A DIFFERENT answer from [`TOOLS_NOT_ON_LIST`], which is for a name the
+/// PC does not know at all.
+pub(crate) const TOOLS_TOML_ONLY_NOTE: &str =
+    "That tool is not offered from inside the app by this slice. Raw shell, computer and \
+     browser control, reading one web page, connecting an account and REA (which also needs \
+     its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC \
+     (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, \
+     my_files, propose_plan, change_setting and feature_guide are not offered in-app by this \
+     slice either. Nothing was changed.";
 
 const STALE: &str =
     "The connection to Jarvis is catching up, so nothing can be sent until it does.";
@@ -141,7 +175,10 @@ pub(crate) fn tier_body(action: &str, ask: bool) -> Result<serde_json::Value, St
 /// tool on [`TOOLS_SWITCHABLE`].
 pub(crate) fn tool_body(tool: &str, enabled: bool) -> Result<serde_json::Value, String> {
     if !TOOLS_SWITCHABLE.contains(&tool) {
-        return Err(TOOLS_NOT_ON_LIST.to_string());
+        if tool.is_empty() || tool == "nonsense" {
+            return Err(TOOLS_NOT_ON_LIST.to_string());
+        }
+        return Err(TOOLS_TOML_ONLY_NOTE.to_string());
     }
     Ok(serde_json::json!({ "tool": tool, "enabled": enabled }))
 }
@@ -269,6 +306,7 @@ mod tests {
     use super::{
         asks_first_answer, change_answer, held_on_stale, tier_body, tool_body, ASKS_FIRST_MISSING,
         LOCKDOWN, NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_SWITCHABLE,
+        TOOLS_TOML_ONLY_NOTE,
     };
 
     /// The real answers, made by `tools/gen_asks_first_cases.py`.
@@ -320,12 +358,20 @@ mod tests {
     }
 
     #[test]
-    fn only_the_four_reading_tools_can_be_offered_and_only_on_is_held() {
+    fn only_the_tiered_tools_can_be_offered_and_only_on_is_held() {
         for t in TOOLS_SWITCHABLE {
             assert!(tool_body(t, false).is_ok());
             assert!(tool_body(t, true).is_ok());
         }
-        for t in ["send_email", "home_control", "browser_control", ""] {
+        for t in [
+            "browser_control",
+            "shell_exec",
+            "read_web_page",
+            "connect_account",
+        ] {
+            assert_eq!(tool_body(t, false).unwrap_err(), TOOLS_TOML_ONLY_NOTE);
+        }
+        for t in ["", "nonsense"] {
             assert_eq!(tool_body(t, false).unwrap_err(), TOOLS_NOT_ON_LIST);
         }
         assert!(held_on_stale(true));
