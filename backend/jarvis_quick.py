@@ -1147,9 +1147,18 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
     # Names become FILE NAMES: the matching form is lowercased, so restore the
     # owner's capitals from the raw sentence before any handler uses them. On a
     # case-sensitive filesystem "Shopping" -> "shopping" is a different file.
-    for key in ("name", "folder", "new", "old", "target", "tag"):
+    for key in ("name", "tname", "folder", "new", "old", "target", "tag"):
         if got is not None and got.f.get(key):
             got.f[key] = _restore(text, got.f[key])
+    # The template's own name is the LAST match in its sentence ("save my
+    # workout log as a template called My workout" has two); the first
+    # occurrence is the source note, not the new template.
+    if got is not None and got.name == "template_save" and got.f.get("tname"):
+        flat = " ".join(str(text or "").replace("\u2019", "'").replace("\u2018", "'").split())
+        piece = got.f["tname"]
+        i = flat.lower().rfind(piece)
+        if i >= 0:
+            got.f["tname"] = flat[i:i + len(piece)].strip(" ,.;:!?")
     return got
 
 
