@@ -329,4 +329,164 @@ class ChatMenuTest {
         // One menu, one message: it never offers a bulk action.
         assertFalse("the menu has a mark-all", menu.contains("Mark all"))
     }
+
+    // ---- 6. The answer's time, and "was this answer right?" (2026-11-01) ----
+
+    // Two phone gaps the owner's field test found on 2026-11-01:
+    //  - the answer's own menu had no date and time, where the desktop HUD's
+    //    has had one since wave-2, and
+    //  - typing "was this answer right?" sent the words to the PC instead of
+    //    opening that menu.
+    // Both are SOURCE PINS, like everything above: a Compose screen cannot be
+    // driven from a JVM unit test here. What they cannot prove is said in the
+    // report: that the menu opens, shows the line and reads out on a phone.
+
+    /** That function's body, cut where the next top-level declaration starts. */
+    private fun fnOf(marker: String, text: String = home): String =
+        text.substringAfter(marker).substringBefore("\n@Composable").substringBefore("\nprivate fun ")
+
+    @Test
+    fun `the menu's first line is the answer's own time, read-only`() {
+        val menu = bodyOf("private fun MessageMenu(")
+        // ONE line, from the pure formatter, and only when the moment is known.
+        assertEquals(
+            "the menu does not draw exactly one answer time",
+            1,
+            Regex("""HistoryView\.answerTime\(""").findAll(menu).count(),
+        )
+        assertTrue("the menu is not given the answer's moment", menu.contains("answerAtMs"))
+        assertTrue("an unknown moment would still draw a line", menu.contains("if (whenWords.isNotEmpty())"))
+        // FIRST: above the Right/Wrong pair, and above the pin.
+        val at = menu.indexOf("HistoryView.answerTime(")
+        assertTrue("the time line is not the menu's first line: $at", at in 0 until menu.indexOf("if (feedback != null)"))
+        assertTrue("the time line is drawn after the marks", at < menu.indexOf("AnswerMarkRows("))
+        assertTrue("the time line is drawn after the pin", at < menu.indexOf("ChatPins.PIN)"))
+        // Read-only: plain text, no tap, no row, nothing to press.
+        val line = menu.substringAfter("val whenWords").substringBefore("if (feedback != null)")
+        assertTrue("the time line is not drawn as text", line.contains("Text("))
+        for (control in listOf("onClick", "clickable", "pressable", "MoreRow(", "Quiet(", "Button")) {
+            assertFalse("the time line is a control: $control", line.contains(control))
+        }
+        // The rules around it are untouched: marks and pin are still there.
+        assertTrue(menu.contains("AnswerMarkRows("))
+        assertTrue(menu.contains("ChatPins.PIN)"))
+        assertTrue(menu.contains("ChatPins.UNPIN)"))
+    }
+
+    @Test
+    fun `typing the menu request opens the menu and sends nothing`() {
+        val composer = fnOf("private fun Composer(")
+        // The words are decided on the phone, by a pure matcher (AnswerMenuAskTest).
+        assertTrue(
+            "nothing decides what a typed menu request means",
+            composer.contains("com.jarvis.client.net.AnswerMenuAsk.matches(text)"),
+        )
+        // ...before anything is sent...
+        assertTrue(
+            "the words are sent before they are decided",
+            composer.indexOf("AnswerMenuAsk.matches(text)") in 0 until composer.indexOf("actions.onSend()"),
+        )
+        // ...and all three send paths go through the ONE local action.
+        assertTrue(
+            "the keyboard sends by a path of its own",
+            composer.contains("keyboardActions = KeyboardActions(onSend = { sendNow() })"),
+        )
+        assertTrue("the Send button sends by a path of its own", composer.contains("onClick = sendPress"))
+        assertTrue("the coach's Send mine sends by a path of its own", composer.contains("sendMine = { sendNow() }"))
+        assertTrue("the button no longer shares the one action", composer.contains("val sendPress: () -> Unit"))
+        // The button's two jobs stay: Send, and Stop while an answer arrives.
+        assertTrue(composer.contains("if (state.streaming) actions.onInterrupt else sendNow()"))
+        // The menu branch opens the menu and sends nothing.
+        val branch = composer.substringAfter("if (hasFinishedAnswer())").substringBefore("actions.onSend()")
+        assertTrue("the menu never opens", branch.contains("onOpenAnswerMenu()"))
+        assertFalse("the menu branch still sends", branch.contains("actions.onSend("))
+        // The old direct paths are gone, so no path can slip past the decision.
+        assertFalse("the keyboard still sends directly", composer.contains("if (canSend) actions.onSend()"))
+        assertFalse("the button still sends directly", composer.contains("else actions.onSend"))
+    }
+
+    @Test
+    fun `no finished answer says so on the phone, and sends nothing`() {
+        val composer = fnOf("private fun Composer(")
+        assertTrue(
+            "nothing is said when there is no finished answer to open",
+            composer.contains("askLine = com.jarvis.client.net.AnswerMenuAsk.NO_ANSWER"),
+        )
+        // Drawn by this screen and dismissible - never a Jarvis bubble.
+        assertTrue("the line is never drawn", composer.contains("askLine?.let { line ->"))
+        assertTrue("the line cannot be dismissed", composer.contains("onClick = { askLine = null }"))
+        assertTrue("the line is not read out when it appears", composer.contains(".liveStatus()"))
+        // Nothing about it comes from the PC: no notice route, no send, no API.
+        for (notSent in listOf("JarvisRuntime.setNotice", "sendTypedChat", "/api/")) {
+            assertFalse("the line goes through the PC: $notSent", composer.contains(notSent))
+        }
+        // The words stay in the box: the draft is cleared only when a menu opened.
+        val sendNow = composer.substringAfter("fun sendNow()").substringBefore("val sendPress")
+        val noAnswer = sendNow.substringAfter("} else {").substringBefore("}")
+        assertTrue("the no-answer branch says nothing", noAnswer.contains("askLine"))
+        assertFalse("the words are cleared with no menu to open", noAnswer.contains("onDraftChange"))
+    }
+
+    @Test
+    fun `the menu opens only for a finished answer on screen`() {
+        val reply = bodyOf("private fun Reply(")
+        assertTrue("Reply never opens the menu from words", reply.contains("LaunchedEffect(openMenuRequest)"))
+        assertTrue(
+            "a half-written answer can open the menu",
+            reply.contains("if (!streaming && text.isNotBlank()) menuOpen = true"),
+        )
+        // Each request opens at most ONE menu: a LazyColumn throws away what
+        // scrolls off the screen, and a request left standing would open the
+        // menu again on the way back without the owner asking.
+        assertTrue(
+            "a request can open the menu more than once",
+            reply.contains("if (openMenuRequest > openMenuServed)"),
+        )
+        assertTrue("the request is never reported as served", reply.contains("onMenuRequestServed(openMenuRequest)"))
+        assertTrue(
+            "the latest served request is not kept outside the list item",
+            home.contains("var answerMenuServed by remember { mutableIntStateOf(0) }"),
+        )
+        // The same test the chevron is drawn behind, so there is never a menu
+        // over half a reply.
+        assertTrue("the chevron's own rule changed", reply.contains("if (!streaming && text.isNotBlank())"))
+        // The caller decides it the same way, so the "no answer" line is honest.
+        assertTrue(
+            "the composer does not know whether an answer finished",
+            home.contains("hasFinishedAnswer = { !state.streaming && reply().isNotBlank() }"),
+        )
+        // A LazyColumn composes only what is on screen: bring the answer into
+        // view first, so the composable that owns the menu exists to open it.
+        assertTrue("the list is never scrolled to the answer", home.contains("LaunchedEffect(answerMenuTick)"))
+        assertTrue(home.contains("openAnswerMenuTick = answerMenuTick"))
+        assertTrue(home.contains("openAnswerMenuServed = answerMenuServed"))
+        assertTrue(home.contains("onAnswerMenuServed = { answerMenuServed = it }"))
+        assertTrue(home.contains("openMenuRequest = openAnswerMenuTick"))
+        assertTrue(home.contains("openMenuServed = openAnswerMenuServed"))
+    }
+
+    @Test
+    fun `the time comes from the answer that finished, not from the clock`() {
+        val session = SourceFile.read("jarvis-client/app/src/main/java/com/jarvis/client/net/ChatSession.kt")
+        assertTrue("the chat keeps no answer time", session.contains("val answerAt: StateFlow<Long?>"))
+        // Taken where the finished answer joins the conversation, and nowhere
+        // else - never when the menu is opened.
+        val commit = session.substringAfter("if (answer != null && answer.isNotBlank()")
+            .substringBefore("return mine")
+        assertTrue(
+            "the time is not taken when the answer finishes",
+            commit.contains("_answerAt.value = finishedAt"),
+        )
+        // Cleared with the answer's own id, so it never labels another answer.
+        val send = session.substringAfter("): String? {").substringBefore("fun cancel()")
+        assertTrue("a new question keeps the old answer's time", send.contains("_answerAt.value = null"))
+        val newChat = session.substringAfter("fun newConversation()").substringBefore("fun continueFrom(")
+        assertTrue("a new conversation keeps the old answer's time", newChat.contains("_answerAt.value = null"))
+        // The screen reads it from the chat, so a menu opened later reads the
+        // answer's moment and not the moment of the tap.
+        assertTrue(main.contains("val answerAt by chat.answerAt.collectAsState()"))
+        assertTrue(main.contains("answerAtMs = answerAt"))
+        assertTrue(home.contains("val answerAtMs: Long? = null"))
+        assertTrue(home.contains("answerAtMs = state.answerAtMs"))
+    }
 }
