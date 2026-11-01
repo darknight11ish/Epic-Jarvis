@@ -11,8 +11,11 @@ The model's side of every streamed turn below is Ollama's REAL
 
     python3 test_agent.py
 """
+import atexit
 import json
+import os
 import sys
+import tempfile
 from unittest import mock
 import traceback
 from pathlib import Path
@@ -33,6 +36,57 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # default. Seen through `python backend/run_suites.py test_agent.py`, which
 # stages the backend this way, the same suite is 202 passed, 0 failed.
 sys.path.insert(0, str(Path(__file__).resolve().parent / "rebuilt"))
+
+# THIS SUITE'S OWN EMPTY CONFIG FOLDER, and why it is here (Gemini review item
+# 5, 2026-11-01).
+#
+# The checks below pin the exact request a turn sends. Two things in that
+# request are read from THIS PC's saved state at request time, so on the
+# owner's workstation they arrive in the middle of the messages and every
+# exact-list check around them fails - while CI, which has no owner config,
+# stays green. That is the suite reading the desk it runs on, not a wrong
+# answer:
+#
+#   * the Cloud preset line. With a provider chosen
+#     (~/.openjarvis/cloud-choice.json, written by the Presets menu) the turn
+#     carries "The Cloud preset is set to DeepSeek (api.deepseek.com, model
+#     deepseek-flash); ...", added by jarvis_agent.with_cloud_state_note()
+#     through jarvis_presets (owner-reported bug 2026-10-31, so the line is
+#     CORRECT to add - just not inside a test that pins the prompt bytes);
+#   * the run_data_script sandbox tool. Its switch is sandbox.json in the JARVIS
+#     settings folder ({"enabled": true} on this PC), and ON adds it to the
+#     offered list wherever the enabled set does or does not name it - so
+#     `enabled_tools={"calculator"}` still offers it, and "an empty enabled set
+#     offers no tools at all" stops being true.
+#
+# MEASURED, 2026-11-01, this PC, origin/main c1b5c5236:
+#   * OPENJARVIS_CONFIG_DIR unset (so ~/.openjarvis): 304 passed, 11 failed;
+#   * OPENJARVIS_CONFIG_DIR pointed at an empty folder: 311 passed, 4 failed.
+# The 7 that move are the cloud line and the data-script switch. The 4 that do
+# not are `jarvis_gate._TOOL_ACTIONS` entries missing for four newer tools - a
+# different fault, separate from this folder, and it is not hidden here.
+#
+# So the folder is made empty for this process BEFORE any module of the
+# product is imported (so none of them can cache ~/.openjarvis first), the way
+# test_schedule.py and test_manner.py do it. Nothing is written to the owner's
+# real config, and the setting is put back on the way out. A relative "temp
+# folder" would not be enough: ~/.openjarvis is what every `_config_dir()`
+# falls back to, and several modules resolve it at import time.
+_CFG = tempfile.TemporaryDirectory(prefix="jarvis-agent-cfg-")
+_SAVED_CONFIG_DIR = os.environ.get("OPENJARVIS_CONFIG_DIR")
+os.environ["OPENJARVIS_CONFIG_DIR"] = _CFG.name
+
+
+def _restore_config_dir():
+    if _SAVED_CONFIG_DIR is None:
+        os.environ.pop("OPENJARVIS_CONFIG_DIR", None)
+    else:
+        os.environ["OPENJARVIS_CONFIG_DIR"] = _SAVED_CONFIG_DIR
+    _CFG.cleanup()
+
+
+atexit.register(_restore_config_dir)
+
 # On a real install (JARVIS_BACKEND set), the backend's own copy must be
 # there and be this one - see _where.require_shipped.
 from _where import require_shipped  # noqa: E402
