@@ -1,13 +1,13 @@
 # The documents, and which ones are current
 
-There are **409 markdown documents** here, adding up to about **10.7 MB**. Neither
+There are **410 markdown documents** here, adding up to about **10.7 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-27
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 409 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 410 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
   Measure-Object -Property Length -Sum).Sum                             # about 10,684,325 bytes
 ```
@@ -135,6 +135,7 @@ Also current, for one area each:
 | [UPDATER-REDESIGN.md](UPDATER-REDESIGN.md) | **The updater: why it cannot finish, and what to do about the owner's own edits.** Written 2026-10-08 on design/updater-redesign, from origin/main at 165e8f2d. |
 | [WATCHER-QUIET-RULES.md](WATCHER-QUIET-RULES.md) | **The watchers' quiet rules: what may be silent, and what may never be.** A decision on paper (written 2026-10-15), no code. Which background watchers may stay quiet, and the cases where they must always speak. |
 | [WORK-SETUPS.md](WORK-SETUPS.md) | **Work setups.** Five combinations of local models, each chosen for a kind of work, each explaining in plain words what it is for before the owner starts. |
+| [NOTES-HOW-TO.md](NOTES-HOW-TO.md) | **How to read, write and customize your Obsidian notes.** The exact sentences to say, what each approval card shows before it writes, the desktop editor's toolbar and shortcuts, the four built-in templates and saving your own, the vault organizer (whole vault or notes you name), what is refused and why, and what is coming next (rename/move with links kept). |
 
 ## Audits and research (dated - true on the day written)
 
