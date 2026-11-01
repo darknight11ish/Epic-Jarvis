@@ -358,6 +358,10 @@ async function openHud(browser, status, pageOptions = {}) {
             }
             return { opened: "page", id: args.id };
           }
+          case "open_fix_place":
+            // Navigation only (hud.json `open-fix-place`); the Memory door's
+            // Review button must be able to reach the Brain from this page.
+            return null;
           case "stop_everything":
             // The fixed HUD control (owner-approved 2026-10-22): the same
             // command the hotkey, tray and widget use. It stops only, approves
