@@ -40,9 +40,12 @@ owner's file:
    ONE card through the module's own `handle_post` switch route (its
    `change_own_config` action); the answer says the switch stays off until the
    owner approves, and it really stays off until the fake gate says yes.
-7. THE INVENTED CAPABILITIES GET HONEST REFUSALS, word for word: create/rename/
-   delete a note (the notes editor's own limit), and Obsidian theme/CSS/
-   templates/customisation ("not one of my features"). No card and no write.
+7. THE REFUSALS STAY HONEST, and the new WRITES are the wave-1 slice: rename
+   and delete a note are still refused word for word (the notes editor's own
+   limit), Obsidian theme/CSS/templates/customisation stays "not one of my
+   features", and "create a new note called Shopping" now really creates ONE
+   note through the notes-editor route (one edit_vault_note card, no overwrite,
+   undo receipt) instead of promising.
 8. NO OVER-CAPTURE: "remind me to call Sam at 5pm" stays a reminder, "organize
    my desk" is still the model's, "what does my Welcome note say?" is not a
    note write, and the two earlier lanes' fixes still hold ("what can I change
@@ -426,11 +429,10 @@ def t_turning_it_on_raises_the_existing_one_card():
 # --------------------------------------------------------------------------
 # 6. The invented capabilities get honest refusals
 # --------------------------------------------------------------------------
-def t_create_rename_delete_are_refused_in_plain_words():
+def t_rename_and_delete_are_refused_in_plain_words():
     reset_all()
     before = tree(VAULT)
-    for text in ("create a new note called Shopping",
-                 "rename my note Welcome to Home",
+    for text in ("rename my note Welcome to Home",
                  "delete my note Welcome",
                  "remove the shopping note"):
         got = ask(text)
@@ -447,6 +449,36 @@ def t_create_rename_delete_are_refused_in_plain_words():
           (GATE["calls"], tree(VAULT)))
     check("... and no daily note was made", not TODAY_NOTE.exists(),
           str(TODAY_NOTE))
+
+
+def t_create_is_now_a_real_write_and_never_overwrites():
+    """Wave 1: 'create a new note called X' makes ONE note, one card, no clobber."""
+    reset_all()
+    GATE.update(allowed=True, outcome="approved")
+    got = ask("create a new note called Shopping")
+    check("'create a new note called Shopping' is the create path",
+          got is not None and got.intent == "note_created",
+          got.intent if got else "the model")
+    created = VAULT / "Shopping.md"
+    check("... and the note really exists", created.is_file(), str(created))
+    reply = got.reply if got else ""
+    check("... in the module's own words, naming the file and undo",
+          reply.lower().startswith("created shopping.md")
+          and "you can undo it" in reply.lower(), reply[:300])
+    check("... after ONE edit_vault_note card",
+          GATE["calls"] == ["edit_vault_note"], GATE["calls"])
+    # a second create of the same note is refused and never overwrites
+    created.write_text("keep me\n", encoding="utf-8")
+    GATE.update(calls=[])
+    before = created.read_bytes()
+    got = ask("create a new note called Shopping")
+    check("a create over an existing note is refused",
+          got is not None and got.intent == "note_create_refused",
+          got.intent if got else "the model")
+    check("... in plain words, and nothing was overwritten",
+          "already a note" in (got.reply or "") and created.read_bytes() == before,
+          (got.reply if got else "")[:300])
+    check("... and it asked NO card", GATE["calls"] == [], GATE["calls"])
 
 
 def t_obsidian_themes_css_and_templates_are_not_features():

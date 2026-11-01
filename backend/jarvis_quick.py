@@ -8292,8 +8292,227 @@ def _obsidian_style_refused(s: str) -> bool:
             and _STYLE_VERB.match(s) is not None)
 
 
+
+#: The wave-1 note WRITES (2026-10-31, the notes flexibility decision): create
+#: ONE note, add words to the END of ONE existing note, add or remove ONE tag.
+#: Every one is a single-file write through jarvis_notes_edit's own routes, so
+#: the module keeps the one card, the File Guardian copy and the undo receipt.
+#: Several notes in one request are refused in plain words (below), and the
+#: owner's other shapes keep their own doors: "note this"/"make a note: X" is
+#: the daily note, "add milk to my shopping list" is the list, "remind me"
+#: is the reminder and "email ..." is email. None of those match here.
+_NOTE_CREATE_NAMED = re.compile(
+    r"(?:create|make|start)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note"
+    r"\s+(?:called|named|titled)\s+(?P<name>.+?)"
+    r"(?:\s+(?:with|containing|saying)\s+(?P<text>.+))?$")
+_NOTE_APPEND_COLON = re.compile(
+    r"(?:add|append)\s+(?:this\s+)?to\s+(?:my|the)\s+(?P<name>.+?)\s+note"
+    r"\s*[:,-]\s*(?P<text>.+)$")
+_NOTE_APPEND_PLAIN = re.compile(
+    r"(?:add|append|write)\s+(?P<text>.+?)\s+(?:to|into|at\s+the\s+end\s+of)\s+"
+    r"(?:my|the)\s+(?P<name>.+?)\s+note\b.*")
+_NOTE_TAG_ADD = re.compile(
+    r"(?:add|put)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+(?:to|on)\s+"
+    r"(?:my|the)\s+(?P<name>.+?)\s+note\b.*")
+_NOTE_TAG_REMOVE = re.compile(
+    r"(?:remove|delete|take)\s+(?:the\s+)?tag\s+(?P<tag>[#A-Za-z0-9_/-]+)\s+from\s+"
+    r"(?:my|the)\s+(?P<name>.+?)\s+note\b.*")
+_NOTE_TAG_WITH = re.compile(
+    r"(?:tag|label)\s+(?:my|the)\s+(?P<name>.+?)\s+note\s+with\s+"
+    r"(?P<tag>[#A-Za-z0-9_/-]+)\b.*")
+#: Several notes at once: refused, never quietly done to the first one.
+_NOTE_WRITE_BATCH = re.compile(
+    r"(?:add|append|write|tag|label|create|make|put)\b.*\b"
+    r"(?:all|every|each|both)\b.*\bnotes?\b.*"
+    r"|(?:add|append|write|tag|label)\s+(?:it\s+)?to\s+(?:my|the)\s+"
+    r"(?:whole|entire)\s+(?:obsidian\s+)?vault\b.*")
+#: The module's own sentences, so the fast path never invents a promise.
+NOTE_WRITE_BATCH_SAID = (
+    "I change one note at a time, so nothing was written: name ONE note, like "
+    "\"add milk to my Shopping note\".")
+NOTE_HIDDEN_SAID = (
+    "Your lists are hidden on this PC, so I did not open or change a note. "
+    "Tap Show and confirm it is you, then ask again.")
+NOTE_NOT_FOUND_SAID = (
+    "I could not find a note called \"{name}\" in your Obsidian vault. "
+    "Nothing was written - open the Brain window's Notes plate to check the name.")
+
+
+def _notes_write_hidden() -> bool:
+    """True while the owner's hidden-lists / App-lock state hides private words."""
+    try:
+        hidden, _words = _calendar_hidden()
+        return bool(hidden)
+    except Exception:                       # noqa: BLE001 - cannot tell: be safe
+        return True
+
+
+def _note_path_for(name: str) -> str:
+    """`Shopping` -> `Shopping.md`; a name that already ends .md/.txt is kept."""
+    text = str(name or "").strip().strip('"').strip("'")
+    if not text:
+        return ""
+    return text if text.lower().endswith((".md", ".txt")) else text + ".md"
+
+
+def _find_note(rel: str):
+    """`(path, "", title)` for a unique note title/path, or `(None, why, "")`.
+
+    Read-only: it asks the notes editor's existing list (paths and titles, never
+    text) and matches the owner's words against the title or the path. Two
+    matches are an ambiguity answered in words, never guessed.
+    """
+    try:
+        import jarvis_notes_edit as E
+    except Exception:                       # noqa: BLE001 - module absent
+        return None, "The notes editor is not installed on this PC, so nothing was changed.", ""
+    want = str(rel or "").strip().replace("\\", "/").casefold()
+    stem = want.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    code, body = E.handle_list("")
+    if code != 200 or not isinstance(body, dict):
+        return None, "Your Obsidian vault could not be read just now, so nothing was changed.", ""
+    exact, loose = [], []
+    for row in (body.get("notes") or []):
+        path = str(row.get("path") or "")
+        title = str(row.get("title") or "")
+        if not path:
+            continue
+        if path.casefold() == want:
+            exact.append((path, title))
+        elif title.casefold() == stem and len(stem) > 0:
+            loose.append((path, title))
+    found = exact or loose
+    if not found:
+        return None, "not_found", ""
+    if len(found) > 1:
+        names = "; ".join(p for p, _t in found[:6])
+        return None, ("That name matches more than one note (" + names + "), so "
+                      "nothing was changed - say the note's folder and name, like "
+                      "\"add milk to my Shopping note in 02 - Areas\"."), ""
+    return found[0][0], "", found[0][1]
+
+
+def _note_read_for_write(path: str):
+    """`(sha256, why)` from the editor's own read: the write must start from it."""
+    try:
+        import jarvis_notes_edit as E
+        from urllib.parse import quote
+        code, body = E.handle_read("path=" + quote(path, safe=""))
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return "", f"The note could not be read ({type(exc).__name__}), so nothing was changed."
+    if code != 200 or not isinstance(body, dict):
+        err = str((body or {}).get("error") or "the note could not be read") if isinstance(body, dict) else "the note could not be read"
+        return "", err + " Nothing was changed."
+    return str(body.get("sha256") or ""), ""
+
+
+def _note_write_result(body, ok_intent: str, wait_intent: str, why_intent: str):
+    body = body if isinstance(body, dict) else {}
+    said = str(body.get("message") or "").strip()
+    state = str(body.get("state") or "")
+    if state in ("saved", "unchanged"):
+        return Result(said or "Done.", ok_intent)
+    if state == "waiting":
+        return Result(said or "Waiting for your approval card.", wait_intent)
+    return Result(said or "Nothing was written.", why_intent)
+
+
+def _run_note_create(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    path = _note_path_for(str(f.get("name") or ""))
+    if not path:
+        return Result("What should the new note be called? Say \"create a note called ...\".",
+                      "note_create_refused")
+    text = str(f.get("text") or "")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_create({"path": path, "text": text}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The note could not be created ({type(exc).__name__}), so nothing was created.",
+                      "note_create_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was created.") if isinstance(body, dict) else "Nothing was created."
+        return Result(said, "note_create_refused")
+    return _note_write_result(body, "note_created", "note_create_waiting", "note_create_refused")
+
+
+def _run_note_append(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    text = str(f.get("text") or "").strip()
+    if not name or not text:
+        return Result('Say it as "add milk to my Shopping note", and I will add the words.',
+                      "note_append_refused")
+    path, why, _title = _find_note(_note_path_for(name))
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_append_refused")
+        return Result(why, "note_append_refused")
+    sha, why = _note_read_for_write(path)
+    if why:
+        return Result(why, "note_append_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_append({"path": path, "text": text,
+                                      "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The words could not be added ({type(exc).__name__}), so nothing was written.",
+                      "note_append_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was written.") if isinstance(body, dict) else "Nothing was written."
+        return Result(said, "note_append_refused")
+    return _note_write_result(body, "note_appended", "note_append_waiting", "note_append_refused")
+
+
+def _run_note_tag(f: dict) -> Result:
+    if _notes_write_hidden():
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
+    name = str(f.get("name") or "").strip()
+    tag = str(f.get("tag") or "").strip()
+    action = str(f.get("action") or "add").strip().lower()
+    if not name or not tag:
+        return Result('Say it as "add tag recipes to my Shopping note", and I will tag it.',
+                      "note_tag_refused")
+    path, why, _title = _find_note(_note_path_for(name))
+    if path is None:
+        if why == "not_found":
+            return Result(NOTE_NOT_FOUND_SAID.format(name=name), "note_tag_refused")
+        return Result(why, "note_tag_refused")
+    sha, why = _note_read_for_write(path)
+    if why:
+        return Result(why, "note_tag_refused")
+    try:
+        import jarvis_notes_edit as E
+        code, body = E.handle_tag({"path": path, "tag": tag, "action": action,
+                                   "expected_sha256": sha}, by="chat", wait_s=1.5)
+    except Exception as exc:                # noqa: BLE001
+        return Result(f"The tag could not be changed ({type(exc).__name__}), so nothing was changed.",
+                      "note_tag_refused")
+    if code not in (200, 202):
+        said = str((body or {}).get("error") or "Nothing was changed.") if isinstance(body, dict) else "Nothing was changed."
+        return Result(said, "note_tag_refused")
+    return _note_write_result(body, "note_tagged", "note_tag_waiting", "note_tag_refused")
+
+
+
 def _note_asking(s: str) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours)."""
+    if _NOTE_WRITE_BATCH.fullmatch(s):
+        return Intent("notes_batch_refused")
+    m = _NOTE_CREATE_NAMED.fullmatch(s)
+    if m:
+        return Intent("note_create", {"name": m.group("name").strip(),
+                                      "text": (m.group("text") or "").strip()})
+    m = _NOTE_TAG_ADD.fullmatch(s) or _NOTE_TAG_WITH.fullmatch(s)
+    if m:
+        return Intent("note_tag", {"name": m.group("name").strip(),
+                                   "tag": m.group("tag").strip(), "action": "add"})
+    m = _NOTE_TAG_REMOVE.fullmatch(s)
+    if m:
+        return Intent("note_tag", {"name": m.group("name").strip(),
+                                   "tag": m.group("tag").strip(), "action": "remove"})
     for rx in (_DAILY_NOTE_ADD, _NOTE_TEXT_COLON, _NOTE_THIS, _JOT_DOWN,
                _NOTE_THAT, _NOTE_TEXT_SPACE):
         m = rx.fullmatch(s)
@@ -8301,6 +8520,14 @@ def _note_asking(s: str) -> Optional[Intent]:
             text = m.group("text").strip()
             if text:
                 return Intent("note_make", {"text": text})
+    m = _NOTE_APPEND_COLON.fullmatch(s)
+    if m:
+        return Intent("note_append", {"name": m.group("name").strip(),
+                                      "text": m.group("text").strip()})
+    m = _NOTE_APPEND_PLAIN.fullmatch(s)
+    if m:
+        return Intent("note_append", {"name": m.group("name").strip(),
+                                      "text": m.group("text").strip()})
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
         if rx.match(s):
             return Intent("note_change_refused")
@@ -10519,6 +10746,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # existing change_own_config card.
     if n == "note_make":
         return _run_note_make(f)
+    if n == "note_create":
+        return _run_note_create(f)
+    if n == "note_append":
+        return _run_note_append(f)
+    if n == "note_tag":
+        return _run_note_tag(f)
+    if n == "notes_batch_refused":
+        return Result(NOTE_WRITE_BATCH_SAID, "notes_batch_refused")
+    if n == "note_write_hidden":
+        return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
     if n == "note_read_honest":
         return _run_note_read_honest()
     if n in ("note_change_refused", "obsidian_style_refused"):

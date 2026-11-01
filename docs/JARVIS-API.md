@@ -28914,6 +28914,48 @@ so a client shows that instead of inventing its own.
   until that deploy. The desktop and phone surfaces are the other two lanes of
   the same feature; this section documents the contract they build against.
 
+### 170.7 The wave-1 writes: create ONE note, append to ONE note, tag ONE note (added 2026-10-31)
+
+The owner's flexibility decision, wave 1: three single-file writes on top of the
+editor, each with ONE approval card, a File Guardian copy first where there are
+old bytes, and an answer that says "You can undo it." Rename, move, delete and
+several notes in one request are NOT here (wave 2) and are refused in plain
+words.
+
+| route | body | answer |
+|---|---|---|
+| `POST /api/notes/create` | `{"path": "...", "text": "..."}` - `text` may be empty | `202` waiting (with `id`) or `200` saved with `sha256` and `receipt`; `409` the path already exists (no card); `400` bad/absolute/outside/hidden/non-text path or a list body; `413` over **2 MiB**; `429` four writes already waiting; `503` no vault configured |
+| `POST /api/notes/append` | `{"path": "...", "text": "...", "expected_sha256": "<hex>"}` | `202`/`200` saved with the new `sha256` and `snapshot` (the File Guardian copy id); `409` the note changed since the request (no card, `current_sha256` named); `404` no note there (create it first); `413` the note or the addition would pass 2 MiB; the same `400`/`429`/`503` shapes |
+| `POST /api/notes/tag` | `{"path": "...", "tag": "recipes", "action": "add"\|"remove", "expected_sha256": "<hex>", "where": "auto"\|"frontmatter"\|"line"}` | `200` `saved` with the new `sha256` and `snapshot`, or `200` `unchanged` when the tag was already there / already absent (no card); `409` stale sha; `400` a tag with a space or no letter/`_`/`-`, a `tags:` value that is not a list, two `tags:` lines, unclosed front matter, or a note that is not valid UTF-8 (all BEFORE any card) |
+| `GET /api/notes/change?id=<job id>` | - | the same waiting/saved/denied/failed shape as the save, plus `kind` (`create`/`append`/`tag`), `path`, `sha256`, `message`, and `receipt` for a create or `snapshot` for the two changes |
+
+- **One card, under the existing action.** All three ask `edit_vault_note` (tier
+  `"ask"` in both shipped `jarvis-framework.toml` files; unclassified, so the
+  gate forces ask and uses its generic warning line - the safe side). The card
+  names the file, says what changes, and the finished answer says "You can undo
+  it." A Deny, an expiry or a refused gate writes nothing.
+- **Undo.** Append and tag take `jarvis_notes.snapshot_vault_before_write()` (the
+  File Guardian) AFTER the card and BEFORE the write; a copy that cannot be made
+  refuses the change in words. Create records one `notes_create` receipt BEFORE
+  the file exists; its Undo removes exactly that file, and refuses if the note
+  changed since (the created sha256 is in the receipt). A failed create discards
+  its receipt.
+- **Append is append-only.** The owner's words are added at the end with the
+  same paragraph rule the daily-note capture uses; the old bytes are never
+  rewritten, and the written block is read back before "Added" is said.
+- **Tags are surgical.** Only the frontmatter `tags:` block (list form), or in
+  `line` mode a visible `#tag` line, is changed; every other byte - other
+  properties, line endings, the body - is kept. `auto` uses the front matter
+  when the note has it and the visible line when it does not. Malformed front
+  matter is refused rather than rewritten.
+- **Hidden lists / App lock unchanged.** The chat fast path refuses to start any
+  of these while the lists are hidden (a fixed sentence, no title, NO card); the
+  apps keep their existing Show gate in front of the editor. The routes serve
+  one file each and no note text goes to a model, a log or a card.
+- **Several notes are refused.** Every route takes ONE path; a body that sends a
+  list is a 400 with "One note at a time, please", and the chat refuses "all my
+  notes"/"every note" in words before any card.
+
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and
