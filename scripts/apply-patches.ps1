@@ -2666,6 +2666,10 @@ $SHIPPED = @(
     # the "no vault configured" 503. The same entry is at the end of
     # backend/_where.py's SHIPPED list.
     'jarvis_notes_edit.py'
+    # What Jarvis is running and what it could run (jarvis_model_knowledge.py,
+    # 2026-10-31): shipped whole, no patch; reads the model/preset and the
+    # measured rows, and asks the EXISTING switch/apply cards.
+    'jarvis_model_knowledge.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

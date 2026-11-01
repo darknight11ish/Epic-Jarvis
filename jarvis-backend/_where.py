@@ -1435,6 +1435,12 @@ SHIPPED = (
     # or through a link - is refused before any card. The same entry is at the
     # end of the script's $SHIPPED.
     "jarvis_notes_edit.py",
+    # What Jarvis is running and what it could run (jarvis_model_knowledge.py,
+    # 2026-10-31): the current model and preset, the other local models, their
+    # measured speeds and honest limits, and the ONE-card switch and preset-apply
+    # doors - the same jarvis_models.switch_to and jarvis_presets.apply_from_body
+    # the Models page and the preset card already use. Shipped whole, no route.
+    "jarvis_model_knowledge.py",
 )
 
 

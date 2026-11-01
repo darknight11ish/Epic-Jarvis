@@ -9603,8 +9603,22 @@ def with_rules_first(msgs: list) -> list:
     already first, so the two cannot fight and the block cannot double up."""
     if (msgs and isinstance(msgs[0], dict) and msgs[0].get("role") == "system"
             and msgs[0].get("content") == LANE_SYSTEM):
-        return list(msgs)
-    return [{"role": "system", "content": LANE_SYSTEM}] + list(msgs)
+        rules = list(msgs)
+    else:
+        rules = [{"role": "system", "content": LANE_SYSTEM}] + list(msgs)
+    # The model it is running and the active preset (2026-10-31, the owner's
+    # "what ai model do you have?" bug): one honest line, right after the
+    # rules, so general chat stops denying what the HUD telemetry already says.
+    # Read from this PC's own state (`jarvis_model_knowledge`); empty - exactly
+    # the old list - when nothing is recorded.
+    try:
+        import jarvis_model_knowledge
+        knowledge_note = jarvis_model_knowledge.prompt_line()
+    except Exception:
+        knowledge_note = ""
+    if not knowledge_note:
+        return rules
+    return [rules[0], {"role": "system", "content": knowledge_note}] + rules[1:]
 
 
 # --------------------------------------------------------------------------

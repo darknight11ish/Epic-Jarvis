@@ -38,6 +38,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "rebuilt"))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_agent.py")
 import jarvis_agent as AG
+
+# The model/preset knowledge line comes from THIS PC's live state (2026-10-31).
+# These tests pin the rules block and the request around it, not the host's
+# installed model, so the line is stubbed here; the new suite
+# backend/test_model_self_knowledge.py proves the line with a fake PC.
+try:
+    import jarvis_model_knowledge as _model_knowledge
+    _model_knowledge.prompt_line = lambda: ""
+except Exception:
+    pass
 # The owner's manner line (jarvis_manner.py) has its own suite, test_manner.py;
 # this one checks the rest of the request word for word, so it is left out here.
 AG._manner_now = lambda *a, **k: None
