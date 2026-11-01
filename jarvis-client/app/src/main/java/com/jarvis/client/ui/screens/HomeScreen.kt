@@ -4362,13 +4362,16 @@ private fun Composer(
     // prompt coach's "Send mine" all come through here, so the words below
     // cannot be sent to the PC by one of them and not the others.
     fun sendNow() {
-        if (!canSend) return
-        askLine = null
         // "Was this answer right?" asks for the answer's own menu (the
         // owner's field test of 2026-11-01: they typed it, the phone sent it,
         // and Jarvis answered it as a question). Answered here, on the phone,
-        // and never sent.
+        // and never sent - so it is decided BEFORE the canSend guard: opening
+        // a local menu must not depend on the PC being reachable (only the
+        // menu's own actions, like a mark, need the link). A dead link leaves
+        // the words in the box exactly as Send always did, but the menu still
+        // opens for a finished answer.
         if (com.jarvis.client.net.AnswerMenuAsk.matches(text)) {
+            askLine = null
             if (hasFinishedAnswer()) {
                 // The words were used up by the menu, so the box empties as it
                 // does after a real send, and the menu opens.
@@ -4381,6 +4384,11 @@ private fun Composer(
             }
             return
         }
+        // An ordinary question: nothing is sent over a link that cannot carry
+        // it, nor while a picture or document is still being prepared (the
+        // 2026-10-24 / 2026-10-29 rule; Send and the keyboard share it).
+        if (!canSend) return
+        askLine = null
         actions.onSend()
     }
     // The Send button: Send while there is something to send, Stop while an

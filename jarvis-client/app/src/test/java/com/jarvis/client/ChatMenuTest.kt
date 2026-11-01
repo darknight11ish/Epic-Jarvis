@@ -386,6 +386,13 @@ class ChatMenuTest {
             "the words are sent before they are decided",
             composer.indexOf("AnswerMenuAsk.matches(text)") in 0 until composer.indexOf("actions.onSend()"),
         )
+        // ...and before the link/attachment guard, because opening a local menu
+        // must not depend on the PC being reachable (only the menu's own
+        // actions, like a mark, need the link: 2026-11-01).
+        assertTrue(
+            "the menu request is decided after the link guard",
+            composer.indexOf("AnswerMenuAsk.matches(text)") in 0 until composer.indexOf("if (!canSend) return"),
+        )
         // ...and all three send paths go through the ONE local action.
         assertTrue(
             "the keyboard sends by a path of its own",
