@@ -1216,6 +1216,15 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "send me the file ... to my phone" (jarvis_send_file.py, 2026-10-31) ---
+    # The deterministic chat door for the built send-one-file feature (it is a
+    # model tool, and the model tool is off in the shipped [tools].enabled). The
+    # shapes require a real file name plus "file"/from-folder/to-my-phone, so
+    # ordinary "send an email to Sam" stays the model's. See _send_file().
+    got = _send_file(s)
+    if got is not None:
+        return got
+
     # --- bulk is refused outright: one at a time ----------------------------
     if re.fullmatch(r"(?:cancel|delete|remove|clear|stop)\s+(?:all|every|both)\s+(?:(?:of\s+)?"
                     r"(?:my|the)\s+)?(timers|alarms|reminders|todos?|todo\s+list|todo\s+items)"
@@ -4700,6 +4709,39 @@ _FEATURE_OVERVIEW = re.compile(
 _FEATURE_OVERVIEW_ABOUT = re.compile(
     r"what\s+can\s+(?:you|jarvis)\s+do\s+about\s+(?:the\s+|my\s+)?(.+)")
 
+# ---- detail shapes (2026-10-31, the owner's "talk about all features in
+# detail" ask) ---------------------------------------------------------------
+# These are DEEPER than explain: the guide's detail() quotes every own field
+# (what, where, example, asks, limit, state, surface, needs) and the state read
+# at answer time. Each pattern resolves the SAME row the explain shapes resolve;
+# an unknown name falls through to the model (or the honest answer when the
+# sentence explicitly says Jarvis/a feature), exactly like the discussion shapes.
+_FEAT_DETAIL = re.compile(
+    r"(?:explain|describe)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+in\s+detail"
+    r"|tell\s+me\s+(?:everything|all)\s+about\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEAT_HOW_USE = re.compile(
+    r"how\s+(?:do|can|should|would)\s+i\s+"
+    r"(?:set\s+(?P<setup>.+?)\s+up"
+    r"|(?:use|try|start\s+using|get\s+started\s+with|set\s+up)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(?P<use>.+))")
+_FEAT_EXAMPLE = re.compile(
+    r"(?:give\s+me\s+an?\s+example\s+of|what\s+do\s+i\s+say\s+to\s+use)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEAT_PRIVATE = re.compile(
+    r"is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+private")
+_FEAT_NEEDS = re.compile(
+    r"what\s+(?:does|do)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+"
+    r"(?:need|require)")
+_FEAT_WHY_STATE = re.compile(
+    r"why\s+is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+"
+    r"(?:on|off|enabled|disabled|switched\s+(?:on|off))")
+_FEAT_WRONG = re.compile(
+    r"what\s+can\s+go\s+wrong\s+with\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+_FEAT_CAN_DO = re.compile(
+    r"can\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+do\s+(.+)")
+_FEAT_LIKE = re.compile(
+    r"what\s+is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+like")
+
 
 def _feature_capabilities(s: str) -> Optional[Intent]:
     """Capability questions the feature list can answer, or None (2026-10-31)."""
@@ -4823,6 +4865,32 @@ def _feature_difference_intent(raw, first: str, second: str):
     return Intent("feature_difference",
                   {"first": row_a["id"] if row_a is not None else first,
                    "second": row_b["id"] if row_b is not None else second})
+
+
+def _feature_detail_row(raw, target: str):
+    """The row a detail shape names, with the SAME gate as explain."""
+    return _feature_discussion_row(raw, target)
+
+
+def _feature_detail_intent(raw, target: str, mode: str):
+    row = _feature_detail_row(raw, target)
+    if row is not None:
+        return Intent("feature_detail", {"id": row["id"], "mode": mode})
+    if _feature_context_ok(raw) and _feature_explicit(_feature_target(target)):
+        return Intent("feature_unknown",
+                      {"words": _feature_target(_feature_without_context(target))})
+    return None
+
+
+def _feature_can_do_intent(raw, target: str, capability: str):
+    row = _feature_detail_row(raw, target)
+    if row is not None:
+        return Intent("feature_can_do",
+                      {"id": row["id"], "capability": str(capability or "").strip()})
+    if _feature_context_ok(raw):
+        return Intent("feature_unknown",
+                      {"words": f"{target} {capability}".strip()})
+    return None
 
 
 def _feature_overview_about_intent(raw, area: str):
@@ -6581,6 +6649,53 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
     m = _FEATURES_GROUP.fullmatch(s)
     if m:
         return Intent("features_group", {"group": (m.group(1) or m.group(2) or "").strip()})
+    # ---- detail shapes (2026-10-31, the owner's depth ask) -----------------
+    m = _FEAT_DETAIL.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1) or m.group(2) or "", "detail")
+        if got is not None:
+            return got
+    m = _FEAT_HOW_USE.fullmatch(s)
+    if m:
+        target = m.group("setup") or m.group("use") or ""
+        got = _feature_detail_intent(raw, target, "detail")
+        if got is not None:
+            return got
+    m = _FEAT_EXAMPLE.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "example")
+        if got is not None:
+            return got
+    m = _FEAT_PRIVATE.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "private")
+        if got is not None:
+            return got
+    m = _FEAT_NEEDS.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "needs")
+        if got is not None:
+            return got
+    m = _FEAT_WHY_STATE.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "why_state")
+        if got is not None:
+            return got
+    m = _FEAT_WRONG.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "goes_wrong")
+        if got is not None:
+            return got
+    m = _FEAT_CAN_DO.fullmatch(s)
+    if m:
+        got = _feature_can_do_intent(raw, m.group(1), m.group(2))
+        if got is not None:
+            return got
+    m = _FEAT_LIKE.fullmatch(s)
+    if m:
+        got = _feature_detail_intent(raw, m.group(1), "like")
+        if got is not None:
+            return got
     m = _FEATURE_TRAIN.fullmatch(s)
     if m:
         # "how do I train you to write like me?" - explain the feature named
@@ -8900,6 +9015,182 @@ def _run_parking(intent: Intent, client_surface: str = "hud",
     return Result(P.reply(result, client_surface=surface), intent.name)
 
 
+# ---------------------------------------------------------------------------
+#   "Send me the file ..." - the chat door for jarvis_send_file (2026-10-31)
+# ---------------------------------------------------------------------------
+# THE OWNER'S ASK, measured on the live backend: the send-file feature is built
+# (routes, card, phone UI), and `send_file_to_phone` IS a model tool - but it is
+# not in the shipped [tools].enabled, so the owner could not ask for it from
+# chat at all. These whole-sentence shapes call the MODULE'S OWN prepare(), so
+# the search, the one-card rule and every refusal are the module's; this file
+# only decides that the sentence was a file-send request.
+SEND_FILE_UNAVAILABLE = ("Sending a file to your phone is not available on this PC "
+                         "yet - run apply-patches.ps1 on the PC.")
+SEND_FILE_NOT_A_CARD = ("The file was ready, but the approval card could not be "
+                        "raised, so nothing was sent.")
+SEND_FILE_SAID = " Nothing is sent until you approve the card."
+#: The module's own gate action, written once and resolved against the module at
+#: call time, so a renamed constant cannot silently split the two.
+SEND_FILE_ACTION = "send_file_to_phone"
+#: Whole sentences only, and the file name is required. The explicit "file" /
+#: from-folder / to-my-phone markers are what keep ordinary "send an email to
+#: Sam", "send me a message" and "send my regards" the model's.
+_SEND_FILE_FIND = re.compile(
+    r"^(?:please\s+)?find\s+(?:the\s+)?(?P<file>file\s+)?(?P<q>.+?)\s+and\s+send\s+"
+    r"(?:it|the file|that file)(?:\s+to\s+me)?(?:\s+to\s+my\s+(?:phone|android))?$",
+    re.I)
+_SEND_FILE_TO_PHONE = re.compile(
+    r"^(?:please\s+|can\s+you\s+|could\s+you\s+)?send\s+(?:me\s+)?(?:the\s+)?"
+    r"(?P<file>file\s+)?(?P<q>.+?)"
+    r"(?:\s+from\s+(?:my|the)\s+(?P<where>downloads|documents|desktop))?"
+    r"\s+to\s+my\s+(?:phone|android)(?:\s+(?:app|jarvis\s+app))?$", re.I)
+_SEND_FILE_FROM = re.compile(
+    r"^(?:please\s+|can\s+you\s+|could\s+you\s+)?send\s+(?:me\s+)?(?:the\s+)?"
+    r"(?P<file>file\s+)?(?P<q>.+?)\s+from\s+(?:my|the)\s+"
+    r"(?P<where>downloads|documents|desktop)(?:\s+folder)?$", re.I)
+_SEND_FILE_ME = re.compile(
+    r"^(?:please\s+|can\s+you\s+|could\s+you\s+)?send\s+(?:me\s+)?(?:the\s+)?file\s+"
+    r"(?P<q>.+)$", re.I)
+#: Things "send <object>" can mean that are NOT a file. Exact objects only: a
+#: real filename that happens to contain one of these words is still accepted.
+_BLOCKED_FILE_OBJECTS = frozenset({
+    "a message", "message", "messages", "a text", "text", "a note", "note",
+    "an email", "email", "e-mail", "mail", "my regards", "regards", "thanks",
+    "love", "a reminder", "reminder", "a todo", "todo", "a link", "link",
+    "it", "this", "that", "a photo", "photo", "a picture", "picture",
+})
+
+
+def _send_file_query_ok(q: str, *, named_folder: bool = False,
+                        explicit_file: bool = False) -> bool:
+    """Whether what follows "send ..." really names ONE file to look for."""
+    q = str(q or "").strip().strip("'\"")
+    if not q or len(q) > 120:
+        return False
+    low = " ".join(q.casefold().split())
+    if low in _BLOCKED_FILE_OBJECTS:
+        return False
+    if re.fullmatch(r"(?:the\s+|a\s+|an\s+|my\s+)?(?:file|document)s?", low):
+        return False
+    # A shape with no explicit "file" word needs a filename (a dot) or a named
+    # source folder; otherwise "send the meeting notes to my phone" is the
+    # model's sentence, not a file search.
+    if not (named_folder or explicit_file) and not re.search(r"\.\w{1,10}$", low):
+        return False
+    return True
+
+
+def _send_file_intent(q: str, *, named_folder: bool = False,
+                      explicit_file: bool = False) -> Optional[Intent]:
+    q = str(q or "").strip().strip("'\"")
+    if not _send_file_query_ok(q, named_folder=named_folder,
+                               explicit_file=explicit_file):
+        return None
+    return Intent("send_file", {"query": q})
+
+
+def _send_file(s: str) -> Optional[Intent]:
+    """The chat door: a file-send sentence, or None (the model has it)."""
+    m = _SEND_FILE_FIND.fullmatch(s)
+    if m is not None:
+        return _send_file_intent(m.group("q"),
+                                 explicit_file=bool(m.group("file")))
+    m = _SEND_FILE_TO_PHONE.fullmatch(s)
+    if m is not None:
+        return _send_file_intent(m.group("q"),
+                                 named_folder=bool(m.group("where")),
+                                 explicit_file=bool(m.group("file")))
+    m = _SEND_FILE_FROM.fullmatch(s)
+    if m is not None:
+        return _send_file_intent(m.group("q"), named_folder=True,
+                                 explicit_file=bool(m.group("file")))
+    m = _SEND_FILE_ME.fullmatch(s)
+    if m is not None:
+        return _send_file_intent(m.group("q"), explicit_file=True)
+    return None
+
+
+def _send_file_tier() -> str:
+    """The tier `What asks first` has for the card, read before it is raised.
+
+    An unreadable framework answers "ask" - the same safe default every other
+    card path uses: a card is never turned into an automatic action here.
+    """
+    try:
+        import jarvis_framework as fw
+        return str(fw.action_tier(SEND_FILE_ACTION))
+    except Exception:
+        return "ask"
+
+
+def _send_file_card_thread(SEND, action: str, state: dict, card: str, gate) -> None:
+    """Wait for the owner's answer; on a yes only, run the module's approve().
+
+    Nothing else happens here: a denied, refused or timed-out card leaves the
+    candidate unapproved, and it ages out on the module's own ten-minute rule.
+    """
+    try:
+        verdict = gate(action, {"text": card}, card)
+    except Exception:
+        return
+    if not getattr(verdict, "allowed", False):
+        return
+    try:
+        SEND.approve(state or {})
+    except Exception:
+        return
+
+
+def _run_send_file_chat(f: dict, *, prepare=None, gate=None, tier_of=None,
+                        spawn=None) -> Result:
+    """The chat door's runner: the module searches, words and refuses; we ask.
+
+    `prepare` is `jarvis_send_file.prepare` itself: exactly one allowed file
+    returns its state plus the ONE card's own sentence; no match, several
+    matches, a protected or outside file and an over-cap file raise its own
+    `ValueError`, which is returned to the owner WORD FOR WORD with no card.
+    The card is raised under the module's own action, with the module's own
+    card words as the prompt. This function never approves: only an approved
+    verdict reaches the module's own `approve()`.
+    """
+    try:
+        import jarvis_send_file as SEND
+    except Exception:
+        return Result(SEND_FILE_UNAVAILABLE, "send_file")
+    action = str(getattr(SEND, "ACTION", SEND_FILE_ACTION))
+    tier_of = tier_of or _send_file_tier
+    try:
+        tier = tier_of(action)
+    except Exception:
+        tier = "ask"
+    if tier != "ask":
+        return Result(
+            "Sending a file to your phone needs a person to say yes, and it is "
+            f"set to {tier!r} in What asks first, so I did not raise a card. "
+            "Nothing was sent.", "send_file")
+    if prepare is None:
+        prepare = SEND.prepare
+    try:
+        state, card = prepare({"query": str((f or {}).get("query") or "").strip()})
+    except ValueError as exc:
+        return Result(str(exc), "send_file")            # the module's own words
+    except Exception as exc:                            # noqa: BLE001
+        return Result(f"Sending a file to your phone is not available right now "
+                      f"({type(exc).__name__}), so nothing was sent.", "send_file")
+    if gate is None:
+        # The ONE gate every card goes through, already wrapped above for the
+        # update card; reusing it keeps this module's single gate import.
+        gate = _update_gate
+    if spawn is None:
+        spawn = lambda fn: threading.Thread(          # noqa: E731
+            target=fn, name="jarvis-send-file-card", daemon=True).start()
+    try:
+        spawn(lambda: _send_file_card_thread(SEND, action, state, card, gate))
+    except Exception:
+        return Result(SEND_FILE_NOT_A_CARD, "send_file")
+    return Result(str(card).strip() + SEND_FILE_SAID, "send_file")
+
+
 def _forget_range(s: str, now: float) -> Optional[Intent]:
     """"forget what you learned last week", "delete my chats from 1 to 15
     September" - jarvis_forget_range.parse_phrase. Without that module, or
@@ -10140,6 +10431,31 @@ def _run_feature_overview(f: dict) -> Result:
     return Result(str(out.get("words") or ""), "feature_overview")
 
 
+def _run_feature_detail(f: dict) -> Result:
+    """"Explain X in detail" and the detail family - every own field + state."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_detail")
+    mode = str(f.get("mode") or "detail")
+    target = f.get("id") or f.get("words") or ""
+    fn = {"detail": FG.detail, "example": FG.example,
+          "private": FG.is_private, "needs": FG.needs,
+          "why_state": FG.why_state, "goes_wrong": FG.goes_wrong,
+          "like": FG.is_like}.get(mode, FG.detail)
+    out = fn(target)
+    return Result(str(out.get("words") or ""), "feature_detail")
+
+
+def _run_feature_can_do(f: dict) -> Result:
+    """"Can X do Y?" - only from X's own row text."""
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_can_do")
+    out = FG.can_do(f.get("id") or f.get("words") or "",
+                    f.get("capability") or "")
+    return Result(str(out.get("words") or ""), "feature_can_do")
+
+
 def _run_feature_state(f: dict) -> Result:
     FG = _guide()
     if FG is None:
@@ -10374,6 +10690,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # that" would undo.
     if n in ("parking_lookup", "parking_calendar"):
         return _run_parking(intent, _client_surface(peer, local, client_surface), now)
+
+    # "send me the file ..." (2026-10-31): the module's OWN prepare() and ONE
+    # card, raised under its own action - nothing re-implemented here.
+    if n == "send_file":
+        return _run_send_file_chat(f)
+
     # The HUD field test's three answers (2026-10-29): Google/Gmail paths,
     # which voice speaks, and how a phone is paired. Every one is read-only:
     # no card, no connection, no voice change. ("change your voice to Ashby"
@@ -10474,6 +10796,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_feature_difference(f)
     if n == "feature_overview":
         return _run_feature_overview(f)
+    if n == "feature_detail":
+        return _run_feature_detail(f)
+    if n == "feature_can_do":
+        return _run_feature_can_do(f)
     if n == "feature_explain":
         return _run_feature_explain(f)
     if n == "feature_unknown":
@@ -10998,6 +11324,9 @@ READ_ONLY_INTENTS = frozenset({
     "feature_explain", "feature_howto", "feature_howto_setting",
     "feature_limits", "feature_asks", "feature_app", "feature_why",
     "feature_difference", "feature_overview",
+    # Detail shapes (2026-10-31): they only read the catalogue row and the
+    # guide's state, and change nothing.
+    "feature_detail", "feature_can_do",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown", "setting_explain",
     # The local calendar read and the honest off / app-only / unbuilt

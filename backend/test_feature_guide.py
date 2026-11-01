@@ -131,7 +131,7 @@ FEATURE_INTENTS = ("feature_explain", "feature_unknown", "feature_state",
                    "feature_switch_refused", "feature_change", "features_list",
                    "features_group", "feature_limits", "feature_asks",
                    "feature_app", "feature_why", "feature_difference",
-                   "feature_overview")
+                   "feature_overview", "feature_detail", "feature_can_do")
 
 #: The owner's own questions (2026-10-26) and the intent each must reach. Every
 #: row is asked every one of them through its title, id and aliases below.
@@ -139,7 +139,7 @@ OWNER_QUESTIONS = (
     ("tell me about {}", "feature_explain"),
     ("what does {} do", "feature_explain"),
     ("explain {}", "feature_explain"),
-    ("how do I use {}", "feature_explain"),
+    ("how do I use {}", "feature_detail"),
     ("where is {}", "feature_explain"),
     ("how do I turn on {}", "feature_howto"),
     ("can I change {}", "feature_change"),
@@ -1171,6 +1171,19 @@ def t_every_feature_answers_every_owner_question():
                     ("apps", FG.surface_words(row) in text),
                     ("how", any(m in text for m in HOW_WORDS)),
                 )
+            elif want == "feature_detail":
+                # 2026-10-31 depth: "how do I use X" answers with the detail
+                # view - every own field plus the state and the app line.
+                required = (
+                    ("name", row["title"] in text),
+                    ("what", row["what"] in text),
+                    ("where", row["where"] in text),
+                    ("asks", row["asks"] in text),
+                    ("limit", not str(row.get("limit") or "").strip()
+                              or row["limit"] in text),
+                    ("state", "Its state:" in text),
+                    ("apps", "Which app(s):" in text),
+                )
             elif want == "feature_howto":
                 required = (
                     ("name", row["title"] in text),
@@ -1318,7 +1331,7 @@ def t_aliases_are_the_rows_own_names():
         for alias in row.get("aliases") or []:
             for template in ("tell me about {}", "where is {}", "how do I use {}",
                              "can I change {}"):
-                allowed = ("feature_explain", "feature_change")
+                allowed = ("feature_explain", "feature_change", "feature_detail")
                 if row["id"] == "manner" and template == "tell me about {}":
                     allowed = allowed + ("personality_describe",)
                 got = match(template.format(_flat(alias)))
