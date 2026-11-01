@@ -1306,6 +1306,84 @@ def _finish_create(job_id: str, full: Path, rel: str, data: bytes,
                        "sha256": _sha256(data)})
 
 
+def _create_now(full: Path, rel: str, data: bytes) -> tuple:
+    """Create ONE new note with NO approval card (owner's decision 2026-10-31:
+    "jarvis should be able to make a new note into my notes without needing an
+    approval card").
+
+    Creating a brand-new file is ADDITIVE: it cannot overwrite or delete any
+    existing content, which is why the owner's one-card rule for changes does
+    not apply to it. Everything that still applies does: the path is inside the
+    vault, a collision is refused (never overwritten, and the O_EXCL open is a
+    second guard), the undo receipt is recorded BEFORE the file exists so one
+    Undo removes exactly the new file, and the bytes are read back. The File
+    Guardian copy is not needed for a brand-new path (there are no old bytes to
+    keep) - the receipt is what makes the undo exact.
+
+    Returns the same `(status, body)` shape the routes use, so every caller sees
+    the module's own words.
+    """
+    import jarvis_receipts as R
+    if full.exists():
+        return 409, {"ok": False, "state": "exists", "path": rel,
+                     "error": f"There is already a note at {rel}, so nothing was created."}
+    try:
+        vault, _why = _vault()
+        parent_real = Path(os.path.realpath(str(full.parent)))
+        if (vault is None or not _inside(vault, parent_real)
+                or not _inside(vault, full)):
+            return 403, {"ok": False, "state": "refused", "path": rel,
+                         "error": ("That note's folder is not inside your Obsidian "
+                                   "vault, so nothing was created.")}
+    except Exception as exc:                                # noqa: BLE001
+        return 503, {"ok": False, "state": "refused", "path": rel,
+                     "error": (f"The note could not be created "
+                               f"({type(exc).__name__}), so nothing was created.")}
+    rid = _record_create(rel, data)
+    if not rid:
+        return 503, {"ok": False, "state": "refused", "path": rel,
+                     "error": ("Nothing was created, because an undo receipt "
+                               "could not be recorded first.")}
+    try:
+        full.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(full), os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                     | getattr(os, "O_BINARY", 0), 0o644)
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
+        with open(str(full), "rb") as fh:
+            landed = fh.read() == data
+    except FileExistsError:
+        try:
+            R.discard(rid)
+        except Exception:                                   # noqa: BLE001
+            pass
+        return 409, {"ok": False, "state": "exists", "path": rel,
+                     "error": f"There is already a note at {rel}, so nothing was created."}
+    except OSError as exc:
+        try:
+            R.discard(rid)
+        except Exception:                                   # noqa: BLE001
+            pass
+        return 503, {"ok": False, "state": "refused", "path": rel,
+                     "error": (f"The note could not be created "
+                               f"({type(exc).__name__}), so nothing was created.")}
+    if not landed:
+        try:
+            R.discard(rid)
+        except Exception:                                   # noqa: BLE001
+            pass
+        return 503, {"ok": False, "state": "refused", "path": rel,
+                     "error": ("The note was made but could not be read back, so "
+                               "check Obsidian.")}
+    _audit("created", {"path": rel, "bytes": len(data), "sha256": _sha256(data),
+                       "card": False})
+    return 200, {"ok": True, "state": "created", "path": rel,
+                 "sha256": _sha256(data), "receipt": rid,
+                 "message": f"Created {rel} in your Obsidian vault. You can undo it."}
+
+
 def _one_path(body) -> tuple:
     """`(raw_path, why)`: ONE path string, or a plain refusal for a list."""
     if not isinstance(body, dict):
@@ -1319,7 +1397,13 @@ def _one_path(body) -> tuple:
 
 def handle_create(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
                   by: str = "") -> tuple:
-    """POST /api/notes/create: exactly one new note, one card, undo by receipt."""
+    """POST /api/notes/create: exactly one new note, NO card, undo by receipt.
+
+    Card-free since the owner's decision of 2026-10-31: a new note is additive
+    and can never destroy content. The collision/protection/hidden/path checks
+    above run before anything is written, exactly as they did when this route
+    raised a card; every OTHER note change still raises its one card.
+    """
     raw, why = _one_path(body)
     if why:
         return _error(400, why, state="refused")
@@ -1351,8 +1435,11 @@ def handle_create(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
     if full.exists():
         return _error(409, f"There is already a note at {rel2}, so nothing was created.",
                       state="exists")
-    return _start_change_job("create", full, rel2, data, "", vault,
-                             gate_check, wait_s, by, {})
+    # OWNER DECISION 2026-10-31: creating a brand-new note is card-free
+    # (additive: it cannot destroy existing content). The receipt/undo and the
+    # collision/protection/hidden checks above stay exactly as they were, and
+    # every other note write keeps its one card.
+    return _create_now(full, rel2, data)
 
 
 def handle_append(body, *, gate_check=None, wait_s: float = DEFAULT_WAIT_S,
