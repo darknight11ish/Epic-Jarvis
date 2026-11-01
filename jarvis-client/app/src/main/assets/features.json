@@ -407,6 +407,9 @@
     "must_mention": [
       "coming up"
     ],
+    "gate": [
+      "schedule_repeat"
+    ],
     "lesson_id": "timers-reminders"
   },
   {
