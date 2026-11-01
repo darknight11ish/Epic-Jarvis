@@ -9841,6 +9841,56 @@ def with_cloud_state_note(msgs: list) -> list:
     return list(msgs[:at]) + [msg] + list(msgs[at:])
 
 
+_PC_FACT_WORDS = re.compile(
+    r"\b(?:disk|drives?|storage|ram|cpu|processor|gpu|graphics\s+card|uptime|"
+    r"been\s+on|specs?|hardware)\b", re.I)
+
+
+def pc_facts_note() -> Optional[str]:
+    """ONE redacted line with the current model/preset and the PC-facts ability.
+
+    Added only when the question is about this PC (see with_pc_facts_note), so
+    a normal chat prompt keeps the exact bytes it had; a question about disk,
+    RAM, CPU, GPU or uptime gets the line that stops the model denying it can
+    read them. No fact value, path, user name or secret is in it.
+    """
+    try:
+        import jarvis_pc_facts
+        return str(jarvis_pc_facts.prompt_line() or "").strip() or None
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
+def _newest_user_text(msgs: list) -> str:
+    for m in reversed(list(msgs or [])):
+        if not isinstance(m, dict) or m.get("role") != "user":
+            continue
+        c = m.get("content")
+        if isinstance(c, str):
+            return c
+        if isinstance(c, list):
+            return " ".join(str(p.get("text") or "") for p in c if isinstance(p, dict))
+    return ""
+
+
+def with_pc_facts_note(msgs: list) -> list:
+    """A copy with the PC-facts line before the question, when it is about this PC."""
+    text = _newest_user_text(msgs)
+    if not text or not _PC_FACT_WORDS.search(text):
+        return list(msgs)
+    note = pc_facts_note()
+    if note is None:
+        return list(msgs)
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users:
+        return list(msgs)
+    at = users[-1]
+    msg = {"role": "system", "content": note}
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    next_time: str = "", spoken: bool = False, live: bool = False,
                    cut_off: str = "", crisis: bool = False,
@@ -9857,6 +9907,9 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # The real cloud connection state, so the local model cannot deny an API
     # that is chosen and has a saved key (owner-reported bug, 2026-10-31).
     out = with_cloud_state_note(out)
+    # The PC-facts line is only for a question about this PC (2026-10-31): the
+    # model otherwise denied it could read disk/RAM/CPU facts.
+    out = with_pc_facts_note(out)
     # The owner's manner (warm or plain): wording only, never first, and
     # before the spoken note so that one is nearer the question.
     out = with_manner_note(out, manner, crisis=crisis)

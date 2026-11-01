@@ -3312,7 +3312,7 @@
       "name": "PC help",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help.",
+      "where": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help. The same facts are answered straight in chat, on either app, when you ask about disk/storage, RAM, CPU, GPU or uptime.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3323,7 +3323,7 @@
       },
       "desktop": {
         "section": "hardware",
-        "location": "Settings > hardware and models",
+        "location": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help. The same facts are answered straight in chat, on either app, when you ask about disk/storage, RAM, CPU, GPU or uptime.",
         "search": [
           "hardware and models",
           "PC help"
@@ -3332,7 +3332,7 @@
       },
       "phone": {
         "section": "hardware",
-        "location": "Settings > hardware and models",
+        "location": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help. The same facts are answered straight in chat, on either app, when you ask about disk/storage, RAM, CPU, GPU or uptime.",
         "search": [
           "hardware and models",
           "pc help"
