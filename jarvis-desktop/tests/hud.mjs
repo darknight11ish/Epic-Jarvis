@@ -2280,6 +2280,18 @@ await check("Cockpit keeps the grid rail with no drawer toggle, and Studio's tab
   assert.equal(await page.evaluate(() =>
     document.getElementById("rail-right").getBoundingClientRect().width > 1), true,
     "Studio's Telemetry tab no longer shows the rail");
+  // Opaque, not translucent (owner's report, 2026-10-31: the Today/Coming up/
+  // Right now/Settings words showed THROUGH this panel - "words on top of
+  // words"). The dark theme's --plate/--void are rgba, so the panel must put
+  // the theme's opaque surface token under its own gradient.
+  const stagePanel = await page.evaluate(() => {
+    const style = getComputedStyle(document.getElementById("rail-right"));
+    return { colour: style.backgroundColor, image: style.backgroundImage };
+  });
+  assert.match(stagePanel.colour, /^rgb\(\d+, \d+, \d+\)$/,
+    `the Telemetry stage panel is not opaque: ${stagePanel.colour}`);
+  assert.match(stagePanel.image, /linear-gradient/,
+    "the Telemetry stage panel lost its own theme gradient");
   await page.close();
   assert.deepEqual(problems, []);
 });
