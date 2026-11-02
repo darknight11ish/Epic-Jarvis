@@ -2155,6 +2155,13 @@ class MainActivity : FragmentActivity() {
             repairing = false
             nav.resetTo(Screen.HOME)
             focusApproval.value = id
+            // The stream lives in the service, and a process Android killed
+            // overnight has none: without this the wait below would sit on a
+            // link nothing is trying to open. Idempotent when it is already up,
+            // and a foreground-service start from a visible activity is
+            // allowed - the same start the Deny action's service does for
+            // itself.
+            EventService.start(this@MainActivity)
             val live = withTimeoutOrNull(NOTIFICATION_APPROVE_WAIT_MS) {
                 combine(JarvisRuntime.stale, JarvisRuntime.link) { stale, link ->
                     !stale && link == LinkState.CONNECTED
