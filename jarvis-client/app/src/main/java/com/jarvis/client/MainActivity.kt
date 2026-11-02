@@ -102,6 +102,7 @@ import com.jarvis.client.ui.NavBackHandler
 import com.jarvis.client.ui.NavScreens
 import com.jarvis.client.ui.OpenPlace
 import com.jarvis.client.ui.Screen
+import com.jarvis.client.ui.SettingsSearch
 import com.jarvis.client.ui.approval.BiometricGate
 import com.jarvis.client.ui.approval.CardWaitingLine
 import com.jarvis.client.ui.rememberNavState
@@ -3525,6 +3526,23 @@ class MainActivity : FragmentActivity() {
                             pendingSection = "look"
                             pendingSectionScreen = Screen.SECURITY.name
                             nav.go(Screen.SECURITY)
+                        },
+                        // The Settings search box's "not in Settings" rows
+                        // (2026-11-02): the owner typed "presets" there and
+                        // nothing came up, because the nine focus presets are
+                        // drawn inside the Brain's Hardware plate. The row says
+                        // so and this opens that plate - the same one-time
+                        // section scroll the Find box uses (Screen.FIND,
+                        // below), and no new route: the place comes from
+                        // SettingsSearch.elsewhereTarget, which is
+                        // FindAnything's own table of where each menu really
+                        // opens.
+                        onOpenElsewhere = { entry ->
+                            SettingsSearch.elsewhereTarget(entry)?.let { (screen, section) ->
+                                pendingSection = section
+                                pendingSectionScreen = screen.name
+                                nav.go(screen)
+                            }
                         },
                         // The "hey Jarvis" switches, moved here from Platform
                         // checks (settings audit 2026-09-30): they need a
