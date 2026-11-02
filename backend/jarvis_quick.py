@@ -1244,6 +1244,18 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- how long Jarvis Live waits before it turns itself off (2026-11-01) ---
+    # BEFORE the reminder capability family below, and that is not a preference:
+    # that family's "does it ring while the app is closed?" matcher reads ANY
+    # "jarvis ... off" sentence as a question about notifications, so "how long
+    # before Jarvis Live turns off when it hears nothing" was answered with the
+    # wrong feature's words. This block is narrow (Live + a waiting word + a
+    # length or a how-long question), so every other sentence steps aside for
+    # it exactly as before; the CHANGE verb still has to name the setting.
+    got = _live_idle_intent(s)
+    if got is not None:
+        return got
+
     # --- timers, alarms and reminders, capability questions only (2026-10-31)
     # The owner asked "can you make a reminder for me" and the model said it
     # could not set a system alarm and could only note reminders in a calendar -
@@ -4584,6 +4596,111 @@ _START_ONE_MOMENT = re.compile(
     r"(?:start|begin|resume|go\s+back\s+to)\s+(?:saying|playing)\s+(.+)")
 
 
+#: HOW LONG JARVIS LIVE KEEPS LISTENING BEFORE IT TURNS ITSELF OFF (2026-11-01).
+#:
+#: THE OWNER'S OWN SENTENCE, in his words: "also id likee to he able to tell
+#: jarvis to change the setting that turns off jarvos live by extending how long
+#: ot takestoo turn off when it doesntt hear anything". So the setting is the
+#: Live quiet window, and the sentence shape is "make it N long" or "how long is
+#: it". This is the FIRST number setting reachable by asking - every other one
+#: so far is on/off or a named choice - so the grammar here is new in kind and
+#: narrow on purpose:
+#:
+#:   * the sentence must name LIVE ("jarvis live" or "live"), and
+#:   * say one of the closed set of waiting words below ("wait", "keep
+#:     listening", "stay on", a timeout/time/window), and
+#:   * carry a length (`parse_duration`, the same parser timers use), OR be a
+#:     "how long / what is" question with no length at all.
+#:
+#: It never reads a bare length as this setting: "remind me in 3 minutes" and
+#: "make jarvis live sing for 3 minutes" name no waiting word and fall through
+#: exactly as they did before. And it never takes the words "the idle timeout"
+#: on their own - that is the CHAT's own "a new conversation starts after" row
+#: (Section idle-new), which is client-side and has no setter; naming "live" is
+#: what keeps the two apart.
+#:
+#: WHAT A MATCH DOES, and nothing more: `Intent("live_idle_set", {"seconds": n})`
+#: with the parsed length, or `Intent("live_idle_ask")`. The RUNNER below does
+#: the range check, the write (through `jarvis_settings_registry.set_live_idle`
+#: -> `jarvis_limits.change`, the same function both Settings screens POST to)
+#: and the spoken receipt. The grammar decides no value is in range.
+_LIVE_WORD = r"(?:jarvis\s+live|live)"
+#: What Live does with the window - the words that make a sentence about the
+#: quiet timeout rather than about Live itself.
+_LIVE_IDLE_WAIT = (r"(?:wait|waits|listen|listens|keep\s+listening|keeps\s+listening"
+                   r"|stay\s+on|stays\s+on|remain\s+on|remains\s+on)")
+#: The change verbs. "turn", "stop" and "start" are deliberately NOT here: they
+#: belong to ending/starting Live itself, and a "turn" verb would put "turn
+#: off jarvis live" at risk of being read as a number change.
+_LIVE_IDLE_VERB = (r"(?:set|change|adjust|make|update|extend|increase|reduce"
+                   r"|shorten|lower|raise|have|let)")
+#: "make/let/have jarvis live wait <dur> [before/when ...]".
+_LIVE_IDLE_SET_WAIT = re.compile(
+    r"(?:set|change|adjust|make|have|let|update)\s+(?:the\s+|my\s+)?"
+    r"(?P<who>" + _LIVE_WORD + r")\s+(?P<what>" + _LIVE_IDLE_WAIT + r")\s+"
+    r"(?:for\s+)?(?:up\s+to\s+)?(?P<dur>.+?)"
+    r"(?:\s+(?:before|when|after|once|if)\b.*)?$")
+#: "set/change the jarvis live [idle] timeout to <dur>".
+_LIVE_IDLE_SET_THING = re.compile(
+    r"(?:" + _LIVE_IDLE_VERB + r")\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?:jarvis\s+live'?s?|live'?s?)\s+"
+    r"(?:(?:idle|quiet|silence|no[- ]?speech)\s+)?"
+    r"(?:timeout|time|wait|window|delay)\s+(?:to|of|at)\s+(?P<dur>.+)$")
+#: "change how long [before] jarvis live ... to <dur>" - the owner's own words
+#: with a length on the end.
+_LIVE_IDLE_SET_HOWLONG = re.compile(
+    r"(?:" + _LIVE_IDLE_VERB + r")\s+how\s+long\s+(?:before\s+)?"
+    r"(?P<who>" + _LIVE_WORD + r")\b.*?\s+to\s+(?P<dur>[a-z0-9 ]+)$")
+#: "jarvis live should wait <dur> [before ...]".
+_LIVE_IDLE_SET_SHOULD = re.compile(
+    r"(?:the\s+)?(?P<who>" + _LIVE_WORD + r")\s+(?:should|must|needs?\s+to)\s+"
+    r"(?P<what>" + _LIVE_IDLE_WAIT + r")\s+(?:for\s+)?(?P<dur>.+?)"
+    r"(?:\s+(?:before|when|after|once|if)\b.*)?$")
+_LIVE_IDLE_SET_PATTERNS = (
+    _LIVE_IDLE_SET_THING, _LIVE_IDLE_SET_HOWLONG,
+    _LIVE_IDLE_SET_WAIT, _LIVE_IDLE_SET_SHOULD)
+#: The question shapes, answered with the value and the range and no write.
+_LIVE_IDLE_ASK_PATTERNS = (
+    re.compile(r"how\s+long\s+(?:before\s+|until\s+)?(?P<who>" + _LIVE_WORD + r")\s+"
+               r"(?:" + _LIVE_IDLE_WAIT + r"|turns?\s+off|ends?|stops?|goes?\s+off)\b.*$"),
+    re.compile(r"how\s+long\s+(?:does|do)\s+(?P<who>" + _LIVE_WORD + r")\s+"
+               r"(?:" + _LIVE_IDLE_WAIT + r"|turns?\s+off|ends?|stops?)\b.*$"),
+    re.compile(r"what(?:'s|\s+is)\s+(?:the\s+)?(?:jarvis\s+)?live\s+"
+               r"(?:(?:idle|quiet|silence)\s+)?(?:timeout|time|wait|window|delay)$"),
+)
+
+
+def _live_idle_said_duration(wanted: str):
+    """Seconds from the words after the verb, or None - `parse_duration`'s own
+    answer, so "3 minutes", "ninety seconds" and "1 minute and a half" all work
+    exactly as they do for a timer. `_spoken_numbers` has already turned the
+    spoken digits into figures before this sees the sentence."""
+    return parse_duration(str(wanted or "").strip())
+
+
+def _live_idle_intent(s: str) -> Optional[Intent]:
+    """The Live quiet-window sentence, or None - see the block above.
+
+    A length makes it a CHANGE; a "how long / what is" question without one makes
+    it the read. A change whose length cannot be parsed is NOT guessed at: it
+    falls through to the model exactly as before, because "make jarvis live wait
+    a bit" is not a number and answering it as one would be a guess."""
+    for pattern in _LIVE_IDLE_SET_PATTERNS:
+        m = pattern.fullmatch(s)
+        if not m:
+            continue
+        seconds = _live_idle_said_duration(m.group("dur"))
+        if seconds is None:
+            return None
+        # A length that is a whole number of seconds only: "2.5 minutes" is
+        # rounded to the nearest second, which is what the PC stores.
+        return Intent("live_idle_set", {"seconds": int(round(seconds))})
+    for pattern in _LIVE_IDLE_ASK_PATTERNS:
+        if pattern.fullmatch(s):
+            return Intent("live_idle_ask")
+    return None
+
+
 def _one_moment_intent(s: str) -> Optional[Intent]:
     """"Stop saying one moment" / "Start saying one moment again" - one switch.
 
@@ -4618,6 +4735,14 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     # before every block below because none of them owns a "stop/start saying"
     # shape, and leaving it after them would mean the model answered it.
     got = _one_moment_intent(s)
+    if got is not None:
+        return got
+    # How long Jarvis Live waits before it turns itself off (2026-11-01). Runs
+    # before every block below for the same reason: this is the only NUMBER
+    # setting the sentences below know nothing about, and a length left to them
+    # would be read as a timer ("make jarvis live wait 3 minutes" contains
+    # "3 minutes").
+    got = _live_idle_intent(s)
     if got is not None:
         return got
     # The interruption budget first: its sentences are the most specific ones
@@ -14418,6 +14543,120 @@ def _run_feature_change_apply(f: dict, peer, local) -> Result:
                   f"before.", "feature_change_apply")
 
 
+def _live_idle_setting():
+    """`(the setting, its limit row)` for the Live quiet window, or (None, None).
+
+    One lookup for the three runners below: the registry's NumberSetting carries
+    the spoken names and the setter, and the row it names carries the default,
+    the range and the words. Both are read, never typed twice."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None, None
+    setting = next((n for n in R.NUMBER_SETTINGS if n.key == "live_idle_seconds"),
+                   None)
+    return setting, (None if setting is None else setting.limit())
+
+
+def _live_idle_now() -> Optional[int]:
+    """The window IN FORCE, read through `jarvis_live.quiet_seconds()` - the
+    exact function the engine's own tick uses, so a receipt can never claim a
+    number the engine is not acting on. None when this PC has no Live module."""
+    try:
+        import jarvis_live as LIVE
+        return int(LIVE.quiet_seconds())
+    except Exception:
+        return None
+
+
+def _run_live_idle_ask() -> Result:
+    """"How long before Jarvis Live turns off?" - the value and the range.
+
+    READ ONLY: nothing is written, no card is raised. `live_idle_ask` is in
+    READ_ONLY_INTENTS, so it cannot take back what "cancel that" would undo."""
+    setting, row = _live_idle_setting()
+    now = _live_idle_now()
+    if setting is None or row is None or now is None:
+        return Result(SETTINGS_MISSING, "live_idle_ask")
+    return Result(
+        f"Jarvis Live waits {setting.words(now)} after it last hears you "
+        f"before it turns itself off. You can make it anything "
+        f"{setting.range_words()} - say \"make Jarvis Live wait three "
+        f"minutes\", or change it in Settings on your PC or phone.",
+        "live_idle_ask")
+
+
+def _run_live_idle_set(f: dict, peer, local) -> Result:
+    """Change how long Jarvis Live waits, or refuse and change nothing.
+
+    THE ONE WRITER IS THE ROUTE'S OWN. `setting.set` is
+    `jarvis_settings_registry.set_live_idle`, which calls
+    `jarvis_limits.change` - the exact function `POST /api/limits/settings`
+    calls for the desktop's "Limits and frequency" card and the phone's Limits
+    plate. So the range check, the write and the sentence are the ones the owner
+    already gets from Settings; this runner adds no rule of its own except
+    reading the value back before it says it worked.
+
+    WHAT IT SAYS, in order:
+      * a length that is not a number -> ask for one, change nothing;
+      * outside the row's own range -> the refusal NAMES the range, and nothing
+        is written (the route would refuse it too - this asks first so the
+        owner gets a spoken sentence rather than the route's shorter one);
+      * already that value -> "already", zero writes;
+      * written and read back -> the new value AND the accepted range, in plain
+        words;
+      * written but not read back equal -> said plainly, never dressed up.
+    """
+    setting, row = _live_idle_setting()
+    if setting is None or row is None:
+        return Result(SETTINGS_MISSING, "live_idle_set")
+    try:
+        seconds = int(round(float(f.get("seconds"))))
+    except (TypeError, ValueError):
+        return Result("I did not catch how long you want Jarvis Live to wait - "
+                      "say a length of time, like \"make Jarvis Live wait three "
+                      "minutes\". Nothing was changed.", "live_idle_set")
+    low, high = int(row.low), int(row.high)
+    if not (low <= seconds <= high):
+        return Result(
+            f"That is outside what I can set: Jarvis Live can wait "
+            f"{setting.range_words()}. Nothing was changed.", "live_idle_set")
+    want = setting.words(seconds)
+    before = _live_idle_now()
+    if before is None:
+        return Result("I cannot read how long Jarvis Live waits on this PC, so I "
+                      "will not change it. Nothing was changed.", "live_idle_set")
+    if before == seconds:
+        return Result(f"Jarvis Live already waits {want} before it turns off. "
+                      f"Nothing was changed.", "live_idle_set")
+    try:
+        out = setting.set(seconds, peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result("How long Jarvis Live waits could not be changed "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "live_idle_set")
+    said = str(getattr(out, "said", "") or "").strip()
+    if getattr(out, "waiting", False):
+        # Not this row's shape today (no card either way), but a runner must
+        # never report "waiting" as done: the module's own words are the answer.
+        if not re.search(r"approv|a card", said, re.I):
+            said = (said + " " if said else "") + (
+                "A card is waiting for your approval. Nothing has changed yet.")
+        return Result(said, "live_idle_set")
+    if not getattr(out, "ok", False):
+        return Result(said or "That did not work, so nothing was changed.",
+                      "live_idle_set")
+    after = _live_idle_now()
+    if after is None or after != seconds:
+        return Result("I asked the PC to change how long Jarvis Live waits, but it "
+                      f"does not read that back, so I will not say it worked. "
+                      f"Nothing was changed.", "live_idle_set")
+    return Result(
+        f"Okay - Jarvis Live will now wait {want} before turning off when it "
+        f"hears nothing. It can be anything {setting.range_words()}, and you can "
+        f"change it in Settings on your PC or phone too.", "live_idle_set")
+
+
 def _run_setting_explain(f: dict) -> Result:
     """The settings-registry answer to a how/where/explain question (Q6 Step A).
 
@@ -14589,6 +14828,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_menu_visibility(f)
     if n == "settings_bool":
         return _run_settings_bool(f, peer, local)
+    # How long Jarvis Live waits before it turns itself off (2026-11-01). The
+    # read changes nothing; the change goes through
+    # jarvis_settings_registry.set_live_idle -> jarvis_limits.change, the same
+    # writer both Settings screens POST to.
+    if n == "live_idle_ask":
+        return _run_live_idle_ask()
+    if n == "live_idle_set":
+        return _run_live_idle_set(f, peer, local)
     if n == "settings_choice":
         return _run_settings_choice(f, peer, local)
     if n == "settings_choice_bad":
@@ -15281,6 +15528,12 @@ READ_ONLY_INTENTS = frozenset({
     "feature_detail", "feature_can_do",
     "feature_state", "feature_state_setting", "feature_switch_refused",
     "feature_unknown", "setting_explain",
+    # How long Jarvis Live waits before it turns itself off, ASKED rather than
+    # changed (2026-11-01): it reads the value the engine is using and says the
+    # range, and writes nothing, so it must not take back what "cancel that"
+    # would undo. The CHANGE (`live_idle_set`) is deliberately not here - it
+    # writes the owner's settings file.
+    "live_idle_ask",
     # Which app is asking (2026-11-01): it only reads jarvis_surface's own
     # header fact, so it must not take away what "cancel that" would undo.
     "surface_origin",
