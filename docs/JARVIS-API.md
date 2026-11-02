@@ -13760,12 +13760,18 @@ each uses the ones above.
   `resumable`, a notification kept on the phone offers Resume Live for the
   rest of `limits.resume_s`; Resume opens the app and starts Live in the
   same chat (after App lock; held on a stale link).
-- **A Bluetooth headset's microphone** is preferred on the phone while one
-  is connected (Android's communication device plus the recorder's
-  preferred input; no Bluetooth permission), falling back to the phone's
-  own; the Live screen says which ("Microphone: your Bluetooth headset
-  (Buds)"). On the PC Windows picks the microphone (the default one), and the
-  Voice settings already say which it is.
+- **A Bluetooth (or car) microphone** is preferred on the phone while one is
+  connected (Android's own device lists; no Bluetooth permission). A car's
+  Bluetooth is a hands-free device whose microphone only exists in a call, so
+  that route records on `VOICE_COMMUNICATION` with the phone in
+  `MODE_IN_COMMUNICATION` and the car as the communication device, and puts the
+  previous mode and device back when Live stops (2026-11-02; the decision is
+  pure and JVM-tested, `voice/LiveAudioRoute.kt`). Where it cannot be used the
+  phone's own microphone is, and the Live screen says which ("Microphone: your
+  Bluetooth headset (Buds)"); Bluetooth that has no microphone (A2DP only) is
+  named as such. On the PC Windows picks the microphone (the default one), and
+  the Voice settings already say which it is. No route changed for this: the
+  clip still goes to `/api/voice/utterance` with `mic=phone`.
 - **"Talk about this in Live"** (phone): a second entry in the Share sheet
   (text only). The text waits on the Live screen as a "Shared text" chip and
   goes, on Send, as its own message tagged `provenance: "shared"` - outside
