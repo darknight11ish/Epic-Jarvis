@@ -1610,6 +1610,13 @@ class MainActivity : FragmentActivity() {
         val absent by JarvisRuntime.absent.collectAsState()
         val streaming by chat.streaming.collectAsState()
         val voicePhase by voice.phase.collectAsState()
+        // What the "hey Jarvis" listener is doing, for the picture-in-picture
+        // window's one word (2026-11-02): a wake-word turn has no CAPTURING
+        // phase - the service records the sentence before the desktop is asked -
+        // so the window cannot tell "he is talking to me" from the phase alone.
+        // Collected here, read only by `PipWords.working` below and only while
+        // the window is up; nothing starts or stops the listener from it.
+        val wakeListenState by WakeWordService.state.collectAsState()
         val voiceStatus by voice.status.collectAsState()
         // The stricter voice check, from the same status read.
         val voiceStrict by voice.strict.collectAsState()
@@ -2391,6 +2398,13 @@ class MainActivity : FragmentActivity() {
                     face = faceHolder,
                     answer = pipAnswer,
                     thread = pipThread,
+                    // The ONE word a running voice turn may show (2026-11-02):
+                    // the owner can say "hey Jarvis" at the small window and
+                    // this is how he sees it heard him. Null when nothing is
+                    // happening, so the resting window stays the face alone.
+                    // Drawn only in the layouts with room for it
+                    // (`PipLayout.turnWordShown`); the hidden one never has it.
+                    word = PipWords.working(voicePhase, wakeListenState),
                 )
                 return@JarvisTheme
             }

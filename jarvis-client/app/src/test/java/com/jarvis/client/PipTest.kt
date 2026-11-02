@@ -208,7 +208,7 @@ class PipTest {
         assertTrue("mode 1 draws the face", PipLayout.FACE.faceShown)
         assertTrue("mode 3's fallback draws the face", PipLayout.LIVE_OFF.faceShown)
         assertTrue("mode 3's fallback draws one short line", PipLayout.LIVE_OFF.oneLineShown)
-        assertFalse("mode 1 draws no line at all", PipLayout.FACE.oneLineShown)
+        assertFalse("mode 1 has no fixed line of its own", PipLayout.FACE.oneLineShown)
         assertFalse(PipLayout.THREAD.answerShown)
         assertTrue(PipLayout.THREAD.threadShown)
         assertTrue(PipLayout.LIVE.liveShown)
@@ -532,14 +532,19 @@ class PipTest {
         "jarvis-client/app/src/main/java/com/jarvis/client/ui/PipWindow.kt"
 
     @Test
-    fun `the normal window is the face alone - no state word and no answer line`() {
+    fun `the resting window is the face alone - no state word and no answer line`() {
         val window = stripComments(file(windowPath))
         assertTrue("mode 1 must draw the face alone",
             window.contains("PipLayout.FACE -> PipFaceOnly(face)"))
         assertTrue("mode 3's fallback must draw the face with its one fixed line",
             window.contains("PipLayout.LIVE_OFF -> PipFaceLine(face, PipWords.LIVE_OFF)"))
         assertFalse("the old answer composable must be gone", window.contains("PipAnswer("))
-        assertFalse("no layout may draw the state word beside the face",
+        // The RESTING word (`PipWords.state`) is still never drawn: the owner's
+        // 2026-10-31 revision ("just keep the model there without the wording").
+        // A word WHILE a turn runs was added on 2026-11-02 and is handed in by
+        // MainActivity - `PipWakeWordTest` holds that half, so this pin keeps
+        // meaning what it says about the idle window.
+        assertFalse("no layout may draw the resting state word beside the face",
             window.contains("PipWords.state("))
         assertFalse("the cut-off answer line must not be drawn",
             window.contains("PipText.firstLine"))
