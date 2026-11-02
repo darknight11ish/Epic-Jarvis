@@ -6,8 +6,10 @@ What this proves, with every slow/private step stubbed except the network hop
 itself, which runs on 127.0.0.1:
 
   1. THE PATH: a WAV goes into `hear()`, its words into the PC's own
-     `/api/chat` with `live: true` and the phone's token, its answer into
-     `say()`, and the answer's WAV leaves as the design's 64 ms PCM frames.
+     `/api/chat` with `live: true` AND `provenance: "voice"` (the shape both
+     apps send, so the server treats it as a spoken Live turn) and the phone's
+     token, its answer into `say()`, and the answer's WAV leaves as the
+     design's 64 ms PCM frames.
   2. THE SILENT OUTCOMES ARE SILENT: a voice that is not the owner, and a clip
      that made no words, produce NO answer and NO speech - never a guess.
   3. THE FAILURES ARE PLAIN: no voice engine, no chat, no token -> a plain
@@ -188,6 +190,7 @@ class _ChatHandler(BaseHTTPRequestHandler):
             "token": self.headers.get("X-Jarvis-Token"),
             "client": self.headers.get("X-Jarvis-Client"),
             "live": (body.get("messages") or [{}])[0].get("live"),
+            "provenance": (body.get("messages") or [{}])[0].get("provenance"),
             "text": (body.get("messages") or [{}])[0].get("content"),
             "stream": body.get("stream"),
         }
@@ -227,6 +230,9 @@ def t_the_real_loopback_chat_call():
     check("the message is marked live and asks for the streaming answer",
           seen.get("live") is True and seen.get("stream") is True
           and seen.get("text") == "what time is it", seen)
+    check("...and it is marked as SPOKEN too, the shape both apps send "
+          "(live without provenance is not a Live turn - jarvis_agent._TurnWatch)",
+          seen.get("provenance") == "voice", seen)
     check("the SSE chunks are joined into the answer",
           out.get("ok") is True and out.get("text") == "It is nine.", out)
 
