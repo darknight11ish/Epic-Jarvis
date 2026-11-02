@@ -2,7 +2,7 @@
  * Settings -> "Skills": the skills menu (the owner's decision of 2026-11-02,
  * scope B; skills-menu-settings.js, skills-menu-rules.js, skills_menu.rs,
  * settings.html; backend/jarvis_skill_menu.py, plugins/ready/skill-menu/;
- * JARVIS-API.md section 177).
+ * JARVIS-API.md section 178).
  *
  * Part 1 holds the pure rules to what they promise: the owner's sentence about
  * a `scripts/` folder word for word, a refused skill never offered for import,

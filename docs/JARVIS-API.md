@@ -29960,7 +29960,7 @@ Also unchanged and worth saying: opening a media app takes it to the front, so a
 Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
 "One-sided on purpose").
 
-## 177. The skills menu: install, import, turn off, edit (added 2026-11-02)
+## 178. The skills menu: install, import, turn off, edit (added 2026-11-02)
 
 The owner asked, in these words:
 
@@ -29982,7 +29982,7 @@ installs a skill, because installing runs the scanner and the approval gate on
 the PC"* (the phone's `Skills.kt`). This section is that route - on the PC,
 where the scanner and the card already live.
 
-### 177.1 The module, and the folder that installs it
+### 178.1 The module, and the folder that installs it
 
 `backend/jarvis_skill_menu.py`, shipped whole by
 `scripts/apply-patches.ps1`, and its five routes come from
@@ -29995,7 +29995,7 @@ and the `modify_own_code` card. One additive change was needed for the card's
 words and is a patch of its own - `backend/skill-install-note.patch`:
 
 - `install(..., note="")` puts ONE caller-written line on the same single card
-  (the sentence in 177.4). With no `note` the card is byte-identical to before.
+  (the sentence in 178.4). With no `note` the card is byte-identical to before.
 - `install()` now re-checks the card's **tier**, the way
   `jarvis_skills.refine()` already did. `jarvis_gate.check` returns
   `allowed=True` on `notify` ("you were told after") and `auto` (nobody in the
@@ -30003,7 +30003,7 @@ words and is a patch of its own - `backend/skill-install-note.patch`:
   would have installed a skill with no person asked. A skill IS instructions
   the agent will follow, so the card has to be a real card.
 
-### 177.2 The five routes
+### 178.2 The five routes
 
 | Route | What it does | Card |
 |---|---|---|
@@ -30019,7 +30019,7 @@ words and is a patch of its own - `backend/skill-install-note.patch`:
 Settings menu's **Remove** calls the same `brain_remove_skill` command the
 Brain already had, so there is one removal path, not two.
 
-### 177.3 The safety model, in the order it happens
+### 178.3 The safety model, in the order it happens
 
 1. **The scanner runs first, on every source.** `parse_skill` + `vet` -
    the same regex-over-raw-bytes scanner, the same limits - run before any card
@@ -30038,7 +30038,7 @@ Brain already had, so there is one removal path, not two.
    (`backend/test_skill_menu.py` counts the calls). Three skills are three
    cards: there is no "install all", no "import all" and no yes-to-all, because
    this project does not build bulk approval.
-5. **The person must really answer.** The tier check in 177.1.
+5. **The person must really answer.** The tier check in 178.1.
 6. **The trust is not the client's to set.** A request that sent
    `{"trust": "local"}` is ignored: anything arriving through this route is
    `third_party`, the strictest level, because `local` scans less strictly
@@ -30059,7 +30059,7 @@ Brain already had, so there is one removal path, not two.
    imports no network library and starts no process. A skill's `scripts/` is
    copied and never executed - by this route or by anything else in Jarvis.
 
-### 177.4 The sentence on the card and on the row (Gemini's ruling 6)
+### 178.4 The sentence on the card and on the row (Gemini's ruling 6)
 
 Skills stay instructions-only, and Hermes skills that ship a `scripts/` folder
 say so in the owner's words, on the install card and on the skill's row:
@@ -30084,7 +30084,7 @@ has no OS gating and no toolset-conditional activation for skills. A skill that
 relied on a bundled script for its behaviour loses that behaviour entirely -
 which is the point of the sentence above, not a bug to work around.
 
-### 177.5 What is NOT built
+### 178.5 What is NOT built
 
 - **No marketplace and no remote install.** No ClawHub, no skills.sh, no
   GitHub fetch, no auto-install, no "browse skills". The three sources are: a
@@ -30098,9 +30098,9 @@ which is the point of the sentence above, not a bug to work around.
   `name:` must still match the folder, which is what stops a skill from being
   addressed by a name it does not own. Renaming is a new install plus a
   removal.
-- **No Hermes-metadata behaviour.** See 177.4.
+- **No Hermes-metadata behaviour.** See 178.4.
 
-### 177.6 What this slice cannot prove at the desk
+### 178.6 What this slice cannot prove at the desk
 
 The Settings card's two Windows dialogs (`src-tauri/src/folders.rs`'s
 `What::SkillFolder` and `What::SkillZip`) are compiled and unit-tested but are

@@ -2,7 +2,7 @@
  * The fixed words and the reads the skills menu's Settings card shares with its
  * tests (the owner's decision of 2026-11-02, scope B; `skills-menu-settings.js`,
  * `skills_menu.rs`, `backend/jarvis_skill_menu.py`,
- * `plugins/ready/skill-menu/`, JARVIS-API.md section 177).
+ * `plugins/ready/skill-menu/`, JARVIS-API.md section 178).
  *
  * Pure: no page, no Tauri, so `tests/skills-menu.mjs` runs it with no browser.
  *

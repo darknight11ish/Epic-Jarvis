@@ -1509,7 +1509,7 @@ pub fn run() {
             // sees no data.
             sandbox_exec::sandbox_exec,
             // The skills menu's PC doors (skills_menu.rs; the owner's decision
-            // of 2026-11-02, JARVIS-API section 177). Settings only, ONE
+            // of 2026-11-02, JARVIS-API section 178). Settings only, ONE
             // command: read the list, pick a folder or a .zip, scan it (no
             // card), install it (the SAME scanner, then ONE modify_own_code
             // card), scan `%USERPROFILE%\.hermes\skills` read-only, turn a

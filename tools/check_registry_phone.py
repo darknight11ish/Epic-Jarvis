@@ -176,7 +176,7 @@ PHONE_LACKS = {
                "so there is no version of this screen that could work on the phone. The phone keeps "
                "the list it always read and Remove with its 'are you sure?', and 'open skills' "
                "answers the honest PC-only sentence (docs/ARCHITECTURE.md section 8, JARVIS-API "
-               "section 177).",
+               "section 178).",
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"skills-menu",',
     },

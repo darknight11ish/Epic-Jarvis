@@ -1,7 +1,7 @@
 //! Settings -> "Skills": the skills menu's PC doors (the owner's decision of
 //! 2026-11-02, scope B of `.dsh-scratch/OWNER-QUEUE-2026-11-02/
 //! HERMES-SKILLS-RESEARCH.md`; `backend/jarvis_skill_menu.py` and the drop-in
-//! folder `plugins/ready/skill-menu/`; JARVIS-API.md section 177).
+//! folder `plugins/ready/skill-menu/`; JARVIS-API.md section 178).
 //!
 //! ONE command, settings window only (permissions/surfaces.toml,
 //! `settings-surface`). Every action is a pass-through: the PC decides, and

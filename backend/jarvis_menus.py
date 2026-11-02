@@ -473,7 +473,7 @@ MENUS: tuple = (
        names=("what asks first", "asks first", "what asks first settings")),
     _m("settings.reach", "What Jarvis can reach", "Which tools Jarvis may use.",
        names=("what jarvis can reach", "reach")),
-    # The skills menu (2026-11-02, JARVIS-API section 177): the PC's Settings
+    # The skills menu (2026-11-02, JARVIS-API section 178): the PC's Settings
     # card that lists the skills Jarvis may follow, installs one from a folder
     # or a .zip, imports what is in the PC's own Hermes folder, turns one off
     # and back on and edits one. Desktop only - every door that writes runs the

@@ -2,7 +2,7 @@
  * Settings -> "Skills": the skills menu (the owner's decision of 2026-11-02,
  * scope B of `.dsh-scratch/OWNER-QUEUE-2026-11-02/HERMES-SKILLS-RESEARCH.md`;
  * `skills_menu.rs`, `backend/jarvis_skill_menu.py`,
- * `plugins/ready/skill-menu/`, JARVIS-API.md section 177).
+ * `plugins/ready/skill-menu/`, JARVIS-API.md section 178).
  *
  * ONE Rust command (`skills_menu`) with nine actions, Settings only:
  *  - read:        the list - every installed skill, every turned-off one, its

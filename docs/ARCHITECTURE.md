@@ -2715,7 +2715,7 @@ backend routes, in both directions; the rest are listed here only.
 
 - **The skills menu installs, turns on and edits on the PC alone, and that is
   one-sided on purpose** (2026-11-02; the owner's decision, the Hermes-skills
-  research document's scope B; JARVIS-API §177). The phone keeps exactly what
+  research document's scope B; JARVIS-API §178). The phone keeps exactly what
   it had: the list it always read (`GET /api/skills`, `net/Skills.kt`) and
   Remove with its "are you sure?" (`POST /api/skills/decide`). What is
   PC-only is the five new doors - `GET /api/skills/menu`,

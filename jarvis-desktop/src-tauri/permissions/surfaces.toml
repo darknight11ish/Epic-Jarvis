@@ -949,7 +949,7 @@ permissions = [
   # stays with the two windows that start and stop it, which is why this is one
   # line here rather than the whole `screen-watch` set.
   "allow-screen-status",
-  # The skills menu's one command (2026-11-02, JARVIS-API section 177): read
+  # The skills menu's one command (2026-11-02, JARVIS-API section 178): read
   # the list, pick a folder or a .zip, scan it, install it behind ONE card,
   # scan the Hermes folder read-only, turn a skill off at once or back on
   # behind one card, and edit a SKILL.md behind the same card. The PC decides

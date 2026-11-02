@@ -253,7 +253,7 @@ class FindAnythingTest {
             // offers View / Save to Downloads, so the finder must reach it too.
             //
             // 129 -> 130 (2026-11-02, the skills menu): `settings.skills-menu` is
-            // the PC's Settings card (JARVIS-API section 177). It is DESKTOP-only
+            // the PC's Settings card (JARVIS-API section 178). It is DESKTOP-only
             // and the phone's OpenPlace.kt answers "only in Jarvis on your PC" for
             // it, but it is still a name the catalogue carries, so the count moved
             // and the finder must be able to say where it is.

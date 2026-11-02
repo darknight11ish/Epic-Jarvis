@@ -339,7 +339,7 @@ SECTIONS: tuple = (
     Section("asks-first", ("what asks first", "asks first settings")),
     Section("prompt-coach", ("prompt coach settings", "the prompt coach page")),
     Section("reach", ("what jarvis can reach", "what jarvis can access")),
-    # The skills menu (2026-11-02, JARVIS-API section 177): the PC's Settings
+    # The skills menu (2026-11-02, JARVIS-API section 178): the PC's Settings
     # card that lists the skills Jarvis may follow, installs one from a folder
     # or a .zip, imports what is in %USERPROFILE%\.hermes\skills, turns one
     # off and back on, and edits one. `app="desktop"` because every door that

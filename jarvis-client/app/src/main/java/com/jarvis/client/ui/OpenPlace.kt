@@ -274,7 +274,7 @@ object OpenPlace {
         // honest PC-only sentence rather than opening a screen that does not
         // have it.
         "media-index",
-        // The skills menu (2026-11-02, JARVIS-API section 177): install a skill
+        // The skills menu (2026-11-02, JARVIS-API section 178): install a skill
         // from a folder or a .zip, import what is in the PC's own Hermes
         // folder, turn one off and back on, and edit its SKILL.md. Every one
         // of those doors runs the PC's scanner and raises ONE card on the PC,
