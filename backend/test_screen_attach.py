@@ -655,7 +655,14 @@ def t_hygiene():
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
              "model-recommendations.patch",
-             "cloud-honesty.patch"}
+             "cloud-honesty.patch",
+             # gate-tool-actions-gap.patch (2026-11-01): ONE hunk in
+             # jarvis_gate.py, four ADDED lines at the END of `_TOOL_ACTIONS`
+             # (after gate-entries.patch's own last entry, `change_setting`),
+             # appended after this patch and immediately before
+             # plugin-loader.patch - it has no hunk in jarvis_hud.py's screen
+             # wrapper, so it rewrites nothing this patch wrote.
+             "gate-tool-actions-gap.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

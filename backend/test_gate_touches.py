@@ -838,7 +838,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              # rewrites nothing this patch wrote, and the later_rewriting() half
              # below proves it.
              "model-recommendations.patch",
-             "cloud-honesty.patch"}
+             "cloud-honesty.patch",
+             # gate-tool-actions-gap.patch (2026-11-01): ONE hunk in
+             # jarvis_gate.py, four ADDED lines at the END of `_TOOL_ACTIONS`
+             # (after gate-entries.patch's own last entry, `change_setting`),
+             # appended after this patch and immediately before
+             # plugin-loader.patch - it rewrites nothing this patch wrote.
+             "gate-tool-actions-gap.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

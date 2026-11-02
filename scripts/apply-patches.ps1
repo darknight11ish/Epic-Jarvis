@@ -1952,6 +1952,33 @@ $PATCHES = @(
     # backend/test_jobs.py rehearses this patch against
     # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
     'jobs-routes.patch'
+
+    # gate-tool-actions-gap.patch (2026-11-01) - four tools jarvis_agent.py
+    # offers the model had NO entry in jarvis_gate.py's `_TOOL_ACTIONS`, so
+    # action_for_tool() fell through to "unclassified_tool" for every one of
+    # them: send_file_to_phone, protect_from_jarvis, connect_account and
+    # rea_investigate. No patch in this list named any of the four, so no run
+    # of this script could ever have added them. ONE hunk, four ADDED lines at
+    # the END of the table, and each maps to an action that ALREADY exists and
+    # already owns its tier and its card words - send_file_to_phone itself,
+    # protect_item, change_own_config, run_shell_on_host - so this invents no
+    # new action, no new tier and no new card wording.
+    #
+    # WHY IT IS HERE, after jobs-routes.patch and immediately before
+    # plugin-loader.patch (which must stay last of all): appended, never
+    # inserted, so no earlier patch's context lines move. Its context is
+    # gate-entries.patch's own last `_TOOL_ACTIONS` line (`change_setting`)
+    # plus the closing brace that patch's hunk already carries, so the stack
+    # walk invents no pre-image for it and _stack.py's jarvis_gate.py RATCHET
+    # does not move (measured: 55 before and after). Every suite that
+    # enumerates "the patches written after me" (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py) has had its name
+    # added there. backend/test_gate_tool_actions.py is the proof: it reads
+    # THIS list, then every patch's added lines, and fails if any tool
+    # jarvis_agent.py offers still resolves to no real gate action in CI,
+    # where jarvis_gate.py itself cannot be imported.
+    'gate-tool-actions-gap.patch'
     'plugin-loader.patch'
 )
 

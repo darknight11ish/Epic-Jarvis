@@ -14,7 +14,7 @@ you drop in and take out.
   - **28** replace a patch, and are generated from it;
   - **17** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **138 core patches**, which still go on through
+- **139 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -228,6 +228,7 @@ stack's order and cannot be moved into a folder.
 | `attached-file.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `unknown-risk-approvable.patch` | edits lines the core already has; it cannot be applied out of order |
 | `jobs-routes.patch` | edits lines the core already has; it cannot be applied out of order |
+| `gate-tool-actions-gap.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one
