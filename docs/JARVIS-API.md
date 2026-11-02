@@ -3946,7 +3946,8 @@ this repository.)
                "min_seconds": 1.0,        least speech it judges (the VAD's span, about 0.4 s of words)
                "bar": "balanced",         the voice-print bar it uses, whatever commands use
                "stop_word": bool},        this PC can also hear "stop" in a barge-in clip
-  "moment":   {"enabled": bool,           [voice] one_moment_enabled (default true)
+  "moment":   {"enabled": bool,           [voice] one_moment_enabled (default true) AND the owner's own
+                                          answer (voice-flow.json; turn it off by asking - see part 3)
                "text": "One moment.",
                "key": str,                changes whenever the clip would sound different (another voice, engine, speaker, speed)
                "ready": bool,             the clip for `key` is made; GET /api/voice/moment answers at once
@@ -3973,6 +3974,15 @@ the old switch on). None is an approval
 card: interrupting only stops Jarvis's own speech, the clip is Jarvis's own
 words, the warm-up loads what is already installed, and none of them sends
 anything anywhere.
+
+**One exception, added 2026-11-01, and it is not a route either.**
+`moment.enabled` is also false when the owner has told Jarvis to stop saying
+"One moment." - "stop saying one moment" typed or spoken in Jarvis Live, or
+the `change_setting` tool with the model's own wording. That answer is saved
+by `jarvis_voice_flow.request_one_moment`, which the settings registry's
+`set_one_moment` calls; no HTTP route writes it, so the paragraph above still
+holds for the TOML file itself. Part 3 has the whole rule, including the
+damaged-file case and how to turn it back on.
 
 ### 1. Interrupting Jarvis by talking - `source=barge_in`
 
@@ -4104,6 +4114,32 @@ delay" panel showing `flow.summary` (the `label`, `median_ms` and
 except the "Voice delay" panel, which neither app has yet - the one-line
 command in `backend/README.md` prints the same table.
 
+**And since 2026-11-01 the owner can switch it off by asking** - no new
+route, no new field. `flow.moment.enabled` (the value both apps already gate
+on) now means "the TOML switch is on AND the owner's own answer is not off";
+`jarvis_voice_flow.one_moment_enabled()` is that function, and the answer is
+saved in `voice-flow.json` in the settings folder (`OPENJARVIS_CONFIG_DIR`,
+else `~/.openjarvis`). So `POST /api/chat` with "stop saying one moment" (or
+"turn off the one moment message", or the model's own phrasing through the
+`change_setting` tool) changes the same value, and the next status read tells
+both apps to stay quiet - there is nothing for a client to send.
+
+- `[voice] one_moment_enabled = false` in `jarvis-framework.toml` is still
+  the PC's hard, hand-edited switch and still wins: asking for the clip back
+  answers that it is still off and names the file, rather than claiming it
+  worked.
+- A damaged or unreadable `voice-flow.json` reads as ON (the state before the
+  file existed) - it never silently changes what the owner hears. The damaged
+  file is named by `jarvis_voice_flow.settings()["why"]`; `flow.moment.why`
+  names only why the clip is off or could not be made, and asking again
+  rewrites the file.
+- The desktop's own "Say 'One moment' if I'm kept waiting" row and the
+  phone's own switch keep their existing meaning - may THIS device play it -
+  and are unchanged. Neither of them shows the PC-wide answer, which is
+  recorded in `docs/ARCHITECTURE.md` section 8 as the follow-up.
+- `flow.moment.why` names the reason: the TOML file, or "you asked Jarvis to
+  stop saying it - say \"start saying one moment again\" to bring it back".
+
 ### 4. Spoken-style answers, and speaking from the first comma (2026-09-24)
 
 The owner's decision of 2026-09-24: "spoken questions get spoken-style
@@ -4232,9 +4268,13 @@ both apps since 2026-09-25** (the owner's decision): **"Play a short sound
 when I finish speaking"**, off by default, per device, right under the "One
 moment" switch (desktop Settings -> Voice, "While you wait"; phone Checks,
 the "hey Jarvis" card). Off, the sound is simply not played; nothing else
-about the turn changes. It is the app's own setting, like "One moment", but
-unlike that one there is nothing on the PC behind it - no route, no
-`[voice]` key: the sound is made in the app and never leaves it. Desktop:
+about the turn changes. It is the app's own setting, like the "One moment"
+switch, but the PC has nothing behind this sound: no route, no `[voice]` key
+and no `voice-flow.json` answer - it is made in the app and never leaves it.
+The "One moment" clip is the other case: the PC makes it and serves it at
+`GET /api/voice/moment`, `[voice] one_moment_enabled` switches it off, and
+since 2026-11-01 the owner's own answer in `voice-flow.json` can too (part 3).
+Desktop:
 `jarvis.voice.heardSound` in the app's own storage (`voice-flow.js`
 `loadHeard`); phone: `heard_sound` in `ClientSettings`
 (`VoiceSession.heardYou` asks it first).
@@ -12389,6 +12429,18 @@ the REST route does, never a copy of its logic:
 | Animal options (2026-09-28) | "keep the animal still", "stop the animal's nodding", "turn on the sun and moon", "turn off the weather", "use Open-Meteo for the weather", "make the animal sharper" | `jarvis_animal.set_switch()`, `jarvis_sky.handle_post()`; sharpness and frame rate go back in X-Jarvis-Route for the asking device - §93.3 |
 | How much Jarvis may interrupt you (2026-10-08) | "speak up 5 times a day", "let jarvis speak up 2 times a day", "speak up less", "speak up more", "the brief at 8pm", "the digest arrives at 7 in the morning" | `jarvis_arbiter.change()` - the same function the route calls; the raise gets the same ONE card - §123.4 |
 
+**The table above is the 2026-09-27 slice, kept as written; the real list is the
+registry's own.** Since then `BOOL_SETTINGS` grew to **34** switches (the
+universal-control pass of 2026-10-22, the Anti-Slop filter, the Jarvis calendar,
+and others), and `tools/check_feature_controls.py` fails unless every switch and
+every desktop Settings row is accounted for - so the count cannot drift silently
+here. The newest, on the owner's own ask (2026-11-01): **"stop saying one
+moment"** (or "turn off the one moment message", or the model's own wording
+through `change_setting`) calls `jarvis_settings_registry.set_one_moment`, which
+calls `jarvis_voice_flow.request_one_moment` - the same function the value both
+apps gate the clip on comes from. §17 part 3 has the wire shape; no card either
+way, and `[voice] one_moment_enabled = false` still wins.
+
 Every one of these keeps its EXISTING gate exactly:
 
 - A setting already behind an approval card (background learning ON,
@@ -13760,12 +13812,18 @@ each uses the ones above.
   `resumable`, a notification kept on the phone offers Resume Live for the
   rest of `limits.resume_s`; Resume opens the app and starts Live in the
   same chat (after App lock; held on a stale link).
-- **A Bluetooth headset's microphone** is preferred on the phone while one
-  is connected (Android's communication device plus the recorder's
-  preferred input; no Bluetooth permission), falling back to the phone's
-  own; the Live screen says which ("Microphone: your Bluetooth headset
-  (Buds)"). On the PC Windows picks the microphone (the default one), and the
-  Voice settings already say which it is.
+- **A Bluetooth (or car) microphone** is preferred on the phone while one is
+  connected (Android's own device lists; no Bluetooth permission). A car's
+  Bluetooth is a hands-free device whose microphone only exists in a call, so
+  that route records on `VOICE_COMMUNICATION` with the phone in
+  `MODE_IN_COMMUNICATION` and the car as the communication device, and puts the
+  previous mode and device back when Live stops (2026-11-02; the decision is
+  pure and JVM-tested, `voice/LiveAudioRoute.kt`). Where it cannot be used the
+  phone's own microphone is, and the Live screen says which ("Microphone: your
+  Bluetooth headset (Buds)"); Bluetooth that has no microphone (A2DP only) is
+  named as such. On the PC Windows picks the microphone (the default one), and
+  the Voice settings already say which it is. No route changed for this: the
+  clip still goes to `/api/voice/utterance` with `mic=phone`.
 - **"Talk about this in Live"** (phone): a second entry in the Share sheet
   (text only). The text waits on the Live screen as a "Shared text" chip and
   goes, on Send, as its own message tagged `provenance: "shared"` - outside
@@ -29640,3 +29698,146 @@ window", or the "Edit HUD" button in the HUD's own header), while this app's own
 look is in Appearance (theme, the face, face size, text size and spacing). No
 phone-side HUD editor is claimed, because there is none. With no header, or from
 the desktop, the old path is untouched; `backend/test_surface.py` pins both.
+
+## 174. Opening an app on your phone, and starting a media search (backend only, added 2026-11-01)
+
+The owner asked, in these words:
+
+> "id like jarvis live to be able to open certain apps on my android phone if i
+> ask it (during a live session on my android phone) and to be able to perform
+> certain actions like if i aaid 'hey jarvis open yourube music and play the
+> weekend'"
+
+So: from a Live conversation on the phone, "open YouTube Music" and "open
+YouTube Music and play The Weeknd" work. The PC is the brain and the gate; the
+phone is the hands, over `adb`, exactly as `control_phone` already did. There is
+**no new route**: this is the existing `control_phone` tool
+(`backend/jarvis_agent.py`) and the existing `jarvis_android_control.py` module,
+both shipped whole.
+
+### 174.1 The three actions the model can now ask for
+
+| Action | What it sends (one literal adb command, printed on the card) |
+|---|---|
+| `list_apps` | **Nothing.** Answered from the settings file; see 174.3. |
+| `open_app` | `adb -s <serial> shell monkey -p <package> -c android.intent.category.LAUNCHER 1` |
+| `play` | `adb -s <serial> shell am start -a android.intent.action.VIEW -d <the app's own search address> -p <package>` |
+
+`play` with YouTube Music, for "play The Weeknd", is exactly:
+
+```
+adb -s <serial> shell am start -a android.intent.action.VIEW -d 'https://music.youtube.com/search?q=The%20Weeknd' -p com.google.android.apps.youtube.music
+```
+
+`open_app` carries no activity name to guess: `monkey` is Android's own "launch
+this package's launcher activity". `play` uses `-p`, so only that one package
+can receive the intent - no browser and no other app can answer it instead.
+
+The rest of the tool is unchanged: `tap`, `swipe`, `key`, `text`, `screenshot`,
+`long_press`, `ui_dump`, all still literal argv lists, all still checked against
+the same plan/describe/run model.
+
+`device` is **no longer required** on the tool. "open YouTube Music" said out
+loud carries no serial, and a model was never told one; leaving it out now means
+the ONE phone connected over adb (`jarvis_android_control.resolve_device`), and
+zero or several connected devices is a plain refusal ("no phone is connected over
+adb right now…" / "more than one device is connected over adb (A, B), so Jarvis
+did not guess which one"), never a guess.
+
+### 174.2 The allow-list IS the permission
+
+`[phone_apps]` in `jarvis-framework.toml` is one line per app - the name you
+would say out loud, and the package behind it:
+
+```toml
+[phone_apps]
+"YouTube Music" = "com.google.android.apps.youtube.music"
+```
+
+It ships **EMPTY**, and empty (or no table at all) refuses everything. The rules,
+all enforced in `jarvis_android_control.py` before any card exists:
+
+- an app that is not on the list is refused, and the refusal **names the apps
+  that are**;
+- an empty list is refused with one sentence saying how to add one;
+- a package that is not a plain dotted name is refused (`_safe_package`);
+- anything under `com.jarvis.` is refused - Jarvis never starts its own app, so
+  no tap can reach an Approve button;
+- a name and a package that disagree are refused rather than picked between;
+- the words of a search are percent-encoded with `urllib.parse.quote(...,
+  safe="")`, so `;`, `&`, `"`, backticks and `$(...)` arrive as `%3B`, `%26`,
+  `%22`, `%60` and `%24%28…` and mean nothing to the phone's own shell. The
+  finished address is then checked against `_SAFE_URL`, which does not admit
+  `&` at all: `adb shell` hands the line to `/system/bin/sh`, where an unquoted
+  `&` starts a background job;
+- a settings line that is not a plain string, and any package `_safe_package`
+  refuses, is **left out** of the list rather than trusted, and `list_apps` says
+  how many lines were ignored.
+
+Only apps whose search address is documented are in `SEARCH_LINKS`: today that
+is YouTube Music alone. Any other app on the list can be **opened**, and `play`
+refuses it in plain words ("Jarvis can open 'Maps' on your phone, but it does not
+know how to ask it to search… Ask it to open the app instead") rather than
+pretending.
+
+### 174.3 `list_apps`: read-only, and never a card
+
+`list_apps` is answered from the settings file with the friendly names only -
+never the phone's installed apps, never a package the owner did not write down:
+
+```json
+{"ok": true, "count": 1,
+ "apps": [{"name": "YouTube Music", "can_play": true}], "note": ""}
+```
+
+It sends nothing to the phone and starts nothing, so it raises **no approval
+card**: `plan()` refuses it outright (`list_apps` is never a command), and
+`_prepare_control_phone` answers a list-only call before the gate. The same is
+true of a call where nothing could become a command - an app not on the list, an
+empty list, no phone connected - so the owner is never asked to approve an empty
+plan, and the model gets the reason to repeat in the owner's own words.
+
+`can_play` is how the model tells "open it" from "open it and search" without
+guessing.
+
+### 174.4 What has NOT changed, on purpose
+
+- **The same gate action and the same tier.** Every plan still resolves to
+  `jarvis_android_control_run` → `control_phone`, and `[autonomy.tiers]` still
+  says `control_phone = "ask"`. One card per plan, printing every literal
+  command; nothing is auto-approved; the tool stays in the agent's
+  `NEEDS_A_PERSON` set.
+- **Still opt-in.** `control_phone` is NOT in the shipped `[tools].enabled`, so
+  a fresh install offers no tool that can touch a phone. To turn it on, add
+  `"control_phone"` to `[tools].enabled` in `jarvis-framework.toml`, and add the
+  apps to `[phone_apps]`. Both files are re-read while Jarvis runs, so an edit
+  takes effect on the next message; a change to the CODE needs the reconciled
+  backend and a restart.
+- **A step that pins its own package is not blocked by the Jarvis-in-front
+  guard.** `open_app` and `play` are `PACKAGE_PINNED_ACTIONS`: both commands
+  name the package themselves (`monkey -p`, `am start -p`), and a `com.jarvis.`
+  package is refused before a command exists, so neither can land a tap inside
+  Jarvis's own app - which is the only thing that guard protects. Without this
+  the feature would be refused every time it was asked FROM the phone, because
+  that is where the Jarvis app is in front. A `tap` is still refused there.
+- **`play` is honest about what it does.** It opens the app on that app's own
+  search address for the words the owner said. On the phone that is a search
+  shown in the app; whether music starts without one tap depends on the app.
+  The tool description and the card both say "one tap may still be needed".
+- **`am start` and `monkey` exit 0 when they fail.** Both print the failure on
+  stdout ("Error: Activity not started, unable to resolve Intent", "No
+  activities found, monkey aborted"). `run()` now reads that, so a launch that
+  did not happen is reported as a failure instead of `done`.
+
+### 174.5 What this repository cannot prove
+
+The exact intent behaviour on the owner's own phone - whether YouTube Music's
+own App Link accepts `https://music.youtube.com/search?q=…` and lands on the
+search, and whether the app then starts playing - is verified by the Lead on the
+real device. Everything above is proved against injected fakes: no test here
+starts `adb` or touches a phone (`backend/test_android_control.py`,
+`backend/test_phone_app_launch.py`).
+
+Also unchanged and worth saying: opening a media app takes it to the front, so a
+Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
+"One-sided on purpose").

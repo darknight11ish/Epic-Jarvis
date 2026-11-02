@@ -9654,6 +9654,26 @@
       "reason": "switch present on the desktop Settings page"
     },
     {
+      "key": "one_moment",
+      "names": [
+        "the one moment message",
+        "one moment",
+        "saying one moment",
+        "the one moment sound",
+        "say one moment if i am kept waiting",
+        "the one moment clip",
+        "one moment while you think"
+      ],
+      "section": null,
+      "desktop_row": "voice-one-moment",
+      "turn_on": "turn on the one moment message",
+      "turn_off": "turn off the one moment message",
+      "resolved": true,
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "switch present on the desktop Settings page"
+    },
+    {
       "key": "web_search",
       "names": [
         "web search",

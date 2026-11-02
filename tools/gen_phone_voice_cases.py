@@ -76,6 +76,7 @@ import jarvis_speech as S  # noqa: E402
 import jarvis_turn as T  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
+import jarvis_voice_flow as F  # noqa: E402
 import jarvis_kokoro as K  # noqa: E402
 import jarvis_voices as VS  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
@@ -224,6 +225,11 @@ class World:
         speaker_dir = missing_models("voice-models", "speaker")
         ps = [
             mock.patch.object(S, "_config_dir", return_value=d),
+            # ... and the owner's own "One moment." answer file (2026-11-02):
+            # the strict.status case below is jarvis_speech.status(), whose
+            # flow.moment is the TOML switch AND voice-flow.json in
+            # jarvis_voice_flow's config folder - so own that folder too.
+            mock.patch.object(F, "_config_dir", return_value=d),
             # The owner's CHOSEN PERSONALITY is not read at speech time any
             # more (2026-10-28): jarvis_speech.tts_voice() asks ONLY
             # jarvis_voices, and this world redirects that module's config

@@ -2674,6 +2674,25 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Opening a listed app on the phone and starting a media search: the ability
+  is on both apps' chats, the SETTINGS are the PC's alone, and that is
+  one-sided on purpose** (2026-11-01; the owner's words: *"id like jarvis live
+  to be able to open certain apps on my android phone if i ask it ... like if i
+  aaid 'hey jarvis open yourube music and play the weekend'"*; JARVIS-API
+  §174). There is no new route and no new screen on either app: this is the
+  existing `control_phone` tool and `jarvis_android_control.py`, so the same
+  sentences work in either app's chat and on either app's Live, and the same
+  one approval card is drawn by both. What is **PC-only** is the permission
+  itself - `[phone_apps]` (the app allow-list) and `"control_phone"` in
+  `[tools].enabled` are two lines in `jarvis-framework.toml`, which is deep
+  config editing and stays off the phone (`CLAUDE.md`). Neither app lists or
+  edits the allowed apps; `list_apps` reads the same file for the model, so the
+  phone never becomes a second authority on what may be opened. **One honest
+  cost, said plainly:** opening a media app brings it to the front, so a Live
+  session running on that phone is backgrounded by the very thing it asked for
+  - the sound carries on, the conversation is behind the app. Nothing here
+  merges, adds a route, or touches `tools/check_parity.py` (no route changed).
+
 - **The Notes editor's formatting toolbar, shortcuts and template menu are the
   desktop's alone** (2026-10-31; the owner asked to "really enhance this
   customizability for notes"). The notes editor itself is in both apps and
@@ -4044,6 +4063,38 @@ file it already holds. The phone lane calls both routes, so
 `tools/check_parity.py` classifies `/api/files/send` and `/api/files/download` as
 **`phone-only`** with that reason written beside each row - the desktop is not
 missing a half to be "fixed" later; it was never meant to have one.
+
+**"Say 'One moment'" has two switches by design, and only one of them is
+visible on a Settings page** (2026-11-01, the owner's ask: *"id like the ability
+to tell jarvis in jarvis live to adjust any settings, includimg no longer
+saying one moment while it comprehends or calculates something"*;
+JARVIS-API §17 part 3; `backend/jarvis_voice_flow.py`). The two are not the
+same setting under two names, and this is written down so the next reader does
+not "fix" one into the other:
+
+- **the PC's switch** - `[voice] one_moment_enabled` in the framework file
+  (hand-edited, protected) **and** the owner's own answer in `voice-flow.json`
+  in the settings folder, which is what asking writes. It decides whether the
+  clip exists at all, is reported as `flow.moment.enabled`, and **both apps
+  obey it** (desktop `main.js` gates on `voiceFlow.moment`; phone
+  `VoiceSession.kt` on `flow.momentUsable`). Changing it changes what the
+  owner hears on either device, which is why the chat phrase changes THIS one.
+- **each app's own per-device switch** - the desktop's
+  `jarvis.voice.oneMoment` and the phone's `ClientSettings.oneMoment`. It means
+  "may THIS device play it" and is unchanged.
+
+**What is one-sided, said plainly:** the desktop's Settings row and the phone's
+switch still write only the per-device value, and **neither screen shows the
+PC-wide answer** - so an owner who has told Jarvis to stop sees an On switch
+that does nothing until they ask again. That is a real gap, not a design
+choice, and the reason it is not closed in the same slice is that the row's
+write is a Tauri command with no backend route behind it: adding a route no
+client calls would be a second door with no first door (the rule
+`jarvis_settings_registry.py` states for every setter). Closing it means a
+route plus the desktop command plus the phone's row, and it is named as the
+follow-up rather than half-built. Nothing about the chat path depends on it:
+the sentence works, is saved, survives a restart, and both apps stay quiet -
+what is missing is only the Settings screen agreeing about who turned it off.
 
 
 ## 9. Where the backend lives

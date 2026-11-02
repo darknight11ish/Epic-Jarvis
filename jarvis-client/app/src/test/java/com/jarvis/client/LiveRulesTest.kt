@@ -223,6 +223,22 @@ class LiveRulesTest {
         assertTrue(LiveRules.onCall(2, ownVoiceCall = false))
         assertTrue(LiveRules.onCall(3, ownVoiceCall = false))
         assertFalse("Jarvis's own echo-cancelling mode is not a call", LiveRules.onCall(3, ownVoiceCall = true))
+        // Live's own call mode for a car's hands-free microphone is not a
+        // call either - it would otherwise close the microphone it just
+        // opened (2026-11-02, the owner's car report).
+        assertTrue("a real call still reads as one", LiveRules.onCall(2, ownVoiceCall = false, ownMicCall = true))
+        assertTrue(
+            "a real call that arrives while Jarvis is replying is still a call",
+            LiveRules.onCall(2, ownVoiceCall = true),
+        )
+        assertFalse(
+            "Live's own microphone route is not a phone call",
+            LiveRules.onCall(3, ownVoiceCall = false, ownMicCall = true),
+        )
+        assertFalse(
+            "and neither is a reply played on the voice-call path",
+            LiveRules.onCall(3, ownVoiceCall = true, ownMicCall = true),
+        )
         val on = status("phone_on")
         val call = status("phone_call")
         val owner = status("phone_muted")
