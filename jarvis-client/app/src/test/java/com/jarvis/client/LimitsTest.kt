@@ -6,6 +6,7 @@ import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.Limits
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -147,6 +148,35 @@ class LimitsTest {
         assertNull("nothing below the PC's low", floor.down)
         val top = floor.copy(value = JsonPrimitive(1000), low = 1, high = 1000)
         assertNull("nothing above the PC's high", top.up)
+    }
+
+    @Test
+    fun `a stepped row moves by the PC's own step and never past its ends`() {
+        // THE LIVE IDLE WINDOW (2026-11-01): 90 s, allowed 30..600, half a
+        // minute a tap - because one second a tap would put three minutes
+        // ninety taps away from the default. Read from the PC's own JSON, so
+        // what is proved is that the `step` FIELD is read and used, not a
+        // number the test typed into a Row itself.
+        val window = Limits.read(JarvisJson.parseToJsonElement(
+            """
+            {"ok":true,"available":true,"limits":[
+              {"key":"live_idle_seconds","title":"How long Jarvis Live waits before it turns off",
+               "kind":"int","value":90,"words":"1 minute and 30 seconds","choices":[],"low":30,
+               "high":600,"unit":"seconds","note":"","loosen_up":false,"pc_only":false,
+               "app":"both","step":30}
+            ]}
+            """,
+        ).jsonObject).single()
+        assertEquals("the PC's own step is read", 30L, window.step)
+        assertEquals("a tap down is half a minute", 60L, window.down)
+        assertEquals("a tap up is half a minute", 120L, window.up)
+        assertNull("nothing below the PC's low", window.copy(value = JsonPrimitive(30)).down)
+        assertNull("nothing above the PC's high", window.copy(value = JsonPrimitive(600)).up)
+        // A row that does not send `step` still steps by one: every other row,
+        // and an older PC that has never heard of the field.
+        val plain = window.copy(step = 1)
+        assertEquals(89L, plain.copy(value = JsonPrimitive(90)).down)
+        assertEquals(91L, plain.copy(value = JsonPrimitive(90)).up)
     }
 
     // ------------------------------------------------------- what is posted --

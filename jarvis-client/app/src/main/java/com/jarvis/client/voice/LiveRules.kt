@@ -698,12 +698,36 @@ object LiveRules {
      */
     val CALL_MODES: Set<Int> = setOf(2, 3, 4, 5, 6)
 
+    /** The one call mode Jarvis itself ever holds (AudioManager.MODE_IN_COMMUNICATION). */
+    const val MODE_IN_COMMUNICATION = 3
+
     /**
-     * Is the phone on a call? [ownVoiceCall]: Jarvis itself put the phone in
-     * communication mode to cancel its own echo (Speaker.voiceCall) - that is
-     * not a call.
+     * Is the phone on a call? Two of the call modes can be Jarvis's own and
+     * are not a call:
+     *
+     * - [ownVoiceCall]: Jarvis itself put the phone in communication mode to
+     *   cancel its own echo while it talks ([com.jarvis.client.audio.Speaker.voiceCall]).
+     * - [ownMicCall]: Jarvis Live itself holds communication mode for a
+     *   Bluetooth (car) microphone, which only exists in call mode
+     *   ([LiveAudioRoute]). Without this, Live would read its own call mode as
+     *   a phone call and close the very microphone it just opened - a deadlock
+     *   that records nothing and says nothing (2026-11-02).
+     *
+     * **Both of Jarvis's own modes are [MODE_IN_COMMUNICATION] (3) and nothing
+     * else**, so that is the only mode either excuse covers. Every other call
+     * mode - IN_CALL (2) above all - is the phone's real call, even while
+     * Jarvis is talking on the voice-call path or holding a car's microphone:
+     * a call that arrives then must still pause Live and be reported, where
+     * before this a real IN_CALL during a reply was read as Jarvis's own
+     * echo-cancelling mode and missed. A VoIP call that also uses mode 3
+     * cannot be told from Jarvis's own, and the car microphone could not record
+     * during one anyway.
      */
-    fun onCall(mode: Int, ownVoiceCall: Boolean): Boolean = !ownVoiceCall && mode in CALL_MODES
+    fun onCall(mode: Int, ownVoiceCall: Boolean, ownMicCall: Boolean = false): Boolean = when {
+        mode !in CALL_MODES -> false
+        ownVoiceCall || ownMicCall -> mode != MODE_IN_COMMUNICATION
+        else -> true
+    }
 
     /**
      * A call began or ended: what to tell the PC, or null. Never undoes the

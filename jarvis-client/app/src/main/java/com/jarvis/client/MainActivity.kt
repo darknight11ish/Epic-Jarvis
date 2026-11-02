@@ -80,6 +80,7 @@ import com.jarvis.client.net.PromptCoach
 import com.jarvis.client.net.Provenance
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.SignedApproval
+import com.jarvis.client.net.StagedLine
 import com.jarvis.client.net.UpdateCheck
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import com.jarvis.client.platform.ApprovalKey
@@ -102,6 +103,7 @@ import com.jarvis.client.ui.NavBackHandler
 import com.jarvis.client.ui.NavScreens
 import com.jarvis.client.ui.OpenPlace
 import com.jarvis.client.ui.Screen
+import com.jarvis.client.ui.SettingsSearch
 import com.jarvis.client.ui.approval.BiometricGate
 import com.jarvis.client.ui.approval.CardWaitingLine
 import com.jarvis.client.ui.rememberNavState
@@ -669,6 +671,31 @@ class MainActivity : FragmentActivity() {
             }
             pictureBusy.value = false
         }
+    }
+
+    /**
+     * A send that failed puts back what it was carrying.
+     *
+     * The strip goes as the bytes leave (so nobody reads "attached" over an
+     * answer that is already arriving), and the bytes are held nowhere else -
+     * [AttachFile] and [ChatPicture] promise never to write, keep or log them.
+     * So a send that comes back with no answer and the chat's own error on
+     * screen (offline, a stale link, the PC refusing, an oversize body) puts
+     * the file and the picture back under the composer; otherwise the owner's
+     * only copy is gone and nothing but the error is left.
+     *
+     * Stop is NOT a failure: the answer is null there too, but the chat puts
+     * no error on screen because the bytes were already on their way. Putting
+     * them back would invite a second copy of a file the PC already read
+     * ([StagedLine.comesBack] is that rule, and is tested apart from this).
+     *
+     * A slot is only filled while it is still empty: a file the owner picked
+     * during the failing send is theirs, not this one's.
+     */
+    private fun putBackUnsent(answer: String?, doc: AttachFile.Ready?, pic: ChatPicture.Ready?) {
+        if (!StagedLine.comesBack(answer, JarvisRuntime.chat.error.value != null)) return
+        if (doc != null && attachedFile.value == null) attachedFile.value = doc
+        if (pic != null && picture.value == null) picture.value = pic
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -2539,6 +2566,18 @@ class MainActivity : FragmentActivity() {
                                 // somewhere to ask. A no-op, silently, on a
                                 // backend without the capability.
                                 JarvisRuntime.refreshAppearance()
+                                // And the PC's OWN voice choice (2026-11-02).
+                                // A reset phone, or a fresh install, holds no
+                                // voice of its own and no cached copy: the PC's
+                                // `voices/state.json` is the only record, so it
+                                // is read the moment there is a link. Without
+                                // this the Voices screen and Jarvis Live stayed
+                                // on "Asking your PC..." (and Live said the
+                                // built-in line) until the owner opened
+                                // Settings -> Voice, which read as "it forgot
+                                // what I changed it to". A read only: it changes
+                                // nothing on the PC.
+                                JarvisRuntime.refreshCustomVoices()
                             }
                         } finally {
                             // A re-pair that did not connect changes
@@ -3514,6 +3553,23 @@ class MainActivity : FragmentActivity() {
                             pendingSectionScreen = Screen.SECURITY.name
                             nav.go(Screen.SECURITY)
                         },
+                        // The Settings search box's "not in Settings" rows
+                        // (2026-11-02): the owner typed "presets" there and
+                        // nothing came up, because the nine focus presets are
+                        // drawn inside the Brain's Hardware plate. The row says
+                        // so and this opens that plate - the same one-time
+                        // section scroll the Find box uses (Screen.FIND,
+                        // below), and no new route: the place comes from
+                        // SettingsSearch.elsewhereTarget, which is
+                        // FindAnything's own table of where each menu really
+                        // opens.
+                        onOpenElsewhere = { entry ->
+                            SettingsSearch.elsewhereTarget(entry)?.let { (screen, section) ->
+                                pendingSection = section
+                                pendingSectionScreen = screen.name
+                                nav.go(screen)
+                            }
+                        },
                         // The "hey Jarvis" switches, moved here from Platform
                         // checks (settings audit 2026-09-30): they need a
                         // desktop, so only once paired.
@@ -3974,9 +4030,15 @@ class MainActivity : FragmentActivity() {
                                         // not re-sent (nothing about it is kept).
                                         attachedFile.value = null
                                         scope.launch {
-                                            JarvisRuntime.sendTypedChat(
+                                            val answer = JarvisRuntime.sendTypedChat(
                                                 text, provenance = tag, shared = shared, attachment = doc,
                                             )
+                                            // A failure here is the owner's
+                                            // file, back under the box - and
+                                            // the chat's error is already on
+                                            // screen (chat.error, collected
+                                            // above). Stop puts nothing back.
+                                            putBackUnsent(answer, doc, null)
                                         }
                                     } else {
                                         // With a picture, the PC is asked first
@@ -3994,10 +4056,13 @@ class MainActivity : FragmentActivity() {
                                                 if (sharedHeld == shared) sharedHeld = null
                                                 picture.value = null
                                                 attachedFile.value = null
-                                                JarvisRuntime.sendTypedChat(
+                                                val answer = JarvisRuntime.sendTypedChat(
                                                     text, picture = pic.dataUri, provenance = tag,
                                                     shared = shared, attachment = doc,
                                                 )
+                                                // Both rode in that one request:
+                                                // a failure gives both back.
+                                                putBackUnsent(answer, doc, pic)
                                             }
                                         }
                                     }
@@ -4180,17 +4245,62 @@ class MainActivity : FragmentActivity() {
                                     pendingSectionScreen = Screen.BRAIN.name
                                     nav.go(Screen.BRAIN)
                                 },
-                                onOpenAppearance = { nav.go(Screen.APPEARANCE) },
+                                // Reminders, where Appearance's button was until
+                                // 2026-11-02 (the owner: Appearance only in
+                                // Settings, a Reminders button in its place).
+                                // It opens the Brain's own Coming up plate -
+                                // "Reminders, alarms, timers and repeating
+                                // jobs" - exactly as "open coming up" and Find
+                                // anything's own row do. Nothing new is read
+                                // and no route is added; Coming up can never be
+                                // hidden (`brain.work.coming-up` is in
+                                // MenuCatalog.NEVER_HIDE, ComingUpReachabilityTest),
+                                // so there is no menu to show for this visit.
+                                onOpenReminders = {
+                                    pendingSection = "coming-up"
+                                    pendingSectionScreen = Screen.BRAIN.name
+                                    nav.go(Screen.BRAIN)
+                                },
                                 // Settings from Home's own row (2026-10-08).
+                                // Appearance is Settings-only on the phone since
+                                // 2026-11-02: its own row in Settings still opens
+                                // that screen (the `onOpenAppearance` further up
+                                // is the SETTINGS screen's callback, not Home's),
+                                // and Home has no Appearance button any more.
                                 onOpenSettings = { nav.go(Screen.SETTINGS) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
                                 // Jarvis Live (ui/screens/LiveScreen.kt).
                                 onOpenLive = { nav.go(Screen.LIVE) },
                                 // "Try again" under a failed question: the same
-                                // words, tag and shared text, asked again.
+                                // words, tag and shared text, asked again - and
+                                // with the file or picture that question carried.
+                                // Those bytes are held nowhere else (AttachFile),
+                                // so a retry that dropped them would ask about a
+                                // file the PC never got.
                                 onRetryQuestion = {
                                     JarvisRuntime.clearNotice()
-                                    scope.launch { chat.retryLast() }
+                                    val doc = attachedFile.value
+                                    val pic = picture.value
+                                    if (doc != null) attachedFile.value = null
+                                    if (pic != null) picture.value = null
+                                    scope.launch {
+                                        val started = chat.retryLast(
+                                            attachment = doc,
+                                            picture = pic?.dataUri,
+                                        )
+                                        // It never started (nothing left to ask
+                                        // again) or it failed: neither was sent,
+                                        // so both come back. Stop puts nothing
+                                        // back - the bytes had already gone.
+                                        if (!started || chat.error.value != null) {
+                                            if (doc != null && attachedFile.value == null) {
+                                                attachedFile.value = doc
+                                            }
+                                            if (pic != null && picture.value == null) {
+                                                picture.value = pic
+                                            }
+                                        }
+                                    }
                                 },
                                 blockerFor = { item: PendingItem ->
                                     JarvisRuntime.decisionBlocker(item, approve = true)

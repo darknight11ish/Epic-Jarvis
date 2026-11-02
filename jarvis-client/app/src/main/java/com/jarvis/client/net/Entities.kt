@@ -511,6 +511,22 @@ object Entities {
     /** The TalkBack action on one dot of the picture. */
     fun openName(name: String): String = OPEN_NAME.replace("{name}", name)
 
+    /**
+     * The one line under a picture that has a SINGLE dot (2026-11-02).
+     *
+     * A one-name picture has no link to draw, and the canvas draws no text -
+     * the rule that keeps 48 names from colliding - so with one name the
+     * owner saw a lone speck in an empty plate and read it as broken. The
+     * dot is now drawn at a size you can see ([GalaxyPicture.LONE_DOT_SHARE])
+     * and this line says which dot it is and why the rest is empty, in the
+     * words the facts panel already uses for a name with no connections
+     * ([ALONE_WHY]): the Galaxy joins two names when one saved fact mentions
+     * both. A blank name gets the reason alone - "This dot is ." is not a
+     * sentence - and nothing here ever claims the owner has no memories.
+     */
+    fun lonePictureLine(name: String): String =
+        if (name.isBlank()) ALONE_WHY else "This dot is $name. $ALONE_WHY"
+
     // ------------------------------------------------------------- as of ---
 
     /** "Facts as of 12 Oct 2026" for the chip row's own heading. */

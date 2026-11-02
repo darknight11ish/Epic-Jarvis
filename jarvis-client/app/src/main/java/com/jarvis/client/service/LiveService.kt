@@ -10,11 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -29,6 +27,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.audio.Wav
+import com.jarvis.client.voice.LiveAudioRoute
 import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.OrtTurnModel
@@ -94,12 +93,22 @@ import kotlinx.coroutines.sync.withLock
  *    app that played sound last, so with music playing elsewhere the other
  *    app may get it; and on some phones holding it opens the phone's
  *    assistant instead. The Live screen says so.
- *  - A BLUETOOTH HEADSET'S MICROPHONE is preferred while one is connected
- *    ([preferHeadset]: Android's communication device, and the recorder's
- *    preferred input); if it cannot be used the phone's own is, and the Live
- *    screen says which ([JarvisRuntime.liveMicWords]). No Bluetooth
- *    permission is needed: the headset is picked from Android's own audio
+ *  - A BLUETOOTH (OR CAR) MICROPHONE is used while one is connected, and the
+ *    Live screen says which ([JarvisRuntime.liveMicWords]). A car's Bluetooth
+ *    is a HANDS-FREE device: its microphone only exists in a CALL, so that
+ *    route records on `VOICE_COMMUNICATION` with the phone in
+ *    `MODE_IN_COMMUNICATION` and the car as the communication device
+ *    ([LiveAudioRoute] decides it, [applyRoute] does it). The phone's own
+ *    microphone is used where there is no such device, and if Android refuses
+ *    the Bluetooth one. The mode and the device are put back in a `finally`
+ *    when Live stops, so a car is not left showing a call. No Bluetooth
+ *    permission is needed: the device is picked from Android's own audio
  *    device lists (MODIFY_AUDIO_SETTINGS, already held).
+ *    WHY IT IS THIS WAY, from the owner's report of 2026-11-02: *"when I am
+ *    using jarvis live in my car and my phone is connected to Bluetooth it
+ *    acts like it is in a call but jarvis cannot hear me."* The old code made
+ *    the car the communication device and then recorded `VOICE_RECOGNITION` in
+ *    `MODE_NORMAL` - the car showed a call and the recorder got silence.
  *  - "LIVE ENDED - RESUME" ([showResume]): a notification kept on this phone
  *    for the rest of the PC's 10 minutes after an end that can be resumed.
  */
@@ -119,8 +128,34 @@ class LiveService : Service() {
     private var media: MediaSession? = null
     private val headsetKeys = LiveExtras.HeadsetKeys()
 
-    /** True once this service made a Bluetooth headset the communication device (undone at the end). */
+    /**
+     * The audio route the phone is currently held in ([LiveAudioRoute]), or
+     * null when nothing is applied. Kept so the mode and the communication
+     * device can be put back - on every microphone close, not only at the end
+     * (a car should not sit showing a call while Live is muted or a card is
+     * up), and so a car connecting or disconnecting mid-session is noticed.
+     */
+    @Volatile private var route: LiveAudioRoute.Route? = null
+
+    /** True once this service made a Bluetooth device the communication device (undone by [restoreRoute]). */
     private var headsetRouted = false
+
+    /** The phone's audio mode before this service held one for a car's microphone, or null. */
+    private var heldMode: Int? = null
+
+    /** True while the old `startBluetoothSco()` was the way the call link came up (undone by [restoreRoute]). */
+    private var scoLegacy = false
+
+    /** A Bluetooth device type Android would not give a microphone through this session, or null. */
+    private var refusedType: Int? = null
+
+    /**
+     * True when the call link had to be brought up again under an open
+     * recorder - the Speaker's own call mode clears the communication device
+     * when a reply ends. The recorder is then reopened so it is bound to the
+     * new link (reported as "not proven on hardware" until a car says so).
+     */
+    private var routeDropped = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -182,7 +217,9 @@ class LiveService : Service() {
         runCatching { JarvisRuntime.voice.speaker.endVoiceCall() }
         runCatching { media?.release() }
         media = null
-        releaseHeadset()
+        // The phone must not be left in a car's call mode if this service goes
+        // away before `listen`'s own finally has run (2026-11-02).
+        runCatching { stopRoute() }
         JarvisRuntime.liveMicWords(null)
         super.onDestroy()
     }
@@ -237,38 +274,120 @@ class LiveService : Service() {
         }
     }
 
-    // ------------------------------------------------------ Bluetooth headset
+    // --------------------------------------------------- the microphone route
 
     /**
-     * A connected Bluetooth headset, made the communication device so its
-     * microphone can be used (Android 12+'s way; minSdk is 33), and the
-     * matching input for the recorder - or null to use the phone's own.
+     * What Android can see right now, as the pure decision wants it
+     * ([LiveAudioRoute.Inputs]). Every call is wrapped: a device list is not
+     * worth stopping Live for, and an empty one simply means the phone's own
+     * microphone.
      */
-    private fun preferHeadset(): Pair<LiveExtras.Mic, AudioDeviceInfo?>? {
-        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
-        try {
-            val comm = am.availableCommunicationDevices
-            val picked = LiveExtras.pickHeadset(
-                comm.map { LiveExtras.Mic(it.type, it.productName?.toString().orEmpty()) },
-            ) ?: return null
-            val device = comm.first { it.type == picked.type }
-            if (am.communicationDevice?.id != device.id && !am.setCommunicationDevice(device)) {
-                return null
-            }
-            headsetRouted = true
-            val input = am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { it.type == device.type }
-            return picked to input
-        } catch (e: Exception) {
-            Log.w(TAG, "the Bluetooth headset could not be chosen", e)
-            return null
-        }
+    private fun routeInputs(speaking: Boolean): LiveAudioRoute.Inputs {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val inputs = runCatching { am?.getDevices(AudioManager.GET_DEVICES_INPUTS)?.map { it.type }.orEmpty() }
+            .getOrDefault(emptyList())
+        val outputs = runCatching { am?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)?.map { it.type }.orEmpty() }
+            .getOrDefault(emptyList())
+        val communication = runCatching {
+            am?.availableCommunicationDevices?.map {
+                LiveExtras.Mic(it.type, it.productName?.toString().orEmpty())
+            }.orEmpty()
+        }.getOrDefault(emptyList())
+        return LiveAudioRoute.Inputs(
+            inputTypes = inputs,
+            outputTypes = outputs,
+            communication = communication,
+            speaking = speaking,
+            // No microphone setting on this phone yet (checked 2026-11-02:
+            // none in Settings, and none in the F.A.Q.). AUTO is therefore the
+            // only value in use. LiveAudioRoute.MicChoice.PHONE - the car's
+            // microphone is no good, use this phone's - is already decided and
+            // tested; wiring a row to it is the only change that adds it.
+            choice = LiveAudioRoute.MicChoice.AUTO,
+        )
     }
 
-    private fun releaseHeadset() {
-        if (!headsetRouted) return
-        headsetRouted = false
+    /**
+     * The Android side of [LiveAudioRoute]: hold the audio mode and make the
+     * communication device the route asks for, so a car's hands-free
+     * microphone actually exists. Then wait, briefly, for the call link to
+     * really come up - `setCommunicationDevice` is not instant, and a recorder
+     * opened before the link is up gets silence, which is the bug this fixes.
+     *
+     * False when Android refused or the link never appeared: the caller then
+     * records from the phone's own microphone instead
+     * ([LiveAudioRoute.fallback]), because a route that yields silence is
+     * worse than a phone microphone that works.
+     */
+    @Suppress("DEPRECATION") // startBluetoothSco: the old way, kept as the fallback below
+    private suspend fun applyRoute(route: LiveAudioRoute.Route): Boolean {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            ?: return route.communicationType == null
+        if (route.holdMode != null) {
+            if (heldMode == null) heldMode = am.mode
+            if (am.mode != route.holdMode) {
+                runCatching { am.mode = route.holdMode }
+            }
+        }
+        val type = route.communicationType ?: return true
+        val device = runCatching { am.availableCommunicationDevices.firstOrNull { it.type == type } }.getOrNull()
+            ?: return false
+        if (am.communicationDevice?.id != device.id) {
+            if (runCatching { am.setCommunicationDevice(device) }.getOrDefault(false)) {
+                headsetRouted = true
+            } else if (route.needsScoLink) {
+                // The modern call was refused: the old way to bring the SCO
+                // link up, which is all some cars/phones still answer to.
+                val started = runCatching { am.startBluetoothSco() }.isSuccess
+                if (!started) return false
+                scoLegacy = true
+                headsetRouted = true
+            } else {
+                return false
+            }
+        } else {
+            headsetRouted = true
+        }
+        repeat(LINK_WAIT_STEPS) {
+            if (callLinkUp(route)) return true
+            delay(LINK_WAIT_STEP_MS)
+        }
+        return callLinkUp(route)
+    }
+
+    /** Is the call link this route needs actually up? Always true for a route that needs none. */
+    @Suppress("DEPRECATION") // isBluetoothScoOn: reads the old link the fallback started
+    private fun callLinkUp(route: LiveAudioRoute.Route): Boolean {
+        val type = route.communicationType ?: return true
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        if (runCatching { am.communicationDevice?.type }.getOrNull() == type) return true
+        return scoLegacy && runCatching { am.isBluetoothScoOn }.getOrDefault(false)
+    }
+
+    /**
+     * Put the phone back the way it was: let the communication device go, stop
+     * the old SCO link if that is what came up, and restore the audio mode Live
+     * held ([LiveAudioRoute.undo]). Safe to call more than once and safe to
+     * call for a route that changed nothing.
+     */
+    @Suppress("DEPRECATION") // stopBluetoothSco: the other half of the fallback
+    private fun restoreRoute(applied: LiveAudioRoute.Route) {
         val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        runCatching { am.clearCommunicationDevice() }
+        val undo = LiveAudioRoute.undo(applied, heldMode ?: am.mode)
+        if (headsetRouted) runCatching { am.clearCommunicationDevice() }
+        headsetRouted = false
+        if (scoLegacy) {
+            runCatching { am.stopBluetoothSco() }
+            scoLegacy = false
+        }
+        undo.mode?.let { runCatching { am.mode = it } }
+        heldMode = null
+    }
+
+    /** Let go of whatever route is applied - the microphone is closing. */
+    private fun stopRoute() {
+        route?.let { applied -> runCatching { restoreRoute(applied) } }
+        route = null
     }
 
     // ------------------------------------------------------------- listening
@@ -288,7 +407,7 @@ class LiveService : Service() {
             OrtTurnModel.load(assets.open("$TURN_DIR/${OrtTurnModel.FILE}").use { it.readBytes() })
         }.onFailure { Log.w(TAG, "Smart Turn did not load; using the fixed pause", it) }.getOrNull()
         var rec: AudioRecord? = null
-        var recSource = -1
+        var openOn: LiveAudioRoute.Route? = null
         var canceller: AcousticEchoCanceler? = null
         var inVoiceCall = false
         val ring = WakeClip.Ring((PREROLL_SECONDS * RATE).toInt())
@@ -301,16 +420,20 @@ class LiveService : Service() {
             rec = null
             runCatching { canceller?.release() }
             canceller = null
-            recSource = -1
+            openOn = null
             if (!keepRing) ring.clear()
         }
         try {
             while (running) {
                 val status = JarvisRuntime.liveStatus.value
                 if (!LiveRules.onHere(status)) break
-                // A call pauses Live (the audio mode; Jarvis's own echo-
-                // cancelling mode does not count), and ends the pause after.
-                JarvisRuntime.liveCall(LiveRules.onCall(audioMode(), voice.speaker.voiceCall))
+                // A call pauses Live (the audio mode; neither Jarvis's own
+                // echo-cancelling mode nor the call mode Live itself holds for
+                // a car's microphone is a call - `ownMicCall`), and ends the
+                // pause after.
+                JarvisRuntime.liveCall(
+                    LiveRules.onCall(audioMode(), voice.speaker.voiceCall, ownMicCall = route?.callMode == true),
+                )
                 val speaking = voice.phase.value == VoiceSession.Phase.SPEAKING || voice.lineSpeaking
                 val may = LiveRules.listen(
                     status,
@@ -324,8 +447,11 @@ class LiveService : Service() {
                 )
                 refreshNotification(status)
                 if (!may.mic) {
-                    // Closed, not ignored: Android's microphone sign goes off.
+                    // Closed, not ignored: Android's microphone sign goes off,
+                    // and so does the car's call mode - Live must not leave a
+                    // car showing a call while it is muted or a card waits.
                     close()
+                    stopRoute()
                     delay(IDLE_MS)
                     continue
                 }
@@ -338,20 +464,24 @@ class LiveService : Service() {
                     voice.speaker.endVoiceCall()
                     inVoiceCall = false
                 }
-                val source = if (speaking) {
-                    MediaRecorder.AudioSource.VOICE_COMMUNICATION
-                } else {
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION
-                }
-                if (rec == null || recSource != source) {
+                // THE ROUTE, decided again every time round the loop
+                // (LiveAudioRoute): a car connected or unplugged mid-session is
+                // noticed here, and a car's hands-free microphone is only
+                // reachable in the call configuration this puts the phone in.
+                val applied = routeFor(speaking)
+                if (rec == null || applied != openOn || routeDropped) {
+                    routeDropped = false
                     close(keepRing = rec != null)
-                    val opened = openPreferred(source)
+                    val opened = openRecorder(applied)
                     if (opened == null) {
                         JarvisRuntime.liveNotice("No microphone available right now.")
                         delay(IDLE_MS * 5)
                         continue
                     }
-                    if (speaking) {
+                    // The echo canceller goes on the voice-call path - used
+                    // while Jarvis talks, and on a car's microphone all the
+                    // time (that route records on the call path anyway).
+                    if (applied.source == LiveAudioRoute.SRC_VOICE_COMMUNICATION) {
                         canceller = runCatching {
                             if (AcousticEchoCanceler.isAvailable()) {
                                 AcousticEchoCanceler.create(opened.audioSessionId)?.also { it.enabled = true }
@@ -362,7 +492,8 @@ class LiveService : Service() {
                     }
                     opened.startRecording()
                     rec = opened
-                    recSource = source
+                    openOn = applied
+                    JarvisRuntime.liveMicWords(applied.words)
                 }
                 val clip = window(requireNotNull(rec), ring, turnModel, overReply = speaking) ?: continue
                 // Not waited for: the recorder's buffer holds well under a
@@ -372,9 +503,61 @@ class LiveService : Service() {
             }
         } finally {
             close()
+            stopRoute()
             if (inVoiceCall) voice.speaker.endVoiceCall()
             turnModel?.close()
         }
+    }
+
+    /**
+     * The route to record on for this moment, applied to the phone: the pure
+     * decision ([LiveAudioRoute.decide]) plus the one thing only Android can
+     * answer - whether it accepted it. When the car's microphone cannot be
+     * made available the phone's own is used, and the Live screen says the
+     * Bluetooth one could not be used ([LiveAudioRoute.fallback]). Never
+     * leaves the phone in a route that was not applied.
+     */
+    private suspend fun routeFor(speaking: Boolean): LiveAudioRoute.Route {
+        var inputs = routeInputs(speaking)
+        // A Bluetooth microphone Android refused is not asked for again and
+        // again: each attempt takes most of a second and flashes the car's
+        // call mode. The phone's own microphone is used until that device
+        // disconnects and comes back (a fresh Live session tries again).
+        refusedType?.let { type ->
+            if (inputs.communication.none { it.type == type }) refusedType = null
+            else inputs = inputs.copy(choice = LiveAudioRoute.MicChoice.PHONE)
+        }
+        val want = LiveAudioRoute.decide(inputs)
+        if (want == route) {
+            // The same route as last time, and it may need putting back: the
+            // Speaker's own call mode lets the communication device go when a
+            // reply ends (Speaker.enterCall's undo).
+            if (want.communicationType != null && !callLinkUp(want)) {
+                routeDropped = true
+                if (!applyRoute(want) || !callLinkUp(want)) route = fellBackTo(inputs, want.communicationType)
+            }
+            return requireNotNull(route)
+        }
+        stopRoute()
+        route = if (applyRoute(want) && callLinkUp(want)) {
+            want
+        } else {
+            fellBackTo(inputs, want.communicationType)
+        }
+        return requireNotNull(route)
+    }
+
+    /**
+     * Record from the phone's own microphone instead: undo what was tried,
+     * apply the fallback, say so on the Live screen, and remember not to ask
+     * for that device again this session.
+     */
+    private suspend fun fellBackTo(inputs: LiveAudioRoute.Inputs, refused: Int?): LiveAudioRoute.Route {
+        stopRoute()
+        if (refused != null) refusedType = refused
+        val fallback = LiveAudioRoute.fallback(inputs)
+        applyRoute(fallback)
+        return fallback
     }
 
     /**
@@ -475,7 +658,11 @@ class LiveService : Service() {
             answering = speaking,
             interrupt = JarvisRuntime.settings.interrupt.value,
         )
-        return may.mic && !LiveRules.onCall(audioMode(), voice.speaker.voiceCall)
+        return may.mic && !LiveRules.onCall(
+            audioMode(),
+            voice.speaker.voiceCall,
+            ownMicCall = route?.callMode == true,
+        )
     }
 
     private suspend fun send(clip: ShortArray) {
@@ -511,32 +698,20 @@ class LiveService : Service() {
     }
 
     /**
-     * The recorder, through a connected Bluetooth headset's microphone when
-     * there is one, else the phone's own - and the Live screen told which.
+     * The recorder, opened as [route] says: `VOICE_COMMUNICATION` on the call
+     * path for a car's or headset's hands-free microphone, `VOICE_RECOGNITION`
+     * for the phone's own (the un-beautified path the voice print was trained
+     * on), and the route's device preferred where Android lists it as an
+     * input.
      */
-    private fun openPreferred(source: Int): AudioRecord? {
-        val headset = preferHeadset()
-        val rec = openRecorder(source) ?: return null
-        if (headset == null) {
-            releaseHeadset()
-            JarvisRuntime.liveMicWords(LiveExtras.micWords(null))
-            return rec
-        }
-        val input = headset.second
-        val took = input != null && runCatching { rec.setPreferredDevice(input) }.getOrDefault(false)
-        if (!took) releaseHeadset()
-        JarvisRuntime.liveMicWords(if (took) LiveExtras.micWords(headset.first) else LiveExtras.micWords(headset.first, fellBack = true))
-        return rec
-    }
-
     @SuppressLint("MissingPermission") // hasMicPermission() is checked before this is reached
-    private fun openRecorder(source: Int): AudioRecord? {
+    private fun openRecorder(route: LiveAudioRoute.Route): AudioRecord? {
         if (!hasMicPermission()) return null
         val min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (min <= 0) return null
         val rec = runCatching {
             AudioRecord(
-                source,
+                route.source,
                 RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
@@ -546,6 +721,19 @@ class LiveService : Service() {
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
             rec.release()
             return null
+        }
+        // The car's microphone by name where Android lists it as an input. On
+        // most phones the communication device already routes it and this only
+        // makes it certain; a refusal here is NOT fatal (the call route still
+        // records from the communication device's microphone), so the recorder
+        // is kept either way.
+        route.expectedInputType?.let { type ->
+            val input = runCatching {
+                (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                    ?.getDevices(AudioManager.GET_DEVICES_INPUTS)
+                    ?.firstOrNull { it.type == type }
+            }.getOrNull()
+            if (input != null) runCatching { rec.setPreferredDevice(input) }
         }
         return rec
     }
@@ -737,6 +925,17 @@ class LiveService : Service() {
 
         /** While the microphone is closed, how often to look again. */
         private const val IDLE_MS = 200L
+
+        /**
+         * How long to wait for a car's call link to come up after asking for
+         * it: `setCommunicationDevice` (and the old `startBluetoothSco`) answer
+         * before the SCO link exists, and a recorder opened too early gets
+         * silence. Twelve 50 ms looks are about as long as a car takes, and
+         * short enough that a phone whose Bluetooth refuses is not stuck
+         * waiting (2026-11-02).
+         */
+        private const val LINK_WAIT_STEPS = 12
+        private const val LINK_WAIT_STEP_MS = 50L
 
         /** How often (in 80 ms steps) a window checks it may stay open: about every 0.4 s. */
         private const val CHECK_EVERY_STEPS = 5

@@ -2056,6 +2056,13 @@ tool_limit = 8
 trust_window_s = 120
 trust_max_short_clips = 16
 max_pause_ms = 1500
+# How long Live keeps listening, after it last heard the owner or last spoke,
+# before it turns itself off (SECONDS). The owner can change it by asking ("make
+# Jarvis Live wait three minutes") and in Settings on the PC or the phone; the
+# one row that owns it is jarvis_limits.LIMITS' "live_idle_seconds", and
+# jarvis_live.quiet_seconds() reads THIS key - so the number written here is the
+# number the engine acts on. 90 is what Live has always used (30 to 600 allowed).
+quiet_s = 90
 # The persistent-stream switch (Slice G design, docs/DESIGN-PHONE-LIVE-STREAM.md,
 # 2026-10-21). OFF by default, and a missing key or a missing [live] table is
 # also OFF - never read as permission. This slice freezes the contract only:

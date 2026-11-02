@@ -2,6 +2,11 @@ package com.jarvis.client
 
 import com.jarvis.client.net.FeatureDirectory
 import com.jarvis.client.net.FeatureSearch
+import com.jarvis.client.net.JarvisJson
+import java.io.File
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -17,6 +22,39 @@ class FeatureDirectoryTest {
 
     private val rows = FeatureDirectory.ROWS
 
+    /**
+     * The PC's own contract - the file this directory is GENERATED from.
+     *
+     * Reading it is the point. The counts below used to be typed into this
+     * test, and they went 26 features stale between 2026-10-28 and 2026-11-02
+     * without one assertion failing: the directory shipped 142 of the
+     * contract's 168 rows and still told the owner "Appearance on Home" after
+     * that button was removed (DEF-027). Comparing the generated rows against
+     * the contract's own `feature_count` and `label_counts` makes the two
+     * artifacts prove each other, so the next stale regeneration fails here
+     * instead of reaching the phone.
+     */
+    private val contract by lazy {
+        JarvisJson.parseToJsonElement(
+            repoFile("contract/feature-controls.json").readText()).jsonObject
+    }
+
+    /** The contract's own count for the one label starting with [prefix]. */
+    private fun contractCount(prefix: String): Int =
+        contract["label_counts"]!!.jsonObject.entries
+            .first { it.key.startsWith(prefix) }.value.jsonPrimitive.int
+
+    /** The directory under test is generated, so its source lives above the test's working dir. */
+    private fun repoFile(rel: String): File {
+        var d: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (d != null) {
+            val f = File(d, rel)
+            if (f.isFile) return f
+            d = d.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
+    }
+
     @Test
     fun `every feature is present, each once, with a real id and name`() {
         // COUNT is generated from the same rows (len(rows) in
@@ -24,6 +62,8 @@ class FeatureDirectoryTest {
         // generated halves together instead of typing the total here.
         assertEquals("the generated artifact's COUNT matches its own rows",
             rows.size, FeatureDirectory.COUNT)
+        assertEquals("the generated rows are the contract's feature count",
+            contract["feature_count"]!!.jsonPrimitive.int, rows.size)
         assertEquals("ids are unique", rows.size, rows.map { it.id }.toSet().size)
         assertTrue("names are not blank", rows.all { it.name.isNotBlank() })
         assertTrue("groups are not blank", rows.all { it.group.isNotBlank() })
@@ -44,18 +84,16 @@ class FeatureDirectoryTest {
             assertTrue("unapproved label: $label",
                 expectedPrefixes.any { label.startsWith(it) })
         }
-        // The counts the PC sends (labels 41/2/15/71/12; corrected 2026-10-23 by
-        // the adjustment-truth pass, Command-Only 69 -> 70 by the desktop
-        // Private chat row on 2026-10-26, and Choose Jarvis's face
-        // PC-Only -> Switchable/Adjustable by the face-by-asking work, same
-        // day: 40 -> 41 and 16 -> 15; Command-Only 70 -> 71 by the
-        // reminder-actions row on 2026-10-27; and Switchable 41 -> 42 by the
-        // Anti-Slop settings card on 2026-10-28), so a wrong label is caught.
-        assertEquals(42, rows.count { it.label.startsWith("Switchable / Adjustable") })
-        assertEquals(2, rows.count { it.label.startsWith("Settings-Only") })
-        assertEquals(15, rows.count { it.label.startsWith("PC-Only Setting") })
-        assertEquals(71, rows.count { it.label.startsWith("Command-Only") })
-        assertEquals(12, rows.count { it.label.startsWith("Always On") })
+        // The counts cross-check the generated rows against the PC's own
+        // contract, the file they are generated from, instead of numbers
+        // typed here. On 2026-11-02 the typed pins read 42/2/15/71/12 while
+        // the contract said 43/2/16/95/12 - 26 features had been missing from
+        // the phone's directory since 2026-10-28 and every assertion passed
+        // (DEF-027). A stale regeneration now fails on the first mismatch.
+        for ((label, expected) in contract["label_counts"]!!.jsonObject) {
+            assertEquals("rows in $label", expected.jsonPrimitive.int,
+                rows.count { it.label == label })
+        }
     }
 
     @Test
@@ -92,7 +130,7 @@ class FeatureDirectoryTest {
     @Test
     fun `an Always-On row owns no switch keys`() {
         val always = rows.filter { it.label.startsWith("Always On") }
-        assertEquals(12, always.size)
+        assertEquals(contractCount("Always On"), always.size)
         assertTrue("Always On may not own a switch", always.all { it.switchKeys.isEmpty() })
         assertTrue("Always On is never a toggle", always.none { it.isToggle })
     }
@@ -133,7 +171,7 @@ class FeatureDirectoryTest {
     fun `no row reaches the phone as a fake control`() {
         // A PC-Only row is shown with its honest refusal, never as a switch.
         val pcOnly = rows.filter { it.label.startsWith("PC-Only Setting") }
-        assertEquals(15, pcOnly.size)
+        assertEquals(contractCount("PC-Only Setting"), pcOnly.size)
         assertTrue("a PC-Only row never offers a phone switch",
             pcOnly.all { it.switchKeys.isEmpty() && !it.isToggle })
     }

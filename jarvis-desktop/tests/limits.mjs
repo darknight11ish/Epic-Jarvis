@@ -110,6 +110,17 @@ await check("a step moves one step and stops at the PC's own ends", async () => 
   assert.equal(stepped({ ...choice, value: 7 }, 1), 24);
   assert.equal(stepped({ ...choice, value: 7 }, -1), 1);
   assert.equal(stepped({ ...choice, kind: "bool" }, 1), null, "a bool has no step");
+  // A row's OWN step (2026-11-01, the Live idle window: 90 s, 30..600, half a
+  // minute a tap). It is read from the PC's `step` and never walks past either
+  // end; a row that does not send one still steps by one.
+  const window = normaliseLimits({ limits: [{ key: "live_idle_seconds", kind: "int",
+    value: 90, choices: [], low: 30, high: 600, unit: "seconds", step: 30 }] }).rows[0];
+  assert.equal(window.step, 30, "the PC's own step is read");
+  assert.equal(stepped(window, 1), 120);
+  assert.equal(stepped(window, -1), 60);
+  assert.equal(stepped({ ...window, value: 600 }, 1), null, "the PC's high");
+  assert.equal(stepped({ ...window, value: 30 }, -1), null, "the PC's low");
+  assert.equal(stepped({ ...window, step: 1 }, 1), 91, "no step sent means one");
 });
 
 await check("what a control sends is the value, never a direction", async () => {

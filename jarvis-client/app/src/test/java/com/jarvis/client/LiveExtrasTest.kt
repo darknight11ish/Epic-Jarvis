@@ -118,6 +118,8 @@ class LiveExtrasTest {
         assertEquals(LiveExtras.MIC_PHONE, LiveExtras.micWords(null))
         assertEquals("Microphone: your Bluetooth headset (Buds)", LiveExtras.micWords(sco))
         assertEquals(LiveExtras.MIC_FELL_BACK, LiveExtras.micWords(sco, fellBack = true))
+        // Bluetooth that offers no microphone at all is named as such (2026-11-02).
+        assertEquals(LiveExtras.MIC_MEDIA_ONLY, LiveExtras.micWords(null, mediaOnly = true))
     }
 
     /**

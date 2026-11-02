@@ -79,7 +79,11 @@ private val DOT_TARGET = 48.dp
  * **TalkBack.** No name is drawn as text on the canvas - at thumb size a 32-name
  * halo is about 21 layout units apart (roughly 18dp after the fit on the
  * 264dp-tall picture as it is sized here), where labels would collide into an
- * unreadable smear. Instead every dot has a real semantics node over it that
+ * unreadable smear. A picture with a SINGLE dot is the one case where the name
+ * is written, in a line under the canvas ([Entities.lonePictureLine]): with one
+ * name there is no neighbour to collide with, and a lone dot would otherwise be
+ * a speck with nothing saying whose it is (2026-11-01). Instead every dot has a
+ * real semantics node over it that
  * announces the same line the band uses ([Entities.galaxyNameLine]), says it is
  * a button ([Role.Button]) and opens the name when double-tapped, so the picture
  * is not a surface only a sighted finger can use. Each node is only as big as
@@ -197,6 +201,20 @@ internal fun GalaxyPicture(
                         },
                 )
             }
+        }
+        // One name has no link to draw, so the whole picture is a single dot.
+        // The canvas carries no text, so this line is where that dot is named
+        // and the empty rest explained - otherwise the owner sees a speck in
+        // an empty box and reads it as broken (2026-11-01).
+        if (picture.dots.size == 1) {
+            Gap(2)
+            val loneLine = Entities.lonePictureLine(picture.dots.single().name)
+            Text(
+                loneLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+                modifier = Modifier.semantics { contentDescription = loneLine },
+            )
         }
         if (picture.dots.size < picture.total) {
             Gap(2)

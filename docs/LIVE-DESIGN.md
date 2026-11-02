@@ -514,10 +514,18 @@ fails closed for any source it does not know (`:1913-1915`).
 from email, calendar, notes, documents or any tool not on the read-aloud list
 stay on screen ("It's on your screen."); a sensitive saved fact keeps an
 answer on screen unless you allowed it; answers about the screen follow the
-2026-09-28 rule; web search, weather and home status are read aloud. The
-utterance reply for a `live` clip carries the same `private_aloud`,
-`memory_aloud`, `sensitive_aloud` and `screen_aloud` fields as any clip
-(`jarvis_speech.py:1757-1786`).
+2026-09-28 rule; web search, weather and home status are read aloud, as are a
+page handed over (`read_web_page`) and - since 2026-11-02 - `feature_guide`.
+**Why `feature_guide` is safe to add** (the owner's answer, "Yes, speak
+capability answers"): the guide reads Jarvis's own shipped feature list and its
+own on/off switch states, never the owner's data, and it changes nothing - no
+card and no outside text - so a spoken Live question answered from it is now
+spoken instead of pointed at the screen. That supersedes the 2026-09-27 list
+restriction for this one read-only tool only; every other tool it keeps on
+screen is unchanged, and the sensitive-fact, private-question and event-stream
+rules come first exactly as before. The utterance reply for a `live` clip
+carries the same `private_aloud`, `memory_aloud`, `sensitive_aloud` and
+`screen_aloud` fields as any clip (`jarvis_speech.py:1757-1786`).
 
 **Say it, do not point at the screen (the owner's request of 2026-11-01: "it
 will say 'it's on your screen' when it'd clearly capable of reading the info
@@ -538,11 +546,15 @@ out loud").** Two things were wrong, and only one of them was the wording:
   is for what it truly cannot say, such as a table of numbers, a picture or a
   long list.
 
-**What deliberately did NOT change:** the apps' own read-aloud rules, the
-private/email/calendar/notes list, the screen rule and the sensitive-fact rule.
-An answer the PC marks as staying on screen still stays on screen, and the one
-fixed line is still "It's on your screen." - the change is that a Live session
-the owner verified no longer loses the facts its own check earned.
+**What deliberately did NOT change in that 2026-11-01 change:** the apps' own
+read-aloud rules, the private/email/calendar/notes list, the screen rule and
+the sensitive-fact rule. An answer the PC marks as staying on screen still
+stays on screen, and the one fixed line is still "It's on your screen." - the
+change is that a Live session the owner verified no longer loses the facts its
+own check earned. **The per-tool list itself changed once, on 2026-11-02**,
+when `feature_guide` joined it by the owner's decision above
+(`decisions.d/2026-11-02-speak-capability-answers.md`); nothing else on the
+list moved, and no tool was taken off it.
 
 **Camera answers need a rule (question 2).** Today there is none: the PC
 records its reading of a picture's words as a reading tool
@@ -1063,14 +1075,16 @@ branch `studio-captcha-live-extras`. No new route; the rules are
 | A Quick Settings tile | Phone | "Jarvis Live - 12 min left" while on here. Tapping it ends Live at once (never held); starting opens the app on the Live screen and starts there, after App lock - Android only lets a microphone service start from an app in front. |
 | The headset button | Phone, only while Live runs here | Press = stop Jarvis talking (not under "Don't interrupt"); hold = Mic off / Mic on. **It never approves, denies or starts anything** (the source check in `LiveExtrasTest`). Android gives the button to the app that played sound last, and on some phones a hold opens the phone's assistant - Mic off is on the screen and the notification; the screen no longer explains the button (the owner asked for the long paragraph to go, 2026-10-26). |
 | "Live ended - Resume" | Phone | After Live ended on the phone and the PC says it can be resumed (quiet, time up), a notification kept on the phone offers Resume Live for the rest of the PC's 10 minutes. Resume opens the app and continues the same chat (after App lock; held on a stale link). |
-| A Bluetooth headset's microphone | Phone | Preferred while one is connected (Android's communication device plus the recorder's preferred input - no Bluetooth permission). If it cannot be used, the phone's own; the Live screen says "Microphone: your Bluetooth headset (Buds)" or the phone's. On the PC Windows chooses the microphone (ARCHITECTURE section 8). The voice check still runs on every clip - a headset microphone is a different microphone, so a voice trained on the phone's own may be recognised less well through it; retraining with the headset on helps. |
+| A Bluetooth (or car) microphone | Phone | Preferred while one is connected. No Bluetooth permission is needed: the device comes from Android's own audio device lists. **A car's Bluetooth is a hands-free device, and its microphone only exists while the phone is in a call**, so that route records on `VOICE_COMMUNICATION` with the phone in `MODE_IN_COMMUNICATION` and the car made the communication device, and the previous mode and device are put back when Live stops (or a card/mute closes the microphone) - a car is never left showing a call. That decision is pure and JVM-tested (`voice/LiveAudioRoute.kt`, `LiveAudioRouteTest`, 2026-11-02). If the car's microphone cannot be used the phone's own is, and when Bluetooth is connected for sound only (A2DP, or a BLE speaker) the screen says Bluetooth here has no microphone. The Live screen says which: "Microphone: your Bluetooth headset (Buds)", or the phone's. On the PC Windows chooses the microphone (ARCHITECTURE section 8). **Unproven on hardware:** whether a particular car (the owner's 2017 Chevrolet Bolt) actually hands its microphone over in that configuration - only that car can say. The voice check still runs on every clip - a headset or car microphone is a different microphone, so a voice trained on the phone's own may be recognised less well through it; retraining with it connected helps, and a lower score fails safe (a refusal, never a false pass). |
 | "Talk about this in Live" | Phone, Android's Share sheet (text) | The text waits on the Live screen as a "Shared text" chip and goes with the next Send as its own message tagged `shared` - outside text, like any share: the chat counts as having read it and nothing is learned from it. Live starts (after App lock) if it was off. |
 | "End Live when" | Phone, Security | The same setting as the PC's: with App lock on, "When App lock would ask again" (default) or "Only when the phone's screen locks" (looser: asks for the fingerprint or PIN; the phone then reports `why: "screen_lock"`). With App lock off neither ends Live. |
 
-**Not verified:** none of the phone's extras has been built by Android's
-compiler here (CI is the only one) or tried on a real phone: the tile, the
-media session's button delivery, the Bluetooth routing and the share entry
-are written from Android's documentation and the app's own patterns.
+**Not verified:** the tile, the media session's button delivery and the share
+entry are written from Android's documentation and the app's own patterns and
+were not tried on a real phone here. The Bluetooth (car) microphone's call-mode
+route was added on 2026-11-02 and its decision is unit-tested on the JVM, but
+whether a particular car hands its microphone over is a hardware fact: only the
+owner's own car can prove it.
 
 ## The phone's microphone precheck (LM-3A, 2026-10-18)
 
