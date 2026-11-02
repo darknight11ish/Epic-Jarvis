@@ -1930,7 +1930,7 @@ $PATCHES = @(
     # where jarvis_gate.py itself cannot be imported.
     'gate-tool-actions-gap.patch'
     # "You have full approval to search the web in this conversation" (the
-    # owner's ask of 2026-11-01; docs/JARVIS-API.md section 174). ONE card,
+    # owner's ask of 2026-11-01; docs/JARVIS-API.md section 175). ONE card,
     # once, that stands in for the `search_the_web` card for the rest of ONE
     # chat - search only, revocable instantly, capped at 8 hours, and every
     # search it covers is logged with the grant's id. Its FOUR hunks are all in

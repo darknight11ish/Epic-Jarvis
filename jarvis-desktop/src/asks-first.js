@@ -82,7 +82,7 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
   "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
   // The conversation-scoped web-search approval and its stop (2026-11-01,
-  // JARVIS-API section 174): chat abilities in "Safety and sharing".
+  // JARVIS-API section 175): chat abilities in "Safety and sharing".
   "approve_web_search_for_conversation", "stop_web_search_approval",
   "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
   "home_control", "my_spending", "retirement_whatif",

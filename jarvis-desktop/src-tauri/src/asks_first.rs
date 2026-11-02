@@ -92,7 +92,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 23] = [
     "github_search",
     "send_file_to_phone",
     // The conversation-scoped web-search approval and its instant stop
-    // (jarvis_agent.py, 2026-11-01; JARVIS-API section 174): chat abilities
+    // (jarvis_agent.py, 2026-11-01; JARVIS-API section 175): chat abilities
     // the owner switches on here, like protect_from_jarvis above. Neither is
     // a fresh-install default, and turning the grant tool on approves nothing
     // by itself - every grant still needs its own card.
