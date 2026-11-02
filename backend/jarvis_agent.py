@@ -6532,12 +6532,14 @@ class _TurnWatch:
         except Exception:
             self.crisis = False
         if self.crisis:
-            # Remember WHEN this conversation last had a crisis turn, so a
-            # carried approval that predates it is dropped rather than run
+            # Remember THAT this conversation has just had a crisis turn, so
+            # a carried approval that predates it is dropped rather than run
             # after it ("An approved step the answer never delivered", the
             # replay-time re-authorisation - owed_may_run). The helper is
             # defined with the owed record, below; it is only called at run
-            # time, never during import.
+            # time, never during import - and it is called at the START of
+            # the crisis turn, before any approval of that turn could be
+            # recorded, so the order it writes is always the later one.
             _note_crisis(self.conversation_id)
 
     # -- Stop everything -----------------------------------------------------
@@ -7776,17 +7778,24 @@ OWED_DROPPED_LINE = ("The {tool} you approved a moment ago was not run: {why}. N
 #: and the audit line carry the short code (`reason`), never a sentence with
 #: the card's words; these phrases are the answer's half.
 OWED_NOT_NOW = {
-    "stop_all": "you pressed Stop everything after approving it",
+    "stop_all": "you pressed Stop everything, and a stop wins over an approval",
     "crisis": "a crisis message came after you approved it",
     "tool_off": "it is no longer switched on",
     "tier_never": "it is set to never run now",
 }
-#: conversation id -> when a crisis turn last happened in it (monotonic).
+#: conversation id -> the order in which a crisis turn last happened in it.
 #: A crisis message after an approval makes that yes stale - the safety path
 #: took over - so the carried step is dropped, never run after it. In memory,
-#: bounded, swept with _OWED, exactly like the record it guards.
-_CRISIS_AT: "dict[str, float]" = {}
-_CRISIS_AT_MAX = 64
+#: bounded, cleared by forget_owed(), exactly like the record it guards.
+#:
+#: AN ORDER, NOT A CLOCK. time.monotonic() on Windows has millisecond
+#: resolution, and the re-sent turn can begin in the same millisecond the
+#: approval was recorded (measured: both read 683627.703 on this PC), so
+#: `crisis_at > approved_at` is not a reliable test of "after". A counter
+#: incremented under _OWED_LOCK is exact, and order is all this rule asks.
+_OWED_SEQ = 0
+_CRISIS_SEQ: "dict[str, int]" = {}
+_CRISIS_SEQ_MAX = 64
 
 
 def _owed_audit(event: str, detail: dict) -> None:
@@ -7811,28 +7820,31 @@ def _owed_card(verdict) -> str:
 def _note_crisis(conversation_id) -> None:
     """Remember that a crisis turn just happened in this conversation, so an
     approval that predates it is never replayed after it. Called by
-    _TurnWatch (defined earlier in this file) when a turn's own crisis check
-    fires - the helper lives here, beside the record it makes stale."""
+    _TurnWatch (defined earlier in this file) at the START of a crisis turn -
+    before anything of that turn can be recorded - so the order it writes is
+    always later than an approval it must invalidate."""
+    global _OWED_SEQ
     if not _usable_conversation_id(conversation_id):
         return
-    now = time.monotonic()
     with _OWED_LOCK:
-        _CRISIS_AT.pop(conversation_id, None)
-        _CRISIS_AT[conversation_id] = now
-        while len(_CRISIS_AT) > _CRISIS_AT_MAX:
-            _CRISIS_AT.pop(next(iter(_CRISIS_AT)))
+        _OWED_SEQ += 1
+        _CRISIS_SEQ.pop(conversation_id, None)
+        _CRISIS_SEQ[conversation_id] = _OWED_SEQ
+        while len(_CRISIS_SEQ) > _CRISIS_SEQ_MAX:
+            _CRISIS_SEQ.pop(next(iter(_CRISIS_SEQ)))
 
 
-def _crisis_since(conversation_id, at) -> bool:
-    """True when a crisis turn happened in this conversation after `at`."""
+def _crisis_since(conversation_id, seq) -> bool:
+    """True when a crisis turn happened in this conversation after the approval
+    whose order is `seq`."""
     if not _usable_conversation_id(conversation_id):
         return False
     try:
-        when = float(at or 0.0)
+        when = int(seq)
     except (TypeError, ValueError):
-        return True                      # no readable time: fail closed
+        return True                      # no readable order: fail closed
     with _OWED_LOCK:
-        last = _CRISIS_AT.get(conversation_id)
+        last = _CRISIS_SEQ.get(conversation_id)
     return last is not None and last > when
 
 
@@ -7846,14 +7858,24 @@ def _owed_sweep(now: float) -> None:
 
 
 def owed_record(conversation_id, verdict, tool_name: str, action: str,
-                call: dict, args: dict) -> bool:
+                call: dict, args: dict, *, stop_mark=None) -> bool:
     """Remember that `tool_name` was approved and its answer never went out.
 
     Only ever called from a turn's `out.gone` branch, AFTER the gate said yes -
     but the "a person said yes" test is made again HERE rather than trusted
     from the caller, because this is the one function that decides something
     will run later with no card in front of the owner: a denied, timed-out,
-    "notify" or auto verdict must never get past it."""
+    "notify" or auto verdict must never get past it.
+
+    `stop_mark` is the CALLER'S TURN mark (`watch.stop_mark`, taken by
+    jarvis_stop_all.begin_turn() before the card was raised), never a mark
+    taken now. That is what lets the replay refuse a yes given after a Stop
+    everything press: the product rule is already that a press while a card
+    waits wins over the approval that follows it (`_one_call`'s own
+    `watch.stopped()` branch), and the dead stream must not become a way round
+    it. A mark taken at record time would already include a press that
+    happened during the wait, and the replay could no longer tell."""
+    global _OWED_SEQ
     if not _usable_conversation_id(conversation_id):
         return False                     # no conversation to carry it into
     if not _a_person_said_yes(verdict):
@@ -7862,26 +7884,30 @@ def owed_record(conversation_id, verdict, tool_name: str, action: str,
     if not card or not isinstance(call, dict) or not isinstance(tool_name, str) or not tool_name:
         return False                     # nothing to run it by, or to de-dupe on
     now = time.monotonic()
-    # Stop everything's own mark AT THE MOMENT OF THE APPROVAL (jarvis_stop_all
-    # .generation()). A press after this makes stopped_since(mark) true, which
-    # is what lets the replay tell "stopped since the tap" from "stopped in
-    # some earlier answer". None when the module is not installed: nothing can
-    # be stopped then, and _stopped_since(None) is False.
-    sa = _stop_all()
-    try:
-        stop_mark = sa.generation() if sa is not None else None
-    except Exception:
-        stop_mark = None
+    # Stop everything's own mark AT THE START OF THE TURN THAT WAITED for the
+    # card (`watch.stop_mark`, passed by both call sites). A press after that
+    # makes stopped_since(mark) true at replay - including a press made while
+    # the card waited and approved afterwards, which the product's own rule
+    # already refuses. A caller with no mark (outside a turn) gets the current
+    # generation: nothing before this line can then be missed.
+    if stop_mark is None:
+        sa = _stop_all()
+        try:
+            stop_mark = sa.generation() if sa is not None else None
+        except Exception:
+            stop_mark = None
     with _OWED_LOCK:
         _owed_sweep(now)
         if card in _OWED_DONE:
             return False                 # this card's one run is already spent
+        _OWED_SEQ += 1
         _OWED.pop(conversation_id, None)
         _OWED[conversation_id] = {"card": card, "tool": tool_name,
                                   "action": str(action or tool_name),
                                   "call": dict(call),
                                   "args": dict(args) if isinstance(args, dict) else {},
                                   "stop_mark": stop_mark,
+                                  "seq": _OWED_SEQ,
                                   "at": now}
         while len(_OWED) > _OWED_MAX:
             _OWED.pop(next(iter(_OWED)))
@@ -7990,7 +8016,7 @@ def owed_may_run(owed: dict, names, extra: dict,
         return "stop_all"
     if watch is not None and watch.stopped():
         return "stop_all"
-    if _crisis_since(getattr(watch, "conversation_id", ""), owed.get("at")):
+    if _crisis_since(getattr(watch, "conversation_id", ""), owed.get("seq")):
         return "crisis"
     offered = set(names or ())
     if isinstance(extra, dict):
@@ -8035,12 +8061,12 @@ def forget_owed(conversation_id=None) -> None:
         if conversation_id is None:
             _OWED.clear()
             _OWED_DONE.clear()
-            _CRISIS_AT.clear()
+            _CRISIS_SEQ.clear()
             return
         rec = _OWED.pop(conversation_id, None)
         if isinstance(rec, dict):
             _OWED_DONE.pop(rec.get("card") or "", None)
-        _CRISIS_AT.pop(conversation_id, None)
+        _CRISIS_SEQ.pop(conversation_id, None)
 
 
 class _AlreadyApproved:
@@ -13514,7 +13540,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # the app is about to re-send this same conversation. owed_record
         # refuses anything that is not a person's approval, so this branch is
         # the only way a step can become owed at all.
-        owed_record(watch.conversation_id, verdict, name, action_name, call, args)
+        owed_record(watch.conversation_id, verdict, name, action_name, call, args,
+                    stop_mark=watch.stop_mark)
         say_step("tool_refused", name)
         if announce:
             try:
@@ -13753,7 +13780,8 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
         # when it really had a card: a search that needed none was never
         # approved by anybody, so there is nothing to carry.
         if lines or pre_approved is not None:
-            owed_record(watch.conversation_id, verdict, name, WS.ACTION_SEARCH, call, args)
+            owed_record(watch.conversation_id, verdict, name, WS.ACTION_SEARCH, call, args,
+                        stop_mark=watch.stop_mark)
         raise ClientGone()
     if watch.stopped():
         # Stop everything while the search's card waited (jarvis_stop_all.py).

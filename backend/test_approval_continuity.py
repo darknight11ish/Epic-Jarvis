@@ -41,11 +41,11 @@ delivered", 2026-11-01):
   6. the record and the replay are in the audit log, names and ids only - the
      card's words and the owner's question are not in it;
   7. THE YES IS RE-MADE AT REPLAY TIME, against the gate's CURRENT decision: a
-     Stop everything pressed after the approval, a crisis turn in the same
-     conversation after it, the tool switched off, or its action now at tier
-     "never" all DROP the step (agent.owed_dropped) instead of running it -
-     nothing the gate would now refuse is ever run, and no second card is
-     raised to ask again;
+     Stop everything pressed after the approval (or while its card waited), a
+     crisis turn in the same conversation after it, the tool switched off, or
+     its action now at tier "never" all DROP the step (agent.owed_dropped)
+     instead of running it - nothing the gate would now refuse is ever run,
+     and no second card is raised to ask again;
   8. THE REPORTED SEAM IS DRIVEN END TO END (`run_local_turn`, not its pieces):
      an approved web_search whose card turn died with the app's stream really
      runs on the next turn, once, its result is in the first round of the
@@ -782,6 +782,59 @@ def t_a_stop_all_after_the_approval_drops_the_step():
             SA._reset_for_tests()
 
 
+def t_a_stop_all_pressed_while_the_card_waited_drops_the_step():
+    """The product's own rule, in STOPPED_ERROR and `_one_call`'s stopped
+    branch: a Stop everything press while a card WAITS wins over the approval
+    that follows it. The dead-stream branch records before that check, so the
+    record must carry the turn's own mark (taken before the card was raised) -
+    a mark taken at record time would already include the press, and the
+    replay could no longer tell."""
+    AG.forget_owed()
+    ran = []
+    real = _count_runs(ran)
+    state = {"sa": None}
+
+    class StopWhileWaiting(Gate):
+        def __init__(self):
+            super().__init__(wait=0.05)
+            self.pressed = False
+
+        def __call__(self, action, detail, prompt):
+            card = f"card{len(self.asked) + 1}-0f1e2d3c"
+            self.asked.append((action, card))
+            time.sleep(self.wait)
+            state["sa"] = _press_stop_all()     # the owner's press, mid-wait
+            self.pressed = True
+            return _Verdict(True, "approved", card, action)
+
+    gate = StopWhileWaiting()
+    try:
+        s1, _ = _turn([calc_call(), ("done", "stop")], gate=gate,
+                      stream_out=_dead_stream_after_the_card())
+        check("the stop was pressed while the card waited, and the app was gone",
+              gate.pressed is True and s1["client_gone"] is True, repr(s1))
+        check("the yes is on record, under the turn's own earlier mark",
+              AG.owed_pending(CONV) is True)
+        out = []
+        s2, _ = _turn([("content", "I stopped."), ("done", "stop")],
+                      gate=gate, stream_out=out.append)
+        said = b"".join(out).decode("utf-8", "replace")
+        check("a stop pressed while the card waited beats the approval that "
+              "followed it",
+              ran == [] and s2["tools_ran"] == [], repr((ran, s2.get("tools_ran"))))
+        check("the owner is told the stop is why", "Stop everything" in said,
+              repr(said[:400]))
+        drops = _dropped_lines()
+        check("the audit log says stop_all, not a denial or a TTL",
+              bool(drops) and drops[-1]["detail"].get("reason") == "stop_all",
+              repr(drops[-1:]))
+        check("the record is spent", AG.owed_pending(CONV) is False)
+    finally:
+        AG.TOOLS["calculator"].execute = real
+        if state["sa"] is not None:
+            state["sa"]._reset_for_tests()
+
+
 def t_a_crisis_after_the_approval_drops_the_step():
     """A crisis message is not an ordinary question: after one, a search
     approved before it is stale, not something to run quietly. The crisis
@@ -1161,6 +1214,7 @@ if __name__ == "__main__":
                t_an_owed_step_ages_out_after_ten_minutes,
                t_a_private_turn_leaves_it_owed_for_an_ordinary_one,
                t_a_stop_all_after_the_approval_drops_the_step,
+               t_a_stop_all_pressed_while_the_card_waited_drops_the_step,
                t_a_crisis_after_the_approval_drops_the_step,
                t_a_tier_turned_to_never_after_the_approval_drops_the_step,
                t_a_tool_switched_off_after_the_approval_drops_the_step,
