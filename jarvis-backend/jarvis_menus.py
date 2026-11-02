@@ -548,6 +548,21 @@ MENUS: tuple = (
            "\"Notifications from Jarvis\", each row saying it is the PC's; neither app has a "
            "hide row for them, so `hide` is False on both.",
        names=("notifications", "notification settings", "desktop notifications")),
+    # "To-do list carry-over" (2026-11-02, the todo-carry-over lane; JARVIS-API
+    # section 179): the desktop's Settings card for how the to-do list is drawn.
+    # DESKTOP ONLY, and the phone's placement is what decides it: the phone
+    # draws the same two choices INSIDE its Limits card (SettingsScreen.kt's
+    # TodoCarryoverSection under LimitsSection), whose menu is settings.limits,
+    # so a row here with "phone" in `apps` would offer to hide something that
+    # has no row of its own on the phone - the rule settings.floating-avatar's
+    # note gives, in reverse. Hideable like every other ordinary Settings card:
+    # settings.js reads `settings.<card id>` for a card that carries no
+    # data-menu-id, so hiding this row really hides the card.
+    _m("settings.todo-carryover", "To-do list carry-over",
+       "Whether yesterday's unfinished to-do items carry into today's list, or each day keeps "
+       "its own.",
+       (DESKTOP,),
+       names=("to-do list carry-over", "the to-do carry-over", "the to-do list mode")),
     _m("settings.backend-supports", "What this backend supports",
        "The capability list the app branches on.",
        names=("what this backend supports", "backend capabilities", "this backend")),

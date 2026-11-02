@@ -545,6 +545,25 @@ SECTIONS: tuple = (
     # answers where the CARD is, not what the phone can change.
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
             app="both"),
+    # "To-do list carry-over" (2026-11-02, the todo-carry-over lane; JARVIS-API
+    # section 179). The owner chose BOTH ways of showing the to-do list, with
+    # full daily rollover as the default, and this Section is the card that
+    # changes it. A card of its own on the desktop
+    # (settings.html#todo-carryover, src/todo-carryover-settings.js), drawn from
+    # GET /api/schedule and written through the SAME POST /api/schedule/act
+    # {"do": "todo_mode"} a spoken sentence reaches - so a tap and a sentence
+    # cannot disagree, and no approval card is raised either way because it
+    # moves no item.
+    #
+    # BOTH, but with no phone row of its own: the phone draws the same two
+    # choices INSIDE its Limits row (SettingsScreen.kt's TodoCarryoverSection
+    # under LimitsSection), so "open the to-do list carry-over" on the phone
+    # lands there - OpenPlace.kt maps this id to the phone's "limits" item.
+    # That is also why contract/feature-controls.json records in_phone_settings
+    # false: the evidence list only sees rows keyed by this id, and the phone
+    # has no such row by design, not by omission.
+    Section("todo-carryover", ("to-do list carry-over", "the to-do carry-over",
+                               "the to-do list mode", "the to-do list's own day")),
     # "All features and abilities" (2026-10-22, #749): the phone's directory of the
     # 140 features. PHONE ONLY, and the reason is the same one the desktop page
     # gives: the desktop's own directory card has NO `<section class="card" id>`
@@ -3192,6 +3211,78 @@ _SMALL_APPROVALS_CHOICES = {
 }
 
 
+# --- the to-do list's day carry-over (2026-11-02) --------------------------
+#
+# THE OWNER'S CHOICE (2026-11-02 ~00:41 PT): BOTH ways of showing the to-do
+# list, with full daily rollover as the DEFAULT. So:
+#
+#   * "rollover" (the default): today's list is every open item written today or
+#     earlier, and each older one says how old it is - "from yesterday", "from
+#     Friday (3d ago)", "from Oct 26". A 3-day-old item never says "from
+#     yesterday";
+#   * "day": each item stays on the day it was written, grouped under that day's
+#     heading, and yesterday's unfinished ones are not moved into today.
+#
+# IT IS NOT A SECOND WAY TO CHANGE ANYTHING. It calls
+# `jarvis_schedule.set_todo_mode_here`, the same method the POST
+# /api/schedule/todo-mode route calls and the same one both apps' Settings
+# switch calls - so a sentence typed or said at Jarvis and a tap cannot
+# disagree about the state.
+#
+# CARDLESS EITHER WAY, and deliberately: it moves no item, deletes nothing,
+# re-stamps no day and loosens no rule - it changes how the owner's own list is
+# DRAWN. The switch is lossless by construction because `created_date` is only
+# ever written once, when an item is created.
+_TODO_CARRYOVER_CHOICES = {
+    "rollover": "rollover", "daily rollover": "rollover",
+    "full daily rollover": "rollover", "a full daily rollover": "rollover",
+    "roll everything over": "rollover", "carry everything over": "rollover",
+    "carry them over": "rollover", "carry over": "rollover",
+    "carry yesterday over": "rollover", "roll over": "rollover",
+    "day": "day", "day by day": "day", "each day": "day",
+    "each day separately": "day", "day labelled": "day", "day labeled": "day",
+    "one day at a time": "day", "separate days": "day",
+}
+
+
+def set_todo_carryover(value, *, peer=None, local=None) -> Outcome:
+    """How the to-do list carries over: "rollover" (the default) or "day".
+
+    Never moves, copies, deletes or re-dates an item - see the block above.
+    `value` arrives as one of `_TODO_CARRYOVER_CHOICES`' values; the raw words
+    are tolerated too, so the same function is safe to call directly."""
+    want = str(value or "")
+    mode = _TODO_CARRYOVER_CHOICES.get(want) or _TODO_CARRYOVER_CHOICES.get(_choice_key(want))
+    if mode is None:
+        return Outcome(False, "The to-do list can be either \"Daily rollover\" or "
+                              "\"Day by day\". Nothing was changed.")
+    try:
+        import jarvis_schedule as JS
+    except Exception:
+        return _missing("the to-do list")
+    try:
+        was = JS.get().todo_mode()
+    except Exception:
+        was = ""
+    try:
+        now_mode = JS.set_todo_mode_here(mode)
+    except Exception as exc:
+        return Outcome(False, "That setting could not be saved "
+                              f"({type(exc).__name__}), so nothing was changed.")
+    if now_mode == was:
+        if now_mode == "rollover":
+            return Outcome(True, "The to-do list already shows everything still open, "
+                                 "each item saying how old it is. Nothing was moved.")
+        return Outcome(True, "The to-do list already keeps each day to itself. "
+                             "Nothing was moved.")
+    if now_mode == "rollover":
+        return Outcome(True, "Today's list is everything still open, and each older item "
+                             "says how old it is - \"from yesterday\", \"from Friday "
+                             "(3d ago)\". Nothing was moved.")
+    return Outcome(True, "Each day keeps its own list now: an item stays on the day it "
+                         "was written. Nothing was moved and nothing was lost.")
+
+
 # --- the ONE number setting (2026-11-01) -----------------------------------
 #
 # THE OWNER'S ASK: "also id likee to he able to tell jarvis to change the setting
@@ -3496,6 +3587,25 @@ CHOICE_SETTINGS: tuple = (
         "whether the small read-only approvals (a web search, a page, the news, "
         "reading your calendar or notes) ask for your fingerprint as well as the "
         "card's own yes",
+    ),
+    # THE TO-DO LIST'S DAY CARRY-OVER (the owner's choice of 2026-11-02: BOTH
+    # ways, full daily rollover as the default). One setting, two answers, and
+    # the SAME function the POST route and both apps' Settings switch call
+    # (jarvis_schedule.set_todo_mode_here), so a sentence and a tap cannot
+    # disagree. The names are the sentences he really says, and every one of
+    # them keeps a word only this setting has ("to-do", "carry", "rollover"), so
+    # "day" cannot swallow the idle-new row. `where` is the card this change
+    # added to the desktop's Settings page; the phone draws the same two inside
+    # its Limits row, which is where OpenPlace sends "open" for this id.
+    ChoiceSetting(
+        "todo_carryover",
+        ("the to-do carry-over", "the todo carry-over", "the to-do list carry-over",
+         "the to-do list carryover", "how the to-do list carries over",
+         "the to-do list mode", "the to-do mode", "the todo list mode"),
+        "todo-carryover", dict(_TODO_CARRYOVER_CHOICES), set_todo_carryover,
+        "whether yesterday's unfinished items join today's to-do list with a tag "
+        "saying how old they are (daily rollover, the default) or each day keeps "
+        "its own list",
     ),
 )
 
@@ -4095,6 +4205,7 @@ SECTION_PLAIN = {
     "phone-notify": "phone notifications",
     "watch-notify": "watch notifications",
     "prompt-coach": "the prompt coach",
+    "todo-carryover": "the to-do list carry-over",
 }
 
 # --------------------------------------------------------------------------

@@ -135,6 +135,15 @@ object OpenPlace {
         // phone (SettingsScreen.kt, item "limits"; LimitsPlate.kt). So "open
         // limits" lands on it instead of the top of Settings.
         "limits" to Where.Go(Screen.SETTINGS, "limits"),
+        // "To-do list carry-over" (2026-11-02, the todo-carry-over lane;
+        // JARVIS-API section 179): a card of its own in the PC's Settings, and on
+        // the phone the same two choices are drawn INSIDE the "Limits and how
+        // often Jarvis does things" row (SettingsScreen.kt's
+        // TodoCarryoverSection, right under LimitsSection; TodoCarryoverPlate.kt).
+        // So "open the to-do list carry-over" lands on that row - there is no
+        // `todo-carryover` item key of its own, and none is owed: the control is
+        // drawn one tap inside it, from the same PC route.
+        "todo-carryover" to Where.Go(Screen.SETTINGS, "limits"),
         // "A new conversation starts after" (the audit of 2026-10-08): a
         // CLIENT-SIDE choice with its own Settings row on the phone
         // (SettingsScreen.kt, item "idle-new"; IdleNewPlate.kt), so "open a new

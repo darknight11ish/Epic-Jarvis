@@ -1093,6 +1093,12 @@ fn main() {
             // this line the command has no permission at all and every press
             // is refused at the ACL.
             "skills_menu",
+            // The to-do list's day carry-over (todo_carryover.rs; 2026-11-02;
+            // JARVIS-API section 179). Settings only: the read (the mode in
+            // force and the two modes in the PC's own words) and the one change.
+            // It moves no item and re-stamps no day, so it raises no card either
+            // way; the write is held on a stale link like every other write.
+            "todo_carryover",
             "big_coder",
             "history_settings",
             // The Jarvis Calendar's switch (calendar_settings.rs; 2026-10-30;

@@ -15278,7 +15278,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
                 others = " Other lists: " + _join(_lower(t) for t in names) + "."
         if not items:
             return Result(f"Your {title} is empty." + others, n, private=bool(others))
-        texts = [i["text"] for i in items]
+        # 2026-11-02 (the owner's choice, Gemini's ruling 8): an item written
+        # before today says how old it is, in the PC's own words - the same tag
+        # both apps draw, from the same function. With daily rollover on (the
+        # default), "what's on my to-do list today" therefore answers with
+        # "milk (from yesterday)" rather than pretending everything is new.
+        texts = [_todo_said(i) for i in items]
         if len(texts) > 8:
             return Result(f"{len(texts)} things on your {title}. The first 8: "
                           f"{_join(texts[:8])}." + others, n, [i["id"] for i in items[:8]],
@@ -15312,6 +15317,22 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
 
 def _lower(s: str) -> str:
     return s[:1].lower() + s[1:]
+
+
+def _todo_said(item: dict) -> str:
+    """One to-do item as the read-out says it: its words, and the PC's own age
+    tag when it was written before today - "milk (from yesterday)", "call the
+    dentist (from Friday (3d ago))".
+
+    2026-11-02 (the owner's choice; Gemini's ruling 8). The tag is the
+    scheduler's own (`jarvis_schedule.carry_words`), computed on the PC's clock
+    and handed out in the item's `carry` field - never worked out here and never
+    by an app, so the spoken answer and both screens cannot disagree. An item
+    written today carries no tag, so every reply about today's list reads
+    exactly as it did before this existed."""
+    words = str(item.get("text") or "")
+    carry = str(item.get("carry") or "")
+    return f"{words} ({carry})" if carry else words
 
 
 def _as_adjective(length: str) -> str:
