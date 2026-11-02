@@ -13881,11 +13881,12 @@ each uses the ones above.
   `MODE_IN_COMMUNICATION` and the car as the communication device, and puts the
   previous mode and device back when Live stops (2026-11-02; the decision is
   pure and JVM-tested, `voice/LiveAudioRoute.kt`). Where it cannot be used the
-  phone's own microphone is, and the Live screen says which ("Microphone: your
-  Bluetooth headset (Buds)"); Bluetooth that has no microphone (A2DP only) is
-  named as such. On the PC Windows picks the microphone (the default one), and
-  the Voice settings already say which it is. No route changed for this: the
-  clip still goes to `/api/voice/utterance` with `mic=phone`.
+  phone's own microphone is, and the route's own words say which ("Microphone:
+  your Bluetooth headset (Buds)"); Bluetooth that has no microphone (A2DP only)
+  is named as such. Those words were drawn on the Live screen until 2026-11-02,
+  when the owner removed that line. On the PC Windows picks the microphone (the
+  default one), and the Voice settings already say which it is. No route changed
+  for this: the clip still goes to `/api/voice/utterance` with `mic=phone`.
 - **"Talk about this in Live"** (phone): a second entry in the Share sheet
   (text only). The text waits on the Live screen as a "Shared text" chip and
   goes, on Send, as its own message tagged `provenance: "shared"` - outside
@@ -29959,3 +29960,160 @@ starts `adb` or touches a phone (`backend/test_android_control.py`,
 Also unchanged and worth saying: opening a media app takes it to the front, so a
 Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
 "One-sided on purpose").
+
+## 175. "You have full approval to search the web for this conversation": ONE card, and search only (added 2026-11-01)
+
+The owner's own words, two messages the same day:
+
+> "also if I ask jarvis and say you have full approval to search the web for
+> anything during this conversation. give jarvis the approval to search the web
+> for the entire conversation until I say it doesn't have authorization to do
+> that. make sure a card comes up that I have to approve before this happens"
+
+> "and if I ask anything further like book a flight for me online then it will
+> have to have another card to approve further action beyond just searching the
+> web."
+
+Section number: main ended at 173 when this was written, and #1067 (the phone app launch, merged first) took 174, so this one is 175.
+
+### 175.1 What it is, and what it is not
+
+ONE approval card, once, that stands in for the ordinary `search_the_web` card
+for the rest of ONE conversation. It is a **standing permission for exactly one
+action**, not a general "trust me" switch:
+
+- it covers `search_the_web` and nothing else. The ONLY code that reads a grant
+  is `_web_search_call` (the one place whose gate action is
+  `jarvis_search.ACTION_SEARCH`), and the only things that write or clear one
+  are the two tools below. "Book a flight for me" is `browser_control` (or
+  `read_web_page` for one page) and still raises its own card with a grant live;
+  so do `send_email`, `control_computer`, `control_phone`, `spend_money`,
+  `delete_file`, `run_shell_on_host`, `change_own_config` and everything else.
+  `backend/test_web_search_grant.py` names six of them and proves each still
+  asks;
+- it cannot be made by the words alone. The model asks for the card; a person
+  answers it. The store is written only on the generic
+  prepare()/gate/execute() path after a verdict that came from a card, so a
+  denied, timed-out or unanswered card writes nothing, and a verdict with
+  nobody asked (`outcome` `auto`) is refused by `NEEDS_A_PERSON` even if someone
+  loosens its tier in their own settings;
+- it dies with the conversation, and on its own. The key is the request's own
+  `conversation_id`, so conversation A's grant cannot cover conversation B, and
+  a request with no conversation id can neither give nor use one (it is refused
+  with no card at all). It is capped at 8 hours, and it is **in memory only** -
+  no file, no database, no setting - so a restart ends it;
+- Lockdown wins. `jarvis_asks_first.lockdown_on()` stops a grant being used for
+  as long as it is on, and the card says so.
+
+### 175.2 The two tools and the two gate actions
+
+| model tool | gate action | tier | card? |
+|---|---|---|---|
+| `approve_web_search_for_conversation` | `grant_web_search_conversation` | `ask` | ONE card, once |
+| `stop_web_search_approval` | `revoke_web_search_grant` | `auto` | none - instant |
+
+Both tier lines are in **both** shipped settings copies
+(`backend/rebuilt/jarvis-framework.toml` and
+`jarvis-backend/jarvis-framework.toml`); `backend/_apply_toml_tiers.py` adds
+them to an existing PC's file at the next update, the same way every other new
+action reaches it. Both actions have their own `_RISK` row in
+`jarvis_gate.py` (the grant is `reversible: yes` / `reach: outbound`, so a
+risky approval that a lock screen may not swipe through; the stop is
+`yes` / `local`), so neither is an unclassified action - which matters: without
+its row the stop would be forced to tier "ask" and the owner would be sent a
+card to STOP something they had just asked to stop. The rows are added by one
+`_RISK.update({...})` at the END of `jarvis_gate.py`, not inside the table's own
+literal: every line in there is some earlier patch's hunk context, and both
+placements that were tried inside it broke a real suite (the numbers and the
+two failures are in `backend/_stack.py`'s RATCHET note). `_RISK.update` runs at
+import, before any `check()` call.
+
+`more_tools` group `web_search_grant`; both tools are switched on from
+Settings -> Tools -> "Safety and sharing" (`jarvis_asks_first.TIER_A`), never
+by default - `[tools].enabled` does not name them, so a fresh install's offered
+list and `test_tool_defaults.py`'s pinned defaults are unchanged.
+
+### 175.3 What the card says
+
+The four things the owner asked to see, and nothing else:
+
+    Allow web searches in this chat to run without a card each time?
+
+    While this is on, a web search in THIS conversation runs without asking you
+    again - including one whose words repeat something Jarvis has saved about
+    you, which would otherwise get its own card.
+
+    Nothing else is covered. Sending an email or a file, booking or buying
+    anything, spending money, deleting a file, running a command, changing a
+    setting, using a browser, your accounts and your phone each still raise
+    their own card and still need your yes. This can never widen to them,
+    however open-ended the words that asked for it were.
+
+    It ends when you say stop ("stop searching without asking", "you don't have
+    approval", "revoke that"), when this chat ends, after 8 hours, or when
+    Jarvis restarts. Every search it covers is written in the approval log with
+    this grant's id. Lockdown still asks: while it is on, no search runs without
+    its card.
+
+    If you say no, every search keeps asking, exactly as it does now.
+
+The `jarvis_card_words` rows are `grant_web_search_conversation` -> "let web
+searches in this chat stop asking" (short summary: "search this chat without
+asking each time") and `revoke_web_search_grant` -> "ask before every web search
+in this chat again". The words the owner actually says are matched by the model,
+not by a phrase list: "you have full approval to search the web for anything
+during this conversation", "don't ask me about searches for this chat"; and, to
+stop, "stop searching without asking", "you don't have approval", "revoke
+that", "ask me before searching again".
+
+### 175.4 What is written down
+
+Three events in the gate's own audit log, written through `jarvis_gate`'s three
+new functions (`grant_made`, `granted`, `grant_ended`) rather than by the agent
+calling `audit_log` itself - the event names and the redaction rules are the
+gate's:
+
+    gate.grant_made   {grant, seconds}          the card was approved
+    gate.granted      {action, grant}           ONE search ran with no card
+    gate.grant_ended  {grant, state}            state: revoked | expired
+
+`grant` is this process's own random 12 hex characters. The CONVERSATION ID IS
+NEVER WRITTEN DOWN - not in the log, not on disk anywhere - so the log says a
+search ran unasked and under which grant, and cannot be joined back to a chat.
+`gate.granted` is written before the search, because a search that starts is a
+search that happened. If the backend's `jarvis_gate.py` is older than its
+`jarvis_agent.py` (a half-applied update), the grant is REFUSED rather than
+allowed unlogged: "every search under a grant is logged" is part of what the
+owner approved.
+
+### 175.5 One-sided? No.
+
+Both apps get this with no new UI: the owner says the sentence in a chat and the
+model calls the tools, exactly as with any other tool. Nothing is desktop-only
+or phone-only, no route was added, and `tools/check_parity.py` is unchanged. A
+"web searches approved for this chat" indicator is deliberately NOT built - the
+approval log and the card are the record, and a second on-screen state would be
+a thing to keep in sync for no gain.
+
+### 175.6 What proves it
+
+- `backend/test_web_search_grant.py` - 95 checks, all nine cases the brief
+  names, driven through the REAL turn loop, the real `jarvis_search` planning
+  and the real `jarvis_gate` audit writers, against a throwaway config and log
+  folder: no card means no grant; one card and a denial grants nothing; an
+  approved grant runs the search with no second card and the log carries
+  `gate.granted` with the grant id; six other actions still ask (two of them
+  driven on the real path); conversation A does not cover B; revocation is
+  instant, logged and idempotent; the 8-hour cap and a restart end it; "book a
+  flight" still raises its own card; open-ended words grant search only. It also
+  applies `backend/web-search-grant.patch` to `jarvis-backend/jarvis_gate.py`
+  and reverses it byte for byte.
+- `tools/check_patch_original_text.py` - the patch's four hunks and 21 lines of
+  the owner's original text are pinned, with the reason written beside the pin.
+- the existing suites: `test_web_search.py` (the search path it sits in),
+  `test_card_words.py` and `test_card_short_words.py` (both actions have plain
+  words), `test_tool_contract.py`, `test_tool_text.py`, `test_short_tool_list.py`,
+  `test_tool_defaults.py` (no fresh-install default changed),
+  `test_reach.py`, `test_smarter_answers.py`, `test_asks_first.py` (the two tools
+  are listed in "Safety and sharing"), `test_gate_risk_words.py`,
+  `test_gate_names.py`, `test_gate_unknown_risk.py`.
