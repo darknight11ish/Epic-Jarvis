@@ -1332,6 +1332,14 @@
      "name": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)"
     },
     {
+     "id": "approve_web_search_for_conversation",
+     "name": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)"
+    },
+    {
+     "id": "stop_web_search_approval",
+     "name": "Putting the card back in front of every web search in this chat (instant, no card)"
+    },
+    {
      "id": "browser_control",
      "name": "Browser control"
     }

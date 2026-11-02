@@ -14,7 +14,7 @@ you drop in and take out.
   - **28** replace a patch, and are generated from it;
   - **17** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **140 core patches**, which still go on through
+- **141 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -227,6 +227,7 @@ stack's order and cannot be moved into a folder.
 | `learning-extract-reason.patch` | edits lines the core already has; it cannot be applied out of order |
 | `attached-file.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `gate-tool-actions-gap.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
+| `web-search-grant.patch` | edits lines the core already has; it cannot be applied out of order |
 | `unknown-risk-approvable.patch` | edits lines the core already has; it cannot be applied out of order |
 | `jobs-routes.patch` | edits lines the core already has; it cannot be applied out of order |
 | `phone-apps.patch` | adds lines to the core (routes, gate tables or a function) but removes none |

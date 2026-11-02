@@ -1837,7 +1837,19 @@ _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "pr
                                   # raises (one change_own_config per app), and its list half
                                   # is answered from the settings file with no card - neither
                                   # is a step a plan should wrap in a second mechanism.
-                                  "phone_apps"})
+                                  "phone_apps",
+                                  # The conversation-scoped web-search approval and its
+                                  # stop (WEB_SEARCH_GRANT, 2026-11-01): both need the
+                                  # TURN's own conversation id, which only `_one_call`
+                                  # hands them, and a plan is not one conversation - a
+                                  # grant written by a step could not be the chat's. The
+                                  # owner asks for these directly, in their own words.
+                                  # Written as the literals GRANT_TOOL and REVOKE_TOOL
+                                  # hold, like "change_setting" above: those two are
+                                  # defined further down this file (with the rest of the
+                                  # feature), and this set is built before them.
+                                  "approve_web_search_for_conversation",
+                                  "stop_web_search_approval"})
 
 #: The gate action a plan step is put to when it must be asked about on its
 #: own card (marked risky, or filled in from an earlier step's result) but
@@ -2670,6 +2682,231 @@ def _run_rea(args, plan_obj, **_):
     return REA.run(plan_obj)
 
 
+# --------------------------------------------------------------------------
+#   "You have full approval to search the web in this conversation"
+#   (the owner's ask, 2026-11-01)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S WORDS, both messages, because the shape below is theirs:
+#
+#   "if I ask jarvis and say you have full approval to search the web for
+#    anything during this conversation. give jarvis the approval to search the
+#    web for the entire conversation until I say it doesn't have authorization
+#    to do that. make sure a card comes up that I have to approve before this
+#    happens"
+#   "and if I ask anything further like book a flight for me online then it
+#    will have to have another card to approve further action beyond just
+#    searching the web."
+#
+# WHAT IT IS. ONE approval card, once, that stands in for the ordinary
+# `search_the_web` card for the rest of ONE conversation. Nothing else is
+# covered, and nothing else can be: the ONLY code that reads a grant is
+# `_web_search_call` - the one place whose gate action is
+# jarvis_search.ACTION_SEARCH ("search_the_web") - and the two tools below are
+# the only things that write or clear one. Every other tool keeps its own
+# action, its own tier and its own card, so "book a flight for me" is
+# `browser_control` (or `read_web_page` for one page) and still raises its own
+# card with a grant live. backend/test_web_search_grant.py names six other
+# actions and proves each one still asks.
+#
+# WHY A MODEL TOOL. The grant has to be understood from whatever words the
+# owner uses ("full approval to search the web for anything", "don't ask me
+# about searches for this chat"), so the model calls it. The model can never
+# GRANT it, though: the card is the gate's ordinary "ask" for
+# `grant_web_search_conversation`, and the store is written only after a
+# person's yes - `_run_web_search_grant` runs only down the generic
+# prepare()/gate/execute() path in `_one_call`, and it writes the grant for the
+# conversation the CARD was worded for and no other. A denied, timed-out or
+# unanswered card writes nothing at all.
+#
+# WHAT ENDS IT. The owner saying stop (the revoke tool: tier "auto", instant,
+# logged, idempotent); a new chat (the key is the request's own
+# conversation_id, so conversation A's grant cannot cover conversation B); the
+# absolute cap below; and a restart (the store is in memory only - nothing is
+# written to disk, so there is no setting to survive and no secret to keep).
+#
+# LOCKDOWN WINS. `_lockdown_on()` ("ask me about everything",
+# jarvis_asks_first.py) stops a grant being used for as long as it is on: a
+# standing yes may not outrank the one switch whose whole purpose is to ask
+# about everything.
+GRANT_TOOL = "approve_web_search_for_conversation"
+GRANT_ACTION = "grant_web_search_conversation"
+REVOKE_TOOL = "stop_web_search_approval"
+REVOKE_ACTION = "revoke_web_search_grant"
+
+#: How long ONE grant may last, and why a cap at all: the owner said "for the
+#: entire conversation until I say it doesn't have authorization", and a
+#: conversation can outlive the reason it was given - an app left open all
+#: night, a chat picked up again days later. Eight hours is the working day
+#: "this conversation" means, and it is the longest a forgotten grant can
+#: stand. Reaching it is not silent: the next search asks again exactly as if
+#: it had never been granted, and the gate's log carries `gate.grant_ended`
+#: with state "expired".
+GRANT_TTL_SECONDS = 8 * 60 * 60
+
+#: The card's own words - the owner's "make sure a card comes up that I have to
+#: approve before this happens". It says the four things it has to say: what is
+#: allowed, where, that NOTHING else is covered however open-ended the sentence
+#: that asked for it was, and exactly how to stop it.
+WEB_SEARCH_GRANT_CARD = (
+    "Allow web searches in this chat to run without a card each time?\n\n"
+    "While this is on, a web search in THIS conversation runs without asking "
+    "you again - including one whose words repeat something Jarvis has saved "
+    "about you, which would otherwise get its own card.\n\n"
+    "Nothing else is covered. Sending an email or a file, booking or buying "
+    "anything, spending money, deleting a file, running a command, changing a "
+    "setting, using a browser, your accounts and your phone each still raise "
+    "their own card and still need your yes. This can never widen to them, "
+    "however open-ended the words that asked for it were.\n\n"
+    "It ends when you say stop (\"stop searching without asking\", \"you don't "
+    "have approval\", \"revoke that\"), when this chat ends, after 8 hours, or "
+    "when Jarvis restarts. Every search it covers is written in the approval "
+    "log with this grant's id. Lockdown still asks: while it is on, no search "
+    "runs without its card.\n\n"
+    "If you say no, every search keeps asking, exactly as it does now."
+)
+
+#: What the owner reads once the card is approved. Handed to the model, which
+#: says it in its own words - it carries the same four facts as the card.
+WEB_SEARCH_GRANT_ON = (
+    "Approved: web searches in this conversation now run without a card. This "
+    "lasts until the owner says stop, this chat ends, 8 hours pass, or Jarvis "
+    "restarts. It covers web searches only - every other action still raises "
+    "its own card - and each search is written in the approval log with this "
+    "grant's id.")
+
+#: The same, for the instant stop. No card was raised for either of these, so
+#: the model is told what is true and nothing more.
+WEB_SEARCH_GRANT_OFF = (
+    "Approval stopped: every web search in this chat asks the owner again from "
+    "now on. Nothing else changed, and web search itself is untouched.")
+WEB_SEARCH_GRANT_WAS_OFF = (
+    "There was no web-search approval on this chat, so nothing changed: every "
+    "search already asks.")
+
+#: Two refusals that raise NO card, because there is either nothing to scope the
+#: grant to or nothing to ask about.
+WEB_SEARCH_GRANT_NO_CHAT = (
+    "refused: this request carries no conversation id, so an approval could "
+    "not be limited to this chat - and one that is not limited to one chat is "
+    "not what was asked for. Nothing was approved and nothing changed.")
+WEB_SEARCH_GRANT_ALREADY_ON = (
+    "refused: web searches are already approved for this chat, so there is "
+    "nothing to ask. Nothing changed.")
+
+
+def _grant_tool_text() -> str:
+    """The grant tool's description (test_tool_text.py holds a tool text to 300
+    tokens, and says WHEN to call and what NOT to promise).
+
+    The two things it must not let the model do: call it on its own initiative
+    (the owner asked for a card, and a card they did not ask for is the noise
+    this feature exists to remove), or claim it is on before the card is
+    approved."""
+    return (
+        "Ask the owner - with ONE approval card - to let web searches in this "
+        "chat run without a card each time. Call it ONLY when the owner asks "
+        "for that: they want to stop being asked about searches for the rest "
+        "of this conversation (\"you have full approval to search the web\", "
+        "\"search anything you need, don't ask me\", \"stop asking me about "
+        "searches in this chat\"). Never call it on your own initiative, and "
+        "never say it is on before the card is approved. It covers web "
+        "searches ONLY: sending email or files, booking, buying, spending, "
+        "deleting, running commands, changing settings, the browser and your "
+        "accounts each still need their own card. The owner can say stop at "
+        "any time.")
+
+
+def _revoke_tool_text() -> str:
+    """The revoke tool's description: instant, no card, and NOT the existing
+    "Ask before every web search" setting (a different request with its own
+    card, jarvis_search.request_ask_every_time)."""
+    return (
+        "Stop this chat's web-search approval at once, with no card. Call it "
+        "the moment the owner says it no longer has approval: \"stop "
+        "searching without asking\", \"you don't have approval to search\", "
+        "\"revoke that\", \"ask me before searching again\". It is instant, "
+        "needs no card, does nothing if there was no approval, and does not "
+        "switch web search off - it puts the per-search card back. This is not "
+        "the \"Ask before every web search\" setting, which is a separate "
+        "request.")
+
+
+def _prepare_web_search_grant(args: dict, watch: Optional["_TurnWatch"]):
+    """prepare() for the grant tool: the card's words, or the one reason
+    nothing is asked.
+
+    The conversation id comes from the TURN (`watch`), not from the model's
+    arguments - the model must not be able to name a chat - and `_one_call`
+    hands it in the same way it hands `draft_email` its watch. No usable id:
+    refused with no card, because a grant that cannot be limited to one chat is
+    not what the owner asked for. Already on: refused with no card, so asking
+    twice never becomes a second card.
+    """
+    cid = getattr(watch, "conversation_id", "") if watch is not None else ""
+    if not _usable_conversation_id(cid):
+        return ({"problem": WEB_SEARCH_GRANT_NO_CHAT}, WEB_SEARCH_GRANT_CARD)
+    if web_search_grant(cid) is not None:
+        return ({"problem": WEB_SEARCH_GRANT_ALREADY_ON}, WEB_SEARCH_GRANT_CARD)
+    return ({"conversation_id": cid}, WEB_SEARCH_GRANT_CARD)
+
+
+def _run_web_search_grant(args: dict, state, *, watch=None, **_unused) -> dict:
+    """execute() for the grant tool: reached only after a person approved the
+    card, down the generic prepare()/gate/execute() path in `_one_call`.
+
+    It writes the grant for the conversation the CARD was worded for (from
+    `prepare()`'s state, never from `args`), and refuses rather than writing
+    one it could not log: "every search under a grant is logged" is part of
+    what the owner approved.
+    """
+    cid = state.get("conversation_id") if isinstance(state, dict) else ""
+    if (not _usable_conversation_id(cid)
+            or cid != getattr(watch, "conversation_id", None)):
+        # Belt: the card said "this chat", so the grant may only be written for
+        # the chat the card was shown in.
+        return {"ok": False, "granted": False, "error": WEB_SEARCH_GRANT_NO_CHAT}
+    grant = _remember_web_search_grant(cid)
+    if not grant:
+        return {"ok": False, "granted": False,
+                "error": "refused: this backend cannot write the approval log "
+                         "this grant has to be recorded in, so no approval was "
+                         "given and nothing changed."}
+    if not _grant_audit("grant_made", grant_id=str(grant.get("grant_id") or "")):
+        _forget_web_search_grant(cid)
+        return {"ok": False, "granted": False,
+                "error": "refused: the approval log could not be written, so "
+                         "no approval was given and nothing changed. Nothing "
+                         "about searching has changed."}
+    return {"ok": True, "granted": True, "chat": "this conversation",
+            "expires_in_seconds": GRANT_TTL_SECONDS,
+            "note": WEB_SEARCH_GRANT_ON}
+
+
+def _prepare_stop_web_search(args: dict, watch: Optional["_TurnWatch"]):
+    """prepare() for the revoke tool. Nothing is planned: stopping is one
+    instant act and raises no card (tier "auto"), so its text is its plan."""
+    return (None, "Stop the web-search approval for this conversation")
+
+
+def _run_stop_web_search(args: dict, state, *, watch=None, **_unused) -> dict:
+    """execute() for the revoke tool: instant, logged, idempotent.
+
+    Runs with no card at all (its action is tier "auto"), so it must be safe in
+    the only way that matters here: it can only ever take permission AWAY, and
+    a stop that finds nothing to stop says so instead of pretending.
+    """
+    cid = getattr(watch, "conversation_id", "") if watch is not None else ""
+    if not _usable_conversation_id(cid):
+        return {"ok": True, "stopped": False, "note": WEB_SEARCH_GRANT_WAS_OFF}
+    grant = _forget_web_search_grant(cid)
+    if not grant:
+        return {"ok": True, "stopped": False, "note": WEB_SEARCH_GRANT_WAS_OFF}
+    _grant_audit("grant_ended", grant_id=str(grant.get("grant_id") or ""),
+                 state="revoked")
+    return {"ok": True, "stopped": True, "note": WEB_SEARCH_GRANT_OFF}
+
+
 TOOLS: dict = {
     "calculator": Tool(
         "calculator", "Evaluate a plain arithmetic expression.",
@@ -3320,6 +3557,19 @@ TOOLS: dict = {
          "required": ["action"]},
         _prepare_rea,
         _run_rea),
+    # The conversation-scoped web-search approval (see WEB_SEARCH_GRANT above,
+    # and GRANT_TOOL for why it is a model tool at all). No arguments: which
+    # chat it is comes from the turn, never from the model.
+    GRANT_TOOL: Tool(
+        GRANT_TOOL, _grant_tool_text(),
+        {"type": "object", "properties": {}},
+        _prepare_web_search_grant,
+        _run_web_search_grant),
+    REVOKE_TOOL: Tool(
+        REVOKE_TOOL, _revoke_tool_text(),
+        {"type": "object", "properties": {}},
+        _prepare_stop_web_search,
+        _run_stop_web_search),
 }
 
 
@@ -3622,6 +3872,17 @@ NEEDS_A_PERSON = {
     # Protected from Jarvis: adding to the list changes what Jarvis may
     # touch, and removing is loosening; both need a person every time.
     PROTECT_TOOL: "changes what Jarvis may touch, so it needs your yes every time",
+    # The conversation-scoped web-search approval (WEB_SEARCH_GRANT, the
+    # owner's ask of 2026-11-01). The whole point of the tool is that the MODEL
+    # can ask for the card and never decide it: with the tier at its shipped
+    # "ask" a person is asked anyway, and this entry is the belt for the day
+    # someone loosens `grant_web_search_conversation` in their own settings -
+    # a grant let through at "auto" would let the model approve itself, which
+    # is the one thing the owner said must never happen. NOT the revoke tool:
+    # stopping takes permission away, runs at "auto" by design, and must never
+    # wait for a card.
+    GRANT_TOOL: "lets web searches in this chat run without asking you, which only "
+                "you may allow",
 }
 
 #: The same rule for every tool from a plug-in program (jarvis_mcp.py): a
@@ -6191,7 +6452,16 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # and the on/off reads are this PC's own switch flags. Labelling
                 # its result as outside text would make the very answer that
                 # explains a feature look like a page Jarvis had read.
-                FEATURE_GUIDE_TOOL}
+                FEATURE_GUIDE_TOOL,
+                # The two web-search-grant tools (WEB_SEARCH_GRANT, 2026-11-01):
+                # granting or stopping a standing approval reads NOTHING from
+                # outside - no page, no file, no mail - and their answers are
+                # this file's own sentences. Recorded as a read, approving the
+                # card would mark the conversation as having read outside text
+                # and make every later card in it say "what shaped this request"
+                # about a grant. It would also be untrue: nothing outside was
+                # read.
+                GRANT_TOOL, REVOKE_TOOL}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -7366,6 +7636,16 @@ def offered_tools(enabled_tools) -> list:
 # jarvis-framework.toml turns it on; test_short_tool_list.py pins it.
 
 #: The core: offered on every turn (when enabled), in this order.
+#:
+#: The conversation-scoped web-search approval and its instant stop
+#: (WEB_SEARCH_GRANT, 2026-11-01) are NOT here, and the reason is the one
+#: `read_web_page` and `change_setting` already give above: measured on this
+#: tree with this module's own estimate_tokens rule, the two tool texts cost
+#: 277 + 204 = 481 tokens together, and the core is sent on EVERY turn - the
+#: 8 GB card's whole tool budget is about 8,000. They cost 20 tokens instead,
+#: in their own `more_tools` group, and only with `[tools] short_list = true`,
+#: which ships OFF: with it off (the default) an enabled tool is offered
+#: straight away and there is no extra round at all.
 CORE_TOOLS = ("calculator", "memory_search", "calendar_read", "email_check",
               "notes_search", "web_search", "home_read", "set_reminder")
 
@@ -7447,6 +7727,14 @@ TOOL_GROUPS = (
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
+    # The conversation-scoped web-search approval and its stop
+    # (WEB_SEARCH_GRANT, 2026-11-01). A group rather than the core, for the
+    # reason CORE_TOOLS' own comment measures: the two texts are 481 tokens,
+    # and a group's name and one line are about 20 - paid only with
+    # `[tools] short_list = true`, which ships OFF. Enabled from Settings ->
+    # Tools ("Safety and sharing", jarvis_asks_first.TIER_A), never by default.
+    ("web_search_grant", "let web searches in this chat stop asking",
+     (GRANT_TOOL, REVOKE_TOOL)),
 )
 PLUGINS = "plugins"
 
@@ -7640,6 +7928,24 @@ TOOL_HINTS = {
     "phone_apps": (r"\bphone apps?\b", r"\ballow[- ]?list\b", r"\bwhich apps\b",
                    r"\bapps?\b.*\b(?:add|remove|allow|approve|list)\b",
                    r"\b(?:add|remove|allow|approve)\b.*\bapps?\b"),
+    # The conversation-scoped web-search approval (GRANT_TOOL, 2026-11-01). Its
+    # own words, narrow on purpose: a plain "search the web" must NOT pull the
+    # grant in (that would offer the model a card the owner never asked for),
+    # so every pattern here needs an approval word AND a searching word.
+    "approve_web_search_for_conversation": (
+        r"full approval", r"\bapprov\w*\b.*\b(?:search|web)\b",
+        r"\b(?:search|web)\b.*\bapprov", r"without asking",
+        r"\bdon'?t ask me\b", r"\bno need to ask\b",
+        r"\bfor (?:this|the rest of this) (?:chat|conversation)\b.*\bsearch",
+        r"\bsearch\b.*\bfor (?:this|the rest of this) (?:chat|conversation)\b"),
+    # And the instant stop. "stop asking before every web search" is a
+    # DIFFERENT request (jarvis_search.ACTION_ASK_LESS, its own card), so the
+    # patterns here all name the approval itself or its end.
+    "stop_web_search_approval": (
+        r"\bstop (?:the )?(?:web[- ]?)?search", r"\bstop searching\b",
+        r"no longer authori", r"\brevoke\b", r"\byou don'?t have approval\b",
+        r"no approval to search", r"\bask me before (?:you )?search",
+        r"without asking any ?more"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
@@ -7793,6 +8099,115 @@ def _remember_opened(conversation_id, groups) -> None:
         _OPENED[conversation_id] = frozenset(groups)
         while len(_OPENED) > _OPENED_MAX:
             _OPENED.pop(next(iter(_OPENED)))
+
+
+# --------------------------------------------------------------------------
+#   The conversation-scoped web-search approval - the store
+# --------------------------------------------------------------------------
+#
+# IN MEMORY ONLY, bounded, gone on a restart - the same shape as _OPENED above,
+# and for the same reasons plus two of its own (see WEB_SEARCH_GRANT):
+#
+#   * nothing is written to disk, so there is no setting to survive a restart
+#     and no file to keep secret. That is the whole answer to "it is never a
+#     setting that survives";
+#   * the KEY is the app's own conversation_id, unchanged: a different chat is a
+#     different id, so conversation A's grant cannot cover conversation B, and a
+#     request with no id at all (or an odd one) can neither give nor use one.
+#
+# A grant is read on every search and dropped the moment it is past its cap, so
+# an expired one cannot be used even inside one long-running conversation.
+_GRANTS_MAX = 200
+_GRANTS: "dict[str, dict]" = {}            # conversation_id -> the grant
+_GRANTS_LOCK = threading.Lock()
+
+
+def _grant_audit(name: str, **fields) -> bool:
+    """Call one of jarvis_gate's three grant-event writers; False when this
+    backend does not have it.
+
+    THE AGENT'S ONE DOOR INTO THE GATE'S AUDIT LOG, and the reason it is a
+    function rather than a local `audit_log()` call: the gate owns that log, its
+    redaction and its event names (jarvis_gate.grant_made / granted /
+    grant_ended). A backend whose gate predates them is a half-updated install,
+    and then a grant is REFUSED rather than allowed unlogged - "every search
+    under a grant is logged" is part of what the owner approved, so it is not
+    optional. A failed write AFTER a grant exists is swallowed, exactly as every
+    other audit line in this project is (the owner's search must not fail
+    because the disk is full).
+    """
+    try:
+        import jarvis_gate
+        writer = getattr(jarvis_gate, name, None)
+        if writer is None:
+            return False
+        writer(**fields)
+        return True
+    except Exception:                                        # noqa: BLE001
+        return False
+
+
+def web_search_grant(conversation_id) -> "dict | None":
+    """The LIVE grant for this conversation, or None.
+
+    An expired one is dropped here rather than by a timer - there is no thread
+    to keep alive, and a grant nobody looks at costs nothing. The copy returned
+    is a plain dict: a caller cannot edit the stored grant by accident.
+    """
+    if not _usable_conversation_id(conversation_id):
+        return None
+    with _GRANTS_LOCK:
+        grant = _GRANTS.get(conversation_id)
+        if not isinstance(grant, dict):
+            return None
+        if float(grant.get("expires_at") or 0) <= time.time():
+            _GRANTS.pop(conversation_id, None)
+            dropped = grant
+        else:
+            return dict(grant)
+    # Logged outside the lock: the audit log is a file, and a slow disk must
+    # never hold up another chat's search.
+    _grant_audit("grant_ended", grant_id=str(dropped.get("grant_id") or ""),
+                 state="expired")
+    return None
+
+
+def _remember_web_search_grant(conversation_id) -> "dict | None":
+    """Store a grant for this conversation and return it. None when there is no
+    usable conversation id to key it on.
+
+    Called ONLY from `_run_web_search_grant`, which the generic path in
+    `_one_call` reaches only after the gate said a person approved the card.
+    """
+    if not _usable_conversation_id(conversation_id):
+        return None
+    now = time.time()
+    grant = {"grant_id": os.urandom(6).hex(), "issued_at": now,
+             "expires_at": now + GRANT_TTL_SECONDS}
+    with _GRANTS_LOCK:
+        _GRANTS.pop(conversation_id, None)
+        _GRANTS[conversation_id] = grant
+        while len(_GRANTS) > _GRANTS_MAX:
+            _GRANTS.pop(next(iter(_GRANTS)))
+    return dict(grant)
+
+
+def _forget_web_search_grant(conversation_id) -> "dict | None":
+    """Drop this conversation's grant now; the grant it dropped, or None.
+
+    Idempotent, and instant: the only thing it can do is take permission away,
+    which is why no card is raised for it.
+    """
+    if not _usable_conversation_id(conversation_id):
+        return None
+    with _GRANTS_LOCK:
+        return _GRANTS.pop(conversation_id, None)
+
+
+def _reset_web_search_grants() -> None:
+    """Forget every grant (tests, and the one thing a restart does by itself)."""
+    with _GRANTS_LOCK:
+        _GRANTS.clear()
 
 
 # --------------------------------------------------------------------------
@@ -13496,6 +13911,17 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # 2026-10-31): the gate forces an unclassified action to "ask", so the
         # ONE card is the ordinary one, and no second mechanism exists.
         action_name = PROTECT_ACTION
+    if name == GRANT_TOOL:
+        # The conversation-scoped web-search approval (WEB_SEARCH_GRANT): its
+        # own action name, tier "ask" in both shipped settings copies, so the
+        # card is the ordinary one and nothing else is invented. The model can
+        # ask for this card; it can never decide it.
+        action_name = GRANT_ACTION
+    if name == REVOKE_TOOL:
+        # Tier "auto", and its own action name: stopping has no card at all
+        # ("revoke that" must work instantly), and the gate keeps its own
+        # auto-tier audit line for it.
+        action_name = REVOKE_ACTION
     if name == "send_email":
         action_name = SEND_EMAIL_ACTION
     if name == "draft_email":
@@ -13536,7 +13962,17 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     # tool validating its own arguments, e.g. {"days_ahead": "seven"} - comes
     # back as a tool RESULT the model can read and retry from.
     try:
-        if name == "draft_email" and tool.prepare is _prepare_draft_email:
+        if (name in (GRANT_TOOL, REVOKE_TOOL)
+                and tool.prepare in (_prepare_web_search_grant,
+                                     _prepare_stop_web_search)):
+            # The two web-search-grant tools need the TURN's own conversation
+            # id - that is what a grant is scoped to - and the generic
+            # prepare() contract carries only arguments. Handed over only while
+            # the REAL prepare is in place, the same exception draft_email below
+            # makes: a test (or a caller) that replaced prepare() keeps its own
+            # stand-in, which takes the arguments alone.
+            state, plan_text = tool.prepare(args, watch)
+        elif name == "draft_email" and tool.prepare is _prepare_draft_email:
             # The D-2 classifier needs this turn's own prompt words and taint;
             # the generic tool.prepare() contract carries only arguments, so
             # the one tool that needs context is handed the watch here. A test
@@ -13579,6 +14015,20 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
                       "outcome": "no card needed" if ran else "refused"})
         return
+
+    if name in (GRANT_TOOL, REVOKE_TOOL):
+        # Nothing to ask about: no conversation id to scope a grant to, or a
+        # grant already on for this chat. Refused BEFORE any card is raised - a
+        # card nobody can act on is exactly the noise this feature removes.
+        problem = state.get("problem") if isinstance(state, dict) else ""
+        if problem:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "error": problem})})
+            steps.append({"tool": name, "ran": False, "ok": False,
+                          "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+
     if name == "control_phone" and isinstance(state, (_PhoneApps, _PhoneRefused)):
         # NOTHING TO APPROVE, so no card (2026-11-01). One of two things came
         # back from _prepare_control_phone instead of a plan: the owner's own
@@ -13894,6 +14344,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             kwargs["checker"] = checker
             kwargs["watch"] = watch
             kwargs["out"] = out
+        if name in (GRANT_TOOL, REVOKE_TOOL):
+            # The turn's own conversation id - the thing a grant is scoped to,
+            # and the only thing that says which chat's grant to write or
+            # clear. See WEB_SEARCH_GRANT and _prepare_web_search_grant.
+            kwargs["watch"] = watch
         if name == "propose_plan":
             # The extra context this ONE tool's execute() needs to dispatch
             # each of its own steps through the exact same per-tool
@@ -14033,15 +14488,39 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
         say_step("tool_refused", name)
         return reply(WS.tool_result(WS.run(p, approved=True)))
     lines = web_search_card_lines(watch, bool(s.get("ask_every_time")), p.query)
+    # THE CONVERSATION-SCOPED APPROVAL (WEB_SEARCH_GRANT above): while one is
+    # live for THIS chat, the search's own card is not raised and the search
+    # runs - that is the one thing the owner approved, in this one chat.
+    #
+    # Lockdown is not covered by it, deliberately: `_lockdown_on()` is the
+    # switch whose whole purpose is "ask me before anything", so a grant may not
+    # outrank it while it is on (the card says so too). Everything that is NOT
+    # this card is untouched: the refusals above (a secret in the words, no
+    # key, ddgs missing, a card too long to show) still happen before anything
+    # is sent, and every other tool still asks under its own action.
+    grant = None if _lockdown_on() else web_search_grant(watch.conversation_id)
     step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
+    if grant is not None and lines:
+        # "granted" is the turn's own record that this search ran with nobody
+        # asked because a standing approval covered it, and it is only ever
+        # written when a person's yes is behind that approval. A search that
+        # would have run with no card anyway keeps "no card needed": the grant
+        # replaced nothing there, and the log should not imply it did.
+        step["outcome"] = "granted"
     card_note = None
     # A carried step ("An approved step the answer never delivered", 2026-11-01):
     # this very search already had a person's yes and lost it with the app's
     # stream, so there is no card left to raise and nothing left to ask.
+    #
+    # The conversation-scoped grant is the OTHER way a card can be absent: it
+    # replaces this card only while it is live for THIS chat, so the card is
+    # raised when `lines` says a card was needed AND no grant covers it. A
+    # carried approval outranks the grant (its yes is the older, narrower one);
+    # with neither, nothing is asked at all, as before.
     verdict = pre_approved
     if pre_approved is not None:
         step["outcome"] = "approved"
-    elif lines:
+    elif lines and grant is None:
         if watch.cards >= CARDS_PER_TURN:
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
@@ -14098,8 +14577,11 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
         # The owner's own yes for this search is kept for the app's re-send
         # (2026-11-01, "An approved step the answer never delivered"). Only
         # when it really had a card: a search that needed none was never
-        # approved by anybody, so there is nothing to carry.
-        if lines or pre_approved is not None:
+        # approved by anybody, so there is nothing to carry. A search the
+        # conversation-scoped grant let through had no card either (`grant`
+        # replaced it), so it carries nothing; `verdict` is None there and
+        # owed_record would refuse it anyway.
+        if (lines and grant is None) or pre_approved is not None:
             owed_record(watch.conversation_id, verdict, name, WS.ACTION_SEARCH, call, args,
                         stop_mark=watch.stop_mark)
         raise ClientGone()
@@ -14116,6 +14598,16 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
             announce(f"Using {name}...")
         except Exception:
             pass
+    if grant is not None and lines and pre_approved is None:
+        # THE LOG LINE THE OWNER'S "ALWAYS LOGGED" DEPENDS ON. Nobody is shown a
+        # card for this search because a standing approval covered it, so this is
+        # the only record that it ran unasked and under which grant. Written
+        # before the search, not after: a search that starts is a search that
+        # happened, whatever comes back. Only when the grant is what replaced the
+        # card (`lines`) - a search that would have asked nothing anyway is
+        # recorded as "no card needed" and needs no grant line.
+        _grant_audit("granted", action=WS.ACTION_SEARCH,
+                     grant_id=str(grant.get("grant_id") or ""))
     step["ran"] = True
     try:
         result = WS.tool_result(WS.run(p, approved=True))

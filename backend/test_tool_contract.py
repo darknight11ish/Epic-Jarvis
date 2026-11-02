@@ -108,8 +108,15 @@ OFFERED_FRESH = [
 
 #: (d) Every tool that exists, pinned in full. A future tool must be added
 #: here, which forces the three lists above to be looked at in the same edit.
+#: `approve_web_search_for_conversation` and `stop_web_search_approval` (the
+#: conversation-scoped web-search approval and its instant stop, 2026-11-01)
+#: are NOT in FULL_ENABLED or OFFERED_FRESH on purpose: they are "Safety and
+#: sharing" tools the owner switches on (jarvis_asks_first.TIER_A), never a
+#: fresh-install default - a standing approval that lets searches leave this PC
+#: unasked must be chosen, not given.
 CATALOGUE = [
-    "append_logseq_journal", "append_obsidian_daily", "browser_control",
+    "append_logseq_journal", "append_obsidian_daily",
+    "approve_web_search_for_conversation", "browser_control",
     "calculator", "calendar_read", "change_setting", "coming_up",
     "connect_account", "control_computer", "control_phone", "create_joplin_note",
     "draft_email",
@@ -119,7 +126,8 @@ CATALOGUE = [
     "read_web_page",
     "retirement_whatif", "run_data_script", "send_email", "send_file_to_phone",
     "set_reminder",
-    "set_timer", "shell_exec", "tidy_inbox", "todo_add", "todo_done",
+    "set_timer", "shell_exec", "stop_web_search_approval", "tidy_inbox",
+    "todo_add", "todo_done",
     "web_search",
 ]
 

@@ -325,7 +325,14 @@ def t_the_patch_is_registered_last():
              # (after gate-entries.patch's own last entry, `change_setting`) -
              # it adds no `_RISK` row at all, so it rewrites neither of the two
              # stale rows this patch removes.
-             "gate-tool-actions-gap.patch"}
+             "gate-tool-actions-gap.patch",
+             # web-search-grant.patch (2026-11-01, the owner's "full approval to
+             # search the web for this conversation"): three hunks, all in
+             # jarvis_gate.py - two rows at the END of _RISK, the word "grant" in
+             # _SAFE_KEYS and three audit writers after _audit. It adds lines and
+             # rewrites none of this patch's, which the later_rewriting() half
+             # proves.
+             "web-search-grant.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

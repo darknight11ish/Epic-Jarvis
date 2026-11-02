@@ -171,7 +171,7 @@ def t_the_patch_and_the_base():
     later = {"learning-extract-reason.patch", "attached-file.patch",
              "unknown-risk-approvable.patch", "jobs-routes.patch",
              "gate-tool-actions-gap.patch",
-             "phone-apps.patch"}
+             "phone-apps.patch", "web-search-grant.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

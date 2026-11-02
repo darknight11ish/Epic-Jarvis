@@ -381,12 +381,21 @@ def t_the_short_list():
     tokens = AG.estimate_tokens(AG.TOOLS[AG.RETIREMENT_TOOL].schema())
     check(f"the tool fits the per-tool token budget of 300 ({tokens})", tokens <= 300)
     every = set(AG.TOOLS) - {"browser_control"}
-    check("more_tools itself still fits the budget with every group in (380 since "
-          "2026-10-28, measured 360 with connect_account's own group - see "
-          "test_short_tool_list.py's note; 345 since 2026-10-13: change_setting's own "
+    # 395 since 2026-11-01: `approve_web_search_for_conversation` and
+    # `stop_web_search_approval` (the conversation-scoped web-search approval and
+    # its instant stop, JARVIS-API section 175) needed a `more_tools` group of
+    # their own - one more group name and one more line - and that card measures
+    # 387 on this tree with this module's own estimate_tokens, against 360
+    # without it. A pin is a decision, so the reasoning and the two rejected
+    # alternatives are test_short_tool_list.py's own note, which raised this same
+    # expression's pin 380 -> 395 in the same change; this copy was left at 380.
+    check("more_tools itself still fits the budget with every group in (395 since "
+          "2026-11-01, measured 387 with the web_search_grant group - see "
+          "test_short_tool_list.py's note; 380 since 2026-10-28, measured 360 with "
+          "connect_account's own group; 345 since 2026-10-13: change_setting's own "
           "group; 325 since 2026-10-05 for read_web_page's)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 380)
+          <= 395)
     check("the tool is offered only when [tools].enabled names it",
           AG.RETIREMENT_TOOL not in AG.offered_tools({"calculator"}) and AG.RETIREMENT_TOOL in AG.offered_tools(enabled))
 

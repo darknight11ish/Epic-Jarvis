@@ -115,9 +115,18 @@ ROW_OF = {"email_check": "email_read", "home_read": "home_read"}
 
 
 def t_every_switch_writes_the_tool_the_model_is_offered():
-    check("the tiered in-app rows: 21, Tier A + Tier B, calendar_read kept",
+    # 23 since 2026-11-01: the conversation-scoped web-search approval and its
+    # instant stop (jarvis_agent.py, JARVIS-API section 175) are chat abilities
+    # the owner switches on here, in "Safety and sharing", like
+    # protect_from_jarvis and send_file_to_phone beside them. That is Tier A 13
+    # -> 15, Tier B unchanged at 8, and the identity below is what keeps the
+    # tuple and the tiers in step. The loop underneath proves each of the two
+    # really does switch through the real route, so this is a count that follows
+    # the route rather than a pin widened to make it pass. test_asks_first.py
+    # carries the same 23 (and the same comment); this copy was left at 21.
+    check("the tiered in-app rows: 23, Tier A + Tier B, calendar_read kept",
           AF.TOOLS_SWITCHABLE == tuple(AF.TIER_A) + tuple(AF.TIER_B)
-          and len(AF.TOOLS_SWITCHABLE) == 21)
+          and len(AF.TOOLS_SWITCHABLE) == 23)
     for action in AF.TOOLS_SWITCHABLE:
         real = AF.real_tool(action)
         check(f"{action}: the tool it switches ({real}) is a real tool in jarvis_agent.TOOLS",

@@ -158,6 +158,14 @@ ACTING_TOOLS = frozenset({
     # folders is made fetchable by the phone, which can keep a copy - that is
     # an ACT, so a claimed "nothing was done" must not be said after it.
     "send_file_to_phone",
+    # The conversation-scoped web-search approval and its stop (2026-11-01).
+    # Both CHANGE something - what asks for the rest of this chat - so an answer
+    # that says "searches in this chat will not ask you any more", in a turn
+    # where only the card was raised or nothing ran, must be corrected like any
+    # other action's. The grant tool is the dangerous half: a model claiming it
+    # had been granted something that was denied is exactly the claim this set
+    # exists to catch.
+    "approve_web_search_for_conversation", "stop_web_search_approval",
     "set_reminder", "set_timer", "shell_exec", "tidy_inbox", "todo_add",
     "todo_done",
     # "phone_apps" (2026-11-02): the mixed shape browser_control already has.
