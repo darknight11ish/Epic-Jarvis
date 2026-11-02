@@ -1071,12 +1071,12 @@ permissions = [
   "allow-brain-memory-auto-list",
   "allow-brain-memory-learning-auto",
   "allow-brain-memory-learning-sensitive",
-  # The third switch (2026-11-02, "Save facts even when Jarvis had to reword
-  # them"): ONE setting per call, ON raises the same approval card and is held
-  # while the event stream is stale, OFF is immediate. The Brain draws all
-  # three switches (src/auto-learn.js), so this command has to be granted here
-  # as well as to the Settings window - without it the Brain's own toggle is
-  # refused by the capability and the switch silently does nothing.
+  # The third switch (2026-11-02, option C1 of the memory-card research):
+  # "Save facts even when Jarvis had to reword them". The Brain draws it
+  # beside the other two in the same card (brain.js paintAutoSettings), so the
+  # Brain must hold it - leaving it to `learning-settings` alone left the
+  # switch drawn here and refused here. One setting per call; ON raises ONE
+  # card and is held on a stale link, OFF is immediate.
   "allow-brain-memory-learning-paraphrase",
   # The ids of facts saved automatically that the owner has not looked at
   # yet, counted in Rust because the Brain is destroyed when it is closed

@@ -75,13 +75,10 @@
      "write_notes_after_outside_text",  # jarvis_agent.py: a note after outside text asks every time
      "power_manage",           # shipped "auto": a card means the owner chose "ask"
      "append_obsidian_daily",  # shipped "auto": the same
-@@ -581,9 +582,15 @@
+@@ -581,6 +582,12 @@
      # fact; every one can be forgotten, and turning it off never asks.
      "learning_auto_enable": ("yes", "local", "lets Jarvis save facts about you and your projects from what you type or say to it, without asking about each one; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
      "learning_sensitive_enable": ("yes", "local", "lets Jarvis also save facts about health, money and other people's private details without asking first; passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses still wait for your yes; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
-     # 2026-11-02: "Save facts even when Jarvis had to reword them". Relaxes
-     # ONE check - "not in your own words" - and nothing else.
-     "learning_paraphrase_enable": ("yes", "local", "lets Jarvis save a fact whose words are its own rather than yours, instead of waiting for your yes; it relaxes nothing else - health, money and other people still wait unless you allow those, passwords, PINs and ID numbers always wait, and pasted text, a tool's reading, a correction or a forgotten fact still waits; nothing is sent anywhere, every fact it saves this way is marked and listed with Forget, and turning it off is immediate"),
 +    # hardware.patch (jarvis_hardware.py). Making a tuned model (jarvis-chat,
 +    # jarvis-long, jarvis-vision) for a preset: Ollama on THIS PC makes it
 +    # from a model already downloaded. Nothing is downloaded and nothing is
