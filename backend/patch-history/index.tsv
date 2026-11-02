@@ -14,6 +14,7 @@ apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d4
 asks-first.patch	asks-first/0088dd5.patch	0088dd526f1f34b64638a14d5281e8a08f6ddec5	2026-09-26T03:47:42Z	Gate notice for schedule_repeat: say that each run reads the owner's own servers
 asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37Z	Backend: repeats without a card, lights setting, "What asks first"
 attention-settings.patch	attention-settings/e572cf8.patch	e572cf8fe152b88903569f193d5cbbaf4ed82475	2026-10-09T00:29:50-07:00	the route that makes the budget changeable, and the patch that exposes it
+auto-learn.patch	auto-learn/81a6503.patch	81a6503eee9cf1e0a3e5195aa044a3c686822d68	2026-11-02T11:03:24-08:00	feat(memory): one named switch for facts in Jarvis's own words, and three free repairs (C1 + C2)
 auto-learn.patch	auto-learn/52b7570.patch	52b7570daf75fa54a03cd17d0ef1d9e76e15c184	2026-10-06T08:41:12-07:00	learning: a failed pass is visible, and the counters are on the status route
 auto-learn.patch	auto-learn/5a32e3a.patch	5a32e3abb26e30582e729295c455be850cb7e241	2026-09-29T00:11:03Z	Backend: continued chats re-register their own words, games stay games, hand-accepted facts keep their chat
 auto-learn.patch	auto-learn/f3b3652.patch	f3b36529eb06a32c17a51a62d1993ca02863fd56	2026-09-26T07:10:08Z	Memory review, backend half: bugs B1-B15 and B17, improvements measured
@@ -186,7 +187,6 @@ voices.patch	voices/15d1300.patch	15d1300e6f10b21b724535bb9ca761388700d761	2026-
 voices.patch	voices/1262208.patch	126220810bc58273cd6196d6a8fbce1b538655de	2026-09-26T19:47:59Z	Grow "What did I miss?" and add a built-in-voice-choice setting
 voices.patch	voices/ca53319.patch	ca5331976dca4cfaa937bb04b690306707d0a70d	2026-09-26T07:41:16Z	Voice upgrades: the bake-off, Pocket TTS and a newer "hey Jarvis" built but off, and the speaking speed in both apps
 voices.patch	voices/ca3f625.patch	ca3f62575069f0b741ace3645b33729f9c2c7d9c	2026-09-24T08:14:23Z	Custom voices, backend: jarvis_voices.py, voices.patch, and the better voice
-web-search-grant.patch	web-search-grant/a78133f.patch	a78133f5d40dada673c2428ac4b48ece038f25a7	2026-11-01T18:29:51-08:00	feat(web-search): one card, once, lets a conversation search the web without asking
 web-search-switch.patch	web-search-switch/236ba22.patch	236ba22118bf640403d8572c23bca580a6bde245	2026-09-30T06:54:43Z	Settings audit 2026-09-30: email switch fix, web search on/off, jump list, voice switches in Voice
 web-search.patch	web-search/dcfdbaf.patch	dcfdbafdf25c0944179e6103990326786c11de38	2026-09-25T06:49:40Z	Web search: Brave back as the fifth option, and its line says it can cost money
 web-search.patch	web-search/7c82046.patch	7c820464c4b614c3305ce54d126772b7e6e09d09	2026-09-25T06:33:24Z	Web search: Exa replaces Brave (SearXNG, DuckDuckGo, Exa, Tavily)

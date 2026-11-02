@@ -304,18 +304,23 @@
  
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -347,6 +347,14 @@
+@@ -347,6 +347,19 @@
      # Without this line the action would be read as "unknown", and the
      # notice would say it might leave the machine.
      "history_enable": ("yes", "local", "keeps your chats with Jarvis, including what you say by voice, encrypted on this PC; nothing is sent anywhere, turning it off is immediate, and each kept conversation can be deleted"),
++    # 2026-11-02: "Save facts even when Jarvis had to reword them". Relaxes
++    # ONE check - "not in your own words" - and nothing else. Placed ABOVE the
++    # two auto-learn rows below, not after them: hardware.patch (later in this
++    # stack) anchors its own row on "learning_sensitive_enable" being the
++    # table's LAST, so a row added after it would stop that patch applying on
++    # the owner's PC (test_backup.py's restore_backup placement check catches
++    # exactly this). The table is a dict; order here means nothing to the code.
++    "learning_paraphrase_enable": ("yes", "local", "lets Jarvis save a fact whose words are its own rather than yours, instead of waiting for your yes; it relaxes nothing else - health, money and other people still wait unless you allow those, passwords, PINs and ID numbers always wait, and pasted text, a tool's reading, a correction or a forgotten fact still waits; nothing is sent anywhere, every fact it saves this way is marked and listed with Forget, and turning it off is immediate"),
 +    # auto-learn.patch (jarvis_auto_learn.py). Automatic learning saves facts
 +    # about you from what you type or say, on THIS PC, without a card per
 +    # fact; every one can be forgotten, and turning it off never asks.
 +    "learning_auto_enable": ("yes", "local", "lets Jarvis save facts about you and your projects from what you type or say to it, without asking about each one; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
 +    "learning_sensitive_enable": ("yes", "local", "lets Jarvis also save facts about health, money and other people's private details without asking first; passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses still wait for your yes; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
-+    # 2026-11-02: "Save facts even when Jarvis had to reword them". Relaxes
-+    # ONE check - "not in your own words" - and nothing else.
-+    "learning_paraphrase_enable": ("yes", "local", "lets Jarvis save a fact whose words are its own rather than yours, instead of waiting for your yes; it relaxes nothing else - health, money and other people still wait unless you allow those, passwords, PINs and ID numbers always wait, and pasted text, a tool's reading, a correction or a forgotten fact still waits; nothing is sent anywhere, every fact it saves this way is marked and listed with Forget, and turning it off is immediate"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",

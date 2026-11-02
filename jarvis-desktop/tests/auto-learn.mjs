@@ -700,7 +700,8 @@ await check("private answers hide the list, keep the count and the switches, and
   await page.close();
   assert.match(hidden, /3 facts, hidden until Windows Hello confirms it is you/);
   assert.doesNotMatch(hidden, /Fact number/);
-  assert.equal(switches, 2);
+  assert.equal(switches, 3,
+    "the two switches and 2026-11-02's reworded-facts switch stay beside the count");
   assert.equal(shown, 3);
 });
 
@@ -767,9 +768,12 @@ await check("CONTROL: the learning switches' commands are the Brain's, plus ONE 
   const holders = (perm) => sets.filter((s) => s.includes(`"${perm}"`))
     .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
   const cmds = ["brain_memory_learning_status", "brain_memory_auto_list", "brain_memory_learning_auto",
-    "brain_memory_learning_sensitive", "brain_memory_saved_unseen"];
-  // The three the Settings window also holds since 2026-10-28 (see below).
-  const shared = new Set(["brain_memory_learning_status", "brain_memory_learning_sensitive"]);
+    "brain_memory_learning_sensitive", "brain_memory_learning_paraphrase",
+    "brain_memory_saved_unseen"];
+  // The four the Settings window also holds since 2026-10-28, plus the
+  // 2026-11-02 reworded-facts switch (see below).
+  const shared = new Set(["brain_memory_learning_status", "brain_memory_learning_sensitive",
+    "brain_memory_learning_paraphrase"]);
   for (const cmd of cmds) {
     const perm = `allow-${cmd.replace(/_/g, "-")}`;
     const want = shared.has(cmd) ? ["brain-memory", "learning-settings"] : ["brain-memory"];
@@ -777,15 +781,18 @@ await check("CONTROL: the learning switches' commands are the Brain's, plus ONE 
   }
   // The 2026-10-28 settings audit (G1) gave the two learning switches a
   // Settings card, so the settings window holds their THREE commands too - and
-  // only those three. The grant is deliberately narrow: the state read and the
-  // two switch writes, never the fact list, the saved ids or Forget.
+  // only those three. 2026-11-02 added the reworded-facts switch, whose card
+  // sits in the same Settings plate, so FOUR. The grant is deliberately narrow:
+  // the state read and the three switch writes, never the fact list, the saved
+  // ids or Forget.
   const learning = sets.find((s) => /identifier = "learning-settings"/.test(s));
   assert.ok(learning, "the settings window's learning-settings set is missing");
   const granted = [...learning.matchAll(/"allow-([a-z-]+)"/g)].map((m) => m[1]).sort();
-  assert.deepEqual(granted, ["brain-memory-learning", "brain-memory-learning-sensitive",
-    "brain-memory-learning-status"], `the Settings grant is ${granted}`);
+  assert.deepEqual(granted, ["brain-memory-learning", "brain-memory-learning-paraphrase",
+    "brain-memory-learning-sensitive", "brain-memory-learning-status"],
+  `the Settings grant is ${granted}`);
   for (const perm of ["allow-brain-memory-learning", "allow-brain-memory-learning-status",
-    "allow-brain-memory-learning-sensitive"]) {
+    "allow-brain-memory-learning-sensitive", "allow-brain-memory-learning-paraphrase"]) {
     assert.deepEqual(holders(perm), ["brain-memory", "learning-settings"], `${perm} is held by ${holders(perm)}`);
   }
   assert.match(read("src-tauri/capabilities/settings.json"), /"learning-settings"/);
