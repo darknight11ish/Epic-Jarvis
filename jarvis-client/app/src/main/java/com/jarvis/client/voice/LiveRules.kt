@@ -200,7 +200,10 @@ object LiveRules {
         "short" to "Didn't catch that - say a bit more",
         "heard" to "Heard you - thinking",
         "quiet_warn" to "Live ends soon - it's quiet. Say something to keep going",
-        "end_hint" to "To end, say \"Okay Jarvis, that's all for now\", or use End Live.",
+        // The owner, 2026-11-02: "get rid of the 'or use end live' wording."
+        // End Live is a button on the same card, so the sentence teaches only
+        // the spoken phrase that ends Live by voice.
+        "end_hint" to "To end, say \"Okay Jarvis, that's all for now\".",
         "call_unknown" to "Jarvis can't tell when you're on a call - use Mic off",
         "move" to "Live is on your {device} - move it here?",
         "elsewhere" to "Jarvis Live is on your {device}",

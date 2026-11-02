@@ -150,10 +150,12 @@ class VoiceSession(
     /**
      * Which voice the last reply on this phone was really spoken in: the PC's
      * (`/api/voice/say`), or this phone's own offline voice when the PC had no
-     * engine, or nothing yet. The Live screen shows it, so "the voice did not
-     * change" can be seen for what it is - a voice the PC is not using, or a
-     * PC with no voice at all - instead of looking like Live ignoring the
-     * setting (the owner's report of 2026-10-28; the rules are in [VoiceNow]).
+     * engine, or nothing yet. The Live screen drew it until 2026-11-02, so "the
+     * voice did not change" could be seen for what it is - a voice the PC is
+     * not using, or a PC with no voice at all - instead of looking like Live
+     * ignoring the setting (the owner's report of 2026-10-28; the rules are in
+     * [VoiceNow]). The owner then removed that line with the microphone line;
+     * this value is still recorded, and nothing draws it today.
      */
     val voiceNow: StateFlow<VoiceNow.Source> = _voiceNow.asStateFlow()
 

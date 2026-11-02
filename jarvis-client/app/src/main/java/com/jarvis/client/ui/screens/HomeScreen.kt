@@ -3123,6 +3123,11 @@ private fun LaneChip(status: StatusInfo?, onOpenModels: () -> Unit) {
  * desktop's hotkey (`POST /api/stop_all`, `backend/jarvis_stop_all.py`).
  * What it stopped is reported in the shared notice, in the PC's own words
  * ([com.jarvis.client.net.StopEverything]); this plate never claims it.
+ *
+ * The sentence that used to sit beside the button ("Stops Jarvis talking and
+ * anything it is doing on the PC or this phone. Asks nothing first; approves
+ * nothing.") was removed on the owner's request of 2026-11-02 - "having the
+ * stop button is enough" - so the card now holds only the button.
  */
 @Composable
 private fun StopEverythingPlate(actions: HomeActions) {
@@ -3130,29 +3135,20 @@ private fun StopEverythingPlate(actions: HomeActions) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     Plate {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                com.jarvis.client.net.StopEverything.HINT,
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textLo,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            Quiet(
-                com.jarvis.client.net.StopEverything.LABEL,
-                color = chrome.badInk,
-                enabled = !busy,
-                onClick = {
-                    if (!busy) {
-                        busy = true
-                        scope.launch {
-                            actions.onStopEverything()
-                            busy = false
-                        }
+        Quiet(
+            com.jarvis.client.net.StopEverything.LABEL,
+            color = chrome.badInk,
+            enabled = !busy,
+            onClick = {
+                if (!busy) {
+                    busy = true
+                    scope.launch {
+                        actions.onStopEverything()
+                        busy = false
                     }
-                },
-            )
-        }
+                }
+            },
+        )
     }
 }
 
