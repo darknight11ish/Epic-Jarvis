@@ -585,11 +585,21 @@ class SettingsSearchTest {
             emptyList<String>(),
             SettingsSearch.elsewhereMatching("   ").map { it.menuId },
         )
-        // ...and the sections' own answer is untouched: "presets" still hides
-        // every card. The row is drawn BESIDE the filtered cards, so `matching`
-        // must not learn about it - `SettingsSearchTest`'s screen-order test
-        // and `FindAnything`'s use of `wordsFor` both depend on that.
-        assertEquals(emptyList<String>(), SettingsSearch.matching("presets"))
+        // ...and the sections' own answer gains exactly ONE real row, on
+        // purpose: "Home screen" (the phone's editable HUD, 2026-11-02) is a
+        // Settings row whose own words include the layout presets it arranges,
+        // so "presets" finds it. The FOCUS-presets row is still NOT in the
+        // filter - it is drawn BESIDE the cards, not invented as a section -
+        // which is what this assertion has always protected.
+        assertEquals(
+            "the editable-HUD row is the one Settings section that owns the word",
+            listOf("edit-hud"),
+            SettingsSearch.matching("presets"),
+        )
+        assertFalse(
+            "the focus-presets row is drawn beside the cards, never as a section",
+            "settings.focus-presets" in SettingsSearch.matching("presets"),
+        )
     }
 
     /**
