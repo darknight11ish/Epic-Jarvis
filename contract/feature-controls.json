@@ -5227,7 +5227,7 @@
       "name": "Appearance",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Settings, Appearance. On the phone, Appearance on Home, or from Settings.",
+      "where": "Settings, Appearance. On the phone it is Settings, Appearance - it is not a Home button any more (a Reminders button took its place there on 2026-11-02).",
       "control": {
         "type": "refused",
         "setting_keys": [],
