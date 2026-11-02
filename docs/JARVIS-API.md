@@ -3157,6 +3157,24 @@ preset's own pace (`voice_speed`, 0.94-1.1) is **not** applied: a pace on this
 PC is one of three choices (slower, normal, faster) and a preset's own lands on
 "normal"; that small loss is deliberate and recorded in the decision log.
 
+**RESETTING THE PHONE APP NEVER CHANGES THIS SETTING** (2026-11-02; the
+owner's report: *"when I reset the jarvis Android app it changes the voice to
+the default. it doesn't seem to remember what I changed it to."*). The phone's
+one app-level reset is Settings, Devices, **"Unpair & clear the token"**: it
+calls `POST /api/devices/remove` and then clears the phone's own Keystore
+token, address and resume point. On this PC that route writes
+`devices/registry.json` and nothing else - it never touches
+`voices/state.json` - so a re-paired or reinstalled phone reads the stored
+choice back (`jarvis_voices.status()`, asked as soon as the pair connects) and
+the PC keeps speaking it. Two consequences the apps must honour:
+**`speaker.choice` is the voice that SPEAKS**, not necessarily the owner's
+saved one (a pack without that name, a blend still being checked, a refused
+voice), so `speaker.saved` is the field that says what the owner chose; and
+**a write to a damaged `voices/state.json` is refused with a 500 and the file
+left untouched** - it is never merged onto defaults, because that would
+rewrite the owner's whole voice (speaker, speed, face voice, every animal)
+from one changed key (the `jarvis_manner` F3 rule).
+
 **Live is the same path, and the phone now says so.** A Live reply asks
 `/api/voice/say` for its sound exactly like every other reply
 (`VoiceSession` -> `api.say`), so it speaks in this one setting - there has
@@ -3337,7 +3355,8 @@ request.
            "choices": [{"id": "slower", "label": "Slower"},
                        {"id": "normal", "label": "Normal"},
                        {"id": "faster", "label": "Faster"}]},        absent on an older PC: show nothing
- "speaker": {"choice": "<a voice NAME, e.g. af_heart>" | "custom",   "custom": set by hand in the toml, not a named voice
+ "speaker": {"choice": "<a voice NAME, e.g. af_heart>" | "custom",   "custom": set by hand in the toml, not a named voice; else the voice that SPEAKS
+             "saved": "<a voice NAME>" | null,   the owner's own saved choice, and the field to show as "you chose this" (added 2026-11-02: `choice` is the voice that speaks, which is the pack's default whenever the saved name is not in the installed pack, is a blend still being checked, or was refused - so `choice` alone made a reset or a fresh install read as "it forgot what I changed it to"; null when the owner never chose one)
              "value": 3,                  sherpa-onnx's own `sid` in the installed pack
              "default": "af_heart",       the pack's own default voice ("af" on the old pack)
              "title": "Jarvis's built-in voice", "detail": str, "note": str,
