@@ -291,8 +291,9 @@ class AuditPlumbingTest {
         // offer gates the controls themselves used. Since 2026-10-30 the three
         // chat modes sit one tap deeper in HomeMoreModes, and the rows that left
         // the menu (Earlier chats, Pinned messages, Jarvis Presets) are gone.
+        // Since 2026-11-01 the Photo row is gone too: its photo half lives in
+        // the one Attach row, routed to the picture path by AttachFile.
         for (word in listOf(
-            "MoreMenuWords.PHOTO",
             "MoreMenuWords.FILE",
             "MoreMenuWords.MODES",
             "MoreMenuWords.NOTIFICATIONS",
@@ -311,6 +312,9 @@ class AuditPlumbingTest {
             "MoreMenuWords.PRESETS",
             "ChatHistory.EARLIER_CHATS",
             "ChatPins.TITLE",
+            // The owner's ask of 2026-11-01: "remove the photo option".
+            "MoreMenuWords.PHOTO",
+            "actions.onAttachPicture()",
         )) {
             assertFalse("the short More menu still draws $gone", menu.contains(gone))
         }

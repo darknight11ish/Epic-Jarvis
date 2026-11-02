@@ -14,9 +14,10 @@ package com.jarvis.client.ui.screens
  *
  * NOTHING in this file decides whether a row is drawn - `HomeMoreMenu` asks
  * the same state gates the controls carried when they sat around the box
- * (pictureOffered, thinkOffered, the coach's route + switch,
- * notificationsAttachable). So a PC that never offered a control still cannot
- * see it here.
+ * (thinkOffered, the coach's route + switch, notificationsAttachable). So a
+ * PC that never offered a control still cannot see it here. The Photos gate
+ * is the one that moved: since 2026-11-01 it lives inside the Attach row's
+ * own picker (`AttachFile.mimeTypes`), not on a row of its own.
  */
 internal object MoreMenuWords {
 
@@ -108,22 +109,27 @@ internal object MoreMenuWords {
     /** The line under the row: where the presets really are, so the next screen is not a surprise. */
     const val PRESETS_DETAIL = "In Brain, under Hardware"
 
-    /** The Photo key that used to sit at the start of the composer row. */
-    const val PHOTO = "Photo"
-
     /**
-     * "Attach a file" (2026-10-29): one PDF, Word, Excel, PowerPoint, text,
-     * Markdown or CSV file, read on the owner's PC within the question it is
-     * sent with. No new permission, no upload route and no switch.
+     * "Attach a file" (2026-10-29; the ONE way to send a document OR a photo
+     * since 2026-11-01, when the separate Photo row went). A document is one
+     * PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, read on the
+     * owner's PC within the question it is sent with. A photo picked here
+     * goes down its own picture path, exactly as the Photo row did. No new
+     * permission, no upload route and no switch.
      */
     const val FILE = "Attach a file"
 
     /**
      * Under "Attach a file": what really happens to it, so the row is not
-     * mistaken for an upload that is kept somewhere. The chip above the box
-     * says the rest (the outside-text sentence).
+     * mistaken for an upload that is kept somewhere. Every kind and every
+     * cap is named - the documents' 2.5 MB is `AttachFile.MAX_BYTES`, and the
+     * photo's 1.5 MB is `ChatPicture.MAX_JPEG_BYTES`, which the phone shrinks
+     * the photo to fit rather than a limit on what may be picked. The chip
+     * above the box says the rest (the outside-text sentence).
      */
-    const val FILE_DETAIL = "PDF, Word, Excel, PowerPoint, text, Markdown or CSV, up to 2.5 MB. Read on your PC."
+    const val FILE_DETAIL =
+        "PDF, Word, Excel, PowerPoint, text, Markdown, CSV or a photo. " +
+            "A document up to 2.5 MB; a photo is shrunk to fit 1.5 MB. Read on your PC."
 
     /** The Notifications key while phone notifications are on and one was captured. */
     const val NOTIFICATIONS = "Notifications"

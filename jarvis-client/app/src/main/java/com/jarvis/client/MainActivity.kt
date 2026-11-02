@@ -18,7 +18,6 @@ import android.util.Rational
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -520,19 +519,6 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Android's photo picker (API 33+ has it built in): the owner chooses one
-     * photo and the app may read that one. No storage permission is asked
-     * for, and nothing is copied to the app's own storage - the photo is read
-     * once, straight into [PictureEncoder].
-     */
-    private val pickPicture = registerForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri == null) return@registerForActivityResult
-        attachPicture(uri)
-    }
-
-    /**
      * An audio file picked for a new custom voice (VoicesScreen), read into
      * memory and checked ([CustomVoices.picked]), or null. Never copied to
      * the app's storage, never in a Bundle: a rotation drops it.
@@ -582,17 +568,31 @@ class MainActivity : FragmentActivity() {
     private val attachBusy = mutableStateOf(false)
 
     /**
-     * The system's file picker, for one document - the same
-     * `ActivityResultContracts.OpenDocument()` the custom-voice WAV uses, with
-     * no storage permission (the owner chooses one file and the app may read
-     * that one, once). The list is narrow on purpose ([AttachFile.MIME_TYPES]):
-     * the seven kinds `my_files` already reads, and nothing that would let a
+     * The ONE "Attach a file" row's picker (2026-10-29; the only way to send a
+     * document OR a photo since 2026-11-01, when the owner asked for the Photo
+     * row to go: "ATTach a file on my Android phone will bring up the option
+     * to add a photo").
+     *
+     * It is the same `ActivityResultContracts.OpenDocument()` the custom-voice
+     * WAV uses, with no storage permission (the owner chooses one file and the
+     * app may read that one, once). The filter comes from [AttachFile.MIME_TYPES]
+     * - the eight kinds `my_files` already reads, plus an image type wildcard
+     * only while the PC's Pictures feature works - and nothing that would let a
      * 400 MB video be picked only to be refused.
+     *
+     * A photo the picker returns is routed BEFORE a byte is read: it goes down
+     * the picture path ([attachPickedPicture] -> [PictureEncoder] -> [ChatPicture]),
+     * never [readAttachFile]. The decision is the pure [AttachFile.goesToPicture].
      */
     private val pickAttachFile = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@registerForActivityResult
+        val (name, mime) = pickNameAndType(uri)
+        if (AttachFile.goesToPicture(name, mime)) {
+            attachPickedPicture(uri)
+            return@registerForActivityResult
+        }
         attachBusy.value = true
         lifecycleScope.launch {
             when (val out = withContext(Dispatchers.IO) { readAttachFile(uri) }) {
@@ -601,6 +601,51 @@ class MainActivity : FragmentActivity() {
             }
             attachBusy.value = false
         }
+    }
+
+    /**
+     * The provider's own name and type for one pick, read WITHOUT opening the
+     * file. This is all the routing decision needs
+     * ([AttachFile.goesToPicture]), and the size is asked for later, inside
+     * [readAttachFile], where a document is actually read.
+     */
+    private fun pickNameAndType(uri: Uri): Pair<String?, String?> {
+        var name: String? = null
+        runCatching {
+            contentResolver.query(
+                uri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null, null, null,
+            )?.use { c ->
+                val nameAt = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameAt >= 0 && c.moveToFirst() && !c.isNull(nameAt)) name = c.getString(nameAt)
+            }
+        }
+        val mime = runCatching { contentResolver.getType(uri) }.getOrNull()
+        return name to mime
+    }
+
+    /**
+     * A photo picked through the one "Attach a file" row.
+     *
+     * It goes down the PICTURE path - [attachPicture] -> [PictureEncoder] ->
+     * [ChatPicture] - so it gets the same vision model and the same
+     * black-boxed secrets the Photo row always did, and it is never read as a
+     * document. The Photo row's own gate is kept here, asked after the pick
+     * instead of before it: a PC whose Pictures feature is off is refused in
+     * plain words ([AttachFile.photoNeedsPictures]) rather than having its
+     * photo's bytes read as a file.
+     */
+    private fun attachPickedPicture(uri: Uri) {
+        if (!SecondCard.picturesTaken(JarvisRuntime.secondCard.value)) {
+            JarvisRuntime.setNotice(
+                AttachFile.photoNeedsPictures(
+                    ChatPicture.notWorkingWhy(JarvisRuntime.secondCard.value),
+                ),
+            )
+            return
+        }
+        attachPicture(uri)
     }
 
     /**
@@ -4014,18 +4059,17 @@ class MainActivity : FragmentActivity() {
                                         }
                                     }
                                 },
-                                onAttachPicture = {
-                                    pickPicture.launch(
-                                        PickVisualMediaRequest.Builder()
-                                            .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                            .build(),
-                                    )
-                                },
                                 onRemovePicture = { picture.value = null },
-                                // One document for the next question: the
-                                // system picker, the narrow list, no storage
-                                // permission. Nothing is sent by choosing it.
-                                onAttachFile = { pickAttachFile.launch(AttachFile.MIME_TYPES) },
+                                // ONE row for a document OR a photo (the
+                                // owner's ask of 2026-11-01: the Photo row
+                                // went, and Attach a file offers both). The
+                                // Boolean is the old Photo row's gate, read
+                                // from the composed state: with it false the
+                                // picker offers no images at all. Nothing is
+                                // sent by choosing something.
+                                onAttachFile = { withPictures ->
+                                    pickAttachFile.launch(AttachFile.mimeTypes(withPictures))
+                                },
                                 onRemoveAttach = { attachedFile.value = null },
                                 // Fills the SAME shared-text chip the Share
                                 // sheet already uses - the owner still

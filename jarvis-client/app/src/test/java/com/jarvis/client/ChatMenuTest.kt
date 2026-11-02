@@ -187,10 +187,12 @@ class ChatMenuTest {
     // ---- 4. Old chats and new chats, where the owner now looks -------------
 
     @Test
-    fun `the menu is five doors, and the modes live one tap deeper`() {
+    fun `the menu is four doors, and the modes live one tap deeper`() {
         // The owner's choice of 2026-10-30, after he photographed the old
         // sheet ("too many options"): the More menu is short now, and the
-        // three chat modes are one tap deeper behind ONE "Modes" row.
+        // three chat modes are one tap deeper behind ONE "Modes" row. He
+        // shortened it again on 2026-11-01: the Photo row went, because the
+        // one Attach row brings up photos too.
         val shell = bodyOf("private fun HomeMoreMenu(")
         val menu = bodyOf("private fun HomeMoreMain(")
         val modes = bodyOf("private fun HomeMoreModes(")
@@ -199,9 +201,9 @@ class ChatMenuTest {
         assertTrue("the More shell does not open the short menu", shell.contains("HomeMoreMain("))
         assertTrue("the More shell does not open the modes sub-sheet", shell.contains("HomeMoreModes("))
         assertTrue("the modes page has no way back", shell.contains("modesOpen = false"))
-        // The five doors, in the order the owner reads them.
+        // The four doors, in the order the owner reads them.
         val order = listOf(
-            "MoreMenuWords.NEW_CHAT", "MoreMenuWords.PHOTO", "MoreMenuWords.FILE",
+            "MoreMenuWords.NEW_CHAT", "MoreMenuWords.FILE",
             "MoreMenuWords.MODES", "MoreMenuWords.QUICK_NOTE",
         )
         val at = order.map { menu.indexOf(it) }
@@ -211,6 +213,15 @@ class ChatMenuTest {
         assertFalse("Earlier chats is still a More row", menu.contains("ChatHistory.EARLIER_CHATS"))
         assertFalse("Pinned messages is still a More row", menu.contains("ChatPins.TITLE"))
         assertFalse("Jarvis Presets is still a More row", menu.contains("MoreMenuWords.PRESETS"))
+        // The Photo row left on 2026-11-01 and its constant with it. A row
+        // coming back here would be the second photo door the owner asked to
+        // remove.
+        assertFalse("the Photo row is back in More", menu.contains("MoreMenuWords.PHOTO"))
+        assertFalse("the Photo constant is still in the words", words.contains("const val PHOTO"))
+        assertTrue(
+            "the Attach row does not say a photo can be picked there",
+            words.contains("or a photo"),
+        )
         // Earlier chats opened History; History IS the list, so the words come
         // back nowhere in Home and the status-line control is the one door.
         assertEquals(
