@@ -4563,6 +4563,49 @@ _SETTINGS_LEAD_SAID = re.compile(
     r"\s*[:,;-]?\s*(.+)")
 
 
+#: "Stop saying 'One moment.'" (2026-11-01, the owner's own words: "id like the
+#: ability to tell jarvis in jarvis live to adjust any settings, includimg no
+#: longer saying one moment while it comprehends or calculates something").
+#:
+#: WHY THIS IS ITS OWN PAIR AND NOT PART OF `_ADJUST_ONOFF` BELOW. `_ADJUST_ONOFF`
+#: owns "turn on/off <name>", "enable <name>" and "disable <name>" for EVERY
+#: switch, and it must not grow a "stop" verb: "stop the timer", "stop listening"
+#: and "stop talking" are other lanes' sentences, and a generic "stop X" read as
+#: a setting named X would be a second way to rewrite sentences this file
+#: already answers. So this is ONE pair of verbs and ONE setting, and the tail
+#: still has to resolve to that setting - a sentence about anything else falls
+#: through exactly as it did before. Measured before this block existed:
+#: `Q.match("stop saying one moment")` was None, so the sentence went to the
+#: model, which has no way to change anything.
+_STOP_ONE_MOMENT = re.compile(
+    r"(?:stop|quit|don'?t|do\s+not|never|no\s+longer)\s+"
+    r"(?:say|saying|play|playing)\s+(.+)")
+_START_ONE_MOMENT = re.compile(
+    r"(?:start|begin|resume|go\s+back\s+to)\s+(?:saying|playing)\s+(.+)")
+
+
+def _one_moment_intent(s: str) -> Optional[Intent]:
+    """"Stop saying one moment" / "Start saying one moment again" - one switch.
+
+    The tail must name the `one_moment` switch through the registry's own
+    tolerant matcher, so "stop saying one moment while you think", "stop saying
+    the one moment message" and "don't say one moment please" reach it, while
+    "stop saying my name" reaches nothing (no switch's whole name is in those
+    words). The setting's own setter is what runs - cosmetic, no card."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    for pattern, on in ((_STOP_ONE_MOMENT, False), (_START_ONE_MOMENT, True)):
+        m = pattern.fullmatch(s)
+        if not m:
+            continue
+        setting = R.find_bool_setting_words(m.group(1))
+        if setting is not None and setting.key == "one_moment":
+            return Intent("settings_bool", {"key": "one_moment", "on": bool(on)})
+    return None
+
+
 def _settings_adjust(s: str) -> Optional[Intent]:
     try:
         import jarvis_settings_registry as R
@@ -4571,6 +4614,12 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     m = _SETTINGS_LEAD_SAID.fullmatch(s)
     if m:
         s = m.group(1).strip()
+    # "Stop saying one moment" (2026-11-01). Its own verbs, one setting; it runs
+    # before every block below because none of them owns a "stop/start saying"
+    # shape, and leaving it after them would mean the model answered it.
+    got = _one_moment_intent(s)
+    if got is not None:
+        return got
     # The interruption budget first: its sentences are the most specific ones
     # here ("speak up 3 times a day"), so nothing below can swallow one.
     budget = _budget_intent(s)
@@ -13931,7 +13980,9 @@ def _run_settings_not_by_asking(f: dict) -> Result:
 
     Nothing is changed, no card is raised and no model is used: the answer says
     where the switch really lives, so the owner is not left believing it was
-    done. See jarvis_settings_registry.NOT_BY_ASKING for the ten and why.
+    done. See jarvis_settings_registry.NOT_BY_ASKING for the nine and why (it
+    was ten until 2026-11-01, when "One moment." became a real switch and left
+    the table).
 
     A MIXED SENTENCE gets one extra sentence (2026-10-26): when the same turn
     also named a setting Jarvis CAN change, the refusal says so and asks for

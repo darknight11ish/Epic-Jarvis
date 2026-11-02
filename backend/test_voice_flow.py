@@ -178,7 +178,15 @@ class World:
                   mock.patch.object(V, "_cfg", vcfg),
                   mock.patch.object(V, "strong_embedder", lambda *a: None),
                   mock.patch.object(VS, "voices_dir", return_value=self.dir / "voices"),
-                  mock.patch.object(F, "_spawn", lambda fn: None)]
+                  mock.patch.object(F, "_spawn", lambda fn: None),
+                  # The owner's own "One moment." answer (2026-11-01) lives in a
+                  # file of its own. It is patched into this world for the same
+                  # reason the voice print and the voices folder are: without
+                  # it, a suite would read (and, in the asking test, write) the
+                  # owner's real one, and an owner who had turned the clip off
+                  # would make every test below depend on that.
+                  mock.patch.object(F, "settings_path",
+                                   lambda: self.dir / "voice-flow.json")]
         for p in self.p:
             p.start()
         if self.custom:
@@ -556,6 +564,95 @@ def t_one_moment_is_cached_per_voice():
         code, body = S.moment_reply()
         check("switched off: 503 with the reason, nothing made", code == 503
               and "one_moment_enabled" in body["why"] and len(made) == n, body)
+
+
+def t_the_owner_can_stop_one_moment_by_asking():
+    """2026-11-01, the owner's own words: "id like the ability to tell jarvis in
+    jarvis live to adjust any settings, includimg no longer saying one moment
+    while it comprehends or calculates something".
+
+    THE WHOLE CHAIN, MEASURED, because the claim is the chain and not one link:
+    the sentence the owner types -> `jarvis_quick`'s own intent -> the registry's
+    own setter -> `request_one_moment` -> the file on the PC -> the value
+    `/api/voice/status` reports -> the value BOTH apps gate on. The apps' halves
+    are pinned where they live and are quoted here so a reader can follow:
+
+        desktop  jarvis-desktop/src/main.js   momentFlow.toolStarted(
+                 loadMoment() && voiceFlow.moment, ...)   (two call sites)
+        phone    jarvis-client/.../VoiceSession.kt  moment.toolStarted(
+                 oneMoment() && flow.momentUsable, ...)
+
+    `voiceFlow.moment` / `flow.momentUsable` both come from this module's
+    `moment_state()["enabled"]`, which is the value this test turns off.
+
+    WHAT IS NOT PROVEN HERE, said plainly: neither app's own code runs in a
+    Python suite, so "the desktop bar really stays silent" is left to the
+    owner's live check (the PR's Limits say so). What is proven is the switch
+    they both read, and that it is now reachable from the sentence."""
+    import jarvis_quick as Q
+    made = []
+
+    def synth(text, **kw):
+        made.append((text, kw))
+        return tone(0.7, 0.4), 16000, "kokoro", "builtin", "", "", ""
+
+    brief = {"active": "builtin", "name": "Built-in voice", "engine": "kokoro",
+             "fallback": ""}
+    with World(), mock.patch.object(S, "_synthesise", synth), \
+            mock.patch.object(VS, "brief", lambda: dict(brief)):
+        check("before: the PC makes and hands out the clip",
+              F.moment_state()["enabled"] is True and F.moment()["ok"] is True)
+        got = Q.match("stop saying one moment")
+        check("the owner's sentence is a settings change, not the model's job",
+              got is not None and got.name == "settings_bool"
+              and got.f == {"key": "one_moment", "on": False}, got)
+        said = Q._run_settings_bool(got.f, None, True)
+        check("it runs through the setting's own setter and says what happened",
+              "One moment" in said.reply, said.reply)
+        st = F.moment_state()
+        check("status: the PC no longer offers it, and says why and how to undo",
+              st["enabled"] is False and st["ready"] is False
+              and "asked Jarvis" in st["why"] and "start saying one moment again" in st["why"],
+              st)
+        code, body = S.moment_reply()
+        check("the clip route answers 503 with that reason, and makes nothing",
+              code == 503 and "asked Jarvis" in body.get("why", "") and len(made) == 1,
+              (code, body, len(made)))
+        check("it is SAVED on the PC, not held in memory",
+              F.settings()["one_moment"] is False and F.settings_path().is_file()
+              and F.settings()["why"] == "", F.settings_path())
+        back = Q.match("start saying one moment again")
+        check("the sentence back is a settings change too",
+              back is not None and back.name == "settings_bool"
+              and back.f == {"key": "one_moment", "on": True}, back)
+        Q._run_settings_bool(back.f, None, True)
+        check("...and it puts the clip back", F.moment_state()["enabled"] is True
+              and F.moment()["ok"] is True, F.settings())
+    # THE PC'S HARD SWITCH STILL WINS, and the owner is told so rather than
+    # being told it worked: `[voice] one_moment_enabled = false` is a hand edit
+    # of the owner's own config, and asking can never override it.
+    with World({"one_moment_enabled": False}):
+        code, body = F.request_one_moment({"enabled": True})
+        check("the TOML switch off: asking for it back reports it is still off",
+              code == 200 and body["enabled"] is False and body["chosen"] is True
+              and "one_moment_enabled" in body["said"], body)
+        check("...and the reason names the file, not the owner's answer",
+              "one_moment_enabled" in F.moment_state()["why"], F.moment_state())
+    # A DAMAGED FILE FAILS OPEN, deliberately: the state this PC was in before
+    # the file existed (on), with `why` saying so - never a silent change.
+    with World():
+        F.settings_path().write_text("{not json", encoding="utf-8")
+        check("a damaged settings file leaves the clip on, and says it is damaged",
+              F.one_moment_enabled() is True and F.one_moment_choice() is None
+              and "damaged" in F.settings()["why"], F.settings())
+        F.request_one_moment({"enabled": False})
+        check("...and asking again rewrites it", F.one_moment_enabled() is False
+              and F.settings()["why"] == "", F.settings())
+    with World():
+        nope = F.request_one_moment({"enabled": "maybe"})
+        check("a value that is neither on nor off changes nothing",
+              nope[0] == 400 and F.one_moment_enabled() is True
+              and not F.settings_path().exists(), nope)
 
 
 def t_the_better_voice_is_never_started_for_it():
