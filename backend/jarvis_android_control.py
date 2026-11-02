@@ -65,6 +65,43 @@ all of it:
     when the phone says a `com.jarvis.` app is in front, or when the dump's
     own root package is one, so a node list can never be used to aim at the
     Jarvis app's own Approve button. `run()` keeps its own check as well.
+
+OPENING ONE OF THE OWNER'S OWN APPS, AND ASKING IT TO SEARCH (2026-11-01)
+The owner asked for this in these words: "id like jarvis live to be able to open
+certain apps on my android phone if i ask it (during a live session on my android
+phone) and to be able to perform certain actions like if i aaid 'hey jarvis open
+yourube music and play the weekend'". Three things were added for it, and one
+rule holds across all three:
+
+  * THE ALLOW-LIST IS THE PERMISSION. `[phone_apps]` in `jarvis-framework.toml`
+    is one line per app - its friendly name, and the package behind it - and it
+    starts EMPTY. An app that is not in it cannot be opened, cannot be played,
+    and is not listed. There is no way to name a package that is not there,
+    which is the point: a model that invents a package name gets a refusal, not
+    a phone that opens something the owner never chose. An empty list refuses
+    everything and says so in plain words.
+  * `open_app` starts it with Android's own launcher (`monkey -p ... -c
+    android.intent.category.LAUNCHER 1`) - no activity name to guess.
+  * `play` opens the app AND puts the owner's words into it as a search, with
+    `am start -a android.intent.action.VIEW -d <the app's own search address>
+    -p <package>`. The address comes from `SEARCH_LINKS`, which holds only apps
+    whose own search address is documented; an app that is not there can be
+    opened and NOT asked to search, and `play` says exactly that rather than
+    pretending. The words are URL-encoded with `urllib.parse.quote(..., safe="")`
+    so the only characters that reach the phone's own shell are the ones in the
+    template itself, and the finished address is checked against `_SAFE_URL`
+    before it becomes a command.
+  * `list_apps` is READ-ONLY and is never a command: it answers from the
+    settings file with the friendly names only (never every app installed on the
+    phone, never a package name the owner did not write), so the model can
+    resolve "YouTube Music" without guessing. `plan()` refuses it outright, and
+    the caller answers it without touching the phone or raising a card.
+
+WHAT `play` HONESTLY DOES. It opens the app on that app's own search address for
+the words the owner said. On the phone that is a search for those words, shown
+in the app; whether music starts by itself without one tap depends on the app and
+on what it does with that address, and this module does not claim it does. The
+card says the same thing in the same words.
 """
 
 from __future__ import annotations
@@ -76,6 +113,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Optional
+from urllib.parse import quote
 
 # adb key event codes worth naming rather than making the caller remember
 # numbers. Not exhaustive - just the ones a caller is likely to ask for.
@@ -136,6 +174,85 @@ _DESTRUCTIVE = re.compile(
 #: (test_security_pc.py pins it).
 READ_ONLY_ACTIONS = ("screenshot", "ui_dump")
 
+#: The steps that ask the SYSTEM to start a package, and can never land a tap
+#: inside the Jarvis app: the package is pinned by the command itself (`-p` on
+#: both `monkey` and `am start`), and a `com.jarvis.` package is refused before
+#: a command exists at all. So the Jarvis-in-front guard - whose whole purpose
+#: is to stop a tap landing on Jarvis's own Approve button - has nothing to
+#: protect against here.
+#:
+#: WHY THIS MATTERS MORE THAN IT LOOKS (2026-11-01): the owner asked for this
+#: from JARVIS LIVE ON THE PHONE. When the question is asked from the phone,
+#: the Jarvis app IS what is in front - and with the screen off, `dumpsys` says
+#: nothing at all, which the guard reads as "could not tell". Either way, an
+#: unconditional guard refuses the one request this feature exists for. Neither
+#: action taps anything: `monkey -p X` starts X, `am start -p X -d <url>` hands
+#: one intent to X, and X cannot be Jarvis.
+PACKAGE_PINNED_ACTIONS = ("open_app", "play")
+
+
+# --------------------------------------------------------------------------
+#   The owner's own app allow-list, and the apps whose search is known
+# --------------------------------------------------------------------------
+
+#: The one table in `jarvis-framework.toml` that says which apps on the owner's
+#: phone Jarvis may open: one line per app, `"Friendly name" = "package.name"`.
+#: It ships EMPTY, so a fresh install can open nothing, and a missing table
+#: reads the same as an empty one - never as permission.
+PHONE_APPS_SECTION = "phone_apps"
+
+#: The apps whose own SEARCH ADDRESS this module knows, as a template in which
+#: `{query}` becomes the owner's words, URL-encoded. Only apps whose address is
+#: documented are here, because the alternative - guessing an address and
+#: calling the result "play" - is exactly the claim this module must not make.
+#:
+#: YouTube Music: `music.youtube.com` is the app's own share domain and
+#: `/search?q=` is the address its website uses for a search, so the app
+#: receives the same words a search on the site would. The `-p` on the intent
+#: means only that one package can receive it - no browser, no other app.
+#:
+#: An app NOT in here can still be opened; `play` refuses it and says so.
+SEARCH_LINKS = {
+    "com.google.android.apps.youtube.music":
+        "https://music.youtube.com/search?q={query}",
+}
+
+#: The ONE shape a finished search address may have. `quote(text, safe="")`
+#: only ever emits `A-Za-z0-9_.-~` and `%XX`, so the owner's words can never
+#: introduce a character this pattern does not already allow; the template
+#: could, and that is what this checks. `&` is deliberately ABSENT: `adb shell`
+#: joins the argv and hands the line to the phone's own `/system/bin/sh`, where
+#: an unquoted `&` starts a background job and splits the command in two. A
+#: template that needs one is not supported until that is solved properly, and
+#: it fails here rather than on the phone.
+_SAFE_URL = re.compile(r"^https://[A-Za-z0-9.-]+/[A-Za-z0-9._~/?=%-]*$")
+
+#: The most words one search may carry. Not a security boundary (the encoding
+#: is that); a plain one: five thousand characters is not a search.
+MAX_SEARCH_CHARS = 120
+
+#: The read-only request that lists the allow-list. It NEVER becomes a step -
+#: it sends nothing to the phone - so `plan()` refuses it and `list_apps()`
+#: answers it from the settings file, without a card.
+LIST_APPS = "list_apps"
+
+#: What the owner reads when nothing is allowed yet. Written once, so the
+#: refusal, the list and the docs cannot drift into three different sentences.
+#: "then ask again" and not "restart": `jarvis_framework` re-reads the settings
+#: file whenever it changes on disk, and the tool is offered per turn, so a line
+#: added here is live on the next message - saying "restart" would send the
+#: owner to do something that is not needed.
+NO_APPS_LINE = (
+    'no apps are allowed on your phone yet. Add the ones you want under '
+    '[phone_apps] in jarvis-framework.toml - one line each, for example '
+    '"YouTube Music" = "com.google.android.apps.youtube.music" - then ask '
+    'again. Nothing was sent to the phone.')
+
+#: The words `am start` and `monkey` use when they did NOT start anything. Both
+#: commands report a launch they could not make on STDOUT and still exit 0, so
+#: reading only the exit code would report "done" for an app that never opened.
+_NO_LAUNCH = re.compile(r"Error:|Exception|No activities found", re.IGNORECASE)
+
 
 # --------------------------------------------------------------------------
 #   The plan - the literal adb command line for each requested step
@@ -145,6 +262,8 @@ READ_ONLY_ACTIONS = ("screenshot", "ui_dump")
 class Step:
     action: str              # "tap" | "swipe" | "key" | "text" | "screenshot"
                              #   | "long_press" | "open_app" | "ui_dump"
+                             #   | "play" (never "list_apps": that is answered
+                             #   from the settings file and is no command)
     argv: list                # the literal adb command, as a list - never a
                               # shell string, so nothing here is interpreted
                               # by a shell and there is no injection surface
@@ -204,7 +323,188 @@ def _safe_package(value) -> str:
     return pkg
 
 
-def _build_step(device: str, r: dict) -> Step:
+# --------------------------------------------------------------------------
+#   Reading the owner's allow-list, and looking an app up in it
+# --------------------------------------------------------------------------
+
+def _framework_section(name: str) -> dict:
+    """One section of `jarvis-framework.toml`, as a dict - or `{}`.
+
+    Never raises. `jarvis_framework` is a rebuilt module this one does not
+    import at module level, for the reason every module in this backend treats
+    it carefully: a phone-control module that cannot load because a config
+    layer is missing would take tapping down with it. With no config there is
+    no allow-list, and no allow-list means nothing is allowed - the fail-closed
+    direction, which is the only acceptable one here."""
+    try:
+        import jarvis_framework as FW
+        got = FW.section(name)
+    except Exception:
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def read_phone_apps() -> tuple:
+    """(the owner's allow-list, the names that could not be used).
+
+    The allow-list maps a FRIENDLY NAME the owner wrote to the package behind
+    it, exactly as `[phone_apps]` holds it. A value that is not a plain string
+    (a sub-table, a number), an empty line, and a package that `_safe_package`
+    refuses (anything that is not a dotted name, and anything under
+    `com.jarvis.`) are all LEFT OUT rather than trusted - a settings file is
+    not a place to smuggle a command into an argv.
+
+    The second half of the answer is the friendly names that were skipped, so
+    `list_apps()` can say "one line under [phone_apps] was ignored" instead of
+    an app simply being missing with no explanation.
+    """
+    raw = _framework_section(PHONE_APPS_SECTION)
+    allowed, ignored = {}, []
+    for name, package in (raw or {}).items():
+        if not isinstance(name, str):
+            continue
+        friendly = name.strip()
+        if not isinstance(package, str):
+            ignored.append(friendly or repr(name))
+            continue
+        try:
+            pkg = _safe_package(package)
+        except (ValueError, TypeError):
+            ignored.append(friendly or repr(name))
+            continue
+        if not friendly:
+            ignored.append(pkg)
+            continue
+        allowed[friendly] = pkg
+    return allowed, ignored
+
+
+def phone_apps() -> dict:
+    """The owner's allow-list, friendly name -> package. `{}` when there is
+    none - and `{}` is the answer for every way of having none: no settings
+    file, no `[phone_apps]` table, an empty one, or one whose every line was
+    refused."""
+    return read_phone_apps()[0]
+
+
+def _find_by_name(name: str, table: dict) -> str:
+    """The package a friendly name means, or "" - never a guess between two.
+
+    Case does not matter ("youtube music" is "YouTube Music"), and a unique
+    prefix is accepted, because a spoken sentence arrives with whatever
+    capitalisation and whatever tail the speech recogniser chose. Two apps that
+    both start with the words the owner said resolve to NEITHER; a wrong app
+    opened on purpose is worse than a question."""
+    want = str(name or "").strip().casefold()
+    if not want:
+        return ""
+    for friendly, pkg in table.items():
+        if friendly.casefold() == want:
+            return pkg
+    starts = [pkg for friendly, pkg in table.items()
+              if friendly.casefold().startswith(want)]
+    return starts[0] if len(starts) == 1 else ""
+
+
+def _name_of(package: str, table: dict) -> str:
+    """The friendly name behind a package, for the words a person reads."""
+    for friendly, pkg in table.items():
+        if pkg == package:
+            return friendly
+    return package or "that app"
+
+
+def _not_listed_line(named: str, table: dict) -> str:
+    """The refusal for an app the owner did not allow, naming what IS allowed."""
+    allowed = ", ".join(sorted(table)) if table else ""
+    tail = (f" The apps you have allowed are: {allowed}." if allowed
+            else " The list is empty.")
+    return (f"{named!r} is not in your phone's app list, so Jarvis did not open "
+            f"it.{tail} Add another under [phone_apps] in "
+            f"jarvis-framework.toml.")
+
+
+def allowed_package(request: dict, table: Optional[dict] = None) -> tuple:
+    """(friendly name, package) for an app the owner allowed, or ValueError.
+
+    ONE place decides what "the owner allowed this app" means, so `open_app` and
+    `play` cannot come to two different answers about the same phone:
+
+      * `"app"` is the friendly name as written in `[phone_apps]`;
+      * `"package"` is accepted too, but only when that exact package is one of
+        the allowed values - so a model that guesses a package name can only
+        ever reach an app the owner listed;
+      * an empty allow-list, an unknown name, an unknown package, and two
+        values that disagree all refuse, in plain words, BEFORE any card;
+      * the package finally returned still goes through `_safe_package`, so a
+        bad line in a settings file cannot become an argv element.
+    """
+    allow = phone_apps() if table is None else table
+    named = str(request.get("app", "") or "").strip()
+    given = str(request.get("package", "") or "").strip()
+    if not allow:
+        raise ValueError(NO_APPS_LINE)
+    if named:
+        pkg = _find_by_name(named, allow)
+        if not pkg:
+            raise ValueError(_not_listed_line(named, allow))
+        if given and given != pkg:
+            raise ValueError(
+                f"the app name {named!r} and the package {given!r} do not agree, "
+                f"so Jarvis did not guess which one you meant. Nothing was sent.")
+    elif given:
+        if given not in allow.values():
+            raise ValueError(_not_listed_line(given, allow))
+        pkg = given
+    else:
+        raise ValueError(
+            "say which app, by the name in your [phone_apps] list - for example "
+            '"app": "YouTube Music". Nothing was sent.')
+    return _name_of(pkg, allow), _safe_package(pkg)
+
+
+def _search_argv(device: str, name: str, package: str, words: str) -> list:
+    """`am start` for one app's own search address, or ValueError.
+
+    The words are percent-encoded with `quote(..., safe="")`, so a `;`, a space,
+    a `&` or a quote the owner said arrives at the phone as `%3B`, `%20`, `%26`
+    or `%22` and means nothing to a shell. The assembled address is then
+    checked against `_SAFE_URL` - the template is the only place a character
+    could get in that the encoding did not produce - and a bad one refuses with
+    a sentence rather than becoming a command.
+    """
+    link = SEARCH_LINKS.get(package, "")
+    if not link:
+        raise ValueError(
+            f"Jarvis can open {name!r} on your phone, but it does not know how to "
+            f"ask it to search, so it did not try. Ask it to open the app "
+            f"instead. Nothing was sent.")
+    if "{query}" not in link:
+        # A template with nowhere to put the words would open the app on a
+        # search for nothing and look like it worked. Refused here, where it is
+        # one line of code to fix, rather than on the phone.
+        raise ValueError(
+            f"the search address Jarvis has for {name!r} has no place for your "
+            f"words, so nothing was sent.")
+    text = str(words or "").strip()
+    if not text:
+        raise ValueError(
+            'say what to search for - "play" needs the words, for example "play '
+            'The Weeknd in YouTube Music". Nothing was sent.')
+    if len(text) > MAX_SEARCH_CHARS:
+        raise ValueError(
+            f"that is more than {MAX_SEARCH_CHARS} characters, too long to put in "
+            f"one phone address. Say a shorter search. Nothing was sent.")
+    url = link.replace("{query}", quote(text, safe=""))
+    if not _SAFE_URL.fullmatch(url):
+        raise ValueError(
+            "that search could not be turned into an address this tool will send "
+            "to a phone safely, so nothing was sent.")
+    return ["adb", "-s", device, "shell", "am", "start", "-a",
+            "android.intent.action.VIEW", "-d", url, "-p", package]
+
+
+def _build_step(device: str, r: dict, allow: Optional[dict] = None) -> Step:
     action = str(r.get("action", "")).strip()
     why = str(r.get("why", ""))
     heavy = bool(r.get("irreversible")) or bool(r.get("leaves_machine"))
@@ -257,11 +557,29 @@ def _build_step(device: str, r: dict) -> Step:
     if action == "open_app":
         # `monkey` is Android's own "launch this package's launcher activity":
         # no activity name to guess and no second way to start something on
-        # the phone. A `com.jarvis.` package is refused (see _safe_package).
-        pkg = _safe_package(r.get("package", ""))
+        # the phone. The package must be one the OWNER ALLOWED (see
+        # allowed_package), and `_safe_package` refuses a `com.jarvis.` one
+        # inside it.
+        _name, pkg = allowed_package(r, allow)
         return Step(action, base + ["monkey", "-p", pkg, "-c",
                                     "android.intent.category.LAUNCHER", "1"],
                     why, heavy)
+    if action == "play":
+        # Open the owner's app AND ask it to search for their words, in ONE
+        # literal command. `-p` means only that one package can receive the
+        # intent, so no browser and no other app can answer it instead.
+        name, pkg = allowed_package(r, allow)
+        argv = _search_argv(device, name, pkg, r.get("query", r.get("value", "")))
+        return Step(action, argv, why or f"open {name} and search for those words",
+                    heavy)
+    if action == LIST_APPS:
+        # Read-only, and NOT a command: it answers from the settings file (see
+        # list_apps), so it must never reach an argv. Refused here so a plan
+        # that mixes it with real steps cannot silently drop it.
+        raise ValueError(
+            f"listing your apps is read from your settings file and is never a "
+            f"phone command. Ask for {LIST_APPS!r} on its own, with no other "
+            f"request in the same call. Nothing was sent.")
     if action == "ui_dump":
         # Read-only, like a screenshot, and never heavy: this asks the phone
         # to describe its own screen and sends no input to it at all.
@@ -271,13 +589,21 @@ def _build_step(device: str, r: dict) -> Step:
     raise ValueError(f"unknown action {action!r}")
 
 
-def plan(device: str, goal: str, requests: list) -> Plan:
+def plan(device: str, goal: str, requests: list, *, apps: Optional[dict] = None) -> Plan:
     """Work out the literal commands. Runs nothing - building an argv list
-    and formatting a string are the only things this function does."""
+    and formatting a string are the only things this function does.
+
+    `apps` is the allow-list to check `open_app` and `play` against, read from
+    `[phone_apps]` when it is not given. It is a parameter for the same reason
+    `run_adb` is injectable: a suite must be able to prove the rule without
+    writing a settings file, and a caller that has already read the list should
+    not read it twice.
+    """
+    allow = phone_apps() if apps is None else dict(apps)
     steps, rejected = [], []
     for r in requests:
         try:
-            steps.append(_build_step(device, r))
+            steps.append(_build_step(device, r, allow))
         except (KeyError, ValueError, TypeError) as exc:
             # TypeError alongside the other two: a request with `"x": null`
             # (or any non-numeric x/y/x1/y1/x2/y2) hits `int(r["x"])`, and
@@ -288,6 +614,82 @@ def plan(device: str, goal: str, requests: list) -> Plan:
     return Plan(
         device=str(device), goal=str(goal), steps=steps, rejected=rejected,
         if_refused="nothing happens on the phone; the goal is not attempted")
+
+
+def only_lists_apps(requests) -> bool:
+    """True when this call only asks for the allow-list, and nothing else.
+
+    The caller answers that from the settings file, with no card and no adb
+    command (see `list_apps`). Exactly the same test the agent uses, so the
+    two cannot disagree about whether a call was "just a list"."""
+    items = list(requests or [])
+    return bool(items) and all(
+        isinstance(r, dict) and str(r.get("action", "")).strip() == LIST_APPS
+        for r in items)
+
+
+def list_apps(*, apps: Optional[dict] = None) -> dict:
+    """The owner's allow-list, by the names they wrote - and nothing else.
+
+    READ-ONLY, and it touches no phone: there is no adb command here at all, so
+    it never lists every app installed on the device and never returns a
+    package the owner did not write down. `can_play` says which of the listed
+    apps Jarvis also knows how to ask for a search, so the model can tell "open
+    it" from "open it and search" without guessing.
+
+    An empty list is not an error and is not silent: `note` carries the same
+    plain sentence the refusal uses, so the model has the owner's own words to
+    repeat back.
+    """
+    table, ignored = read_phone_apps()
+    if apps is not None:
+        table, ignored = dict(apps), []
+    rows = [{"name": friendly, "can_play": bool(SEARCH_LINKS.get(package))}
+            for friendly, package in sorted(table.items())]
+    out = {"ok": True, "apps": rows, "count": len(rows), "note": ""}
+    if not rows:
+        out["note"] = ("Nothing is allowed yet: " + NO_APPS_LINE)
+    elif ignored:
+        out["note"] = (f"{len(ignored)} line(s) under [phone_apps] were ignored "
+                       f"because they are not a plain name and a plain package "
+                       f"name: {', '.join(ignored)}.")
+    return out
+
+
+def resolve_device(requested, *, run_adb: Optional[Callable[[list], object]] = None) -> tuple:
+    """(serial, why_not): which phone to plan against, or why there is none.
+
+    `control_phone` is spoken to, not typed at: "open YouTube Music" never
+    carries a serial. Before this existed the tool was handed whatever the
+    model wrote in `device` (usually nothing), the plan said `adb -s  shell
+    ...`, and the only way it could work was a model that happened to know a
+    serial it was never told. So: an empty `device` means the ONE phone
+    connected over adb, and zero or several means a plain refusal instead of a
+    guess. A serial the caller DID name is passed through untouched - `run()`
+    already re-checks that it is connected before every step, and inventing a
+    second opinion about it here is how two answers to one question start.
+
+    Never raises: this runs before a card, and a missing adb must be a
+    sentence, not a traceback.
+    """
+    want = str(requested or "").strip()
+    if want:
+        return want, ""
+    caller = run_adb or _real_adb
+    try:
+        serials = sorted(_current_serials(caller))
+    except Exception as exc:
+        return "", (f"Jarvis could not ask adb which phones are connected "
+                    f"({type(exc).__name__}), so nothing was sent to any phone.")
+    if len(serials) == 1:
+        return serials[0], ""
+    if not serials:
+        return "", ("no phone is connected over adb right now, so nothing was sent. "
+                    "Connect it (plug it in, or turn on wireless debugging) and ask "
+                    "again.")
+    return "", (f"more than one device is connected over adb ({', '.join(serials)}), "
+                f"so Jarvis did not guess which one. Name one.")
+
 
 
 # The weight the CARD prints is the heavier of two: the steps the model
@@ -410,7 +812,28 @@ def jarvis_in_front(device: str, run_adb: Callable) -> str:
 _STEP_WORD = {"tap": "a tap", "swipe": "a swipe", "key": "a key press",
               "text": "typing", "screenshot": "a screenshot",
               "long_press": "a long press", "open_app": "opening an app",
-              "ui_dump": "a screen read"}
+              "ui_dump": "a screen read",
+              "play": "opening an app and asking it to search"}
+
+
+def _launch_failed(action: str, output: str) -> str:
+    """Why this step did NOT start anything, or "" - for the two that can say.
+
+    `am start` and `monkey` both report a launch they could not make on STDOUT
+    and still exit 0: "Error: Activity not started, unable to resolve Intent
+    {...}" and "monkey: ... No activities found". Reading only the exit code
+    would report `done` for an app that never opened, which is the one claim a
+    phone-control step must never make. A successful `am start` prints
+    "Starting: Intent {...}" and a successful `monkey` prints "Events
+    injected", so neither matches.
+    """
+    if action not in ("open_app", "play"):
+        return ""
+    text = str(output or "")
+    if not _NO_LAUNCH.search(text):
+        return ""
+    line = next((ln.strip() for ln in text.splitlines() if _NO_LAUNCH.search(ln)), "")
+    return ("did not start anything on the phone" + (f": {line}" if line else ""))
 
 
 def _current_serials(run_adb: Callable) -> set:
@@ -519,7 +942,8 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
                                  f"{p.device!r} is no longer connected - "
                                  "stopping rather than sending it to whatever "
                                  "phone is plugged in now")
-        if step.action not in READ_ONLY_ACTIONS:
+        if step.action not in READ_ONLY_ACTIONS and \
+                step.action not in PACKAGE_PINNED_ACTIONS:
             why_not = jarvis_in_front(p.device, caller)
             if why_not:
                 return stopped_at(i, f"step {i} ({step.action}): {why_not}")
@@ -538,6 +962,9 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
             msg = stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else str(stderr)
             return stopped_at(
                 i, f"step {i} ({step.action}) failed (exit {rc}): {msg.strip()}")
+        miss = _launch_failed(step.action, _text_of(result))
+        if miss:
+            return stopped_at(i, f"step {i} ({step.action}) {miss}")
         done.append(step)
         if step.action == "screenshot":
             # base64, not raw bytes: this dict is handed straight to

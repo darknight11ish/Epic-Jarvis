@@ -29610,3 +29610,146 @@ window", or the "Edit HUD" button in the HUD's own header), while this app's own
 look is in Appearance (theme, the face, face size, text size and spacing). No
 phone-side HUD editor is claimed, because there is none. With no header, or from
 the desktop, the old path is untouched; `backend/test_surface.py` pins both.
+
+## 174. Opening an app on your phone, and starting a media search (backend only, added 2026-11-01)
+
+The owner asked, in these words:
+
+> "id like jarvis live to be able to open certain apps on my android phone if i
+> ask it (during a live session on my android phone) and to be able to perform
+> certain actions like if i aaid 'hey jarvis open yourube music and play the
+> weekend'"
+
+So: from a Live conversation on the phone, "open YouTube Music" and "open
+YouTube Music and play The Weeknd" work. The PC is the brain and the gate; the
+phone is the hands, over `adb`, exactly as `control_phone` already did. There is
+**no new route**: this is the existing `control_phone` tool
+(`backend/jarvis_agent.py`) and the existing `jarvis_android_control.py` module,
+both shipped whole.
+
+### 174.1 The three actions the model can now ask for
+
+| Action | What it sends (one literal adb command, printed on the card) |
+|---|---|
+| `list_apps` | **Nothing.** Answered from the settings file; see 174.3. |
+| `open_app` | `adb -s <serial> shell monkey -p <package> -c android.intent.category.LAUNCHER 1` |
+| `play` | `adb -s <serial> shell am start -a android.intent.action.VIEW -d <the app's own search address> -p <package>` |
+
+`play` with YouTube Music, for "play The Weeknd", is exactly:
+
+```
+adb -s <serial> shell am start -a android.intent.action.VIEW -d 'https://music.youtube.com/search?q=The%20Weeknd' -p com.google.android.apps.youtube.music
+```
+
+`open_app` carries no activity name to guess: `monkey` is Android's own "launch
+this package's launcher activity". `play` uses `-p`, so only that one package
+can receive the intent - no browser and no other app can answer it instead.
+
+The rest of the tool is unchanged: `tap`, `swipe`, `key`, `text`, `screenshot`,
+`long_press`, `ui_dump`, all still literal argv lists, all still checked against
+the same plan/describe/run model.
+
+`device` is **no longer required** on the tool. "open YouTube Music" said out
+loud carries no serial, and a model was never told one; leaving it out now means
+the ONE phone connected over adb (`jarvis_android_control.resolve_device`), and
+zero or several connected devices is a plain refusal ("no phone is connected over
+adb right now…" / "more than one device is connected over adb (A, B), so Jarvis
+did not guess which one"), never a guess.
+
+### 174.2 The allow-list IS the permission
+
+`[phone_apps]` in `jarvis-framework.toml` is one line per app - the name you
+would say out loud, and the package behind it:
+
+```toml
+[phone_apps]
+"YouTube Music" = "com.google.android.apps.youtube.music"
+```
+
+It ships **EMPTY**, and empty (or no table at all) refuses everything. The rules,
+all enforced in `jarvis_android_control.py` before any card exists:
+
+- an app that is not on the list is refused, and the refusal **names the apps
+  that are**;
+- an empty list is refused with one sentence saying how to add one;
+- a package that is not a plain dotted name is refused (`_safe_package`);
+- anything under `com.jarvis.` is refused - Jarvis never starts its own app, so
+  no tap can reach an Approve button;
+- a name and a package that disagree are refused rather than picked between;
+- the words of a search are percent-encoded with `urllib.parse.quote(...,
+  safe="")`, so `;`, `&`, `"`, backticks and `$(...)` arrive as `%3B`, `%26`,
+  `%22`, `%60` and `%24%28…` and mean nothing to the phone's own shell. The
+  finished address is then checked against `_SAFE_URL`, which does not admit
+  `&` at all: `adb shell` hands the line to `/system/bin/sh`, where an unquoted
+  `&` starts a background job;
+- a settings line that is not a plain string, and any package `_safe_package`
+  refuses, is **left out** of the list rather than trusted, and `list_apps` says
+  how many lines were ignored.
+
+Only apps whose search address is documented are in `SEARCH_LINKS`: today that
+is YouTube Music alone. Any other app on the list can be **opened**, and `play`
+refuses it in plain words ("Jarvis can open 'Maps' on your phone, but it does not
+know how to ask it to search… Ask it to open the app instead") rather than
+pretending.
+
+### 174.3 `list_apps`: read-only, and never a card
+
+`list_apps` is answered from the settings file with the friendly names only -
+never the phone's installed apps, never a package the owner did not write down:
+
+```json
+{"ok": true, "count": 1,
+ "apps": [{"name": "YouTube Music", "can_play": true}], "note": ""}
+```
+
+It sends nothing to the phone and starts nothing, so it raises **no approval
+card**: `plan()` refuses it outright (`list_apps` is never a command), and
+`_prepare_control_phone` answers a list-only call before the gate. The same is
+true of a call where nothing could become a command - an app not on the list, an
+empty list, no phone connected - so the owner is never asked to approve an empty
+plan, and the model gets the reason to repeat in the owner's own words.
+
+`can_play` is how the model tells "open it" from "open it and search" without
+guessing.
+
+### 174.4 What has NOT changed, on purpose
+
+- **The same gate action and the same tier.** Every plan still resolves to
+  `jarvis_android_control_run` → `control_phone`, and `[autonomy.tiers]` still
+  says `control_phone = "ask"`. One card per plan, printing every literal
+  command; nothing is auto-approved; the tool stays in the agent's
+  `NEEDS_A_PERSON` set.
+- **Still opt-in.** `control_phone` is NOT in the shipped `[tools].enabled`, so
+  a fresh install offers no tool that can touch a phone. To turn it on, add
+  `"control_phone"` to `[tools].enabled` in `jarvis-framework.toml`, and add the
+  apps to `[phone_apps]`. Both files are re-read while Jarvis runs, so an edit
+  takes effect on the next message; a change to the CODE needs the reconciled
+  backend and a restart.
+- **A step that pins its own package is not blocked by the Jarvis-in-front
+  guard.** `open_app` and `play` are `PACKAGE_PINNED_ACTIONS`: both commands
+  name the package themselves (`monkey -p`, `am start -p`), and a `com.jarvis.`
+  package is refused before a command exists, so neither can land a tap inside
+  Jarvis's own app - which is the only thing that guard protects. Without this
+  the feature would be refused every time it was asked FROM the phone, because
+  that is where the Jarvis app is in front. A `tap` is still refused there.
+- **`play` is honest about what it does.** It opens the app on that app's own
+  search address for the words the owner said. On the phone that is a search
+  shown in the app; whether music starts without one tap depends on the app.
+  The tool description and the card both say "one tap may still be needed".
+- **`am start` and `monkey` exit 0 when they fail.** Both print the failure on
+  stdout ("Error: Activity not started, unable to resolve Intent", "No
+  activities found, monkey aborted"). `run()` now reads that, so a launch that
+  did not happen is reported as a failure instead of `done`.
+
+### 174.5 What this repository cannot prove
+
+The exact intent behaviour on the owner's own phone - whether YouTube Music's
+own App Link accepts `https://music.youtube.com/search?q=…` and lands on the
+search, and whether the app then starts playing - is verified by the Lead on the
+real device. Everything above is proved against injected fakes: no test here
+starts `adb` or touches a phone (`backend/test_android_control.py`,
+`backend/test_phone_app_launch.py`).
+
+Also unchanged and worth saying: opening a media app takes it to the front, so a
+Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
+"One-sided on purpose").

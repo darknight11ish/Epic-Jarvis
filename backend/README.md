@@ -20274,3 +20274,192 @@ entry); `jarvis_owner_check.py`, `jarvis_asks_first.py` and
 owner's drifted install the patcher refuses, and the honest route is the one
 `#997` used plus a reconcile delta - see
 `.dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md` section 6.
+
+# `control_phone` can open a listed app and start a media search: `jarvis_android_control.py` (2026-11-01)
+
+The owner asked, in their own words:
+
+> "id like jarvis live to be able to open certain apps on my android phone if i
+> ask it (during a live session on my android phone) and to be able to perform
+> certain actions like if i aaid 'hey jarvis open yourube music and play the
+> weekend'"
+
+Nothing new was added to the backend's routes, and no `.patch` file was needed:
+both files this touches (`jarvis_android_control.py`, `jarvis_agent.py`) are
+shipped whole, so they go to the base by the ordinary two-file rule.
+
+## In plain words
+
+Before this, the model could tap, swipe, type, press a key and take a
+screenshot - but it had no way to say "open an app", even though the module
+underneath had known how since 5A. The tool's own `requests` list stopped at
+five actions, so the one thing the owner actually asked for was unreachable: the
+model could not name it, so it could never ask for it.
+
+Now it can: "open YouTube Music", and "open YouTube Music and play The Weeknd".
+The first starts the app; the second starts it on a search for those words.
+
+And the owner chooses which apps exist as far as Jarvis is concerned. A new
+`[phone_apps]` table in `jarvis-framework.toml` is one line per app - the name
+you would say out loud, and the package behind it - and it ships **empty**.
+Empty means nothing is allowed, and asking anyway gets one plain sentence
+saying so.
+
+## The three actions, and the exact commands
+
+| Action | What the card prints |
+|---|---|
+| `list_apps` | **nothing** - answered from the settings file, no card, no adb |
+| `open_app` | `adb -s <serial> shell monkey -p <package> -c android.intent.category.LAUNCHER 1` |
+| `play` | `adb -s <serial> shell am start -a android.intent.action.VIEW -d <search address> -p <package>` |
+
+For "play The Weeknd" in YouTube Music, the whole command is:
+
+```
+adb -s <serial> shell am start -a android.intent.action.VIEW -d 'https://music.youtube.com/search?q=The%20Weeknd' -p com.google.android.apps.youtube.music
+```
+
+`monkey` is Android's own "launch this package's launcher activity", so there is
+no activity name to guess. `play` uses `-p`, so only the allowed app can receive
+the intent - no browser can quietly answer it instead.
+
+## Why "play" is that and not something cleverer
+
+There is no platform API for "play this song in that app". `SEARCH_LINKS` holds
+the search addresses whose own app documents them, and today that is YouTube
+Music alone (`music.youtube.com` is the app's own domain and `/search?q=` is the
+address its site uses). An app that is not in there can be **opened** and not
+asked to search, and `play` says exactly that in words - "Jarvis can open 'Maps'
+on your phone, but it does not know how to ask it to search ... Ask it to open
+the app instead." Pretending otherwise would be a lie told by a card.
+
+What `play` honestly does: it opens the app on that search. Whether the music
+starts without one tap is the app's business, and both the tool description and
+the card say "one tap may still be needed".
+
+## What is refused, and before what
+
+All of this happens in `jarvis_android_control.py`, in `plan()`, which runs
+nothing - so a refused request is a refusal **before any card exists**:
+
+- an app that is not in `[phone_apps]` - and the refusal names the apps that are;
+- an empty list (or no table at all) - the one `NO_APPS_LINE` sentence, which the
+  model can repeat to the owner word for word;
+- a name and a package that disagree - refused rather than picked between,
+  because a wrong app opened on purpose is worse than a question;
+- anything that is not a plain dotted package name (`_safe_package`), including
+  a settings line somebody typed wrong - it is left out of the list and counted,
+  never trusted;
+- anything under `com.jarvis.` - Jarvis never starts its own app, so no tap on a
+  card can reach an Approve button;
+- an empty or over-120-character search;
+- an app with no known search address (for `play`);
+- any character that would mean something to the phone's own shell: the words are
+  percent-encoded with `urllib.parse.quote(..., safe="")`, so `;`, `&`, `"`,
+  backticks and `$(...)` arrive as `%3B`, `%26`, `%22`, `%60`, `%24%28...` - and
+  the finished address is then checked against `_SAFE_URL`, which does not admit
+  `&` at all, because `adb shell` hands the line to `/system/bin/sh` where an
+  unquoted `&` starts a background job.
+
+`list_apps` is never a command: `plan()` refuses it outright, so there is no
+argv it could ever become. It answers from the settings file with the friendly
+names only - never the phone's installed apps, and never a package the owner did
+not write down.
+
+## Why a list and a refusal raise no card
+
+`_prepare_control_phone` returns one of two stand-ins instead of a plan, and
+`_one_call` answers both **before** the gate:
+
+- `_PhoneApps` - a list-only call. Nothing is sent to the phone, so there is
+  nothing to approve.
+- `_PhoneRefused` - nothing became a command (an app off the list, an empty list,
+  no phone connected). A card would ask the owner to approve an empty plan; the
+  reasons go back to the model instead, which can repeat them.
+
+A **mixed** call (one good step and one bad one) still raises a card, and the
+card prints the bad one under "will NOT run" - the same shape every other plan
+in this module has always had.
+
+## The phone is the one connected, not a guessed serial
+
+`control_phone` used to be handed whatever the model wrote in `device`, which for
+"open YouTube Music" is nothing at all - and a model was never told a serial, so
+the only way it could work was by luck. `resolve_device()` now answers that from
+`adb devices`: exactly one connected device means that one; zero or several
+means a plain refusal ("no phone is connected over adb right now ..." / "more
+than one device is connected over adb (A, B), so Jarvis did not guess which
+one"), never a guess. A serial the caller DOES name is passed through untouched:
+`run()` already re-checks it before every step, and a second opinion here is how
+two answers to one question start. `device` is therefore no longer a required
+field on the tool.
+
+## It has to work FROM the phone, which is where Live is
+
+The owner asked for this "during a live session on my android phone" - so the
+Jarvis app is the app **in front**. `run()` has always refused every step that
+sends input while a `com.jarvis.` app is in front (and with the screen off,
+`dumpsys window` says nothing at all, which the guard reads as "could not tell"
+and refuses too). That guard exists to stop a TAP landing on Jarvis's own
+Approve button - and an unconditional one refused the exact request this
+feature exists for, every time it was asked from the phone.
+
+`PACKAGE_PINNED_ACTIONS = ("open_app", "play")` is the fix, and its argument is
+that neither can do what the guard exists to prevent: both commands pin the
+package themselves (`monkey -p X`, `am start -p X`), and a `com.jarvis.` package
+is refused before a command exists at all, so X can never be Jarvis. A `tap`
+is still refused in front of the Jarvis app, and so is every other input step -
+`test_android_control.py` pins both halves.
+
+## A launch that did not happen is not reported as done
+
+`am start` and `monkey` both print their failure on **stdout** and still exit 0:
+`Error: Activity not started, unable to resolve Intent {...}` and
+`** No activities found to run, monkey aborted. **`. Reading only the exit code
+reported `done` for an app that never opened. `run()` now reads that line for
+`open_app` and `play` and stops the plan with the phone's own words, so a
+successful `am start` ("Starting: Intent ...") and a successful `monkey`
+("Events injected") stay `done` and a failed one does not.
+
+## Still opt-in, and that did not change
+
+`control_phone` is NOT in the shipped `[tools].enabled`, so a fresh install
+offers no tool that can touch a phone. To turn it on, add `"control_phone"` to
+`[tools].enabled` and add the apps to `[phone_apps]`. Its tier is unchanged
+(`control_phone = "ask"`), the tool still resolves to `jarvis_android_control_run`,
+and it is still in the agent's `NEEDS_A_PERSON` set - one card per plan, every
+literal command printed, nothing auto-approved. Both files are re-read while
+Jarvis runs, so a settings edit takes effect on the next message; a change to the
+CODE needs the reconciled backend and a restart.
+
+## Test it
+
+```powershell
+py -3 backend\test_android_control.py
+py -3 backend\test_phone_app_launch.py
+python -B backend\run_suites.py test_android_control.py test_phone_app_launch.py
+```
+
+`test_android_control.py` grew from 197 to 251 checks: the allow-list, the exact
+`open_app`/`play` argv, the encoding, every refusal, `resolve_device`, and the
+launch-that-failed. `test_phone_app_launch.py` (new, 62 checks) proves the agent
+half against the real `_one_call`: the schema the model is SENT names the three
+actions, a list-only call and a refusal raise **no** card, a real plan goes to
+the same gate action and prints the literal command on the card, and the tier,
+the gate mapping and the opt-in are unchanged.
+
+Neither suite starts `adb` or touches a phone: every one runs against an injected
+fake, and `NoRealProcess` raises if a real process is ever started.
+
+## What this repository cannot prove
+
+That YouTube Music's own App Link accepts `https://music.youtube.com/search?q=...`
+on the owner's phone, lands on the search, and whether it then starts playing
+without a tap. That is measured on the real device by the Lead, not here. If the
+address turns out not to work, the honest fix is one line in `SEARCH_LINKS`, not
+a different claim on a card.
+
+Recorded as JARVIS-API §174, and as the "One-sided on purpose" row in
+`docs/ARCHITECTURE.md` §8: the ability is in both apps' chats, the permission
+(`[phone_apps]` and `[tools].enabled`) is the PC's alone because it is deep
+config editing.
