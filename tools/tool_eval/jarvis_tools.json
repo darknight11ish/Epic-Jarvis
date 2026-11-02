@@ -286,11 +286,11 @@
      },
      "name": {
       "type": "string",
-      "description": "the app's name, e.g. YouTube Music"
+      "description": "the app's name, e.g. Maps"
      },
      "package": {
       "type": "string",
-      "description": "add: the Android package, e.g. com.google.android.apps.youtube.music"
+      "description": "add: the Android package, e.g. com.example.maps"
      }
     },
     "required": [

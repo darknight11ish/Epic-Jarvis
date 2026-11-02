@@ -2813,9 +2813,9 @@ TOOLS: dict = {
         {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["list", "add", "remove"]},
             "name": {"type": "string", "description":
-                "the app's name, e.g. YouTube Music"},
+                "the app's name, e.g. Maps"},
             "package": {"type": "string", "description":
-                "add: the Android package, e.g. com.google.android.apps.youtube.music"}},
+                "add: the Android package, e.g. com.example.maps"}},
          "required": ["action"]},
         _prepare_phone_apps,
         _execute_phone_apps,
