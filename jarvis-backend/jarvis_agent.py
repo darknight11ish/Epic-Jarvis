@@ -6201,7 +6201,16 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # and the on/off reads are this PC's own switch flags. Labelling
                 # its result as outside text would make the very answer that
                 # explains a feature look like a page Jarvis had read.
-                FEATURE_GUIDE_TOOL}
+                FEATURE_GUIDE_TOOL,
+                # The two web-search-grant tools (WEB_SEARCH_GRANT, 2026-11-01):
+                # granting or stopping a standing approval reads NOTHING from
+                # outside - no page, no file, no mail - and their answers are
+                # this file's own sentences. Recorded as a read, approving the
+                # card would mark the conversation as having read outside text
+                # and make every later card in it say "what shaped this request"
+                # about a grant. It would also be untrue: nothing outside was
+                # read.
+                GRANT_TOOL, REVOKE_TOOL}
 
 
 def strip_chat_markers(text: str) -> str:
