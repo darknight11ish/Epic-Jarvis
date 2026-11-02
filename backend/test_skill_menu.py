@@ -55,6 +55,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import BACKEND, REPO, require_shipped  # noqa: E402,F401
+import _stack  # noqa: E402
+import _where  # noqa: E402
 
 # The rebuilt jarvis_framework is the one the suites use, ahead of any other.
 sys.path.insert(0, str(HERE / "rebuilt"))
@@ -613,9 +615,11 @@ def t_each_door_calls_the_installer_at_most_once():
                  and n.func.attr == "install"]
         check(f"{fn.name} reaches install() exactly once", len(calls) == want[fn.name],
               f"{len(calls)} call(s)")
-    text = (BACKEND / "jarvis_skill_menu.py").read_text(encoding="utf-8")
-    check("the module has no route that approves more than one thing",
-          "approve_all" not in text and "install_all" not in text)
+    names = {n.name for n in ast.walk(tree)
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    check("no function on the module is a bulk door",
+          not [n for n in names if "approve_all" in n or "install_all" in n],
+          repr(sorted(names)))
 
 
 # --------------------------------------------------------------------------
@@ -994,6 +998,20 @@ def t_nothing_here_opens_a_socket_or_starts_a_process():
         check(f"it never calls {call}", call not in text)
 
 
+def _install_parameters(path: Path) -> set:
+    """The parameter names of `install()` in a Python file, read as a program.
+
+    No text matching: a rename is followed, and a parameter that is there is
+    seen however it is formatted.
+    """
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "install":
+            args = node.args
+            return {a.arg for a in list(args.args) + list(args.kwonlyargs)}
+    return set()
+
+
 def t_the_patch_is_in_the_installers_list_and_rehearses_off_the_base():
     script = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("skill-install-note.patch is in $PATCHES",
@@ -1013,9 +1031,9 @@ def t_the_patch_is_in_the_installers_list_and_rehearses_off_the_base():
     if rev.returncode == 0:
         subprocess.run(["git", "apply", "--reverse", str(patch)], cwd=str(work),
                        capture_output=True, text=True)
-        old = (work / "jarvis_skills.py").read_text(encoding="utf-8")
         check("the reversed text really loses the note parameter",
-              "note: str = \"\"" not in old, old[:200])
+              "note" not in _install_parameters(work / "jarvis_skills.py"),
+              repr(_install_parameters(work / "jarvis_skills.py")))
         fwd = subprocess.run(["git", "apply", str(patch)], cwd=str(work),
                              capture_output=True, text=True)
         # Line endings are the one difference that does not count: a Windows
@@ -1030,10 +1048,14 @@ def t_the_patch_is_in_the_installers_list_and_rehearses_off_the_base():
 
 
 def t_the_module_is_in_both_shipped_lists_and_has_a_plugin_folder():
-    where = (REPO / "backend" / "_where.py").read_text(encoding="utf-8")
-    script = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
-    check("backend/_where.py ships it", '"jarvis_skill_menu.py"' in where)
-    check("apply-patches.ps1 ships it", "'jarvis_skill_menu.py'" in script)
+    # Both lists are DATA here, not text: `_where.SHIPPED` is the repository's
+    # own tuple, and `_stack.order()` is the walk of the installer's own list
+    # that the patch suites use. `backend/test_shipped_modules.py` is what keeps
+    # the script's `$SHIPPED` equal to this tuple, so asking it twice would be
+    # asking the same question.
+    check("backend/_where.py ships it", "jarvis_skill_menu.py" in _where.SHIPPED)
+    check("apply-patches.ps1 applies its patch",
+          "skill-install-note.patch" in _stack.order())
     check("the published base has it",
           (REPO / "jarvis-backend" / "jarvis_skill_menu.py").is_file())
     folder = REPO / "plugins" / "ready" / "skill-menu"
