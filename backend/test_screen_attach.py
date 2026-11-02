@@ -503,6 +503,9 @@ def t_hygiene():
              # plugin-loader.patch - it cannot rewrite the POST /api/screen
              # wrapper this patch installs.
              "jobs-routes.patch",
+             # phone-apps.patch (2026-11-02): three route branches in jarvis_hud.py
+             # and no hunk in jarvis_gate.py at all.
+             "phone-apps.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no line
              # this patch POST /api/screen wrapper wrote.

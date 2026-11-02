@@ -699,6 +699,9 @@ def t_the_patch_is_registered_and_carries_the_change():
              # before plugin-loader.patch - jarvis_gate.py not at all, so it
              # rewrites nothing this patch wrote.
              "jobs-routes.patch",
+             # phone-apps.patch (2026-11-02): three route branches in jarvis_hud.py
+             # and no hunk in jarvis_gate.py at all.
+             "phone-apps.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing this patch wrote.

@@ -238,6 +238,7 @@ on a throwaway copy instead.
 | `cloud-honesty.patch` | `jarvis_hud.py` | **The cloud lane gets the honesty lines, and a crisis turn is never answered by one** (2026-10-28, from the 2026-10-27 AI-safety audit's H1 and M1: `.dsh-scratch/AUDITS-2026-10-27/partner-ai-safety.md`). Three hunks and no install block. (1) The route header's crisis flag comes from `jarvis_wellbeing.crisis_in_turn` - the SAME rule the answering turn now uses - so the calm panel both apps draw and the 988/911 line the answer carries are decided from the same words; it used to test `messages[-1]` here while the turn tested the owner's own words only (typed/voice), so a distress message pasted, shared, captioning a picture or said with a failed voice print showed the panel and never the line. (2) A crisis turn on a cloud lane is answered on THIS PC: the lane is rebound to the local model, the payload rebuilt as a local turn's, and `X-Jarvis-Route` says so in a new field, `cloud_refused: "crisis"` (JARVIS-API section 145.2). (3) The cloud relay asks `jarvis_agent.cloud_postscript` for the lines the answer cannot back - `postscript_lines` with an empty step list, the same function the local answer appends, so a cloud turn and a local one cannot say different things - and writes them through `CloudAnswer.close(tail=...)`, after the model's words and BEFORE the `finish_reason`/`[DONE]` events every reader finalizes on. A cloud lane offers no tools at all, so on that lane a claim of action is unbackable by construction; before this it was the one lane with no correction. It sits before `cloud-escalate.patch` (whose `_says = _api.CloudAnswer(...)` line its third hunk follows) and so before `f01-manual-lane-gate.patch`, which stays the last code patch; one of its three hunks reads text only the owner's PC holds (the re-take's `_says.close()` block), pinned in `tools/check_patch_original_text.py` and proved by `backend/test_cloud_honesty.py` applying it to the published base and reversing it byte for byte. A backend whose `jarvis_chatbot_api.py` predates `answer_text()` keeps its old relay behaviour rather than erroring. |
 
 | `learning-extract-reason.patch` | `jarvis_extract.py` | **A failed local-model call says WHY it failed** (2026-10-28, `docs/defect-register.tsv` DEF-017). `jarvis_extract._local_llm()`'s `except Exception: return None` threw away the exception class, the HTTP status and the body, so the learner's only message was "reached no model at http://127.0.0.1:11436 ... Is it pulled?" - while on 2026-10-28 the owner's own PC had `qwen3.5:9b` loaded (9.86 GB VRAM) and answered a one-token `POST /api/generate` in **1.969 s**, with an EMPTY `response` and `done_reason: "length"`. It now records a CLOSED-WORLD reason - the exception class or the kind of empty answer, the HTTP status, the wall duration and Ollama's own `done_reason`; never a prompt word and never an answer word - keeps returning `None`, and hands the reason to `jarvis_auto_learn.note_model_failure`, which `/api/memory/learning` already reads back in `counters.model_failures`, `counters.last_model_error` and the human `counters.note`. **And it asks the model to answer, not to think:** `qwen3.5:9b` is a hybrid reasoning model, and with a small budget it can spend the whole of it in `thinking` and return that same empty 200 (the measured `thinking: "Okay"`), so the request now carries `"think": False`; an Ollama old enough not to know the field ignores it, so no version probe is needed (Gemini Edition-3 review F1). **No HUD hunk and no app change**: the counters path is the shipped `jarvis_auto_learn.py`. ONE file, no install block, no route, no gate row, no tier row - so it is appended immediately before `plugin-loader.patch` (which must stay LAST of all), after `f01-manual-lane-gate.patch`, and its context is the `_local_llm` block of the owner's own file, which no earlier patch writes. `backend/test_learning_local_llm_reason.py` is the proof, including the bite proof: with this patch taken back off the published base, the old code has no way to say why, records nothing, and sends no `think` flag at all. |
+| `phone-apps.patch` | `jarvis_hud.py` | **The phone's app allow-list, managed: add or remove ONE app, card first** (2026-11-02; the owner's words: "i would need to approve a card with the apps i would like it to manipulate first and i can remove or add any android app to that list any time with an approval card... or by going to the settings and changing it there too"; `docs/JARVIS-API.md` section 175). PR #1067 made `[phone_apps]` the whole permission for opening an app on the phone and it ships EMPTY, so the only way in was editing `jarvis-framework.toml` by hand. This adds the management: `GET /api/phone/apps` (read-only) and `POST /api/phone/apps` (ONE app, ONE `change_own_config` card naming the friendly name and the exact package id, nothing written until approved), wired to the shipped `jarvis_phone_apps.py` in THREE hunks - the GET read, the `_desktop_action` branch beside `/api/limits/settings`, and the POST route TUPLE. No install block, so `plugin-loader.patch`'s anchor is untouched. **No `jarvis_gate.py` hunk and no new gate action**: the model tool resolves through the existing `change_setting` key to `change_own_config`, the same action the other settings changes use, and `backend/test_phone_app_allowlist.py` proves that mapping is load-bearing (the tool's own name is not a `_TOOL_ACTIONS` key, so without it the gate would answer `unclassified_tool`) and fails pre-fix. No bulk path. The write is the same config layer the other settings use - one line of the owner's text, the whole file re-parsed and compared, atomic replace, then `reload_framework()` - and an applied add or remove writes one audit line. Appended last of the core patches, immediately before `plugin-loader.patch`; every suite that enumerates "the patches written after me" has the name. See "The phone's app list, managed", at the very end. |
 
 ## The gate reads what an action touches, not the words on its card
 
@@ -20463,3 +20464,60 @@ Recorded as JARVIS-API §174, and as the "One-sided on purpose" row in
 `docs/ARCHITECTURE.md` §8: the ability is in both apps' chats, the permission
 (`[phone_apps]` and `[tools].enabled`) is the PC's alone because it is deep
 config editing.
+
+
+## The phone's app list, managed (2026-11-02)
+
+**`phone-apps.patch`.** Three route hunks in `jarvis_hud.py` and nothing else;
+the rules live in the shipped `jarvis_phone_apps.py`.
+
+**Why it exists.** PR #1067's `[phone_apps]` table is the whole of what Jarvis
+may open on the owner's phone, and it ships EMPTY. That is the right default,
+but it left hand-editing `jarvis-framework.toml` as the only way to use the
+feature - and the owner asked for the opposite in their own words: *"i would
+need to approve a card with the apps i would like it to manipulate first and i
+can remove or add any android app to that list any time with an approval card...
+or by going to the settings and changing it there too."*
+
+**What the patch adds, and what it deliberately does not.**
+
+- `GET /api/phone/apps` - read-only; the allowed apps by the owner's own names,
+  the package behind each, and whether Jarvis also knows that app's search
+  address (`can_play`). It reads `[phone_apps]` and nothing else: it never lists
+  the phone's installed apps and never runs `adb`.
+- `POST /api/phone/apps` - `{"action": "add"|"remove", "name": ..., "package": ...}`.
+  ONE app; `jarvis_phone_apps.change()` validates, raises ONE
+  `change_own_config` card through `jarvis_gate.check` and writes only after a
+  person's yes. A carded removal, a carded add, no bulk.
+- The card is built by `jarvis_phone_apps.card_text`, never by the model, and it
+  names BOTH the friendly name and the exact package id. The write is the same
+  config layer the other settings use (`jarvis_limits.py`'s discipline): one line
+  of the owner's own text, the whole file re-parsed and compared so nothing else
+  can have moved, a temp file and `os.replace`, then
+  `jarvis_framework.reload_framework()`. No bare `open(path, "w")`.
+- An applied add and an applied remove each write one audit line
+  (`phone_apps.added` / `phone_apps.removed`) naming the app and the package.
+- **No `jarvis_gate.py` hunk.** The model tool (`phone_apps`, in
+  `jarvis_agent.py`) is put to the gate under the existing `change_setting` key,
+  which the published gate base already maps to `change_own_config` - the same
+  action `connect_account` maps to - so no new action, tier, risk row or card
+  wording is invented and no patch is needed. What the entry does is
+  load-bearing: `phone_apps` itself is not a `_TOOL_ACTIONS` key.
+- It ships the tool ON in `[tools].enabled` (see the template's own comment):
+  a tool that is the only way to fill a list that ships empty cannot itself be
+  gated behind a hand edit of the same file. `control_phone`, which actually
+  opens apps, stays opt-in.
+
+**Proof.** `backend/test_phone_app_allowlist.py` (the card required, a denied
+card and a rejection changing nothing byte for byte, an approved add opening and
+searching in the app through the REAL reader, an approved remove breaking it
+again, the card naming the name and the package both ways, no bulk, the audit
+lines, the gate mapping and its pre-fix failure, and the shipping defaults).
+`backend/test_installed_stand_in.py` keeps the stack walk's `jarvis_hud.py`
+RATCHET where it was: the patch's three hunks anchor on text earlier patches
+write, so it materialises no pre-image.
+
+**Remaining half, said plainly.** The desktop Settings section and the phone's
+read-only Settings screen are not in this patch; they are named in the PR body
+with the exact files they would touch. The routes they need are here and
+documented in `docs/JARVIS-API.md` section 175.

@@ -566,6 +566,10 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # at all, so it leaves devices.patch's gate lines
                                 # alone.
                                 "jobs-routes.patch",
+                                # phone-apps.patch (2026-11-02) adds three route
+                                # branches to jarvis_hud.py and has no hunk in
+                                # jarvis_gate.py at all.
+                                "phone-apps.patch",
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",

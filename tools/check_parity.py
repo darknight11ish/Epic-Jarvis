@@ -963,6 +963,20 @@ BACKEND_ONLY = {
     "/api/projects/{id}/app/tasks/{id}/android/build": "The Gradle build of one app task (JARVIS-API section 166.3): ONE risky card (app_build_android), then exactly `<task copy>/gradlew.bat assembleDebug`. PC only (403 pc_only): the SDK, the wrapper and the build's output are on this machine. The card is drawn by both apps, so the owner may approve it from the phone - only the ROUTE is desktop-side, which is why this is classified here rather than given a phone screen.",
     "/api/projects/{id}/app/tasks/{id}/android/install": "The sideload of the built APK (JARVIS-API section 166.4): ONE risky card (app_install_android), then exactly `adb install -r <the apk inside the task's copy>`. PC only (403 pc_only) because the phone is on THIS PC's cable. The card reaches both apps; the route cannot, and the phone deliberately has no install button for its own phone.",
     "/api/protection/propose": "The chat door to the Protected from Jarvis list (JARVIS-API section 170; backend jarvis_protection.py and the model tool protect_from_jarvis): the owner asks in chat to protect a folder, file or program, the route validates the words before it raises anything, then ONE protect_item card waits; the store is written only after that card's own yes and GET ?id= reads how the card ended. No app window calls it - both apps reach it by chatting and the model tool is what calls it inside the backend - so it is backend-only rather than a missing screen. The desktop's own Settings add is /api/protection/add (immediate, no card) and the phone has no add route on purpose (ARCHITECTURE section 8).",
+    "/api/phone/apps": "The phone's app allow-list, managed (JARVIS-API section 175; backend/phone-apps.patch, jarvis_phone_apps.py): ONE path with two verbs - GET reads [phone_apps] (read-only) and POST asks for ONE app to be added or removed, raising ONE change_own_config card that names the friendly name and the exact package id; nothing is written until a person approves and there is no bulk path. The feature is reachable from BOTH apps today through the `phone_apps` model tool in chat and Live, which is why these routes are not the only door. The SETTINGS screens are the remaining half of this slice: the desktop section (typed package id, each write through POST) and the phone's READ-ONLY list plus 'ask Jarvis to add an app' (GET), because typing a name AND a package is deep config editing and stays off the phone (ARCHITECTURE section 8, docs/DECISIONS.md 2026-11-02). When the desktop section lands this entry is removed and the route becomes `ported`; when the phone's read-only screen lands it is `todo`, never `ported`, on purpose.",
+    # GET reads [phone_apps] (read-only) and POST asks for ONE app to be added
+    # or removed, raising ONE change_own_config card that names the friendly
+    # name and the exact package id; nothing is written until a person approves
+    # and there is no bulk path. The feature is reachable from BOTH apps today
+    # through the `phone_apps` model tool in chat and Live, which is the reason
+    # these two routes are not the only door. The SETTINGS screens are the
+    # remaining half of this slice: the desktop section (typed package id, each
+    # write through POST) and the phone's READ-ONLY list plus "ask Jarvis to add
+    # an app" (GET), because typing a name AND a package is deep config editing
+    # and stays off the phone (ARCHITECTURE section 8, docs/DECISIONS.md
+    # 2026-11-02). When the desktop section lands, this entry is removed and the
+    # route becomes `ported`; when the phone's read-only screen lands it is
+    # `todo`, never `ported`, on purpose.
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

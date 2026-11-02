@@ -681,6 +681,9 @@ def t_the_patch_and_the_lists():
              # plugin-loader.patch - it adds no tier row, no _RISK row and no
              # _TOOL_ACTIONS line, so it rewrites nothing referee.patch wrote.
              "jobs-routes.patch",
+             # phone-apps.patch (2026-11-02): three route branches in jarvis_hud.py
+             # and no hunk in jarvis_gate.py at all.
+             "phone-apps.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing referee.patch wrote.

@@ -1454,6 +1454,13 @@ SHIPPED = (
     # doors - the same jarvis_models.switch_to and jarvis_presets.apply_from_body
     # the Models page and the preset card already use. Shipped whole, no route.
     "jarvis_model_knowledge.py",
+    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
+    # JARVIS-API section 175): reads and writes ONE table of the owner's
+    # settings file, [phone_apps], one line at a time - card first, through
+    # the same atomic section writer the other settings use. Shipped whole,
+    # no patch of its own; phone-apps.patch is the two routes that reach it.
+    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_phone_apps.py"
 )
 
 

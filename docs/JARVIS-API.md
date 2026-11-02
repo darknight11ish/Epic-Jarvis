@@ -29753,3 +29753,139 @@ starts `adb` or touches a phone (`backend/test_android_control.py`,
 Also unchanged and worth saying: opening a media app takes it to the front, so a
 Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
 "One-sided on purpose").
+
+## 175. The phone's app list, managed: add or remove one app, card first (added 2026-11-02)
+
+The owner asked for this in their own words: *"any apps that i ask if to open or
+do something with. i would need to approve a card with the apps i would like it
+to manipulate first and i can remove or add any android app to that list any
+time with an approval card... or by going to the settings and changing it there
+too."* Section 174's `[phone_apps]` table is the whole permission, and it ships
+empty - so before this the only way to use the feature was to hand-edit
+`jarvis-framework.toml`. Now the table is managed, by chat and by the settings
+routes below, and every change is ONE approval card that names the app.
+
+### 175.1 The model's tool: `phone_apps`
+
+One tool, three actions, in chat and in Live on both apps (it is in the shipped
+`[tools].enabled` - see 175.5):
+
+| action | what it does | a card? |
+| --- | --- | --- |
+| `list` | the allowed apps, by the owner's own names, from the settings file | **no** - nothing to approve, nothing is written |
+| `add` | one app: `name` (the words the owner says) and `package` (the Android package) | **yes**, ONE `change_own_config` card |
+| `remove` | one app, by `name` | **yes**, ONE `change_own_config` card |
+
+The card is built by `jarvis_phone_apps.card_text`, never by the model, and it
+names **both** the friendly name and the exact package id - for a removal
+exactly as for an add:
+
+```
+Let Jarvis open "YouTube Music" (com.google.android.apps.youtube.music) on your phone?
+
+This adds ONE line to the [phone_apps] list in your settings file on this PC:
+"YouTube Music" = "com.google.android.apps.youtube.music". Nothing else changes,
+and nothing is written until you approve.
+```
+
+Nothing is written until that card is approved. A denied card, a timed-out card
+and a call refused before a card exists (a bad name, a package that is not a
+package, `com.jarvis.`, an app already listed, an app not listed) all leave the
+settings file byte-for-byte unchanged - `backend/test_phone_app_allowlist.py`
+proves each one, including that no audit line is written.
+
+**No bulk.** One call carries one app. The schema has no array for apps, the
+route takes one name and one package, and a list where a string belongs is
+refused in the owner's words ("One app at a time, please") before any card - so
+there is no "add all of these" path to get wrong.
+
+**The gate mapping.** The tool is put to the gate under the existing
+`change_setting` key, which the published gate base already maps to
+`change_own_config` - the same action the other settings changes use, with the
+`ask` tier it already has. No new gate action, tier, risk row or card wording is
+invented, and no `backend/*.patch` hunk in `jarvis_gate.py` is needed. The
+mapping is load-bearing: `phone_apps` itself is not a `_TOOL_ACTIONS` key, so
+without it `action_for_tool()` would answer `unclassified_tool`.
+
+**Audit.** Every applied add and remove writes one local audit line -
+`phone_apps.added` / `phone_apps.removed` - naming the app and the package,
+after the write succeeded. A refused or failed write leaves no line claiming it
+happened.
+
+### 175.2 `GET /api/phone/apps` - the list (read-only)
+
+Behind `X-Jarvis-Token` like every settings route, from either app. It reads
+`[phone_apps]` and nothing else; it never lists the phone's installed apps and
+never runs an adb command.
+
+```json
+{"ok": true, "available": true, "count": 1, "empty": false, "note": "",
+ "apps": [{"name": "YouTube Music",
+           "package": "com.google.android.apps.youtube.music",
+           "can_play": true}]}
+```
+
+`can_play` says whether Jarvis also knows that app's own search address
+(`SEARCH_LINKS` in `jarvis_android_control.py`), so a screen can say "open" from
+"open and search" without guessing. A line that is not a plain name and a plain
+package is left out of `apps` (the reader's rule, the same one the phone tool
+uses) and counted in `note` - it is not silently hidden.
+
+### 175.3 `POST /api/phone/apps` - ONE change, and its card
+
+`{"action": "add", "name": "YouTube Music", "package": "com.google.android.apps.youtube.music"}`
+or `{"action": "remove", "name": "YouTube Music"}`. The module
+(`jarvis_phone_apps.change`) validates, raises **ONE** `change_own_config` card
+through `jarvis_gate.check` and writes the one line only after a person's yes.
+The answers:
+
+| status | when |
+| --- | --- |
+| `200` | approved and written (`changed` says whether the file moved; `apps` is the new list) |
+| `400` | refused before a card: a bad name, a package that is not a package, `com.jarvis.`, an app already listed (or the package already under another name), an app not listed, a list where a string belongs |
+| `409` | a card was answered "no", timed out, or the write itself failed - `error` is the owner's sentence |
+| `503` | this PC cannot ask (-`jarvis_gate` not there, or the tier is not `ask`), or the settings file cannot be found; nothing changed |
+
+A lower-level `409` is possible in one honest case: the list changed while the
+card waited (the app was added or removed meanwhile), so the write re-validates
+against the list as it is NOW and says so rather than writing twice or removing
+something the card did not show.
+
+### 175.4 The file: one line, the same way the other settings are written
+
+`jarvis_phone_apps.write` follows `jarvis_limits.py` and `jarvis_notify_prefs.py`
+exactly: read the owner's bytes, change ONE line of their own text (comments,
+ordering and line endings untouched), re-parse the whole file and prove the ONLY
+difference is the line it meant to change, then write through a temporary file
+and `os.replace` with the file's own permissions, and
+`jarvis_framework.reload_framework()` so the next message sees it. There is no
+`open(path, "w")` anywhere in this feature. A line the owner wrote by hand, in
+either TOML quoting style, can be found and removed.
+
+### 175.5 The surfaces, and the phone decision
+
+- **Chat and Live, both apps**: the `phone_apps` tool (175.1). It ships ON in
+  `[tools].enabled`, because a tool that is itself the only way to fill a list
+  that ships empty cannot be gated behind a hand edit of the same file. What it
+  can reach is that ONE table; the phone tool that OPENS apps (`control_phone`)
+  is still opt-in.
+- **Desktop Settings**: the apps, with an honest empty state, an add (typed
+  package id) and a remove - each through `POST /api/phone/apps`, so each raises
+  the normal card. *(This surface is the remaining half of this slice - see the
+  PR body; the routes it needs are above.)*
+- **Phone Settings**: a READ-ONLY list and "Ask Jarvis to add an app", not an
+  editor. This is the standing "no deep config editing on the phone" rule: an
+  add needs a friendly name AND a package id, and the phone is the one device
+  that cannot look a package up. The owner's own sentence - *"or by going to the
+  settings and changing it there too"* - is answered by the PC's Settings and by
+  the same card from the phone's chat; the record is in `docs/DECISIONS.md`
+  (2026-11-02) and `docs/ARCHITECTURE.md` §8. *(This screen is the remaining
+  half of this slice too - the route it reads is `GET /api/phone/apps`.)*
+
+### 175.6 What has NOT changed
+
+`control_phone` and its own one-card plan (§174) are untouched: opening an app
+still goes to `jarvis_android_control_run` → `control_phone`, still one card
+printing every literal command, still opt-in. This section adds the management
+of the list; it does not add a way to open an app without a card, a second
+permission model, or a bulk approval.

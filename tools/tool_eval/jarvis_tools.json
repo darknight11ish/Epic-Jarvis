@@ -271,6 +271,37 @@
  {
   "type": "function",
   "function": {
+   "name": "phone_apps",
+   "description": "Manage which apps Jarvis may open on the owner's phone. \"list\" names them (no card). \"add\" takes the app's name and Android package (com.company.app), and \"remove\" takes the name; each raises ONE approval card naming it. ONE app per call. Never guess a package id - if the owner does not know it, ask them to find it on the PC (adb shell pm list packages). Nothing changes until the card is approved.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "list",
+       "add",
+       "remove"
+      ]
+     },
+     "name": {
+      "type": "string",
+      "description": "the app's name, e.g. YouTube Music"
+     },
+     "package": {
+      "type": "string",
+      "description": "add: the Android package, e.g. com.google.android.apps.youtube.music"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "github_search",
    "description": "Check GitHub for an existing library for a coding idea, graded by maintenance and licence. For a general web search, use web_search.",
    "parameters": {
