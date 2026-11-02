@@ -87,6 +87,36 @@ object Schedule {
             "card; a repeating briefing or \"tell me when\" waits for your yes on an approval card."
     const val TODO_TITLE = "To-do list"
 
+    /**
+     * How the to-do list carries over (2026-11-02; the owner's choice of BOTH
+     * ways, full daily rollover as the DEFAULT; Gemini's ruling 8;
+     * docs/JARVIS-API.md section 179; backend `jarvis_schedule.py`).
+     *
+     * EVERY to-do item keeps the day it was written, for good (`created_date`,
+     * written once when the item is created and never rewritten). The mode is
+     * ONE value on the PC, and only changes how the same rows are drawn:
+     *
+     *  - [MODE_ROLLOVER] (the default): today's list is every open item written
+     *    today or earlier, and each older one carries the PC's own tag:
+     *    "from yesterday", "from Friday (3d ago)", "from Oct 26";
+     *  - [MODE_DAY]: each item stays on the day it was written, grouped under
+     *    that day's heading. Nothing is moved or lost by switching, so the
+     *    toggle is lossless in both directions.
+     *
+     * The PC decides which, and this phone never keeps a second copy: the
+     * state rides on GET /api/schedule (`todo_mode`), and the change goes
+     * through [ACT_PATH] as [todoModeBody] - the SAME method a typed or spoken
+     * sentence runs on the PC, so a tap here and "set the to-do list mode to
+     * day by day" cannot disagree.
+     */
+    const val MODE_ROLLOVER = "rollover"
+    const val MODE_DAY = "day"
+    const val MODE_TITLE = "To-do list carry-over"
+    const val MODE_DETAIL =
+        "Whether yesterday's unfinished items join today's list, each one saying how old it " +
+            "is, or each day keeps its own list. Nothing is moved or lost by changing it."
+    const val MODE_SAVED_ON_PC = "Saved on your PC, so both apps and anything you say to Jarvis agree."
+
     /** Nothing on a list. */
     const val EMPTY_JOBS =
         "Nothing coming up. Say or type \"set a timer for 10 minutes\" or \"remind me at 6 to call Mum\"."
@@ -387,6 +417,20 @@ object Schedule {
         val showsAt: String = "",
         /** Seconds since it went off, by the PC's clock (backend jarvis_schedule.py). */
         val ageSeconds: Double? = null,
+        /**
+         * The day a TO-DO item was written, "YYYY-MM-DD" in the PC's local
+         * time (2026-11-02). Written once, when the item is created, and never
+         * rewritten - so it is the same in both modes and through any number
+         * of switches. "" on every other kind and on an older PC.
+         */
+        val createdDate: String = "",
+        /**
+         * How old that is, in the PC's OWN words: "from yesterday", "from
+         * Friday (3d ago)", "from Oct 26" - "" for an item written today.
+         * Computed on the PC (`jarvis_schedule.carry_words`): a phone whose
+         * clock is a day out must never decide an item's age for itself.
+         */
+        val carry: String = "",
     )
 
     /** A named list: its name as the PC keeps it, its title, how many open items. */
@@ -399,7 +443,28 @@ object Schedule {
         /** What went off in the last hour (an older PC sends none). */
         val wentOff: List<Job> = emptyList(),
         val lists: List<NamedList> = emptyList(),
+        /**
+         * How the to-do list carries over (2026-11-02): [MODE_ROLLOVER] (the
+         * default, and what an older PC that sends no key really does) or
+         * [MODE_DAY].
+         */
+        val todoMode: String = MODE_ROLLOVER,
+        /** The two modes in the PC's own words, for the Settings switch. */
+        val todoModes: List<Mode> = emptyList(),
+        /** The open items grouped by the day they were written, today first. */
+        val todoDays: List<Day> = emptyList(),
     )
+
+    /** One of the two ways to show the to-do list, in the PC's own words. */
+    data class Mode(val value: String, val label: String, val detail: String = "")
+
+    /**
+     * One day of the day-labelled list: its "YYYY-MM-DD", the PC's heading for
+     * it ("Today", "Yesterday", "Friday (3d ago)", "Oct 26"), and the open
+     * items written that day - the SAME items the rollover list draws, so no
+     * item is ever sent or shown twice.
+     */
+    data class Day(val date: String, val label: String, val items: List<Job>)
 
     /** One job, read - or null when it has no id the PC makes. */
     fun job(o: JsonObject): Job? {
@@ -439,6 +504,8 @@ object Schedule {
             today = o.text("today") ?: "",
             showsAt = o.text("shows_at") ?: "",
             ageSeconds = o.num("age_s"),
+            createdDate = o.text("created_date") ?: "",
+            carry = o.text("carry") ?: "",
         )
     }
 
@@ -446,12 +513,36 @@ object Schedule {
     fun parse(body: JsonObject): View? {
         val jobs = body["jobs"] as? JsonArray ?: return null
         val todo = body["todo"] as? JsonArray ?: return null
+        val todoJobs = todo.mapNotNull { (it as? JsonObject)?.let(::job) }
+        val byId = todoJobs.associateBy { it.id }
+        // The day-labelled view is the SAME rows, grouped: its entries name the
+        // items by id and this resolves them here, so an item is never held
+        // twice and an id this phone cannot see is simply not shown.
+        val days = (body["todo_days"] as? JsonArray)?.mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val date = o.text("date") ?: return@mapNotNull null
+            val ids = (o["items"] as? JsonArray)?.mapNotNull { x ->
+                (x as? JsonPrimitive)?.contentOrNull
+            } ?: emptyList()
+            val items = ids.mapNotNull { byId[it] }
+            if (items.isEmpty()) null else Day(date, o.text("label") ?: date, items)
+        } ?: emptyList()
         return View(
             jobs = jobs.mapNotNull { (it as? JsonObject)?.let(::job) },
-            todo = todo.mapNotNull { (it as? JsonObject)?.let(::job) },
+            todo = todoJobs,
+            todoDays = days,
             hidden = body.flag("hidden") == true,
             wentOff = (body["went_off"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.let(::job) }
                 ?: emptyList(),
+            todoMode = (body.text("todo_mode") ?: MODE_ROLLOVER).let {
+                if (it == MODE_DAY) MODE_DAY else MODE_ROLLOVER
+            },
+            todoModes = (body["todo_modes"] as? JsonArray)?.mapNotNull { el ->
+                val o = el as? JsonObject ?: return@mapNotNull null
+                val value = o.text("value") ?: return@mapNotNull null
+                if (value != MODE_ROLLOVER && value != MODE_DAY) return@mapNotNull null
+                Mode(value, o.text("label") ?: value, o.text("detail") ?: "")
+            } ?: emptyList(),
             lists = (body["lists"] as? JsonArray)?.mapNotNull { el ->
                 val o = el as? JsonObject ?: return@mapNotNull null
                 val name = o.text("name") ?: return@mapNotNull null
@@ -493,7 +584,67 @@ object Schedule {
             hidden = true,
             wentOff = v.wentOff.map { it.copy(text = "", alert = "", broken = "", about = "", hidden = true) },
             lists = v.lists.map { it.copy(name = standIn(it.name), title = "") },
+            // The day headings are the PC's own words ("Friday (3d ago)"), and
+            // an item's words are blanked here: while the lists are hidden there
+            // is no age to show, so no tag and no heading is kept.
+            todoMode = v.todoMode,
+            todoModes = v.todoModes,
         )
+    }
+
+    /**
+     * The tag under one to-do item, in the PC's words: "from yesterday", "from
+     * Friday (3d ago)", "from Oct 26" - or "" for an item written today, for
+     * any other kind, and while the private lists are hidden (an age is a fact
+     * about words that are gone).
+     *
+     * This does NOT work an age out from the phone's clock: the PC wrote the
+     * item and the PC says how old it is. The desktop's coming-up.js carryOf()
+     * says the same thing.
+     */
+    fun carryOf(job: Job?): String {
+        if (job == null || job.hidden || job.kind != "todo") return ""
+        return job.carry
+    }
+
+    /**
+     * The day-labelled list, for [MODE_DAY]: [{date, label, items}] today
+     * first, the items themselves (not ids). A PC from before this feature
+     * sends no grouping - the rollover list is then ONE day, so the screen
+     * still shows every open item rather than an empty list.
+     */
+    fun todoDays(v: View?): List<Day> {
+        if (v == null) return emptyList()
+        val byId = v.todo.associateBy { it.id }
+        val days = v.todoDays.mapNotNull { d ->
+            val items = d.items.mapNotNull { byId[it.id] }
+            if (items.isEmpty()) null else Day(d.date, d.label, items)
+        }
+        if (days.isNotEmpty()) return days
+        val all = todoItems(v)
+        return if (all.isEmpty()) emptyList() else listOf(Day("", "", all))
+    }
+
+    /** The two modes, the PC's words first - a plain fallback if it sent none. */
+    fun todoModes(v: View?): List<Mode> {
+        val modes = v?.todoModes ?: emptyList()
+        if (modes.isNotEmpty()) return modes
+        return listOf(
+            Mode(MODE_ROLLOVER, "Daily rollover"),
+            Mode(MODE_DAY, "Day by day"),
+        )
+    }
+
+    /**
+     * The body that changes the mode: one verb and one mode, nothing else - or
+     * null when it is not one of the two. It rides [ACT_PATH] deliberately:
+     * that is the scheduler's ONE write door for changes that need no card (the
+     * `clear_list` form already lives there), and the PC's `handle_act` takes
+     * `{"do": "todo_mode"}` as its second non-job form.
+     */
+    fun todoModeBody(mode: String): String? {
+        if (mode != MODE_ROLLOVER && mode != MODE_DAY) return null
+        return "{\"do\":\"todo_mode\",\"mode\":\"$mode\"}"
     }
 
     /** The to-do list's own items: those on no named list. */
@@ -585,7 +736,7 @@ object Schedule {
     }
 
     /** The lines under a row's title - the desktop's metaOf, word for word. */
-    fun metaOf(job: Job, sinceMs: Long = 0L): List<String> {
+    fun metaOf(job: Job, sinceMs: Long = 0L, carry: String = ""): List<String> {
         val out = mutableListOf<String>()
         if (job.state == "waiting") {
             if (job.repeat.isNotEmpty()) out += job.repeat
@@ -612,6 +763,10 @@ object Schedule {
             return out
         }
         if (job.repeats && job.repeat.isNotEmpty()) out += job.repeat
+        // A to-do's own age, in the PC's words (2026-11-02). Only in the
+        // rollover list: the day-labelled view puts the day on the group's
+        // heading instead, so the same fact is not said twice.
+        if (carry.isNotEmpty() && job.kind == "todo") out += carry
         if (job.state == "paused") {
             out += "Paused"
         } else if (job.whenWords.isNotEmpty()) {

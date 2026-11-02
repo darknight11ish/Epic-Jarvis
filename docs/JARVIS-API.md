@@ -30182,3 +30182,116 @@ a thing to keep in sync for no gain.
   `test_reach.py`, `test_smarter_answers.py`, `test_asks_first.py` (the two tools
   are listed in "Safety and sharing"), `test_gate_risk_words.py`,
   `test_gate_names.py`, `test_gate_unknown_risk.py`.
+
+## 179. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
+
+The owner's question of 2026-11-02 ~00:20 PT, and his answer the same night
+(`.dsh-scratch/OWNER-QUEUE-2026-11-02/OWNER-QUEUE.md` item 4): *is Jarvis smart
+enough that, next day, "what's on my to-do list today" brings up yesterday's
+unfinished items **while saying they are from yesterday**?* Measured against
+`origin/main` before any change: the items DID carry over (they stay until done
+or removed), but nothing said they were yesterday's - and the Today board's
+`rollover_cards` had never been built. Asked which way he wanted it, he chose
+**both**: *"To-do carry-over: build BOTH, with full daily rollover (option B) as
+the DEFAULT, changeable by asking Jarvis or in Settings."* This is the todo
+half of that; the decision is
+`decisions.d/2026-11-02-todo-day-carryover.md`.
+
+**THE ONE NEW FACT: `created_date`, and it never changes.** Every job row gains
+`created_date` - the day it was written, `YYYY-MM-DD` in THIS PC's local time
+(`jarvis_schedule._day_of`). A to-do item's whole age is measured from it, so
+it is written ONCE, inside `Scheduler._insert`, and no later path writes it
+again: not midnight, not an `edit`, not `done`, not the mode switch. That is
+Gemini's ruling 8 (2026-11-02) and the reason it is a column rather than
+arithmetic at read time: a rollover that stamped everything with "today" would
+erase the very thing it is meant to show.
+
+**MIGRATION, once, on the open that first finds the column missing.** Every row
+with no `created_date` is backfilled from its own `created` stamp, in local
+time; a legacy row whose stamp is missing or `0` is stamped **today** - the one
+answer that never claims an age the data cannot support. It is idempotent (it
+reads only `created_date IS NULL` rows and writes only those), it runs inside
+the same `BEGIN IMMEDIATE` as the Phase 2 `ALTER TABLE`s, and after the first
+open there is nothing NULL left to stamp.
+
+**THE TWO WAYS OF SHOWING THE SAME LIST.** `todo_mode` is ONE value on the PC
+(`meta['todo_mode']`, `Scheduler.todo_mode()`/`set_todo_mode()`), never a copy
+per device, and the switch moves no item, copies nothing and re-stamps no day -
+so toggling is lossless by construction and `created_date` is identical in both
+modes.
+
+- `"rollover"` - **the default**. Today's list is every open item written today
+  or earlier, and each older one carries a tag built on the PC
+  (`jarvis_schedule.carry_words`), handed out as the item's `carry` field:
+  - 1 day old -> `from yesterday`
+  - 2 to 6 days old -> `from <Weekday> (<N>d ago)`, e.g. `from Friday (3d ago)`
+  - 7 or more days old -> `from <MMM D>`, e.g. `from Oct 26`
+
+  A 3-day-old item therefore never says `from yesterday`: the wording is
+  measured from `created_date`, never from "is it still on the list". An item
+  written today grows **no** `carry` key at all.
+- `"day"` - each item stays on the day it was written, grouped under that
+  day's own heading (`Today`, `Yesterday`, `Friday (3d ago)`, `Oct 26`). The
+  heading already names the day, so the rows do not repeat the tag.
+
+**WHAT `GET /api/schedule` ADDS (all additive; an older app ignores them).**
+`todo` is unchanged in both modes - the same flat list, in the PC's order - and
+each to-do item gains `created_date` and, when it is older than today, `carry`.
+The answer also carries `todo_mode` (`"rollover"`/`"day"`, read as rollover for
+an older PC that sends nothing), `todo_modes` (the two modes in the PC's own
+words, for both Settings controls: `{value, label, detail}`) and `todo_days`
+(the same open items grouped by day: `{date, label, count, items}` with `items`
+the ids of rows in `todo`, so no item is sent twice, today first).
+
+**THE CHANGE: `POST /api/schedule/act` with `{"do": "todo_mode", "mode": ...}`.**
+It rides the scheduler's ONE existing write route rather than opening a second
+door - the same choice `clear_list` made, and the second form on that route
+that is not one job (`Scheduler.handle_act` says so). No approval card either
+way: it changes only how the owner's own list is drawn, and it touches no row.
+400 in words for anything that is not one of the two modes; 200 carries
+`{ok, mode, said, todo_modes}`, `said` being the PC's own sentence.
+
+**THE SAME CHANGE BY ASKING.** `jarvis_settings_registry.py` gains the choice
+setting `todo_carryover` (names: "the to-do carry-over", "the to-do list
+mode", ...; values `rollover`/`day`), whose setter calls
+`jarvis_schedule.set_todo_mode_here` - the very method the route calls. So
+"set the to-do list mode to day by day" (the phrase grammar, no model), the
+`change_setting` tool (any wording, model) and either app's control cannot
+disagree about the state. Both directions are cardless, like every other
+"how is this drawn" preference.
+
+**THE READ-OUT SAYS IT TOO.** `jarvis_quick.py`'s to-do answer tags each older
+item with the PC's own `carry` words: *"Your to-do list: renew the prescription
+(from Saturday (2d ago)), buy milk."* An item written today reads exactly as it
+did before this existed.
+
+**BOTH APPS.** Desktop: `jarvis-desktop/src/coming-up.js` (`carryOf`,
+`todoDays`, `todoModes`, and the tag as a meta line on a rollover row),
+`src/brain.js` (the tag, and the day headings in "Day by day"),
+`src/todo-carryover-settings.js` + `src/settings.html` (Settings -> "To-do list
+carry-over"), `src-tauri/src/todo_carryover.rs` (one command: the read, and
+`{mode}` to change it). Phone: `net/Schedule.kt` (`carry`, `createdDate`,
+`todoMode`, `todoModes`, `todoDays`, `todoModeBody`, `carryOf`),
+`ui/screens/ComingUpPlate.kt` (the tag, and the day headings),
+`ui/screens/TodoCarryoverPlate.kt` + `ui/screens/LimitsPlate.kt`'s card (the
+same two modes, drawn from the PC's own words), `JarvisRuntime.setTodoMode`.
+Nothing is decided by a client's clock: the PC wrote the item and the PC says
+how old it is, so a phone a day out cannot mislabel it.
+
+**WHAT IT DOES NOT DO.** It does not "close" yesterday: no item is moved,
+archived or hidden by the day turning over, and the list is the SAME rows read
+two ways. It adds no new route, no card and no gate, and it changes nothing
+about adding, ticking off or removing an item (`done` and `delete` are exactly
+what they were). The Today board's own `rollover_cards` is untouched and still
+returns `[]` - this is the scheduler's to-do list, not the board.
+
+**THE SECTION NUMBER, AND THE CHECK THAT USED TO FAIL.** The rule in
+`backend/test_pictures.py` used to want sections 129..N with no gap; it now
+wants them unique and strictly ascending, with at most three missing between
+neighbours (Gemini's ruling 1, 2026-11-02, which replaced the contiguous pin).
+This file adds **179**: 175 is on `main` from #1074's squash merge, and 176,
+177 and 178 are held by the in-flight #1073, #1091 and #1092, so exactly three
+are missing between 175 and 179 - the most that rule allows - and the check
+passes. The number is deliberate: the Lead reassigned it from 178 on
+2026-11-02 so it cannot collide with #1092's. Verified at the desk, not
+assumed.
