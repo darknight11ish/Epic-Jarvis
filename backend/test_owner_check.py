@@ -44,9 +44,11 @@ import ast
 import importlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -1378,6 +1380,176 @@ def t_a_card_that_is_not_risky_asks_nothing():
     check("not risky, from this PC: no prompt", _run({"id": "s2"}, lambda: [row], v) is None
           and not v.asked)
     check("stamped", OC.take_stamp("s2", row["action"]))
+
+
+# ------------------------- the small read-only cards (owner, 2026-11-01) --
+#
+# THE OWNER'S REQUEST: *"for small approvals like asking jarvis to search the
+# web ... i would like to only have to approve the card, not necessarily use my
+# fingerprint on top of approving the card."* The rule is `is_small`, and the
+# answer to "does it ask" is stored (`approvals_mode`). These tests drive
+# `approve_check` itself with a throwaway MODE file, so they never touch the
+# owner's own setting and never open a real Windows Hello dialog.
+
+
+class _Mode:
+    """The stored answer, in a throwaway file, for one test.
+
+    `mode=None` writes no file at all - the shipped default. "garbage" writes a
+    file that cannot be read, which must ask (the stricter side)."""
+
+    def __init__(self, mode=None):
+        self.mode = mode
+
+    def __enter__(self):
+        path = Path(tempfile.mkdtemp(prefix="jarvis-small-")) / "approvals-mode.json"
+        if self.mode == "garbage":
+            path.write_text("{not json", encoding="utf-8")
+        elif self.mode:
+            path.write_text(json.dumps({"approvals": self.mode}), encoding="utf-8")
+        self.old = os.environ.get(OC.MODE_FILE_ENV)
+        os.environ[OC.MODE_FILE_ENV] = str(path)
+        return self
+
+    def __exit__(self, *exc):
+        if self.old is None:
+            os.environ.pop(OC.MODE_FILE_ENV, None)
+        else:
+            os.environ[OC.MODE_FILE_ENV] = self.old
+        return False
+
+
+def _small_row(rid="sm1", action="search_the_web"):
+    """A small read-only card as GET /api/pending sends it: the owner's own
+    example - one web search's words - with the gate's risk row for it."""
+    row = dict(_case_rows()[f"small read: {action}"]["row"])
+    row["id"] = rid
+    row["expires_in"] = 150
+    return row
+
+
+def t_the_small_card_is_approved_by_the_card_alone_by_default():
+    with _Mode():
+        check("no stored answer: 'small' - the owner's request of 2026-11-01",
+              OC.approvals_mode() == OC.MODE_SMALL)
+        check("... so a small card does not ask", OC.asks_for_small() is False)
+        row = _small_row("sm1")
+        v = Verifier("confirmed")
+        got = _run({"id": "sm1"}, lambda: [row], v)
+        check("a small card from this PC: no Windows Hello prompt at all",
+              got is None and not v.asked, (got, v.asked))
+        check("... and the approval is stamped, so the gate really runs it",
+              OC.take_stamp("sm1", row["action"]))
+        # A card that is NOT small is untouched by any of this: same run, one
+        # prompt, exactly as before.
+        other = _risky_row("sm2")
+        v2 = Verifier("confirmed")
+        got = _run({"id": "sm2"}, lambda: [other], v2)
+        check("a risky card that is not small still asks",
+              got is None and len(v2.asked) == 1, (got, v2.asked))
+
+
+def t_asking_for_the_small_ones_again_puts_the_prompt_back():
+    with _Mode(OC.MODE_RISKY):
+        check("the stored answer is 'risky'", OC.approvals_mode() == OC.MODE_RISKY)
+        row = _small_row("sm3")
+        v = Verifier("confirmed")
+        got = _run({"id": "sm3"}, lambda: [row], v)
+        check("mode risky: the same small card asks Windows Hello again",
+              got is None and len(v.asked) == 1, (got, v.asked))
+        check("... and it is stamped after the yes", OC.take_stamp("sm3", row["action"]))
+
+
+def t_an_unreadable_answer_asks_rather_than_skips():
+    with _Mode("garbage"):
+        check("a file that cannot be read asks the most (never silently skips)",
+              OC.approvals_mode() == OC.MODE_EVERY)
+        check("... so the small cards are asked for too", OC.asks_for_small() is True)
+    with _Mode("nonsense"):
+        check("an unknown value in a readable file asks too",
+              OC.approvals_mode() == OC.MODE_EVERY)
+    check("and with no file at all the answer is the shipped default",
+          OC.approvals_mode() == OC.MODE_SMALL)
+
+
+def t_small_never_covers_an_unclassified_irreversible_or_rushed_card():
+    names = ("small action, but the gate says it cannot be undone",
+             "small action, but the gate has not classified it",
+             "small action, but something tried to rush it")
+    with _Mode():
+        for i, name in enumerate(names):
+            rid = f"nm{i}"
+            row = dict(_case_rows()[name]["row"])
+            row["id"] = rid
+            row["expires_in"] = 150
+            check(f"{name}: is_small says no", OC.is_small(row) is False)
+            v = Verifier("confirmed")
+            got = _run({"id": rid}, lambda row=row: [row], v)
+            check(f"{name}: still asks Windows Hello",
+                  got is None and len(v.asked) == 1, (name, got, v.asked))
+        # The nearest miss on the ACTION side: local and undoable, so the gate
+        # calls it not risky and it never asked - and it is not a read, so the
+        # small list must not claim it either.
+        docker = dict(_case_rows()["local and undoable, but it stops a service: "
+                                   "not a read, not small"]["row"])
+        docker["id"] = "nm-docker"
+        check("a service stop is not small, even though it is local and undoable",
+              OC.is_small(docker) is False and OC.is_risky(docker) is False)
+        check("... and it is not on the list", "docker_service_stop" not in OC.SMALL_ACTIONS)
+
+
+def t_a_small_card_from_the_phone_needs_no_device_signature():
+    calls = []
+    original = OC._signed_check
+    OC._signed_check = lambda body, row, device: calls.append(device) or None
+    try:
+        with _Mode():
+            _fresh_stamps()
+            OC.set_verifier(Verifier(RuntimeError("no prompt for another device's card")))
+            try:
+                row = _small_row("p1")
+                got = OC.approve_check({"id": "p1"}, peer="100.101.102.103",
+                                       local="100.64.0.5", pending=lambda: [row],
+                                       own=(), device="phone-key")
+            finally:
+                OC.set_verifier(None)
+            check("default mode: a phone's small approval needs no signature",
+                  got is None and calls == [], (got, calls))
+        with _Mode(OC.MODE_RISKY):
+            calls.clear()
+            _fresh_stamps()
+            OC.set_verifier(None)
+            row = _small_row("p2")
+            OC.approve_check({"id": "p2"}, peer="100.101.102.103",
+                             local="100.64.0.5", pending=lambda: [row],
+                             own=(), device="phone-key")
+            check("mode risky: it needs the device signature again",
+                  calls == ["phone-key"], calls)
+    finally:
+        OC._signed_check = original
+
+
+def t_the_small_rule_is_the_phones_own_list():
+    """The list is one answer on both sides of the wire.
+
+    `SecurityRules.SMALL_ACTIONS` in the Kotlin is read straight out of the
+    file and compared with `jarvis_owner_check.SMALL_ACTIONS`, so a card can
+    never be small on the PC and asked for on the phone (or the other way
+    round). The RULE is held by the shared fixture, which both sides are tested
+    against."""
+    kt = SECURITY_KT.read_text(encoding="utf-8")
+    start = kt.find("val SMALL_ACTIONS: Set<String>")
+    check("the phone has a small list of its own", start >= 0)
+    if start < 0:
+        return
+    block = kt[start:kt.find(")", start)]
+    theirs = set(re.findall(r'"([a-z_]+)"', block))
+    check("the phone's small list is the PC's, action for action",
+          theirs == set(OC.SMALL_ACTIONS), sorted(theirs ^ set(OC.SMALL_ACTIONS)))
+    wanted = {f"small read: {action}" for action in OC.SMALL_ACTIONS}
+    covered = set(_case_rows())
+    check("the shared fixture has a small-read case for every action on the list",
+          wanted <= covered, sorted(wanted - covered))
 
 
 def t_what_this_backend_cannot_find_it_leaves_to_the_owners_handler():

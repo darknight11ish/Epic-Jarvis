@@ -1630,5 +1630,91 @@ def t_a_blend_that_is_not_made_says_so_instead_of_the_voice_list():
         JV.speaker_view = real_view
 
 
+# ------------------------- the fingerprint on the small approvals (2026-11-01) --
+#
+# THE OWNER'S REQUEST: "make this setting adjustable in settings or through
+# chatting to jarvis". The phone's Security screen draws it; on the PC it is this
+# setting, and it is ONE rule, stored where the approval itself reads it
+# (jarvis_owner_check.approvals_mode). This test drives the REAL setter, so what
+# it proves is what happens when the owner says it - not a copy of the rule.
+
+def t_the_small_approvals_setting_is_one_rule():
+    setting = R.find_choice_setting("the fingerprint for small approvals")
+    check("the setting is named the way the owner would say it",
+          setting is not None and setting.key == "small_approvals",
+          setting and setting.key)
+    if setting is None:
+        return
+    check("it belongs to the Security card, with the other check settings",
+          setting.where == "security", setting.where)
+    sent = Q.match("set the fingerprint for small approvals to ask")
+    check("the chat sentence reaches it, with no model and no guessing",
+          sent is not None and sent.name == "settings_choice"
+          and sent.f.get("key") == "small_approvals", sent)
+    check("a value it does not have is refused, and its real ones work",
+          R.choice_from_words(setting, "maybe") is None
+          and R.choice_from_words(setting, "ask") is True
+          and R.choice_from_words(setting, "leave them alone") is False,
+          setting.options())
+
+    # ---- the shipped default: the small read-only cards are card-only.
+    check("out of the box the small cards are approved by the card alone",
+          OC.approvals_mode() == OC.MODE_SMALL and OC.asks_for_small() is False,
+          OC.approvals_mode())
+
+    # ---- asking for them again: stricter, so instant.
+    out = setting.set(True)
+    check("'ask' is taken at once, in the owner's words",
+          out.ok and not out.waiting and "asks" in out.said, out)
+    check("...and the answer the approval itself reads really moved",
+          OC.approvals_mode() == OC.MODE_RISKY and OC.asks_for_small() is True,
+          OC.approvals_mode())
+    out = setting.set(True)
+    check("...saying it again changes nothing and says it is already so",
+          out.ok and "already" in out.said, out)
+
+    # ---- turning the check off is this PC's own decision, never a phone's.
+    out = R.set_small_approvals(False, peer="100.101.102.103", local="100.64.0.5")
+    check("a phone cannot turn it off, and nothing changes",
+          (not out.ok) and out.refused_pc_only and OC.approvals_mode() == OC.MODE_RISKY,
+          (out, OC.approvals_mode()))
+    check("...and the sentence says where it can be changed",
+          "on your PC" in out.said, out.said)
+
+    # ---- back to the default, from this PC.
+    out = R.set_small_approvals(False, peer="127.0.0.1", local="127.0.0.1")
+    check("this PC can leave the small cards alone again",
+          out.ok and OC.approvals_mode() == OC.MODE_SMALL, (out, OC.approvals_mode()))
+    out = R.set_small_approvals(False, peer="127.0.0.1", local="127.0.0.1")
+    check("...and saying that twice changes nothing",
+          out.ok and "already" in out.said, out)
+
+
+def t_the_small_rule_is_the_shipped_list():
+    """The list the setting covers is an explicit one, and its actions are reads.
+
+    Nothing here guesses from the words on a card: the list is
+    `jarvis_owner_check.SMALL_ACTIONS`, and each entry must also have a risk row
+    in the gate's table that says it changes nothing - that is the second half
+    of `is_small`."""
+    import test_approval_contract as AC
+    table = AC._risk_table()
+    live_only = {"web_research", "read_calendar", "read_files_readonly", "read_joplin_note"}
+    for action in sorted(OC.SMALL_ACTIONS):
+        row = table.get(action)
+        if row is None:
+            check(f"{action}: no patch adds its row (the owner's own file carries it)",
+                  action in live_only, action)
+            continue
+        reversible, reach = row[0], row[1]
+        check(f"{action}: the gate says it changes nothing ({reversible}, {reach})",
+              reversible == "yes" and reach in ("local", "outbound"), row)
+    # And what must never be on it.
+    for action in ("send_email", "spend_money", "delete_calendar_event",
+                   "docker_service_stop", "change_own_config", "run_shell_on_host",
+                   "pair_device"):
+        check(f"{action} is not a small approval", action not in OC.SMALL_ACTIONS)
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -4565,6 +4565,11 @@ class MainActivity : FragmentActivity() {
      * not know signed approvals, or a PC that could not be read - takes
      * today's way, and the PC says `no_approval_key` if it needed one.
      *
+     * A SMALL card in the default mode is the one card that is risky and still
+     * takes today's way: its signature would need the very fingerprint the
+     * owner asked not to give for it ([SecurityRules.approveTakesSignedPath]),
+     * and the PC's own rule exempts the same card from the signature.
+     *
      * The PLAIN branch's POST is awaited, because its answer is what the
      * card needs; the SIGNED branch dispatches its POST on the runtime's own
      * scope (a signature is made once and is already sent by the time it
@@ -4573,10 +4578,15 @@ class MainActivity : FragmentActivity() {
      * decision is only ever sent after the owner's own answer.
      */
     private suspend fun approveItem(item: PendingItem): Boolean {
-        val risky = SecurityRules.riskyByToday(item)
+        // A SMALL card in the default mode is approved by the card alone (the
+        // owner's request of 2026-11-01), and a signature can only be made
+        // after a fingerprint - so it goes the plain way, and the PC accepts
+        // that because it reads the same rule (jarvis_owner_check.is_small).
+        // Every other risky card keeps today's signed path.
+        val signed = SecurityRules.approveTakesSignedPath(currentSecurity(), item)
         // pcOnly and needsChoice cards are refused in decide() with their own words.
-        val read = if (risky && !item.pcOnly && !item.needsChoice) JarvisRuntime.signedApprovalRead() else null
-        return when (val path = SignedApproval.pathFor(risky, read?.state)) {
+        val read = if (signed && !item.pcOnly && !item.needsChoice) JarvisRuntime.signedApprovalRead() else null
+        return when (val path = SignedApproval.pathFor(signed, read?.state)) {
             SignedApproval.Path.PLAIN -> {
                 if (confirmed(item)) {
                     // Awaited, not dispatched and answered `true`: a POST the
