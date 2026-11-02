@@ -187,10 +187,12 @@ class ChatMenuTest {
     // ---- 4. Old chats and new chats, where the owner now looks -------------
 
     @Test
-    fun `the menu is five doors, and the modes live one tap deeper`() {
+    fun `the menu is four doors, and the modes live one tap deeper`() {
         // The owner's choice of 2026-10-30, after he photographed the old
         // sheet ("too many options"): the More menu is short now, and the
-        // three chat modes are one tap deeper behind ONE "Modes" row.
+        // three chat modes are one tap deeper behind ONE "Modes" row. He
+        // shortened it again on 2026-11-01: the Photo row went, because the
+        // one Attach row brings up photos too.
         val shell = bodyOf("private fun HomeMoreMenu(")
         val menu = bodyOf("private fun HomeMoreMain(")
         val modes = bodyOf("private fun HomeMoreModes(")
@@ -199,9 +201,9 @@ class ChatMenuTest {
         assertTrue("the More shell does not open the short menu", shell.contains("HomeMoreMain("))
         assertTrue("the More shell does not open the modes sub-sheet", shell.contains("HomeMoreModes("))
         assertTrue("the modes page has no way back", shell.contains("modesOpen = false"))
-        // The five doors, in the order the owner reads them.
+        // The four doors, in the order the owner reads them.
         val order = listOf(
-            "MoreMenuWords.NEW_CHAT", "MoreMenuWords.PHOTO", "MoreMenuWords.FILE",
+            "MoreMenuWords.NEW_CHAT", "MoreMenuWords.FILE",
             "MoreMenuWords.MODES", "MoreMenuWords.QUICK_NOTE",
         )
         val at = order.map { menu.indexOf(it) }
@@ -211,6 +213,27 @@ class ChatMenuTest {
         assertFalse("Earlier chats is still a More row", menu.contains("ChatHistory.EARLIER_CHATS"))
         assertFalse("Pinned messages is still a More row", menu.contains("ChatPins.TITLE"))
         assertFalse("Jarvis Presets is still a More row", menu.contains("MoreMenuWords.PRESETS"))
+        // The Photo row left on 2026-11-01 and its constant with it. A
+        // `menu.contains("MoreMenuWords.PHOTO")` pin would be VACUOUS now: the
+        // constant no longer exists, so no code could name it and the assertion
+        // could never fail (the 2026-11-02 review's (g)). The row that replaced
+        // it is pinned instead - exactly ONE Attach row, carrying the Pictures
+        // gate - so a second photo door would have to come back through it.
+        assertEquals(
+            "the short menu no longer has exactly one Attach row",
+            1,
+            // \b so FILE_DETAIL (the row's own detail line) is not counted.
+            Regex("MoreMenuWords\\.FILE\\b").findAll(menu).count(),
+        )
+        assertTrue(
+            "the Attach row no longer carries the Pictures gate",
+            menu.contains("actions.onAttachFile(state.pictureOffered)"),
+        )
+        assertFalse("the Photo constant is still in the words", words.contains("const val PHOTO"))
+        assertTrue(
+            "the Attach row does not say a photo can be picked there",
+            words.contains("or a photo"),
+        )
         // Earlier chats opened History; History IS the list, so the words come
         // back nowhere in Home and the status-line control is the one door.
         assertEquals(
@@ -376,23 +399,25 @@ class ChatMenuTest {
     @Test
     fun `typing the menu request opens the menu and sends nothing`() {
         val composer = fnOf("private fun Composer(")
-        // The words are decided on the phone, by a pure matcher (AnswerMenuAskTest).
+        // The words are decided on the phone, by ONE pure function
+        // (AnswerMenuAskTest holds its cases) - not by a copy of the conditions
+        // here. The full-screen face bar's box calls the same function, which is
+        // what the 2026-11-02 review's finding (a) was about.
         assertTrue(
             "nothing decides what a typed menu request means",
-            composer.contains("com.jarvis.client.net.AnswerMenuAsk.matches(text)"),
+            composer.contains("AnswerMenuAsk.decide(text, canSend, hasFinishedAnswer())"),
         )
         // ...before anything is sent...
         assertTrue(
             "the words are sent before they are decided",
-            composer.indexOf("AnswerMenuAsk.matches(text)") in 0 until composer.indexOf("actions.onSend()"),
+            composer.indexOf("AnswerMenuAsk.decide(") in 0 until composer.indexOf("actions.onSend()"),
         )
-        // ...and before the link/attachment guard, because opening a local menu
-        // must not depend on the PC being reachable (only the menu's own
-        // actions, like a mark, need the link: 2026-11-01).
-        assertTrue(
-            "the menu request is decided after the link guard",
-            composer.indexOf("AnswerMenuAsk.matches(text)") in 0 until composer.indexOf("if (!canSend) return"),
-        )
+        // ...and the menu is decided before the link: `canSend` is handed IN to
+        // the decision, and the OPEN_MENU branch never reads it, so opening a
+        // local menu does not depend on the PC being reachable (only the menu's
+        // own actions, like a mark, need the link: 2026-11-01). Only the HELD
+        // branch refuses a send.
+        assertTrue("the held case is gone", composer.contains("Decision.HELD -> Unit"))
         // ...and all three send paths go through the ONE local action.
         assertTrue(
             "the keyboard sends by a path of its own",
@@ -404,7 +429,7 @@ class ChatMenuTest {
         // The button's two jobs stay: Send, and Stop while an answer arrives.
         assertTrue(composer.contains("if (state.streaming) actions.onInterrupt else sendNow()"))
         // The menu branch opens the menu and sends nothing.
-        val branch = composer.substringAfter("if (hasFinishedAnswer())").substringBefore("actions.onSend()")
+        val branch = composer.substringAfter("Decision.OPEN_MENU ->").substringBefore("Decision.NEEDS_ANSWER")
         assertTrue("the menu never opens", branch.contains("onOpenAnswerMenu()"))
         assertFalse("the menu branch still sends", branch.contains("actions.onSend("))
         // The old direct paths are gone, so no path can slip past the decision.
@@ -419,19 +444,26 @@ class ChatMenuTest {
             "nothing is said when there is no finished answer to open",
             composer.contains("askLine = com.jarvis.client.net.AnswerMenuAsk.NO_ANSWER"),
         )
-        // Drawn by this screen and dismissible - never a Jarvis bubble.
-        assertTrue("the line is never drawn", composer.contains("askLine?.let { line ->"))
-        assertTrue("the line cannot be dismissed", composer.contains("onClick = { askLine = null }"))
-        assertTrue("the line is not read out when it appears", composer.contains(".liveStatus()"))
+        // Drawn by this screen and dismissible - never a Jarvis bubble. The
+        // line is one composable ([AnswerMenuLine]), shared with the face bar,
+        // so the two boxes cannot word it differently.
+        assertTrue(
+            "the line is never drawn",
+            composer.contains("AnswerMenuLine(line, onDismiss = { askLine = null })"),
+        )
+        val line = fnOf("private fun AnswerMenuLine(")
+        assertTrue("the line cannot be dismissed", line.contains("onClick = onDismiss"))
+        assertTrue("the line is not read out when it appears", line.contains(".liveStatus()"))
         // Nothing about it comes from the PC: no notice route, no send, no API.
         for (notSent in listOf("JarvisRuntime.setNotice", "sendTypedChat", "/api/")) {
             assertFalse("the line goes through the PC: $notSent", composer.contains(notSent))
         }
-        // The words stay in the box: the draft is cleared only when a menu opened.
+        // The words stay in the box: only a menu that opened uses them up.
         val sendNow = composer.substringAfter("fun sendNow()").substringBefore("val sendPress")
-        val noAnswer = sendNow.substringAfter("} else {").substringBefore("}")
+        val noAnswer = sendNow.substringAfter("Decision.NEEDS_ANSWER ->").substringBefore("Decision.SEND")
         assertTrue("the no-answer branch says nothing", noAnswer.contains("askLine"))
         assertFalse("the words are cleared with no menu to open", noAnswer.contains("onDraftChange"))
+        assertFalse("the no-answer branch sends", noAnswer.contains("actions.onSend"))
     }
 
     @Test
@@ -458,9 +490,15 @@ class ChatMenuTest {
         // over half a reply.
         assertTrue("the chevron's own rule changed", reply.contains("if (!streaming && text.isNotBlank())"))
         // The caller decides it the same way, so the "no answer" line is honest.
+        // ONE definition of a finished answer, handed to the chat's box AND the
+        // full-screen face bar's (2026-11-02), so the two cannot disagree.
+        assertTrue(
+            "the finished-answer test is not defined once",
+            home.contains("val hasFinishedAnswer: () -> Boolean = { !state.streaming && reply().isNotBlank() }"),
+        )
         assertTrue(
             "the composer does not know whether an answer finished",
-            home.contains("hasFinishedAnswer = { !state.streaming && reply().isNotBlank() }"),
+            home.contains("hasFinishedAnswer = hasFinishedAnswer"),
         )
         // A LazyColumn composes only what is on screen: bring the answer into
         // view first, so the composable that owns the menu exists to open it.

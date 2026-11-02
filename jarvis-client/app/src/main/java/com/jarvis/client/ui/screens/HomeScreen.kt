@@ -27,7 +27,10 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -104,8 +107,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.jarvis.client.Activity
 import com.jarvis.client.FaceState
 import com.jarvis.client.LinkState
@@ -214,6 +219,13 @@ private const val PANE_LIST = "list"
 
 /** The reply's key in the conversation list - the follow-the-reply code looks for it. */
 private const val REPLY_KEY = "reply"
+
+/**
+ * What TalkBack calls the full-screen face bar's small typing box. The box
+ * itself stays blank - the owner asked for "a small blank emptyy text box"
+ * (2026-11-01) - so this name is the only thing said about it out loud.
+ */
+private const val FACE_TYPE_HINT = "Type a message to Jarvis"
 
 /**
  * The Home HUD's key in the conversation list (2026-11-02). It is the list's
@@ -560,16 +572,20 @@ data class HomeState(
     /** An Undo of [inboxTidy] is on its way - the button waits. */
     val inboxTidyBusy: Boolean = false,
     /**
-     * Whether the quick-note field is open - the home-screen widget's Note
-     * button opens it. See [QuickNotePlate].
+     * Whether the quick-note sheet is open. Opened by the More menu's Quick
+     * note row and by the home-screen widget's Note button. See
+     * [QuickNoteSheet].
      */
     val quickNoteOpen: Boolean = false,
     /**
-     * Offer the Photo button: the PC says its second graphics card's
-     * Pictures feature is working, or that it reads the words in a picture
-     * itself ([com.jarvis.client.net.SecondCard.picturesTaken], 2026-09-26).
-     * Hidden otherwise - without either the everyday model would get a
-     * picture it cannot see.
+     * The PC can take a picture: its second graphics card's Pictures feature
+     * is working, or it reads the words in a picture itself
+     * ([com.jarvis.client.net.SecondCard.picturesTaken], 2026-09-26).
+     *
+     * Since 2026-11-01 this is no longer a More row of its own. It decides
+     * whether the one "Attach a file" row's picker offers images at all
+     * (`AttachFile.mimeTypes`); off, an image is not offered, and one that
+     * still arrives is refused in plain words rather than read as a document.
      */
     val pictureOffered: Boolean = false,
     /**
@@ -996,19 +1012,23 @@ data class HomeActions(
      */
     val onLoadNoteTargets: suspend () -> NoteCapture.Targets =
         { NoteCapture.Targets.Unknown("not checked yet") },
-    /** Open or close the quick-note field. */
+    /** Open or close the quick-note sheet (see [QuickNoteSheet]). */
     val onQuickNoteOpenChange: (Boolean) -> Unit = {},
-    /** Open Android's photo picker. No storage permission: the picker hands over one photo. */
-    val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
     /**
      * Open the system's file picker for one document (PDF, Word, Excel,
-     * PowerPoint, text, Markdown or CSV). No storage permission and no new
-     * route: the picker hands over one file's bytes, which are read into
-     * memory, and the PC reads them within the question they were sent with.
+     * PowerPoint, text, Markdown or CSV) or, while the PC's Pictures feature
+     * works, one photo - the ONE "Attach a file" row since 2026-11-01, when
+     * the separate Photo row went. No storage permission and no new route: the
+     * picker hands over one file's bytes, which are read into memory, and the
+     * PC reads them within the question they were sent with. A photo picked
+     * here never goes down that document path.
+     *
+     * The Boolean is [HomeState.pictureOffered]: with it false the picker does
+     * not even offer images (the Photo row's old gate, kept).
      */
-    val onAttachFile: () -> Unit = {},
+    val onAttachFile: (withPictures: Boolean) -> Unit = {},
     /** Drop the attached document without sending it. */
     val onRemoveAttach: () -> Unit = {},
     /**
@@ -1457,6 +1477,12 @@ fun HomeScreen(
         val handleWords =
             if (shrunk) "Made small" else "${(ownFraction * 100).roundToInt()} percent of the screen"
 
+        // "Is there a FINISHED answer on the screen?" - the same test that
+        // draws the answer's chevron. Defined once and handed to BOTH typing
+        // boxes, so the chat's "was this answer right?" and the face bar's
+        // cannot disagree about whether there is a menu to open (2026-11-02).
+        val hasFinishedAnswer: () -> Boolean = { !state.streaming && reply().isNotBlank() }
+
         // The resizable region: the face pane, a drag handle, and the
         // conversation below it, sharing whatever height is left once the
         // status line, the navigation row (when shown) and the composer have
@@ -1471,9 +1497,25 @@ fun HomeScreen(
                 state,
                 actions,
                 reply,
+                draft,
                 micLevel,
                 onShowChat = { peekChat = true },
                 onOpenMore = { moreOpen = true },
+                // A question typed in the bar does go to the PC, and then the
+                // chat opens so the answer can be read: full screen shows only
+                // the first three lines of it. Said here, where `peekChat`
+                // lives - the bar itself knows nothing about the split.
+                onTypedSend = { peekChat = true },
+                // "Was this answer right?" typed in the face box opens the
+                // answer's own menu instead of being sent, exactly as in the
+                // chat box (2026-11-02). The menu is drawn in the conversation
+                // (see Reply), which full screen does not compose, so the chat
+                // is opened for it - the same move a typed question makes.
+                onOpenAnswerMenu = {
+                    peekChat = true
+                    answerMenuTick += 1
+                },
+                hasFinishedAnswer = hasFinishedAnswer,
             )
         } else {
             if (state.faceSize.hidden) {
@@ -1631,7 +1673,7 @@ fun HomeScreen(
                 // that draws the chevron - so the box can say why nothing
                 // happened instead of opening a menu on half a reply.
                 onOpenAnswerMenu = { answerMenuTick += 1 },
-                hasFinishedAnswer = { !state.streaming && reply().isNotBlank() },
+                hasFinishedAnswer = hasFinishedAnswer,
             )
         }
     }
@@ -1645,6 +1687,14 @@ fun HomeScreen(
             onDismiss = { moreOpen = false },
             onCoachThis = { coachTick += 1 },
         )
+    }
+    // The quick-note sheet, drawn once for BOTH layouts and deliberately
+    // OUTSIDE the `voiceMode` branch above it: full screen composes no
+    // conversation list, so a row in that list could never open for it (the
+    // owner's report of 2026-11-01: "the quick note button doesn't do
+    // anything"). See [QuickNoteSheet].
+    if (state.quickNoteOpen) {
+        QuickNoteSheet(actions)
     }
 }
 
@@ -1735,13 +1785,10 @@ private fun ConversationList(
             }
         }
 
-        // Quick note (backend/note-capture.patch) moved into the More menu on
-        // 2026-10-25: the small closed-state button no longer sits in the
-        // conversation. The plate itself still opens here when the menu (or
-        // the home-screen widget's Note) asks for it.
-        if (state.quickNoteOpen) {
-            item(key = "quick-note") { QuickNotePlate(open = true, actions = actions) }
-        }
+        // Quick note is NOT a row in this list any more (2026-11-01). It was
+        // appended at the end, so a tap could open it below the fold - and in
+        // full screen this list is not composed at all. It is now the sheet
+        // [QuickNoteSheet], drawn above both layouts.
 
         // "Playing on your PC" (2026-09-28): play, pause, next, previous -
         // greyed while the link is stale (rule 4), no card.
@@ -3527,103 +3574,185 @@ private fun TaskControlsPlate(paused: Boolean, actions: HomeActions) {
  * note, or in today's Obsidian daily note - the desktop's
  * `POST /api/notes/capture` (`backend/note-capture.patch`).
  *
- * Closed, it is one small button. Open, a field and one button for each note
- * app the desktop says is set up (asked each time it opens). None set up, or
- * the desktop cannot say: no button, and one line saying which. What happens
- * next is reported in the shared notice, in the desktop's own words ("Filed
- * in Logseq, …", "Waiting for your approval…", or why not) - this plate
- * never says "filed" itself. The typed text is kept if sending fails.
+ * A SHEET, not a row in the conversation (the owner's report of 2026-11-01:
+ * "the quick note button doesn't do anything"). It used to be a `LazyColumn`
+ * item inside [ConversationList], which made the More menu's Quick note look
+ * dead twice over: full screen composes no conversation list at all, and in
+ * the chat the item sat at the very end, where a tap could open it below the
+ * fold. It is drawn here above BOTH layouts, the way the More menu is drawn,
+ * so the row always opens something the owner can see wherever they pressed
+ * it.
+ *
+ * The words are unchanged: a field and one button for each note app the
+ * desktop says is set up (asked each time it opens). None set up, or the
+ * desktop cannot say: no button, and one line saying which. What happens next
+ * is reported in the shared notice, in the desktop's own words ("Filed in
+ * Logseq, …", "Waiting for your approval…", or why not) - this sheet never
+ * says "filed" itself. The typed text is kept if sending fails, and Close is
+ * still the way out.
+ *
+ * NOTHING TYPED IS LOST BY A GESTURE (2026-11-02): an outside tap no longer
+ * closes the sheet, Back and Close both ask first when there is a typed note,
+ * and the keyboard cannot cover the note box ([DialogProperties],
+ * `imePadding`). The note is not recoverable once the sheet is gone - it is
+ * never written anywhere on the phone - so the one thing that must not happen
+ * is closing it by accident.
  */
 @Composable
-private fun QuickNotePlate(open: Boolean, actions: HomeActions) {
+private fun QuickNoteSheet(actions: HomeActions) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var noteText by rememberSaveable { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     // null while the desktop is being asked.
     var targets by remember { mutableStateOf<NoteCapture.Targets?>(null) }
-    LaunchedEffect(open) {
-        if (open) {
-            targets = null
-            targets = actions.onLoadNoteTargets()
+    // "Close without filing this note?" - only ever set while something typed
+    // would be lost with the sheet. See [requestClose].
+    var confirmClose by remember { mutableStateOf(false) }
+    // Asked every time the sheet opens - and it is composed only while open,
+    // so "opens" is this composition.
+    LaunchedEffect(Unit) {
+        targets = null
+        targets = actions.onLoadNoteTargets()
+    }
+    // THE one way out. The Close button, the system Back gesture and the
+    // dialog's own dismiss all come here, so not one of them can throw away a
+    // note the owner typed (2026-11-02); an outside tap is turned off below.
+    // With nothing typed there is nothing to lose, and it closes at once -
+    // exactly what Close always did.
+    fun requestClose() {
+        if (sending) return
+        if (noteText.isBlank()) {
+            actions.onQuickNoteOpenChange(false)
+        } else {
+            confirmClose = true
         }
     }
-
-    if (!open) {
-        Quiet("Quick note…", color = chrome.textMid, onClick = { actions.onQuickNoteOpenChange(true) })
-        return
-    }
-    Plate {
-        Text("Quick note", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Filed on the desktop exactly as you type it. The desktop's own rules decide " +
-                "whether it asks you first.",
-            style = MaterialTheme.typography.labelSmall,
-            color = chrome.textLo,
-        )
-        Spacer(Modifier.height(10.dp))
-        TextInput(
-            value = noteText,
-            onValueChange = { noteText = it },
-            placeholder = "Your note…",
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(10.dp))
-        val ready = (targets as? NoteCapture.Targets.Known)?.names.orEmpty()
-        if (ready.isEmpty()) {
+    Dialog(
+        onDismissRequest = { requestClose() },
+        // An outside tap used to dismiss this sheet and silently drop the note
+        // in it (2026-11-02). It does nothing now; Close - and Back, which asks
+        // the same question - is the only way out.
+        //
+        // decorFitsSystemWindows = false is what lets the imePadding below see
+        // the keyboard: a dialog that fits the system windows is not told where
+        // the keyboard is, and the note box sat under it. Not driven on a
+        // device from this branch.
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .background(chrome.surface1)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        ) {
             Text(
-                targets?.let { NoteCapture.noTargetsLine(it) }
-                    ?: "Checking which note apps are set up on your PC…",
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textMid,
+                "Quick note",
+                style = MaterialTheme.typography.titleMedium,
+                color = chrome.textHi,
+                modifier = Modifier.semantics { heading() },
             )
-            Spacer(Modifier.height(6.dp))
-        }
-        fun send(target: String) {
-            if (sending || noteText.isBlank()) return
-            val note = noteText
-            sending = true
-            scope.launch {
-                val accepted = actions.onFileNote(target, note)
-                sending = false
-                if (accepted) {
-                    noteText = ""
-                    actions.onQuickNoteOpenChange(false)
-                }
-            }
-        }
-        // Up to three destinations, so Close has a row of its own: four
-        // buttons do not fit across a phone.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (target in ready) {
-                Quiet(
-                    "To ${NoteCapture.name(target)}",
-                    enabled = !sending && noteText.isNotBlank(),
-                    onClick = { send(target) },
-                )
-            }
-        }
-        // The chat box takes the same notes: a prefix per app that is set
-        // up, as the desktop's help list shows them.
-        val primer = NoteCapture.primer(targets)
-        if (primer.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
+            Gap(4)
             Text(
-                "Or start a message to Jarvis with:",
+                "Filed on the desktop exactly as you type it. The desktop's own rules decide " +
+                    "whether it asks you first.",
                 style = MaterialTheme.typography.labelSmall,
-                color = chrome.textMid,
+                color = chrome.textLo,
             )
-            for ((prefix, what) in primer) {
+            Spacer(Modifier.height(10.dp))
+            TextInput(
+                value = noteText,
+                onValueChange = { noteText = it },
+                placeholder = "Your note…",
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(10.dp))
+            if (confirmClose) {
+                // Something typed would be lost, so the sheet says what closing
+                // does before it does it. Both ways out are here, and "Keep
+                // writing" puts the destinations back.
                 Text(
-                    "$prefix  $what",
+                    "Close without filing this note? It has not been sent anywhere yet.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = chrome.textLo,
+                    color = chrome.textMid,
                 )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Quiet(
+                        "Keep writing",
+                        color = chrome.textMid,
+                        onClick = { confirmClose = false },
+                    )
+                    Quiet(
+                        "Close without filing",
+                        color = chrome.badInk,
+                        enabled = !sending,
+                        onClick = { actions.onQuickNoteOpenChange(false) },
+                    )
+                }
+            } else {
+                val ready = (targets as? NoteCapture.Targets.Known)?.names.orEmpty()
+                if (ready.isEmpty()) {
+                    Text(
+                        targets?.let { NoteCapture.noTargetsLine(it) }
+                            ?: "Checking which note apps are set up on your PC…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+                fun send(target: String) {
+                    if (sending || noteText.isBlank()) return
+                    val note = noteText
+                    sending = true
+                    scope.launch {
+                        val accepted = actions.onFileNote(target, note)
+                        sending = false
+                        if (accepted) {
+                            noteText = ""
+                            actions.onQuickNoteOpenChange(false)
+                        }
+                    }
+                }
+                // Up to three destinations, so Close has a row of its own: four
+                // buttons do not fit across a phone.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (target in ready) {
+                        Quiet(
+                            "To ${NoteCapture.name(target)}",
+                            enabled = !sending && noteText.isNotBlank(),
+                            onClick = { send(target) },
+                        )
+                    }
+                }
+                // The chat box takes the same notes: a prefix per app that is set
+                // up, as the desktop's help list shows them.
+                val primer = NoteCapture.primer(targets)
+                if (primer.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Or start a message to Jarvis with:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                    )
+                    for ((prefix, what) in primer) {
+                        Text(
+                            "$prefix  $what",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                    }
+                }
+                Quiet("Close", color = chrome.textMid, enabled = !sending,
+                    onClick = { requestClose() })
             }
         }
-        Quiet("Close", color = chrome.textMid, enabled = !sending,
-            onClick = { actions.onQuickNoteOpenChange(false) })
     }
 }
 
@@ -4584,6 +4713,36 @@ private fun MarkToggle(
     }
 }
 
+/**
+ * The line under either typing box when the words asked for the answer's menu
+ * and there is no finished answer to open one for (2026-11-02).
+ *
+ * Said in this screen's own words, not Jarvis's and not the PC's: nothing was
+ * sent, so the PC has nothing to say about it and no answer is invented. One
+ * composable for the chat's box and the full-screen face bar's, so the two
+ * cannot word it differently.
+ */
+@Composable
+private fun AnswerMenuLine(line: String, onDismiss: () -> Unit) {
+    val chrome = LocalChrome.current
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            line,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+            modifier = Modifier.weight(1f).liveStatus(),
+        )
+        Quiet(
+            "Dismiss",
+            color = chrome.textLo,
+            modifier = Modifier.semantics {
+                contentDescription = "Dismiss this line about the answer menu"
+            },
+            onClick = onDismiss,
+        )
+    }
+}
+
 @Composable
 private fun Composer(
     state: HomeState,
@@ -4625,34 +4784,33 @@ private fun Composer(
     // prompt coach's "Send mine" all come through here, so the words below
     // cannot be sent to the PC by one of them and not the others.
     fun sendNow() {
-        // "Was this answer right?" asks for the answer's own menu (the
-        // owner's field test of 2026-11-01: they typed it, the phone sent it,
-        // and Jarvis answered it as a question). Answered here, on the phone,
-        // and never sent - so it is decided BEFORE the canSend guard: opening
-        // a local menu must not depend on the PC being reachable (only the
-        // menu's own actions, like a mark, need the link). A dead link leaves
-        // the words in the box exactly as Send always did, but the menu still
-        // opens for a finished answer.
-        if (com.jarvis.client.net.AnswerMenuAsk.matches(text)) {
-            askLine = null
-            if (hasFinishedAnswer()) {
+        // The decision is NOT made here any more: it is
+        // [com.jarvis.client.net.AnswerMenuAsk.decide], the one function the
+        // full-screen face bar's box calls too (2026-11-02). There is more than
+        // one Send on this screen, and a "was this answer right?" typed in one
+        // of them must never reach the PC as a question.
+        when (com.jarvis.client.net.AnswerMenuAsk.decide(text, canSend, hasFinishedAnswer())) {
+            com.jarvis.client.net.AnswerMenuAsk.Decision.OPEN_MENU -> {
                 // The words were used up by the menu, so the box empties as it
                 // does after a real send, and the menu opens.
+                askLine = null
                 actions.onDraftChange("")
                 onOpenAnswerMenu()
-            } else {
+            }
+            com.jarvis.client.net.AnswerMenuAsk.Decision.NEEDS_ANSWER -> {
                 // Nothing was sent and nothing was used up: the words stay in
                 // the box to be edited, and the line says why nothing happened.
                 askLine = com.jarvis.client.net.AnswerMenuAsk.NO_ANSWER
             }
-            return
+            com.jarvis.client.net.AnswerMenuAsk.Decision.SEND -> {
+                askLine = null
+                actions.onSend()
+            }
+            // An ordinary question that cannot go yet (a dead link, a picture
+            // or document still being prepared): nothing is sent, the words
+            // stay, and a line already under them stays too.
+            com.jarvis.client.net.AnswerMenuAsk.Decision.HELD -> Unit
         }
-        // An ordinary question: nothing is sent over a link that cannot carry
-        // it, nor while a picture or document is still being prepared (the
-        // 2026-10-24 / 2026-10-29 rule; Send and the keyboard share it).
-        if (!canSend) return
-        askLine = null
-        actions.onSend()
     }
     // The Send button: Send while there is something to send, Stop while an
     // answer is arriving - one action, as it has always been.
@@ -4818,24 +4976,10 @@ private fun Composer(
     // "Was this answer right?" with no finished answer on screen to open a
     // menu for: said here, right above the box the words are in, rather than
     // in a Jarvis bubble or as the PC's sentence (nothing was sent, so the PC
-    // said nothing). Dismissible, and read out as it appears.
+    // said nothing). Dismissible, read out as it appears, and the very same
+    // line the full-screen face bar shows ([AnswerMenuLine]).
     askLine?.let { line ->
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                line,
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textMid,
-                modifier = Modifier.weight(1f).liveStatus(),
-            )
-            Quiet(
-                "Dismiss",
-                color = chrome.textLo,
-                modifier = Modifier.semantics {
-                    contentDescription = "Dismiss this line about the answer menu"
-                },
-                onClick = { askLine = null },
-            )
-        }
+        AnswerMenuLine(line, onDismiss = { askLine = null })
         Spacer(Modifier.height(6.dp))
     }
     Row(
@@ -5016,17 +5160,77 @@ private fun VoiceStrips(state: HomeState, actions: HomeActions) {
  *
  * Notices still show. A refusal or an error said only in the chat would be
  * said to nobody while the chat is out of the way.
+ *
+ * Its small typing box decides what Send means through the SAME function the
+ * chat's box does ([com.jarvis.client.net.AnswerMenuAsk.decide]), so "was this
+ * answer right?" typed here opens the answer's menu instead of being sent
+ * (2026-11-02).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VoiceBar(
     state: HomeState,
     actions: HomeActions,
     reply: () -> String,
+    draft: () -> String,
     micLevel: State<Float>,
     onShowChat: () -> Unit,
     onOpenMore: () -> Unit,
+    onTypedSend: () -> Unit,
+    /**
+     * Open the answer on screen's own menu - what the chat's chevron opens.
+     * Called when the typed words ask for it (see
+     * [com.jarvis.client.net.AnswerMenuAsk]).
+     */
+    onOpenAnswerMenu: () -> Unit = {},
+    /**
+     * Is there a FINISHED answer on screen? The same test that draws the
+     * chevron, handed in by the caller so both boxes decide identically.
+     */
+    hasFinishedAnswer: () -> Boolean = { false },
 ) {
     val chrome = LocalChrome.current
+    // The one snapshot read of the draft in this bar, the same way [Composer]
+    // makes it: a keystroke recomposes the bar and nothing above it.
+    val text = draft()
+    // [Composer]'s own canSend rule, plus the one thing full screen needs and
+    // the composer does not: while an answer arrives, a tap must send nothing.
+    // (The composer's Send button BECOMES Stop there; here Stop is its own
+    // control, so the typing box has to refuse by itself.)
+    val canSend = (text.isNotBlank() || state.sharedLine != null) &&
+        state.link == LinkState.CONNECTED && !state.pictureBusy && !state.attachBusy &&
+        !state.streaming
+    // The line [AnswerMenuLine] shows when the words asked for the answer's
+    // menu and there is no finished answer to open one for. This bar has no
+    // room for a second composer, so the line sits above its own row.
+    var askLine by remember { mutableStateOf<String?>(null) }
+    // THE one send path in this bar: the keyboard's Send key and the box's own
+    // send action both come through here, and the DECISION is
+    // [com.jarvis.client.net.AnswerMenuAsk.decide] - the same function the
+    // chat's box calls, so neither can send a menu request as a question
+    // (2026-11-02). Nothing is cleared here on a plain send on purpose -
+    // `actions.onSend()` reads the words and empties the box exactly as the
+    // composer's Send does, and leaves them there when nothing was sent (a
+    // note the PC refused, a picture it would not take).
+    fun sendTyped() {
+        when (com.jarvis.client.net.AnswerMenuAsk.decide(text, canSend, hasFinishedAnswer())) {
+            com.jarvis.client.net.AnswerMenuAsk.Decision.OPEN_MENU -> {
+                askLine = null
+                actions.onDraftChange("")
+                onOpenAnswerMenu()
+            }
+            com.jarvis.client.net.AnswerMenuAsk.Decision.NEEDS_ANSWER ->
+                askLine = com.jarvis.client.net.AnswerMenuAsk.NO_ANSWER
+            com.jarvis.client.net.AnswerMenuAsk.Decision.SEND -> {
+                askLine = null
+                actions.onSend()
+                // The chat opens where the answer can be read: full screen
+                // shows only the first three lines of it.
+                onTypedSend()
+            }
+            com.jarvis.client.net.AnswerMenuAsk.Decision.HELD -> Unit
+        }
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -5042,53 +5246,103 @@ private fun VoiceBar(
         }
         VoiceStrips(state, actions)
         ReplyPeek(reply, state.streaming)
-        Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-            Row(
-                Modifier.align(Alignment.CenterStart),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Quiet("Show chat", onClick = onShowChat)
-                Spacer(Modifier.width(8.dp))
-                // The SAME menu the chat bar's More opens (the owner's ask of
-                // 2026-10-25: one shared menu) - the full-screen face bar was
-                // otherwise the one place with no way to reach those controls.
-                Quiet(
-                    MoreMenuWords.MORE,
-                    modifier = Modifier.semantics {
-                        contentDescription = "More chat controls, modes and tools"
-                    },
-                    onClick = onOpenMore,
-                )
-            }
-            Box(Modifier.align(Alignment.Center)) {
-                // A PC that has not offered push-to-talk must not get an
-                // enabled microphone that does nothing - the same gate the
-                // composer's own row uses (`if (state.voiceOffered)`, below).
-                // Full screen normally implies an offered microphone already
-                // (see `voiceMode`), but the button's own gate said nothing
-                // about it, so any future change to that branch would have
-                // drawn a dead, enabled mic.
-                if (state.voiceOffered) {
-                    VoiceButton(
-                        enabled = state.voiceOffered &&
-                            state.link == LinkState.CONNECTED && !state.streaming,
-                        capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
-                        micLevel = micLevel,
-                        onBegin = actions.onVoiceBegin,
-                        onRelease = actions.onVoiceRelease,
-                        onCancel = actions.onVoiceCancel,
+        // "Was this answer right?" with no finished answer to open a menu for:
+        // the same line, in the same words, the chat's box shows above itself.
+        askLine?.let { line ->
+            AnswerMenuLine(line, onDismiss = { askLine = null })
+            Spacer(Modifier.height(6.dp))
+        }
+        // Three cells rather than three overlaid Boxes (before 2026-11-01 this
+        // was a Box with CenterStart / Center / CenterEnd children, which was
+        // fine while both ends were short). Each cell now owns its space, so
+        // the typing box can never draw over the microphone or "Show chat" on
+        // a 360dp phone, and the microphone stays exactly in the middle while
+        // the two sides are equal.
+        BoxWithConstraints(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+            // What is left of one side of the microphone once the typing box
+            // and Stop have their room. Kept between 48 and 96dp: a small box,
+            // never a second composer, and it shrinks rather than crowding the
+            // microphone on a narrow phone. At 360dp this is 88dp. The
+            // arithmetic is [FaceBarPlan] so [PhoneFaceBarTest] can hold it at a
+            // computed 360dp; it is also why box + gap + Stop is exactly one
+            // side and cannot reach the microphone.
+            val typeWidth = FaceBarPlan.typeWidthDp(maxWidth.value).dp
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // The two labels, in ONE cell that is half of what is left
+                // beside the microphone - so they fit on one line at the
+                // default text size and, at a larger one, "More" moves onto a
+                // second line instead of being clipped (2026-11-02: at 1.3x
+                // they need about 159dp and this cell has 144dp at 360dp). A
+                // FlowRow is what makes that wrap; maxLines = 1 with an
+                // ellipsis is the last resort for a text size so large that
+                // one label alone is wider than the cell. The bar grows
+                // taller; nothing is ever cut off or drawn over.
+                FlowRow(
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Quiet(
+                        "Show chat",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        onClick = onShowChat,
+                    )
+                    // The SAME menu the chat bar's More opens (the owner's ask of
+                    // 2026-10-25: one shared menu) - the full-screen face bar was
+                    // otherwise the one place with no way to reach those controls.
+                    Quiet(
+                        MoreMenuWords.MORE,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics {
+                            contentDescription = "More chat controls, modes and tools"
+                        },
+                        onClick = onOpenMore,
                     )
                 }
-            }
-            // Stop is the same action the composer's Send button turns into
-            // while an answer streams: cancelling the call stops generation.
-            if (state.streaming) {
-                Quiet(
-                    "Stop",
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                    color = chrome.badInk,
-                    onClick = actions.onInterrupt,
-                )
+                Box {
+                    // A PC that has not offered push-to-talk must not get an
+                    // enabled microphone that does nothing - the same gate the
+                    // composer's own row uses (`if (state.voiceOffered)`, below).
+                    // Full screen normally implies an offered microphone already
+                    // (see `voiceMode`), but the button's own gate said nothing
+                    // about it, so any future change to that branch would have
+                    // drawn a dead, enabled mic.
+                    if (state.voiceOffered) {
+                        VoiceButton(
+                            enabled = state.voiceOffered &&
+                                state.link == LinkState.CONNECTED && !state.streaming,
+                            capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
+                            micLevel = micLevel,
+                            onBegin = actions.onVoiceBegin,
+                            onRelease = actions.onVoiceRelease,
+                            onCancel = actions.onVoiceCancel,
+                        )
+                    }
+                }
+                Row(
+                    Modifier.weight(1f).padding(start = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // The owner's ask of 2026-11-01: a small blank box to the
+                    // right of the microphone, for the times typing beats
+                    // talking.
+                    FaceTypeBox(
+                        text = text,
+                        width = typeWidth,
+                        onDraftChange = actions.onDraftChange,
+                        onSend = { sendTyped() },
+                    )
+                    // Stop is the same action the composer's Send button turns
+                    // into while an answer streams: cancelling the call stops
+                    // generation. It is pushed to the bar's right edge so the
+                    // typing box can stay next to the microphone.
+                    if (state.streaming) {
+                        Spacer(Modifier.weight(1f))
+                        Quiet("Stop", color = chrome.badInk, onClick = actions.onInterrupt)
+                    }
+                }
             }
         }
         // The same reason line the composer shows under the same button. Full
@@ -5108,6 +5362,64 @@ private fun VoiceBar(
                 modifier = Modifier.liveStatus(),
             )
         }
+    }
+}
+
+/**
+ * The small typing box on the full-screen face bar (the owner's ask of
+ * 2026-11-01: "put a small blank emptyy text box to the right of the mic").
+ *
+ * Blank on purpose: there are no placeholder words in it, only the TalkBack
+ * name [FACE_TYPE_HINT]. It is [Composer]'s field made small - a flat
+ * `surface2` plate, `BasicTextField`, the keyboard's Send key wired to the
+ * same send path - one line tall and [width] wide.
+ *
+ * The whole 48dp of height is the FIELD's own touch target, not padding
+ * around it: the decoration box only centres the one line of text, so a tap
+ * anywhere in the plate puts the cursor in it.
+ */
+@Composable
+private fun FaceTypeBox(
+    text: String,
+    width: Dp,
+    onDraftChange: (String) -> Unit,
+    onSend: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val radii = LocalRadii.current
+    Box(
+        Modifier
+            .width(width)
+            .heightIn(min = 48.dp)
+            .clip(radii.controlShape)
+            .background(chrome.surface2)
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        BasicTextField(
+            value = text,
+            onValueChange = onDraftChange,
+            textStyle = LocalTextStyle.current.merge(
+                MaterialTheme.typography.bodySmall.copy(color = chrome.textHi),
+            ),
+            cursorBrush = SolidColor(accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            // The keyboard showed a Send key that did nothing on the composer
+            // for the same reason: ImeAction only chooses the key's LABEL, and
+            // without this the press is swallowed. Same guard inside sendTyped.
+            keyboardActions = KeyboardActions(onSend = { onSend() }),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = FACE_TYPE_HINT },
+            decorationBox = { inner ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    inner()
+                }
+            },
+        )
     }
 }
 
@@ -5173,10 +5485,16 @@ private fun TemporaryChatMarker(empty: Boolean) {
  *
  * SHORT ON PURPOSE since the owner's choice of 2026-10-30. He photographed the
  * old sheet ("these both screenshots need further simplification, too many
- * options") and chose to tuck the rare ones away: it now lists at most five
- * rows - New chat, Photo, Attach a file, Modes and Quick note - then Close.
+ * options") and chose to tuck the rare ones away: it now lists at most four
+ * rows - New chat, Attach a file, Modes and Quick note - then Close. (It was
+ * five until 2026-11-01, when the owner asked for the Photo row to go: the one
+ * Attach row offers a photo too, through the same picker.)
  *
  * Nothing was dropped, only relocated:
+ * - "Photo" went into "Attach a file" (2026-11-01): the picker offers a
+ *   document AND, while the PC's Pictures feature works, a photo. A photo
+ *   picked there still goes down its own picture path, never the document
+ *   one. See [HomeMoreMain]'s Attach row.
  * - "Earlier chats" left because it opened History, and History IS the list
  *   (Home's status line opens it in one tap) - so the row said nothing the
  *   screen did not.
@@ -5187,19 +5505,20 @@ private fun TemporaryChatMarker(empty: Boolean) {
  * - Think, Coach this and Incognito moved one tap deeper into [HomeMoreModes],
  *   behind the one "Modes" row.
  *
- * Every row still asks the same gate the control carried (`pictureOffered`,
- * `notificationsAttachable`, the coach's route and switch, `!streaming`), so a
- * PC that never offered a control still cannot see it. Nothing new can act:
- * every row calls the existing [HomeActions] callback. The one exception kept
- * deliberately is the conditional Notifications row - it is the ONLY door to
- * attaching captured notifications, and tucking it one sheet deeper would make
- * it three taps instead of two.
+ * Every row still asks the same gate the control carried
+ * (`notificationsAttachable`, the coach's route and switch, `!streaming`), so a
+ * PC that never offered a control still cannot see it. (The Photos gate is
+ * asked in the Attach row's picker instead: `AttachFile.mimeTypes`.) Nothing
+ * new can act: every row calls the existing [HomeActions] callback. The one
+ * exception kept deliberately is the conditional Notifications row - it is the
+ * ONLY door to attaching captured notifications, and tucking it one sheet
+ * deeper would make it three taps instead of two.
  *
  * Drawn as the app's own quiet text rows inside a plain [Dialog] (the
  * PhotoReminderDialog shape: flat surface, no Material sheet, no new
  * dependency). Every row closes the menu before it acts, so a control that
- * raises its own surface - the coach's advice panel, Android's photo picker,
- * the note plate - is never left behind a dialog.
+ * raises its own surface - the coach's advice panel, Android's file picker,
+ * the note sheet - is never left behind a dialog.
  */
 @Composable
 private fun HomeMoreMenu(
@@ -5232,7 +5551,7 @@ private fun HomeMoreMenu(
     }
 }
 
-/** The short menu itself: at most five content rows, then Close. */
+/** The short menu itself: at most four content rows, then Close. */
 @Composable
 private fun HomeMoreMain(
     state: HomeState,
@@ -5270,23 +5589,21 @@ private fun HomeMoreMain(
             detail = MoreMenuWords.NEW_CHAT_DETAIL,
         ) { onDismiss(); actions.onNewConversation() }
 
-        // Photo, while the PC's Pictures feature works (HomeState.pictureOffered).
-        if (state.pictureOffered) {
-            MoreRow(
-                MoreMenuWords.PHOTO,
-                enabled = state.link == LinkState.CONNECTED &&
-                    !state.streaming && !state.pictureBusy,
-            ) { onDismiss(); actions.onAttachPicture() }
-        }
-
-        // A document for the next question (2026-10-29): read on the PC within
-        // that one turn. No switch and no capability of its own.
+        // ONE row for everything sent with a question - the owner's ask of
+        // 2026-11-01: "remove the photo option because ATTach a file on my
+        // Android phone will bring up the option to add a photo". The row
+        // still opens the system picker; a photo picked there goes down the
+        // PICTURE path (`AttachFile.goesToPicture`), never the document path,
+        // so it keeps vision and the black-boxed secrets. The old Photo row's
+        // gate moved into the picker's own filter (`AttachFile.mimeTypes`),
+        // and its busy windows are still respected here (2026-10-29: nothing
+        // is sent while a file or picture is still being prepared).
         MoreRow(
             MoreMenuWords.FILE,
             detail = MoreMenuWords.FILE_DETAIL,
             enabled = state.link == LinkState.CONNECTED &&
-                !state.streaming && !state.attachBusy,
-        ) { onDismiss(); actions.onAttachFile() }
+                !state.streaming && !state.attachBusy && !state.pictureBusy,
+        ) { onDismiss(); actions.onAttachFile(state.pictureOffered) }
 
         // Notifications, only while phone notifications are on AND something was
         // captured (HomeState.notificationsAttachable). Kept a DIRECT row on
