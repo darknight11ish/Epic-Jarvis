@@ -1651,7 +1651,7 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 175))   # 129 ..= 174 (170 "Protected from Jarvis", 2026-10-31, this lane; the notes-editor lane also took the next number, so one of the two is renumbered at merge, as 161/162 were; 169 the jobs create/answer routes, 2026-10-30; 146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 the blind-approval guards, 2026-10-21; 151 the Obsidian vault organizer, 2026-10-21; 152 the Notion export -> Obsidian vault routes, 2026-10-21; 153 the Live voice screen/selection reads, 2026-10-21; 154 the spoken-command normaliser and speaking-speed reflex, Voice Slice A, 2026-10-21; 155 Duet Wave D-2 (read-only continuation, outbound tiers, source provenance, walk brain-dump), 2026-10-22; 161 Google Calendar, both ways; 162 connecting an account by talking, both 2026-10-28; 163 a file in a chat, 2026-10-30; 164 Jarvis's own calendar, 2026-10-29; 165 what a parking stay costs, minute by minute, 2026-10-30; 166 building an Android app from chat and sideloading it, 2026-10-30; 167 the phone's notification styles, built from the owner's words, 2026-10-30; 168 the calendar in the desktop HUD, 2026-10-30; 169 starting a background job and answering a parked grant, 2026-10-30; 170 the Obsidian notes editor, 2026-10-31; 171 Protected from Jarvis, 2026-10-31; 172 sending one file from the PC to the phone; 173 the surface-aware answers, 2026-10-31; 174 opening an app on the phone and starting a media search, 2026-11-01)
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 175)) + (177,)   # 129 ..= 174 then 177 (170 "Protected from Jarvis", 2026-10-31, this lane; the notes-editor lane also took the next number, so one of the two is renumbered at merge, as 161/162 were; 169 the jobs create/answer routes, 2026-10-30; 146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 the blind-approval guards, 2026-10-21; 151 the Obsidian vault organizer, 2026-10-21; 152 the Notion export -> Obsidian vault routes, 2026-10-21; 153 the Live voice screen/selection reads, 2026-10-21; 154 the spoken-command normaliser and speaking-speed reflex, Voice Slice A, 2026-10-21; 155 Duet Wave D-2 (read-only continuation, outbound tiers, source provenance, walk brain-dump), 2026-10-22; 161 Google Calendar, both ways; 162 connecting an account by talking, both 2026-10-28; 163 a file in a chat, 2026-10-30; 164 Jarvis's own calendar, 2026-10-29; 165 what a parking stay costs, minute by minute, 2026-10-30; 166 building an Android app from chat and sideloading it, 2026-10-30; 167 the phone's notification styles, built from the owner's words, 2026-10-30; 168 the calendar in the desktop HUD, 2026-10-30; 169 starting a background job and answering a parked grant, 2026-10-30; 170 the Obsidian notes editor, 2026-10-31; 171 Protected from Jarvis, 2026-10-31; 172 sending one file from the PC to the phone; 173 the surface-aware answers, 2026-10-31; 174 opening an app on the phone and starting a media search, 2026-11-01; 177 approving a card from its Android notification, 2026-11-02 - three above the tail because #1074 takes 175 and #1073 takes 176, both in flight and merging before this one, so no two PRs claim one number; see RESERVED_SECTION_NUMBERS below)
 #: 156 is section 156, the private chat (backend Slice 1, 2026-10-25);
 #: 157 is the owner-secret hand-off card, wired 2026-10-26;
 #: 158 is updates in chat - "is there an update?", "what changed in the
@@ -1684,6 +1684,17 @@ EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 175))   # 129 ..= 174 (170 "Protec
 #:
 #: This list names the RELEASED tail, so a dropped section anywhere in it is
 #: caught, and a section above it is reported rather than silently accepted.
+
+#: 175 AND 176 ARE RESERVED, NOT MISSING. Two pull requests in flight before
+#: this branch add them - #1074 takes 175 and #1073 takes 176 - so the Lead
+#: gave THIS feature 177 rather than let two PRs claim one number. Until both
+#: land, `docs/JARVIS-API.md` legitimately reads 129 ..= 174 then 177, and the
+#: contiguity check below would call that a hole. Naming the two numbers here
+#: keeps that check biting on every OTHER number - a third hole, a repeat, or
+#: 175/176 arriving before their own PRs land all still fail - instead of
+#: switching the check off. Delete this tuple, and 177's entry in
+#: `EXPECTED_SECTIONS_FROM_129`, in the commit that brings #1074 and #1073 in.
+RESERVED_SECTION_NUMBERS = (175, 176)
 
 
 def t_every_section_from_129_up_is_still_in_the_document():
@@ -1750,9 +1761,10 @@ def t_the_sections_after_129_run_without_a_gap_or_a_repeat():
       number, and `api.count("\\n## 129.") == 1` guards only 129 itself.
 
     So this asserts the RUN, independent of any pinned list: every number from
-    129 to the highest present, none missing, **none twice**. Adding a section
-    does not need this edited; deleting one fails it; numbering two sections the
-    same fails it - which is the case nobody was watching.
+    129 to the highest present, none missing (except the numbers
+    `RESERVED_SECTION_NUMBERS` says are spoken for), **none twice**. Adding a
+    section does not need this edited; deleting one fails it; numbering two
+    sections the same fails it - which is the case nobody was watching.
 
     Why it matters beyond tidiness: `docs/JARVIS-API.md` is what the desktop and
     Android apps are written against. A missing section is a route with no
@@ -1766,7 +1778,11 @@ def t_the_sections_after_129_run_without_a_gap_or_a_repeat():
               "there is no section 129, so the run cannot be checked")
         return
     tail = numbered[numbered.index(129):]
-    expected = list(range(129, max(tail) + 1))
+    # 175 and 176 are RESERVED by the in-flight PRs #1074 and #1073, so the
+    # document has 177 without them on purpose - see RESERVED_SECTION_NUMBERS.
+    # Every OTHER number in the run must still be present exactly once.
+    expected = [n for n in range(129, max(tail) + 1)
+                if n not in RESERVED_SECTION_NUMBERS]
     missing = [n for n in expected if n not in tail]
     repeated = sorted({n for n in tail if tail.count(n) > 1})
     check("the sections after 129 run without a gap or a repeat",

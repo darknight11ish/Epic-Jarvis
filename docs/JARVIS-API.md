@@ -28682,7 +28682,7 @@ may do; nothing is applied until the owner taps Add. The PC's own sentence says 
   and the notification is built exactly as it was before this feature existed.
 - A style changes how the words are drawn and nothing else. On 2026-11-02 the owner asked for an
   Approve button on the approval notification itself; that button (and its five-point security
-  envelope) is §175's, and a style may not alter it. Deny and the tap-through are unchanged.
+  envelope) is §177's, and a style may not alter it. Deny and the tap-through are unchanged.
 
 ### What it does not style
 
@@ -29962,7 +29962,7 @@ Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
 "One-sided on purpose").
 
 
-## 175. Approving a card from an Android notification, with Deny, Approve and Review (phone, added 2026-11-02)
+## 177. Approving a card from an Android notification, with Deny, Approve and Review (phone, added 2026-11-02)
 
 The owner asked, 2026-11-02: *"make sure i can approve jarvis cards through an android
 notification with a deny or approve button or tap too see more button if the summary that's short
@@ -29977,7 +29977,7 @@ that cancels a notification when `/api/pending` stops carrying its id. What was 
 approve action on that surface was refused, and the lock screen's public words were a generic
 sentence rather than the one the owner asked for.
 
-### 175.1 The five-point envelope (Gemini's ruling, binding)
+### 177.1 The five-point envelope (Gemini's ruling, binding)
 
 1. **Deny may run from the lock screen.** Refusing without reading is the safe direction, and it
    was already allowed there.
@@ -30011,7 +30011,7 @@ forbids, and the redaction itself is the owner's existing privacy rule (`Securit
 setup**, so the owner will see Review rather than Approve until he turns App lock off; the app's
 Settings, Security row is where that choice lives.
 
-### 175.2 The two Approve routes
+### 177.2 The two Approve routes
 
 - **Direct (`ACTION_APPROVE`, small read-only cards).** The action targets the app's own
   non-exported `EventService`. It waits briefly for a live link, re-reads the card from the live
@@ -30031,7 +30031,7 @@ only on a fresh launch (not a rotation or a Recents replay). `notice.approve_ok`
 the phone's own envelope decides, not the desktop's hint. **No backend change and no new route** -
 both routes end at the existing `/api/approve`.
 
-### 175.3 Where it lives
+### 177.3 Where it lives
 
 | File | What it holds |
 |---|---|
@@ -30041,7 +30041,7 @@ both routes end at the existing `/api/approve`.
 | `.../MainActivity.kt` | the proof-gated in-app approve: opens the card, forces the check, then the existing `decide` |
 | `.../InternalLaunch.kt` | `APPROVE_ACTION` and the proof/freshness decision (`approvesApproval`) |
 
-### 175.4 Tests, and what is not proved here
+### 177.4 Tests, and what is not proved here
 
 `ApprovalNotificationPolicyTest` (19 checks) holds the envelope on the JVM: Deny unlocked, every
 Approve unlock-gated, small direct vs non-small in-app, the forced check for a write card that the
