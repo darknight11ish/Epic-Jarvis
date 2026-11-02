@@ -142,6 +142,13 @@ object FindAnything {
      * on one - the entries in the phone's navigation. Each is where the
      * owner really lands when they tap that entry, which is what
      * `MenuPlaces.INSIDE` says in words.
+     *
+     * `entry.appearance` is NOT here, and that is the 2026-11-02 change: its
+     * Home button is gone (Appearance is Settings-only now), so there is no
+     * entry to land from. Appearance itself is still found by typing -
+     * through `settings.appearance-card`, the Settings row that opens the same
+     * screen - and `MenuPlaces.INSIDE` keeps the id listed so the phone's map
+     * of menus with no place of their own stays complete.
      */
     private val ENTRY_PLACES: Map<String, Pair<Screen, String?>> = mapOf(
         // The status line at the top of Home opens Platform checks, whose
@@ -151,7 +158,6 @@ object FindAnything {
         // Brain's own card for the same thing, `brain.model.tutorials`).
         "entry.help" to (Screen.FAQ to null),
         "entry.settings" to (Screen.SETTINGS to null),
-        "entry.appearance" to (Screen.APPEARANCE to null),
         "entry.voices" to (Screen.VOICES to null),
         "entry.voice-check" to (Screen.VOICE_CHECK to null),
         // A menu drawn inside something that is not a menu itself, so the

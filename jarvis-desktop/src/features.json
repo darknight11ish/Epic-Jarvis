@@ -2049,7 +2049,7 @@
     "group": "The PC itself",
     "title": "Appearance",
     "what": "The theme, the face Jarvis wears, and the colour for each state.",
-    "where": "Settings, Appearance. On the phone, Appearance on Home, or from Settings.",
+    "where": "Settings, Appearance. On the phone it is Settings, Appearance - it is not a Home button any more (a Reminders button took its place there on 2026-11-02).",
     "asks": "No card - a look changes at once.",
     "limit": "Look-and-behaviour options are shared with your phone; sharpness and frame rate stay per device.",
     "surface": "both",

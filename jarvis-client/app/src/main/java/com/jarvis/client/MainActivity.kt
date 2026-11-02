@@ -4192,8 +4192,28 @@ class MainActivity : FragmentActivity() {
                                     pendingSectionScreen = Screen.BRAIN.name
                                     nav.go(Screen.BRAIN)
                                 },
-                                onOpenAppearance = { nav.go(Screen.APPEARANCE) },
+                                // Reminders, where Appearance's button was until
+                                // 2026-11-02 (the owner: Appearance only in
+                                // Settings, a Reminders button in its place).
+                                // It opens the Brain's own Coming up plate -
+                                // "Reminders, alarms, timers and repeating
+                                // jobs" - exactly as "open coming up" and Find
+                                // anything's own row do. Nothing new is read
+                                // and no route is added; Coming up can never be
+                                // hidden (`brain.work.coming-up` is in
+                                // MenuCatalog.NEVER_HIDE, ComingUpReachabilityTest),
+                                // so there is no menu to show for this visit.
+                                onOpenReminders = {
+                                    pendingSection = "coming-up"
+                                    pendingSectionScreen = Screen.BRAIN.name
+                                    nav.go(Screen.BRAIN)
+                                },
                                 // Settings from Home's own row (2026-10-08).
+                                // Appearance is Settings-only on the phone since
+                                // 2026-11-02: its own row in Settings still opens
+                                // that screen (the `onOpenAppearance` further up
+                                // is the SETTINGS screen's callback, not Home's),
+                                // and Home has no Appearance button any more.
                                 onOpenSettings = { nav.go(Screen.SETTINGS) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
                                 // Jarvis Live (ui/screens/LiveScreen.kt).

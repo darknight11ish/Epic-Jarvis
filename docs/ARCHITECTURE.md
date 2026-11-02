@@ -3221,6 +3221,24 @@ not missing a control: its own app already reads and acts on the same
 schedule. `tools/check_parity.py` has nothing new to classify, because no
 backend route is added and the phone's read of `/api/schedule` is unchanged.
 
+**The phone's Home row gained a Reminders button on 2026-11-02, and it is one
+more way in to the same Coming up read surface, not a second reminders screen**
+(the owner: *"move appearance to only in settings for the android app and
+replace the appearance button with a reminders button instead"*). The button
+opens Brain -> Coming up (`brain.work.coming-up`, the plate the phone already
+had and can never hide), exactly as "open coming up" and Find anything's own
+row do; it reads nothing new and adds no route, so `tools/check_parity.py` has
+nothing to classify. **The HUD's Reminders tab above is unchanged and stays the
+desktop HUD's**, and no desktop surface changed at all - the phone's row is the
+only thing that moved, which is why this is a note here rather than a parity
+gap. Appearance is reached only from its Settings row on the phone now (still
+`settings.appearance-card`, still hideable there), and the old home-row menu id
+`entry.appearance` is KEPT - ids are never reused or renamed - with
+`hide=False` and a written reason in `backend/jarvis_menus.py`: a switch over a
+button that no longer exists would turn nothing off. The phone's Home row
+therefore reads no `menus.shows(...)` at all; its six buttons are always drawn,
+like Settings and Help.
+
 **Wave D-1's proactive surfaces are desktop-first in one place, and that is
 written down rather than implied** (2026-10-22; PR #722; JARVIS-API sections 22
 and 82). The briefing's new sections - Travel and next steps, 2-minute prep and
