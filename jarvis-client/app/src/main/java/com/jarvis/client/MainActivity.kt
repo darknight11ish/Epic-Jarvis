@@ -91,6 +91,7 @@ import com.jarvis.client.platform.PictureEncoder
 import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PowerWatch
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.service.ApprovalNotificationPolicy
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.AvatarOverlayService
 import com.jarvis.client.service.EventService
@@ -142,9 +143,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
@@ -179,6 +182,19 @@ class MainActivity : FragmentActivity() {
 
     /** The approval a notification asked us to open, or null. */
     private val focusApproval = mutableStateOf<String?>(null)
+
+    /**
+     * The approval a notification's APPROVE asked us to run the card's own
+     * gate for, or null (2026-11-02).
+     *
+     * Set only by [readApprovalIntent] after [InternalLaunch.approvesApproval]
+     * has accepted the intent. Consumed once by `App()`: it opens Jarvis on the
+     * card and calls the same `approveItem` the card's own button calls, which
+     * runs `BiometricPrompt` for every non-small card - including one whose
+     * setting alone would not have asked. A notification can never approve a
+     * write, a config change, a send or a phone-app action by itself.
+     */
+    private val approveFromNotification = mutableStateOf<String?>(null)
 
     /**
      * Text handed to this app by another app's share sheet, waiting to be
@@ -710,7 +726,10 @@ class MainActivity : FragmentActivity() {
             .onFailure { startupError.value = it.stackTraceToString() }
 
         lastCrash.value = CrashLog.read(this)
-        readApprovalIntent(intent)
+        // The body tap only focuses a card and is harmless to re-read; the
+        // Approve must not run again from a rebuilt activity (see
+        // readApprovalIntent).
+        readApprovalIntent(intent, fresh = savedInstanceState == null)
         // `fresh`: a rotation rebuilds this activity from the SAME launch
         // intent - a Live start (the tile, "Resume") or a share into Live
         // must not happen again then.
@@ -857,9 +876,40 @@ class MainActivity : FragmentActivity() {
         quickNoteOpen.value = true
     }
 
-    private fun readApprovalIntent(intent: Intent?) {
-        if (intent?.action != ApprovalNotifier.ACTION_OPEN_APPROVAL) return
-        focusApproval.value = intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID) ?: ""
+    /**
+     * The two approval-notification intents, read.
+     *
+     * [ApprovalNotifier.ACTION_OPEN_APPROVAL] only focuses a card - it is the
+     * notification's body tap and its Review button, and it decides nothing,
+     * so it needs no proof. [InternalLaunch.APPROVE_ACTION] is the Approve
+     * button: it runs the card's own gate, so it is accepted only with this
+     * app's secret and only on a fresh launch (a rotation or a Recents replay
+     * must not fire it again). The decision is
+     * [InternalLaunch.approvesApproval]'s, tested without Android.
+     *
+     * @param fresh false when this activity is being rebuilt from saved state
+     *   or replayed from history.
+     */
+    private fun readApprovalIntent(intent: Intent?, fresh: Boolean = true) {
+        if (intent == null) return
+        val id = intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID).orEmpty()
+        when (intent.action) {
+            ApprovalNotifier.ACTION_OPEN_APPROVAL -> focusApproval.value = id
+            InternalLaunch.APPROVE_ACTION -> {
+                val replayed = (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+                val allowed = InternalLaunch.approvesApproval(
+                    intent.action,
+                    intent.getStringExtra(InternalLaunch.EXTRA_PROOF),
+                    InternalLaunch.token(this),
+                    fresh && !replayed,
+                )
+                if (!allowed || id.isEmpty()) return
+                // Focus first, so a refused prompt leaves the owner looking at
+                // the card rather than at whatever screen was last open.
+                focusApproval.value = id
+                approveFromNotification.value = id
+            }
+        }
     }
 
     /**
@@ -2081,6 +2131,69 @@ class MainActivity : FragmentActivity() {
             // nowhere.
             delay(FOCUS_HOLD_MS)
             if (focusApproval.value == id) focusApproval.value = null
+        }
+
+        // The notification's APPROVE, for a card that may not be approved by
+        // the tap alone (2026-11-02; Gemini's envelope, point 3).
+        //
+        // It opens Jarvis on the card and then runs the SAME
+        // [approveItem] the card's own Approve runs - including
+        // `BiometricPrompt` for every non-small card, even one the owner's
+        // setting alone would not have asked about
+        // ([ApprovalNotificationPolicy.notificationApproveNeedsCheck]).
+        // Nothing is decided before the prompt returns; a dismissal or a
+        // refusal leaves the card exactly where it was.
+        //
+        // Waits for the app lock first, like the focus effect above: a prompt
+        // must not appear over the lock screen for a card the owner cannot
+        // see. Then waits (briefly) for the live queue, because `decide`
+        // rightly refuses a stale one - a cold process has not connected yet
+        // when the notification is tapped.
+        LaunchedEffect(approveFromNotification.value, locked) {
+            val id = approveFromNotification.value ?: return@LaunchedEffect
+            if (locked) return@LaunchedEffect
+            repairing = false
+            nav.resetTo(Screen.HOME)
+            focusApproval.value = id
+            val live = withTimeoutOrNull(NOTIFICATION_APPROVE_WAIT_MS) {
+                combine(JarvisRuntime.stale, JarvisRuntime.link) { stale, link ->
+                    !stale && link == LinkState.CONNECTED
+                }.first { it }
+            } ?: false
+            var item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
+            if (item == null) {
+                JarvisRuntime.refreshPending()
+                item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
+            }
+            if (item == null) {
+                // Same split as Deny's: "still waiting, couldn't check" must
+                // never read like "handled elsewhere".
+                val message = if (!live || JarvisRuntime.stale.value ||
+                    JarvisRuntime.link.value != LinkState.CONNECTED
+                ) {
+                    "Could not reach the desktop to check - this may still be waiting. " +
+                        "Open the app once it reconnects."
+                } else {
+                    "That request is no longer waiting - it was handled elsewhere, " +
+                        "or Jarvis restarted since the notification was posted."
+                }
+                JarvisRuntime.setNotice(message)
+                ApprovalNotifier.cancelFor(this@MainActivity, id)
+                approveFromNotification.value = null
+                return@LaunchedEffect
+            }
+            decideAndReset(
+                item,
+                approve = true,
+                onReset = {},
+                scope = lifecycleScope,
+                fromNotification = true,
+            )
+            // Cleared only after the decision has been handed to the
+            // runtime's own scope. Clearing it is itself a key change, which
+            // restarts this effect - done BEFORE the wait above it would have
+            // cancelled the wait, and the approve would silently never run.
+            approveFromNotification.value = null
         }
 
         // Opens Home ready to talk. It does NOT call beginVoice(), and that is
@@ -4600,9 +4713,9 @@ class MainActivity : FragmentActivity() {
      * screen-lock settings (the owner's "no lock, no risky approval",
      * 2026-09-25; it used to let a risky approval through unchecked).
      */
-    private suspend fun confirmed(item: PendingItem): Boolean {
+    private suspend fun confirmed(item: PendingItem, force: Boolean = false): Boolean {
         val s = currentSecurity()
-        if (!SecurityRules.approvalNeedsCheck(s, item)) return true
+        if (!force && !SecurityRules.approvalNeedsCheck(s, item)) return true
         val outcome = withOwnerCheck { BiometricGate.confirm(this, item, s.method) }
         return when (val verdict = SecurityRules.afterApprovalCheck(s, outcome)) {
             SecurityRules.Verdict.Go -> true
@@ -4637,23 +4750,38 @@ class MainActivity : FragmentActivity() {
      * itself: the gates in [confirmed] and [signedApprove] come first, and a
      * decision is only ever sent after the owner's own answer.
      */
-    private suspend fun approveItem(item: PendingItem): Boolean {
+    private suspend fun approveItem(item: PendingItem, fromNotification: Boolean = false): Boolean {
         // A SMALL card in the default mode is approved by the card alone (the
         // owner's request of 2026-11-01), and a signature can only be made
         // after a fingerprint - so it goes the plain way, and the PC accepts
         // that because it reads the same rule (jarvis_owner_check.is_small).
         // Every other risky card keeps today's signed path.
         val signed = SecurityRules.approveTakesSignedPath(currentSecurity(), item)
+        // The notification's Approve is not the card's own button: it arrives
+        // from a surface where the card was not read on screen. So every card
+        // that is not small asks here even when the owner's setting would not
+        // ask on the card itself (Gemini's point 3, 2026-11-02). In-app
+        // presses are unchanged.
+        val requireCheck = fromNotification &&
+            ApprovalNotificationPolicy.notificationApproveNeedsCheck(item, currentSecurity())
         // pcOnly and needsChoice cards are refused in decide() with their own words.
         val read = if (signed && !item.pcOnly && !item.needsChoice) JarvisRuntime.signedApprovalRead() else null
         return when (val path = SignedApproval.pathFor(signed, read?.state)) {
             SignedApproval.Path.PLAIN -> {
-                if (confirmed(item)) {
+                if (confirmed(item, force = requireCheck)) {
                     // Awaited, not dispatched and answered `true`: a POST the
                     // PC did not take has to come back as "not sent" or the
                     // card keeps the `decided` flag the tap set - the same
                     // freeze the Deny path had (Android audit 2026-10-08).
-                    JarvisRuntime.decide(item, approve = true) is ApiResult.Ok
+                    val sent = JarvisRuntime.decide(item, approve = true) is ApiResult.Ok
+                    if (sent && fromNotification) {
+                        // The owner answered from the shade; take that
+                        // notification away now rather than waiting for the
+                        // queue refresh to reach the watcher. A refusal above
+                        // leaves it, exactly like a failed Deny.
+                        ApprovalNotifier.cancelFor(this, item.id)
+                    }
+                    sent
                 } else {
                     false
                 }
@@ -4781,10 +4909,11 @@ class MainActivity : FragmentActivity() {
         approve: Boolean,
         onReset: () -> Unit,
         scope: CoroutineScope,
+        fromNotification: Boolean = false,
     ) {
         JarvisRuntime.launchDetached {
             val sent = try {
-                if (approve) approveItem(item) else denyItem(item)
+                if (approve) approveItem(item, fromNotification = fromNotification) else denyItem(item)
             } catch (e: Exception) {
                 // Covers the runtime's scope being cancelled (the process
                 // itself) as well as a bug: either way, say "not sent" and let
@@ -5431,3 +5560,11 @@ private const val TOKEN_REFUSED_DETAIL = "Token refused"
  * again re-runs the scroll rather than finding the id already set.
  */
 private const val FOCUS_HOLD_MS = 8_000L
+
+/**
+ * How long the notification's Approve waits for the live queue before it gives
+ * up and says so. The same order as EventService's own wait: long enough for a
+ * cold start over Tailscale, short enough that the prompt still reads as the
+ * answer to the tap.
+ */
+private const val NOTIFICATION_APPROVE_WAIT_MS = 20_000L

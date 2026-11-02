@@ -15,10 +15,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.jarvis.client.Activity
+import com.jarvis.client.InternalLaunch
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
+import com.jarvis.client.data.SecurityRules
+import com.jarvis.client.platform.DeviceSecure
 import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
@@ -131,6 +134,26 @@ class EventService : Service() {
             // above does. Returning NOT_STICKY here would leave the link
             // unable to auto-restart after some later, unrelated kill, purely
             // because the last onStartCommand happened to be a Deny tap.
+            return START_STICKY
+        }
+        if (intent?.action == ACTION_APPROVE) {
+            // The notification's Approve for a SMALL read-only card only -
+            // ApprovalNotifier decides which Approve gets this route, and
+            // approveFromNotification re-checks the card against the live
+            // queue before sending anything. The proof is the same
+            // InternalLaunch secret MainActivity's own protected actions use;
+            // this service is not exported, so the proof is defence in depth
+            // rather than the only wall.
+            JarvisRuntime.startStream()
+            val proved = InternalLaunch.proves(
+                intent.getStringExtra(InternalLaunch.EXTRA_PROOF),
+                InternalLaunch.token(this),
+            )
+            if (!proved) {
+                Log.w(TAG, "approve action without this app's proof; ignored")
+                return START_STICKY
+            }
+            approveFromNotification(intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID))
             return START_STICKY
         }
         if (intent?.action == ACTION_CHATBOT_STOP) {
@@ -299,6 +322,85 @@ class EventService : Service() {
                 val message = "Could not send the denial: " +
                     (JarvisRuntime.notice.value ?: "the desktop did not accept it.")
                 runCatching { Toast.makeText(this@EventService, message, Toast.LENGTH_LONG).show() }
+            }
+        }
+    }
+
+    /**
+     * The Approve on a small read-only card, from the notification (owner's
+     * ask of 2026-11-02; Gemini's envelope, point 3).
+     *
+     * This path exists only because the owner asked not to give a fingerprint
+     * for a web search or a page read (`SecurityRules.isSmall`, 2026-11-01).
+     * Everything else about it is deliberately the same as Deny:
+     *
+     *  - the stream is started first and the tap waits briefly for it, so a
+     *    cold process does not decide against a queue it cannot confirm;
+     *  - the card is re-read from the live queue (with one direct
+     *    `refreshPending()` if it is missing), so the notification is never
+     *    the authority on what is waiting;
+     *  - if it is gone, say so and take the dead notification away;
+     *  - `JarvisRuntime.decide` still applies the stale rule and the expiry
+     *    check - a notification tap is not an exception to rule 4.
+     *
+     * Before sending, the card is checked AGAIN against `isSmall` and the
+     * phone's current privacy state. Both can have changed since the
+     * notification was posted (the card's risk row is re-read; App lock may
+     * have been turned on). Either makes this direct path refuse and say to
+     * open Jarvis - fail closed, never a blind approve.
+     */
+    private fun approveFromNotification(id: String?) {
+        if (id == null) return
+        scope.launch {
+            val live = awaitLive()
+            var item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
+            if (item == null) {
+                JarvisRuntime.refreshPending()
+                item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
+            }
+            if (item == null) {
+                Log.w(TAG, "approve tapped for an approval that is not pending any more")
+                val message = if (!live || JarvisRuntime.stale.value || JarvisRuntime.link.value != LinkState.CONNECTED) {
+                    "Could not reach the desktop to check - this may still be waiting. " +
+                        "Open the app once it reconnects."
+                } else {
+                    "That request is no longer waiting - it was handled elsewhere, " +
+                        "or Jarvis restarted since the notification was posted."
+                }
+                runCatching { Toast.makeText(this@EventService, message, Toast.LENGTH_LONG).show() }
+                runCatching { JarvisRuntime.setNotice(message) }
+                runCatching { ApprovalNotifier.cancelFor(this@EventService, id) }
+                return@launch
+            }
+            val security = JarvisRuntime.settings.security.value
+            val locked = SecurityRules.notificationsLocked(security, DeviceSecure.isSecure(this@EventService))
+            val stillSmall = !locked &&
+                SecurityRules.isSmall(item) &&
+                !SecurityRules.approvalNeedsCheck(security, item)
+            if (!stillSmall) {
+                // The notification's Approve was for the small-card fast path,
+                // and this card is no longer that. Never send it from here:
+                // the card's own sheet and its fingerprint are the answer.
+                val message = if (!live || JarvisRuntime.stale.value || JarvisRuntime.link.value != LinkState.CONNECTED) {
+                    "Could not reach the desktop to check - open Jarvis to approve this one."
+                } else {
+                    "That approval changed since the notification was posted - open Jarvis to approve it."
+                }
+                runCatching { Toast.makeText(this@EventService, message, Toast.LENGTH_LONG).show() }
+                runCatching { JarvisRuntime.setNotice(message) }
+                return@launch
+            }
+            val result = JarvisRuntime.decide(item, approve = true)
+            if (result is ApiResult.Failed) {
+                val message = "Could not send the approval: " +
+                    (JarvisRuntime.notice.value ?: "the desktop did not accept it.")
+                runCatching { Toast.makeText(this@EventService, message, Toast.LENGTH_LONG).show() }
+            } else {
+                // The queue refresh inside `decide` normally resyncs the
+                // drawer; this makes the card's own notification go the moment
+                // the desktop said yes, even if that refresh is slow.
+                runCatching { ApprovalNotifier.cancelFor(this@EventService, id) }
+                runCatching { Toast.makeText(this@EventService, "Approved.", Toast.LENGTH_SHORT).show() }
             }
         }
     }
@@ -484,15 +586,26 @@ class EventService : Service() {
         private const val NOTIFICATION_ID = NotificationIds.EVENT_LINK
         const val ACTION_STOP = "com.jarvis.client.STOP_LINK"
         const val ACTION_DENY = "com.jarvis.client.DENY_APPROVAL"
+
+        /**
+         * The notification's Approve for a SMALL read-only card (2026-11-02).
+         *
+         * Deliberately a separate action from [ACTION_DENY] and from the
+         * MainActivity approval action: this one is the only path on which a
+         * tap may send a decision without opening the app, so it is also the
+         * only one that needs re-checking against the live card and the
+         * phone's privacy state before it sends anything.
+         */
+        const val ACTION_APPROVE = "com.jarvis.client.APPROVE_FROM_NOTIFICATION"
         const val ACTION_SNOOZE = "com.jarvis.client.SNOOZE_JOB"
         const val ACTION_STOP_RINGING = "com.jarvis.client.STOP_RINGING"
         const val ACTION_CHATBOT_STOP = "com.jarvis.client.STOP_CHATBOT"
 
         /**
-         * How long a Deny from outside the app waits for the link to come up
-         * before answering "could not reach the desktop". Long enough for a
-         * cold start over Tailscale; short enough that the toast still reads
-         * as the answer to the tap.
+         * How long a Deny or a small-card Approve from outside the app waits
+         * for the link to come up before answering "could not reach the
+         * desktop". Long enough for a cold start over Tailscale; short enough
+         * that the toast still reads as the answer to the tap.
          */
         private const val LIVE_WAIT_MS = 20_000L
 
