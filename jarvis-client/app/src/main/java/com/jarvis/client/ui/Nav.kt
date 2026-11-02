@@ -134,6 +134,20 @@ enum class Screen {
      * be inserted in the middle.
      */
     CALENDAR,
+
+    /**
+     * "Edit HUD" (ui/screens/EditHudScreen.kt): the phone's own editor for the
+     * Home screen's arrangement - which cards are on Home, which section each
+     * one is in, and in what order (the Android `A3`/`A4` slice of the
+     * editable-HUD design, 2026-11-02). Opened from Settings' "Home screen" row.
+     * Last, for the same reason as every entry above it: the back stack is saved
+     * as names, so a new screen must never be inserted in the middle.
+     *
+     * It is a display preference, the same class as the theme: no route, no
+     * approval card, nothing sent to the PC and nothing stored outside this
+     * phone.
+     */
+    EDIT_HUD,
 }
 
 /**

@@ -238,6 +238,10 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // desktop can never disagree about whether it is on. A row added at the end
     // moves no other number.
     "calendar" to 37,
+    // "Home screen" (2026-11-02): the phone's own Edit HUD. A row added at the
+    // end of the screen moves no other number - the same reason the two above
+    // it were added there.
+    "edit-hud" to 38,
 )
 
 /**
@@ -301,6 +305,18 @@ fun SettingsScreen(
      * as a destination before there is a desktop to push to.
      */
     onOpenAppearance: (() -> Unit)? = null,
+    /**
+     * "Home screen" (2026-11-02): the phone's own Edit HUD - the four sections,
+     * the five read-only presets, the owner's own copies and the JSON
+     * (ui/screens/EditHudScreen.kt).
+     *
+     * Saved on this phone only, so - like Floating Jarvis and unlike Appearance
+     * - it needs no `canAct` gate and nothing is sent to the PC: it is a display
+     * preference, the same class as the theme, so it raises no approval card and
+     * no pairing token is involved. Null only for previews and tests, where the
+     * row is drawn without its button rather than with one that does nothing.
+     */
+    onOpenEditHud: (() -> Unit)? = null,
     /**
      * "Pair with your PC", inside the Devices card - the way back into the
      * pairing screen from Settings (2026-10-28).
@@ -1012,6 +1028,45 @@ fun SettingsScreen(
             // row is always drawn. A row added at the end moves no other row's
             // position (see SETTINGS_ITEM_INDEX).
             if (drawn("calendar")) item(key = "calendar") { CalendarSettingsSection(canAct = canAct) }
+
+            // "Home screen" (2026-11-02; the owner's own words: "add building
+            // the real editor to the queue"): the phone's own Edit HUD - the
+            // four sections, the five read-only built-in arrangements, the
+            // owner's own copies and the layout's JSON
+            // (ui/screens/EditHudScreen.kt).
+            //
+            // A DISPLAY PREFERENCE, the same class as the theme: saved on this
+            // phone only, no route, no approval card, nothing sent to the PC -
+            // which is why this row has no `canAct` gate and is not `stale`-held
+            // like a write. It is NOT a hideable menu either: no catalogue id
+            // exists for it and none is invented here, so, like "What asks
+            // first" and "Calendar", the row is always drawn.
+            //
+            // It sits last, beside the other "how the phone itself looks" rows
+            // rather than among the PC's settings: a row added at the end moves
+            // no other row's position (see SETTINGS_ITEM_INDEX).
+            if (drawn("edit-hud")) item(key = "edit-hud") {
+                Section("Home screen") {
+                    Plate {
+                        Text(
+                            "Choose which of Jarvis's cards sit on your Home screen, which " +
+                                "of the four sections each one is in, and in what order.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid,
+                        )
+                        Gap(4)
+                        Text(
+                            "The five built-in arrangements are read-only. Duplicate one to make it yours.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                        Gap(8)
+                        onOpenEditHud?.let {
+                            Secondary("Edit Home screen", modifier = Modifier.fillMaxWidth(), onClick = it)
+                        }
+                    }
+                }
+            }
             item(key = "tail") { Gap(24) }
         }
     }

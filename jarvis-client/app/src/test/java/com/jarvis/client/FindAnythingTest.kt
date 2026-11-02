@@ -354,6 +354,13 @@ class FindAnythingTest {
                 // moved out of Home; it has no catalogue menu id (it is not a
                 // feature switch), so it is always drawn like the two above.
                 "settings-row.model-lane",
+                // "Home screen" (2026-11-02): the phone's own Edit HUD. A
+                // display preference, not a feature switch, so there is no
+                // catalogue menu id for it and the row is always drawn - the
+                // same shape as the three above. The HUD's own CARDS are menus
+                // and find their places the normal way; it is the EDITOR row
+                // that has none.
+                "settings-row.edit-hud",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )

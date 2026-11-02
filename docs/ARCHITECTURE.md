@@ -3050,13 +3050,24 @@ exist only there. The seven built-in layouts - **Cockpit** (the default),
 **Studio**, **Ambient**, **Quiet**, **Telemetry & Ops**, **Second Brain &
 Planner** and **Minimal** - are therefore desktop-only data, mirrored in
 `contract/hud-presets.json` for the desktop's own Rust and tests. **The phone
-does not read this file and has no editable-HUD layouts: the Android home-HUD
-presets (`A1`-`A4`) are planned and not yet built** (the plan lives in the
-editable-HUD design, not in shipped code, and no phone source names this file
-or the layout document). `tools/check_parity.py` has nothing to classify: no
-backend route and no phone source names it. The choice is saved in the
-desktop's appearance-class settings store (the same class as `theme`, no
-approval card, no pairing token).
+has an editable HUD of its own now, and it still does not read this file**
+(built 2026-11-02; the Android `A1`-`A4` slice: `net/HudLayout.kt`,
+`data/MenuPrefs.kt`, `ui/screens/EditHudScreen.kt`, `HomeScreen.kt`). The
+phone's layout is its OWN document: four ordered sections (`top_strip`, `hero`,
+`body`, `composer`), its own `MenuCatalog` card ids, five read-only built-in
+arrangements (**Default**, **Live & Voice**, **Brain & Learning**, **Everyday
+Ops**, **Calm**), one versioned JSON document in the phone's own
+`SharedPreferences`, and one `HudLayout.apply` reducer every input calls. It
+cannot read `contract/hud-presets.json`, because the desktop's five regions and
+its card ids do not exist on a phone column - the two are different questions,
+not two halves of one choice. `tools/check_parity.py` has nothing to classify:
+no backend route and no phone source names that file. `docs/HUD-MAIN-SCREEN-CARDS-2026-10-29.md`
+section 7 is the unbuilt design for ONE shared choice over one route; this is
+the per-phone document the phone already had, finally drawn and editable. The
+desktop's choice is still saved in the desktop's appearance-class settings
+store (the same class as `theme`, no approval card, no pairing token), and the
+phone's is saved on the phone by the same class of preference - no route, no
+card, nothing sent to the PC.
 
 **H2 draws the editor: one reducer, every input (2026-10-22; H2 of the
 editable-HUD design, rulings 23-27; `jarvis-desktop/src/hud-edit.js`, the HUD
@@ -3219,13 +3230,17 @@ per-computer (export/import is the manual move path; no sync), touch/pen and the
 real monitor look are NOT-TESTABLE in CI, and H4's non-hideable safety rail
 (outside-text/rush-latch, stale-link/catching-up with Deny kept live, App lock)
 is still H4 - H3 does not draw it and makes no new guarantee about it.
-Desktop-only, like H1/H2: the phone has its own home screen and no editable-HUD
-layouts (A1-A4 planned, not built), and it has no personality picker at all -
-`jarvis-client` has no personality code (only its own focus presets,
-`FocusPresets.kt`), so that half is one-sided on purpose rather than a parity
-gap; the five model presets the menu adds are PC settings, and the phone
+Desktop-only, like H1/H2: this library is the desktop HUD's own arrangements, and
+the phone reaches its own editable HUD in its own way - since 2026-11-02 the
+phone HAS one (`net/HudLayout.kt`, `ui/screens/EditHudScreen.kt`, reached from
+Settings' "Home screen" row), but it is the phone's four sections and card ids,
+not this seven-preset widescreen library, and the two documents never meet
+(the paragraph above H2 says why). What the phone still has no half of is the
+personality picker: `jarvis-client` has no personality code (only its own focus
+presets, `FocusPresets.kt`), so that half is one-sided on purpose rather than a
+parity gap; the five model presets the menu adds are PC settings, and the phone
 reaches its own focus presets through the Brain screen's own row. No phone half
-was added for the menu.
+of the personality picker was added for the menu.
 
 **The Studio dock's lane dropdown is the read-only "Current Models" panel now
 (2026-10-26).** The owner's words: *"under the button on the jarvis hud that says
