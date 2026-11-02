@@ -353,6 +353,37 @@ instruction tries to wear a person into pressing Approve without reading.
 The limit is a refusal, never a grant. `backend/README.md`, "The approval
 gate, tightened".
 
+**A standing permission is allowed for exactly ONE action, and it is never a
+setting** (the owner's ask, 2026-11-01: *"you have full approval to search the
+web for anything during this conversation ... make sure a card comes up that I
+have to approve before this happens"*, and *"if I ask anything further like book
+a flight for me online then it will have to have another card"*; `docs/JARVIS-API.md`
+section 175). ONE card, once, stands in for the `search_the_web` card for the rest
+of ONE conversation - and for nothing else. The four rules that make it a
+permission model rather than a hole in it:
+
+- **One action.** The only code that reads a grant is `_web_search_call`, the one
+  place whose gate action is `search_the_web`; the only code that writes or
+  clears one is the pair of tools that ask for it and stop it. Every other
+  action keeps its own tier, its own card and its own yes - "book a flight" is
+  `browser_control` and still asks, with a grant live.
+- **A card first, always.** The model may ask for the grant; it may never decide
+  it. The store is written only down the ordinary prepare()/gate/execute() path
+  after a verdict from a card, a denial or an unanswered card writes nothing, and
+  the tool is in `NEEDS_A_PERSON`, so a settings file that loosened its tier
+  still cannot make it self-approve.
+- **It dies by itself.** Keyed on the request's own `conversation_id` (so one
+  chat's grant cannot reach another, and a request with no id can neither give
+  nor use one), capped at 8 hours, in memory only - no file, no setting, nothing
+  that survives a restart - and ended instantly by the stop tool, which is tier
+  `auto` because revoking only ever takes permission away. Lockdown outranks it.
+- **Always logged.** `gate.grant_made`, one `gate.granted` per search it covered
+  (with the grant's id) and `gate.grant_ended` go in the gate's own audit log,
+  written through `jarvis_gate`'s own functions. The conversation id is never
+  written down, so the log says a search ran unasked without becoming a way to
+  link chats together. A backend whose gate is too old to write those lines
+  refuses to create a grant at all.
+
 **What changed on 2026-09-26** (the approvals audit,
 `docs/APPROVALS-AUDIT-2026-09-26.md`; the owner's four decisions): a plain
 repeating alarm, reminder or standby schedule has no card (the briefing and
