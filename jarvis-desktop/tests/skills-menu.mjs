@@ -165,6 +165,15 @@ await check("the three doors that raise a card are the ones held on a stale link
   assert.ok(RUST.includes('matches!(action, "install" | "enable" | "edit")'));
 });
 
+await check("every action the page uses is in the one list", () => {
+  const used = [...PAGE.matchAll(/ask\("([a-z_]+)"/g)].map((m) => m[1]);
+  const pick = [...PAGE.matchAll(/pickAndScan\("([a-z_]+)"\)/g)].map((m) => m[1]);
+  assert.ok(used.length >= 5, `the page asks ${used.length} action(s)`);
+  for (const action of [...used, ...pick]) {
+    assert.ok(R.ACTIONS.includes(action), `${action} is a real action`);
+  }
+});
+
 await check("the page asks its one command, and removes through the PC's existing one", () => {
   assert.ok(PAGE.includes('invoke("skills_menu"'));
   assert.ok(PAGE.includes('invoke("brain_remove_skill"'));

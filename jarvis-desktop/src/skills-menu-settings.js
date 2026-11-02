@@ -33,10 +33,8 @@
 
 import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
 import {
-  ACTIONS,
   answerWords,
   CHOOSING,
-  CARD_ACTIONS,
   importView,
   menuView,
   MISSING,
@@ -215,10 +213,9 @@ function paint() {
   el.hermesRoot.hidden = !el.hermesRoot.textContent;
   el.installFolder.disabled = busy;
   el.installZip.disabled = busy;
-  if (!live()) {
-    const held = CARD_ACTIONS.length ? WAITING_LINK : "";
-    if (held && !el.status.textContent) say(held);
-  }
+  // The three doors that raise a card need a live event stream (rule 4); say
+  // so before a press rather than after one fails.
+  if (!live() && !el.status.textContent) say(WAITING_LINK);
 }
 
 function clearPick() {
@@ -494,7 +491,3 @@ onQueue(() => load());
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) load();
 });
-
-// For tests/skills-menu.mjs: the actions this page may ask for, so a typo in
-// one of them fails there rather than on the owner's PC.
-export const USED_ACTIONS = ACTIONS;
