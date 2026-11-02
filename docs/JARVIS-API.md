@@ -3817,12 +3817,15 @@ for a question that came by VOICE and reply `private_aloud: false`:
    **Which tools are private** (the owner's decision of 2026-09-27: "Read
    aloud answers from web search, weather and home status. Email,
    calendar, notes, memory and any unknown tool still stay on screen"):
-   every tool EXCEPT the ones on the read-aloud list, `web_search` and
-   `home_read` - and, since the owner's answer of 2026-09-28 (§62),
-   `read_screen`, an answer about the screen: a read the PC records, not a
-   model tool (`jarvis_agent.STEP_READS` lets the `step` event carry its
-   name; nothing sends it yet) - matched exactly against the `step`
-   event's `tool`. Weather
+   every tool EXCEPT the ones on the read-aloud list - `web_search` and
+   `home_read` (that decision), `read_screen`, an answer about the screen
+   (the owner's answer of 2026-09-28, §62: a read the PC records, not a
+   model tool; `jarvis_agent.STEP_READS` lets the `step` event carry its
+   name), `read_camera`, the same read for what the camera sees in Jarvis
+   Live (2026-09-28), `read_web_page`, one page the owner handed over
+   (2026-10-05), and `feature_guide`, Jarvis's own shipped feature list
+   (2026-11-01: Live speaks an answer it can say, rather than "It's on your
+   screen.") - matched exactly against the `step` event's `tool`. Weather
    has no tool of its own - "what's the weather?" is answered by the quick
    path with no tool, and the model reads the weather device with
    `home_read`. So email, calendar, notes and the note writers, documents

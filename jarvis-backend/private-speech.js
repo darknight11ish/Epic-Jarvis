@@ -125,7 +125,10 @@ export function isToolRun(data) {
  * shown on a card before anything is fetched. Every earlier rule still comes
  * first - a sensitive saved fact, a private question, the router's private
  * gate, a forgotten event stream - and a stale or dropped stream keeps the
- * answer on screen too. It is one name here, and
+ * answer on screen too. `feature_guide` is the PC's own shipped feature list
+ * (2026-11-01): its answer is Jarvis's own words and its own switch states,
+ * never the owner's data, so Live speaks it rather than saying "It's on your
+ * screen." It is one name here, and
  * tools/gen_private_aloud_cases.py generates the table both apps are held to.
  * Exact names, as the `step` event carries them. The phone's
  * `PrivateAloud.READ_ALOUD_TOOLS` and the shared table
@@ -133,7 +136,7 @@ export function isToolRun(data) {
  * a name added to one of the three alone fails a test.
  */
 export const READ_ALOUD_TOOLS = Object.freeze(["home_read", "read_camera", "read_screen", "web_search",
-  "read_web_page"]);
+  "read_web_page", "feature_guide"]);
 
 /** A tool ran, and its answer stays on screen: its name is not on
  *  `READ_ALOUD_TOOLS`, or it has none. The phone's `isPrivateToolRun`. */
