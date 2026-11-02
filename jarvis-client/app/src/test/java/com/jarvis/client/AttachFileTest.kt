@@ -454,7 +454,8 @@ class AttachFileTest {
         // ONE row, one picker: documents, and images only while Pictures works.
         assertTrue(src.contains("AttachFile.mimeTypes("))
         // A photo is routed BEFORE a byte is read, and to the picture path.
-        assertTrue(src.contains("AttachFile.goesToPicture(name, mime)"))
+        // The name and type come from ONE read of the provider (2026-11-02).
+        assertTrue(src.contains("AttachFile.goesToPicture(info.name, info.mime)"))
         assertTrue(src.contains("attachPickedPicture(uri)"))
         // The old separate photo picker is gone with the Photo row.
         assertFalse("the photo picker is back beside the one Attach row", src.contains("PickVisualMedia"))

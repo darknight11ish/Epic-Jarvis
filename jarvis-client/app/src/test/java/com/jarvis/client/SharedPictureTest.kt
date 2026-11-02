@@ -16,8 +16,8 @@ import org.junit.Test
 
 /**
  * A photo shared INTO Jarvis from another app's Share sheet is attached under
- * exactly the Photo button's rule: only while the PC says Pictures on the
- * second graphics card works - and never dropped without a word.
+ * exactly the rule the Photo button had and the Attach row's photo pick has:
+ * only while the PC says Pictures on the second graphics card works - and\n * never dropped without a word.
  *
  * The PC's answers are the second-card fixture (`contract/second-card-cases.json`,
  * written from the backend's own functions); the "working" answer is that
@@ -63,7 +63,7 @@ class SharedPictureTest {
     @Test
     fun whenPicturesWorksTheShareIsAttached() {
         val read = loaded("capable_off", visionOn = true)
-        assertTrue("the Photo button would be offered", SecondCard.visionAvailable(read))
+        assertTrue("a photo would be offered in the Attach row", SecondCard.visionAvailable(read))
         assertNull(ChatPicture.sharedRefusal(read))
     }
 
@@ -103,7 +103,7 @@ class SharedPictureTest {
         val read = loaded("one_card_reads_words")
         assertFalse(SecondCard.visionAvailable(read))
         assertTrue(SecondCard.pictureTextAvailable(read))
-        assertTrue("the Photo button would be offered", SecondCard.picturesTaken(read))
+        assertTrue("a photo would be offered in the Attach row", SecondCard.picturesTaken(read))
         assertNull(ChatPicture.sharedRefusal(read))
         val p = ChatPicture.Ready("data:image/jpeg;base64,AA", 10, 20, 2048)
         assertEquals(

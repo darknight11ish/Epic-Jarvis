@@ -312,12 +312,28 @@ class AuditPlumbingTest {
             "MoreMenuWords.PRESETS",
             "ChatHistory.EARLIER_CHATS",
             "ChatPins.TITLE",
-            // The owner's ask of 2026-11-01: "remove the photo option".
-            "MoreMenuWords.PHOTO",
-            "actions.onAttachPicture()",
         )) {
             assertFalse("the short More menu still draws $gone", menu.contains(gone))
         }
+        // The owner's ask of 2026-11-01 - "remove the photo option" - is NOT
+        // pinned as `menu.contains("MoreMenuWords.PHOTO")` or
+        // `menu.contains("actions.onAttachPicture()")` any more: both names
+        // were deleted with the row (2026-11-02 review, finding (g)), so a
+        // search for either in the menu could never match and the assertion
+        // could never fail - it held nothing. What the row left behind is
+        // pinned instead: ONE Attach row, opening the picker with the Pictures
+        // gate, which is the only door a second photo path could reappear
+        // through.
+        assertEquals(
+            "the short More menu no longer has exactly one Attach row",
+            1,
+            // \b so FILE_DETAIL (the row's own detail line) is not counted.
+            Regex("MoreMenuWords\\.FILE\\b").findAll(menu).count(),
+        )
+        assertTrue(
+            "the Attach row does not carry the Pictures gate into its picker",
+            menu.contains("actions.onAttachFile(state.pictureOffered)"),
+        )
         // The coach button left PromptCoachBar for the menu: the bar must be
         // able to hide its own button and to be asked to coach from outside.
         val coachBar = source("ui/screens/PromptCoachBar.kt")

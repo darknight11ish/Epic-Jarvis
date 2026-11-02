@@ -12503,7 +12503,8 @@ tokens) are sent; the model is told how much was left out.
 recognition for your display language. If it is missing, the first picture's
 answer says the words could not be read, and from then until Jarvis
 restarts the apps treat pictures as before (the "can't see pictures"
-notice on the PC, no Photo button on the phone). To fix it, add your language
+notice on the PC, no images offered in the phone's one Attach a file picker
+since 2026-11-01 - it was a Photo button of its own before). To fix it, add your language
 again with its optional features in Settings -> Time & language -> Language
 & region (the words of Windows' screens, not checked on your PC), then
 restart Jarvis. No download by Jarvis, no Python package, nothing to switch

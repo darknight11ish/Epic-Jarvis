@@ -27812,6 +27812,17 @@ the model - the picture path's rule of 2026-09-29.
 | the converter is not installed | `That file was not read: the part of Jarvis that reads PDF, Word, Excel and PowerPoint files (MarkItDown) is not installed on this PC.` |
 | no words in it | `That file was not read: it has no words in it to read.` |
 
+**The picture row is the PC's own sentence, quoted and not corrected here**
+(checked 2026-11-02). `jarvis_attached_file.WHY_PICTURE` still says "attach it
+with the picture button", because the phone's one **Attach a file** row
+(2026-11-01) is newer than that text. This page quotes the PC's wording rather
+than pretending it moved: the phone routes an image it can recognise down the
+picture path before a byte is read (`AttachFile.goesToPicture`), so this
+sentence is normally the desktop's, and the phone reads it only for a file the
+PC's own bytes check finds is a picture. Changing it means editing
+`backend/jarvis_attached_file.py` and its `jarvis-backend/` twin (and the test
+that quotes it) - a known follow-up, not a phone-UI change.
+
 ### 163.5 What it deliberately does not do, and exactly what is stored
 
 No upload route, no upload folder, no temporary file, no chunking, no resume, no
@@ -27850,9 +27861,14 @@ your PC", the refusal sentences, and the attachment on the newest message of the
 `send()` body. **No Rust**, no new command, no new window.
 
 **Phone** (`jarvis-client`, a separate agent's slice): an `OpenDocument` picker
-with the same narrow MIME list, the same chip and the same refusal sentences,
-the cap enforced by reading one byte over the limit, and no storage permission.
-`tools/check_parity.py` sees no new route on either side.
+with the same document list, plus an image wildcard only while the PC's
+Pictures feature works (or it reads the words in pictures - section 36), so it
+is not the document list alone any more (2026-11-01). Same chip and the same
+refusal sentences, the cap enforced by reading one byte over the limit, and no
+storage permission. A picked image is routed BEFORE a byte is read
+(`AttachFile.goesToPicture`), down the picture path (`ChatPicture`), and is
+never read as a document. `tools/check_parity.py` sees no new route on either
+side.
 
 ### 163.7 Tests
 

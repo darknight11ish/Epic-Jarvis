@@ -222,7 +222,15 @@ class MainActivity : FragmentActivity() {
     /** "Solve it here" - the "a website needs you" alert was tapped. */
     private val openHandoffRequested = mutableStateOf(false)
 
-    /** The quick-note field on Home is open - see [readQuickNoteIntent]. */
+    /**
+     * The quick-note field on Home is open - see [readQuickNoteIntent].
+     *
+     * Its open/closed flag is ALSO written into the saved instance state
+     * ([onSaveInstanceState]), so a rotation does not close the sheet and drop
+     * a typed note (2026-11-02). The note's own words are saved by the sheet's
+     * `rememberSaveable`; this flag is the only thing that would have told the
+     * sheet to go away.
+     */
     private val quickNoteOpen = mutableStateOf(false)
 
     /** The briefing notification was tapped - see [readBriefingIntent]. Consumed once. */
@@ -588,14 +596,21 @@ class MainActivity : FragmentActivity() {
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@registerForActivityResult
-        val (name, mime) = pickNameAndType(uri)
-        if (AttachFile.goesToPicture(name, mime)) {
-            attachPickedPicture(uri)
-            return@registerForActivityResult
-        }
-        attachBusy.value = true
+        // The provider is asked about this pick OFF the main thread (2026-11-02):
+        // a cloud or slow provider runs its query in the picker's callback, and
+        // that callback is on the UI thread. lifecycleScope cancels this if the
+        // activity is gone, so nothing posts back into a dead screen.
         lifecycleScope.launch {
-            when (val out = withContext(Dispatchers.IO) { readAttachFile(uri) }) {
+            // ONE read of the provider's own name, stated size and type, used
+            // for both the routing decision and the document read - the name
+            // used to be queried twice (once here, once in readAttachFile).
+            val info = withContext(Dispatchers.IO) { readPickInfo(uri) }
+            if (AttachFile.goesToPicture(info.name, info.mime)) {
+                attachPickedPicture(uri)
+                return@launch
+            }
+            attachBusy.value = true
+            when (val out = withContext(Dispatchers.IO) { readAttachFile(uri, info) }) {
                 is AttachFile.Picked.Ok -> attachedFile.value = out.file
                 is AttachFile.Picked.Refused -> JarvisRuntime.setNotice(out.why)
             }
@@ -604,25 +619,43 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * The provider's own name and type for one pick, read WITHOUT opening the
-     * file. This is all the routing decision needs
-     * ([AttachFile.goesToPicture]), and the size is asked for later, inside
-     * [readAttachFile], where a document is actually read.
+     * What the provider says about one pick, before a byte is read: its own
+     * name for the file, the size it states (or -1 when it states none), and
+     * its MIME type. One query, one `getType`, off the main thread.
      */
-    private fun pickNameAndType(uri: Uri): Pair<String?, String?> {
+    private class PickInfo(val name: String?, val stated: Long, val mime: String?)
+
+    /**
+     * The provider's own name, stated size and type for one pick, read WITHOUT
+     * opening the file. This is all the routing decision needs
+     * ([AttachFile.goesToPicture]) and all the document read's refusals need
+     * before the bytes are touched, so the provider is asked exactly once.
+     *
+     * A provider is not obliged to answer: a failed query leaves the name and
+     * size unknown, and the pick is still decided by its bytes and its
+     * extension - a query that cannot answer is not a refusal by itself.
+     */
+    private fun readPickInfo(uri: Uri): PickInfo {
         var name: String? = null
+        var stated = -1L
         runCatching {
             contentResolver.query(
                 uri,
-                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME, android.provider.OpenableColumns.SIZE),
                 null, null, null,
             )?.use { c ->
+                // By NAME, not by position: a provider is not obliged to hand
+                // the columns back in the order they were asked for.
                 val nameAt = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameAt >= 0 && c.moveToFirst() && !c.isNull(nameAt)) name = c.getString(nameAt)
+                val sizeAt = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (c.moveToFirst()) {
+                    name = if (nameAt >= 0 && !c.isNull(nameAt)) c.getString(nameAt) else null
+                    stated = if (sizeAt >= 0 && !c.isNull(sizeAt)) c.getLong(sizeAt) else -1L
+                }
             }
         }
         val mime = runCatching { contentResolver.getType(uri) }.getOrNull()
-        return name to mime
+        return PickInfo(name, stated, mime)
     }
 
     /**
@@ -635,13 +668,20 @@ class MainActivity : FragmentActivity() {
      * instead of before it: a PC whose Pictures feature is off is refused in
      * plain words ([AttachFile.photoNeedsPictures]) rather than having its
      * photo's bytes read as a file.
+     *
+     * The switch is ASKED AGAIN before it is trusted (2026-11-02): the cached
+     * flow is whatever the last read said, and the owner may just have turned
+     * Pictures on (or off) in Brain. A read that fails is not "on": the
+     * refusal then carries the PC's own reason, the same shape the shared
+     * picture uses ([ChatPicture.sharedRefusal]). The send checks again too
+     * ([JarvisRuntime.pictureBlocker]), so this is the early, plain-words half.
      */
-    private fun attachPickedPicture(uri: Uri) {
-        if (!SecondCard.picturesTaken(JarvisRuntime.secondCard.value)) {
+    private suspend fun attachPickedPicture(uri: Uri) {
+        JarvisRuntime.refreshSecondCard()
+        val read = JarvisRuntime.secondCard.value
+        if (!SecondCard.picturesTaken(read)) {
             JarvisRuntime.setNotice(
-                AttachFile.photoNeedsPictures(
-                    ChatPicture.notWorkingWhy(JarvisRuntime.secondCard.value),
-                ),
+                AttachFile.photoNeedsPictures(ChatPicture.notWorkingWhy(read)),
             )
             return
         }
@@ -649,41 +689,22 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * One document, read once, into memory: the name from
-     * `OpenableColumns.DISPLAY_NAME` (the provider's own name for it), the
-     * kind checked BEFORE the file is opened, then at most one byte over
+     * One document, read once, into memory: the name and kind already read for
+     * the routing decision ([PickInfo]), then at most one byte over
      * [AttachFile.MAX_BYTES] - the same "one byte over" the WAV picker uses,
      * so a 40 MB file is refused with its real size in the sentence instead of
      * being read in full. Nothing is copied anywhere: the bytes live in the
      * returned [AttachFile.Ready] and nowhere else.
      */
-    private fun readAttachFile(uri: Uri): AttachFile.Picked {
-        val columns = arrayOf(
-            android.provider.OpenableColumns.DISPLAY_NAME,
-            android.provider.OpenableColumns.SIZE,
-        )
-        var name: String? = null
-        var stated = -1L
-        runCatching {
-            contentResolver.query(uri, columns, null, null, null)?.use { c ->
-                // By NAME, not by position: a provider is not obliged to hand
-                // the columns back in the order they were asked for.
-                val nameAt = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                val sizeAt = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                if (c.moveToFirst()) {
-                    name = if (nameAt >= 0 && !c.isNull(nameAt)) c.getString(nameAt) else null
-                    stated = if (sizeAt >= 0 && !c.isNull(sizeAt)) c.getLong(sizeAt) else -1L
-                }
-            }
-        }
-        val mime = runCatching { contentResolver.getType(uri) }.getOrNull()
+    private fun readAttachFile(uri: Uri, info: PickInfo): AttachFile.Picked {
+        val name = info.name
         // A kind this app does not read is refused before a byte is read.
-        if (AttachFile.kindFor(name, mime) == null) {
+        if (AttachFile.kindFor(name, info.mime) == null) {
             return AttachFile.Picked.Refused(AttachFile.wrongKind(AttachFile.shownName(name)))
         }
         // The provider's own size, when it states one: a 40 MB file is refused
-        // with its real size in the sentence and nothing is read.
-        if (stated > AttachFile.MAX_BYTES) return AttachFile.Picked.Refused(AttachFile.tooBig(stated))
+        // with the real number in the sentence and nothing is read.
+        if (info.stated > AttachFile.MAX_BYTES) return AttachFile.Picked.Refused(AttachFile.tooBig(info.stated))
         val limit = AttachFile.MAX_BYTES
         val bytes = runCatching {
             contentResolver.openInputStream(uri)?.use { input ->
@@ -697,7 +718,7 @@ class MainActivity : FragmentActivity() {
                 out.toByteArray()
             }
         }.getOrNull() ?: return AttachFile.Picked.Refused(AttachFile.UNREADABLE)
-        return AttachFile.picked(bytes, name, mime)
+        return AttachFile.picked(bytes, name, info.mime)
     }
 
     /**
@@ -716,9 +737,24 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * One Boolean, and nothing the owner typed: whether the Quick note sheet
+     * was open. The note's words are `rememberSaveable` inside the sheet (Compose
+     * saves those into this same Bundle), so writing this flag is what lets the
+     * restored sheet come back with them (2026-11-02). Without it a rotation
+     * closed the sheet and the note went with it.
+     */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_QUICK_NOTE_OPEN, quickNoteOpen.value)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Restored BEFORE the first composition, so the sheet is composed on
+        // the first frame and its `rememberSaveable` note text is found again.
+        quickNoteOpen.value = savedInstanceState?.getBoolean(STATE_QUICK_NOTE_OPEN) == true
 
         // Caught rather than allowed to kill the activity. Everything the
         // runtime builds — the Keystore, the preferences, the HTTP client —
@@ -5166,6 +5202,13 @@ class MainActivity : FragmentActivity() {
     }
 
     companion object {
+        /**
+         * Saved-instance-state key for the Quick note sheet's open flag - see
+         * [onSaveInstanceState]. Namespaced like the actions below, and it
+         * carries no note text: only whether the sheet is open.
+         */
+        private const val STATE_QUICK_NOTE_OPEN = "com.jarvis.client.state.QUICK_NOTE_OPEN"
+
         /** Fired by [com.jarvis.client.widget.QuickLinkWidget]'s Mic action. */
         const val ACTION_START_VOICE = "com.jarvis.client.action.START_VOICE"
 

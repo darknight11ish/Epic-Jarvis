@@ -1,5 +1,6 @@
 package com.jarvis.client
 
+import com.jarvis.client.ui.screens.FaceBarPlan
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,13 +12,16 @@ import org.junit.Test
  *
  * SOURCE PINS, the same shape as [AuditPlumbingTest] and [ChatMenuTest]: a
  * Compose screen cannot be driven from a JVM unit test in this project, so
- * what is pinned here is the arrangement, the guards and the words. What these
- * cannot prove is said in the PR: that the box types, that the keyboard's Send
- * key answers, that the sheet is reachable from the face layout on a real
- * screen, and that nothing overlaps at 360dp - this lane has no device.
+ * what is pinned here is the arrangement, the guards and the words - plus
+ * [FaceBarPlan]'s arithmetic, which is plain numbers and can be held exactly.
+ * What these cannot prove is said in the PR: that the box types, that the
+ * keyboard's Send key answers, that the sheet is reachable from the face
+ * layout on a real screen, and that nothing overlaps at 360dp - this lane has
+ * no device.
  *
  * The rules behind them are proved elsewhere: the photo routing by
- * [AttachFileTest], the note route by [NoteCaptureTest].
+ * [AttachFileTest], the note route by [NoteCaptureTest], and the send decision
+ * itself by [AnswerMenuAskTest].
  */
 class PhoneFaceBarTest {
 
@@ -74,7 +78,17 @@ class PhoneFaceBarTest {
     }
 
     @Test
-    fun `a typed send uses the composer's guard and then opens the chat`() {
+    fun `both typing boxes make the same send decision, and only a real send opens the chat`() {
+        // (a) of the 2026-11-02 review: the face box used to send "was this
+        // answer right?" to the PC as a question. It must call the SAME one
+        // decision function the chat box does - not a second copy of the
+        // sentence list and not a second copy of the conditions.
+        assertTrue("the face bar does not use the shared decision", voiceBar.contains("AnswerMenuAsk.decide("))
+        assertTrue("the chat box does not use the shared decision", composer.contains("AnswerMenuAsk.decide("))
+        // ...and that function, not a duplicated condition, is the only place
+        // the sentence list is consulted.
+        assertEquals(0, Regex("AnswerMenuAsk\\.matches\\(").findAll(voiceBar).count())
+        assertEquals(0, Regex("AnswerMenuAsk\\.matches\\(").findAll(composer).count())
         // The same rule as the composer's canSend, plus "nothing while
         // streaming": full screen's Stop is its own control, not this button.
         for (pin in listOf(
@@ -96,29 +110,105 @@ class PhoneFaceBarTest {
         )) {
             assertTrue("the composer lost: $pin", composer.contains(pin))
         }
-        // ONE send path: the guard first, then the one send action. Nothing is
-        // cleared here on purpose - onSend reads the words and empties the box
-        // exactly as it does for the composer's Send, and a note the PC refused
-        // has to stay in it.
         val sendFn = voiceBar.substringAfter("fun sendTyped()").substringBefore("\n    Column(")
-        assertTrue(sendFn.contains("if (!canSend) return"))
+        // The four outcomes, each handled: nothing is sent on HELD; the menu
+        // request is used up and opens the menu; no finished answer is said in
+        // words; an ordinary send sends.
+        assertTrue(sendFn.contains("Decision.HELD -> Unit"))
+        assertTrue(sendFn.contains("Decision.OPEN_MENU"))
+        assertTrue(sendFn.contains("Decision.NEEDS_ANSWER"))
+        assertTrue(sendFn.contains("Decision.SEND"))
+        assertTrue(sendFn.contains("actions.onDraftChange(\"\")"))
+        assertTrue(sendFn.contains("onOpenAnswerMenu()"))
+        assertTrue(sendFn.contains("AnswerMenuAsk.NO_ANSWER"))
         assertTrue(sendFn.contains("actions.onSend()"))
-        assertFalse("the bar clears the draft under onSend", sendFn.contains("onDraftChange"))
-        // The chat opens AFTER the send, so the answer can be read - the bar
-        // above shows only its first three lines.
+        // Nothing is sent by a held press: onSend and onTypedSend sit after the
+        // decision, and the draft is only emptied in the OPEN_MENU branch (a
+        // note the PC refused must stay in the box).
         val sent = sendFn.indexOf("actions.onSend()")
         val opened = sendFn.indexOf("onTypedSend()")
         assertTrue("the chat opens before the question is sent: $opened <= $sent", opened > sent)
-        assertTrue(
-            "the call site does not open the chat",
-            home.contains("onTypedSend = { peekChat = true }"),
+        assertTrue("the box is cleared before the send", sendFn.indexOf("onDraftChange") < sent)
+        // The call site gives the bar the menu and the finished-answer test:
+        // the chat is opened for the menu (it is drawn in the conversation,
+        // which full screen does not compose) and the answer's own menu is
+        // asked for by number.
+        assertTrue(home.contains("onOpenAnswerMenu = {"))
+        assertTrue(home.contains("answerMenuTick += 1"))
+        assertTrue(home.contains("hasFinishedAnswer = hasFinishedAnswer"))
+        // ONE definition of "a finished answer", shared by both boxes.
+        assertEquals(
+            "the finished-answer test is defined more than once",
+            1,
+            Regex("val hasFinishedAnswer").findAll(home).count(),
         )
         // An empty box sends nothing: the keyboard key and the box's own
-        // action both end at sendTyped, and sendTyped's first line is the guard.
+        // action both end at sendTyped, and sendTyped's first act is the
+        // decision, whose HELD case sends nothing.
         assertEquals(
-            "the keyboard's Send key bypasses the guard",
+            "the keyboard's Send key bypasses the decision",
             1,
             Regex("KeyboardActions\\(onSend = \\{").findAll(typeBox).count(),
+        )
+    }
+
+    // B) The bar at 360dp and at a large text size ---------------------------
+
+    @Test
+    fun `the typing box's width is computed so it cannot reach the microphone`() {
+        // A 360dp phone, the composer's 12dp side padding taken off: the
+        // columns are 336dp, the microphone 48dp, so each side has 144dp. The
+        // box keeps room for Stop beside it, which is why it is 88dp and not
+        // the whole side.
+        val available = 360f - 24f
+        assertEquals(336f, available, 0.001f)
+        assertEquals(144f, FaceBarPlan.sideDp(available), 0.001f)
+        assertEquals(88f, FaceBarPlan.typeWidthDp(available), 0.001f)
+        assertEquals(
+            "the box, its gap and Stop do not add up to one side",
+            FaceBarPlan.sideDp(available),
+            FaceBarPlan.typeWidthDp(available) + FaceBarPlan.GAP_DP + FaceBarPlan.STOP_DP,
+            0.001f,
+        )
+        // The narrowest phone this app supports is 320dp: still exact there,
+        // so the box never overlaps the microphone on a real device size.
+        val narrow = 320f - 24f
+        assertEquals(68f, FaceBarPlan.typeWidthDp(narrow), 0.001f)
+        assertEquals(
+            FaceBarPlan.sideDp(narrow),
+            FaceBarPlan.typeWidthDp(narrow) + FaceBarPlan.GAP_DP + FaceBarPlan.STOP_DP,
+            0.001f,
+        )
+        // The code uses the plan for the real width, not a second copy of the
+        // arithmetic.
+        assertTrue(voiceBar.contains("FaceBarPlan.typeWidthDp(maxWidth.value).dp"))
+    }
+
+    @Test
+    fun `at 1_3x the left labels wrap instead of being clipped`() {
+        // Computed, at 1.3x: "Show chat" is about 76dp of 12sp text and "More"
+        // about 35dp; each Quiet adds 10dp of padding a side, and the gap is
+        // 8dp. That is about 159dp - more than the 144dp the left cell has at
+        // 360dp, so on ONE line the two labels cannot fit at the owner's
+        // larger text size.
+        val textShowChat = 76f // 9 characters of 12sp Roboto, at 1.3x
+        val textMore = 35f // 4 characters, at 1.3x
+        val leftNeeds = textShowChat + 20f + FaceBarPlan.GAP_DP + maxOf(FaceBarPlan.TYPE_MIN_DP, textMore + 20f)
+        assertEquals(159f, leftNeeds, 0.5f)
+        assertTrue(
+            "the labels actually fit the left cell, so this test is reasoning about nothing",
+            leftNeeds > FaceBarPlan.sideDp(360f - 24f),
+        )
+        // So the cell is a FlowRow: when they do not fit side by side, "More"
+        // moves onto a second line and the bar grows. Each label is still one
+        // line with an ellipsis as its own last resort, so no word is cut with
+        // no sign and nothing is drawn over the microphone.
+        assertTrue("the left cell is not a wrapping row", voiceBar.contains("FlowRow("))
+        assertTrue(voiceBar.contains("horizontalArrangement = Arrangement.spacedBy(8.dp)"))
+        assertEquals(
+            "a Label in the left cell can wrap without an ellipsis",
+            2,
+            Regex("maxLines = 1,\\s*\\n\\s*overflow = TextOverflow\\.Ellipsis").findAll(voiceBar).count(),
         )
     }
 
@@ -126,12 +216,8 @@ class PhoneFaceBarTest {
 
     @Test
     fun `Quick note opens as a sheet above both layouts, not only inside the chat`() {
-        // It is a Dialog now, as the More menu is, and it can be dismissed.
-        assertTrue("the note sheet is not a dialog", quickNote.contains("Dialog(onDismissRequest ="))
-        assertTrue(
-            "the note sheet cannot be closed",
-            quickNote.contains("actions.onQuickNoteOpenChange(false)"),
-        )
+        // It is a Dialog now, and it can be dismissed.
+        assertTrue("the note sheet is not a dialog", quickNote.contains("Dialog("))
         // Drawn ABOVE the layout switch: after the whole `if (voiceMode) ...
         // else ...` block and beside the More menu, so full screen gets it too.
         val call = home.indexOf("QuickNoteSheet(actions)")
@@ -160,5 +246,66 @@ class PhoneFaceBarTest {
         // It files the note through the SAME one action, and never chats.
         assertTrue(quickNote.contains("actions.onFileNote(target, note)"))
         assertFalse(quickNote.contains("sendTypedChat"))
+    }
+
+    @Test
+    fun `a typed note cannot be thrown away by an outside tap, Back or Close`() {
+        // (b) of the 2026-11-02 review: the sheet used the Dialog's defaults,
+        // so an outside tap or Back dismissed it and silently dropped the note.
+        assertTrue(
+            "an outside tap can still dismiss the sheet",
+            quickNote.contains("dismissOnClickOutside = false"),
+        )
+        assertTrue("the dialog properties are not set at all", quickNote.contains("DialogProperties("))
+        // Back is still the owner's Back - it just asks the same question
+        // Close does, through the one close path.
+        assertTrue(quickNote.contains("onDismissRequest = { requestClose() }"))
+        assertTrue(quickNote.contains("fun requestClose()"))
+        // ...and with a typed note that path asks instead of closing.
+        assertTrue(quickNote.contains("if (noteText.isBlank())"))
+        assertTrue(quickNote.contains("confirmClose = true"))
+        assertTrue(quickNote.contains("Close without filing this note?"))
+        assertTrue(quickNote.contains("\"Keep writing\""))
+        assertTrue(quickNote.contains("\"Close without filing\""))
+        // Close goes through the same path, not straight out.
+        assertEquals(
+            "Close does not use the one close path",
+            1,
+            Regex("Quiet\\(\"Close\"[\\s\\S]{0,120}?onClick = \\{ requestClose\\(\\) \\}").findAll(quickNote).count(),
+        )
+        // The keyboard cannot cover the note box.
+        assertTrue("the sheet ignores the keyboard's inset", quickNote.contains(".imePadding()"))
+        assertTrue(
+            "the dialog still fits the system windows, so imePadding cannot see the keyboard",
+            quickNote.contains("decorFitsSystemWindows = false"),
+        )
+    }
+
+    @Test
+    fun `a rotation does not close the sheet and lose the typed note`() {
+        val activity = SourceFile.read("jarvis-client/app/src/main/java/com/jarvis/client/MainActivity.kt")
+        // The typed note lives in the sheet's own rememberSaveable, so what has
+        // to survive recreation is the sheet's open flag - otherwise the sheet
+        // is not composed at all and the restored text has nowhere to go
+        // (2026-11-02). Not driven on a device from this branch: this pins the
+        // two halves that make it so.
+        assertTrue(
+            "the sheet's open flag is not saved",
+            activity.contains("outState.putBoolean(STATE_QUICK_NOTE_OPEN, quickNoteOpen.value)"),
+        )
+        assertTrue(
+            "the sheet's open flag is not restored before the first composition",
+            activity.contains("savedInstanceState?.getBoolean(STATE_QUICK_NOTE_OPEN) == true"),
+        )
+        assertTrue(
+            "the note's text stopped being remembered across recreation",
+            quickNote.contains("var noteText by rememberSaveable"),
+        )
+        // It is the FLAG that is saved, never the note: the one key is written
+        // with a Boolean, so nothing the owner typed rides in the Bundle.
+        assertFalse(
+            "the sheet's key carries a string",
+            activity.contains("putString(STATE_QUICK_NOTE_OPEN"),
+        )
     }
 }
