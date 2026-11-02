@@ -265,6 +265,10 @@ class ApprovalNotificationPolicyTest {
         assertTrue("the unlock rule must reach the Android action",
             src.contains("offered.requiresUnlock"))
         assertTrue(src.contains("setAuthenticationRequired(true)"))
+        assertTrue(
+            "a card that clears must cancel its notification through the tested rule",
+            src.contains("ApprovalNotificationPolicy.cleared("),
+        )
     }
 
     @Test

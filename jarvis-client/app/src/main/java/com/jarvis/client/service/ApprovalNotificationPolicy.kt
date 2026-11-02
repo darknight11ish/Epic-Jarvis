@@ -22,8 +22,8 @@ import com.jarvis.client.net.PendingItem
  *     (`setAuthenticationRequired(true)`), so Android will not deliver it
  *     while the phone is locked - no Jarvis code runs to enforce it.
  *  3. A small read-only card (the same [SecurityRules.isSmall] exemption the
- *     owner asked for on 2026-11-01, `approve = false` still) may submit
- *     directly from the notification. EVERY other card opens Jarvis and runs
+ *     owner asked for on 2026-11-01, #1070) may submit directly from the
+ *     notification. EVERY other card opens Jarvis and runs
  *     the same `BiometricPrompt` the card's own Approve runs -
  *     [notificationApproveNeedsCheck] is why a write card asks even when the
  *     owner's setting would not ask on the card itself.
@@ -70,7 +70,7 @@ object ApprovalNotificationPolicy {
         /** Everything else: open Jarvis on this card and run its own gate. */
         APPROVE_IN_APP,
 
-        /** The words do not fit (or cannot be approved here): open the card. */
+        /** The words do not fit, are redacted, or cannot be approved here: open the card. */
         REVIEW,
     }
 
