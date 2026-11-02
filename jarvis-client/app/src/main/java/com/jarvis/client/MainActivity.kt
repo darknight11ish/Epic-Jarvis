@@ -2539,6 +2539,18 @@ class MainActivity : FragmentActivity() {
                                 // somewhere to ask. A no-op, silently, on a
                                 // backend without the capability.
                                 JarvisRuntime.refreshAppearance()
+                                // And the PC's OWN voice choice (2026-11-02).
+                                // A reset phone, or a fresh install, holds no
+                                // voice of its own and no cached copy: the PC's
+                                // `voices/state.json` is the only record, so it
+                                // is read the moment there is a link. Without
+                                // this the Voices screen and Jarvis Live stayed
+                                // on "Asking your PC..." (and Live said the
+                                // built-in line) until the owner opened
+                                // Settings -> Voice, which read as "it forgot
+                                // what I changed it to". A read only: it changes
+                                // nothing on the PC.
+                                JarvisRuntime.refreshCustomVoices()
                             }
                         } finally {
                             // A re-pair that did not connect changes
