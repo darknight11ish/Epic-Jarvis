@@ -474,6 +474,16 @@ def _read_better_voice():
     return ((M.status().get("better_voice") or {}).get("enabled")) is True
 
 
+def _read_one_moment():
+    """2026-11-01: "Say \"One moment\" if I'm kept waiting", read from the module
+    that owns it - `one_moment_enabled()`, the same value `/api/voice/status`
+    reports and both apps gate the clip on (the TOML switch AND the owner's own
+    answer). Never a second copy of the rule: the ordering above it is the
+    module's own."""
+    import jarvis_voice_flow as M
+    return M.one_moment_enabled() is True
+
+
 def _read_sandbox():
     import jarvis_sandbox_exec as M
     return M.enabled() is True
@@ -582,6 +592,10 @@ STATE_READERS = {
     "second_card_combined": _read_second_card_feature("combined"),
     "second_card_suggest_struggle": _read_second_card_suggest("struggle"),
     "second_card_suggest_correction": _read_second_card_suggest("correction"),
+    # 2026-11-01: "Say \"One moment\" if I'm kept waiting" became a real switch
+    # by asking (the owner's own ask), so it needs its state reader like every
+    # other switch in the table above.
+    "one_moment": _read_one_moment,
 }
 
 

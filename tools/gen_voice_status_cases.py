@@ -224,6 +224,15 @@ class World:
             # their own (jarvis_voice_flow): not started here, so every run
             # writes the same file.
             mock.patch.object(F, "_spawn", lambda fn: None),
+            # THE OWNER'S "One moment." ANSWER IS BUILT TOO - jarvis_voice_flow's
+            # own config folder, not the machine's (2026-11-02). That clip's
+            # status is the TOML switch AND the owner's own answer file
+            # (voice-flow.json, jarvis_voice_flow.settings_path): left to the
+            # machine, a PC - or a CI runner whose SHARED config folder an
+            # earlier suite had already written to - rendered "switched off on
+            # the PC (you asked Jarvis to stop saying it)" into every case, and
+            # the committed fixture went stale (measured 2026-11-02).
+            mock.patch.object(F, "_config_dir", return_value=d),
             # THE VOICE-ID MODEL IS BUILT, NEVER THE MACHINE'S - both ways
             # round, so the file this tool writes is the same everywhere (its
             # own docstring's promise, and what test_voice_contract.py

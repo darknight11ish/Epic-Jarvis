@@ -5227,7 +5227,7 @@
       "name": "Appearance",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Settings, Appearance. On the phone, Appearance on Home, or from Settings.",
+      "where": "Settings, Appearance. On the phone it is Settings, Appearance - it is not a Home button any more (a Reminders button took its place there on 2026-11-02).",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -9648,6 +9648,26 @@
       "desktop_row": "cv-face-switch",
       "turn_on": "turn on voice follows the face",
       "turn_off": "turn off voice follows the face",
+      "resolved": true,
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "switch present on the desktop Settings page"
+    },
+    {
+      "key": "one_moment",
+      "names": [
+        "the one moment message",
+        "one moment",
+        "saying one moment",
+        "the one moment sound",
+        "say one moment if i am kept waiting",
+        "the one moment clip",
+        "one moment while you think"
+      ],
+      "section": null,
+      "desktop_row": "voice-one-moment",
+      "turn_on": "turn on the one moment message",
+      "turn_off": "turn off the one moment message",
       "resolved": true,
       "status": "enforced",
       "owner": "none-needed",

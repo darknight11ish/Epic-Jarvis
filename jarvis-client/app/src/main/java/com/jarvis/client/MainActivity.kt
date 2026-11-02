@@ -2539,6 +2539,18 @@ class MainActivity : FragmentActivity() {
                                 // somewhere to ask. A no-op, silently, on a
                                 // backend without the capability.
                                 JarvisRuntime.refreshAppearance()
+                                // And the PC's OWN voice choice (2026-11-02).
+                                // A reset phone, or a fresh install, holds no
+                                // voice of its own and no cached copy: the PC's
+                                // `voices/state.json` is the only record, so it
+                                // is read the moment there is a link. Without
+                                // this the Voices screen and Jarvis Live stayed
+                                // on "Asking your PC..." (and Live said the
+                                // built-in line) until the owner opened
+                                // Settings -> Voice, which read as "it forgot
+                                // what I changed it to". A read only: it changes
+                                // nothing on the PC.
+                                JarvisRuntime.refreshCustomVoices()
                             }
                         } finally {
                             // A re-pair that did not connect changes
@@ -4207,8 +4219,28 @@ class MainActivity : FragmentActivity() {
                                     pendingSectionScreen = Screen.BRAIN.name
                                     nav.go(Screen.BRAIN)
                                 },
-                                onOpenAppearance = { nav.go(Screen.APPEARANCE) },
+                                // Reminders, where Appearance's button was until
+                                // 2026-11-02 (the owner: Appearance only in
+                                // Settings, a Reminders button in its place).
+                                // It opens the Brain's own Coming up plate -
+                                // "Reminders, alarms, timers and repeating
+                                // jobs" - exactly as "open coming up" and Find
+                                // anything's own row do. Nothing new is read
+                                // and no route is added; Coming up can never be
+                                // hidden (`brain.work.coming-up` is in
+                                // MenuCatalog.NEVER_HIDE, ComingUpReachabilityTest),
+                                // so there is no menu to show for this visit.
+                                onOpenReminders = {
+                                    pendingSection = "coming-up"
+                                    pendingSectionScreen = Screen.BRAIN.name
+                                    nav.go(Screen.BRAIN)
+                                },
                                 // Settings from Home's own row (2026-10-08).
+                                // Appearance is Settings-only on the phone since
+                                // 2026-11-02: its own row in Settings still opens
+                                // that screen (the `onOpenAppearance` further up
+                                // is the SETTINGS screen's callback, not Home's),
+                                // and Home has no Appearance button any more.
                                 onOpenSettings = { nav.go(Screen.SETTINGS) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
                                 // A card on the owner's Home HUD (2026-11-02).

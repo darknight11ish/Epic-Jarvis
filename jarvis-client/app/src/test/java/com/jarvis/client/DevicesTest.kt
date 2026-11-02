@@ -298,4 +298,27 @@ class DevicesTest {
         assertTrue(Devices.UNPAIR_PROMPT.contains("clears its pairing token"))
         assertTrue(Devices.UNPAIR_PROMPT.contains("pair again"))
     }
+
+    /**
+     * The owner's 2026-11-02 bug report: *"when I reset the jarvis Android app
+     * it changes the voice to the default. it doesn't seem to remember what I
+     * changed it to."* The one app-level reset is this unpair, and it clears
+     * what the PHONE owns (pairing, token, resume point) and nothing on the
+     * PC. The voice is the owner's PC-wide setting
+     * (`voices/state.json`), so the prompt he reads before pressing it says it
+     * is kept - a reset that never touches that file is not the thing that
+     * changes the voice, and the sentence must stop implying otherwise.
+     */
+    @Test
+    fun `the reset prompt says the PC's voice choice is kept`() {
+        assertTrue(
+            Devices.UNPAIR_PROMPT,
+            Devices.UNPAIR_PROMPT.contains("voice Jarvis speaks in"),
+        )
+        assertTrue(Devices.UNPAIR_PROMPT, Devices.UNPAIR_PROMPT.contains("kept"))
+        // It still promises only what the reset really does, and it must never
+        // claim to reset the PC's settings.
+        assertFalse(Devices.UNPAIR_PROMPT, Devices.UNPAIR_PROMPT.contains("resets"))
+        assertFalse(Devices.UNPAIR_PROMPT, Devices.UNPAIR_PROMPT.contains("restores"))
+    }
 }

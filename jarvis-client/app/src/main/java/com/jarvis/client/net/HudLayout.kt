@@ -98,7 +98,13 @@ object HudLayout {
         Card(LIVE, "Live and Stop", "Talk back and forth, and the Stop button.", HERO, safety = true),
         Card(EMERGENCY_STOP, "Emergency stop", "Stops everything, at once. Never hidden.", TOP_STRIP, safety = true),
         // Ordinary cards: every one is a phone menu that already exists.
-        Card("entry.appearance", "Appearance", "Theme, faces and how it all looks.", HERO, menu = "entry.appearance"),
+        //
+        // Appearance is deliberately NOT a card here (removed 2026-11-02). The
+        // owner asked for Appearance to be reachable only in Settings, and this
+        // model's cards are Home surfaces: a Home HUD that could put an
+        // Appearance card back would undo that with a layout. Its Settings row
+        // keeps the feature, and `settings.appearance-card` is still the menu
+        // that hides it there.
         Card("entry.voice-check", "Voice check", "Say one line and hear how it sounds.", HERO, menu = "entry.voice-check"),
         Card("brain.now.right-now", "Right now", "What Jarvis is doing at this moment.", TOP_STRIP, menu = "brain.now.right-now"),
         Card("brain.now.budget", "Attention budget", "How much Jarvis may interrupt you today.", TOP_STRIP, menu = "brain.now.budget"),
@@ -193,7 +199,7 @@ object HudLayout {
             Preset("default", "Default", "Everything in its usual place.", true,
                 arrangement(
                     TOP_STRIP to listOf("brain.now.right-now", "brain.now.budget"),
-                    HERO to listOf(LIVE, "brain.now.trace", "entry.appearance"),
+                    HERO to listOf(LIVE, "brain.now.trace"),
                     BODY to listOf("brain.work.today", "brain.work.coming-up",
                         "brain.work.jobs", "brain.work.undo", "brain.model.models",
                         "brain.memory.learning"),
@@ -209,7 +215,7 @@ object HudLayout {
             Preset("brain", "Brain & Learning", "Memory, models and study at the front.", true,
                 arrangement(
                     TOP_STRIP to listOf("brain.memory.learning", "brain.model.models"),
-                    HERO to listOf("entry.appearance", "brain.model.compute"),
+                    HERO to listOf("brain.model.compute"),
                     BODY to listOf("brain.memory.topics", "brain.memory.profile",
                         "brain.memory.wiki", "brain.work.quiz", "brain.work.decks",
                         "brain.model.skills", "brain.trust.ledger"),
