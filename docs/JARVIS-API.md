@@ -13658,6 +13658,13 @@ sent as the `live` event on every change (the same object).
   Live" while `resumable` (10 minutes after a quiet or time-up end), and
   count on from this number by themselves - a status read once is never
   taken as "just now".
+- `limits.quiet_s` - **how long Live waits, after it last heard the owner or
+  last spoke, before it turns itself off**; `quiet_left_s` counts down from
+  it and `quiet_warn` turns true in the last `quiet_warn_s` (15 s). It was a
+  constant (90 s) until 2026-11-01; it is now the owner's setting,
+  `[live].quiet_s`, bounded 30 s..10 minutes, changeable in Settings on
+  either app and by asking Jarvis - see section 123.2.1. The default is still
+  90 s, so a PC that never changes it behaves exactly as before.
 - `end_on` - the PC's `live_end` voice setting (63.5): whether App lock
   ends Live when it would ask again (default) or only when Windows locks.
   The phone ignores it (it keeps App lock's own rule).
@@ -21747,11 +21754,11 @@ The limits are not a module each: they are **rows in one table**
 (`jarvis_limits.LIMITS`), because a new patch costs this repository real work and
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
-the owner's own words for it. Nine of them (`jarvis_limits.LIMITS` holds these
-nine written by hand, and `_notify_rows()` appends **seven more** notification
+the owner's own words for it. Ten of them (`jarvis_limits.LIMITS` holds these
+ten written by hand, and `_notify_rows()` appends **seven more** notification
 rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff` and
-the three Quiet-hours rows - so the table a client receives is sixteen rows
-long. Only the nine are listed here; the seven are built from
+the three Quiet-hours rows - so the table a client receives is seventeen rows
+long. Only the ten are listed here; the seven are built from
 `_NOTIFY_ROWS` and are not copied into this document, for the same
 no-second-copy reason as the numbers below):
 
@@ -21759,6 +21766,7 @@ no-second-copy reason as the numbers below):
 |---|---|---|---|
 | `undo_window` | how long an Undo stays possible | a BIGGER number (it keeps more of the owner's files recoverable on disk) | both |
 | `approval_wait` | how long an approval card waits before it refuses | a BIGGER number (the owner gets longer to decide before the card gives up) | both |
+| `live_idle_seconds` | how long Jarvis Live waits after it last hears the owner before it turns itself off (`[live].quiet_s`, 123.2.1) | neither direction asks - Live is already running and the microphone is already open | both |
 | `jobs_per_tick` | how much Jarvis gets on with at once | neither direction asks | desktop, and the route itself refuses another device |
 | `watch_star_jump` | what counts as news from a watched project | neither direction asks | desktop |
 | `watch_star_floor` | ...but never below this many stars | neither direction asks | desktop |
@@ -21792,7 +21800,7 @@ clips are judged by.
          "limits": [
            {"key": "undo_window", "title": "How long you can undo", "kind": "int",
             "value": 24, "words": "keep undo for a day", "choices": [1, 24, 168],
-            "low": 1, "high": 720, "unit": "hours",
+            "low": 1, "high": 720, "unit": "hours", "step": 1,
             "note": "A longer window keeps older copies of your files on this PC.",
             "loosen_up": true, "pc_only": false, "app": "both"}
          ]}
@@ -21804,6 +21812,14 @@ row's second line in plain words - and on this page **it is the row that knows w
 direction asks**, because `loosen_up` can only describe an UP loosening, so a row
 whose loosening goes down says `false` there and says so in its own `note` instead.
 
+`step` is ADDITIVE (2026-11-01, the same way `quiet_on` was): how far one tap of
+the two apps' -/+ control moves a number. It is `1` on every row that does not say
+otherwise; the Live idle window carries `30`, because one second a tap would put
+three minutes ninety taps away from its 90 s default. A screen that ignores the
+field steps by one and is not wrong, only slower. The step is a UI step and
+nothing else: **any whole number inside `low..high` is accepted by the route**,
+and the spoken sentence sets 45 s happily.
+
 `app` is `"both"`, `"desktop"` or `"phone"`, and `pc_only` marks a row only this PC
 may change. **`app=None` - what the route itself asks for - returns EVERY row**,
 each carrying its own `app`, so each screen filters on what a row says rather than
@@ -21814,6 +21830,53 @@ tell them apart without the caller saying so.)
 There is deliberately **no second copy of any of these numbers** in this document,
 in either app or in `features.json`: the table is the one place they are described,
 and a hand-typed copy would drift from it.
+
+### 123.2.1 The Live idle window: `live_idle_seconds` (added 2026-11-01)
+
+The owner's ask: *"also id likee to he able to tell jarvis to change the setting
+that turns off jarvos live by extending how long ot takestoo turn off when it
+doesntt hear anything"*. Until then `jarvis_live.py`'s `QUIET_S = 90` was a
+constant, with its own comment saying the owner's call was pending.
+
+    "key": "live_idle_seconds", "title": "How long Jarvis Live waits before it turns off",
+    "kind": "int", "value": 90, "words": "1 minute and 30 seconds", "choices": [],
+    "low": 30, "high": 600, "unit": "seconds", "step": 30,
+    "note": "How long Live keeps listening after it last hears you before it turns
+             itself off. From 30 seconds to 10 minutes; it never starts Live and
+             never opens the microphone.",
+    "loosen_up": false, "pc_only": false, "app": "both"
+
+- **The default is today's behaviour.** The key is `[live].quiet_s`, which
+  `jarvis_live.quiet_seconds()` reads on every tick and in the status both apps
+  draw; 90 is what Live has always used, so a PC that never touches this row is
+  unchanged.
+- **The range is 30 s..10 minutes, and it exists for two real reasons.** Below
+  30 s Live would end in the pause between two thoughts (the voice check alone
+  needs a 2 s clip), and above 10 minutes an open microphone has been forgotten -
+  which is the very risk the window exists to bound. A hand-edited `quiet_s =
+  99999` is clamped to 600 by the engine itself, so the file cannot defeat it.
+- **No card in either direction.** Live must ALREADY be running - the owner
+  started it, and the microphone was already open - and this number only decides
+  when an idle session ends: it never starts Live, reads nothing, sends nothing
+  and stores nothing. The same session's own time limit already extends at once
+  and without a card ("give me twenty more minutes", §63.2), so asking a card to
+  keep listening longer would be stricter than the control beside it. This is the
+  same shape "Say \"One moment\"" took the same day.
+- **Changeable by asking**, in chat and in Live, because a Live turn is an
+  ordinary spoken chat turn: *"how long before Jarvis Live turns off when it
+  hears nothing"* answers with the value and the range, and *"make Jarvis Live
+  wait three minutes"* (or "... wait 45 seconds", "set the jarvis live timeout to
+  five minutes") changes it and answers *"Okay - Jarvis Live will now wait 3
+  minutes before turning off when it hears nothing. It can be anything from 30
+  seconds to 10 minutes..."*. A length outside the range is refused in words that
+  name the range, and nothing is written. The sentence goes through
+  `jarvis_settings_registry.set_live_idle` -> `jarvis_limits.change`, the exact
+  function this route calls, so the spoken lane adds no writer, no range check
+  and no tier of its own.
+- **Changeable in Settings on both apps with no client route of its own**: the
+  row is in this table, and the desktop's "Limits and frequency" card and the
+  phone's Limits plate already draw every row, filtered on the row's own `app`
+  and `pc_only`. `step` is what makes 30 s..600 s usable at 30 s a tap.
 
 ### 123.3 What `POST /api/limits/settings` answers
 
