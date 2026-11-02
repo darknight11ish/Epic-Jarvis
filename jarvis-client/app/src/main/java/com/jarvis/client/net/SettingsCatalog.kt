@@ -49,7 +49,7 @@ object SettingsCatalog {
         Row("floating-click-through", null, "desktop", "appearance-card", 3, "Click through to what is behind", "Clicks on the floating face go to whatever is behind it, except on\nthe animal itself - so it can still be dragged, and the face stops\ngetting in the way of whatever is underneath. Off to start.\n", "floating-click-through-label", "floating-click-through-detail", false, true, null, null),
         Row("sky-show", null, "desktop", "animal-options", 4, "Show the sun and moon behind the face", "", "sky-show-label", "sky-show-detail", true, true, null, null),
         Row("face-auto", null, "desktop", "animal-options", 5, "Auto adjust", "Picks quality and frame rate for this computer, and steps down\nif the face runs slow. On a capable graphics chip an animal can\ngo up to Maximum.\n", null, "", false, true, null, null),
-        Row("voice-one-moment", null, "desktop", "voice", 6, "Say \"One moment\" if I'm kept waiting", "", null, "voice-one-moment-detail", true, true, null, null),
+        Row("voice-one-moment", "one_moment", "desktop", "voice", 6, "Say \"One moment\" if I'm kept waiting", "", null, "voice-one-moment-detail", true, true, null, null),
         Row("voice-heard-sound", null, "desktop", "voice", 7, "Play a short sound when I finish speaking", "", null, "voice-heard-sound-detail", true, true, null, null),
         Row("mn-humor", "humor", "desktop", "manner", 8, "Occasional light humour in answers", "", null, "mn-humor-detail", true, true, null, null),
         Row("coach-enabled", "prompt_coach", "desktop", "prompt-coach", 9, "Prompt coach", "", "coach-enabled-label", "coach-enabled-detail", true, true, null, null),

@@ -99,6 +99,18 @@ None of the three acts on the world or sends anything anywhere, so none
 is an approval card: barge-in only stops Jarvis's own speech, and a switch
 turned off here only takes something away.
 
+THE OWNER'S OWN "One moment." ANSWER (2026-11-01), beside the TOML switch
+above and never instead of it. The owner asked to be able to tell Jarvis, in
+Jarvis Live, to stop saying "One moment." while it thinks - and until today
+it could not be changed by asking at all: `jarvis_settings_registry.
+NOT_BY_ASKING` refused the Settings row in words, because the row's value was
+kept by the DESKTOP app (its own per-device toggle) and this backend had no
+function to call. So the PC now keeps the owner's answer itself, in
+`voice-flow.json` in the settings folder (`jarvis_framework.CONFIG_DIR`), and
+`jarvis_settings_registry.set_one_moment` is what writes it. Read
+"THE OWNER'S OWN ANSWER" below for the whole rule, including why a damaged
+file is ON rather than OFF.
+
 Standard library plus numpy (already needed for voice). Prints only as a
 command-line tool (`py -3 jarvis_voice_flow.py --measure`).
 """
@@ -107,9 +119,11 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import threading
 import time
 import wave
+from pathlib import Path
 from typing import Callable, Optional
 
 try:
@@ -138,6 +152,209 @@ def _switch(key: str, default: bool = True) -> bool:
     if isinstance(v, str):
         return v.strip().lower() not in ("false", "0", "no", "off", "")
     return bool(v)
+
+
+# --------------------------------------------------------------------------
+#   THE OWNER'S OWN ANSWER for "One moment." (2026-11-01)
+# --------------------------------------------------------------------------
+# WHY THIS FILE KEEPS IT. The owner asked to tell Jarvis, in Jarvis Live, to
+# stop saying "One moment." while it thinks ("id like the ability to tell jarvis
+# in jarvis live to adjust any settings, includimg no longer saying one moment
+# while it comprehends or calculates something"). Two switches already existed
+# and neither was reachable from chat:
+#
+#   * `[voice] one_moment_enabled` in jarvis-framework.toml - the PC's hard
+#     switch, read here and written only by hand. It is inside the gate's own
+#     protected config, so it is NOT written from code.
+#   * each app's own per-device toggle (desktop: `jarvis.voice.oneMoment` in
+#     the desktop app's localStorage, read by the Jarvis bar;
+#     phone: `ClientSettings.oneMoment`). A backend turn cannot write either
+#     one - they are not its state.
+#
+# So the PC keeps the owner's answer too, in a file of its own:
+#
+#     <settings folder>/voice-flow.json   {"one_moment": false, "changed": <unix>}
+#
+# and a setting that is off in EITHER place is off: `one_moment_enabled()` is
+# the TOML switch AND the owner's answer. The owner's answer can therefore only
+# take the clip away or give it back - it can never override the TOML's own
+# "off", which stays the hand-edited hard switch it always was.
+#
+# WHICH APPS OBEY IT, AND WHY THAT IS THE WHOLE FEATURE. `/api/voice/status`'s
+# `flow.moment.enabled` is `moment_state()["enabled"]`, i.e. this function. The
+# desktop bar plays the clip only when `loadMoment() && voiceFlow.moment`
+# (main.js, the two `momentFlow.toolStarted` calls), and the phone only when
+# `oneMoment() && flow.momentUsable` (VoiceSession.kt `toolStarted`). So the
+# PC's answer already stops BOTH apps, with no client change: that is why the
+# switch lives here rather than in either app.
+#
+# NO APPROVAL CARD, EITHER WAY - the rule this file already states for its
+# three `[voice]` switches: the clip is one cosmetic sentence in Jarvis's own
+# voice, it acts on nothing and sends nothing anywhere, and turning it off only
+# takes something away. Same class as the animal options and "voice follows the
+# face": immediate, from either app or by asking.
+#
+# FAIL OPEN, AND THIS IS THE ONLY PLACE HERE THAT DOES. With no file - or one
+# that cannot be read, is not JSON, or does not hold a real boolean - the answer
+# is ON, which is the state this PC was in before the file existed. Fail-closed
+# would mean a damaged file silently changes what the owner hears, and the
+# switch that matters (the TOML one) is still the hard off. `why` says the file
+# is damaged, and asking again rewrites it.
+
+#: The file's name in the settings folder. One small JSON file, nothing else.
+CONFIG_FILE = "voice-flow.json"
+
+#: Held while writing, so two turns cannot interleave a half-written file.
+_OWNER_LOCK = threading.Lock()
+
+#: What the owner is told when their answer is what silenced the clip, and how
+#: to bring it back. One sentence, used by `moment()` and `moment_state()`.
+OWNER_OFF_WHY = ("switched off on the PC (you asked Jarvis to stop saying it - say "
+                 "\"start saying one moment again\" to bring it back)")
+
+
+def _config_dir() -> Path:
+    """Where this PC keeps state - `jarvis_framework.CONFIG_DIR`, the same
+    folder jarvis_handoff_mode.py and the voice print already use
+    (OPENJARVIS_CONFIG_DIR, else `~/.openjarvis`). Found the same way, so a
+    test can point the whole suite at a temporary folder."""
+    if fw is not None:
+        try:
+            return Path(fw.CONFIG_DIR)
+        except Exception:
+            pass
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+    if env:
+        return Path(os.path.expanduser(env))
+    return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+def settings_path() -> Path:
+    """The owner's own answers for this feature. Not the framework's config:
+    that file is the owner's to edit and the gate's to protect, and this module
+    writes nothing there."""
+    return _config_dir() / CONFIG_FILE
+
+
+#: Said when the file exists but is not the shape `settings()` accepts.
+#: Deliberately says what is true afterwards (still on) and what to do about it.
+DAMAGED_WHY = ("the one-moment settings file is damaged, so \"One moment.\" is still on - "
+               "ask again to rewrite it")
+
+
+def settings() -> dict:
+    """{"one_moment": bool, "why": ""} - the owner's own answer, ON by default.
+
+    ON for no file, and ON for a file that cannot be read, is not JSON, or does
+    not hold a real boolean - see FAIL OPEN above. `why` is empty unless the
+    file is damaged, in which case it says so (and says that asking again fixes
+    it) and the answer is still ON."""
+    try:
+        raw = settings_path().read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {"one_moment": True, "why": ""}
+    except OSError as exc:
+        return {"one_moment": True,
+                "why": (f"the one-moment settings file could not be read "
+                        f"({type(exc).__name__}), so it is still on")}
+    try:
+        doc = json.loads(raw)
+        if not isinstance(doc, dict):
+            raise ValueError
+    except Exception:
+        return {"one_moment": True, "why": DAMAGED_WHY}
+    value = doc.get("one_moment", True)
+    if not isinstance(value, bool):
+        return {"one_moment": True, "why": DAMAGED_WHY}
+    return {"one_moment": value, "why": ""}
+
+
+def one_moment_choice() -> Optional[bool]:
+    """The owner's own answer: True, False, or None when they never gave one
+    (or the file could not be read as an answer - see `settings()`)."""
+    got = settings()
+    if got["why"]:
+        return None
+    return got["one_moment"]
+
+
+def one_moment_enabled() -> bool:
+    """Whether "One moment." exists on this PC at all: the TOML switch AND the
+    owner's own answer. Turning it off in either place is enough."""
+    if not _switch("one_moment_enabled", True):
+        return False
+    return one_moment_choice() is not False
+
+
+def _off_why() -> str:
+    """Why the clip is off, in words that name the place it was switched off."""
+    if not _switch("one_moment_enabled", True):
+        return ("switched off on the PC ([voice] one_moment_enabled = false in "
+                "jarvis-framework.toml)")
+    return OWNER_OFF_WHY
+
+
+def _as_bool(value) -> Optional[bool]:
+    """`True`/`False` from a JSON body, or None when it is not one of the values
+    both apps' switches already send. Never a guess: "maybe" is not off."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        seen = value.strip().lower()
+        if seen in ("on", "true", "1", "yes", "enable", "enabled"):
+            return True
+        if seen in ("off", "false", "0", "no", "disable", "disabled"):
+            return False
+    return None
+
+
+def request_one_moment(body=None) -> tuple:
+    """Set the owner's own answer, and answer in words - `(code, body)`.
+
+    THE ONE FUNCTION THAT CHANGES IT. `jarvis_settings_registry.set_one_moment`
+    calls this, so a typed or spoken sentence and a control both go through the
+    same write; nothing else writes the file. A client route would call this
+    same function (`{"enabled": true|false}`), and there is none today: the
+    desktop's own Settings row writes that app's per-device toggle, not this
+    one, and adding a route no client calls would be a door with nothing
+    behind it (`docs/ARCHITECTURE.md` section 8 records the follow-up).
+
+    Cosmetic in both directions, so no card: see NO APPROVAL CARD above."""
+    body = body if isinstance(body, dict) else {}
+    if "enabled" not in body:
+        return 400, {"ok": False, "error": "enabled (true or false) is required",
+                     "enabled": one_moment_enabled()}
+    wanted = _as_bool(body.get("enabled"))
+    if wanted is None:
+        return 400, {"ok": False,
+                     "error": "enabled must be true or false",
+                     "enabled": one_moment_enabled(), "why": ""}
+    path = settings_path()
+    try:
+        with _OWNER_LOCK:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(json.dumps({"one_moment": bool(wanted),
+                                       "changed": time.time()}), encoding="utf-8")
+            os.replace(tmp, path)
+    except OSError as exc:
+        return 500, {"ok": False,
+                     "error": f"the setting could not be saved ({type(exc).__name__})",
+                     "enabled": one_moment_enabled()}
+    on = one_moment_enabled()
+    if wanted:
+        said = ("On. Jarvis will say \"One moment.\" again if a spoken question has to wait."
+                if on else
+                "Saved, but this PC's own switch has it off "
+                "([voice] one_moment_enabled = false in jarvis-framework.toml), "
+                "so nothing will play it.")
+    else:
+        said = ("Off. Jarvis will not say \"One moment.\" while it looks something up - "
+                "on either app, until you say \"start saying one moment again\".")
+    return 200, {"ok": True, "enabled": on, "chosen": bool(wanted),
+                 "text": MOMENT_TEXT, "why": "" if on else _off_why(), "said": said}
 
 
 def _spawn(fn: Callable[[], None]) -> None:
@@ -730,10 +947,9 @@ def moment() -> dict:
     """The clip for the voice in use now: {"ok", "wav", "key", "voice",
     "engine", "seconds", "why"}. Made on the first ask after the voice
     changed, then handed out from memory. Never raises."""
-    if not _switch("one_moment_enabled", True):
+    if not one_moment_enabled():
         return {"ok": False, "wav": None, "key": "", "voice": "", "engine": "", "seconds": 0.0,
-                "why": ("switched off on the PC ([voice] one_moment_enabled = false in "
-                        "jarvis-framework.toml)")}
+                "why": _off_why()}
     key, active, _engine = moment_key()
     with _MOMENT_LOCK:
         if _MOMENT["key"] == key and _MOMENT["wav"]:
@@ -776,7 +992,7 @@ def moment_state(spawn: Optional[Callable] = None) -> dict:
     """For status(): the clip for the voice in use now, and whether it is
     ready. When it is not (the voice changed), it is made in the background
     so it is ready before the app asks."""
-    on = _switch("one_moment_enabled", True)
+    on = one_moment_enabled()
     key, active, engine = moment_key() if on else ("", "", "")
     can = on and _anything_installed()
     with _MOMENT_LOCK:
@@ -806,8 +1022,7 @@ def moment_state(spawn: Optional[Callable] = None) -> dict:
             with _MOMENT_LOCK:
                 _MOMENT["busy"] = False
     if not on:
-        why = ("switched off on the PC ([voice] one_moment_enabled = false in "
-               "jarvis-framework.toml)")
+        why = _off_why()
     return {"enabled": on, "text": MOMENT_TEXT, "key": key, "ready": ready, "voice": active,
             "engine": engine, "seconds": seconds, "after_ms": MOMENT_AFTER_MS, "why": why}
 
