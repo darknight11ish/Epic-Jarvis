@@ -76,6 +76,7 @@ import jarvis_speech as S  # noqa: E402
 import jarvis_turn as T  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
+import jarvis_voice_flow as F  # noqa: E402
 import jarvis_kokoro as K  # noqa: E402
 import jarvis_voices as VS  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
@@ -260,6 +261,15 @@ class World:
             mock.patch.object(E, "_audit", lambda *a: None),
             mock.patch.object(E, "_timeout", lambda: 180.0),
             mock.patch.object(VS, "_config_dir", lambda: d),
+            # THE OWNER'S OWN ANSWER FOR "One moment." (2026-11-02): it lives in
+            # jarvis_voice_flow's <config>/voice-flow.json (2026-11-01), and this
+            # world did not point that module anywhere - so status() printed
+            # whatever answer THIS machine held (off: "you asked Jarvis to stop
+            # saying it" on the owner's PC, and off on the CI runner once an
+            # earlier suite had written it into the shared staged config folder),
+            # where the fixture holds the default, ON. The same promise as the
+            # VS._config_dir pin above.
+            mock.patch.object(F, "_config_dir", lambda: d),
             mock.patch.object(VS, "_cfg", lambda k, default=None: default),
             mock.patch.object(VS, "_audit", lambda *a: None),
             mock.patch.object(VS, "_publish", lambda *a: None),

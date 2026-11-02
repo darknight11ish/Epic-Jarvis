@@ -329,6 +329,14 @@ class World:
             mock.patch.object(VO, "zipvoice_dir",
                               lambda: missing_models("voice-models", "zipvoice")),
             mock.patch.object(VO, "_config_dir", return_value=d),
+            # THE OWNER'S OWN ANSWER FOR "One moment." (2026-11-02): it lives in
+            # jarvis_voice_flow's <config>/voice-flow.json (2026-11-01), and this
+            # world did not point that module anywhere - so every statuses block
+            # below printed THIS PC's answer (enabled:false on the owner's PC,
+            # and on the CI runner the shared staged config folder's answer after
+            # an earlier suite wrote it), where the fixture holds the default,
+            # ON. Same class as the VO._config_dir pin above.
+            mock.patch.object(F, "_config_dir", return_value=d),
             mock.patch.object(VO, "_cfg", side_effect=lambda k, default=None: default),
             mock.patch.object(VO, "_audit", side_effect=lambda e, det: None),
             mock.patch.object(VO, "_publish", side_effect=lambda data: None),

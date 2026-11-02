@@ -663,16 +663,42 @@ def t_the_desktop_fixture_is_fresh():
           f"world (saved state: {saved!r}) and {outside!r} outside it - so "
           f"flow.moment.key would be this PC's voice, not the state the case names")
 
+    # THE SAME PREMISE, ONE MODULE OVER (2026-11-02), for all three producers.
+    # "One moment." has the owner's own answer too, in
+    # <config folder>/voice-flow.json (jarvis_voice_flow, 2026-11-01). Left to
+    # the machine, every flow.moment block in all three fixtures printed THIS
+    # PC's answer - off, with "you asked Jarvis to stop saying it" on the
+    # owner's PC, and off on the CI runner once an earlier suite had written the
+    # answer into the shared staged config folder - where the committed files
+    # hold the default, ON. Measured 2026-11-02: this suite 752 passed, 8 failed
+    # in the required backend job, with the SHORT and LONG %TEMP% runs byte-
+    # identical to each other (so it was never a path-length problem). Each
+    # producer now points that module's folder at its own world; if a pin is
+    # ever lost, this says so in one line instead of eight fixture failures.
+    import gen_voice_training_cases as T
+    import gen_phone_voice_cases as P
+    outside_flow = str(F._config_dir())
+    for name, mod in (("gen_voice_status_cases", G), ("gen_voice_training_cases", T),
+                      ("gen_phone_voice_cases", P)):
+        with mod.World():
+            inside_flow = str(F._config_dir())
+            flow_folder_was_there = os.path.isdir(inside_flow)
+            answer = F.settings()
+        check(f"{name}: builds the default One moment state, not this PC's",
+              inside_flow != outside_flow and flow_folder_was_there
+              and answer.get("one_moment") is True and answer.get("why") == "",
+              f"jarvis_voice_flow._config_dir() answered {inside_flow!r} inside "
+              f"the producer's world and {outside_flow!r} outside it "
+              f"(answer: {answer!r})")
+
     check("voice-status-cases.json equals a fresh run of the producer",
           G.main(["--check"]) == 0, "run python3 tools/gen_voice_status_cases.py")
     # The training and custom-voice screens are tested against their own
     # file (tests/voice-training.mjs). Nothing checked it, so a backend
     # change left it stale unseen (the voice-flow merge did exactly that).
-    import gen_voice_training_cases as T
     check("voice-training-cases.json equals a fresh run of the producer",
           T.main(["--check"]) == 0, "run python3 tools/gen_voice_training_cases.py")
     # The phone's voice screens read their own copy of the PC's answers.
-    import gen_phone_voice_cases as P
     check("phone-voice-cases.json equals a fresh run of the producer",
           P.main(["--check"]) == 0, "run python3 tools/gen_phone_voice_cases.py")
     # THE PREMISE THE CHECK ABOVE STANDS ON, and the one a fresh run cannot see
