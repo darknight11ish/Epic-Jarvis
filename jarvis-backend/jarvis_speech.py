@@ -2482,20 +2482,31 @@ def _live_trust_source(mic: str) -> str:
 
 
 class _SessionTrusted:
-    """A 1.5-2.0 s clip allowed by the session's own recent strict check.
+    """A clip allowed by the session's own strict check - no speaker model.
 
-    No speaker model runs for this clip (that is the speed this design buys);
-    the values make the ordinary Heard/common path work while `_really_checked`
-    stays false, so no private/sensitive answer is read aloud on session trust
-    alone. The fresh >= 2.0 s check is what sets `trust_active`.
+    Jarvis Live's session is verified by ONE real check (the owner's request of
+    2026-11-01), so every later clip runs on that verification: no speaker
+    model, nothing said about it, and no ask to verify again.
+
+    `strictness` is the strictness of the check that verified the session
+    ("very_strict" / "balanced", "" when the session cannot say). Carrying it
+    is what keeps `_really_checked` answering for these clips exactly as it
+    answered for the check that earned them: an answer that uses what Jarvis
+    remembers may be read aloud, instead of Live saying "it's on your screen"
+    about an answer it could say. It is the SESSION's verified check, never a
+    claim that this particular clip was checked - `mode` stays "session", so
+    nothing can mistake it for a fresh check, and the settings that gate a
+    private answer (`_private_aloud`, `_sensitive_aloud`) are still asked.
     """
     is_owner = True
     score = 1.0
     threshold = 0.0
     mode = "session"
-    strictness = ""
     voice_print = ""
     reason = "session trust"
+
+    def __init__(self, strictness: str = ""):
+        self.strictness = str(strictness or "")
 
 
 def _live_started(out: dict, engine: str, wake: bool, common: dict) -> Heard:
@@ -3117,17 +3128,24 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                          reason=ECHO_REFUSAL, **_live_fields(mic))
         return Heard(False, source=source, seconds=seconds, reason=ECHO_REFUSAL)
 
-    # Session trust (owner's refinement, 2026-10-18): a >= 2.0 s clip gets
-    # the full strict check and refreshes; 1.5-2.0 s may run on the session's
-    # trust without a check; an expired window refuses short clips and asks
-    # for a full sentence. The first clip is always the >= 2.0 s check.
+    # Session verification (the owner's request of 2026-11-01): ONE successful
+    # strict check verifies the whole Jarvis Live session. Before it, the first
+    # clip must be a full sentence (>= 2.0 s) and is checked; after it, nothing
+    # in the session asks the owner to verify again - a 1.5 s+ clip runs on the
+    # session's own trust. A >= 2.0 s clip still gets the silent spot check
+    # below (that is what refuses another voice, and what a private answer
+    # needs before it may be read aloud). A session whose verification was
+    # voided - a failed check, or a re-enrolled print - asks once more, exactly
+    # like a new session.
     live_trust = ""
     live_trust_words = ""
+    live_trust_info: dict = {}
     if live:
         try:
             _d = jarvis_live.ENGINE.trust_decision(mic, spoken)
         except Exception:
             _d = {"action": "refuse_stale", "words": jarvis_live.SAY_RECHECK}
+        live_trust_info = _d if isinstance(_d, dict) else {}
         live_trust = str(_d.get("action") or "")
         live_trust_words = str(_d.get("words") or "")
         if check_only:
@@ -3140,8 +3158,8 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                          min_seconds=jarvis_live.TRUST_FIRST_S, reason=words,
                          live_say=words, **_live_fields(mic))
 
-    if live_trust == "trusted_short":
-        # 1.5-2.0 s on session trust: no "say a bit more" and no speaker model.
+    if live_trust == "trusted":
+        # The session is verified: no "say a bit more" and no speaker model.
         short = False
     if jarvis_voice is None:
         return Heard(False, source=source, available=False, seconds=seconds,
@@ -3224,8 +3242,18 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         except Exception:
             early = None
 
-    if live_trust == "trusted_short":
-        verdict, embedder = _SessionTrusted(), None
+    if live_trust == "trusted":
+        # The session's own verification covers this clip: no speaker model
+        # runs, and the strictness the session's real check earned is carried
+        # so `_really_checked` answers as it did for that check - which is what
+        # lets an answer that uses what Jarvis remembers be READ ALOUD instead
+        # of "it's on your screen" (the owner's report of 2026-11-01). It is
+        # still not a new check: nothing private is read aloud on the say-so of
+        # a setting alone, and the settings that gate it (`_private_aloud`,
+        # `_memory_aloud`, `_sensitive_aloud`) are asked exactly as before.
+        verdict = _SessionTrusted(
+            strictness=str(live_trust_info.get("strictness") or ""))
+        embedder = None
         steps["owner_check"] = 0.0
         steps["owner_check_early"] = 0.0
     else:
@@ -3313,9 +3341,14 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         return Heard(False, reason=verdict.reason, **common)
     if live and live_trust == "check":
         # A >= 2.0 s clip passed the full strict check: this IS the spot
-        # check, and it refreshes the session's trust window.
+        # check, and it verifies the whole session (the owner's request of
+        # 2026-11-01). Its own strictness and the print that passed travel
+        # with it, so the clips that follow on session trust carry what this
+        # real check proved, and a re-enrolled print can void it.
         try:
-            jarvis_live.ENGINE.note_verified(mic)
+            jarvis_live.ENGINE.note_verified(
+                mic, strictness=str(getattr(verdict, "strictness", "") or ""),
+                label=str(getattr(verdict, "voice_print", "") or ""))
         except Exception:
             pass
     if check_only:
@@ -3351,7 +3384,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     # report the short join as if speech-to-text had become free.
     steps["stt"] = early.ms if early is not None else (time.monotonic() - t) * 1000.0
     engine = f"{STT_ENGINE}:{_stt_files()[0]}"
-    if live and live_trust == "trusted_short":
+    if live and live_trust == "trusted":
         try:
             jarvis_live.ENGINE.note_trusted_short(mic)
         except Exception:

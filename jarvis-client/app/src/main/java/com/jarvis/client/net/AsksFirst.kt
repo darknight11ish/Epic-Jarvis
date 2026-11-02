@@ -138,7 +138,7 @@ object AsksFirst {
 
     // --- The switchable in-app tools (2026-10-31, the tiered-tools slice) -----
     //
-    // The PC now offers 21 one-tool switches in four groups, plus the vault
+    // The PC now offers 23 one-tool switches in four groups, plus the vault
     // organizer's own switch and the list of tools it deliberately does not
     // offer in-app. The PHONE IS READ-ONLY here (`can_enable` is false for a
     // request that did not come from the PC): it shows every switch and its

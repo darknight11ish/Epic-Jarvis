@@ -995,11 +995,15 @@ def t_live_clips_are_checked_before_words():
               and sp.calls == ["owner_check", "stt"], (h, sp.calls))
 
 
-def t_too_short_clips():
-    """Owner's refinement (2026-10-18): the first clip is a strict >= 2.0 s
-    check; 1.5-2.0 s may run on session trust and does not refresh; the
-    window dies after 120 s OR 16 short clips; expiry refuses short clips
-    until a full sentence; a failed spot check aborts trust at once."""
+def t_one_verification_covers_the_whole_session():
+    """The owner's request of 2026-11-01: "once I actively verify my voice in
+    a single Jarvis Live session, Jarvis shouldn't need to re-verify my voice".
+
+    One successful full-sentence check verifies the session: nothing asks
+    again for as long as it lasts (the 120 s / 16-short-clip window is gone),
+    a long turn still gets the SILENT spot check that keeps another voice out,
+    and a new session, a failed check or a re-enrolled print still asks."""
+    import os
     with T.Temp() as t:
         sp = Speech(t)
         sp.w.engine.start("phone")
@@ -1009,71 +1013,137 @@ def t_too_short_clips():
               h["too_short"] and h["live_say"] == L.SAY_RECHECK
               and sp.calls == [] and not h["text"], (h, sp.calls))
         h = sp.hear(seconds=2.5, words="first full sentence")
-        check("the first >= 2.0 s clip is the strict check and becomes the baseline",
+        check("one full sentence verifies the whole session (the real strict check)",
               h["ok"] and sorted(sp.calls) == ["owner_check", "stt"]
               and sp.w.engine.trust_state()["active"]
               and sp.w.engine.trust_state()["checks"] == 1, (h, sp.calls))
         sp.calls.clear()
         h = sp.hear(seconds=1.6, words="yes please")
-        check("a 1.6 s clip runs on session trust: NO speaker model, words still made",
+        check("the NEXT turn in the same session asks nothing: no speaker model, "
+              "no 'say a full sentence', words still made",
               h["ok"] and h["text"] == "yes please" and sp.calls == ["stt"]
-              and sp.w.engine.trust_state()["short_clips_since"] == 1, (h, sp.calls))
-        for _ in range(15):
-            h = sp.hear(seconds=1.6, words="short")
-        check("the 16th short clip expires the window by count",
-              not sp.w.engine.trust_state()["active"]
-              and sp.w.engine.trust_state()["expired"] == "count", sp.w.engine.trust_state())
+              and not h["too_short"] and not h["live_say"], (h, sp.calls))
         sp.calls.clear()
-        h = sp.hear(seconds=1.6, words="NEVER TRANSCRIBED")
-        check("...after which a short clip is refused with the full-sentence line",
-              h["too_short"] and h["live_say"] == L.SAY_RECHECK
-              and sp.calls == [] and not h["text"], (h, sp.calls))
-        sp.calls.clear()
-        h = sp.hear(seconds=2.5, words="a normal sentence")
-        check("a normal sentence checks again and refreshes the window",
+        h = sp.hear(seconds=3.5, words="a longer question this time")
+        check("a long turn still gets the silent spot check - that is what keeps "
+              "another voice out - and says nothing about it",
               h["ok"] and sorted(sp.calls) == ["owner_check", "stt"]
-              and sp.w.engine.trust_state()["short_clips_since"] == 0, (h, sp.calls))
-        sp.w.clock.t += 121
+              and not h["too_short"] and not h["live_say"], (h, sp.calls))
+        for _ in range(20):
+            sp.hear(seconds=1.6, words="short")
+        check("twenty short clips do not use the session up: there is no clip cap",
+              sp.w.engine.trust_state()["active"]
+              and sp.w.engine.trust_state()["short_clips_total"] == 21,
+              sp.w.engine.trust_state())
+        sp.w.clock.t += 15 * 60
         sp.w.engine.note_active("phone")
         sp.calls.clear()
-        h = sp.hear(seconds=1.6, words="NEVER")
-        check("the window also expires by time (120 s)",
-              h["too_short"] and sp.calls == []
-              and sp.w.engine.trust_state()["expired"] == "time", (h, sp.calls))
+        h = sp.hear(seconds=1.6, words="still fine")
+        check("...and fifteen minutes later there is no window to expire: still "
+              "trusted, nothing asked",
+              h["ok"] and sp.calls == ["stt"]
+              and sp.w.engine.trust_state()["active"]
+              and not sp.w.engine.trust_state()["expired"], (h, sp.calls))
+        sp.w.engine.stop("owner", device="phone")
+        sp.w.engine.start("phone")
         sp.calls.clear()
-        h = sp.hear(who="stranger", seconds=2.5, words="NEVER")
-        check("a failed spot check aborts session trust immediately",
-              not h["ok"] and sorted(sp.calls) == ["owner_check", "stt"]
-              and sp.w.engine.trust_state()["aborts"] == 1
-              and not sp.w.engine.trust_state()["active"], (h, sp.calls))
         h = sp.hear(seconds=1.6, words="NEVER TRANSCRIBED")
-        check("...and the next short clip is refused, not checked",
-              h["too_short"] and h["live_say"] == L.SAY_RECHECK and not h["text"], h)
+        check("a NEW session asks again: a short first clip is refused with the "
+              "full-sentence line",
+              h["too_short"] and h["live_say"] == L.SAY_RECHECK
+              and sp.calls == [] and not h["text"], (h, sp.calls))
+        h = sp.hear(seconds=2.5, words="second session, first sentence")
+        check("...and one full sentence verifies it", h["ok"]
+              and sorted(sp.calls) == ["owner_check", "stt"], (h, sp.calls))
+        h = sp.hear(who="stranger", seconds=2.5, words="NEVER")
+        check("a failed spot check ends the session's verification at once",
+              not h["ok"] and not sp.w.engine.trust_state()["active"]
+              and sp.w.engine.trust_state()["aborts"] == 1, h)
+        sp.calls.clear()
+        h = sp.hear(seconds=1.6, words="NEVER TRANSCRIBED")
+        check("...and the next short clip asks for a full sentence instead of "
+              "being taken on trust",
+              h["too_short"] and h["live_say"] == L.SAY_RECHECK
+              and sp.calls == [], (h, sp.calls))
+        h = sp.hear(seconds=2.5, words="ok then")
+        check("...which verifies the session again", h["ok"], (h, sp.calls))
         sp.calls.clear()
         with mock.patch.object(V, "verify", side_effect=RuntimeError("verifier died")):
             h = sp.hear(seconds=2.5, words="NEVER")
-        check("a voice-check ERROR fails closed: refused, trust off, and the words "
-              "made beside the failed check are discarded",
+        check("a voice-check ERROR still fails closed: refused, the session's "
+              "verification off, and the words made beside the failed check are "
+              "discarded",
               not h["ok"] and h["available"] is False and "trust is off" in h["reason"]
-              # Since 2026-10-21 the check is asked on the clip's first window
-              # first; when THAT raises, the full clip is checked exactly as
-              # before - so a dead verifier is asked twice before the refusal,
-              # never once and then trusted. The words made beside it are still
-              # discarded, which is the part that must not move.
+              # The check is asked on the clip's first window first; when THAT
+              # raises, the full clip is checked exactly as before - so a dead
+              # verifier is asked twice before the refusal, never once and then
+              # trusted.
               and sorted(sp.calls) == ["owner_check", "owner_check", "stt"]
-              and not h["text"],
-              (h, sp.calls))
+              and not h["text"], (h, sp.calls))
+        h = sp.hear(seconds=2.5, words="one more sentence")
+        check("...and one full sentence verifies the session again", h["ok"], (h, sp.calls))
+        path = V.PROFILE_PATH
+        st = os.stat(path)
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 10 ** 9))
+        sp.calls.clear()
+        h = sp.hear(seconds=1.6, words="NEVER TRANSCRIBED")
+        check("a re-enrolled print voids the session's verification: the next short "
+              "clip asks again, and the reason says so",
+              h["too_short"] and h["live_say"] == L.SAY_RECHECK
+              and sp.w.engine.trust_state()["expired"] == "print", (h, sp.calls))
         check("status exposes the trust state honestly (numbers/fixed words only)",
               set(("active", "last_verified_at", "short_clips_since", "window_s",
-                   "max_short_clips", "expired")) <= set(sp.w.engine.status()["trust"]))
-        check("the window and the short-clip cap are the owner's 120 s / 16",
-              sp.w.engine.status()["trust"]["window_s"] == 120
-              and sp.w.engine.status()["trust"]["max_short_clips"] == 16)
+                   "max_short_clips", "expired", "strictness")) <=
+              set(sp.w.engine.status()["trust"]))
+        check("the session is the window now: the 120 s / 16-clip window is gone",
+              sp.w.engine.status()["trust"]["window_s"] == int(L.TRUST_SESSION_S)
+              and sp.w.engine.status()["trust"]["max_short_clips"] == 0)
+
+
+def t_session_verification_keeps_the_read_aloud_flags():
+    """The owner's report of 2026-11-01: Live says "it's on your screen" for an
+    answer it could say. A clip on the session's own verification carries the
+    strictness the session's real check earned, so an answer that uses what
+    Jarvis remembers is read aloud (the default `memory_aloud`); every setting
+    that withholds an answer still withholds it, and a sensitive saved fact
+    still stays on screen unless the owner allowed it."""
+    with T.Temp() as t:
+        sp = Speech(t)
+        sp.w.engine.start("phone")
+        h = sp.hear(seconds=2.5, words="first full sentence")
+        check("the verifying clip is a real check, so the memory answer may be said",
+              h["memory_aloud"] is True and h["private_aloud"] is False, h)
+        h = sp.hear(seconds=1.6, words="what did I say about the boat")
+        check("...and the NEXT turn, on the session's verification, still may - "
+              "no 'it's on your screen' about an answer it can say",
+              h["ok"] and h["memory_aloud"] is True, h)
+        check("...while a private answer follows the owner's own setting, unchanged "
+              "(on screen by default)", h["private_aloud"] is False, h)
+        check("...and a sensitive saved fact is still kept on screen (its own "
+              "setting, which does NOT travel with the session)",
+              h["sensitive_aloud"] is False, h)
+        V.set_setting("privacy", "voice_is_enough", approved=True)
+        h = sp.hear(seconds=1.6, words="and my calendar")
+        check("with 'your voice is enough' on, the session's own check is enough "
+              "for a private answer too - as it was for the clip that passed",
+              h["private_aloud"] is True and h["memory_aloud"] is True, h)
+        V.set_setting("sensitive_memory", "sensitive_aloud", approved=True)
+        h = sp.hear(seconds=1.6, words="and my blood pressure")
+        check("...and a sensitive fact is read aloud only because the owner's own "
+              "setting says so", h["sensitive_aloud"] is True, h)
+        # The screen rule is its own setting, and it still keeps a screen answer
+        # on screen: this is the "genuinely visual" half, unchanged.
+        V.set_setting("hands_free", "button_only")
+        V.set_setting("hands_free_live", "live_like_hey_jarvis")
+        h = sp.hear(seconds=1.6, words="read my screen")
+        check("an answer about the SCREEN still stays on screen when the Live "
+              "caution setting says so", h["ok"] and h["screen_aloud"] is False, h)
 
 
 def t_live_model_fallback_and_limits_are_one_injected_value():
     """The `[live]` model/fallback and the one lane URL are settings, not a
-    second model loader; context 16K and a 6-tool diet are Live-only."""
+    second model loader; context 16K is Live-only and the tool limit is a
+    FLOOR, never fewer tools than typed chat (2026-11-01)."""
     old_cfg, old_models = L._live_cfg, L._installed_models
     old_warm = getattr(L.ENGINE, "_warm", {})
     L._live_cfg = lambda key, default=None: {
@@ -1091,9 +1161,11 @@ def t_live_model_fallback_and_limits_are_one_injected_value():
         check("a Live turn uses the Live model on the one injected lane URL",
               ov["model"] == "qwen3.5:9b" and ov["ollama_url"] == L.lane_url()
               and ov["lane_url"] == L.lane_url(), ov)
-        check("...and a 16K context and the short tool limit (typed chat unchanged)",
-              ov["context_length"] == 16384 and ov["tool_limit"] == 6
+        check("...and a 16K context, and a tool limit that is a floor at typed chat's own size",
+              ov["context_length"] == 16384 and ov["tool_limit"] >= 8
               and L.live_limits()["context_tokens"] == 16384, ov)
+        check("...so a configured 6 cannot hand a spoken turn fewer tools than typed chat",
+              ov["tool_limit"] == 8, ov)
         check("the model is a setting, not a hard-coded second loader",
               "[live]" in (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
               and "qwen3:8b" in (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8"))

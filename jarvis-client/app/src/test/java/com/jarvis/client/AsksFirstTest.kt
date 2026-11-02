@@ -159,7 +159,7 @@ class AsksFirstTest {
         assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
-        assertEquals("21 one-tool switches", 21, rawIds.size)
+        assertEquals("23 one-tool switches", 23, rawIds.size)
         assertEquals("every tool, in the PC's own order",
             rawIds, t.groups.flatMap { g -> g.rows.map { it.id } })
         assertEquals("the PC's four group titles, in order",
