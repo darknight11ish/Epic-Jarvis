@@ -224,6 +224,56 @@ class MomentFlow {
 }
 
 /**
+ * The "One moment." clip this phone holds, and the one rule that keeps it
+ * honest: its bytes are played only for the key they were fetched under.
+ *
+ * The PC's key (`flow.moment.key`, `jarvis_voice_flow.moment_key()`) changes
+ * whenever the clip would sound different - another speaker, another face
+ * voice, another speed. Bytes kept under another key are therefore the OLD
+ * voice, and playing them is the owner's report of 2026-11-01: a male "One
+ * moment." over female answers. [playable] is the only way out of this class,
+ * and a refused fetch clears rather than keeps, so a 503 leaves silence.
+ */
+class MomentClip {
+    private var key: String = ""
+    private var wav: ByteArray? = null
+
+    /** The bytes only when they are the clip for [currentKey] and the PC says [usable]. */
+    @Synchronized
+    fun playable(currentKey: String, usable: Boolean): ByteArray? {
+        val held = wav
+        return if (usable && currentKey.isNotEmpty() && key == currentKey) held else null
+    }
+
+    /** True when nothing is held for [currentKey]: a fetch is due (a new voice, or a failed one). */
+    @Synchronized
+    fun missing(currentKey: String): Boolean =
+        currentKey.isEmpty() || key != currentKey || wav == null
+
+    /** Nothing may be played until a fetch succeeds. */
+    @Synchronized
+    fun clear() {
+        key = ""
+        wav = null
+    }
+
+    /**
+     * Keep [got] for [expectedKey] - but only when [got] is real and the PC
+     * is still on [currentKey]. Null, empty or overtaken bytes clear rather
+     * than keep, so a refused (503) fetch leaves silence, never the old voice.
+     */
+    @Synchronized
+    fun store(expectedKey: String, got: ByteArray?, currentKey: String) {
+        if (got == null || got.isEmpty() || expectedKey != currentKey) {
+            if (key == expectedKey) clear()
+            return
+        }
+        key = expectedKey
+        wav = got
+    }
+}
+
+/**
  * Speech over a reply, from per-step loudness only (the talk button's own
  * rule, [WakeClip.EndOfSpeech.threshold]). [step] is fed every 80 ms step
  * the barge-in listener reads, and says when half a second of speech has

@@ -142,7 +142,11 @@ facts/connections view. It reads nothing new (`/api/memory/entities` only), writ
 no route, no card and no GL/AGSL. The desktop panel remains the interactive one: the constellation
 and its three flat presets, hover and drag, the floating search box, the merge card, the names under
 each fact and the fact-words paging that hangs off a dot all stay there. The phone's picture is a
-view, never a control.
+view, never a control. **Corrected 2026-11-02:** a picture of ONE name draws that name's dot at a
+readable size and names it in one line under the canvas ("This dot is Priya. The Galaxy joins two
+names when one saved fact mentions both, so this fills in as Jarvis learns."), instead of leaving a
+~7dp speck in an empty plate - one name has no link to draw, and the owner read the speck as the
+picture being broken. The no-labels rule on the canvas itself is unchanged.
 
 **A1 (2026-10-21, owner + Gemini approved): the list becomes easy to look through - still read-only.**
 The phone's plate gains four things, every one a VIEW of the same `/api/memory/entities` read and

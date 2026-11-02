@@ -285,6 +285,188 @@ def unclassified(row: Optional[dict]) -> bool:
     return not (isinstance(risk, dict) and risk.get("classified") is True)
 
 
+# ---------------------------------------------------------------------------
+# Small approvals - the owner's request of 2026-11-01
+# ---------------------------------------------------------------------------
+#
+# THE OWNER'S WORDS: *"for small approvals like asking jarvis to search the web
+# (for things like weather or the news or anything small) i would like to only
+# have to approve the card, not necessarily use my fingerprint on top of
+# approving the card. make this setting adjustable in settings or through
+# chatting to jarvis."*
+#
+# WHAT MAKES A CARD SMALL. Two things, and both are needed:
+#
+#   1. the action is on the explicit list below - never a guess from the
+#      words on the card, and never "it looks harmless";
+#   2. the gate's OWN risk row for it says it changes nothing (`reversible`
+#      "yes") and has classified it, and nothing outside text tried to rush
+#      it. So a gate that ever gives one of these an irreversible row puts
+#      the check straight back on it, without touching this list.
+#
+# EVERY ACTION CLASSIFIED SMALL, and what the gate says about each (the rows
+# are in `jarvis_gate._RISK`):
+#
+#   the web reads     search_the_web ("sends the search words shown on the
+#                     card to the web search you chose ... nothing else of
+#                     yours is sent"), web_research ("a public query leaves
+#                     the machine; nothing changes"), news_read ("fetches the
+#                     news feeds you chose; a public read that changes
+#                     nothing"), page_read ("reads the one page you already
+#                     named ... nothing changes"), github_read ("reads public
+#                     GitHub data; sends nothing of yours and changes
+#                     nothing"), browse_model_catalog ("a fixed public query;
+#                     downloads nothing")
+#   the local reads   calendar_read, email_read, notes_search, home_read,
+#                     read_calendar, read_files_readonly, read_joplin_note,
+#                     read_logseq_page - each "reads ... changes nothing"
+#
+# ALL OF THESE WERE RISKY UNTIL NOW, and that is the whole of the owner's
+# complaint: `is_risky` calls anything `outbound` risky, and a web search is
+# outbound, so pressing Approve on it asked for the phone's fingerprint or the
+# PC's Windows Hello on top of the card's own yes.
+#
+# WHAT IS DELIBERATELY NOT SMALL: anything that writes, spends, sends,
+# deletes, or changes an account, a credential, a device, the network, an app
+# or a permission. `docker_service_stop` is the nearest miss - local and
+# undoable, and it stops something - so it stays out. A question like "what is
+# the weather" raises no card at all, so there is nothing to list for it; the
+# card that DOES come from a weather question is the one this list is about
+# (`search_the_web`, or `news_read` for the news).
+SMALL_ACTIONS = frozenset({
+    # the web reads
+    "search_the_web",
+    "web_research",
+    "news_read",
+    "page_read",
+    "github_read",
+    "browse_model_catalog",
+    # the local reads
+    "calendar_read",
+    "email_read",
+    "notes_search",
+    "home_read",
+    "read_calendar",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+})
+
+#: The three answers to "which approvals ask for the check". The same three
+#: values the two apps have in their own Settings (`ApprovalCheck` in
+#: `jarvis-client/.../data/Security.kt` and in
+#: `jarvis-desktop/src-tauri/src/lock/rules.rs`).
+#:
+#: SMALL  - a small read-only card is approved by the card alone; every other
+#:          risky card still asks. THE OWNER'S REQUEST OF 2026-11-01, and the
+#:          default since it.
+#: RISKY  - today's rule: every risky card asks, the small ones included.
+#:          This is what "ask me for my fingerprint on everything again" sets.
+#: EVERY  - every card asks, risky or not. This is the desktop app's own
+#:          "Every approval" and the phone's; the backend only reads it so a
+#:          small card is not left unchecked while the apps ask for
+#:          everything.
+MODE_SMALL = "small"
+MODE_RISKY = "risky"
+MODE_EVERY = "every"
+MODES = (MODE_SMALL, MODE_RISKY, MODE_EVERY)
+DEFAULT_MODE = MODE_SMALL
+
+#: Where the answer is kept: one small file in the folder Jarvis keeps its own
+#: state in (`~/.openjarvis`, or OPENJARVIS_CONFIG_DIR / JARVIS_CONFIG_DIR).
+#: NOT in the framework toml: that file is the owner's to edit by hand, and a
+#: setting Jarvis writes belongs in the state folder like approvals.db does.
+MODE_FILE_NAME = "approvals-mode.json"
+
+#: An environment override, for tests and for a suite that must not touch the
+#: owner's own file. Read fresh every time, like the log folder's own override.
+MODE_FILE_ENV = "JARVIS_APPROVALS_MODE_FILE"
+
+
+def _mode_file() -> Path:
+    explicit = os.environ.get(MODE_FILE_ENV, "").strip()
+    if explicit:
+        return Path(os.path.expanduser(explicit))
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+    if env:
+        return Path(os.path.expanduser(env)) / MODE_FILE_NAME
+    return Path(os.path.expanduser("~")) / ".openjarvis" / MODE_FILE_NAME
+
+
+def approvals_mode() -> str:
+    """Which approvals ask for the check: MODE_SMALL (the default), MODE_RISKY
+    or MODE_EVERY.
+
+    A missing file is the shipped default - the owner's request of 2026-11-01
+    - so a PC that has never been asked answers SMALL. A file that cannot be
+    read or does not name one of the three is EVERY: a typo, a half-written
+    file or a hand edit must never quietly turn a check OFF. (`jarvis_owner_
+    check` refuses rather than guesses everywhere else; this is the same
+    direction.)
+    """
+    try:
+        text = _mode_file().read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return DEFAULT_MODE
+    except Exception:
+        return MODE_EVERY
+    try:
+        data = json.loads(text)
+    except Exception:
+        return MODE_EVERY
+    value = data.get("approvals") if isinstance(data, dict) else None
+    return value if value in MODES else MODE_EVERY
+
+
+def set_approvals_mode(mode: str) -> str:
+    """Store `mode` and answer what it was before. Raises ValueError for a
+    value that is not one of the three, and lets a write failure out: the
+    caller has to be able to say "nothing was changed" honestly."""
+    if mode not in MODES:
+        raise ValueError(f"not one of {MODES!r}: {mode!r}")
+    was = approvals_mode()
+    path = _mode_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps({"approvals": mode}, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+    return was
+
+
+def asks_for_small() -> bool:
+    """True when a small read-only card asks for the check as well.
+
+    The owner's request of 2026-11-01 is that it does not (MODE_SMALL); every
+    other value asks. Written as one function so `approve_check` reads one
+    answer and the two rules below cannot drift."""
+    return approvals_mode() != MODE_SMALL
+
+
+def is_small(row: Optional[dict]) -> bool:
+    """True when `row` (a /api/pending row) is a SMALL approval: a read-only
+    action on the list above, whose own risk row says it changes nothing.
+
+    Fails toward asking: anything this cannot read - no action, an action
+    that is not on the list, a missing or unclassified `risk`, a `reversible`
+    that is not "yes", a rush latch - is NOT small, so the card keeps the
+    check it has today. An unclassified card is never small, which is the
+    same fail-closed default `is_risky` uses.
+    """
+    if not isinstance(row, dict):
+        return False
+    action = row.get("action")
+    if not isinstance(action, str) or action not in SMALL_ACTIONS:
+        return False
+    risk = row.get("risk")
+    if not isinstance(risk, dict) or risk.get("classified") is not True:
+        return False
+    if risk.get("reversible") != "yes":
+        return False
+    if risk.get("reach") not in ("local", "outbound"):
+        return False
+    return not _raised(row)
+
+
 def approval_message(row: Optional[dict]) -> str:
     """What the Windows Hello prompt says: the gate's own title (built from
     the action name and the risk table, never the payload) and why it
@@ -1633,6 +1815,16 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
       set by jarvis_devices' key check): needs that device's signature
       (`_signed_check`). A phone with no approval key yet is refused with
       "no_approval_key", so it can offer to turn signed approvals on.
+
+    - A SMALL card is the owner's request of 2026-11-01: `is_small` and
+      `approvals_mode() == MODE_SMALL`, which is the default - a read-only
+      card (a web search, a page, the news) is approved by the card alone.
+      Then no Windows Hello prompt is shown for it on this PC, and the
+      phone's own approval of it does not need the device signature the
+      phone can only make with its fingerprint. The card itself is still
+      raised and still needs its own yes: nothing is auto-approved, and
+      `small_skips` is asked once, from the row that is waiting, after the
+      "is this still the live card" checks.
     """
     pending = pending or _pending_rows
     request_id = body.get("id") if isinstance(body, dict) else None
@@ -1662,11 +1854,17 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
     if action in PC_ONLY_ACTIONS and not here:
         # Approved on the PC only, with Windows Hello (PC_ONLY_ACTIONS).
         return 403, {"ok": False, "error": PC_ONLY, "owner_check": "pc_only"}
-    if not here and is_risky(row):
+    # THE SMALL-CARD EXEMPTION (2026-11-01) is decided once, on the row that is
+    # waiting now, and read by both rules below: the phone's signature and this
+    # PC's Windows Hello prompt. One answer, so the two cannot disagree about
+    # what "small" means - a card the phone may approve without its fingerprint
+    # is the same card this PC will not ask Windows Hello for.
+    small_skips = is_small(row) and not asks_for_small()
+    if not here and is_risky(row) and not small_skips:
         refused = _signed_check(body, row, device)
         if refused is not None:
             return refused
-    if (is_risky(row) or action in PC_ONLY_ACTIONS) and here:
+    if (is_risky(row) or action in PC_ONLY_ACTIONS) and here and not small_skips:
         # A prompt may only ask about something Jarvis can NAME. An action with
         # no written words gets a title made up from its own name
         # (`jarvis_card_words.FALLBACK`), which reads fine but describes

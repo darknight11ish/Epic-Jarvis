@@ -3,7 +3,7 @@
 The owner's feature list, as data: 168 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 cce0c97c4b2c1b5e131ca38fb23590a69d6a6c6fb34fe9a4942748eb029bb159); the apps' Features pages read their own
+`features/features.json` (sha256 82f0499231d6068aead1e0baba78036c0dbc505a5f5f6f3567f3c98b8648d7f0); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "cce0c97c4b2c1b5e131ca38fb23590a69d6a6c6fb34fe9a4942748eb029bb159"
+SOURCE_SHA256 = "82f0499231d6068aead1e0baba78036c0dbc505a5f5f6f3567f3c98b8648d7f0"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1128,7 +1128,7 @@ FEATURES = (
         "id": "phone-pip",
         "group": "Phone",
         "title": "Picture-in-picture",
-        "what": "A small Jarvis window that stays on screen while you use other apps - the face and the first line of the answer, the last few messages, or Jarvis Live.",
+        "what": "A small Jarvis window that stays on screen while you use other apps - the face, one word while Jarvis is working on what you said, the last few messages, or Jarvis Live.",
         "where": "Settings, Picture-in-picture.",
         "asks": "No card. The window never approves anything, and tapping it brings Jarvis back.",
         "limit": "It never shows hidden or locked content, never approves a card and never changes a setting. What it shows is chosen on this phone only.",
@@ -1199,7 +1199,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Appearance",
         "what": "The theme, the face Jarvis wears, and the colour for each state.",
-        "where": "Settings, Appearance. On the phone, Appearance on Home, or from Settings.",
+        "where": "Settings, Appearance. On the phone it is Settings, Appearance - it is not a Home button any more (a Reminders button took its place there on 2026-11-02).",
         "asks": "No card - a look changes at once.",
         "limit": "Look-and-behaviour options are shared with your phone; sharpness and frame rate stay per device.",
         "surface": "both",

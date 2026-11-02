@@ -70,25 +70,50 @@ class ApproveAsksFingerprintTest {
         ((JarvisJson.parseToJsonElement(text) as JsonObject)["cases"] as JsonArray).map { it.jsonObject }
     }
 
-    private fun items(): List<Triple<String, PendingItem, Boolean>> = cases.map { case ->
-        val name = case["name"]!!.jsonPrimitive.content
-        val risky = case["risky"]!!.jsonPrimitive.boolean
-        Triple(name, decodePendingRows(listOf(case["row"]!!)).items.single(), risky)
+    /** One contract case: its name, the row as the phone reads it, and the PC's two answers. */
+    private data class Case(
+        val name: String,
+        val item: PendingItem,
+        val risky: Boolean,
+        val small: Boolean,
+    )
+
+    private fun items(): List<Case> = cases.map { case ->
+        Case(
+            name = case["name"]!!.jsonPrimitive.content,
+            item = decodePendingRows(listOf(case["row"]!!)).items.single(),
+            risky = case["risky"]!!.jsonPrimitive.boolean,
+            small = case["small"]!!.jsonPrimitive.boolean,
+        )
     }
 
     // ------------------------------------------------- the same cards ----
 
     @Test
-    fun `exactly the cards the desktop asks Windows Hello for show the line`() {
+    fun `exactly the cards that will ask for the check show the line`() {
         assertTrue(cases.size >= 10)
-        for ((name, item, risky) in items()) {
-            val words = SecurityRules.approveCheckWords(Security(), item)
-            if (risky) {
-                assertNotNull("$name is a Windows Hello card on the PC, so its Approve " +
+        for (c in items()) {
+            val words = SecurityRules.approveCheckWords(Security(), c.item)
+            // Since the owner's request of 2026-11-01 the small read-only cards
+            // are approved by the card alone, so they are the ONE kind of risky
+            // card with no line - and every other risky card still has one.
+            if (c.risky && !c.small) {
+                assertNotNull("${c.name} is a Windows Hello card on the PC, so its Approve " +
                     "must say a check is coming", words)
             } else {
-                assertNull("$name is not a Windows Hello card on the PC, so the phone " +
-                    "must not claim a check it will not run", words)
+                assertNull("${c.name} will not run a check by default, so the phone " +
+                    "must not claim one", words)
+            }
+        }
+        // THE OLD CLAIM, still asserted where it is exactly true: under
+        // "Risky only" - today's rule, and still a choice - every risky card in
+        // the contract shows the line, small ones included.
+        for (c in items()) {
+            val words = SecurityRules.approveCheckWords(Security(approvals = ApprovalCheck.RISKY), c.item)
+            if (c.risky) {
+                assertNotNull("${c.name} asks under Risky only", words)
+            } else {
+                assertNull("${c.name} does not ask under Risky only", words)
             }
         }
     }
@@ -139,10 +164,10 @@ class ApproveAsksFingerprintTest {
         // about how much checking) or a proposal that needs a named plan
         // (`item.needsChoice`, which the PC's decide route cannot carry yet).
         // Neither is the risk level refusing the phone.
-        for ((name, item, risky) in items()) {
-            if (!risky) continue
-            assertTrue("$name would not even draw an Approve button here", !item.pcOnly)
-            assertTrue("$name would not even draw an Approve button here", !item.needsChoice)
+        for (c in items()) {
+            if (!c.risky) continue
+            assertTrue("${c.name} would not even draw an Approve button here", !c.item.pcOnly)
+            assertTrue("${c.name} would not even draw an Approve button here", !c.item.needsChoice)
         }
     }
 

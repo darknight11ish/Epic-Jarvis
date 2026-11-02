@@ -3107,6 +3107,287 @@ def set_focus_preset(value: str, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+# --- the fingerprint on SMALL approvals (jarvis_owner_check.py) ------------
+#
+# THE OWNER'S REQUEST OF 2026-11-01: *"for small approvals like asking jarvis to
+# search the web (for things like weather or the news or anything small) i
+# would like to only have to approve the card, not necessarily use my
+# fingerprint on top of approving the card. make this setting adjustable in
+# settings or through chatting to jarvis."*
+#
+# The rule and the list of small actions live in jarvis_owner_check.py
+# (`is_small`, `SMALL_ACTIONS`), which is the module that decides both prompts
+# on this PC: the Windows Hello prompt for a risky card approved here, and the
+# device signature a phone's approval needs. This is the ONE setting that
+# turns the exemption off again ("ask me for my fingerprint on everything
+# again"), so the two prompts can never disagree about which cards are small.
+#
+# IT IS NOT A SECOND WAY TO CHANGE ANYTHING. It calls exactly the function that
+# stores the answer (`jarvis_owner_check.set_approvals_mode`), the same one the
+# per-approval rule reads. Stricter - asking for the small ones too - is
+# immediate, like every other change in the owner's direction. Looser - leaving
+# the small ones alone, which is the shipped default - is this PC only:
+# `peer`/`local` are passed through to `jarvis_owner_check.from_this_pc`, the
+# same test the approval itself makes, so a phone cannot turn a check off.
+def set_small_approvals(ask: bool, *, peer=None, local=None) -> Outcome:
+    """Ask for the fingerprint/PIN on the small read-only cards as well.
+
+    `ask=True`  - every risky approval asks, the small ones included (today's
+                  rule before the owner's request; the stricter direction).
+    `ask=False` - a small card is approved by the card alone (the default).
+    """
+    try:
+        import jarvis_owner_check as OC
+    except Exception:
+        return _missing("the fingerprint for small approvals")
+    try:
+        here = OC.from_this_pc(peer, local)
+    except Exception:
+        here = False
+    if not here:
+        return Outcome(False, _SMALL_APPROVALS_PC_ONLY, refused_pc_only=True)
+    was = OC.approvals_mode()
+    if ask and was in (OC.MODE_RISKY, OC.MODE_EVERY):
+        return Outcome(True, "Every risky approval already asks for your fingerprint, "
+                             "the small read-only ones too.")
+    if not ask and was == OC.MODE_SMALL:
+        return Outcome(True, "Small read-only cards are already approved by the card "
+                             "alone, and everything else that is risky still asks.")
+    try:
+        OC.set_approvals_mode(OC.MODE_RISKY if ask else OC.MODE_SMALL)
+    except Exception as exc:
+        return Outcome(False, "That setting could not be saved "
+                              f"({type(exc).__name__}), so nothing was changed.")
+    if ask:
+        return Outcome(True, "Every risky approval asks for your fingerprint again, the "
+                             "small read-only ones included.")
+    return Outcome(True, "Small read-only cards - a web search, a page, the news - are "
+                         "approved by the card alone. Everything else that is risky still "
+                         "asks.")
+
+
+#: Said when a phone (or another device) asks for the loosening. It is this
+#: PC's own check, so the PC is where it can be turned off.
+_SMALL_APPROVALS_PC_ONLY = (
+    "The fingerprint for small approvals can only be changed on your PC - it is "
+    "this PC's own check. Nothing was changed.")
+
+_SMALL_APPROVALS_CHOICES = {
+    "ask": True, "ask me": True, "ask for them": True, "ask on them": True,
+    "ask for small approvals": True, "fingerprint": True,
+    "on": True, "yes": True,
+    "skip": False, "skip them": False, "skip small cards": False,
+    "skip the small ones": False, "leave them": False, "leave them alone": False,
+    "do not ask": False, "off": False, "no": False,
+}
+
+
+# --- the ONE number setting (2026-11-01) -----------------------------------
+#
+# THE OWNER'S ASK: "also id likee to he able to tell jarvis to change the setting
+# that turns off jarvos live by extending how long ot takestoo turn off when it
+# doesntt hear anything". Until today the Jarvis Live quiet window was a
+# constant in jarvis_live.py (`QUIET_S = 90`), with its own comment saying the
+# owner's call was pending. It is a real setting now, and every surface reads
+# ONE key: `[live].quiet_s` in the owner's settings file.
+#
+# WHERE THE NUMBER LIVES, AND WHY NOT HERE. The row is in `jarvis_limits.py`'s
+# table (`live_idle_seconds`), because that table already owns "a number in
+# jarvis-framework.toml that a module reads", its route (`POST
+# /api/limits/settings`), its range check, its words and BOTH Settings screens.
+# This file carries the SPOKEN name and the setter, and reads the default, the
+# range and the words FROM the row - so there is no second copy of 90/30/600
+# anywhere, and the value the sentence writes is the value the engine reads.
+#
+# `jarvis_quick._run_live_idle_set` is the sentence's runner. It calls
+# `set_live_idle` below, which calls `jarvis_limits.change` - the exact function
+# the desktop's "Limits and frequency" card and the phone's Limits plate POST
+# to. So a spoken change and a tapped change are ONE path, one range check, one
+# write, and the spoken receipt reads the value back through
+# `jarvis_live.quiet_seconds()`, the reader the engine itself uses.
+LIVE_IDLE_LIMIT_KEY = "live_idle_seconds"
+
+
+def set_live_idle(seconds, *, peer=None, local=None) -> Outcome:
+    """Change how long Jarvis Live waits before it turns itself off.
+
+    `jarvis_limits.change({"key": "live_idle_seconds", "value": seconds})` -
+    the same function `POST /api/limits/settings` calls for both apps, which
+    owns the range check ("That has to be between 30 and 600."), the PC-only
+    rule (this row is offered to both apps, so there is none) and the sentence.
+    Nothing about that route's rules is decided here.
+
+    No card either way: see the row's own comment in jarvis_limits.py. Live must
+    already be running - the owner started it and the microphone was already
+    open - and this only decides when an idle session ends. It cannot start
+    Live, read anything, send anything or store anything, and the same
+    session's time limit already extends at once ("give me twenty more
+    minutes"), so asking a card to keep listening longer would be stricter than
+    the control beside it."""
+    try:
+        import jarvis_limits as JL
+    except Exception:
+        return _missing("the Jarvis Live quiet timeout")
+    if JL.find(LIVE_IDLE_LIMIT_KEY) is None:
+        return _missing("the Jarvis Live quiet timeout")
+    try:
+        code, out = JL.change({"key": LIVE_IDLE_LIMIT_KEY, "value": int(seconds)},
+                              peer=peer, local=local)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Outcome(False, "The Jarvis Live quiet timeout could not be "
+                              f"saved ({type(exc).__name__}), so nothing was "
+                              "changed.")
+    return _say(code, out)
+
+
+@dataclass(frozen=True)
+class NumberSetting:
+    """One setting whose value is a whole number inside a real range.
+
+    Distinct from `ChoiceSetting` on purpose: a choice is one of a fixed list
+    and a number is `low..high` with a step for the two apps' -/+ controls. It
+    is ALSO not a `BoolSetting`, so it cannot be read by
+    `jarvis_feature_guide.read_state` (which answers True/False) - the spoken
+    runner reads the value back through the engine's own reader instead.
+
+    The DEFAULT, the RANGE and the WORDS are not stored here: `limit()` returns
+    the `jarvis_limits.Limit` row that owns them, so this table cannot drift
+    from the number the engine and both Settings screens act on.
+    """
+
+    key: str
+    #: What a person may call the setting. Exact aliases only first; the
+    #: tolerant matcher below is what a model's own wording goes through.
+    names: tuple
+    #: The `jarvis_limits.LIMITS` key that owns the value, the range and the
+    #: words. The two keys are the same word today and are kept separate so a
+    #: rename on either side is a deliberate edit rather than a silent one.
+    limit_key: str
+    #: Calls the exact existing function; (value, *, peer, local) -> Outcome.
+    set: Callable[..., Outcome] = field(repr=False)
+
+    def limit(self):
+        """The row that owns this number, or None when this PC has no
+        `jarvis_limits.py` (an older backend)."""
+        try:
+            import jarvis_limits as JL
+        except Exception:
+            return None
+        return JL.find(self.limit_key)
+
+    def default(self):
+        row = self.limit()
+        return None if row is None else row.default
+
+    def low(self):
+        row = self.limit()
+        return None if row is None else row.low
+
+    def high(self):
+        row = self.limit()
+        return None if row is None else row.high
+
+    def unit(self) -> str:
+        row = self.limit()
+        return "" if row is None else row.unit
+
+    def title(self) -> str:
+        row = self.limit()
+        return self.names[0] if row is None else row.title
+
+    def words(self, value) -> str:
+        """The value in the PC's own words ("3 minutes"), from the row."""
+        row = self.limit()
+        return str(value) if row is None else row.words(value)
+
+    def range_words(self) -> str:
+        """The accepted range in the owner's words: "from 30 seconds to 10
+        minutes". Empty when this PC has no row to read it from - a caller then
+        says nothing about a range rather than inventing one."""
+        row = self.limit()
+        if row is None:
+            return ""
+        return f"from {row.words(row.low)} to {row.words(row.high)}"
+
+
+NUMBER_SETTINGS: tuple = (
+    # "How long Jarvis Live waits before it turns off" (2026-11-01).
+    #
+    # THE NAMES ARE THE SENTENCES THE OWNER REALLY SAYS, and every one of them
+    # keeps the word "live" in it. That is deliberate: "the idle timeout" alone
+    # is the chat's own "a new conversation starts after" row (Section
+    # idle-new), which is CLIENT-SIDE and has no setter at all - a name without
+    # "live" would make the same words mean two different things depending on
+    # which table happened to answer first.
+    #
+    # "how long before jarvis live turns off when it hears nothing" is the
+    # owner's own sentence and the ASK shape; with a length on the end ("...
+    # to three minutes", "make it three minutes") it is the CHANGE shape.
+    NumberSetting(
+        "live_idle_seconds",
+        ("how long jarvis live waits before it turns off",
+         "how long jarvis live waits when it hears nothing",
+         "how long before jarvis live turns off when it hears nothing",
+         "how long before jarvis live turns off",
+         "how long jarvis live waits",
+         "how long jarvis live keeps listening",
+         "how long jarvis live listens",
+         "the jarvis live timeout",
+         "the jarvis live quiet timeout",
+         "the live idle timeout",
+         "the live quiet timeout",
+         "the live timeout"),
+        LIVE_IDLE_LIMIT_KEY,
+        set_live_idle),
+)
+
+
+def find_number_setting(words: str):
+    """The NumberSetting `words` names exactly, or None (never a guess)."""
+    bare = _bare(words)
+    for setting in NUMBER_SETTINGS:
+        if any(bare == _bare(name) for name in setting.names):
+            return setting
+    return None
+
+
+def find_number_setting_words(words: str):
+    """The ONE number setting `words` names in the MODEL's own wording.
+
+    The same two rules `find_bool_setting_words` uses, and for the same reason:
+    filler and case are ignored, then the request must CONTAIN every word of one
+    whole name, one direction only. Ambiguity is refused, never guessed at."""
+    text = _setting_words(words)
+    if not text:
+        return None
+    exact: dict = {}
+    for setting in NUMBER_SETTINGS:
+        for name in setting.names:
+            exact.setdefault(_setting_words(name), set()).add(setting.key)
+    if text in exact:
+        return _one_number(exact[text])
+    if len(text.split()) < 2:
+        return None
+    theirs = set(text.split())
+    found: set = set()
+    for setting in NUMBER_SETTINGS:
+        for name in setting.names:
+            mine = set(_setting_words(name).split())
+            if mine and mine <= theirs:
+                found.add(setting.key)
+                break
+    return _one_number(found)
+
+
+def _one_number(keys) -> Optional["NumberSetting"]:
+    """The single NumberSetting `keys` names, or None when that is not exactly
+    one - the same refusal `_one_setting` makes for the switches."""
+    if len(keys) != 1:
+        return None
+    key = next(iter(keys))
+    return next((n for n in NUMBER_SETTINGS if n.key == key), None)
+
+
 CHOICE_SETTINGS: tuple = (
     ChoiceSetting(
         "handoff_mode",
@@ -3190,6 +3471,22 @@ CHOICE_SETTINGS: tuple = (
         "manner", {"during": "during", "after": "after"}, set_antislop_mode,
         "whether the Anti-Slop filter works as it writes (during) or audits "
         "first (after)"),
+    # THE FINGERPRINT ON SMALL APPROVALS (the owner's request of 2026-11-01).
+    # One setting, two answers, and the SAME function the approval itself reads
+    # (jarvis_owner_check.set_approvals_mode / approvals_mode) - so "ask me for
+    # my fingerprint on everything again" changes the rule that actually asks,
+    # not a second copy of it. "small" is the shipped default; see that
+    # module's SMALL_ACTIONS for the exact list of cards it covers.
+    ChoiceSetting(
+        "small_approvals",
+        ("the fingerprint for small approvals", "the fingerprint on small approvals",
+         "the fingerprint for small things", "the fingerprint for small cards",
+         "the fingerprint for small cards and approvals", "small approvals"),
+        "security", dict(_SMALL_APPROVALS_CHOICES), set_small_approvals,
+        "whether the small read-only approvals (a web search, a page, the news, "
+        "reading your calendar or notes) ask for your fingerprint as well as the "
+        "card's own yes",
+    ),
 )
 
 
@@ -4064,6 +4361,10 @@ def capability_keys() -> list:
     """
     keys = [f"switch:{b.key}" for b in BOOL_SETTINGS]
     keys += [f"choice:{c.key}" for c in CHOICE_SETTINGS]
+    # The one number setting (2026-11-01): "how long Jarvis Live waits before
+    # it turns off". Its own prefix, so an app built before it can tell the
+    # backend has something new without mistaking it for a switch.
+    keys += [f"limit:{n.key}" for n in NUMBER_SETTINGS]
     keys += [f"asks_first:{k}" for k in _ASKS_FIRST_TARGETS]
     keys += [f"tool:{k}" for k in _TOOL_TARGETS]
     for what, _where, _count, module in _OTHER_REACHABLE:
@@ -4154,6 +4455,16 @@ def changeable_settings() -> dict:
     for choice in CHOICE_SETTINGS:
         rows.append((choice.describe or choice.key,
                      SECTION_PLAIN.get(choice.where or "", "")))
+        total += 1
+
+    # The number settings (2026-11-01). One row each, named the way a person
+    # says it, because "how long Jarvis Live waits before it turns off" is a
+    # setting the owner can now change by asking - leaving it out of this answer
+    # would tell him it cannot be done.
+    for number in NUMBER_SETTINGS:
+        row = number.limit()
+        where = SECTION_PLAIN.get("limits", "") if row is not None else ""
+        rows.append((number.names[0], where))
         total += 1
 
     return {"switches": rows, "count": total,

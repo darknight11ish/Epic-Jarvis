@@ -383,8 +383,9 @@ fun LiveScreen(
                     Gap(6)
                     Text(
                         "Jarvis listens after every answer until you end it, say \"Okay Jarvis, " +
-                            "that's all for now\", or it has been quiet for 90 seconds. Every sentence " +
-                            "is checked for your voice on your PC before any words are made of it.",
+                            "that's all for now\", or it has been quiet for 90 seconds. Every full " +
+                            "sentence is checked for your voice on your PC; once this session is " +
+                            "verified, a short reply is trusted without a check.",
                         style = MaterialTheme.typography.labelSmall,
                         color = chrome.textMid,
                     )

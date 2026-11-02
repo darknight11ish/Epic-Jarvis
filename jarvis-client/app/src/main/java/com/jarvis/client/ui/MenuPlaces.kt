@@ -215,9 +215,25 @@ object MenuPlaces {
     /**
      * Menus drawn INSIDE another screen or item rather than under an item key of their own:
      * id -> where (a sentence; the test only needs the id to be listed).
+     *
+     * It is also where a phone menu with NO drawing of its own is written down, which is one
+     * entry: `entry.appearance`'s button left Home's row on 2026-11-02. `ui/FindAnything.kt`
+     * reads this map as "the phone has nowhere of its own to take you for this id", and
+     * MenuVisibilityTest reads it as "this id is placed", so a menu cannot quietly lose its
+     * place without one of the two failing.
      */
     val INSIDE: Map<String, String> = mapOf(
-        "entry.appearance" to "HomeScreen: the Appearance button in the home row (six buttons since Settings joined it, 2026-10-08)",
+        // The phone's Home row drew an Appearance button until 2026-11-02. The
+        // owner then asked for Appearance to be Settings-only and for a Reminders
+        // button in its place, so the button is gone - and the id is no longer a
+        // home-surface toggle. `backend/jarvis_menus.py` keeps it `hide=False`
+        // (a switch over a button that no longer exists would hide nothing), and
+        // the Appearance row in Settings, `settings.appearance-card` (a real
+        // place in SETTINGS above), is the one that hides Appearance. It stays
+        // listed here because this map is the phone's record of a menu with no
+        // `item(key = ...)` of its own: dropping the line instead would make
+        // Find anything list it as a place with no home.
+        "entry.appearance" to "HomeScreen: the Appearance button was removed on 2026-11-02 - Appearance is Settings-only now, and the Appearance row in Settings (settings.appearance-card) is the switch that hides it",
         // "entry.voices" was here until 2026-10-10. It was one of TWO ids for
         // the same feature - this row and the desktop's own `settings.voices`
         // card - against backend/jarvis_menus.py's rule that one id means one

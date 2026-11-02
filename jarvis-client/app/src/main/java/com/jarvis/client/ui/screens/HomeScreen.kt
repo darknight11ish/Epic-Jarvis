@@ -86,6 +86,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -118,6 +119,8 @@ import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.net.ChatLog
+import com.jarvis.client.net.HudLayout
+import com.jarvis.client.net.MenuView
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
@@ -127,7 +130,7 @@ import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.Chevron
-import com.jarvis.client.ui.parts.AppearanceIcon
+import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.FormattedAnswer
 import com.jarvis.client.ui.parts.Gap
@@ -140,6 +143,7 @@ import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.RemindersIcon
 import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.SettingsIcon
 import com.jarvis.client.ui.parts.TextInput
@@ -210,6 +214,21 @@ private const val PANE_LIST = "list"
 
 /** The reply's key in the conversation list - the follow-the-reply code looks for it. */
 private const val REPLY_KEY = "reply"
+
+/**
+ * The Home HUD's key in the conversation list (2026-11-02). It is the list's
+ * first item, so it has a key of its own like every other row: the walk that
+ * scrolls to an approval card must not count it by position, and a drag cannot
+ * mistake it for one of the safety plates below.
+ */
+private const val HUD_KEY = "home-hud"
+
+/**
+ * The Home HUD's tray height. It is bounded so that the first-run layout - which
+ * holds every card the phone has - cannot push the conversation off Home: the
+ * tray scrolls inside itself and the list scrolls it away.
+ */
+private val HUD_TRAY_MAX = 260.dp
 
 /** Where one paragraph of a reply ends: a blank line, however it is spaced. */
 private val PARAGRAPH_BREAK = Regex("\n\\s*\n")
@@ -371,9 +390,13 @@ data class HomeState(
      */
     val faceFraction: Float = DEFAULT_FACE_FRACTION,
     /**
-     * The navigation row (Brain, Inbox, Live, Appearance, Help) is always on
-     * screen instead of one swipe or tap away. The status line above it is
-     * shown either way - it is not a setting.
+     * The navigation row (Brain, Inbox, Live, Reminders, Settings, Help) is
+     * always on screen instead of one swipe or tap away. The status line above
+     * it is shown either way - it is not a setting.
+     *
+     * Reminders took Appearance's place on 2026-11-02 (the owner: Appearance
+     * only in Settings, a Reminders button in its place), so Appearance is no
+     * longer a destination of this row - it is a row in Settings.
      *
      * Shown by default, matching [com.jarvis.client.data.Look.navAlwaysShown],
      * which IS the setting and the only thing that fills this in (MainActivity
@@ -566,7 +589,8 @@ data class HomeState(
     val pictureLine: String? = null,
     /**
      * The line for a document waiting to go with the next question
-     * ("taxes.pdf — 1.2 MB. Read on your PC."), or null when none is attached
+     * ("Attached to your next question — not sent yet. Type it and press Send.
+     * taxes.pdf — 1.2 MB. Read on your PC."), or null when none is attached
      * ([com.jarvis.client.net.AttachFile]). The file's bytes are never in this
      * state - only its name and size, in words.
      */
@@ -835,15 +859,37 @@ data class HomeActions(
      * and never bypasses it.
      */
     val onOpenGalaxy: () -> Unit,
-    val onOpenAppearance: () -> Unit,
+    /**
+     * Reminders, in the place Home's row gave Appearance until 2026-11-02.
+     *
+     * The owner (2026-11-01): *"move appearance to only in settings for the
+     * android app and replace the appearance button with a reminders button
+     * instead"*. It opens Brain -> Coming up - the plate that already holds
+     * "Reminders, alarms, timers and repeating jobs" (`brain.work.coming-up`),
+     * exactly as "open coming up" and Find anything's own row do. Nothing new
+     * is read and no route is added. Coming up is in `MenuCatalog.NEVER_HIDE`
+     * (a due reminder must stay reachable, `ComingUpReachabilityTest`), so
+     * this button is always drawn - like Settings and Help beside it - and
+     * needs no show-for-visit.
+     */
+    val onOpenReminders: () -> Unit,
     /**
      * Settings itself (2026-10-08): its own button in the row, beside
-     * Appearance - it used to be three taps and a scroll away. Always shown,
+     * Reminders - it used to be three taps and a scroll away. Always shown,
      * like Help: "Settings and Help themselves always stay reachable"
-     * (MenuCatalog's `entry.settings`, which is not hideable).
+     * (MenuCatalog's `entry.settings`, which is not hideable). It is also the
+     * only way to Appearance since 2026-11-02, where that is a row of its own.
      */
     val onOpenSettings: () -> Unit,
     val onOpenFaq: () -> Unit,
+    /**
+     * One of this phone's own Home cards, opened from the Home HUD
+     * (2026-11-02). The id is a [HudLayout][com.jarvis.client.net.HudLayout]
+     * card id - a real `MenuCatalog` id for an ordinary card, or one of the
+     * three fixed safety ids - and how it resolves is [hudCardPlace]'s own
+     * answer. Nothing here decides where a card goes: the layout already did.
+     */
+    val onOpenHudCard: (String) -> Unit = {},
     val blockerFor: (PendingItem) -> String?,
     /**
      * The deny direction's blocker, which is the same rule minus the stale arm:
@@ -1129,6 +1175,28 @@ fun HomeScreen(
     val motion = LocalMotion.current
     val density = LocalDensity.current
 
+    // The phone's own Home HUD (2026-11-02): the arrangement the owner saved in
+    // the editor, and the hide rules the rest of the screen already reads.
+    // Collected once here rather than inside HomeHud, so the whole screen works
+    // from one answer - and so a hidden menu empties its Home card exactly as it
+    // empties its settings row.
+    val hudLayout by com.jarvis.client.JarvisRuntime.menus.hudLayout.collectAsState()
+    val hudMenus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
+    // The emergency stop is an ACTION, not a door: the HUD's own card runs the
+    // same `onStopEverything` the Stop plate below already runs.
+    val stopScope = rememberCoroutineScope()
+
+    // The one slot both conversation lists draw: the list is built twice (the
+    // face pane and the no-face layout), and the HUD must not be two different
+    // things depending on which one is on screen.
+    val hudSlot: @Composable () -> Unit = {
+        HomeHud(
+            layout = hudLayout,
+            menus = hudMenus,
+            onOpen = actions.onOpenHudCard,
+            onStop = { stopScope.launch { actions.onStopEverything() } },
+        )
+    }
     // Only the navigation row is ever hidden. The status line above it is
     // always on screen - see StatusLine for why that is not negotiable.
     // rememberSaveable, so turning the phone does not snap an open row shut.
@@ -1435,6 +1503,7 @@ fun HomeScreen(
                         openAnswerMenuTick = answerMenuTick,
                         openAnswerMenuServed = answerMenuServed,
                         onAnswerMenuServed = { answerMenuServed = it },
+                        hud = hudSlot,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                 }
@@ -1486,6 +1555,7 @@ fun HomeScreen(
                             openAnswerMenuTick = answerMenuTick,
                             openAnswerMenuServed = answerMenuServed,
                             onAnswerMenuServed = { answerMenuServed = it },
+                            hud = hudSlot,
                             modifier = Modifier.layoutId(PANE_LIST),
                         )
                     },
@@ -1596,6 +1666,14 @@ private fun ConversationList(
     openAnswerMenuServed: Int = 0,
     /** The answer has looked at that request, so it is used up. */
     onAnswerMenuServed: (Int) -> Unit = {},
+    /**
+     * The phone's own editable Home HUD (2026-11-02): the four sections, drawn
+     * as the list's first item so it scrolls away under the conversation
+     * instead of holding a fixed slice of the screen - a first-run layout holds
+     * every card, and a fixed block of them would push the chat off Home.
+     * Empty for a caller that has no HUD to draw (the screen always does).
+     */
+    hud: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -1614,6 +1692,11 @@ private fun ConversationList(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // The owner's own Home cards, first, in the layout they chose
+        // (2026-11-02). Above "Stop everything" on purpose: the safety plates
+        // below are about what is happening NOW, and a card that is merely a
+        // door must not come between the owner and one.
+        item(key = HUD_KEY) { hud() }
         // "Stop everything" (the owner's decision of 2026-09-25; the
         // desktop's Alt+Shift+X). Shown whenever Jarvis is doing anything -
         // on the PC, or talking on this phone - and never held on a stale
@@ -2203,17 +2286,20 @@ private fun NavToggle(shown: Boolean, onToggle: (Boolean) -> Unit) {
     }
 }
 
-/** Mind, Inbox, Live, Appearance, Settings and Help - the part of the old bar
- *  that may hide (Settings arrived 2026-10-08; see its own NavItem below). */
+/** Mind, Inbox, Live, Reminders, Settings and Help - the part of the old bar
+ *  that may hide (Settings arrived 2026-10-08; Reminders replaced Appearance
+ *  on 2026-11-02, and the Appearance screen itself is now reached only from
+ *  Settings - see its own NavItem below). */
 @Composable
 private fun NavRow(state: HomeState, actions: HomeActions) {
     val chrome = LocalChrome.current
-    val menus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
     // UI-AUDIT-2026-09-18 choice A1: icons + words, status separated
     // from navigation by a rule, Brain gets a real button, "Look"
-    // becomes "Appearance". Every destination is weighted the same, so the
-    // row balances regardless of phone width - five when Appearance is
-    // hidden, six otherwise.
+    // becomes "Appearance" - and since 2026-11-02 the row carries Reminders
+    // instead, because Appearance is Settings-only. Every destination is
+    // weighted the same, so the row balances regardless of phone width. All
+    // six are always shown: not one of them is a hideable menu, which is why
+    // this row reads no `menus.shows(...)` at all.
     Column(Modifier.fillMaxWidth().background(chrome.surface1)) {
         Rule()
         Row(Modifier.fillMaxWidth()) {
@@ -2236,20 +2322,22 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 onClick = actions.onOpenLive,
                 modifier = Modifier.weight(1f),
             )
-            // "Show or hide menus" (docs/JARVIS-API.md section 109): the owner may hide this button;
-            // Appearance itself is still in Settings and "open appearance" still works.
-            if (menus.shows("entry.appearance")) {
-                NavItem(
-                    icon = { AppearanceIcon(chrome.textMid) },
-                    label = "Appearance",
-                    onClick = actions.onOpenAppearance,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            // Reminders, where Appearance's button was until 2026-11-02 (the
+            // owner asked for Appearance to be Settings-only and this button
+            // in its place). It opens Brain -> Coming up - "Reminders, alarms,
+            // timers and repeating jobs" - and that plate can never be hidden
+            // (`brain.work.coming-up` is in MenuCatalog.NEVER_HIDE), so this
+            // button is always drawn rather than gated on a menu switch.
+            NavItem(
+                icon = { RemindersIcon(chrome.textMid) },
+                label = "Reminders",
+                onClick = actions.onOpenReminders,
+                modifier = Modifier.weight(1f),
+            )
             // Settings, in the same shape as its neighbours (2026-10-08): one
             // tap from Home instead of three and a scroll. Always shown -
             // Settings is never hideable, and its own row is where the owner
-            // reaches everything the phone can change.
+            // reaches everything the phone can change, Appearance included.
             NavItem(
                 icon = { SettingsIcon(chrome.textMid) },
                 label = "Settings",
@@ -2263,6 +2351,185 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/**
+ * Where one of the phone's Home cards opens (2026-11-02).
+ *
+ * The layout names a card; the card is a real `MenuCatalog` id for an ordinary
+ * one, so the place it opens is the place that menu already lives in - the same
+ * answer `MenuPlaces` gives the finder and the "open <a place>" by voice. A card
+ * that the catalogue no longer describes, or that is not this app's, answers
+ * null and is then drawn but opens nothing: the layout is never trusted to name
+ * a destination by itself.
+ *
+ * The three safety surfaces are fixed ids, not menus: Live and the approvals
+ * queue are screens of their own, and the emergency stop is an ACTION rather
+ * than a place - the caller draws it as the button it already is
+ * (`HomeActions.onStopEverything`) instead of a door.
+ */
+internal fun hudCardPlace(id: String): Pair<Screen, String?>? {
+    when (id) {
+        HudLayout.LIVE -> return Screen.LIVE to null
+        HudLayout.APPROVALS -> return Screen.APPROVALS to null
+        // The stop is not a door. See the doc above.
+        HudLayout.EMERGENCY_STOP -> return null
+        // The entry rows the catalogue carries, and their destinations.
+        // `FindAnything`'s own table says the same, and neither reads the other:
+        // a card id is a menu id, and a menu id's destination is the catalogue's
+        // business.
+        //
+        // `entry.appearance` is answered here because the id still exists and
+        // the phone still has the screen (#1077 kept it, Settings-owned), but no
+        // layout can reach this line: 2026-11-02 took the Appearance CARD out of
+        // [HudLayout.CARDS] and out of every preset, so `normalize` drops it from
+        // any document that names it - a layout cannot put Appearance back on
+        // Home (`HudLayoutTest`). The destination stays the catalogue's answer,
+        // not evidence that a card exists.
+        "entry.appearance" -> return Screen.APPEARANCE to null
+        "entry.voice-check" -> return Screen.VOICE_CHECK to null
+        "entry.settings" -> return Screen.SETTINGS to null
+        "entry.help" -> return Screen.FAQ to null
+        "entry.history" -> return Screen.HISTORY to null
+        "entry.checks" -> return Screen.CHECKS to null
+    }
+    val menu = com.jarvis.client.net.MenuLogic.menu(id) ?: return null
+    if (!menu.phone) return null
+    return when (menu.area) {
+        // The row's own `item(key = ...)`, so a card lands on its section rather
+        // than at the top of a long screen. Null when the menu has no row of its
+        // own (it lives inside another one), which is still a real destination.
+        "brain" -> Screen.BRAIN to com.jarvis.client.ui.MenuPlaces.BRAIN.entries
+            .firstOrNull { it.value == id }?.key
+        "settings", "safety" -> Screen.SETTINGS to com.jarvis.client.ui.MenuPlaces.SETTINGS.entries
+            .firstOrNull { it.value == id }?.key
+        else -> null
+    }
+}
+
+/**
+ * The owner's own Home cards, drawn from the layout they chose (the Android
+ * `A2` slice of the editable-HUD design, 2026-11-02).
+ *
+ * Four ordered sections, each card in its section and in its order, and the body
+ * in one column below [HudLayout.TWO_COLUMN_DP] dp and two at or above it -
+ * [HudLayout.columnsAt] is the one answer to that, shared with the editor's own
+ * note. The layout only decides WHERE and IN WHICH ORDER a card draws: what each
+ * card says and where its tap goes is [hudCardPlace]'s, exactly as before.
+ *
+ * THE HIDE RULES STILL WIN. [HudLayout.visible] is applied on top of the layout
+ * with the same [MenuView] the rest of the screen reads, so a menu hidden by
+ * voice or in Settings empties its Home card here too. A protected card ignores
+ * hiding altogether - that rule lives in [HudLayout.visible] and is not repeated
+ * here - and the three indicators are not cards, so no layout can move them.
+ *
+ * WHY IT IS BOUNDED. A first-run layout holds every card the phone has, and a
+ * fixed block that tall would push the conversation off Home. The tray is capped
+ * at [HUD_TRAY_MAX] and scrolls inside itself, and the conversation list scrolls
+ * it away like any other row. It draws nothing at all when every card in it is
+ * hidden, so a Home with no cards carries no empty frame.
+ */
+@Composable
+private fun HomeHud(
+    layout: HudLayout.Layout,
+    menus: MenuView,
+    onOpen: (String) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = LocalChrome.current
+    val shown = HudLayout.visible(layout, menus)
+    val total = shown.values.sumOf { it.size }
+    if (total == 0) return
+    val columns = HudLayout.columnsAt(LocalConfiguration.current.screenWidthDp)
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Kicker(if (total == 1) "Your Home screen · 1 card" else "Your Home screen · $total cards")
+            Spacer(Modifier.weight(1f))
+            Text(
+                "Rearrange it in Settings, Home screen",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = HUD_TRAY_MAX)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            for (section in HudLayout.SECTIONS) {
+                val ids = shown.getValue(section)
+                if (ids.isEmpty()) continue
+                Gap(8)
+                Kicker(HUD_SECTION_WORDS.getValue(section), color = chrome.textLo)
+                // Only the body is a grid; the strip, the hero and the composer
+                // are columns of full-width cards in the layout's sense, and a
+                // 2-column hero would be a second, different layout.
+                val perRow = if (section == HudLayout.BODY) columns else 1
+                for (row in ids.chunked(perRow)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        for (id in row) {
+                            HudCard(
+                                id = id,
+                                onOpen = onOpen,
+                                onStop = onStop,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        // Keeps a half-filled last row the same width as a full
+                        // one, so a two-column body does not stretch its last card.
+                        repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                    Gap(6)
+                }
+            }
+        }
+    }
+}
+
+/** One card in the Home HUD: its own words, and one tap. */
+@Composable
+private fun HudCard(
+    id: String,
+    onOpen: (String) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = LocalChrome.current
+    val card = HudLayout.card(id) ?: return
+    val isStop = id == HudLayout.EMERGENCY_STOP
+    Column(
+        modifier
+            .clip(LocalRadii.current.insetShape)
+            .background(chrome.surface1)
+            .pressable(onClick = { if (isStop) onStop() else onOpen(id) })
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .semantics { contentDescription = "${card.title}. ${card.about}" },
+    ) {
+        Text(
+            card.title,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (HudLayout.isProtected(id)) chrome.warnInk else chrome.textHi,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            card.about,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -4443,11 +4710,18 @@ private fun Composer(
         TemporaryChatMarker(empty = state.lastUserText == null && state.conversationTurns == 0)
     }
     VoiceStrips(state, actions)
-    // A picture waiting to go with the next question. Dismiss drops it.
+    // A picture waiting to go with the next question. Remove drops it.
     if (state.pictureBusy) {
         VoiceStrip("Preparing the picture…", tone = chrome.textMid)
     } else if (state.pictureLine != null) {
-        VoiceStrip(state.pictureLine, tone = chrome.textMid, onDismiss = actions.onRemovePicture)
+        // The owner's own photo, waiting for the next question - so its action
+        // is Remove, not the Dismiss a notice gets (2026-11-02).
+        VoiceStrip(
+            state.pictureLine,
+            tone = chrome.textMid,
+            onDismiss = actions.onRemovePicture,
+            dismissLabel = com.jarvis.client.net.StagedLine.REMOVE,
+        )
         // "Photo to reminder": the PC reads the dates in it and proposes.
         Quiet(
             if (state.photoFinding) {
@@ -4459,12 +4733,19 @@ private fun Composer(
             onClick = actions.onFindDateInPicture,
         )
     }
-    // A document waiting to go with the next question. Dismiss drops it, and
+    // A document waiting to go with the next question. Remove drops it, and
     // its bytes with it - nothing was written anywhere to drop.
     if (state.attachBusy) {
         VoiceStrip("Reading the file…", tone = chrome.textMid)
     } else if (state.attachLine != null) {
-        VoiceStrip(state.attachLine, tone = chrome.textMid, onDismiss = actions.onRemoveAttach)
+        // The owner's own file, waiting for the next question: Remove, not
+        // Dismiss (2026-11-02).
+        VoiceStrip(
+            state.attachLine,
+            tone = chrome.textMid,
+            onDismiss = actions.onRemoveAttach,
+            dismissLabel = com.jarvis.client.net.StagedLine.REMOVE,
+        )
     }
     // Text shared from another app: sent as its own message, before what is
     // typed, never mixed into it. Dismiss drops it.

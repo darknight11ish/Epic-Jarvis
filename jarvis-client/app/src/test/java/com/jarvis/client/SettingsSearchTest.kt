@@ -1,10 +1,17 @@
 package com.jarvis.client
 
+import com.jarvis.client.net.MenuCatalog
+import com.jarvis.client.net.MenuView
+import com.jarvis.client.ui.FindAnything
+import com.jarvis.client.ui.MenuPlaces
+import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.SettingsJump
 import com.jarvis.client.ui.SettingsSearch
 import com.jarvis.client.ui.SettingsSearchWords
+import com.jarvis.client.ui.screens.BrainSections
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -523,6 +530,200 @@ class SettingsSearchTest {
         // A query about the voice must not drag Devices in through its new
         // control names: "your" and "with" are on its button, "voice" is not.
         assertFalse(SettingsSearch.matching("Train my voice").contains("devices"))
+    }
+
+    // ---- A feature that is not in Settings at all (2026-11-02) -------------
+    //
+    // THE OWNER'S BUG, 2026-11-02, measured on this tree with a throwaway probe
+    // before the fix - the same pattern as the 2026-10-13 probe above:
+    //
+    //     PROBE [presets]       settings=[] find=[settings.focus-presets->BRAIN/hardware]
+    //     PROBE [preset]        settings=[] find=[settings.focus-presets->BRAIN/hardware]
+    //     PROBE [focus]         settings=[] find=[settings.focus-presets->BRAIN/hardware, brain.work.focus->BRAIN/focus]
+    //     PROBE [focus presets] settings=[] find=[settings.focus-presets->BRAIN/hardware]
+    //     PROBE [hardware]      settings=[] find=[settings.hardware->BRAIN/hardware, group.graphics-cards->BRAIN/hardware]
+    //
+    // The Settings box answered NOTHING for every one of the five words he
+    // might type - it hid every card and said "Nothing here matches" - while
+    // the Find box already had the place and could open it. So this was a dead
+    // end, not a missing feature: the nine presets are drawn inside the Brain's
+    // Hardware plate, and the Settings box is a filter over Settings' own rows.
+    //
+    // [SettingsSearch.ELSEWHERE] is the box's third answer, and these tests hold
+    // its two halves: the words a person types must find it, and the place it
+    // names must be real, reachable and the app's own words.
+
+    @Test
+    fun `a search for presets says where they really are`() {
+        for (query in listOf("presets", "preset", "focus", "focus presets", "hardware")) {
+            assertEquals(
+                "\"$query\" must say where the focus presets are - the owner typed " +
+                    "\"presets\" into Settings on 2026-11-02 and nothing came up",
+                listOf("settings.focus-presets"),
+                SettingsSearch.elsewhereMatching(query).map { it.menuId },
+            )
+        }
+        // The two lines the screen prints, in the index's own words, so a
+        // reworded row is a test failure rather than a silent change.
+        val e = SettingsSearch.elsewhereMatching("presets").single()
+        assertEquals("Not in Settings: Focus presets", SettingsSearch.elsewhereLine(e))
+        assertEquals("It is in Brain, under Hardware.", SettingsSearch.elsewhereWhere(e))
+        assertEquals("Open", SettingsSearch.ELSEWHERE_OPEN)
+    }
+
+    @Test
+    fun `a search that is not about presets does not claim them`() {
+        for (query in listOf("voice", "security", "zzzz")) {
+            assertEquals(
+                "\"$query\" must not offer the focus presets",
+                emptyList<String>(),
+                SettingsSearch.elsewhereMatching(query).map { it.menuId },
+            )
+        }
+        assertEquals(
+            "an empty box is nothing matched, not everything offered",
+            emptyList<String>(),
+            SettingsSearch.elsewhereMatching("   ").map { it.menuId },
+        )
+        // ...and the sections' own answer gains exactly ONE real row, on
+        // purpose: "Home screen" (the phone's editable HUD, 2026-11-02) is a
+        // Settings row whose own words include the layout presets it arranges,
+        // so "presets" finds it. The FOCUS-presets row is still NOT in the
+        // filter - it is drawn BESIDE the cards, not invented as a section -
+        // which is what this assertion has always protected.
+        assertEquals(
+            "the editable-HUD row is the one Settings section that owns the word",
+            listOf("edit-hud"),
+            SettingsSearch.matching("presets"),
+        )
+        assertFalse(
+            "the focus-presets row is drawn beside the cards, never as a section",
+            "settings.focus-presets" in SettingsSearch.matching("presets"),
+        )
+    }
+
+    /**
+     * The other half: a "not in Settings" row is only honest if the place it
+     * names exists on this phone, is opened by the app's real navigation, and
+     * is not a Settings row after all.
+     */
+    @Test
+    fun `every not-in-Settings row is reachable and is the catalogue's own`() {
+        assertTrue(
+            "ELSEWHERE is empty, so this test checks nothing",
+            SettingsSearch.ELSEWHERE.isNotEmpty(),
+        )
+        val client = "jarvis-client/app/src/main/java/com/jarvis/client/"
+        val hardware = repoFile(client + "ui/screens/HardwarePlate.kt").readText()
+        val brain = repoFile(client + "ui/screens/BrainScreen.kt").readText()
+        for (e in SettingsSearch.ELSEWHERE) {
+            // The words are the catalogue's own, and a PHONE menu's - the same
+            // aliases Jarvis answers to by voice and the desktop's palette
+            // matches, generated from backend/jarvis_menus.py.
+            val menu = MenuCatalog.MENUS.firstOrNull { it.id == e.menuId }
+            assertNotNull("${e.menuId} is not a menu in this app's catalogue", menu)
+            assertTrue(
+                "${e.menuId} is not a phone menu, so this row would promise a place on the phone " +
+                    "that the phone does not have",
+                menu!!.phone,
+            )
+            // ...and it must still have NO Settings row, or the feature would be
+            // offered twice: a real Settings row is filtered like every other,
+            // and this row would then point at a screen for a thing that is on
+            // the one the owner is already looking at.
+            assertFalse(
+                "${e.menuId} has a Settings row now (MenuPlaces.SETTINGS names it) - drop its " +
+                    "ELSEWHERE entry instead of offering it twice",
+                MenuPlaces.SETTINGS.containsValue(e.menuId),
+            )
+            // It opens a real place: the same screen and section the Find box
+            // uses, and a plate Brain really draws.
+            val target = SettingsSearch.elsewhereTarget(e)
+            assertNotNull("${e.menuId} has no place on this phone", target)
+            assertEquals(Screen.BRAIN, target!!.first)
+            assertEquals("hardware", target.second)
+            assertTrue(
+                "${e.menuId} opens Brain at \"${target.second}\", but no plate of that name is " +
+                    "declared on Brain (BrainSections) - the scroll would land nowhere",
+                BrainSections.SECTIONS.any { s -> s.plates.any { p -> p.key == target.second } },
+            )
+            // The sentence it prints is the app's own words: "Brain" is the
+            // screen's own title, "Hardware" is the plate's own heading.
+            assertEquals("Brain, under ", e.place.substring(0, "Brain, under ".length))
+            assertTrue(
+                "HardwarePlate.kt no longer titles its plate \"Hardware\"",
+                hardware.contains("Section(\"Hardware\""),
+            )
+            assertTrue(
+                "BrainScreen.kt no longer titles its screen \"Brain\"",
+                brain.contains("TopBar(\"Brain\""),
+            )
+        }
+    }
+
+    /**
+     * The wiring, which no pure test can compose: the box must ask the index
+     * for these rows, and the app must give the row somewhere to go. Each
+     * assertion is the shortest thing that would break if the row stopped
+     * being drawn or stopped navigating.
+     */
+    @Test
+    fun `the Settings screen draws the row and the app opens it`() {
+        val screen = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt"
+        ).readText()
+        assertTrue(
+            "the search box must ask the index for its \"not in Settings\" rows",
+            screen.contains("SettingsSearch.elsewhereMatching(query)"),
+        )
+        assertTrue(
+            "the box must be handed those rows, or it can never draw them",
+            screen.contains("elsewhere = elsewhere,"),
+        )
+        assertTrue(
+            "the row must print the index's own sentence rather than its own copy",
+            screen.contains("SettingsSearch.elsewhereLine(e)"),
+        )
+        assertTrue(
+            "the row's action must call back, or it is a dead end like the bug",
+            screen.contains("onOpenElsewhere(e)"),
+        )
+        val activity = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/MainActivity.kt"
+        ).readText()
+        assertTrue(
+            "nothing passes onOpenElsewhere to SettingsScreen, so the row could not open the place",
+            activity.contains("onOpenElsewhere = { entry ->"),
+        )
+        assertTrue(
+            "the row must open FindAnything's own place for the feature, not a second route",
+            activity.contains("SettingsSearch.elsewhereTarget(entry)"),
+        )
+    }
+
+    /**
+     * The escape hatch the owner already had, measured: the Find box finds the
+     * presets and opens the Hardware plate. This is what makes the row's claim
+     * checkable - the Settings row and the Find box must agree on the place,
+     * because they are the same table (`elsewhereTarget` asks `FindAnything`).
+     */
+    @Test
+    fun `the Find box already finds the presets, and the two boxes agree on where`() {
+        val ids = FindAnything.results("presets", MenuView(), privateHidden = false).map { it.id }
+        assertTrue(
+            "the Find box must find the focus presets - it did before this change, which is " +
+                "why the Settings row reuses its place. Found: $ids",
+            ids.contains("settings.focus-presets"),
+        )
+        val row = FindAnything.row("settings.focus-presets")
+        assertNotNull(row)
+        assertEquals(
+            "the Settings row and the Find box must open the same place",
+            row!!.screen to row.section,
+            SettingsSearch.elsewhereTarget(SettingsSearch.elsewhereMatching("presets").single()),
+        )
+        assertEquals(Screen.BRAIN, row.screen)
+        assertEquals("hardware", row.section)
     }
 
     @Test

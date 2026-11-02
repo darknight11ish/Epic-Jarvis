@@ -1,6 +1,7 @@
 package com.jarvis.client.ui
 
 import com.jarvis.client.net.Calendar
+import com.jarvis.client.net.MenuCatalog
 import com.jarvis.client.net.ModelLane
 
 /**
@@ -76,6 +77,15 @@ import com.jarvis.client.net.ModelLane
  * That is [namesIt] and the rule in [matching]; the tiers and [rankPart] are
  * untouched, so the shared cross-app fixture still holds both engines to one
  * rule set.
+ *
+ * A QUERY CAN ALSO ANSWER "NOT HERE" (2026-11-02). [ROWS] is Settings' own
+ * rows, and a few of the app's features are not among them: the nine focus
+ * presets are drawn inside the Brain's Hardware plate. [ELSEWHERE] carries
+ * those, in the app's own words, and [matching] is untouched by them - the
+ * screen draws them under the box beside the filtered cards, and tapping one
+ * opens the place. The owner typed **"presets"** into this box on 2026-11-02
+ * and got "Nothing here matches" with no way on; that is the case this
+ * answers.
  */
 object SettingsSearch {
 
@@ -591,6 +601,22 @@ object SettingsSearch {
             ),
             source = JUMP + listOf("net/Calendar.kt", PLATES + "CalendarSettingsPlate.kt"),
         ),
+        // "Home screen" (2026-11-02): the phone's own Edit HUD. The words here
+        // are the ones the row and the editor print - "Home screen", "the
+        // layout", the four sections' names - so a search for how the app is
+        // arranged finds it, and "edit hud" (what the screen is called once it
+        // opens) finds it too.
+        Row(
+            key = "edit-hud", title = "Home screen",
+            label = "Home screen; my home screen; the main screen; edit hud; Edit HUD; " +
+                "the layout; rearrange; reorder; move cards; the top strip; the hero; " +
+                "the body; the composer; the four sections; presets; " +
+                "duplicate a preset; reset the layout; import a layout; export a layout",
+            quotes = listOf(
+                "The five built-in arrangements are read-only. Duplicate one to make it yours.",
+            ),
+            source = SCREEN,
+        ),
         Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
             label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),
@@ -608,6 +634,120 @@ object SettingsSearch {
     fun wordsFor(key: String): String {
         val r = row(key) ?: return ""
         return listOf(r.title, r.label).plus(r.titles).plus(r.quotes).joinToString(" ")
+    }
+
+    // ---- the features that are not in Settings at all (2026-11-02) --------
+
+    /**
+     * One feature this phone draws somewhere OTHER than Settings, and where
+     * that is.
+     *
+     * THE OWNER'S BUG, 2026-11-02, in his own words: *"also, when i search
+     * presets in the settings in the android app, nothing comes up."* Asked
+     * which presets, he answered the FOCUS presets - and on the phone those
+     * nine are drawn inside the Brain's Hardware plate
+     * (`HardwarePlate.kt`'s `FocusPresetsSection`), not in Settings. There is
+     * no honest Settings row for them: they are the PC's own presets, and
+     * applying one raises an approval card before any model changes, so the
+     * phone can offer the list and the card but has nothing to SET. The box is
+     * a filter over Settings' rows ([ROWS]), so their names matched nothing,
+     * every card was hidden, and the one place he looked answered "Nothing here
+     * matches" with no way on.
+     *
+     * A row here is NOT a Settings section and never joins [ROWS]: it adds no
+     * switch, no value and no request (it changes nothing), it is not filtered,
+     * and `SettingsSearchTest`'s "every Settings section can be searched, in
+     * screen order" still holds because [ROWS] is untouched. It is the box's
+     * third answer - "not here, over there" - and it opens the place through
+     * [FindAnything]'s own table ([elsewhereTarget]), the same one the Find box
+     * navigates with.
+     *
+     * @param menuId the [MenuCatalog] row whose title and `names` are the words
+     *   this answers to - never a second copy of them. Those aliases are the
+     *   names Jarvis already answers to by voice and the desktop's palette
+     *   matches ("presets", "the preset selector"), generated from
+     *   `backend/jarvis_menus.py` into this app's catalogue.
+     * @param place where it really is, in the app's own words: the Brain's
+     *   "Hardware" heading (`HardwarePlate.kt`), on the screen the nav calls
+     *   Brain. [SettingsScreen] prints this sentence as it stands.
+     */
+    data class Elsewhere(val menuId: String, val place: String)
+
+    /**
+     * The features a Settings search may say "not here" about, in the order
+     * they are offered.
+     *
+     * One entry, and it is the owner's own bug rather than a sweep: a row here
+     * promises that a feature EXISTS and says where it lives, so it is only
+     * written when that is measured and can be tested. Every entry is held to
+     * the real screens by `SettingsSearchTest` ("a search for presets says
+     * where they really are", "every not-in-Settings row is reachable and is
+     * the catalogue's own"), and a feature that later gets a real Settings row
+     * must lose its entry here rather than be offered twice.
+     */
+    val ELSEWHERE: List<Elsewhere> = listOf(
+        Elsewhere(menuId = "settings.focus-presets", place = "Brain, under Hardware"),
+    )
+
+    /** The first line of a "not in Settings" row: "Not in Settings: Focus presets". */
+    fun elsewhereLine(e: Elsewhere): String = "Not in Settings: " + elsewhereTitle(e)
+
+    /** The second line: "It is in Brain, under Hardware." */
+    fun elsewhereWhere(e: Elsewhere): String = "It is in " + e.place + "."
+
+    /** The action on a "not in Settings" row. The app's own word for opening a place. */
+    const val ELSEWHERE_OPEN = "Open"
+
+    /** The catalogue row an [Elsewhere] names, or null if the catalogue lost it. */
+    private fun menuOf(e: Elsewhere): MenuCatalog.Menu? =
+        MenuCatalog.MENUS.firstOrNull { it.id == e.menuId }
+
+    /** The name a "not in Settings" row carries: the catalogue's own title. */
+    fun elsewhereTitle(e: Elsewhere): String = menuOf(e)?.title ?: ""
+
+    /**
+     * What one [Elsewhere] is searched by: the catalogue's title and aliases,
+     * plus the key of the place it opens.
+     *
+     * That last word is "hardware", and it is the PLATE's own key
+     * (`BrainScreen.kt`'s `item(key = "hardware")`, the plate `HardwarePlate.kt`
+     * titles "Hardware") rather than a word invented here: it is the name the
+     * owner uses for where the presets are, and the one of his words the
+     * catalogue does not already carry. It also keeps the two boxes pointing
+     * one way - the Find box answers "hardware" with the Hardware plate
+     * (`settings.hardware`), and this row opens that same plate.
+     */
+    fun elsewhereWords(e: Elsewhere): String {
+        val menu = menuOf(e) ?: return ""
+        val place = elsewhereTarget(e)?.second ?: ""
+        return (listOf(menu.title) + menu.names + listOf(place)).joinToString(" ")
+    }
+
+    /**
+     * Where an [Elsewhere] really opens: the screen, and the `item(key = ...)`
+     * to bring into view - or null when the app has no place for that menu.
+     *
+     * [FindAnything]'s own answer, not a second table: that object builds its
+     * rows from the catalogue and `MenuPlaces`, and `FindAnythingTest` walks
+     * every one of them to a real `item(key = ...)` on the screen it names. So
+     * the Settings row and the Find box cannot send the owner to two different
+     * places for one feature.
+     */
+    fun elsewhereTarget(e: Elsewhere): Pair<Screen, String?>? =
+        FindAnything.row(e.menuId)?.let { it.screen to it.section }
+
+    /**
+     * The [ELSEWHERE] entries [query] asks for, in list order.
+     *
+     * The same four tiers and the same AND rule as a Settings row ([rankPart]),
+     * so "preset" and "focus" answer here exactly as they would there: a
+     * heading word ranks above a body word, and every word typed must be
+     * found. Nothing is dropped by [namesIt] - every word of an [Elsewhere]
+     * names the feature, none of them is prose - and nothing here changes.
+     */
+    fun elsewhereMatching(query: String): List<Elsewhere> {
+        if (normalise(query).isEmpty()) return emptyList()
+        return ELSEWHERE.filter { e -> rankPart(elsewhereTitle(e), elsewhereWords(e), query) > 0 }
     }
 
     /**

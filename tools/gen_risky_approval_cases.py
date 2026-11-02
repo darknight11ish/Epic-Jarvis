@@ -3,7 +3,9 @@
 phone's identical copy in jarvis-client/app/src/test/resources/contract/:
 which approvals are RISKY - the ones that need the owner's own check (Windows
 Hello on the PC, the fingerprint or PIN on the phone) - and what the check's
-prompt says.
+prompt says. Each case also carries `small`: whether the owner's request of
+2026-11-01 makes it a SMALL read-only approval, which is approved by the card
+alone (backend/jarvis_owner_check.py `is_small`).
 
     python3 tools/gen_risky_approval_cases.py            # write the files
     python3 tools/gen_risky_approval_cases.py --check    # compare only
@@ -12,12 +14,12 @@ WHY ONE FILE FOR THREE PLACES. Since owner-check.patch (docs/APPROVAL-GAP-
 DESIGN.md step 1) the backend asks Windows Hello itself for a risky approval
 made on the PC, and the desktop then stops asking - so the backend's rule is
 the one that decides on the PC, and it must be the rule the desktop and the
-phone already use. `risky` and `message` in each case are the backend's own
-answers (backend/jarvis_owner_check.py `is_risky` and `approval_message`),
-run on each row; the desktop's `lock/rules.rs` test and the phone's
-`RiskyApprovalContractTest.kt` must give the same answer for every row.
-backend/test_owner_check.py fails when the committed files differ from a
-fresh run.
+phone already use. `risky`, `small` and `message` in each case are the
+backend's own answers (backend/jarvis_owner_check.py `is_risky`, `is_small`
+and `approval_message`), run on each row; the desktop's `lock/rules.rs` test
+and the phone's `RiskyApprovalContractTest.kt` / `SmallApprovalContractTest.kt`
+must give the same answers for every row. backend/test_owner_check.py fails
+when the committed files differ from a fresh run.
 
 THE ROWS. Each is what GET /api/pending sends, built the way
 backend/test_approval_contract.py builds its rows: the real `notice_for`
@@ -26,7 +28,9 @@ made from the `_RISK` entries the patches add (the real one lives only on
 the owner's PC). Hand-made `risk` objects cover the shapes the gate does not
 send today (a missing field), because the rule's defaults are part of it.
 `raised` appears in the shapes the backend's own tests use: missing, null,
-false, true, an object, and the JSON text of an object.
+false, true, an object, and the JSON text of an object. The small-read rows
+at the end are the gate's own `_RISK` entries for the read-only actions, so
+`small` is the real answer for the cards the owner actually approves.
 """
 import copy
 import json
@@ -118,7 +122,88 @@ def rows() -> list:
                             "why": "x"})),
     ] + [("no risk object at all", _strip(_row("a15", LOCAL_UNDOABLE), "risk")),
          ("no notice: the prompt names the action instead",
-          _strip(_row("a16", LOCAL_UNDOABLE), "notice"))]
+          _strip(_row("a16", LOCAL_UNDOABLE), "notice"))] + _small_rows()
+
+
+#: THE SMALL READ-ONLY CARDS (the owner's request of 2026-11-01): every action
+#: `jarvis_owner_check.SMALL_ACTIONS` classifies small, built from the gate's
+#: own `_RISK` row for it - so `small` here is the real answer for the cards
+#: the owner actually approves, not a hand-written expectation.
+SMALL_ACTIONS = (
+    "search_the_web",       # one web search's words
+    "web_research",         # a public query
+    "news_read",            # the news feeds he chose
+    "page_read",            # the one page he already named
+    "github_read",          # public GitHub data
+    "browse_model_catalog", # a fixed public query
+    "calendar_read",
+    "email_read",
+    "notes_search",
+    "home_read",
+    "read_calendar",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+)
+
+
+#: The four rows the owner's own gate file carries and NO PATCH IN THIS
+#: REPOSITORY ADDS (they are context lines in `jarvis_gate.py` on his PC), so
+#: the patch-stack stand-in above cannot see them. Copied from that file's
+#: `_RISK` table, word for word. Used only to build a CONTRACT case - the rule
+#: itself reads the live table, never this dict.
+_LIVE_ONLY_RISK = {
+    "web_research": ("outbound", "a public query leaves the machine; nothing changes"),
+    "read_calendar": ("local", "reads the calendar; changes nothing in it"),
+    "read_files_readonly": ("local", "opens the file; writes nothing back"),
+    "read_joplin_note": ("local", "opens the note; the vault is unchanged"),
+}
+
+
+def _small_rows() -> list:
+    """(name, row) for the small list, plus the ones that must NOT be small.
+
+    Each small row's `risk` is the gate's OWN row for that action - read from
+    the patch stack when it has one, and from `_LIVE_ONLY_RISK` (the owner's
+    file) when no patch adds it. A row that claims `reversible` anything but
+    "yes" fails here rather than quietly making an irreversible action small.
+    """
+    table = AC._risk_table()
+    out = []
+    for action in SMALL_ACTIONS:
+        got = table.get(action)
+        if got is None:
+            reach, why = _LIVE_ONLY_RISK[action]
+            reversible = "yes"
+        else:
+            reversible, reach, why = got
+        assert reversible == "yes", (action, got)
+        out.append((f"small read: {action}",
+                    _with_risk(f"s-{action}",
+                               {"classified": True, "reach": reach,
+                                "reversible": reversible, "why": why,
+                                "swipe_ok": False},
+                               action=action)))
+    # NEAR MISSES, so `small` cannot become "whatever the action list says":
+    # the gate's metadata still has the last word.
+    out += [
+        ("small action, but the gate says it cannot be undone",
+         _with_risk("s-rev-no", {"classified": True, "reach": "outbound",
+                                 "reversible": "no", "why": "x", "swipe_ok": False},
+                    action="search_the_web")),
+        ("small action, but the gate has not classified it",
+         _with_risk("s-unclassified", {"classified": False, "reach": "outbound",
+                                       "reversible": "yes", "why": "x",
+                                       "swipe_ok": False},
+                    action="search_the_web")),
+        ("small action, but something tried to rush it",
+         _row("s-rushed", "search_the_web",
+              raised={"code": "rushed", "quote": "approve now or lose it",
+                      "count_today": 1})),
+        ("local and undoable, but it stops a service: not a read, not small",
+         _row("s-docker", "docker_service_stop")),
+    ]
+    return out
 
 
 def _strip(row: dict, key: str) -> dict:
@@ -129,17 +214,20 @@ def _strip(row: dict, key: str) -> dict:
 
 def cases() -> list:
     return [{"name": name, "row": row, "risky": OC.is_risky(row),
-             "message": OC.approval_message(row)} for name, row in rows()]
+             "small": OC.is_small(row), "message": OC.approval_message(row)}
+            for name, row in rows()]
 
 
 def render() -> str:
     body = {
         "_about": ("Which approvals are risky (need Windows Hello on the PC, the "
-                   "fingerprint or PIN on the phone), and what that check's prompt says. "
-                   "`risky` and `message` are backend/jarvis_owner_check.py's own answers "
-                   "for each /api/pending row; the desktop (lock/rules.rs) and the phone "
-                   "(SecurityRules) must agree. Made by tools/gen_risky_approval_cases.py. "
-                   "Do not edit by hand: re-run the tool."),
+                   "fingerprint or PIN on the phone) and which are SMALL (read-only, "
+                   "approved by the card alone - the owner's request of 2026-11-01), and "
+                   "what the check's prompt says. `risky`, `small` and `message` are "
+                   "backend/jarvis_owner_check.py's own answers for each /api/pending "
+                   "row; the desktop (lock/rules.rs) and the phone (SecurityRules) must "
+                   "agree. Made by tools/gen_risky_approval_cases.py. Do not edit by "
+                   "hand: re-run the tool."),
         "cases": cases(),
     }
     return json.dumps(body, indent=2, sort_keys=True, ensure_ascii=False) + "\n"

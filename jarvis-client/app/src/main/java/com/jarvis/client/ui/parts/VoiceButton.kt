@@ -222,6 +222,11 @@ fun VoiceStrip(
     label: String,
     tone: androidx.compose.ui.graphics.Color? = null,
     onDismiss: (() -> Unit)? = null,
+    /**
+     * What the action says. "Dismiss" belongs to a notice; the owner's own
+     * file or picture under the composer is REMOVED (2026-11-02).
+     */
+    dismissLabel: String = "Dismiss",
 ) {
     val chrome = LocalChrome.current
     val colour = tone ?: LocalAccent.current
@@ -243,7 +248,7 @@ fun VoiceStrip(
         )
         if (onDismiss != null) {
             Spacer(Modifier.width(8.dp))
-            Quiet("Dismiss", color = chrome.textMid, onClick = onDismiss)
+            Quiet(dismissLabel, color = chrome.textMid, onClick = onDismiss)
         }
     }
     Spacer(Modifier.height(8.dp))

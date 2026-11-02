@@ -1206,10 +1206,26 @@ class ChatSession(
      * "Try again" under a failed question: the same words, with the same tag
      * and shared text, as a new [send]. False when there is nothing to ask
      * again (a new conversation was started since).
+     *
+     * [attachment] and [picture] are the file and the picture the failed
+     * question carried, handed back by the caller from the only copy that
+     * exists ([AttachFile] keeps none). They ride with this retry exactly as
+     * they rode with the question that failed; a retry that dropped them would
+     * ask about a file the PC never received. Nothing is kept here: they are
+     * this call's arguments, and are gone when it returns.
      */
-    suspend fun retryLast(): Boolean {
+    suspend fun retryLast(
+        attachment: AttachFile.Ready? = null,
+        picture: String? = null,
+    ): Boolean {
         val (message, provenance, shared) = lastAsked ?: return false
-        send(message, provenance = provenance, shared = shared)
+        send(
+            message,
+            provenance = provenance,
+            shared = shared,
+            attachment = attachment,
+            picture = picture,
+        )
         return true
     }
 

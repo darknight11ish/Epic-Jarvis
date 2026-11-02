@@ -200,14 +200,42 @@ class HudLayoutTest {
     @Test
     fun `hiding a menu empties its card, but a protected card ignores hiding`() {
         val d = HudLayout.defaults()
-        val hidden = MenuView(MenuState(hidden = setOf("brain.work.today", "entry.appearance")))
+        val hidden = MenuView(MenuState(hidden = setOf("brain.work.today", "entry.voice-check")))
         val visible = HudLayout.visible(d, hidden)
         assertFalse("brain.work.today" in visible.getValue(HudLayout.BODY))
-        assertFalse("entry.appearance" in visible.getValue(HudLayout.HERO))
+        assertFalse("entry.voice-check" in visible.getValue(HudLayout.HERO))
         assertTrue("the approvals card is not hideable", HudLayout.APPROVALS in
             visible.getValue(HudLayout.TOP_STRIP))
         assertTrue("the Live card is not hideable", HudLayout.LIVE in
             visible.getValue(HudLayout.HERO))
+    }
+
+    /**
+     * Appearance is Settings-only on the phone since 2026-11-02, and this model
+     * is the list of HOME cards: an Appearance card left in it would let a
+     * built-in preset (or a pasted document, once A4 is wired) put the button
+     * the owner asked to remove back on Home. The Settings row keeps the
+     * feature, so nothing is lost by it not being a card.
+     */
+    @Test
+    fun `Appearance is not a Home card and no preset puts one back`() {
+        assertNull("Appearance must not be a Home card", HudLayout.card("entry.appearance"))
+        assertFalse(
+            "Appearance is not in the default layout",
+            "entry.appearance" in HudLayout.defaults().visibleCards(),
+        )
+        for (preset in HudLayout.BUILT_IN_PRESETS) {
+            assertFalse(
+                "${preset.id} puts Appearance on Home",
+                "entry.appearance" in preset.layout.visibleCards(),
+            )
+        }
+        // A pasted document naming it is dropped like any other unknown card,
+        // rather than being drawn from the menu id it names.
+        val pasted = HudLayout.fromJson(
+            """{"version":1,"sections":{"hero":["entry.appearance"]}}""",
+        )!!
+        assertFalse("entry.appearance" in pasted.visibleCards())
     }
 
     @Test
@@ -231,6 +259,65 @@ class HudLayoutTest {
             HudLayout.INDICATORS.any { it.id in movedAway.visibleCards() })
         for (id in HudLayout.INDICATORS.map { it.id }) {
             assertNull("an indicator cannot be moved", HudLayout.move(d, id, HudLayout.BODY, 0))
+        }
+    }
+
+    @Test
+    fun `the reducer adds a card the layout does not hold, and nothing else`() {
+        // The edit screen's "Add" (2026-11-02): a card a preset left out can be
+        // put back - through the SAME reducer a move goes through, so there is
+        // no second way into a layout.
+        val calm = HudLayout.BUILT_IN_PRESETS.first { it.id == "calm" }.layout
+        val missing = HudLayout.missingFrom(calm)
+        assertTrue("Calm holds fewer cards than the phone has", missing.isNotEmpty())
+        val added = HudLayout.apply(calm, HudLayout.Action.Add(missing[0], HudLayout.BODY))
+        assertTrue("${missing[0]} is back", missing[0] in added.visibleCards())
+        assertEquals("in the section it was asked for", HudLayout.BODY, added.sectionOf(missing[0]))
+        assertEquals("at the end when no place is given", missing[0], added.items(HudLayout.BODY).last())
+        val atStart = HudLayout.apply(calm, HudLayout.Action.Add(missing[0], HudLayout.BODY, 0))
+        assertEquals(missing[0], atStart.items(HudLayout.BODY).first())
+        // The closed world still holds: no invented id, no indicator, no
+        // duplicate, no section that does not exist.
+        assertEquals(calm, HudLayout.apply(calm, HudLayout.Action.Add("no.such.card", HudLayout.BODY)))
+        for (indicator in HudLayout.INDICATORS) {
+            assertEquals(calm, HudLayout.apply(calm, HudLayout.Action.Add(indicator.id, HudLayout.BODY)))
+        }
+        val present = added.visibleCards().first()
+        assertEquals(added, HudLayout.apply(added, HudLayout.Action.Add(present, HudLayout.HERO)))
+        assertNull(HudLayout.add(calm, missing[0], "no_such_section"))
+        // And it answers the same layout, not a crash, for a card the layout
+        // already holds.
+        assertEquals(calm, HudLayout.apply(calm, HudLayout.Action.Add(HudLayout.LIVE, HudLayout.BODY)))
+    }
+
+    @Test
+    fun `every action leaves the three safety cards present exactly once`() {
+        // The invariant an editor, a drag and a paste all lean on: whatever the
+        // action, [HudLayout.normalize] has already run, so a safety surface is
+        // in the answer once and an indicator never is.
+        val d = HudLayout.defaults()
+        val body = d.items(HudLayout.BODY)
+        val actions = listOf(
+            HudLayout.Action.Move(HudLayout.APPROVALS, HudLayout.COMPOSER, 0),
+            HudLayout.Action.Move(HudLayout.EMERGENCY_STOP, HudLayout.BODY, 1),
+            HudLayout.Action.Move(HudLayout.LIVE, HudLayout.TOP_STRIP, 0),
+            HudLayout.Action.Earlier(HudLayout.LIVE),
+            HudLayout.Action.Later(HudLayout.APPROVALS),
+            HudLayout.Action.First(HudLayout.LIVE, HudLayout.COMPOSER),
+            HudLayout.Action.Last(HudLayout.APPROVALS),
+            HudLayout.Action.Add(body[0], HudLayout.TOP_STRIP),
+            HudLayout.Action.Move(body[0], HudLayout.HERO, 0),
+            HudLayout.Action.Reset,
+        ) + HudLayout.BUILT_IN_PRESETS.map { HudLayout.Action.ApplyPreset(it.id) } +
+            HudLayout.BUILT_IN_PRESETS.map { HudLayout.Action.Last(HudLayout.LIVE, it.layout.sectionOf(HudLayout.LIVE)) }
+        for (action in actions) {
+            val out = HudLayout.apply(d, action)
+            val all = out.visibleCards()
+            for (id in listOf(HudLayout.APPROVALS, HudLayout.LIVE, HudLayout.EMERGENCY_STOP)) {
+                assertEquals("$action keeps $id once", 1, all.count { it == id })
+            }
+            assertFalse("$action never stores an indicator",
+                HudLayout.INDICATORS.any { it.id in all })
         }
     }
 }

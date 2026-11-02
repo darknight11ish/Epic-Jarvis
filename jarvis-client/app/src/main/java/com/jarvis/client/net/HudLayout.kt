@@ -98,7 +98,13 @@ object HudLayout {
         Card(LIVE, "Live and Stop", "Talk back and forth, and the Stop button.", HERO, safety = true),
         Card(EMERGENCY_STOP, "Emergency stop", "Stops everything, at once. Never hidden.", TOP_STRIP, safety = true),
         // Ordinary cards: every one is a phone menu that already exists.
-        Card("entry.appearance", "Appearance", "Theme, faces and how it all looks.", HERO, menu = "entry.appearance"),
+        //
+        // Appearance is deliberately NOT a card here (removed 2026-11-02). The
+        // owner asked for Appearance to be reachable only in Settings, and this
+        // model's cards are Home surfaces: a Home HUD that could put an
+        // Appearance card back would undo that with a layout. Its Settings row
+        // keeps the feature, and `settings.appearance-card` is still the menu
+        // that hides it there.
         Card("entry.voice-check", "Voice check", "Say one line and hear how it sounds.", HERO, menu = "entry.voice-check"),
         Card("brain.now.right-now", "Right now", "What Jarvis is doing at this moment.", TOP_STRIP, menu = "brain.now.right-now"),
         Card("brain.now.budget", "Attention budget", "How much Jarvis may interrupt you today.", TOP_STRIP, menu = "brain.now.budget"),
@@ -193,7 +199,7 @@ object HudLayout {
             Preset("default", "Default", "Everything in its usual place.", true,
                 arrangement(
                     TOP_STRIP to listOf("brain.now.right-now", "brain.now.budget"),
-                    HERO to listOf(LIVE, "brain.now.trace", "entry.appearance"),
+                    HERO to listOf(LIVE, "brain.now.trace"),
                     BODY to listOf("brain.work.today", "brain.work.coming-up",
                         "brain.work.jobs", "brain.work.undo", "brain.model.models",
                         "brain.memory.learning"),
@@ -209,7 +215,7 @@ object HudLayout {
             Preset("brain", "Brain & Learning", "Memory, models and study at the front.", true,
                 arrangement(
                     TOP_STRIP to listOf("brain.memory.learning", "brain.model.models"),
-                    HERO to listOf("entry.appearance", "brain.model.compute"),
+                    HERO to listOf("brain.model.compute"),
                     BODY to listOf("brain.memory.topics", "brain.memory.profile",
                         "brain.memory.wiki", "brain.work.quiz", "brain.work.decks",
                         "brain.model.skills", "brain.trust.ledger"),
@@ -259,6 +265,16 @@ object HudLayout {
         /** Put it last in a section (the target section when given). */
         data class Last(val id: String, val section: String? = null) : Action
 
+        /**
+         * Put a card that the layout does not hold anywhere into [section]
+         * (the editor's "Add" - A3). It is an ACTION rather than a second
+         * writer so that a card can only ever arrive through the same reducer
+         * a move does, with the same normalisation behind it. Refused for an
+         * unknown id, an indicator, a card already in the layout, or a section
+         * that does not exist.
+         */
+        data class Add(val id: String, val section: String, val index: Int? = null) : Action
+
         /** The whole layout goes back to one built-in preset / the default. */
         data class ApplyPreset(val presetId: String) : Action
 
@@ -278,6 +294,7 @@ object HudLayout {
             BUILT_IN_PRESETS.firstOrNull { it.id == action.presetId }?.layout
                 ?: normalize(layout)
         is Action.Move -> move(layout, action.id, action.section, action.index) ?: layout
+        is Action.Add -> add(layout, action.id, action.section, action.index) ?: layout
         is Action.Earlier -> shift(layout, action.id, -1) ?: layout
         is Action.Later -> shift(layout, action.id, 1) ?: layout
         is Action.First -> place(layout, action.id, action.section) { 0 } ?: layout
@@ -308,6 +325,22 @@ object HudLayout {
             return normalize(Layout(layout.version, map))
         }
         return normalize(Layout(layout.version, layout.sections.toMutableMap().also { it[section] = target }))
+    }
+
+    /**
+     * A card the layout does not hold arrives in [section] - the editor's
+     * "Add". Null when the card is unknown, is an indicator (never a stored
+     * card), is already somewhere in the layout, or names no section. The
+     * result is normalised, so the protected cards are still forced present.
+     */
+    fun add(layout: Layout, id: String, section: String, index: Int? = null): Layout? {
+        if (section !in SECTIONS) return null
+        val card = byId[id] ?: return null
+        if (card.indicator) return null
+        if (layout.contains(id)) return null
+        val ids = layout.items(section).toMutableList()
+        ids.add((index ?: ids.size).coerceIn(0, ids.size), id)
+        return normalize(Layout(layout.version, layout.sections.toMutableMap().also { it[section] = ids }))
     }
 
     /** One place earlier (-1) or later (+1); null when it cannot move. */

@@ -238,6 +238,10 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // desktop can never disagree about whether it is on. A row added at the end
     // moves no other number.
     "calendar" to 37,
+    // "Home screen" (2026-11-02): the phone's own Edit HUD. A row added at the
+    // end of the screen moves no other number - the same reason the two above
+    // it were added there.
+    "edit-hud" to 38,
 )
 
 /**
@@ -301,6 +305,18 @@ fun SettingsScreen(
      * as a destination before there is a desktop to push to.
      */
     onOpenAppearance: (() -> Unit)? = null,
+    /**
+     * "Home screen" (2026-11-02): the phone's own Edit HUD - the four sections,
+     * the five read-only presets, the owner's own copies and the JSON
+     * (ui/screens/EditHudScreen.kt).
+     *
+     * Saved on this phone only, so - like Floating Jarvis and unlike Appearance
+     * - it needs no `canAct` gate and nothing is sent to the PC: it is a display
+     * preference, the same class as the theme, so it raises no approval card and
+     * no pairing token is involved. Null only for previews and tests, where the
+     * row is drawn without its button rather than with one that does nothing.
+     */
+    onOpenEditHud: (() -> Unit)? = null,
     /**
      * "Pair with your PC", inside the Devices card - the way back into the
      * pairing screen from Settings (2026-10-28).
@@ -421,6 +437,19 @@ fun SettingsScreen(
      * Picture mode (which also needs it). Null hides the button.
      */
     onOpenLookSwitch: (() -> Unit)? = null,
+    /**
+     * Opens a feature the search box found OUTSIDE Settings - the focus
+     * presets, which the phone draws inside the Brain's Hardware plate
+     * (`SettingsSearch.ELSEWHERE`, the owner's bug of 2026-11-02: he typed
+     * "presets" into this box and nothing came up). The row says where the
+     * feature is and calls this with the entry; `MainActivity` turns it into
+     * the same one-time section scroll the Find box uses.
+     *
+     * Null means "do not offer the row" rather than "offer one that goes
+     * nowhere" - the same rule the other optional actions on this screen
+     * follow. Navigation only: nothing here changes a setting.
+     */
+    onOpenElsewhere: ((SettingsSearch.Elsewhere) -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // The same gate every other write on this screen already uses
@@ -472,6 +501,11 @@ fun SettingsScreen(
         // a keystroke, not a frame.
         val matching: Set<String> = SettingsSearch.matching(query).toSet()
         val shownCount = SettingsSearch.SECTION_KEYS.count { it in matching }
+        // ...and the features that are not in Settings at all (2026-11-02):
+        // "presets" hides every card, and without this the screen answered
+        // "Nothing here matches" and stopped. Worked out from the same folded
+        // query, once per keystroke, and it changes nothing.
+        val elsewhere = SettingsSearch.elsewhereMatching(query)
         // Which sections this screen draws. Read as a lambda so the sections
         // that do not match are simply not composed, and so a section added
         // later is filtered without a second list to keep in step.
@@ -503,6 +537,8 @@ fun SettingsScreen(
                     query = query,
                     onQueryChange = { typed -> query = typed },
                     shown = shownCount,
+                    elsewhere = elsewhere,
+                    onOpenElsewhere = onOpenElsewhere,
                 )
             }
 
@@ -992,6 +1028,45 @@ fun SettingsScreen(
             // row is always drawn. A row added at the end moves no other row's
             // position (see SETTINGS_ITEM_INDEX).
             if (drawn("calendar")) item(key = "calendar") { CalendarSettingsSection(canAct = canAct) }
+
+            // "Home screen" (2026-11-02; the owner's own words: "add building
+            // the real editor to the queue"): the phone's own Edit HUD - the
+            // four sections, the five read-only built-in arrangements, the
+            // owner's own copies and the layout's JSON
+            // (ui/screens/EditHudScreen.kt).
+            //
+            // A DISPLAY PREFERENCE, the same class as the theme: saved on this
+            // phone only, no route, no approval card, nothing sent to the PC -
+            // which is why this row has no `canAct` gate and is not `stale`-held
+            // like a write. It is NOT a hideable menu either: no catalogue id
+            // exists for it and none is invented here, so, like "What asks
+            // first" and "Calendar", the row is always drawn.
+            //
+            // It sits last, beside the other "how the phone itself looks" rows
+            // rather than among the PC's settings: a row added at the end moves
+            // no other row's position (see SETTINGS_ITEM_INDEX).
+            if (drawn("edit-hud")) item(key = "edit-hud") {
+                Section("Home screen") {
+                    Plate {
+                        Text(
+                            "Choose which of Jarvis's cards sit on your Home screen, which " +
+                                "of the four sections each one is in, and in what order.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid,
+                        )
+                        Gap(4)
+                        Text(
+                            "The five built-in arrangements are read-only. Duplicate one to make it yours.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                        Gap(8)
+                        onOpenEditHud?.let {
+                            Secondary("Edit Home screen", modifier = Modifier.fillMaxWidth(), onClick = it)
+                        }
+                    }
+                }
+            }
             item(key = "tail") { Gap(24) }
         }
     }
@@ -1021,6 +1096,8 @@ private fun SettingsSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     shown: Int,
+    elsewhere: List<SettingsSearch.Elsewhere> = emptyList(),
+    onOpenElsewhere: ((SettingsSearch.Elsewhere) -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
@@ -1069,7 +1146,7 @@ private fun SettingsSearchField(
             color = chrome.textMid,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
-        if (query.isNotBlank() && shown == 0) {
+        if (query.isNotBlank() && shown == 0 && elsewhere.isEmpty()) {
             Text(
                 SettingsSearchWords.none(query),
                 style = MaterialTheme.typography.bodyMedium,
@@ -1080,6 +1157,35 @@ private fun SettingsSearchField(
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textLo,
             )
+        }
+        // "Not in Settings" (2026-11-02): the owner typed "presets" here and
+        // the screen hid every card and stopped. These rows are the box's third
+        // answer - the feature is real, it is just not a Settings thing on this
+        // phone - and each one says where it is in the app's own words and
+        // opens it. Drawn whether or not a Settings card also matched, because
+        // a feature that lives elsewhere is worth saying either way; with no
+        // card and no row the box still answers "Nothing here matches" above.
+        for (e in elsewhere) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        SettingsSearch.elsewhereLine(e),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = chrome.textHi,
+                    )
+                    Text(
+                        SettingsSearch.elsewhereWhere(e),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                }
+                if (onOpenElsewhere != null) {
+                    Quiet(SettingsSearch.ELSEWHERE_OPEN, onClick = { onOpenElsewhere(e) })
+                }
+            }
         }
     }
 }
