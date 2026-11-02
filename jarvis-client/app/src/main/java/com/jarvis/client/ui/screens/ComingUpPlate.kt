@@ -240,7 +240,27 @@ internal fun ComingUpSection(
                         Text(Schedule.EMPTY_TODO, style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid)
                     }
-                    todoItems.forEach { ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) } }
+                    // 2026-11-02 (JARVIS-API section 179; the owner's choice of
+                    // both ways, daily rollover the default). ROLLOVER: every
+                    // open item, each older one carrying the PC's own tag ("from
+                    // yesterday", "from Friday (3d ago)"). DAY BY DAY: the same
+                    // items, grouped under the day the PC says each was written -
+                    // the heading already names the day, so no row repeats it.
+                    if (shown.todoMode == Schedule.MODE_DAY) {
+                        Schedule.todoDays(shown).forEach { day ->
+                            Gap(6)
+                            Text(day.label, style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textLo)
+                            day.items.forEach {
+                                ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) }
+                            }
+                        }
+                    } else {
+                        todoItems.forEach {
+                            ScheduleRow(it, now - readAt, canAct && busyId == null,
+                                carry = Schedule.carryOf(it)) { a -> act(it, a) }
+                        }
+                    }
                     Gap(8)
                     val add: () -> Unit = {
                         if (todoText.isNotBlank() && canAct && !adding) {
@@ -276,7 +296,8 @@ internal fun ComingUpSection(
                         Gap(14)
                         Text(part.title, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
                         part.items.forEach {
-                            ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) }
+                            ScheduleRow(it, now - readAt, canAct && busyId == null,
+                                carry = Schedule.carryOf(it)) { a -> act(it, a) }
                         }
                         if (!shown.hidden) {
                             Gap(6)
@@ -454,6 +475,10 @@ private fun ScheduleRow(
     sinceMs: Long,
     enabled: Boolean,
     onSaid: (String) -> Unit = {},
+    // The PC's own age tag for a to-do item ("from yesterday"), or "" - the
+    // rollover list only: the day-labelled view puts the day on its heading
+    // instead (2026-11-02; Schedule.carryOf).
+    carry: String = "",
     onAct: (String) -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -467,7 +492,7 @@ private fun ScheduleRow(
             color = chrome.textLo,
         )
         Text(Schedule.titleOf(job), style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
-        Schedule.metaOf(job, sinceMs).forEach {
+        Schedule.metaOf(job, sinceMs, carry).forEach {
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
         if (offer is AlsoOnPhone.Offer.Later) {

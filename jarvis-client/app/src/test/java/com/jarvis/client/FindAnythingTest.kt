@@ -251,8 +251,17 @@ class FindAnythingTest {
             // phone's own Settings row (SettingsScreen.kt item "files") with a real
             // place in MenuPlaces.SETTINGS - it lists the one approved file and
             // offers View / Save to Downloads, so the finder must reach it too.
+            // 129 -> 130 (2026-11-02, the todo-carry-over lane):
+            // `settings.todo-carryover` is the desktop's own "To-do list
+            // carry-over" card, and it is DESKTOP ONLY - the phone draws the same
+            // two choices inside its Limits row (SettingsScreen.kt's
+            // TodoCarryoverSection under LimitsSection), so there is no phone
+            // place to add and no FindAnything row for it: the catalogue is one
+            // larger for the same reason `settings.media-index` was, and
+            // `every phone menu with a place can be found` stays satisfied
+            // because `phone` is false.
             "the catalogue must still carry the names at all",
-            129,
+            130,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
