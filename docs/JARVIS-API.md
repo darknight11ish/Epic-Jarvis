@@ -2375,7 +2375,8 @@ carries the note's text.** Clients show `message` and nothing of their own.
 Replaces what `POST /api/note` in §8 suggested. The desktop's `#log` / `#obs` /
 `#joplin` / quick note / widget capture use it (`capture_note`,
 `capture_note_status`); the chat turn with a routing system message is gone.
-The phone uses it too: Home's "Quick note…" field, opened directly or by the
+The phone uses it too: Home's Quick note sheet, opened by the More menu's
+Quick note row or by the
 home-screen widget's Note button (`JarvisApi.captureNote`, `noteStatus`,
 `JarvisRuntime.fileNote`). The phone keeps asking while a card waits and
 shows the desktop's own sentence in its notice.
@@ -2444,7 +2445,9 @@ link and let going quieter through.
 `backend/second-card.patch` and `backend/jarvis_second_card.py`. The owner's
 guide is `docs/SECOND-CARD.md`. **Both apps call both** (2026-09-24). The
 phone: Brain screen, "Second graphics card" (`SecondCardPlate.kt` /
-`net/SecondCard.kt`), and chat's photo button. The desktop: Settings, "Second
+`net/SecondCard.kt`), and chat's one `Attach a file` row, which takes a photo as
+well as a document since 2026-11-01 (it was a Photo button of its own before).
+The desktop: Settings, "Second
 graphics card" (`get_second_card` / `set_second_card` in `commands.rs`,
 granted to the settings window only), and `vision.rs`, which reads it before
 deciding whether pictures can be sent. `tools/check_parity.py` records
@@ -2472,7 +2475,8 @@ Since 2026-09-26 it also carries `"picture_text": {"available": bool,
 itself when the model answering cannot see it (section 36). Both apps read
 it where they already read this route before a picture goes: the desktop's
 `vision.rs` (`reads_text`) sends the picture without asking; the phone
-offers its Photo button (`SecondCard.picturesTaken`). An older PC sends
+offers photos in its one `Attach a file` row (`SecondCard.picturesTaken`, read
+as `HomeState.pictureOffered`). An older PC sends
 none: both apps behave as before.
 
 ```
@@ -2842,9 +2846,13 @@ go to <model> on the second graphics card."); otherwise do what it does
 today. The phone does the same wherever it decides whether to send a
 picture. The route header then carries `second_card: "vision"` on that turn.
 
-**The phone's picture** (2026-09-24): a Photo button in chat, shown only
-while the `vision` row's `available` is true, and checked again (a fresh
-`GET`) before the send. Android's photo picker, no storage permission; the
+**The phone's picture** (2026-09-24; one `Attach a file` row since 2026-11-01):
+a photo is picked through the chat's one `Attach a file` row, and the picker
+offers images only while the `vision` row's `available` is true (or the PC
+reads the words in pictures - section 36's `picture_text`), checked again (a
+fresh `GET`) before the send. Android's system file picker, no storage
+permission; a picked image is sent to the picture path by
+`AttachFile.goesToPicture` and is never read as a document. The
 photo is shrunk in memory to 1920 pixels on its long side at JPEG quality 82
 (the desktop's `MAX_CAPTURE_WIDTH` and `JPEG_QUALITY`), then lower quality or
 smaller until it is at most 1.5 MB, which stays well inside `MAX_BODY` (4 MiB)
@@ -9555,7 +9563,8 @@ No new route and no new field.
 whether it works; `why` is a plain sentence when it does not ("Windows has
 no text recognition for your language installed. Settings -> Time &
 language -> ..."). The desktop sends a picture without its "can't see
-pictures" notice when it works; the phone offers its Photo button and says
+pictures" notice when it works; the phone offers photos in its one `Attach a
+file` row and says
 under an attached picture: "It goes only to your PC, which reads the words
 in it for Jarvis - the layout and anything else in it are not seen. The
 words count as outside text." While it runs, the `activity` event says
