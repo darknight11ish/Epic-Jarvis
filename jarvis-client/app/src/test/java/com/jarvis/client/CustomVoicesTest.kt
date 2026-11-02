@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -353,6 +354,45 @@ class CustomVoicesTest {
         assertEquals("Choose one of the listed voices.", CustomVoices.answerLine(answer("speaker_bad")))
         // A PC too old to have it sends no `speaker`: nothing is shown.
         assertNull(CustomVoices.parse(JsonObject(raw("empty") - "speaker"))?.speaker)
+    }
+
+    @Test
+    fun `the picker marks the voice the owner saved, not only the one that speaks`() {
+        // The owner's report, 2026-11-02: he saved a voice, it was not the one
+        // that spoke, and the picker marked the pack default as his choice.
+        // The PC now answers `choice` (the voice that SPEAKS) plus `saved`
+        // (the one he chose); this is a real response with only `saved` moved
+        // to a different row, so both are voices the picker really draws.
+        val speaker = raw("pack_v1_chosen")["speaker"]!!.jsonObject.toMutableMap().apply {
+            put("saved", JsonPrimitive("bm_george"))
+        }
+        val fallback = raw("pack_v1_chosen").toMutableMap().apply { put("speaker", JsonObject(speaker)) }
+        val sk = requireNotNull(CustomVoices.parse(JsonObject(fallback))?.speaker) { "no speaker block" }
+
+        // The voice that SPEAKS keeps its old meaning: the screens that name
+        // the sound (VoiceNow's "Voice: ..., from your PC") still read the truth.
+        assertEquals("af_heart", sk.choice)
+        // The voice the owner CHOSE is read from the new field, and it is the
+        // one the picker marks - a row that really is on the screen.
+        assertEquals("bm_george", sk.saved)
+        assertEquals("bm_george", sk.chosen)
+        assertNotEquals(sk.choice, sk.chosen)
+        assertTrue(
+            "the marked voice must be one of the rows the picker draws",
+            sk.choices.any { it.id == sk.chosen },
+        )
+
+        // A PC older than `speaker.saved` sends no field at all: nothing is
+        // invented, and the picker marks the speaking voice as it always did.
+        val older = requireNotNull(CustomVoices.parse(raw("pack_v1_chosen"))?.speaker)
+        assertEquals("af_heart", older.saved)
+        assertEquals(older.choice, older.chosen)
+
+        // `saved: null` - the owner never chose one - reads as "" too, so the
+        // default is marked because it really is what he is getting.
+        val never = requireNotNull(status("empty").speaker)
+        assertEquals("", never.saved)
+        assertEquals(never.choice, never.chosen)
     }
 
     @Test

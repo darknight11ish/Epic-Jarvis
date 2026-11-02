@@ -58,7 +58,8 @@ import kotlin.math.sqrt
  * case-insensitively A-Z (`lowercase(Locale.ROOT)`), so two names differing
  * only in case could order differently - the picture is still deterministic;
  * and the desktop's fit scale starts at its own zoom, while [fit] shrinks or
- * grows the layout to the canvas (never past [MAX_SCALE]).
+ * grows the layout to the canvas (never past [MAX_SCALE] for a multi-name
+ * picture; a one-name picture has no layout to fit and uses [LONE_DOT_SHARE]).
  */
 object GalaxyPicture {
 
@@ -72,9 +73,21 @@ object GalaxyPicture {
     const val ZEN_RING_PITCH = 24.0
     const val ZEN_HALO_GAP = 21.0
 
-    /** [fit] never grows the layout past this, so a two-name picture is two
-     *  dots rather than two blobs filling the screen. */
+    /** [fit] never grows a MULTI-NAME layout past this, so a two-name picture
+     *  is two dots rather than two blobs filling the screen. A lone dot has no
+     *  layout to grow and is sized by [LONE_DOT_SHARE] instead. */
     const val MAX_SCALE = 2.0
+
+    /** A LONE dot's radius as a share of the canvas room's smaller side.
+     *
+     *  One name is the one picture that has no layout to fit: the dot IS the
+     *  picture, and [MAX_SCALE] - which exists to stop a two-name layout
+     *  becoming two blobs - leaves it a 5-9dp speck at the centre of the
+     *  264dp plate on a real phone, which the owner read as the picture being
+     *  broken ("it clearly doesn't show anything", 2026-11-01). A lone dot is
+     *  given a readable share instead: 0.06 of the 236dp room is about a
+     *  14dp radius, 28dp across, still a dot and never a blob. */
+    const val LONE_DOT_SHARE = 0.06
 
     /** One drawn name. [x], [y] and [radius] are the layout's own units; the
      *  UI's [fit] turns them into pixels. [facts] is `fact_ids.size`,
@@ -193,8 +206,10 @@ object GalaxyPicture {
      *
      * Blank names are kept as dots (the list below draws them the same way)
      * but they are not given a caption - the desktop clips a label at 34
-     * characters and the phone draws no labels at all, so nothing here is
-     * clipped or fake.
+     * characters and the phone draws no labels on the canvas, so nothing here
+     * is clipped or fake. A picture with ONE dot is named in a line under the
+     * canvas instead ([Entities.lonePictureLine]), because with a single name
+     * there is no second dot for a label to collide with.
      */
     fun build(entities: List<Entities.Entity>, look: String = CONSTELLATION): Picture {
         val kept = ordered(entities)
@@ -378,6 +393,12 @@ object GalaxyPicture {
      * The layout scaled to a canvas: uniform scale (never past [MAX_SCALE]),
      * centred, with [padding] pixels of air. Every dot's own radius is scaled
      * with it, so a dot and the space around it keep their proportion.
+     *
+     * A picture of ONE dot is the exception (2026-11-02): there is no layout
+     * to fit, so [MAX_SCALE] would size the single dot rather than the layout,
+     * and on a real phone that was a 5-9dp speck at the centre of the plate.
+     * A lone dot is scaled to [LONE_DOT_SHARE] of the room instead; every
+     * multi-name picture is fitted exactly as before.
      */
     fun fit(picture: Picture, width: Float, height: Float, padding: Float): List<ScreenDot> {
         if (picture.dots.isEmpty() || width <= 0f || height <= 0f) return emptyList()
@@ -395,7 +416,11 @@ object GalaxyPicture {
         val spanY = max(1e-6, maxY - minY)
         val roomX = max(1.0, width - 2.0 * padding).toDouble()
         val roomY = max(1.0, height - 2.0 * padding).toDouble()
-        val scale = min(min(roomX / spanX, roomY / spanY), MAX_SCALE)
+        val scale = if (picture.dots.size == 1) {
+            min(roomX, roomY) * LONE_DOT_SHARE / picture.dots[0].radius
+        } else {
+            min(min(roomX / spanX, roomY / spanY), MAX_SCALE)
+        }
         val centreX = (minX + maxX) / 2.0
         val centreY = (minY + maxY) / 2.0
         val ox = width / 2.0

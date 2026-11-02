@@ -161,16 +161,33 @@ object CustomVoices {
      * "Jarvis's built-in voice": which of Kokoro's own voices - the PC's own
      * choices and words (a new choice needs no phone release), the same
      * shape as [Speed]. [note] is the PC's extra line, or "".
+     *
+     * [choice] is the voice that SPEAKS, and [saved] is the voice the owner
+     * actually chose ("" when he never chose one). They differ whenever the
+     * saved voice cannot speak - a voice pack without that name, a blend
+     * still being checked, a voice that was refused - and then the PC's
+     * [note] says which is which. [chosen] is the one the picker marks, so
+     * the screen names the owner's own choice instead of the pack default he
+     * never picked (2026-11-02: `speaker.saved` added to the PC's answer).
      */
     data class Speaker(
         val choice: String = "",
+        /** The owner's own saved voice; "" when the PC answers null (he never chose one). */
+        val saved: String = "",
         val choices: List<SpeakerChoice> = emptyList(),
         val title: String = SPEAKER_TITLE,
         val detail: String = "",
         val note: String = "",
         /** The one PowerShell line that makes Ashby and Clara, or "" when there is nothing to run. */
         val makeLine: String = "",
-    )
+    ) {
+        /**
+         * Which chip the picker marks as the owner's: his SAVED voice when the
+         * PC names one, and otherwise the voice that speaks - a PC older than
+         * `speaker.saved` sends no such field, and there `choice` is all there is.
+         */
+        val chosen: String get() = saved.ifBlank { choice }
+    }
 
     /**
      * "Voice follows the face": with an animal face showing, the built-in
@@ -417,6 +434,10 @@ object CustomVoices {
         if (choices.isEmpty()) return null
         return Speaker(
             choice = sk.str("choice"),
+            // `saved` is the owner's own choice, null on the PC when he never
+            // made one - str() turns that null into "". `choice` keeps its
+            // meaning (the voice that speaks), so no other screen changes.
+            saved = sk.str("saved"),
             choices = choices,
             title = sk.str("title").ifBlank { SPEAKER_TITLE },
             detail = sk.str("detail"),

@@ -127,7 +127,6 @@ import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.Chevron
-import com.jarvis.client.ui.parts.AppearanceIcon
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.FormattedAnswer
 import com.jarvis.client.ui.parts.Gap
@@ -140,6 +139,7 @@ import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.RemindersIcon
 import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.SettingsIcon
 import com.jarvis.client.ui.parts.TextInput
@@ -371,9 +371,13 @@ data class HomeState(
      */
     val faceFraction: Float = DEFAULT_FACE_FRACTION,
     /**
-     * The navigation row (Brain, Inbox, Live, Appearance, Help) is always on
-     * screen instead of one swipe or tap away. The status line above it is
-     * shown either way - it is not a setting.
+     * The navigation row (Brain, Inbox, Live, Reminders, Settings, Help) is
+     * always on screen instead of one swipe or tap away. The status line above
+     * it is shown either way - it is not a setting.
+     *
+     * Reminders took Appearance's place on 2026-11-02 (the owner: Appearance
+     * only in Settings, a Reminders button in its place), so Appearance is no
+     * longer a destination of this row - it is a row in Settings.
      *
      * Shown by default, matching [com.jarvis.client.data.Look.navAlwaysShown],
      * which IS the setting and the only thing that fills this in (MainActivity
@@ -835,12 +839,26 @@ data class HomeActions(
      * and never bypasses it.
      */
     val onOpenGalaxy: () -> Unit,
-    val onOpenAppearance: () -> Unit,
+    /**
+     * Reminders, in the place Home's row gave Appearance until 2026-11-02.
+     *
+     * The owner (2026-11-01): *"move appearance to only in settings for the
+     * android app and replace the appearance button with a reminders button
+     * instead"*. It opens Brain -> Coming up - the plate that already holds
+     * "Reminders, alarms, timers and repeating jobs" (`brain.work.coming-up`),
+     * exactly as "open coming up" and Find anything's own row do. Nothing new
+     * is read and no route is added. Coming up is in `MenuCatalog.NEVER_HIDE`
+     * (a due reminder must stay reachable, `ComingUpReachabilityTest`), so
+     * this button is always drawn - like Settings and Help beside it - and
+     * needs no show-for-visit.
+     */
+    val onOpenReminders: () -> Unit,
     /**
      * Settings itself (2026-10-08): its own button in the row, beside
-     * Appearance - it used to be three taps and a scroll away. Always shown,
+     * Reminders - it used to be three taps and a scroll away. Always shown,
      * like Help: "Settings and Help themselves always stay reachable"
-     * (MenuCatalog's `entry.settings`, which is not hideable).
+     * (MenuCatalog's `entry.settings`, which is not hideable). It is also the
+     * only way to Appearance since 2026-11-02, where that is a row of its own.
      */
     val onOpenSettings: () -> Unit,
     val onOpenFaq: () -> Unit,
@@ -2203,17 +2221,20 @@ private fun NavToggle(shown: Boolean, onToggle: (Boolean) -> Unit) {
     }
 }
 
-/** Mind, Inbox, Live, Appearance, Settings and Help - the part of the old bar
- *  that may hide (Settings arrived 2026-10-08; see its own NavItem below). */
+/** Mind, Inbox, Live, Reminders, Settings and Help - the part of the old bar
+ *  that may hide (Settings arrived 2026-10-08; Reminders replaced Appearance
+ *  on 2026-11-02, and the Appearance screen itself is now reached only from
+ *  Settings - see its own NavItem below). */
 @Composable
 private fun NavRow(state: HomeState, actions: HomeActions) {
     val chrome = LocalChrome.current
-    val menus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
     // UI-AUDIT-2026-09-18 choice A1: icons + words, status separated
     // from navigation by a rule, Brain gets a real button, "Look"
-    // becomes "Appearance". Every destination is weighted the same, so the
-    // row balances regardless of phone width - five when Appearance is
-    // hidden, six otherwise.
+    // becomes "Appearance" - and since 2026-11-02 the row carries Reminders
+    // instead, because Appearance is Settings-only. Every destination is
+    // weighted the same, so the row balances regardless of phone width. All
+    // six are always shown: not one of them is a hideable menu, which is why
+    // this row reads no `menus.shows(...)` at all.
     Column(Modifier.fillMaxWidth().background(chrome.surface1)) {
         Rule()
         Row(Modifier.fillMaxWidth()) {
@@ -2236,20 +2257,22 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 onClick = actions.onOpenLive,
                 modifier = Modifier.weight(1f),
             )
-            // "Show or hide menus" (docs/JARVIS-API.md section 109): the owner may hide this button;
-            // Appearance itself is still in Settings and "open appearance" still works.
-            if (menus.shows("entry.appearance")) {
-                NavItem(
-                    icon = { AppearanceIcon(chrome.textMid) },
-                    label = "Appearance",
-                    onClick = actions.onOpenAppearance,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            // Reminders, where Appearance's button was until 2026-11-02 (the
+            // owner asked for Appearance to be Settings-only and this button
+            // in its place). It opens Brain -> Coming up - "Reminders, alarms,
+            // timers and repeating jobs" - and that plate can never be hidden
+            // (`brain.work.coming-up` is in MenuCatalog.NEVER_HIDE), so this
+            // button is always drawn rather than gated on a menu switch.
+            NavItem(
+                icon = { RemindersIcon(chrome.textMid) },
+                label = "Reminders",
+                onClick = actions.onOpenReminders,
+                modifier = Modifier.weight(1f),
+            )
             // Settings, in the same shape as its neighbours (2026-10-08): one
             // tap from Home instead of three and a scroll. Always shown -
             // Settings is never hideable, and its own row is where the owner
-            // reaches everything the phone can change.
+            // reaches everything the phone can change, Appearance included.
             NavItem(
                 icon = { SettingsIcon(chrome.textMid) },
                 label = "Settings",

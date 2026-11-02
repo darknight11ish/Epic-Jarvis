@@ -771,7 +771,9 @@ data class Look(
      * 2026-09-27.md: `navAlwaysShown = false` today; keep "hide" as an
      * Appearance option). Brain, Inbox, Live, Appearance and Help were one
      * swipe and one 14x8 dp chevron away from anyone who did not already know
-     * they were there.
+     * they were there. (Reminders is in Appearance's place in the row since
+     * 2026-11-02 - Appearance is Settings-only now - but the setting itself is
+     * unchanged: the row is still shown or hidden as a whole.)
      *
      * The default moving does NOT move an owner who already chose. Every
      * field of this record is written on save ([encodeLook] says why), so a

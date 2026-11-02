@@ -223,7 +223,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
-| `step` | Rendered in Brain → Now (the tab was "Live" until 2026-09-28; `brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen`, `read_camera` or `read_web_page` (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
+| `step` | Rendered in Brain → Now (the tab was "Live" until 2026-09-28; `brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen`, `read_camera`, `read_web_page` or `feature_guide` (Jarvis's own feature list, 2026-11-02) (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen). Since 2026-09-28 it also rings when an animal switch changes (`{"part": "animal", "animal": {...}}`, §93); the document then carries the new `animal` values, and every window keeps them for its face frames (`jarvis-link.js`, `animal-shared.js`) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`), `animal` included (`AppearanceStore.animal`) |
 | `sky` | **Since 2026-09-28** (`jarvis_sky.py`, §89): `{"changed": true}` only - never the town, a position or the weather - on every change that lands (and a card raised or answered). Fanned out; `sky-feed.js` (Settings, the Widget, the floating face) and Settings' own section read `GET /api/sky` again at once | Reads `GET /api/sky` again (`JarvisRuntime.onEvent` -> `sky()`), so the face and Appearance show it now |
@@ -3836,12 +3836,15 @@ for a question that came by VOICE and reply `private_aloud: false`:
    **Which tools are private** (the owner's decision of 2026-09-27: "Read
    aloud answers from web search, weather and home status. Email,
    calendar, notes, memory and any unknown tool still stay on screen"):
-   every tool EXCEPT the ones on the read-aloud list, `web_search` and
-   `home_read` - and, since the owner's answer of 2026-09-28 (§62),
-   `read_screen`, an answer about the screen: a read the PC records, not a
-   model tool (`jarvis_agent.STEP_READS` lets the `step` event carry its
-   name; nothing sends it yet) - matched exactly against the `step`
-   event's `tool`. Weather
+   every tool EXCEPT the ones on the read-aloud list - `web_search` and
+   `home_read` (that decision), `read_screen`, an answer about the screen
+   (the owner's answer of 2026-09-28, §62: a read the PC records, not a
+   model tool; `jarvis_agent.STEP_READS` lets the `step` event carry its
+   name), `read_camera`, the same read for what the camera sees in Jarvis
+   Live (2026-09-28), `read_web_page`, one page the owner handed over
+   (2026-10-05), and `feature_guide`, Jarvis's own shipped feature list
+   (2026-11-01: Live speaks an answer it can say, rather than "It's on your
+   screen.") - matched exactly against the `step` event's `tool`. Weather
    has no tool of its own - "what's the weather?" is answered by the quick
    path with no tool, and the model reads the weather device with
    `home_read`. So email, calendar, notes and the note writers, documents
@@ -13658,6 +13661,13 @@ sent as the `live` event on every change (the same object).
   Live" while `resumable` (10 minutes after a quiet or time-up end), and
   count on from this number by themselves - a status read once is never
   taken as "just now".
+- `limits.quiet_s` - **how long Live waits, after it last heard the owner or
+  last spoke, before it turns itself off**; `quiet_left_s` counts down from
+  it and `quiet_warn` turns true in the last `quiet_warn_s` (15 s). It was a
+  constant (90 s) until 2026-11-01; it is now the owner's setting,
+  `[live].quiet_s`, bounded 30 s..10 minutes, changeable in Settings on
+  either app and by asking Jarvis - see section 123.2.1. The default is still
+  90 s, so a PC that never changes it behaves exactly as before.
 - `end_on` - the PC's `live_end` voice setting (63.5): whether App lock
   ends Live when it would ask again (default) or only when Windows locks.
   The phone ignores it (it keeps App lock's own rule).
@@ -14727,7 +14737,7 @@ the list "Windows Hello for memory lists" hides (`lock/rules.rs`
   5. Press Enter for the next." or "No name matches that." It matches the
   name, names joined to it, and what the owner calls it ("sister").
 
-The phone now has a read-only Galaxy picture (owner, 2026-10-26: at most 48 names, the desktop's zen-ring layout, no labels, a tap opens the existing facts view): the *editable* memory graph stays off the phone (CLAUDE.md), and no route is added - it reuses `/api/memory/entities`. On the desktop, picking a dot also lists the facts that name it, read-only, in their own words - see §106.4.
+The phone now has a read-only Galaxy picture (owner, 2026-10-26: at most 48 names, the desktop's zen-ring layout, no labels on the canvas - a picture of one name names its dot in one line below it - a tap opens the existing facts view): the *editable* memory graph stays off the phone (CLAUDE.md), and no route is added - it reuses `/api/memory/entities`. On the desktop, picking a dot also lists the facts that name it, read-only, in their own words - see §106.4.
 
 ### 71.4 Not checked, said plainly
 
@@ -21747,11 +21757,11 @@ The limits are not a module each: they are **rows in one table**
 (`jarvis_limits.LIMITS`), because a new patch costs this repository real work and
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
-the owner's own words for it. Nine of them (`jarvis_limits.LIMITS` holds these
-nine written by hand, and `_notify_rows()` appends **seven more** notification
+the owner's own words for it. Ten of them (`jarvis_limits.LIMITS` holds these
+ten written by hand, and `_notify_rows()` appends **seven more** notification
 rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff` and
-the three Quiet-hours rows - so the table a client receives is sixteen rows
-long. Only the nine are listed here; the seven are built from
+the three Quiet-hours rows - so the table a client receives is seventeen rows
+long. Only the ten are listed here; the seven are built from
 `_NOTIFY_ROWS` and are not copied into this document, for the same
 no-second-copy reason as the numbers below):
 
@@ -21759,6 +21769,7 @@ no-second-copy reason as the numbers below):
 |---|---|---|---|
 | `undo_window` | how long an Undo stays possible | a BIGGER number (it keeps more of the owner's files recoverable on disk) | both |
 | `approval_wait` | how long an approval card waits before it refuses | a BIGGER number (the owner gets longer to decide before the card gives up) | both |
+| `live_idle_seconds` | how long Jarvis Live waits after it last hears the owner before it turns itself off (`[live].quiet_s`, 123.2.1) | neither direction asks - Live is already running and the microphone is already open | both |
 | `jobs_per_tick` | how much Jarvis gets on with at once | neither direction asks | desktop, and the route itself refuses another device |
 | `watch_star_jump` | what counts as news from a watched project | neither direction asks | desktop |
 | `watch_star_floor` | ...but never below this many stars | neither direction asks | desktop |
@@ -21792,7 +21803,7 @@ clips are judged by.
          "limits": [
            {"key": "undo_window", "title": "How long you can undo", "kind": "int",
             "value": 24, "words": "keep undo for a day", "choices": [1, 24, 168],
-            "low": 1, "high": 720, "unit": "hours",
+            "low": 1, "high": 720, "unit": "hours", "step": 1,
             "note": "A longer window keeps older copies of your files on this PC.",
             "loosen_up": true, "pc_only": false, "app": "both"}
          ]}
@@ -21804,6 +21815,14 @@ row's second line in plain words - and on this page **it is the row that knows w
 direction asks**, because `loosen_up` can only describe an UP loosening, so a row
 whose loosening goes down says `false` there and says so in its own `note` instead.
 
+`step` is ADDITIVE (2026-11-01, the same way `quiet_on` was): how far one tap of
+the two apps' -/+ control moves a number. It is `1` on every row that does not say
+otherwise; the Live idle window carries `30`, because one second a tap would put
+three minutes ninety taps away from its 90 s default. A screen that ignores the
+field steps by one and is not wrong, only slower. The step is a UI step and
+nothing else: **any whole number inside `low..high` is accepted by the route**,
+and the spoken sentence sets 45 s happily.
+
 `app` is `"both"`, `"desktop"` or `"phone"`, and `pc_only` marks a row only this PC
 may change. **`app=None` - what the route itself asks for - returns EVERY row**,
 each carrying its own `app`, so each screen filters on what a row says rather than
@@ -21814,6 +21833,53 @@ tell them apart without the caller saying so.)
 There is deliberately **no second copy of any of these numbers** in this document,
 in either app or in `features.json`: the table is the one place they are described,
 and a hand-typed copy would drift from it.
+
+### 123.2.1 The Live idle window: `live_idle_seconds` (added 2026-11-01)
+
+The owner's ask: *"also id likee to he able to tell jarvis to change the setting
+that turns off jarvos live by extending how long ot takestoo turn off when it
+doesntt hear anything"*. Until then `jarvis_live.py`'s `QUIET_S = 90` was a
+constant, with its own comment saying the owner's call was pending.
+
+    "key": "live_idle_seconds", "title": "How long Jarvis Live waits before it turns off",
+    "kind": "int", "value": 90, "words": "1 minute and 30 seconds", "choices": [],
+    "low": 30, "high": 600, "unit": "seconds", "step": 30,
+    "note": "How long Live keeps listening after it last hears you before it turns
+             itself off. From 30 seconds to 10 minutes; it never starts Live and
+             never opens the microphone.",
+    "loosen_up": false, "pc_only": false, "app": "both"
+
+- **The default is today's behaviour.** The key is `[live].quiet_s`, which
+  `jarvis_live.quiet_seconds()` reads on every tick and in the status both apps
+  draw; 90 is what Live has always used, so a PC that never touches this row is
+  unchanged.
+- **The range is 30 s..10 minutes, and it exists for two real reasons.** Below
+  30 s Live would end in the pause between two thoughts (the voice check alone
+  needs a 2 s clip), and above 10 minutes an open microphone has been forgotten -
+  which is the very risk the window exists to bound. A hand-edited `quiet_s =
+  99999` is clamped to 600 by the engine itself, so the file cannot defeat it.
+- **No card in either direction.** Live must ALREADY be running - the owner
+  started it, and the microphone was already open - and this number only decides
+  when an idle session ends: it never starts Live, reads nothing, sends nothing
+  and stores nothing. The same session's own time limit already extends at once
+  and without a card ("give me twenty more minutes", §63.2), so asking a card to
+  keep listening longer would be stricter than the control beside it. This is the
+  same shape "Say \"One moment\"" took the same day.
+- **Changeable by asking**, in chat and in Live, because a Live turn is an
+  ordinary spoken chat turn: *"how long before Jarvis Live turns off when it
+  hears nothing"* answers with the value and the range, and *"make Jarvis Live
+  wait three minutes"* (or "... wait 45 seconds", "set the jarvis live timeout to
+  five minutes") changes it and answers *"Okay - Jarvis Live will now wait 3
+  minutes before turning off when it hears nothing. It can be anything from 30
+  seconds to 10 minutes..."*. A length outside the range is refused in words that
+  name the range, and nothing is written. The sentence goes through
+  `jarvis_settings_registry.set_live_idle` -> `jarvis_limits.change`, the exact
+  function this route calls, so the spoken lane adds no writer, no range check
+  and no tier of its own.
+- **Changeable in Settings on both apps with no client route of its own**: the
+  row is in this table, and the desktop's "Limits and frequency" card and the
+  phone's Limits plate already draw every row, filtered on the row's own `app`
+  and `pc_only`. `step` is what makes 30 s..600 s usable at 30 s a tap.
 
 ### 123.3 What `POST /api/limits/settings` answers
 
