@@ -4112,8 +4112,10 @@ both apps to stay quiet - there is nothing for a client to send.
   answers that it is still off and names the file, rather than claiming it
   worked.
 - A damaged or unreadable `voice-flow.json` reads as ON (the state before the
-  file existed), with `flow.moment.why` saying it is damaged - it never
-  silently changes what the owner hears.
+  file existed) - it never silently changes what the owner hears. The damaged
+  file is named by `jarvis_voice_flow.settings()["why"]`; `flow.moment.why`
+  names only why the clip is off or could not be made, and asking again
+  rewrites the file.
 - The desktop's own "Say 'One moment' if I'm kept waiting" row and the
   phone's own switch keep their existing meaning - may THIS device play it -
   and are unchanged. Neither of them shows the PC-wide answer, which is
@@ -4249,9 +4251,13 @@ both apps since 2026-09-25** (the owner's decision): **"Play a short sound
 when I finish speaking"**, off by default, per device, right under the "One
 moment" switch (desktop Settings -> Voice, "While you wait"; phone Checks,
 the "hey Jarvis" card). Off, the sound is simply not played; nothing else
-about the turn changes. It is the app's own setting, like "One moment", but
-unlike that one there is nothing on the PC behind it - no route, no
-`[voice]` key: the sound is made in the app and never leaves it. Desktop:
+about the turn changes. It is the app's own setting, like the "One moment"
+switch, but the PC has nothing behind this sound: no route, no `[voice]` key
+and no `voice-flow.json` answer - it is made in the app and never leaves it.
+The "One moment" clip is the other case: the PC makes it and serves it at
+`GET /api/voice/moment`, `[voice] one_moment_enabled` switches it off, and
+since 2026-11-01 the owner's own answer in `voice-flow.json` can too (part 3).
+Desktop:
 `jarvis.voice.heardSound` in the app's own storage (`voice-flow.js`
 `loadHeard`); phone: `heard_sound` in `ClientSettings`
 (`VoiceSession.heardYou` asks it first).
