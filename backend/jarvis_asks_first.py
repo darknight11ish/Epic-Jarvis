@@ -394,16 +394,22 @@ TIER_A = (
     "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
     "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
     "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
-    # The conversation-scoped web-search approval and its instant stop
-    # (jarvis_agent.py, the owner's ask of 2026-11-01): both are chat abilities
-    # the owner switches on here, like protect_from_jarvis and
-    # send_file_to_phone beside them. Neither is a default on a fresh install
-    # (`[tools].enabled` does not name them): a standing approval that lets
-    # searches leave this PC unasked is the owner's choice to make, not a
-    # default. Turning the grant tool ON here cannot approve anything by itself
-    # - every grant still needs its own card and a person's yes.
-    "approve_web_search_for_conversation", "stop_web_search_approval",
 )
+
+#: The conversation web-search approval and its instant stop are NOT rows here
+#: (changed 2026-11-02, after the live field test). They used to be, switched on
+#: here like protect_from_jarvis beside them - and on the owner's own PC that
+#: switch was never on, so the model was offered no way to ask, no card could
+#: ever be raised, and a natural "you have full approval to search the web"
+#: produced a plain "Search is approved" with nothing behind it. The ask is not
+#: a capability: it raises ONE card, and that card is the permission, so it now
+#: rides with web search instead (`jarvis_agent.GRANT_ASK_TOOLS` offered
+#: whenever `web_search` is). A switch here whose state the turn ignored would
+#: be a lie, which is why the rows are gone rather than left on. Turning web
+#: search off in Settings still takes both with it. Kept as a name so the two
+#: modules can be checked against each other (test_web_search_grant).
+GRANT_ASK_TOOLS = ("approve_web_search_for_conversation", "stop_web_search_approval")
+
 TIER_B = (
     "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
     "home_control", "my_spending", "retirement_whatif",
@@ -429,8 +435,7 @@ TOOL_GROUPS = (
      ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
     ("Connected accounts & home", TIER_B),
     ("Safety and sharing",
-     ("protect_from_jarvis", "github_search", "send_file_to_phone",
-      "approve_web_search_for_conversation", "stop_web_search_approval")),
+     ("protect_from_jarvis", "github_search", "send_file_to_phone")),
 )
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
@@ -472,8 +477,7 @@ TOOL_GROUPS = (
      ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
     ("Connected accounts & home", TIER_B),
     ("Safety and sharing",
-     ("protect_from_jarvis", "github_search", "send_file_to_phone",
-      "approve_web_search_for_conversation", "stop_web_search_approval")),
+     ("protect_from_jarvis", "github_search", "send_file_to_phone")),
 )
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 

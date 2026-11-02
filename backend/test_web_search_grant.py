@@ -45,6 +45,15 @@ throwaway log folder and a stand-in for the model:
   9. An open-ended "full approval to do anything" grants search only: the card
      says so in its own words, and nothing widens.
      (`t_open_ended_words_grant_search_only`)
+ 10. The field test of 2026-11-02: a natural request reaches the grant tool on
+     the tools a real PC offers (the ask rides with web search), a natural
+     request raises EXACTLY one card and the search after it asks no more, the
+     prompt's "a grant is in force" line is a real store read, and an answer
+     that claims an approval the store does not hold is corrected in plain
+     words - while an honest denial or a conditional is never touched.
+     (`t_a_natural_request_reaches_the_grant_tool`,
+     `t_the_model_cannot_claim_a_grant_it_does_not_have`,
+     `t_the_prompt_state_is_a_real_read`)
 
 And the delivery itself: `backend/web-search-grant.patch` applies to
 `jarvis-backend/jarvis_gate.py` and reverses byte for byte, both shipped
@@ -89,6 +98,7 @@ shutil.copyfile(HERE / "rebuilt" / "jarvis-framework.toml",
 import jarvis_agent as AG  # noqa: E402
 import jarvis_search as WS  # noqa: E402
 import jarvis_framework as FW  # noqa: E402
+import jarvis_asks_first as AF  # noqa: E402
 import _base  # noqa: E402
 
 # The two things a turn publishes that this suite has no use for, and that
@@ -204,8 +214,9 @@ class Model:
     """The model, as a list of rounds: each round is the tool calls to ask for,
     and the last round is the answer. `post` answers them in order."""
 
-    def __init__(self, rounds):
+    def __init__(self, rounds, answer="done"):
         self.rounds = [r for r in rounds]
+        self.answer = answer
         self.sent = []
         self.index = 0
 
@@ -220,7 +231,7 @@ class Model:
                         {"id": f"c{i}", "function": {"name": n,
                                                      "arguments": json.dumps(a)}}
                         for i, (n, a) in enumerate(calls)]}}]}
-        return {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
+        return {"choices": [{"message": {"role": "assistant", "content": self.answer}}]}
 
     def told(self):
         """Every tool result the model was handed, newest round last."""
@@ -267,18 +278,25 @@ def _fake_run(seen):
 
 
 def _turn(*, cid="c1", tool_calls, gate, runs, tainted=False, enabled=None,
-          answer="done"):
+          answer="done", words="please", strict=False):
     """One real turn: the model asks for `tool_calls`, then answers.
+
+    `enabled` is the tools the turn is OFFERED. By default the tool it calls is
+    added to that set (the older tests are about the gate, not about the offer);
+    `strict=True` offers exactly `enabled` and nothing else, which is what a
+    real turn does - it is how the field-test case is driven below.
 
     Returns (the model, its tool results for the last round, the turn summary).
     """
     AG._conversation_tainted = (lambda c, messages=None: True) if tainted \
         else (lambda c, messages=None: False)
     WS.run = _fake_run(runs)
-    model = Model([tool_calls, []])
-    messages = [{"role": "user", "content": "please"}]
-    req = [{"role": "user", "content": "please", "provenance": "typed"}]
-    names = set(enabled or ()) | {n for n, _a in tool_calls}
+    model = Model([tool_calls, []], answer=answer)
+    req = [{"role": "user", "content": words, "provenance": "typed"}]
+    messages = [{"role": "user", "content": words}]
+    names = set(enabled or ())
+    if not strict:
+        names |= {n for n, _a in tool_calls}
     summary = AG.run_local_turn(
         messages, "m", ollama_url="http://127.0.0.1:11434",
         stream_out=lambda b: None, post=model.post, gate_check=gate,
@@ -515,9 +533,12 @@ def t_the_grant_covers_no_other_action():
             continue
         if pattern.search(line):
             reader_fns.add(current)
-    check("a grant is READ in exactly two places, both named: the search itself, "
-          "and the 'already on' refusal on the grant card",
-          reader_fns == {"_web_search_call", "_prepare_web_search_grant"},
+    check("a grant is READ in exactly four places, all named, and only the FIRST "
+          "can skip a card: the search itself. The other three only REPORT the "
+          "same store - the 'already on' refusal, the prompt's state line and the "
+          "false-claim correction - so none of them can widen what a grant covers",
+          reader_fns == {"_web_search_call", "_prepare_web_search_grant",
+                         "_grant_prompt_line", "_grant_claim_line"},
           sorted(reader_fns))
     check("... and the grant store is one plain dict in this process's memory "
           "(no file, no database)",
@@ -824,6 +845,169 @@ def t_open_ended_words_grant_search_only():
 
 
 # --------------------------------------------------------------------------
+#   10. The field test of 2026-11-02: a natural request reaches the tool, and a
+#       grant the store does not hold can never be claimed
+# --------------------------------------------------------------------------
+#
+# THE FAILURE THIS SECTION FIXES, measured on the owner's PC after #1074:
+#
+#   "Give me full approval to search the web for this conversation." and
+#   "Approve web search for this conversation, so you can search without asking
+#   me each time in this chat." both produced NO grant card at all, and the
+#   model answered "Understood. Search is approved for this conversation.
+#   Ready to check the web whenever needed." The next search raised an ordinary
+#   search_the_web card, so nothing had been granted.
+#
+# Cause, measured in this tree: the grant tool was not in the live
+# `[tools].enabled` (it was never a fresh-install default), and `offered_tools`
+# offers only names in that set - so the model had no tool to call, no card
+# could ever be raised, and nothing in the prompt said whether an approval was
+# in force. The fixes these checks pin: the two tools ride with web search, the
+# prompt carries a real store read when a grant IS in force, and an answer that
+# claims one the store does not hold is corrected in plain words.
+
+#: The field test's own answer, word for word, from the failing turn.
+FIELD_TEST_ANSWER = ("Understood. Search is approved for this conversation. "
+                     "Ready to check the web whenever needed.")
+
+
+def t_a_natural_request_reaches_the_grant_tool():
+    """The offer is the fix: the two tools are offered on the tools a real PC
+    has, even though `[tools].enabled` never names them."""
+    if GATE is None:
+        skip("jarvis_gate.py is not here, so no grant card can be raised")
+        return
+    reset()
+    enabled = AG.enabled_tools_for_turn()
+    check("the settings list really does NOT name the grant tools (the old cause: "
+          "they were never a default)",
+          AG.GRANT_TOOL not in enabled and AG.REVOKE_TOOL not in enabled, sorted(enabled))
+    offered = AG.offered_tools(enabled)
+    check("... and yet a real turn OFFERS the grant tool, because the ask rides with "
+          "web search", AG.GRANT_TOOL in offered, offered)
+    check("... and its instant stop with it", AG.REVOKE_TOOL in offered, offered)
+    check("... and web search itself is offered (the one condition)",
+          "web_search" in offered, offered)
+    check("... with web search NOT offered, neither is the ask",
+          not (set(AG.GRANT_ASK_TOOLS) & set(AG.offered_tools(
+              set(enabled) - {"web_search"}))))
+    check("... and the Settings page no longer offers a switch for them (a switch "
+          "the turn ignored would be a lie)",
+          not (set(AG.GRANT_ASK_TOOLS) & set(AF.TOOLS_SWITCHABLE)),
+          sorted(set(AG.GRANT_ASK_TOOLS) & set(AF.TOOLS_SWITCHABLE)))
+    check("... and the two modules name the same pair, so they cannot drift",
+          tuple(AF.GRANT_ASK_TOOLS) == tuple(AG.GRANT_ASK_TOOLS),
+          (AF.GRANT_ASK_TOOLS, AG.GRANT_ASK_TOOLS))
+    # The field test's own two sentences, on the offer a real turn has.
+    for words in ("Give me full approval to search the web for this conversation.",
+                  "Approve web search for this conversation, so you can search without "
+                  "asking me each time in this chat."):
+        runs = reset()
+        gate = Gate()
+        _turn(tool_calls=[(AG.GRANT_TOOL, {})], gate=gate, runs=runs,
+              enabled=offered, strict=True, words=words)
+        check(f"natural words raise EXACTLY ONE grant card: {words[:38]!r}...",
+              gate.actions() == [AG.GRANT_ACTION], (gate.actions(), words))
+        check("... and the card was approved into a real grant",
+              AG.web_search_grant("c1") is not None)
+        gate2 = Gate()
+        _search_in(gate=gate2, runs=runs, tainted=True)
+        check("... and a search in that conversation then runs with NO card",
+              gate2.actions() == [] and runs == ["walking boots"],
+              (gate2.actions(), runs))
+    reset()
+
+
+def t_the_model_cannot_claim_a_grant_it_does_not_have():
+    """The field test's false "Search is approved": corrected from a real store
+    read, and NOT corrected when a real grant makes it true."""
+    if GATE is None:
+        skip("jarvis_gate.py is not here, so no grant can be checked")
+        return
+    runs = reset()
+    gate = Gate()
+    _model, _told, summary = _turn(
+        tool_calls=[], gate=gate, runs=runs, answer=FIELD_TEST_ANSWER,
+        words="Give me full approval to search the web for this conversation.")
+    answer = str(summary.get("answer") or "")
+    check("CONTROL: the field test's answer was really sent", FIELD_TEST_ANSWER in answer,
+          answer[:200])
+    check("... with no card raised and NO grant created",
+          gate.calls == [] and AG.web_search_grant("c1") is None,
+          (gate.actions(), AG.web_search_grant("c1")))
+    check("... and the answer is CORRECTED in plain words: no approval is in force",
+          "no web-search approval is in force" in answer.lower(), answer[-400:])
+    check("... and the correction says how to get one",
+          "give me full approval to search the web for this conversation" in answer.lower(),
+          answer[-400:])
+    # CONTROL: a real grant makes the same words true, so nothing is added.
+    runs = reset()
+    _grant_now(runs=runs)
+    check("CONTROL: a real grant is live", AG.web_search_grant("c1") is not None)
+    _m2, _t2, summary2 = _turn(tool_calls=[], gate=Gate(), runs=runs,
+                               answer=FIELD_TEST_ANSWER)
+    check("... the same words are true now and are NOT corrected",
+          "no web-search approval is in force" not in str(summary2.get("answer") or "").lower(),
+          str(summary2.get("answer") or "")[-300:])
+    # An honest denial, a conditional, a reported-speech echo and a promise are
+    # sentences this must never touch.
+    for honest in (
+            "There is no web-search approval in force in this chat, so every search asks.",
+            "If you approve the card, search is approved for this chat.",
+            "You said you have full approval to search the web, so searches still ask.",
+            "I don't have approval to search yet - just the card waiting for you."):
+        reset()
+        _m3, _t3, s3 = _turn(tool_calls=[], gate=Gate(), runs=[], answer=honest)
+        check(f"an honest sentence is NOT corrected: {honest[:34]!r}...",
+              "Correction" not in str(s3.get("answer") or ""),
+              str(s3.get("answer") or "")[-300:])
+    reset()
+
+
+def t_the_prompt_state_is_a_real_read():
+    """The only signal that tells the model a grant is in force is the store."""
+    if GATE is None:
+        skip("jarvis_gate.py is not here, so no grant can be checked")
+        return
+    runs = reset()
+    check("no grant: the prompt carries NO state line at all (0 tokens)",
+          AG._grant_prompt_line("c1") == "")
+    _grant_now(runs=runs)
+    line = AG._grant_prompt_line("c1")
+    check("a grant: the prompt line says so, and it is this feature's own sentence",
+          line == AG.WEB_SEARCH_GRANT_IN_FORCE and "IS in force" in line, line)
+    check("... another chat gets nothing (the read is per conversation)",
+          AG._grant_prompt_line("c2") == "")
+    _m, _told, _s = _turn(tool_calls=[], gate=Gate(), runs=runs)
+    sent = [m.get("content") for m in (_m.sent[-1].get("messages") or [])
+            if isinstance(m, dict) and m.get("role") == "system"]
+    check("... and a real turn SENDS it to the model as a system message",
+          AG.WEB_SEARCH_GRANT_IN_FORCE in sent, sent)
+    check("... and the rules are still the first message",
+          bool(_m.sent[-1].get("messages")) and
+          _m.sent[-1]["messages"][0].get("content") == AG.LANE_SYSTEM)
+    # After the owner says stop, the line is gone on the next turn.
+    _turn(tool_calls=[(AG.REVOKE_TOOL, {})], gate=Gate(), runs=runs,
+          enabled={AG.REVOKE_TOOL})
+    check("... and after a stop the prompt line is gone at once",
+          AG.web_search_grant("c1") is None and AG._grant_prompt_line("c1") == "")
+    _m2, _t2, _s2 = _turn(tool_calls=[], gate=Gate(), runs=runs)
+    sent2 = [m.get("content") for m in (_m2.sent[-1].get("messages") or [])
+             if isinstance(m, dict) and m.get("role") == "system"]
+    check("... and the next turn carries no state line again",
+          AG.WEB_SEARCH_GRANT_IN_FORCE not in sent2)
+    # The rules paragraph is in the shipped prompt, so the model is told plainly
+    # not to claim an approval before one happens.
+    check("the rules say an approval is not the model's to give or assume",
+          "An approval is not yours to give or to assume" in AG.LANE_SYSTEM)
+    check("... and that only a tool result can say one is in place",
+          "unless a tool result in this conversation told you so" in AG.LANE_SYSTEM)
+    check("the grant tool's own text says it too",
+          "Never say it is on before a person answers the card" in AG._grant_tool_text())
+    reset()
+
+
+# --------------------------------------------------------------------------
 #   The delivery: the patch, the two settings copies, the base's rows
 # --------------------------------------------------------------------------
 
@@ -933,6 +1117,9 @@ if __name__ == "__main__":
                t_the_cap_a_restart_and_a_new_chat_end_it,
                t_booking_a_flight_still_asks,
                t_open_ended_words_grant_search_only,
+               t_a_natural_request_reaches_the_grant_tool,
+               t_the_model_cannot_claim_a_grant_it_does_not_have,
+               t_the_prompt_state_is_a_real_read,
                t_the_patch_and_the_tables):
         print(f"\n--- {fn.__name__} ---")
         try:

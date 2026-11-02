@@ -96,22 +96,26 @@ PRIVATE_CHAT_ALLOWED = []
 
 #: What those enabled six become when a turn is built: `my_files` is dropped
 #: while no folder is listed (the model is never offered a tool that could
-#: read nothing), so a fresh PC offers five. Sorted. `send_file_to_phone` is
-#: NOT a default (it leaves the PC for the phone, like the other outbound
-#: tools); the owner enables it in their own settings list.
+#: read nothing), so a fresh PC offers five - plus the conversation web-search
+#: approval and its instant stop, which ride with `web_search` (2026-11-02,
+#: `jarvis_agent.GRANT_ASK_TOOLS`): offering the ASK grants nothing, because
+#: the store is written only after a person answers the card. Sorted.
+#: `send_file_to_phone` is NOT a default (it leaves the PC for the phone, like
+#: the other outbound tools); the owner enables it in their own settings list.
 OFFERED_FRESH = [
-    "calculator", "change_setting", "feature_guide", "memory_search",
-    "web_search",
+    "approve_web_search_for_conversation", "calculator", "change_setting",
+    "feature_guide", "memory_search", "stop_web_search_approval", "web_search",
 ]
 
 #: (d) Every tool that exists, pinned in full. A future tool must be added
 #: here, which forces the three lists above to be looked at in the same edit.
 #: `approve_web_search_for_conversation` and `stop_web_search_approval` (the
 #: conversation-scoped web-search approval and its instant stop, 2026-11-01)
-#: are NOT in FULL_ENABLED or OFFERED_FRESH on purpose: they are "Safety and
-#: sharing" tools the owner switches on (jarvis_asks_first.TIER_A), never a
-#: fresh-install default - a standing approval that lets searches leave this PC
-#: unasked must be chosen, not given.
+#: are NOT in FULL_ENABLED: `[tools].enabled` never names them (2026-11-02,
+#: after the field test that proved the old "Settings -> Tools" switch left the
+#: feature dead on the owner's own PC). They ARE in OFFERED_FRESH because the
+#: ask rides with `web_search` - it is not a capability, and its card is the
+#: permission.
 CATALOGUE = [
     "append_logseq_journal", "append_obsidian_daily",
     "approve_web_search_for_conversation", "browser_control",
@@ -247,8 +251,10 @@ def t_a_fresh_install_offers_exactly_the_pinned_list():
             lambda: sorted(AG.offered_tools(AG.enabled_tools_for_turn())))
     finally:
         JD.folders = real_folders
-    check("a fresh install (no folder listed) offers exactly five names, "
-          "my_files withheld by its own rule", got == OFFERED_FRESH, got)
+    check("a fresh install (no folder listed) offers exactly seven names - the "
+          "five defaults plus the grant ask and its stop, which ride with web "
+          "search - with my_files withheld by its own rule",
+          got == OFFERED_FRESH, got)
     check("...so my_files is enabled but not offered: the folder is the only "
           "thing keeping it out",
           "my_files" in FULL_ENABLED and "my_files" not in OFFERED_FRESH)

@@ -1121,7 +1121,7 @@
   "type": "function",
   "function": {
    "name": "approve_web_search_for_conversation",
-   "description": "Ask the owner - with ONE approval card - to let web searches in this chat run without a card each time. Call it ONLY when the owner asks for that: they want to stop being asked about searches for the rest of this conversation (\"you have full approval to search the web\", \"search anything you need, don't ask me\", \"stop asking me about searches in this chat\"). Never call it on your own initiative, and never say it is on before the card is approved. It covers web searches ONLY: sending email or files, booking, buying, spending, deleting, running commands, changing settings, the browser and your accounts each still need their own card. The owner can say stop at any time.",
+   "description": "Ask the owner - with ONE approval card - to let web searches in this chat run without a card each time. Call it ONLY when the owner asks for that: they want to stop being asked about searches for the rest of this conversation (\"you have full approval to search the web\", \"search anything you need, don't ask me\", \"stop asking me about searches in this chat\"). Never call it on your own initiative. Never say it is on before a person answers the card: no card, no approval. It covers web searches ONLY: sending email or files, booking, buying, spending, deleting, running commands, changing settings, the browser and your accounts each still need their own card. The owner can say stop at any time.",
    "parameters": {
     "type": "object",
     "properties": {}

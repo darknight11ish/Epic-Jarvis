@@ -1368,9 +1368,7 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone",
-       "approve_web_search_for_conversation",
-       "stop_web_search_approval"
+       "send_file_to_phone"
       ],
       "title": "Safety and sharing"
      }
@@ -1542,22 +1540,6 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "approve_web_search_for_conversation",
-      "last": null,
-      "on": false,
-      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "stop_web_search_approval",
-      "last": null,
-      "on": false,
-      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -2985,9 +2967,7 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone",
-       "approve_web_search_for_conversation",
-       "stop_web_search_approval"
+       "send_file_to_phone"
       ],
       "title": "Safety and sharing"
      }
@@ -3159,22 +3139,6 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "approve_web_search_for_conversation",
-      "last": null,
-      "on": false,
-      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "stop_web_search_approval",
-      "last": null,
-      "on": false,
-      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -4597,9 +4561,7 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone",
-       "approve_web_search_for_conversation",
-       "stop_web_search_approval"
+       "send_file_to_phone"
       ],
       "title": "Safety and sharing"
      }
@@ -4771,22 +4733,6 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "approve_web_search_for_conversation",
-      "last": null,
-      "on": false,
-      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "stop_web_search_approval",
-      "last": null,
-      "on": false,
-      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -6204,9 +6150,7 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone",
-       "approve_web_search_for_conversation",
-       "stop_web_search_approval"
+       "send_file_to_phone"
       ],
       "title": "Safety and sharing"
      }
@@ -6378,22 +6322,6 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "approve_web_search_for_conversation",
-      "last": null,
-      "on": false,
-      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "stop_web_search_approval",
-      "last": null,
-      "on": false,
-      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -7811,9 +7739,7 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone",
-       "approve_web_search_for_conversation",
-       "stop_web_search_approval"
+       "send_file_to_phone"
       ],
       "title": "Safety and sharing"
      }
@@ -7985,22 +7911,6 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "approve_web_search_for_conversation",
-      "last": null,
-      "on": false,
-      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "stop_web_search_approval",
-      "last": null,
-      "on": false,
-      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -9432,9 +9342,7 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone",
-       "approve_web_search_for_conversation",
-       "stop_web_search_approval"
+       "send_file_to_phone"
       ],
       "title": "Safety and sharing"
      }
@@ -9606,22 +9514,6 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "approve_web_search_for_conversation",
-      "last": null,
-      "on": false,
-      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "stop_web_search_approval",
-      "last": null,
-      "on": false,
-      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -11044,9 +10936,7 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone",
-       "approve_web_search_for_conversation",
-       "stop_web_search_approval"
+       "send_file_to_phone"
       ],
       "title": "Safety and sharing"
      }
@@ -11219,22 +11109,6 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "approve_web_search_for_conversation",
-      "last": null,
-      "on": false,
-      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "waiting": false
-     },
-     {
-      "group": "Safety and sharing",
-      "id": "stop_web_search_approval",
-      "last": null,
-      "on": false,
-      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
-      "waiting": false
      }
     ],
     "label": "Let the AI use this",
@@ -11336,8 +11210,6 @@
   "protect_from_jarvis",
   "github_search",
   "send_file_to_phone",
-  "approve_web_search_for_conversation",
-  "stop_web_search_approval",
   "email_check",
   "send_email",
   "draft_email",
