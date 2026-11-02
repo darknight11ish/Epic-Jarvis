@@ -303,9 +303,15 @@ def t_every_tool_resolves_in_the_table_an_install_gets():
 def t_the_four_are_added_by_a_patch():
     order = _order()
     if FIX_PATCH not in order:
-        return skip("the four are added by a patch the installer applies",
-                    f"{FIX_PATCH} is not in apply-patches.ps1's list, so no run of "
-                    "it reaches the owner's own jarvis_gate.py")
+        # NOT a skip. A patch that exists in backend/ but is missing from
+        # apply-patches.ps1's list never reaches the owner's own jarvis_gate.py -
+        # that IS the deployment gap this suite exists to catch, and a skipped
+        # check reads as a pass (measured 2026-11-01: 11 passed / 0 failed /
+        # 2 skipped while the fix could not be deployed at all).
+        check("a patch the installer applies adds the four entries", False,
+              f"{FIX_PATCH} is not in apply-patches.ps1's list, so no run of it "
+              "reaches the owner's own jarvis_gate.py")
+        return
     added = _added_entries(order)
     absent = sorted(t for t in FIXED if t not in added)
     check("a patch the installer applies ADDS an entry for each of the four",
@@ -407,8 +413,13 @@ def t_it_bites_on_the_pre_fix_tree():
         return skip("the check bites on the pre-fix tree", why)
     order = _order()
     if FIX_PATCH not in order:
-        return skip("the check bites on the pre-fix tree",
-                    f"{FIX_PATCH} is not in the installer's list")
+        # Same rule as the check above: the bite proof cannot be rebuilt without
+        # the patch the installer applies, and an unbuildable bite proof must
+        # fail rather than read as a pass.
+        check("the check bites on the pre-fix tree", False,
+              f"{FIX_PATCH} is not in the installer's list, so the pre-fix tree "
+              "cannot be rebuilt and the bite is not proven")
+        return
     stripped = _strip_lines(BASE_GATE.read_text(encoding="utf-8"), FIXED)
     before = _table_of(stripped, "_TOOL_ACTIONS")
     check("the bite proof really took the four lines out of the base",
