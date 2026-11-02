@@ -1309,6 +1309,27 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.todo-carryover",
+    "title": "To-do list carry-over",
+    "about": "Whether yesterday's unfinished to-do items carry into today's list, or each day keeps its own.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "to-do list carry-over",
+      "the to-do carry-over",
+      "the to-do list mode"
+    ]
+  },
+  {
     "id": "settings.backend-supports",
     "title": "What this backend supports",
     "about": "The capability list the app branches on.",
@@ -3156,6 +3177,9 @@ export const ALIASES = {
   "third card": "settings.second-card.third-card",
   "third graphics card": "settings.second-card.third-card",
   "this backend": "settings.backend-supports",
+  "to-do carry-over": "settings.todo-carryover",
+  "to-do list carry-over": "settings.todo-carryover",
+  "to-do list mode": "settings.todo-carryover",
   "today": "brain.work.today",
   "tool updates": "settings.tool-updates",
   "topics": "brain.memory.topics",

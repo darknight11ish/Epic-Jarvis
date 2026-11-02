@@ -191,6 +191,17 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"pictures" to Where.Go(Screen.BRAIN, "pictures"),',
     },
+    "settings.todo-carryover": {
+        "name": "To-do list carry-over",
+        "why": ("The card is the desktop's own place for the choice. The phone HAS the same "
+                "two choices - it draws them INSIDE its \"Limits and how often Jarvis does "
+                "things\" row (SettingsScreen.kt's TodoCarryoverSection under LimitsSection, "
+                "TodoCarryoverPlate.kt), read and written through the same PC route - but it "
+                "has no Settings card of its own, so there is no phone place to hide or to "
+                "open apart from Limits, which OpenPlace.kt maps this id to."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
+        "must_contain": '"todo-carryover" to Where.Go(Screen.SETTINGS, "limits"),',
+    },
     "brain.tab.memory": {
         "name": "Memory (rail tab)",
         "why": ("A layout difference, not a missing feature: the phone draws the Memory "

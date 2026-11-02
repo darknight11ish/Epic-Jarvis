@@ -10813,6 +10813,19 @@
       "where": "settings",
       "in_desktop_settings": false,
       "in_phone_settings": true
+    },
+    {
+      "id": "todo-carryover",
+      "names": [
+        "to-do list carry-over",
+        "the to-do carry-over",
+        "the to-do list mode",
+        "the to-do list's own day"
+      ],
+      "app": "both",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": false
     }
   ],
   "known_gaps": [
@@ -13359,6 +13372,45 @@
         "handler": "jarvis_settings_registry.set_small_approvals",
         "status": "enforced",
         "proof": "backend/test_settings_registry.py: 'set the fingerprint for small approvals to ask' resolves through the registry to set_small_approvals, the value the approval itself reads really moves (jarvis_owner_check.approvals_mode), and a phone peer is refused (t_the_small_approvals_setting_is_one_rule); backend/test_owner_check.py drives approve_check itself: in the default 'small' mode the Windows Hello prompt is not shown for a small card and the phone's signature is not needed, and in 'risky' both are back (t_the_small_card_exemption_is_the_rule_that_asks)"
+      },
+      {
+        "key": "todo_carryover",
+        "names": [
+          "the to-do carry-over",
+          "the todo carry-over",
+          "the to-do list carry-over",
+          "the to-do list carryover",
+          "how the to-do list carries over",
+          "the to-do list mode",
+          "the to-do mode",
+          "the todo list mode"
+        ],
+        "section": "todo-carryover",
+        "options": {
+          "rollover": "rollover",
+          "daily rollover": "rollover",
+          "full daily rollover": "rollover",
+          "a full daily rollover": "rollover",
+          "roll everything over": "rollover",
+          "carry everything over": "rollover",
+          "carry them over": "rollover",
+          "carry over": "rollover",
+          "carry yesterday over": "rollover",
+          "roll over": "rollover",
+          "day": "day",
+          "day by day": "day",
+          "each day": "day",
+          "each day separately": "day",
+          "day labelled": "day",
+          "day labeled": "day",
+          "one day at a time": "day",
+          "separate days": "day"
+        },
+        "desktop_found": true,
+        "phone_found": true,
+        "handler": "jarvis_settings_registry.set_todo_carryover",
+        "status": "enforced",
+        "proof": "backend/test_todo_carryover.py: the sentences \"set the to-do list mode to day by day\", \"set the to-do carry-over to full daily rollover\" and \"set the to-do list mode to each day separately\" each resolve through jarvis_quick.match() to the settings_choice intent naming todo_carryover with its own value, the registry setter really moves the ONE value the scheduler reads (jarvis_schedule.set_todo_mode_here -> Scheduler.todo_mode), and the same method is what POST /api/schedule/act {\"do\": \"todo_mode\"} calls - so a phrase, the route and either app Settings switch cannot disagree."
       }
   ],
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",

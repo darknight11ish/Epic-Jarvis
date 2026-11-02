@@ -155,9 +155,18 @@ def t_the_column_is_declared_once():
     # inserted before an older one would change an older reader's column order.
     # 2026-10-27: `action` (a reminder's own action) is the newest, appended
     # after this one; source_taint is still where this change left it.
+    # 2026-11-02: `created_date` (the day a to-do item was written, the
+    # todo-carry-over lane) is the newest, appended after `action` - the
+    # migration in jarvis_schedule.py is one `ALTER TABLE jobs ADD COLUMN` at
+    # the tail of `_ADDED_COLUMNS`, which is exactly the append this pin
+    # demands. Extending the tail here is the correct edit when a column is
+    # appended: the list names every column added AFTER source_taint, in order,
+    # so source_taint itself is pinned where it was and a column inserted
+    # BEFORE it (the re-ordering this check is about) still fails.
     order = [name for name, _typ in S._ADDED_COLUMNS]
     check("...and it is not a re-ordering of the columns before it",
-          order.index("source_taint") == len(order) - 2 and order[-1] == "action",
+          order.index("source_taint") == len(order) - 3
+          and order[-2:] == ["action", "created_date"],
           order[-3:])
 
 
