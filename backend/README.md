@@ -16295,8 +16295,10 @@ Nothing new to run on the PC beyond `apply-patches.ps1` as usual.
 The owner asked for Jarvis Live to be able to *"reasonably do anything that
 jarvis can do through chat"*. A Live turn already went through the same
 `/api/chat` route, the same agent, the same gate and the same approval cards as
-a typed one - what made it narrower was the tool LIST it was shown, and a model
-cannot call a tool it is not shown.
+a typed one - what made it narrower was the tool LIST it was shown: the model
+was never told a hidden tool's name or its arguments, so a spoken request would
+not reach it in practice, even though the gate would still accept a call to any
+allowed tool.
 
 - `backend/jarvis_live.py`: `LIVE_TOOL_FLOOR` (8, typed chat's own
   `TOOL_DIET_LIMIT`); `live_tool_limit()` returns `max(floor, [live] tool_limit)`,

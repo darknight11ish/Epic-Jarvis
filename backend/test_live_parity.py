@@ -11,9 +11,12 @@ six tools, and the cap even cut the diet's FULL-LIST fallback. A typed question
 the tool diet did not recognise was shown all 32 tools; the same words said in
 Live were shown 6 - `notes_search`, `append_obsidian_daily`, `set_timer`,
 `set_reminder`, `todo_add`, `change_setting`, `send_email` and 19 more were
-never in front of the model. The model cannot call a tool it is not shown, so a
-spoken request could not reach most of what Jarvis can do. The per-conversation
-carried tool list was capped one smaller than typed chat's for the same reason.
+never in front of the model. The model was never told a hidden tool's name or
+its arguments, so a spoken request would not reach it in practice - even though
+the gate would still accept a call to any allowed tool, which is why this was a
+reachability problem rather than a permission one. The per-conversation carried
+tool list was capped at min(9, 6) = 6 - three smaller than typed chat's 9 - for
+the same reason.
 
 WHAT IS TRUE NOW: a Live turn is shown exactly the tools a typed turn is shown
 for the same words - same diet, same full-list fallback, same carried list -
@@ -203,7 +206,9 @@ def t_live_is_shown_exactly_what_typed_chat_is_shown():
     """The measured defect: 32 -> 6 tools for words the diet did not recognise.
 
     Every pair here must be the SAME list, not merely an overlapping one: a
-    tool the model is not shown is a tool it does not call.
+    tool the model is not shown is a tool it will not call in practice - it is
+    never told that tool's name or arguments - even though the gate would still
+    accept a call to any tool on the allowed list.
     """
     for label, question in QUESTIONS:
         typed = shown(None, question)
@@ -241,10 +246,18 @@ def t_the_live_tool_limit_is_a_floor_not_a_cut():
 
 
 def t_the_carried_tool_list_is_the_same_size():
-    """The KV-prefix carried list: a Live chat must not carry one fewer."""
+    """The KV-prefix carried list: a Live chat must not carry fewer tools.
+
+    The FIRST turn is the multi-step question, which the diet fills to
+    MAX_STICKY_TOOLS (9) names - that is what makes the second turn's carried
+    list reach the cap. With the old Live cap it carried min(9, 6) = 6 names,
+    three fewer than typed chat; a revert of the `cap = MAX_STICKY_TOOLS` line
+    would therefore fail both checks below. The before-probe in the PR records
+    the measured old value (live tool limit 6).
+    """
     def two_turns(limit, conv):
         A.reset_sticky_tools()
-        first = shown(limit, "email Sam that I am late", conv)
+        first = shown(limit, "check my email and calendar, then remind me and add a note", conv)
         second = shown(limit, "what is the weather like", conv)
         A.reset_sticky_tools()
         return first, second
@@ -252,6 +265,10 @@ def t_the_carried_tool_list_is_the_same_size():
     live = two_turns(L.live_tool_limit(), "carry-live")
     check("two turns of a Live conversation carry the same tools as two typed turns",
           live == typed, {"typed": typed, "live": live})
+    cap = getattr(A, "MAX_STICKY_TOOLS", 0)
+    check("...and the scenario really reaches the carried cap, so a 6-tool Live cut would show",
+          len(typed[0]) >= cap and len(typed[1]) == cap,
+          {"first": len(typed[0]), "second": len(typed[1]), "cap": cap})
 
 
 # -------------------------------------------------------------- 2. the turn --

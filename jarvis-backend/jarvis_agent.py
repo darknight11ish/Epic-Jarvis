@@ -7634,8 +7634,9 @@ def reset_sticky_tools(conversation_id=None) -> None:
 
 def sticky_tool_union(conversation_id, chosen, allowed, *, cap: int = MAX_STICKY_TOOLS) -> list:
     """The tool names this turn shows: `chosen`, plus what this conversation
-    already showed, in canonical order, at most `cap` (`MAX_STICKY_TOOLS`
-    normally; a Live turn passes its own smaller limit).
+    already showed, in canonical order, at most `cap` (`MAX_STICKY_TOOLS` for
+    every turn now; a Live turn's `[live] tool_limit` is a floor that can only
+    raise it, never a smaller cap - 2026-11-01).
 
     `chosen` - this turn's own diet pick - is never cut: a multi-step chain
     legitimately picks up to TOOL_DIET_MULTI_LIMIT tools, and must not lose
@@ -10254,14 +10255,15 @@ def _fill_offer(offer: dict, names: list, question: str = "",
     # conversation's questions have named every tool it needs (see the
     # section above MAX_STICKY_TOOLS). A full-list fallback is not carried: it
     # selected nothing, and the next recognised question must still get the
-    # diet (the Live cap and the 2026-10-19 chain work both depend on that).
+    # diet (the 2026-10-19 chain work depends on that; the Live limit is a
+    # floor since 2026-11-01, not a cap).
     # A turn that offers no tools at all (a crisis turn, a model that cannot
     # use tools) changes nothing: its empty list is not a selection either.
     if not selection["fallback"] and names:
         # The same cap for every turn. It used to be min(MAX_STICKY_TOOLS, the
-        # Live limit), so a Live conversation carried one tool fewer forward
-        # than a typed one and could lose a tool it had already used - a
-        # narrower list by another route (2026-11-01).
+        # Live limit), so a Live conversation carried three fewer forward
+        # (min(9, 6) = 6) than a typed one and could lose a tool it had already
+        # used - a narrower list by another route (2026-11-01).
         cap = MAX_STICKY_TOOLS
         shown = sticky_tool_union(conversation_id,
                                   [n for n in offer["shown"] if n != MORE_TOOLS],
@@ -10741,8 +10743,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             pass
     # Jarvis Live's own speed slice (2026-10-18): the Live-only model from
     # `[live]`, the one injected lane URL (the preset-lane patch supplies
-    # :11435 later - jarvis_model_lanes.py is not edited here), a 16K context
-    # and a shorter top-K tool list. Typed chat is untouched.
+    # :11435 later - jarvis_model_lanes.py is not edited here) and a 16K
+    # context. Its tool list is no longer shorter (2026-11-01: the Live limit is
+    # a floor, typed chat is the baseline), so typed chat is untouched.
     live_turn = bool(getattr(watch, "live", False))
     if live_turn:
         try:

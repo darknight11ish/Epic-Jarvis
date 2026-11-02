@@ -561,8 +561,9 @@ The owner's request: *"also, id like javis live to be able to reasonably do
 anything that jarvis can do through chat."* A Live turn is an ordinary chat
 turn with two marks on it (`live: true`, `provenance: "voice"`), so it always
 had the same tools, the same gate and the same cards - but until 2026-11-01 it
-was **shown** a narrower tool list, and a model cannot call a tool it is not
-shown.
+was **shown** a narrower tool list - the model was never told a hidden tool's
+name or its arguments, so a spoken request would not reach it in practice,
+even though the gate would still accept a call to any allowed tool.
 
 **What was wrong (measured on `1861485da`).** A Live turn's offer was cut to
 `[live] tool_limit` (6), and the cut also applied to the diet's full-list
@@ -573,7 +574,8 @@ were hidden, including `notes_search`, `append_obsidian_daily`,
 `send_email`, `change_setting`, `feature_guide`, `connect_account` and
 `propose_plan`. A question matching many tools showed 12 typed and 6 spoken; a
 multi-step question showed 9 and 6. The per-conversation list carried forward
-for the prefix cache was capped one smaller than typed chat's as well.
+for the prefix cache was capped at `min(9, 6) = 6` - three smaller than typed
+chat's 9 - as well.
 
 **What it is now.** A Live turn is shown exactly what a typed turn is shown for
 the same words: the same top-K diet, the same full-list fallback, the same
