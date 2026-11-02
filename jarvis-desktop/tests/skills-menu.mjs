@@ -263,6 +263,19 @@ await check("the page's own ids all exist in settings.html", () => {
   assert.ok(HTML.includes('<script type="module" src="skills-menu-settings.js"></script>'));
 });
 
+await check("every element the page touches is in its own el map", () => {
+  // THE BUG THIS CATCHES (found by CI's browser shard, 2026-11-02): the page
+  // used el.editInert in two functions and the map never had it, so
+  // `el.editInert.textContent` threw a TypeError at import time - on every
+  // Settings page, in a real browser only. A name in the map is not optional.
+  const defined = new Set(
+    [...PAGE.matchAll(/^\s{2}([A-Za-z]+): \$/gm)].map((m) => m[1]));
+  const used = new Set([...PAGE.matchAll(/el\.([A-Za-z]+)/g)].map((m) => m[1]));
+  const missing = [...used].filter((name) => !defined.has(name));
+  assert.deepEqual(missing, [], `not in the el map: ${missing.join(", ")}`);
+  assert.ok(defined.size >= 20, `${defined.size} elements mapped`);
+});
+
 await check("the page says what it does NOT do, in the owner's words", () => {
   assert.ok(PAGE.includes("never run"));
   assert.ok(PAGE.includes("ONE approval card") || PAGE.includes("ONE card"));

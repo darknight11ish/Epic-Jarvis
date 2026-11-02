@@ -72,6 +72,7 @@ const el = {
   editTitle: $("sk-edit-title"),
   editText: $("sk-edit-text"),
   editNote: $("sk-edit-note"),
+  editInert: $("sk-edit-inert"),
   editSave: $("sk-edit-save"),
   editCancel: $("sk-edit-cancel"),
   status: $("sk-status"),
