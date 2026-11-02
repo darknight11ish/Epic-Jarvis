@@ -316,13 +316,25 @@ object Devices {
     // device list is the revoke/rotation surface), then clears the local
     // Keystore token and address. Even when the PC cannot be reached the local
     // secret is cleared; the sentence says which half happened.
+    //
+    // IT IS NOT A PC RESET (2026-11-02, the owner's bug report). It clears
+    // what THIS PHONE owns - its pairing, its token, its resume point - and
+    // never a setting on the PC. The voice Jarvis speaks in, its speed and an
+    // animal's voice are the owner's PC-wide settings (`voices/state.json`),
+    // and resetting the app must not change them, so the prompt says so: the
+    // owner asked for "when I reset the jarvis Android app it changes the
+    // voice to the default" to stop being true, and a reset that never touches
+    // that file cannot be what changes it. The re-paired phone reads the
+    // stored choice back (`JarvisRuntime.refreshCustomVoices()` after pairing).
 
     const val UNPAIR_BUTTON = "Unpair & clear the token"
 
     const val UNPAIR_PROMPT =
         "This forgets the desktop on this phone and clears its pairing token now. " +
             "If the PC can be reached, this device is also removed from its list. " +
-            "You will need to pair again with the PC's token (or QR code)."
+            "You will need to pair again with the PC's token (or QR code). " +
+            "Your PC's own settings are kept - the voice Jarvis speaks in, its speed and " +
+            "any animal's voice stay exactly as you chose them."
 
     /** What [removeSaid] plus the local half said, once the token is gone. */
     fun unpairSaid(removedOnPc: Boolean): String =

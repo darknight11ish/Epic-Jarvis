@@ -143,13 +143,23 @@ object LiveExtras {
     const val MIC_PHONE = "Microphone: this phone's"
     const val MIC_HEADSET = "Microphone: your Bluetooth headset"
     const val MIC_FELL_BACK = "Microphone: this phone's - the Bluetooth headset's could not be used"
+    const val MIC_MEDIA_ONLY = "Microphone: this phone's - the Bluetooth audio here has no microphone"
 
-    /** What the Live screen says about the microphone in use. */
-    fun micWords(headset: Mic?, fellBack: Boolean = false): String = when {
+    /**
+     * What the Live screen says about the microphone in use.
+     *
+     * [mediaOnly] is the 2026-11-02 car case: Bluetooth sound is connected but
+     * there is no hands-free microphone in it (a car whose call profile did not
+     * pair, a Bluetooth speaker). Naming that is the difference between "the
+     * car's microphone cannot be heard" and "Jarvis is broken", and it is said
+     * instead of blaming the phone when the phone is the thing that works.
+     */
+    fun micWords(headset: Mic?, fellBack: Boolean = false, mediaOnly: Boolean = false): String = when {
         fellBack -> MIC_FELL_BACK
-        headset == null -> MIC_PHONE
-        headset.name.isBlank() -> MIC_HEADSET
-        else -> "$MIC_HEADSET (${headset.name.take(40)})"
+        headset != null && headset.name.isBlank() -> MIC_HEADSET
+        headset != null -> "$MIC_HEADSET (${headset.name.take(40)})"
+        mediaOnly -> MIC_MEDIA_ONLY
+        else -> MIC_PHONE
     }
 
     // The long "Headset button" explanation that used to sit under the
