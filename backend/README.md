@@ -16290,10 +16290,57 @@ all of it is in the files shipped whole):
 
 Nothing new to run on the PC beyond `apply-patches.ps1` as usual.
 
+## The parity fix (2026-11-01, branch `feat/live-parity-2026-11-01`)
+
+The owner asked for Jarvis Live to be able to *"reasonably do anything that
+jarvis can do through chat"*. A Live turn already went through the same
+`/api/chat` route, the same agent, the same gate and the same approval cards as
+a typed one - what made it narrower was the tool LIST it was shown, and a model
+cannot call a tool it is not shown.
+
+- `backend/jarvis_live.py`: `LIVE_TOOL_FLOOR` (8, typed chat's own
+  `TOOL_DIET_LIMIT`); `live_tool_limit()` returns `max(floor, [live] tool_limit)`,
+  so a configured value can raise the number of tools a spoken turn sees and
+  can never lower it below typed chat's.
+- `backend/jarvis_agent.py`: `_fill_offer` no longer trims the short-list /
+  no-diet offer or the diet's full-list fallback for a Live turn, and the
+  carried (prefix-cache) list uses the same cap as typed chat. **Measured on
+  `1861485da` before the fix:** for "book a table for two at the italian
+  place" a typed turn was shown all 32 tools and a Live turn 6 - 26 hidden,
+  `notes_search`, `append_obsidian_daily`, `set_timer`, `set_reminder`,
+  `todo_add`, `send_email`, `change_setting` and `connect_account` among them;
+  a many-match question showed 12 typed and 6 spoken, a multi-step question 9
+  and 6. **After:** the same list, tool for tool, in every case measured.
+- `backend/jarvis_live_turn.py`: the switched-OFF stream path now marks its
+  loopback message `provenance: "voice"` as well as `live: true` - the shape
+  both apps already send, without which the server does not treat the turn as
+  a spoken Live turn at all.
+- `backend/rebuilt/jarvis-framework.toml` (and the base twin): `[live]
+  tool_limit = 8`, with the floor explained beside it.
+- `backend/test_live_parity.py` (new): 40 checks - tool-list equality for six
+  kinds of question, the floor, the carried list, a whole Live turn reaching
+  the tool path and raising the same ONE card with nothing run first, the
+  prompt's only difference being the Live note, the server's marks, the fast
+  path's identical answer, and the deliberate rules (no voice-approval
+  surface, the card pause, side talk). `test_live.py` and `test_agent.py`
+  each had one assertion that pinned the OLD cap; both now assert the floor
+  rule instead.
+
+Nothing about permission changed: the same gate checks the same actions and
+raises the same cards, still decided by tapping only, and Live still pauses
+while a card waits. The `[live]` model, its lane and the 16K window are the
+speed slice (`docs/LIVE-DESIGN.md` 4.1) and stay.
+
+**Not checked, said plainly:** no real model chose a tool from a spoken
+sentence, no phone was driven, and no Live session was run end to end on the
+owner's PC for this change. The proof is headless (fake model, stub tool, stub
+gate, real module code).
+
 ## Test it
 
 ```
 python3 backend/test_live.py
+python3 backend/test_live_parity.py
 python3 backend/test_voice_strict.py
 python3 backend/test_chat_log.py
 python3 tools/gen_live_cases.py --check
@@ -16327,11 +16374,12 @@ the switch on, and a real phone + PC measurement is still the next slice.**
   uses (session, cards, mute, the owner check, then words); a voice that is
   not the owner, or a clip with no words, is silent. The words are asked
   through the PC's OWN `/api/chat` route over 127.0.0.1, with the message
-  marked `live: true` and the phone's own token, and the answer is spoken
-  with `say()` and sent as 16 kHz PCM frames. **The hand-off is whole-WAV for
-  now** - the owner hears nothing until the whole answer exists;
-  first-fragment TTS streaming is a later phase, and the extra loopback hop
-  is measured in the design's G4 slice.
+  marked `live: true` AND `provenance: "voice"` (the shape both apps send) and
+  the phone's own token, and the answer is spoken with `say()` and sent as
+  16 kHz PCM frames. **The hand-off is whole-WAV for now** - the owner hears
+  nothing until the whole answer exists; first-fragment TTS streaming is a
+  later phase, and the extra loopback hop is measured in the design's G4
+  slice.
 - `backend/jarvis_live.py`: the route hands the socket over only when
   `stream_enabled()`; the speech sink is `jarvis_live_turn.turn`
   (`_STREAM_SINK` stays a test/override seam). With the switch OFF the stub
