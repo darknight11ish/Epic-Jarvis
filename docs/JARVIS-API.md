@@ -5429,10 +5429,14 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    been measured with a real model yet (`backend/README.md`, "The
    sensitive-topic check", has the command).
 
-**"Remember: ..."** is saved without a card only with a **colon**, on **one
+**"Remember: ..."** is saved without a card only when the message opens with
+that request - `remember:` (a colon, comma or dash), `remember this:`,
+`remember that ...` or `please remember:` (2026-11-02, C2a; the bare colon was
+the only form the research measured working) - on **one
 line**, at most 600 characters, from a typed or verified-voice live turn,
 with background learning and "Learn automatically" both on, and nothing
-sensitive or instruction-like in it (GUARDS L3). No model writes it, so check
+sensitive or instruction-like in it (GUARDS L3). A question is not a request
+("remember that film?" asks one, and stores nothing). No model writes it, so check
 2 does not apply - though the sensitive-topic check (9) does ask the local
 model about it. Otherwise it stays the card it already is - and that card
 says "Your own words" (`verbatim`) only when the words were typed or said to

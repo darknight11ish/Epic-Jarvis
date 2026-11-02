@@ -106,10 +106,12 @@ await check("NOTHING on this pane acts on more than one fact", async () => {
   // world to add for convenience.
   const page = await memoryTab();
   const labels = await page.locator("#view-memory button").allInnerTexts();
-  // The two automatic-learning switches (JARVIS-API.md section 19) are
-  // settings, by id, and nothing else here may be a checkbox.
+  // The three automatic-learning switches (JARVIS-API.md section 19) are
+  // settings, by id, and nothing else here may be a checkbox. The third one
+  // arrived 2026-11-02 ("Save facts even when Jarvis had to reword them").
   const boxes = await page.locator(
-    "#view-memory input[type=checkbox]:not(#memory-auto-on):not(#memory-sensitive-on)").count();
+    "#view-memory input[type=checkbox]:not(#memory-auto-on):not(#memory-sensitive-on)"
+    + ":not(#memory-paraphrase-on)").count();
   await page.close();
   assert.equal(boxes, 0, "a checkbox column is how bulk actions start");
   const bulk = labels.filter((t) =>

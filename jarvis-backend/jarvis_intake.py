@@ -431,10 +431,11 @@ def temporary_body(body) -> bool:
 # ignored while the literal colon was accepted).
 #
 # Still NOT "remember when": "remember when we went to Porto" is conversation,
-# not a request. And still not "remember my sister's birthday is ..." with no
-# separator at all - that stays the ordinary learner's job rather than a
-# verbatim queue, because guessing where the request ends is how a sentence
-# becomes a stored fact word for word.
+# not a request. Still not a question either - "remember that film?" asks one,
+# and remember_command() refuses a trailing "?" for that reason. And still not
+# "remember my sister's birthday is ..." with no separator at all - that stays
+# the ordinary learner's job rather than a verbatim queue, because guessing
+# where the request ends is how a sentence becomes a stored fact word for word.
 #
 # The old reason for excluding "remember this:" is gone: the gate's denial
 # proposal used to open that way when you turned an action down, and since
@@ -472,13 +473,21 @@ _REMEMBER_WHY = {
 
 def remember_command(text) -> Optional[str]:
     """The words after "Remember:", whitespace tidied and nothing else, or
-    None if this is not a Remember command."""
+    None if this is not a Remember command.
+
+    A QUESTION is not a statement to store, and "remember that ..." is exactly
+    how one is asked: "remember that film?" would otherwise queue "film?" as a
+    fact about the owner. So a trailing question mark means conversation, the
+    same as "remember when ..." does (2026-11-02, with C2a's widening - the
+    wider pattern made this the one new false positive it could cause)."""
     if not isinstance(text, str):
         return None
     m = _REMEMBER.match(text)
     if not m:
         return None
     rest = " ".join(m.group("rest").split())
+    if rest.endswith("?"):
+        return None
     return rest or None
 
 

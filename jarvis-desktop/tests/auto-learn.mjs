@@ -700,7 +700,10 @@ await check("private answers hide the list, keep the count and the switches, and
   await page.close();
   assert.match(hidden, /3 facts, hidden until Windows Hello confirms it is you/);
   assert.doesNotMatch(hidden, /Fact number/);
-  assert.equal(switches, 2);
+  // All THREE switches stay in reach while the list is hidden (the third one
+  // arrived 2026-11-02, C1's "Save facts even when Jarvis had to reword them"):
+  // hiding the facts must never hide the control that stops them being saved.
+  assert.equal(switches, 3);
   assert.equal(shown, 3);
 });
 
@@ -778,14 +781,19 @@ await check("CONTROL: the learning switches' commands are the Brain's, plus ONE 
   // The 2026-10-28 settings audit (G1) gave the two learning switches a
   // Settings card, so the settings window holds their THREE commands too - and
   // only those three. The grant is deliberately narrow: the state read and the
-  // two switch writes, never the fact list, the saved ids or Forget.
+  // two switch writes, never the fact list, the saved ids or Forget. The third
+  // switch (2026-11-02, "Save facts even when Jarvis had to reword them") is a
+  // switch of the same kind, so it is that same narrow grant plus that ONE
+  // write - the list below stays exact, never "at least these".
   const learning = sets.find((s) => /identifier = "learning-settings"/.test(s));
   assert.ok(learning, "the settings window's learning-settings set is missing");
   const granted = [...learning.matchAll(/"allow-([a-z-]+)"/g)].map((m) => m[1]).sort();
-  assert.deepEqual(granted, ["brain-memory-learning", "brain-memory-learning-sensitive",
+  assert.deepEqual(granted, ["brain-memory-learning", "brain-memory-learning-paraphrase",
+    "brain-memory-learning-sensitive",
     "brain-memory-learning-status"], `the Settings grant is ${granted}`);
   for (const perm of ["allow-brain-memory-learning", "allow-brain-memory-learning-status",
-    "allow-brain-memory-learning-sensitive"]) {
+    "allow-brain-memory-learning-sensitive",
+    "allow-brain-memory-learning-paraphrase"]) {
     assert.deepEqual(holders(perm), ["brain-memory", "learning-settings"], `${perm} is held by ${holders(perm)}`);
   }
   assert.match(read("src-tauri/capabilities/settings.json"), /"learning-settings"/);

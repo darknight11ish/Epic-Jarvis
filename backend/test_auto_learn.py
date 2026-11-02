@@ -2482,15 +2482,24 @@ def t_the_third_switch_relaxes_only_the_owners_own_words():
 
     # The order in after_pass is the enforcement: R1 is read AFTER every check
     # that must keep its card, and BEFORE the forgotten/contradiction ones.
-    src = (HERE / "jarvis_auto_learn.py").read_text(encoding="utf-8")
-    body = src[src.index("def after_pass("):src.index("def _moved_from(")]
-    at = body.index("check_grounded(fact, texts)")
-    for before in ("sensitive_why(fact, src, allowed)", "check_instruction(fact)",
-                   "check_not_correction(row)"):
+    # Walked as AST nodes rather than read as source text: what this pins is
+    # the order of the CALLS, and a name in a comment, a docstring or a string
+    # can never be mistaken for one (tools/check_no_source_pins.py, shape 2).
+    # The text version of this check also cost three source pins by giving the
+    # module-level name `src` a second meaning - see the same tool's docstring.
+    _tree = ast.parse((HERE / "jarvis_auto_learn.py").read_text(encoding="utf-8"))
+    _after = [n for n in ast.walk(_tree)
+              if isinstance(n, ast.FunctionDef) and n.name == "after_pass"]
+    check("after_pass is still one function to read", len(_after) == 1, len(_after))
+    _calls = sorted((n.lineno, n.func.id) for n in ast.walk(_after[0])
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name))
+    order = [name for _line, name in _calls]
+    at = order.index("check_grounded")
+    for before in ("sensitive_why", "check_instruction", "check_not_correction"):
         check(f"R1 ({before}) runs BEFORE the switch may relax anything",
-              body.index(before) < at, body.index(before))
-    for after in ("like_forgotten(fact, st)", "find_contradiction(fact, st)"):
-        check(f"and {after} still runs after it", at < body.index(after))
+              order.index(before) < at, order.index(before))
+    for after in ("like_forgotten", "find_contradiction"):
+        check(f"and {after} still runs after it", at < order.index(after))
 
 
 def t_a_sensitive_check_that_could_not_run_is_a_fault_not_a_verdict():

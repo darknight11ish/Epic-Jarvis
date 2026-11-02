@@ -1,0 +1,90 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1442,7 +1442,24 @@
+             except Exception as exc:
+                 return self._send(503, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
++        if path == "/api/hardware":
++            # hardware.patch - which graphics cards this PC has, what runs on
++            # them now, and the three setups Jarvis offers for them
++            # (jarvis_hardware.py, docs/HARDWARE-PROFILES.md). Reads only: it
++            # starts, loads and changes nothing. Card names and hardware ids
++            # (GPU-...); never a token.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_hardware
++                return self._send(200, jarvis_hardware.status())
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++
+         if path in ("/api/wiki", "/api/wiki/ingest"):
+             # wiki.patch - the wiki builder (jarvis_wiki.py). GET /api/wiki:
+             # whether it can run (it needs the second card's "wiki" lane),
+@@ -1831,6 +1848,39 @@
+             code, out = jarvis_second_card.handle_post(body)
+             return self._send(code, out)
+ 
++        if route in ("/api/hardware/apply", "/api/hardware/create",
++                     "/api/hardware/measure"):
++            # hardware.patch - the three setups (jarvis_hardware.py).
++            #   apply {"preset": "fast" | "smart" | "features" | null}:
++            #     remembers the owner's choice and returns its steps. It
++            #     changes no model and no setting by itself.
++            #   create {"name": "jarvis-chat" | "jarvis-long" |
++            #     "jarvis-vision"}: ONE approval card (models_create, tier
++            #     "ask"); nothing is made until it is approved.
++            #   measure {}: times each model of the setup on this PC, in the
++            #     background, and checks each is all on the card.
++            # 200 {"ok": true, ...}; 400/409/503 {"error": "<a sentence>"}.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_hardware
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            if route == "/api/hardware/apply":
++                code, out = jarvis_hardware.handle_apply(body)
++            elif route == "/api/hardware/create":
++                code, out = jarvis_hardware.handle_create(body)
++            else:
++                code, out = jarvis_hardware.request_measure()
++            return self._send(code, out)
++
+         if route == "/api/wiki/ingest":
+             # wiki.patch - "Add to wiki" for one document in Sources. The
+             # second card's model reads it and proposes pages, then ONE
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -143,6 +143,7 @@
+     "wiki_update",            # shipped "ask"; the owner pressed Add in the wiki
+     "download_model",         # shipped "ask"; the owner typed the model's name
+     "switch_model",           # shipped "ask"; the owner picked the model
++    "models_create",          # jarvis_hardware.py acts only on tier "ask" (hardware.patch)
+     "write_notes_after_outside_text",  # jarvis_agent.py: a note after outside text asks every time
+     "power_manage",           # shipped "auto": a card means the owner chose "ask"
+     "append_obsidian_daily",  # shipped "auto": the same
+@@ -581,6 +582,12 @@
+     # fact; every one can be forgotten, and turning it off never asks.
+     "learning_auto_enable": ("yes", "local", "lets Jarvis save facts about you and your projects from what you type or say to it, without asking about each one; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
+     "learning_sensitive_enable": ("yes", "local", "lets Jarvis also save facts about health, money and other people's private details without asking first; passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses still wait for your yes; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
++    # hardware.patch (jarvis_hardware.py). Making a tuned model (jarvis-chat,
++    # jarvis-long, jarvis-vision) for a preset: Ollama on THIS PC makes it
++    # from a model already downloaded. Nothing is downloaded and nothing is
++    # sent anywhere. Without this line the action would be read as
++    # "unknown", and the notice would say it might leave the machine.
++    "models_create": ("yes", "local", "makes a tuned copy of a model you already downloaded, with Ollama on this PC; nothing is downloaded or sent anywhere, and jarvis-primary is not changed"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
