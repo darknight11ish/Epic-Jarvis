@@ -1715,8 +1715,9 @@ object JarvisRuntime {
             // a personality applying its voice, or a voice deleted (`{"what",
             // "outcome"}` - a doorbell, never a name or words). The one setting
             // is read again EVERY time, not only once the Voices screen has
-            // asked (2026-10-28): the Live screen names the voice it is speaking
-            // in from this same read, so a change made on the desktop has to
+            // asked (2026-10-28): the Live screen named the voice it was
+            // speaking in from this same read (until the owner removed that
+            // line on 2026-11-02), so a change made on the desktop still has to
             // reach a phone that never opened that screen. It is one cheap GET
             // that loads no model and starts nothing (`GET /api/voice/voices`).
             "voices" -> refreshCustomVoices()
@@ -3826,8 +3827,9 @@ object JarvisRuntime {
     /**
      * `GET /api/voice/voices` - the ONE PC-wide voice (which built-in voice,
      * and how fast), read when the Voices screen opens, by every change the
-     * owner makes here, and on the `voices` event. The Live screen names the
-     * voice it speaks in from this same read, whichever app changed it.
+     * owner makes here, and on the `voices` event. The Live screen named the
+     * voice it spoke in from this same read, whichever app changed it, until
+     * the owner removed that line on 2026-11-02.
      */
     val customVoices: StateFlow<CustomVoices.Read> = _customVoices.asStateFlow()
 

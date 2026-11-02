@@ -84,7 +84,7 @@ object LiveAudioRoute {
      * @param inputTypes `AudioManager.getDevices(GET_DEVICES_INPUTS)` types.
      * @param outputTypes `AudioManager.getDevices(GET_DEVICES_OUTPUTS)` types.
      * @param communication `AudioManager.availableCommunicationDevices`, names
-     *   included because the Live screen says which microphone it is using.
+     *   included because the route's words name which microphone it is using.
      * @param speaking Jarvis is talking: the reply is a voice call so the echo
      *   canceller can take Jarvis's own voice out of what the microphone hears.
      * @param choice the owner's microphone choice ([MicChoice]).
@@ -114,12 +114,12 @@ object LiveAudioRoute {
      * @param expectedInputType the input device type to prefer on the recorder,
      *   or null to leave the choice to Android.
      * @param callMode true for the call configuration - the car's (or a
-     *   headset's) hands-free microphone - which is what the Live screen and
+     *   headset's) hands-free microphone - which is what the route's words and
      *   the call detector must know about.
      * @param mediaOnly true when Bluetooth audio is connected but offers no
      *   microphone at all (A2DP media only, or a BLE speaker). The route is
-     *   unchanged then, but the Live screen says why the car cannot be heard.
-     * @param mic the Bluetooth microphone in use, for the Live screen's words.
+     *   unchanged then, but the route's words say why the car cannot be heard.
+     * @param mic the Bluetooth microphone in use, for the route's words.
      * @param fellBack true when a microphone was wanted and could not be used.
      */
     data class Route(
@@ -133,7 +133,10 @@ object LiveAudioRoute {
         val mic: LiveExtras.Mic? = null,
         val fellBack: Boolean = false,
     ) {
-        /** What the Live screen says about the microphone in use. */
+        /**
+         * The route's words about the microphone in use (drawn on the Live
+         * screen until 2026-11-02).
+         */
         val words: String
             get() = LiveExtras.micWords(mic, fellBack = fellBack, mediaOnly = mediaOnly)
     }
@@ -190,7 +193,7 @@ object LiveAudioRoute {
     /**
      * The same decision with the Bluetooth microphone refused by Android (the
      * communication device could not be made, so the call link never came up):
-     * the phone's own microphone, and the Live screen says the Bluetooth one
+     * the phone's own microphone, and the route's words say the Bluetooth one
      * could not be used. Recording from a route Android refused would be
      * silence - which is the bug this file exists to stop.
      */
