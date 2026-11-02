@@ -1912,11 +1912,23 @@ star_floor = 25        # ...but never fewer than this many
 # may look in" (`jarvis_agent.offered_tools`), so with no folder listed it
 # costs no tokens and reads nothing.
 #
+# `phone_apps` ALSO ships ON (2026-11-02, the owner's ask: "i can remove or add
+# any android app to that list any time with an approval card... or by going to
+# the settings and changing it there too"). It is the narrowest one here and
+# the reason is the list it manages: the `[phone_apps]` table below ships EMPTY,
+# so a tool that fills it cannot itself be gated behind a hand edit of THIS
+# list - that would leave hand-editing the settings file as the only way in,
+# which is exactly what the owner asked to stop. What it can reach is that ONE
+# table and nothing else: each add and remove is ONE `change_own_config` card
+# naming the app and its package, nothing is written until a person approves,
+# and `list` is read-only with no card at all. It cannot open an app itself -
+# that is still `control_phone`, still opt-in below.
+#
 # Everything else here stays opt-in - send_email, browser_control,
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "calculator", "memory_search", "my_files"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)

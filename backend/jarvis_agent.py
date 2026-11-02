@@ -1832,6 +1832,12 @@ _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "pr
                                   # so a plan cannot name it, and the owner is told to ask
                                   # for it directly.
                                   "change_setting",
+                                  # "phone_apps" (2026-11-02): the management of the phone's
+                                  # [phone_apps] allow-list. Its own gate is the card this tool
+                                  # raises (one change_own_config per app), and its list half
+                                  # is answered from the settings file with no card - neither
+                                  # is a step a plan should wrap in a second mechanism.
+                                  "phone_apps",
                                   # The conversation-scoped web-search approval and its
                                   # stop (WEB_SEARCH_GRANT, 2026-11-01): both need the
                                   # TURN's own conversation id, which only `_one_call`
@@ -2409,6 +2415,156 @@ def _run_connect_tool(args: dict) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   "Add YouTube Music to my phone apps" - the allow-list, managed by voice
+#   (2026-11-02)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK, verbatim: "any apps that i ask if to open or do something
+# with. i would need to approve a card with the apps i would like it to
+# manipulate first and i can remove or add any android app to that list any
+# time with an approval card... or by going to the settings and changing it
+# there too."
+#
+# THE GAP. `control_phone` could open an app only if that app was already a line
+# in `[phone_apps]` - and the table ships EMPTY, so the only way to fill it was
+# to hand-edit `jarvis-framework.toml`. This tool is that management in chat and
+# in Live. It is NOT a new permission: every add and remove is one
+# `change_own_config` card (the existing action, tier and card words), and
+# NOTHING is written until a person approves it. `list` is read-only, answered
+# from the settings file, and raises no card - there is nothing to approve.
+#
+# WHY IT IS ONE TOOL AND NOT THREE. The model picks `phone_apps` with an action,
+# so "add", "remove" and "what apps can you open" are one door with one schema;
+# a name it invents is refused by the schema before anything is asked.
+#
+# WHAT IT MAY NOT DO. ONE app per call: `_prepare_phone_apps` refuses any field
+# other than action/name/package, and `jarvis_phone_apps` refuses a list where a
+# string belongs - so there is no bulk path, by construction. The card is built
+# in `jarvis_phone_apps.card_text` (never by the model) and names BOTH the
+# friendly name and the exact package id, for a removal exactly as for an add.
+# The write itself is `jarvis_phone_apps.write`, the one place that edits the
+# owner's table: the same atomic, comment-preserving, whole-file-verified writer
+# the other settings use, followed by `reload_framework()` so the next message
+# sees it, and one audit line naming the app and the package.
+PHONE_APPS_TOOL = "phone_apps"
+
+#: The gate key `phone_apps` is put to the gate under. `change_setting` is
+#: ALREADY a key of `jarvis_gate._TOOL_ACTIONS` (it maps to `change_own_config`,
+#: the same action `connect_account` maps to), so this adds no line to the
+#: owner's gate file and no backend patch: the tool resolves through a mapping
+#: that ships. A new key would need a gate patch and its own risk row; a change
+#: to one of Jarvis's own settings does not invent one. `test_phone_app_allowlist.
+#: py` proves the mapping is load-bearing by checking the tool's own name (what
+#: the gate would get without it) is NOT a key.
+PHONE_APPS_GATE_NAME = "change_setting"
+
+
+def _phone_apps_tool_text() -> str:
+    """The phone_apps description, under the 300-token per-tool budget.
+
+    An instruction, not a note about the feature: the owner says "add TikTok to
+    my phone apps". It says plainly that list is free and that add/remove are
+    one card each - and that Jarvis cannot invent a package id, because Android
+    package names are not guessable and a wrong one would name someone else's
+    app."""
+    return ("Manage which apps Jarvis may open on the owner's phone. \"list\" names "
+            "them (no card). \"add\" takes the app's name and Android package "
+            "(com.company.app), and \"remove\" takes the name; each raises ONE "
+            "approval card naming it. ONE app per call. Never guess a package id - "
+            "if the owner does not know it, ask them to find it on the PC "
+            "(adb shell pm list packages). Nothing changes until the card is approved.")
+
+
+class _PhoneAppsListed:
+    """A phone_apps call that asked only for the list.
+
+    READ-ONLY and answered from the settings file, so it is recognised BEFORE
+    the gate and no card is raised - there is nothing to approve, exactly like
+    control_phone's own list_apps (2026-11-01)."""
+
+    def __init__(self, listed: dict) -> None:
+        self.listed = listed
+
+
+class _PhoneAppsRefused:
+    """A phone_apps call that could not become ONE change.
+
+    A bad name, a package that is not a package, `com.jarvis.`, an app already
+    listed, an app not listed, more than one app in one call. A card showing
+    none of these would ask the owner to approve nothing, so the reason goes
+    back to the model instead, in the owner's words, before any card."""
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
+
+
+def _prepare_phone_apps(args: dict):
+    """(state, the card's own words) for one phone_apps call.
+
+    A list, or a refusal, comes back as a sentinel `_one_call` answers without
+    a card. An add/remove that passed every rule comes back as the plain dict
+    `execute` writes - the SAME name and package the card shows, never
+    recomputed from the model's arguments a second time."""
+    try:
+        import jarvis_phone_apps as PA
+    except Exception as exc:                     # noqa: BLE001 - module absent
+        return (_PhoneAppsRefused(
+            "Jarvis cannot manage the phone's app list on this PC: "
+            f"jarvis_phone_apps.py is not in the backend folder ({type(exc).__name__})"),
+            "Manage the phone's allowed apps")
+    extra = sorted(str(k) for k in (args or {})
+                   if str(k) not in ("action", "name", "package"))
+    if extra:
+        return (_PhoneAppsRefused(
+            "one app at a time, please - this tool takes an action, a name and a "
+            f"package only ({', '.join(extra)} was sent), so nothing was changed"),
+            "Add an app to the phone's allowed apps")
+    action = str((args or {}).get("action") or "").strip().lower()
+    if action == "list":
+        return _PhoneAppsListed(PA.view()), "List the apps Jarvis may open on the phone"
+    if action not in ("add", "remove"):
+        return (_PhoneAppsRefused(
+            'say "list" to see the apps, or "add" or "remove" with one app\'s name, '
+            "so nothing was changed"),
+            "Manage the phone's allowed apps")
+    try:
+        if action == "add":
+            name, package = PA.check_add((args or {}).get("name"),
+                                         (args or {}).get("package"))
+        else:
+            name, package = PA.check_remove((args or {}).get("name"))
+    except PA.PhoneAppsError as exc:
+        return _PhoneAppsRefused(str(exc)), "Manage the phone's allowed apps"
+    return ({"action": action, "name": name, "package": package},
+            PA.card_text(action, name, package))
+
+
+def _execute_phone_apps(args: dict, state) -> dict:
+    """Write the ONE line the card showed, after its approval.
+
+    Re-validated by `jarvis_phone_apps.write` against the list as it is NOW: an
+    approval of "add YouTube Music" cannot become a different app because the
+    file changed while the card waited, and a line that is already there says so
+    rather than being written twice."""
+    if not isinstance(state, dict):
+        return {"ok": False, "changed": False,
+                "error": "refused: that call named no one app, so nothing was changed."}
+    try:
+        import jarvis_phone_apps as PA
+    except Exception as exc:                     # noqa: BLE001 - module absent
+        return {"ok": False, "changed": False,
+                "error": f"the app list could not be changed "
+                         f"(jarvis_phone_apps.py is not here: {type(exc).__name__})"}
+    try:
+        return PA.write(state.get("action"), state.get("name"), state.get("package"))
+    except PA.PhoneAppsError as exc:
+        return {"ok": False, "changed": False, "error": str(exc)}
+    except Exception as exc:                     # noqa: BLE001 - the file
+        return {"ok": False, "changed": False,
+                "error": f"the app list could not be changed ({type(exc).__name__})"}
+
+
+# --------------------------------------------------------------------------
 #   "What is this feature?" - explaining Jarvis's own features (2026-10-20)
 # --------------------------------------------------------------------------
 #
@@ -2883,6 +3039,24 @@ TOOLS: dict = {
                                                 checkpoint=kw.get("checkpoint")),
         needs_announce=True,
         gate_lookup_name=lambda args: "jarvis_android_control_run"),
+    # "add YouTube Music to my phone apps" (2026-11-02) - the management the
+    # owner asked for, so the allow-list is not a file edit. It ships ON, like
+    # change_setting: a tool that is itself the only way to fill the list
+    # cannot be gated behind a hand edit of [tools].enabled. Every add and
+    # remove is ONE change_own_config card; list is free.
+    "phone_apps": Tool(
+        "phone_apps",
+        _phone_apps_tool_text(),
+        {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["list", "add", "remove"]},
+            "name": {"type": "string", "description":
+                "the app's name, e.g. Maps"},
+            "package": {"type": "string", "description":
+                "add: the Android package, e.g. com.example.maps"}},
+         "required": ["action"]},
+        _prepare_phone_apps,
+        _execute_phone_apps,
+        gate_lookup_name=lambda args: PHONE_APPS_GATE_NAME),
     "browser_control": Tool(
         "browser_control",
         "Drive one browser tab by naming page elements (role and accessible "
@@ -7544,8 +7718,12 @@ TOOL_GROUPS = (
     # rather than adding a group name to more_tools' own enum: changing and
     # explaining a setting are the same "Jarvis's own switches" subject, and a
     # group's members cost nothing extra in that enum.
+    # phone_apps (2026-11-02) shares this group for the reason below: it
+    # changes ONE of Jarvis's own settings - the [phone_apps] allow-list - and
+    # a group's members cost nothing extra in more_tools' own enum, so the
+    # short list's 1,550-token pin does not move.
     ("settings", "change one of Jarvis's own settings",
-     (SETTINGS_TOOL, FEATURE_GUIDE_TOOL)),
+     (SETTINGS_TOOL, FEATURE_GUIDE_TOOL, PHONE_APPS_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -7742,6 +7920,14 @@ TOOL_HINTS = {
     "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|account)\b",
                         r"\b(?:set ?up|link|sign in|log ?in)\b.*\b(?:calendar|caldav|"
                         r"github|account)\b"),
+    # PHONE_APPS (2026-11-02): the [phone_apps] allow-list itself - "add YouTube
+    # Music to my phone apps", "which apps can you open", "remove it from that
+    # list", "what is on the allow-list". Deliberately narrow: "open YouTube on
+    # my phone" is control_phone's job, so each pattern here names the LIST, or
+    # the adding/removing of an app rather than the opening of one.
+    "phone_apps": (r"\bphone apps?\b", r"\ballow[- ]?list\b", r"\bwhich apps\b",
+                   r"\bapps?\b.*\b(?:add|remove|allow|approve|list)\b",
+                   r"\b(?:add|remove|allow|approve)\b.*\bapps?\b"),
     # The conversation-scoped web-search approval (GRANT_TOOL, 2026-11-01). Its
     # own words, narrow on purpose: a plain "search the web" must NOT pull the
     # grant in (that would offer the model a card the owner never asked for),
@@ -13805,6 +13991,31 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
         say_step("tool_finished", name, ok=False)
         return
+    if name == PHONE_APPS_TOOL and isinstance(state, (_PhoneAppsListed, _PhoneAppsRefused)):
+        # NOTHING TO APPROVE, so no card (2026-11-02). One of two things came
+        # back from _prepare_phone_apps instead of one app to add or remove: the
+        # owner's own list (read from [phone_apps], no write at all), or a
+        # plain reason nothing could become one change (a bad name, a package
+        # that is not a package, an app already listed, two apps in one call).
+        # A card showing either would ask the owner to approve nothing; the
+        # model is told instead, in the owner's words, before any card exists.
+        if isinstance(state, _PhoneAppsListed):
+            result = dict(state.listed)
+            say_step("tool_started", name)
+            say_step("tool_finished", name, ok=True)
+            ran = True
+        else:
+            result = {"ok": False,
+                      "error": f"refused: {state.problem} Nothing was changed and "
+                               f"nobody was asked."}
+            say_step("tool_refused", name)
+            ran = False
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
+                      "outcome": "no card needed" if ran else "refused"})
+        return
+
     if name in (GRANT_TOOL, REVOKE_TOOL):
         # Nothing to ask about: no conversation id to scope a grant to, or a
         # grant already on for this chat. Refused BEFORE any card is raised - a
