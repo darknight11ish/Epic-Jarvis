@@ -73,6 +73,10 @@ IN PLAIN WORDS, WHAT HAPPENS
     minutes" extends it, never more than 2 hours ahead of now), on Standby,
     when Windows locks or the PC sleeps (a desktop session), or when App lock
     comes on (reported by the app). It never restarts by itself.
+    The 90 seconds is the owner's to change, in Settings on either app or by
+    asking in chat or in Live ("make Jarvis Live wait three minutes") - it is
+    `[live].quiet_s`, bounded 30 s..10 min, and `quiet_seconds()` is the one
+    reader (2026-11-01, the owner's ask).
 
 THE RULES ADDED BY THE RULES REVIEW (2026-09-28, before anything shipped):
   * NO LIVE WITHOUT A REAL VOICE CHECK: owner mode, a trained voice print for
@@ -155,8 +159,20 @@ EXTEND_DEFAULT_MIN = 20
 WARN_BEFORE_S = 120
 #: Quiet this long after Jarvis last spoke (or the owner last spoke, or Live
 #: started) ends Live (the design: long enough to think, short enough that an
-#: open microphone is not forgotten). Kept at 90 s (owner's call pending).
+#: open microphone is not forgotten). This is the DEFAULT: the owner's own
+#: number lives in `[live].quiet_s` (the row `jarvis_limits.LIMITS` calls
+#: live_idle_seconds, 2026-11-01) and `quiet_seconds()` is the one reader, so
+#: the engine, the PC's Settings card and the phone's Limits plate all act on
+#: one value. A PC that never touched it reads 90 and behaves exactly as before.
 QUIET_S = 90
+#: The shortest and longest the owner may make that window, in SECONDS, and the
+#: same bounds the limits row carries. Below 30 s Live would end in the pause
+#: between two thoughts; above 10 minutes an open microphone has been forgotten,
+#: which is the very risk the window exists to bound. These two are the
+#: FALLBACK a backend with no jarvis_limits.py still gets - `quiet_seconds()`
+#: asks the row itself when it can, so the table stays the one source.
+QUIET_MIN_S = 30
+QUIET_MAX_S = 600
 #: The visible "Live ends soon - it's quiet" this long before that.
 QUIET_WARN_S = 15
 #: After Live ended on its own, both apps offer "Resume Live" this long; it
@@ -328,6 +344,34 @@ def live_tool_limit() -> int:
     changes what is SHOWN, never what is allowed or what asks.
     """
     return _live_int("tool_limit", 6, 3, 12)
+
+
+def quiet_seconds() -> int:
+    """How long a quiet Live session waits before it turns itself off.
+
+    ONE READER OF ONE KEY. The value lives in `[live].quiet_s` in the owner's
+    settings file, which is the key `jarvis_limits.LIMITS`' own row
+    (`live_idle_seconds`) writes, and which the PC's Settings card and the
+    phone's Limits plate change through `POST /api/limits/settings`. So the
+    number the owner sees in Settings is the number this engine acts on - the
+    spoken "make Jarvis Live wait three minutes" goes through that same route.
+
+    The bounds and the default come from the row itself when this backend has
+    `jarvis_limits.py`; `QUIET_MIN_S`/`QUIET_MAX_S`/`QUIET_S` are only the
+    fallback for a PC running this module without it. Bounding here as well as
+    at the route is deliberate: a hand-edited `quiet_s = 99999` in the file must
+    not keep a microphone open for a day, and a `quiet_s = 1` must not end Live
+    before the owner can speak.
+    """
+    lo, hi, default = QUIET_MIN_S, QUIET_MAX_S, QUIET_S
+    try:
+        import jarvis_limits as limits
+        row = limits.find("live_idle_seconds")
+        if row is not None:
+            lo, hi, default = int(row.low), int(row.high), int(row.default)
+    except Exception:
+        pass
+    return _live_int("quiet_s", default, lo, hi)
 
 
 def live_limits() -> dict:
@@ -1229,7 +1273,8 @@ class Live:
                         # quiet clock waits for Unmute.
                         self.active_at = now
                     if (self._on() and self.pause not in CARD_PAUSES
-                            and not self.crisis and now - self.active_at >= QUIET_S):
+                            and not self.crisis
+                            and now - self.active_at >= quiet_seconds()):
                         self._end("quiet")
                         changed = True
                     elif (self._on() and not self.warned and not self.crisis
@@ -1516,8 +1561,12 @@ class Live:
         with self._lock:
             now = self.clock()
             on = self._on()
+            # The owner's own quiet window (jarvis_limits.py's
+            # live_idle_seconds, read from `[live].quiet_s`): 90 s unless they
+            # changed it, in Settings or by asking.
+            quiet = quiet_seconds()
             left = int(max(0, round(self.ends_at - now))) if on else None
-            quiet_left = (int(max(0, round(QUIET_S - (now - self.active_at))))
+            quiet_left = (int(max(0, round(quiet - (now - self.active_at))))
                           if on and self.pause not in CARD_PAUSES
                           and not self.muted and not self.crisis else None)
             resumable = (self.state == ENDED and self.ended_why in ("quiet", "time")
@@ -1578,7 +1627,7 @@ class Live:
                            "trust_max_short_clips": int(live_limits()["trust_max_short_clips"]),
                            "context_tokens": int(live_limits()["context_tokens"]),
                            "max_pause_ms": int(live_limits()["max_pause_ms"]),
-                           "extend_minutes": EXTEND_DEFAULT_MIN, "quiet_s": QUIET_S,
+                           "extend_minutes": EXTEND_DEFAULT_MIN, "quiet_s": quiet,
                            "quiet_warn_s": QUIET_WARN_S, "warn_s": WARN_BEFORE_S,
                            "resume_s": RESUME_S, "ended_show_s": ENDED_SHOW_S,
                            "crisis_more_s": CRISIS_MORE_S},
