@@ -39,9 +39,13 @@ WHAT IS COVERED
     that is not one of our ids (no traversal, no other file type);
   - "a picture is never sent anywhere": this module holds no email, upload or
     chat path, and no model path imports it;
-  - the whole tail of `docs/JARVIS-API.md` is still there: every section from
-    129 up is checked against a list kept OUTSIDE the document, so a merge that
-    silently drops the end of the file fails here and names the missing number;
+  - the tail of `docs/JARVIS-API.md` still hangs together: every section from
+    129 up has a number of its own, the numbers strictly increase, and no two
+    sections skip more than three numbers - so a duplicate `§175`, or a number
+    that goes backwards, fails here and names the number (Gemini's ruling 1,
+    2026-11-02; a small gap is allowed because a sibling PR's reserved number
+    may not have merged yet). The old hand-written list of every section is
+    gone on purpose - it was one shared line every API PR had to edit;
   - install() wraps a handler, passes every other request through, and refuses
     a request that fails the server's own origin or token check.
 """
@@ -1624,7 +1628,14 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
     # run reads ... 101, 102, 110, 103, 104 ... on main already (section 110 sits
     # before 103), which is pre-existing and nothing to do with this feature. A
     # global ordering check would fail on main, so it is not what this asserts.
-    numbered = [int(m.group(1)) for m in re.finditer(r"\n## (\d+)\.", api)]
+    #
+    # Since Gemini's ruling 1 (2026-11-02) the run from 129 up also has its own
+    # check - unique numbers, strictly increasing, at most three missing - in
+    # `t_the_sections_from_129_up_are_unique_ascending_and_never_skip_more_than_three`,
+    # which reads the numbers through `api_section_numbers` below. This check
+    # keeps what is about THIS feature's heading; its `tail == sorted(tail)` is a
+    # second, cheaper look at the same run rather than the rule.
+    numbered = api_section_numbers(api)
     tail = numbered[numbered.index(129):] if 129 in numbered else []
     check("the section is present once, and nothing numbered below it follows it",
           api.count("\n## 129.") == 1
@@ -1634,161 +1645,201 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
           repr(tail))
 
 
-#: EVERY numbered section of `docs/JARVIS-API.md` from 129 up, written out by
-#: hand so the check below has something INDEPENDENT to compare against.
+#: How many numbers may be MISSING between two sections that are both present.
 #:
-#: WHY A HAND-WRITTEN LIST AND NOT A DERIVED ONE. Any rule that derives its
-#: expectation from the document itself - "the numbers are contiguous", "each
-#: number is one more than the last" - has to derive its END from the document
-#: too, and that end is the very thing a lost tail changes. The intact document
-#: reads 129..136 and a tail-deleted one reads 129..134: contiguous both times,
-#: so the derived rule agrees with the deletion. That is the check that CANNOT
-#: FAIL, and it is exactly how 135 and 136 went missing. The expectation has to
-#: live outside the file being watched, and this list is that outside.
+#: GEMINI'S RULING 1, 2026-11-02, quoted because it is the reason this file no
+#: longer carries a hand-written list of every section: *"Update
+#: `backend/test_pictures.py` so it checks that all `## <N>.` headings from 129
+#: upward have (a) strictly unique numbers (no duplicate `§175`s) and (b)
+#: strictly increasing order (`N_i < N_{i+1}`), while allowing a small gap
+#: (`<= 3`) when an in-flight sibling PR's reserved number hasn't merged yet -
+#: and remove the hardcoded upper bound so PRs stop conflicting on
+#: `EXPECTED_SECTIONS_FROM_129`."*
 #:
-#: WHAT IT COSTS. Adding a section, or deliberately removing one, means editing
-#: this list in the same commit - one visible line, and the person doing it
-#: writes down that they meant to. That is the price of a check that bites, and
-#: it is why the failure message below spells out the difference instead of
-#: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 176)) + (177,)   # 129 ..= 175 then 177 (175 "a conversation may search the web after one Allow", 2026-11-02, this branch; 170 "Protected from Jarvis", 2026-10-31, this lane; the notes-editor lane also took the next number, so one of the two is renumbered at merge, as 161/162 were; 169 the jobs create/answer routes, 2026-10-30; 146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 the blind-approval guards, 2026-10-21; 151 the Obsidian vault organizer, 2026-10-21; 152 the Notion export -> Obsidian vault routes, 2026-10-21; 153 the Live voice screen/selection reads, 2026-10-21; 154 the spoken-command normaliser and speaking-speed reflex, Voice Slice A, 2026-10-21; 155 Duet Wave D-2 (read-only continuation, outbound tiers, source provenance, walk brain-dump), 2026-10-22; 161 Google Calendar, both ways; 162 connecting an account by talking, both 2026-10-28; 163 a file in a chat, 2026-10-30; 164 Jarvis's own calendar, 2026-10-29; 165 what a parking stay costs, minute by minute, 2026-10-30; 166 building an Android app from chat and sideloading it, 2026-10-30; 167 the phone's notification styles, built from the owner's words, 2026-10-30; 168 the calendar in the desktop HUD, 2026-10-30; 169 starting a background job and answering a parked grant, 2026-10-30; 170 the Obsidian notes editor, 2026-10-31; 171 Protected from Jarvis, 2026-10-31; 172 sending one file from the PC to the phone; 173 the surface-aware answers, 2026-10-31; 174 opening an app on the phone and starting a media search, 2026-11-01; 177 approving a card from its Android notification, 2026-11-02 - 176 is RESERVED by #1073, still in flight, so this branch's section is 177 and no two PRs claim one number; see RESERVED_SECTION_NUMBERS below)
-#: 156 is section 156, the private chat (backend Slice 1, 2026-10-25);
-#: 157 is the owner-secret hand-off card, wired 2026-10-26;
-#: 158 is updates in chat - "is there an update?", "what changed in the
-#: update?" and "update Jarvis" in the chat box, 2026-10-26.
-#: 159 is the Anti-Slop filter (2026-10-28); 160 is the model/preset
-#: advisor (2026-10-28) - both added with their PR, so the tail is
-#: 129 ..= 160 with no hole.
-#: 161 (Google Calendar, both ways) and 162 (connecting an account by talking)
-#: were both appended at the tail on 2026-10-28 and BOTH landed in the
-#: integration merge: the two sections existed as "161" in their own branches,
-#: so one of them was renumbered to 162 there. Both are declared here, which is
-#: what stops the next appended section from arriving unnoticed.
-#: 137 is a REAL section, not a gap: `## 137. Starting the local model when
-#: it is not running`; 138 is `skills.lock` (PR #455). The tail reads
-#: 129 ..= 138 with no hole.
+#: WHAT "A GAP OF 3" MEANS HERE, exactly, because an off-by-one in a rule like
+#: this is silent: it counts the numbers MISSING between two sections that are
+#: both present. `... 174, 178 ...` is three missing (175, 176, 177) and PASSES.
+#: `... 174, 179 ...` is four missing and FAILS. The case the ruling is written
+#: for is the small one: a sibling PR reserved 175 and has not merged, so a
+#: later PR appends 176 and the file reads `... 174, 176 ...` until 175 lands -
+#: one missing number, allowed.
 #:
-#: EVERY SECTION ABOVE 138 IS ITS OWN PR FAMILY, merged in this order:
-#: 139 self-improve's diagnostic routes (PR #549); 140 the guardian's history
-#: and restore routes (#568/#569/#571); 141 the selection chip (#562); 142
-#: the data-and-maths sandbox's own switch (LM-1C, #583); 143 the person
-#: dossier click door (LM-4); 144 the media read slice (F5 S1); 145 the preset
-#: GET route (2026-10-19); 146 app control on the phone (2026-10-20); 147 the
-#: setup questionnaire (2026-10-20, #643); 148 the reverse-engineering tool REA
-#: (2026-10-20); 149 the searchable recordings index (F5 S2, 2026-10-20, #641);
-#: 150 the two mechanical guards against blind / stacked approvals (review
-#: ruling 8.2, 2026-10-20, #680); 151 the Obsidian vault organizer (#681,
-#: 2026-10-21); 152 the Notion export -> Obsidian vault routes (#683,
-#: 2026-10-21). A section added above 138 gets its row here in
-#: the same commit.
-#:
-#: This list names the RELEASED tail, so a dropped section anywhere in it is
-#: caught, and a section above it is reported rather than silently accepted.
+#: WHAT THIS COSTS, said out loud rather than implied. The pinned list is gone,
+#: so a merge that silently drops up to three sections from the MIDDLE of the
+#: run now passes, and a dropped TAIL passes too. That protection was the list
+#: every API pull request had to edit, which is why five of them were blocked or
+#: serialized by one shared line on 2026-11-02: two PRs that both append a
+#: section conflict on it by construction, and a conflicted PR gets no CI at
+#: all. Duplicates and out-of-order numbers - what those five were actually
+#: hitting - still fail.
+MAX_MISSING_BETWEEN_SECTIONS = 3
 
-#: 176 IS RESERVED, NOT MISSING. #1073 adds it and is still in flight; #1074's
-#: 175 landed on main on 2026-11-02 and is in the list above. This branch's new
-#: section is 177 - the Lead's numbering, so no two PRs claim one number - so
-#: `docs/JARVIS-API.md` legitimately reads 129 ..= 175 then 177 until #1073
-#: lands, and the contiguity check below would call that a hole. Naming the
-#: number here keeps that check biting on every OTHER number - a second hole, a
-#: repeat, or 176 arriving before #1073 lands all still fail - instead of
-#: switching the check off. Delete this tuple, and 177's entry in
-#: `EXPECTED_SECTIONS_FROM_129`, in the commit that brings #1073 in.
-RESERVED_SECTION_NUMBERS = (176,)
+#: The lowest section number this rule owns. Sections below it are read too, but
+#: their numbers are not checked: the document's order is not ascending down
+#: there and never was - the run reads ... 101, 102, 110, 103, 104 ... on main
+#: already (section 110 sits before 103), 66-69, 76 and 111 were never written,
+#: and none of that is a fact this feature owns. A global ordering check would
+#: fail on an untouched main, so it is not what the ruling asks for.
+FIRST_CHECKED_SECTION = 129
 
 
-def t_every_section_from_129_up_is_still_in_the_document():
-    """The whole tail of `docs/JARVIS-API.md`, not just its order.
+def api_section_numbers(api: str) -> list[int]:
+    """Every `## <N>.` heading number in `api`, in the order the file holds them.
 
-    THE FAILURE THIS CATCHES. A stale-branch merge once deleted sections 135 and
-    136 - 305 lines, two whole features - with NO conflict shown. The check above
-    stayed green, and correctly so: what survived was still present exactly once,
-    still above 129, still in ascending order. Order among the survivors says
-    nothing about a section that is simply gone. This one compares the document
-    against a list kept outside it, so a missing section fails the suite and the
-    output NAMES the missing number.
+    A section heading in `docs/JARVIS-API.md` is `## N.` at the start of a line,
+    and requiring that start keeps a `### N.M` subsection from being read as a
+    section of its own.
+    """
+    return [int(m.group(1)) for m in re.finditer(r"\n## (\d+)\.", api)]
 
-    It deliberately does NOT assert that 129 is the highest section, or that the
-    document holds no other gaps. The run reads ... 101, 102, 110, 103 ... on
-    main already (section 110 sits before 103), 66-69, 76 and 111 were never
-    written, and new sections are added above 136 all the time. Each of those is
-    a fact about the document that this feature does not own, and a check that
-    failed on them would be turned off within a week.
+
+def api_section_problems(numbers: list[int]) -> list[str]:
+    """Gemini's ruling 1 (2026-11-02) applied to one document's section numbers.
+
+    Returns one plain sentence per thing wrong with the sections from 129 up, in
+    document order; an empty list means the document obeys the ruling. Each
+    sentence starts with the part of the rule it breaks - `duplicate`, `order`
+    or `gap` - so a caller can report them as separate checks and a reader can
+    see which part failed.
+    """
+    tail = [n for n in numbers if n >= FIRST_CHECKED_SECTION]
+    problems: list[str] = []
+    if FIRST_CHECKED_SECTION not in tail:
+        problems.append(
+            f"duplicate: there is no section {FIRST_CHECKED_SECTION} at all, so "
+            f"the run this rule is about cannot be checked")
+    seen: dict[int, int] = {}
+    for position, number in enumerate(tail, 1):
+        if number in seen:
+            problems.append(
+                f"duplicate: section {number} appears twice (at heading "
+                f"{seen[number]} and heading {position}), and two contracts must "
+                f"never share one citation")
+        else:
+            seen[number] = position
+    for before, after in zip(tail, tail[1:]):
+        if after <= before:
+            problems.append(
+                f"order: section {after} comes after {before}, so the numbers do "
+                f"not strictly increase")
+        elif after - before - 1 > MAX_MISSING_BETWEEN_SECTIONS:
+            skipped = ", ".join(str(n) for n in range(before + 1, after))
+            problems.append(
+                f"gap: sections {before} and {after} skip {after - before - 1} "
+                f"numbers ({skipped}), and at most "
+                f"{MAX_MISSING_BETWEEN_SECTIONS} may be reserved by a sibling PR "
+                f"that has not merged yet")
+    return problems
+
+
+def t_the_sections_from_129_up_are_unique_ascending_and_never_skip_more_than_three():
+    """Gemini's ruling 1 (2026-11-02) on `docs/JARVIS-API.md` itself.
+
+    THE RULE, and what it replaced. Until this ruling the file compared the
+    document against `EXPECTED_SECTIONS_FROM_129`, a tuple written out by hand
+    from 129 to 174, and demanded that the numbers ran contiguously and that
+    nothing above 174 had been added "without saying so". That made ONE line the
+    thing every API pull request edits: two PRs that both append a section
+    conflict on it by construction, the second one loses its CI run, and five
+    open PRs were blocked or serialized by it on 2026-11-02. The ruling removes
+    the upper bound and checks the document's own numbers instead - unique,
+    strictly increasing, with at most three missing numbers between two sections
+    so an in-flight sibling's reserved number does not fail the PR behind it.
+
+    WHAT IT CATCHES, which is the case nobody was watching: two sections
+    numbered `175`, and a section whose number goes backwards. Either way two
+    different contracts end up sharing one citation, or a client reading "the
+    next section" reads the wrong one. `docs/JARVIS-API.md` is what the desktop
+    and Android apps are written against.
+
+    WHAT IT NO LONGER CATCHES, deliberately - the trade the ruling makes. A
+    stale-branch merge once deleted sections 135 and 136 - 305 lines, two whole
+    features - with NO conflict shown, and the hand-written list is what caught
+    it. With the list gone, a middle gap of up to three and a dropped tail both
+    pass; the ruling accepts that in exchange for every API PR no longer editing
+    one shared line. `MAX_MISSING_BETWEEN_SECTIONS`'s own comment says this in
+    full, and it is the part to read before trusting this check.
     """
     api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    # `\n## N.` is the same shape the check above reads, so a number with a
-    # `### N.M` subsection is not misread as a section of its own.
-    present = {int(m.group(1)) for m in re.finditer(r"\n## (\d+)\.", api)}
+    numbers = api_section_numbers(api)
+    tail = [n for n in numbers if n >= FIRST_CHECKED_SECTION]
 
-    # A sanity anchor, so a broken read cannot make the check below vacuous: if
-    # the headings ever stop being `## N.` this fails loudly rather than passing
-    # over an empty set.
+    # Two sanity anchors, so a broken read cannot make the three checks below
+    # vacuous: if the headings ever stop being `## N.` this fails loudly instead
+    # of passing over an empty list.
     check("the document still has numbered sections to check at all",
-          len(present) > 128,
-          f"only {len(present)} numbered headings were read")
+          len(numbers) > 128, f"only {len(numbers)} numbered headings were read")
+    check(f"... and section {FIRST_CHECKED_SECTION} and something above it are "
+          f"both there",
+          bool(tail) and tail[0] == FIRST_CHECKED_SECTION,
+          f"the run from {FIRST_CHECKED_SECTION} up reads {tail[:8]}")
 
-    missing = [n for n in EXPECTED_SECTIONS_FROM_129 if n not in present]
-    extra = sorted(n for n in present if n > EXPECTED_SECTIONS_FROM_129[-1])
-    check("every section from 129 up is still in docs/JARVIS-API.md",
-          not missing,
-          f"missing section(s): {missing}. The document jumps "
-          f"{sorted(n for n in present if n >= 129)} - a merge that dropped the "
-          f"tail of the file leaves no other trace. If 129-up really did change "
-          f"on purpose, update EXPECTED_SECTIONS_FROM_129 to the new set in the "
-          f"same commit, so the change is visible to a reader.")
-    check("... and no section above the list has been added without saying so",
-          not extra,
-          f"the document has {extra}, which EXPECTED_SECTIONS_FROM_129 does not "
-          f"know about; add them to that list in this commit")
+    problems = api_section_problems(numbers)
+
+    def broken(part: str) -> list[str]:
+        return [p for p in problems if p.startswith(part + ":")]
+
+    check("every section from 129 up has a number of its own - no §175 twice",
+          not broken("duplicate"), "; ".join(broken("duplicate")))
+    check("... and the numbers strictly increase in document order",
+          not broken("order"), "; ".join(broken("order")))
+    check(f"... and no two sections skip more than {MAX_MISSING_BETWEEN_SECTIONS} "
+          f"numbers (a sibling PR's reserved number may be missing, not four)",
+          not broken("gap"), "; ".join(broken("gap")))
+    # The whole run is printed when something fails, because a number that is
+    # wrong is easiest to spot against the run it sits in.
+    check("the run from 129 up reads as one document, not two halves",
+          not problems, f"tail {tail}")
 
 
-def t_the_sections_after_129_run_without_a_gap_or_a_repeat():
-    """Every number from 129 to the highest is present exactly once.
+def t_the_section_rule_itself_passes_and_fails_the_right_fixtures():
+    """The cases in Gemini's ruling 1, each on a document built for it.
 
-    Ported from the branch `test/jarvis-api-section-completeness`, whose own
-    docstring records why it was written: *"On 2026-10-15, merging main into a
-    stale branch deleted section 135 and 136 (305 lines) with NO conflict shown,
-    and this file's order check stayed green."*
-
-    Two checks above already look at this document and neither closes this hole:
-
-    * `t_every_section_from_129_up_is_still_in_the_document` catches a GAP,
-      because it demands every number in `EXPECTED_SECTIONS_FROM_129` is present
-      - but it can only speak for the numbers that list names, so a section
-      added above it reports as `extra` until a person edits the list.
-    * the order check catches a section that appears BELOW 129 and asserts the
-      tail ascends. `tail == sorted(tail)` is true of a tail holding a repeated
-      number, and `api.count("\\n## 129.") == 1` guards only 129 itself.
-
-    So this asserts the RUN, independent of any pinned list: every number from
-    129 to the highest present, none missing (except the numbers
-    `RESERVED_SECTION_NUMBERS` says are spoken for), **none twice**. Adding a
-    section does not need this edited; deleting one fails it; numbering two
-    sections the same fails it - which is the case nobody was watching.
-
-    Why it matters beyond tidiness: `docs/JARVIS-API.md` is what the desktop and
-    Android apps are written against. A missing section is a route with no
-    contract written down; a duplicate number is worse, because two different
-    contracts then share one citation.
+    WHY THIS EXISTS. The rule above is the only thing standing between the
+    document and a duplicate section number, and it is a rule with three parts
+    and an off-by-one in the gap. A check that is only ever run against a
+    healthy document proves that it PASSES, never that it BITES - so each
+    fixture here breaks one part and the rule is asked to name it. A `FAIL` on
+    one of these lines means the rule got weaker, not that the document is
+    wrong.
     """
-    api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    numbered = [int(m.group(1)) for m in re.finditer(r"\n## (\d+)\.", api)]
-    if 129 not in numbered:
-        check("the sections after 129 run without a gap or a repeat", False,
-              "there is no section 129, so the run cannot be checked")
-        return
-    tail = numbered[numbered.index(129):]
-    # 176 is RESERVED by the in-flight PR #1073 (175 landed with #1074 on
-    # 2026-11-02), so the document has 177 without 176 on purpose - see
-    # RESERVED_SECTION_NUMBERS. Every OTHER number in the run must be present
-    # exactly once.
-    expected = [n for n in range(129, max(tail) + 1)
-                if n not in RESERVED_SECTION_NUMBERS]
-    missing = [n for n in expected if n not in tail]
-    repeated = sorted({n for n in tail if tail.count(n) > 1})
-    check("the sections after 129 run without a gap or a repeat",
-          not missing and not repeated,
-          f"missing {missing}, repeated {repeated}, tail {tail}")
+    def doc(*numbers: int) -> str:
+        return "".join(f"\n## {n}. A section the fixture made up\n" for n in numbers)
+
+    def problems(*numbers: int) -> list[str]:
+        return api_section_problems(api_section_numbers(doc(*numbers)))
+
+    def says(parts: list[str], part: str) -> bool:
+        return any(p.startswith(part + ":") for p in parts)
+
+    no_gap = problems(*range(129, 135))
+    check("a run with no gap at all is accepted", no_gap == [], repr(no_gap))
+
+    # Below 129 the document is not ascending on main (... 101, 102, 110, 103
+    # ...), and this rule must not object to that: it owns 129 and up only.
+    below_129 = problems(103, 110, 129, 130)
+    check("... and the order of the sections BELOW 129 is not this rule's business",
+          below_129 == [], repr(below_129))
+
+    # A duplicate in document order also breaks strict increase, so this fixture
+    # trips two parts; the duplicate is what must be NAMED, because "two
+    # contracts share §175" is the failure a person has to act on.
+    twice = problems(129, 130, 131, 131, 132)
+    check("a duplicate number FAILS, and the failure names the number",
+          says(twice, "duplicate") and "131" in " ".join(twice), repr(twice))
+
+    backwards = problems(129, 130, 132, 131, 133)
+    check("a number out of order FAILS, and that is not read as a duplicate",
+          says(backwards, "order") and not says(backwards, "duplicate"),
+          repr(backwards))
+
+    three_missing = problems(129, 130, 134)     # 131, 132 and 133 are missing
+    check("three numbers missing PASSES - a sibling PR's reserved number has not "
+          "merged yet", not says(three_missing, "gap"), repr(three_missing))
+
+    four_missing = problems(129, 130, 135)      # 131, 132, 133 and 134 are missing
+    check("four numbers missing FAILS - that is no longer one waiting sibling",
+          says(four_missing, "gap"), repr(four_missing))
 
 
 def t_the_settings_route_changes_one_named_thing_and_only_on_the_pc():
@@ -1920,8 +1971,8 @@ def main() -> int:
                t_install_wraps_the_handler_and_leaves_every_other_request_alone,
                t_no_picture_is_sent_anywhere_and_no_model_can_reach_this,
                t_the_api_document_has_the_section_and_it_matches_this_code,
-               t_the_sections_after_129_run_without_a_gap_or_a_repeat,
-               t_every_section_from_129_up_is_still_in_the_document):
+               t_the_sections_from_129_up_are_unique_ascending_and_never_skip_more_than_three,
+               t_the_section_rule_itself_passes_and_fails_the_right_fixtures):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
