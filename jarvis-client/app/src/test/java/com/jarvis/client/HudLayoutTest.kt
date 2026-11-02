@@ -200,14 +200,42 @@ class HudLayoutTest {
     @Test
     fun `hiding a menu empties its card, but a protected card ignores hiding`() {
         val d = HudLayout.defaults()
-        val hidden = MenuView(MenuState(hidden = setOf("brain.work.today", "entry.appearance")))
+        val hidden = MenuView(MenuState(hidden = setOf("brain.work.today", "entry.voice-check")))
         val visible = HudLayout.visible(d, hidden)
         assertFalse("brain.work.today" in visible.getValue(HudLayout.BODY))
-        assertFalse("entry.appearance" in visible.getValue(HudLayout.HERO))
+        assertFalse("entry.voice-check" in visible.getValue(HudLayout.HERO))
         assertTrue("the approvals card is not hideable", HudLayout.APPROVALS in
             visible.getValue(HudLayout.TOP_STRIP))
         assertTrue("the Live card is not hideable", HudLayout.LIVE in
             visible.getValue(HudLayout.HERO))
+    }
+
+    /**
+     * Appearance is Settings-only on the phone since 2026-11-02, and this model
+     * is the list of HOME cards: an Appearance card left in it would let a
+     * built-in preset (or a pasted document, once A4 is wired) put the button
+     * the owner asked to remove back on Home. The Settings row keeps the
+     * feature, so nothing is lost by it not being a card.
+     */
+    @Test
+    fun `Appearance is not a Home card and no preset puts one back`() {
+        assertNull("Appearance must not be a Home card", HudLayout.card("entry.appearance"))
+        assertFalse(
+            "Appearance is not in the default layout",
+            "entry.appearance" in HudLayout.defaults().visibleCards(),
+        )
+        for (preset in HudLayout.BUILT_IN_PRESETS) {
+            assertFalse(
+                "${preset.id} puts Appearance on Home",
+                "entry.appearance" in preset.layout.visibleCards(),
+            )
+        }
+        // A pasted document naming it is dropped like any other unknown card,
+        // rather than being drawn from the menu id it names.
+        val pasted = HudLayout.fromJson(
+            """{"version":1,"sections":{"hero":["entry.appearance"]}}""",
+        )!!
+        assertFalse("entry.appearance" in pasted.visibleCards())
     }
 
     @Test
