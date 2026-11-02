@@ -2638,8 +2638,8 @@ export const MENUS = [
   },
   {
     "id": "entry.appearance",
-    "title": "Appearance button on Home",
-    "about": "The Appearance button in Home's row.",
+    "title": "Appearance",
+    "about": "Theme, faces and how it all looks; on the phone it is a row in Settings.",
     "apps": [
       "phone"
     ],
@@ -2648,9 +2648,9 @@ export const MENUS = [
     "kind": "entry",
     "group": null,
     "parent": null,
-    "hide": true,
+    "hide": false,
     "collapse": false,
-    "why": "",
+    "why": "Its Home button went on 2026-11-02 - Appearance is Settings-only on the phone now - so hiding this id would hide nothing. The Settings Appearance row has its own id, settings.appearance-card.",
     "names": [
       "appearance button"
     ]
@@ -2883,6 +2883,7 @@ export const NEVER_HIDE = [
   "brain.trust.content-risk",
   "brain.trust.ledger",
   "brain.watch.watchlist",
+  "entry.appearance",
   "entry.checks",
   "entry.help",
   "entry.settings",
@@ -2910,7 +2911,6 @@ export const ALIASES = {
   "app updates": "settings.updates",
   "appearance": "settings.appearance-card",
   "appearance button": "entry.appearance",
-  "appearance button on home": "entry.appearance",
   "approval cards": "settings.approval-cards",
   "approvals": "safety.approvals",
   "as of a date": "brain.memory.as-of",

@@ -17,11 +17,16 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 
 /**
- * Six drawn glyphs (Mind, Inbox, Appearance, Live, Help, Settings - Settings
+ * Six drawn glyphs (Mind, Inbox, Reminders, Live, Help, Settings - Settings
  * joined the row on 2026-10-08, and the count here moved with it).
  * `docs/UI-AUDIT-2026-09-18.md` choice A1 - "no icon
  * font... drawn in-app like the microphone glyph is." - still holds: no icon
  * font, no vector asset.
+ *
+ * Reminders is the newest (2026-11-02): the owner asked for Appearance to be
+ * reachable only in Settings and for a Reminders button in its place on Home's
+ * row, so the eye that was here is gone with the button it belonged to. The
+ * set is still six, and still drawn to the one rule below.
  *
  * They used to be built from clipped `Box`es, and it showed: a bulb with a
  * filled base, a ring with a filled centre, a tray with a filled slot, an "i"
@@ -107,19 +112,50 @@ fun InboxIcon(tint: Color, modifier: Modifier = Modifier) {
     }
 }
 
-/** Appearance: an eye - "how this looks", the reading the label's old name
- *  ("Look") gave it, in outline to match the other three. */
+/**
+ * Reminders: a bell - the plain, universal mark for "something will go off".
+ *
+ * It opens Brain -> Coming up ("Reminders, alarms, timers and repeating jobs"),
+ * and it took Appearance's place in Home's row on 2026-11-02. A bell rather
+ * than a clock: Coming up is not one appointment at one time - it is the list
+ * of things that will interrupt the owner, and it is the mark every phone's
+ * own alarm screen uses.
+ */
 @Composable
-fun AppearanceIcon(tint: Color, modifier: Modifier = Modifier) {
+fun RemindersIcon(tint: Color, modifier: Modifier = Modifier) {
     Glyph(modifier) { stroke, u ->
-        val lids = Path().apply {
-            moveTo(2.5f * u, 12f * u)
-            cubicTo(6f * u, 6f * u, 18f * u, 6f * u, 21.5f * u, 12f * u)
-            cubicTo(18f * u, 18f * u, 6f * u, 18f * u, 2.5f * u, 12f * u)
-            close()
+        // The body: two sides rising from the rim, over a round top.
+        val bell = Path().apply {
+            moveTo(6.5f * u, 17.2f * u)
+            lineTo(6.5f * u, 11.5f * u)
+            cubicTo(6.5f * u, 8.4f * u, 8.9f * u, 6.2f * u, 12f * u, 6.2f * u)
+            cubicTo(15.1f * u, 6.2f * u, 17.5f * u, 8.4f * u, 17.5f * u, 11.5f * u)
+            lineTo(17.5f * u, 17.2f * u)
         }
-        drawPath(lids, tint, style = stroke)
-        drawCircle(tint, radius = 3f * u, center = Offset(12f * u, 12f * u), style = stroke)
+        drawPath(bell, tint, style = stroke)
+        // The rim it stands on, a little wider than the body on both sides.
+        drawLine(
+            color = tint,
+            start = Offset(4.5f * u, 17.2f * u),
+            end = Offset(19.5f * u, 17.2f * u),
+            strokeWidth = stroke.width,
+            cap = StrokeCap.Round,
+        )
+        // The clapper: a short arc hanging under the rim, in outline like the rest.
+        val clapper = Path().apply {
+            moveTo(10f * u, 17.2f * u)
+            quadraticTo(10f * u, 20.4f * u, 12f * u, 20.4f * u)
+            quadraticTo(14f * u, 20.4f * u, 14f * u, 17.2f * u)
+        }
+        drawPath(clapper, tint, style = stroke)
+        // The hanger at the top, so the bell reads as hung rather than stood.
+        drawLine(
+            color = tint,
+            start = Offset(12f * u, 3.6f * u),
+            end = Offset(12f * u, 6.2f * u),
+            strokeWidth = stroke.width,
+            cap = StrokeCap.Round,
+        )
     }
 }
 
