@@ -659,9 +659,9 @@ def t_hygiene():
              # gate-tool-actions-gap.patch (2026-11-01): ONE hunk in
              # jarvis_gate.py, four ADDED lines at the END of `_TOOL_ACTIONS`
              # (after gate-entries.patch's own last entry, `change_setting`),
-             # appended after this patch and immediately before
-             # plugin-loader.patch - it has no hunk in jarvis_hud.py's screen
-             # wrapper, so it rewrites nothing this patch wrote.
+             # appended after this patch, immediately before
+             # unknown-risk-approvable.patch - it has no hunk in jarvis_hud.py's
+             # screen wrapper, so it rewrites nothing this patch wrote.
              "gate-tool-actions-gap.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order

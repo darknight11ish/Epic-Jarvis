@@ -226,9 +226,9 @@ stack's order and cannot be moved into a folder.
 | `f01-manual-lane-gate.patch` | edits lines the core already has; it cannot be applied out of order |
 | `learning-extract-reason.patch` | edits lines the core already has; it cannot be applied out of order |
 | `attached-file.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
+| `gate-tool-actions-gap.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `unknown-risk-approvable.patch` | edits lines the core already has; it cannot be applied out of order |
 | `jobs-routes.patch` | edits lines the core already has; it cannot be applied out of order |
-| `gate-tool-actions-gap.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one

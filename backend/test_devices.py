@@ -567,8 +567,9 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # alone.
                                 "jobs-routes.patch",
                                 # gate-tool-actions-gap.patch (2026-11-01) is
-                                # appended last of the code patches, immediately
-                                # before plugin-loader.patch: ONE hunk in
+                                # appended after this patch, immediately BEFORE
+                                # unknown-risk-approvable.patch (whose guard needs
+                                # it to stay the last gate writer): ONE hunk in
                                 # jarvis_gate.py, four ADDED `_TOOL_ACTIONS` lines
                                 # at the END of the table. It removes no line at
                                 # all, so it rewrites nothing devices.patch wrote

@@ -1258,22 +1258,22 @@
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
-      "patch": "unknown-risk-approvable.patch",
+      "patch": "gate-tool-actions-gap.patch",
       "bucket": "core",
       "order": 163,
-      "why": "edits lines the core already has; it cannot be applied out of order"
+      "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
-      "patch": "jobs-routes.patch",
+      "patch": "unknown-risk-approvable.patch",
       "bucket": "core",
       "order": 164,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
-      "patch": "gate-tool-actions-gap.patch",
+      "patch": "jobs-routes.patch",
       "bucket": "core",
       "order": 165,
-      "why": "adds lines to the core (routes, gate tables or a function) but removes none"
+      "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "patch": "plugin-loader.patch",

@@ -163,10 +163,11 @@ def t_the_patch_and_the_base():
     # jarvis_hud.py (the GET /api/jobs body, the _desktop_action branch, the
     # POST route list and the initiative start-up block), no gate row and no
     # install block of its own. None of the four moves the loader's anchor.
-    # gate-tool-actions-gap.patch (2026-11-01) follows it, immediately before
-    # the loader: ONE hunk in jarvis_gate.py (four ADDED lines at the END of
-    # `_TOOL_ACTIONS`), no jarvis_hud.py hunk at all, so it cannot move the
-    # anchor either.
+    # gate-tool-actions-gap.patch (2026-11-01) precedes both, immediately
+    # before unknown-risk-approvable.patch (whose guard needs it to stay the
+    # last gate writer): ONE hunk in jarvis_gate.py (four ADDED lines at the
+    # END of `_TOOL_ACTIONS`), no jarvis_hud.py hunk at all, so it cannot move
+    # the anchor either.
     later = {"learning-extract-reason.patch", "attached-file.patch",
              "unknown-risk-approvable.patch", "jobs-routes.patch",
              "gate-tool-actions-gap.patch"}
