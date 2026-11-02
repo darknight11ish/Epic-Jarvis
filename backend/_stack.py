@@ -583,7 +583,18 @@ RATCHET = {
     #: `jarvis-backend/` these three go with the rest.
     "jarvis_extract.py": 12,
     "jarvis_models.py": 5,
-    "jarvis_skills.py": 2,
+    #: 2 -> 5 on 2026-11-02 for `skill-install-note.patch` (the skills menu's
+    #: install card): its three hunks - install()'s signature, its docstring and
+    #: the `_gate(...)` call it already makes - are the OWNER's own text, and no
+    #: patch in this walk writes any of `jarvis_skills.install()`. That file is
+    #: one of the five the patcher edits, so the walk has no stand-in for those
+    #: lines and nothing earlier in the stack could have supplied them. Honest
+    #: rather than drift, and pinned in tools/check_patch_original_text.py too
+    #: (3 hunks / 22 lines); `backend/test_skill_menu.py` applies the patch to
+    #: the published base forwards and reverses it back byte for byte. A
+    #: ratchet: it may still only go down, and the day the walk seeds a target
+    #: from `jarvis-backend/` this goes with the rest.
+    "jarvis_skills.py": 5,
 }
 
 
