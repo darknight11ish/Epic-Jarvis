@@ -3929,7 +3929,8 @@ this repository.)
                "min_seconds": 1.0,        least speech it judges (the VAD's span, about 0.4 s of words)
                "bar": "balanced",         the voice-print bar it uses, whatever commands use
                "stop_word": bool},        this PC can also hear "stop" in a barge-in clip
-  "moment":   {"enabled": bool,           [voice] one_moment_enabled (default true)
+  "moment":   {"enabled": bool,           [voice] one_moment_enabled (default true) AND the owner's own
+                                          answer (voice-flow.json; turn it off by asking - see part 3)
                "text": "One moment.",
                "key": str,                changes whenever the clip would sound different (another voice, engine, speaker, speed)
                "ready": bool,             the clip for `key` is made; GET /api/voice/moment answers at once
@@ -3956,6 +3957,15 @@ the old switch on). None is an approval
 card: interrupting only stops Jarvis's own speech, the clip is Jarvis's own
 words, the warm-up loads what is already installed, and none of them sends
 anything anywhere.
+
+**One exception, added 2026-11-01, and it is not a route either.**
+`moment.enabled` is also false when the owner has told Jarvis to stop saying
+"One moment." - "stop saying one moment" typed or spoken in Jarvis Live, or
+the `change_setting` tool with the model's own wording. That answer is saved
+by `jarvis_voice_flow.request_one_moment`, which the settings registry's
+`set_one_moment` calls; no HTTP route writes it, so the paragraph above still
+holds for the TOML file itself. Part 3 has the whole rule, including the
+damaged-file case and how to turn it back on.
 
 ### 1. Interrupting Jarvis by talking - `source=barge_in`
 
@@ -4086,6 +4096,30 @@ delay" panel showing `flow.summary` (the `label`, `median_ms` and
 `worst_ms` columns), with `flow.warm.state`. **Built 2026-09-25** (part 5),
 except the "Voice delay" panel, which neither app has yet - the one-line
 command in `backend/README.md` prints the same table.
+
+**And since 2026-11-01 the owner can switch it off by asking** - no new
+route, no new field. `flow.moment.enabled` (the value both apps already gate
+on) now means "the TOML switch is on AND the owner's own answer is not off";
+`jarvis_voice_flow.one_moment_enabled()` is that function, and the answer is
+saved in `voice-flow.json` in the settings folder (`OPENJARVIS_CONFIG_DIR`,
+else `~/.openjarvis`). So `POST /api/chat` with "stop saying one moment" (or
+"turn off the one moment message", or the model's own phrasing through the
+`change_setting` tool) changes the same value, and the next status read tells
+both apps to stay quiet - there is nothing for a client to send.
+
+- `[voice] one_moment_enabled = false` in `jarvis-framework.toml` is still
+  the PC's hard, hand-edited switch and still wins: asking for the clip back
+  answers that it is still off and names the file, rather than claiming it
+  worked.
+- A damaged or unreadable `voice-flow.json` reads as ON (the state before the
+  file existed), with `flow.moment.why` saying it is damaged - it never
+  silently changes what the owner hears.
+- The desktop's own "Say 'One moment' if I'm kept waiting" row and the
+  phone's own switch keep their existing meaning - may THIS device play it -
+  and are unchanged. Neither of them shows the PC-wide answer, which is
+  recorded in `docs/ARCHITECTURE.md` section 8 as the follow-up.
+- `flow.moment.why` names the reason: the TOML file, or "you asked Jarvis to
+  stop saying it - say \"start saying one moment again\" to bring it back".
 
 ### 4. Spoken-style answers, and speaking from the first comma (2026-09-24)
 
@@ -12371,6 +12405,18 @@ the REST route does, never a copy of its logic:
 | Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
 | Animal options (2026-09-28) | "keep the animal still", "stop the animal's nodding", "turn on the sun and moon", "turn off the weather", "use Open-Meteo for the weather", "make the animal sharper" | `jarvis_animal.set_switch()`, `jarvis_sky.handle_post()`; sharpness and frame rate go back in X-Jarvis-Route for the asking device - §93.3 |
 | How much Jarvis may interrupt you (2026-10-08) | "speak up 5 times a day", "let jarvis speak up 2 times a day", "speak up less", "speak up more", "the brief at 8pm", "the digest arrives at 7 in the morning" | `jarvis_arbiter.change()` - the same function the route calls; the raise gets the same ONE card - §123.4 |
+
+**The table above is the 2026-09-27 slice, kept as written; the real list is the
+registry's own.** Since then `BOOL_SETTINGS` grew to **34** switches (the
+universal-control pass of 2026-10-22, the Anti-Slop filter, the Jarvis calendar,
+and others), and `tools/check_feature_controls.py` fails unless every switch and
+every desktop Settings row is accounted for - so the count cannot drift silently
+here. The newest, on the owner's own ask (2026-11-01): **"stop saying one
+moment"** (or "turn off the one moment message", or the model's own wording
+through `change_setting`) calls `jarvis_settings_registry.set_one_moment`, which
+calls `jarvis_voice_flow.request_one_moment` - the same function the value both
+apps gate the clip on comes from. §17 part 3 has the wire shape; no card either
+way, and `[voice] one_moment_enabled = false` still wins.
 
 Every one of these keeps its EXISTING gate exactly:
 

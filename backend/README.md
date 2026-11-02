@@ -8427,6 +8427,26 @@ finish, an app can play a short "One moment." in the voice Jarvis is using.
 The PC makes it once per voice and keeps it; the apps decide when to play it,
 and never over the answer.
 
+**"Stop saying one moment" - added 2026-11-01, your own words:** *"id like the
+ability to tell jarvis in jarvis live to adjust any settings, includimg no
+longer saying one moment while it comprehends or calculates something"*. It
+used to be the one "One moment." switch the PC could not change: the row was
+in `jarvis_settings_registry.NOT_BY_ASKING` and answered "I cannot change that
+by asking", because each app kept its own value. Now the PC keeps your answer
+too, in `voice-flow.json` in the settings folder, and
+`/api/voice/status`'s `flow.moment.enabled` - the value BOTH apps already gate
+on - is false when either that file or `[voice] one_moment_enabled` says off.
+So in Jarvis Live you can type or say **"stop saying one moment"** (or "turn
+off the one moment message", or just ask - the model's own wording reaches the
+same setter), and **"start saying one moment again"** brings it back. No card
+either way: it is one cosmetic sentence in Jarvis's own voice, and switching
+it off only takes something away. The TOML line is still the hard switch and
+still wins - asking for it back while that says `false` answers that it is
+still off instead of pretending. **What is not done here:** the desktop
+Settings row and the phone's own switch still mean "may THIS device play it",
+and neither shows the PC-wide answer; `docs/ARCHITECTURE.md` section 8 records
+that follow-up. `docs/JARVIS-API.md` section 17 part 3 has the wire shape.
+
 **What the apps do with it (2026-09-25).** While Jarvis talks and "hey
 Jarvis" listening is on, half a second of your speech **pauses** Jarvis at
 once, and about two seconds of it go to the PC with the question above: your
@@ -14993,6 +15013,39 @@ has the phone-parity row.
   estimated exist; every top-level section is "open"-able. The exact list
   is in `jarvis_settings_registry.py`'s own module header and
   `docs/JARVIS-API.md` section 58.2/58.3.
+
+## The 2026-11-01 audit, and the switch it made reachable
+
+The counts above are the 2026-09-27 slice, kept as they were written. The
+table grew after it, and the owner's standing requirement ("tell jarvis in
+jarvis live to adjust any settings") is checked against the tables themselves
+rather than against a number here: `tools/check_feature_controls.py` fails
+unless every `BOOL_SETTINGS` switch and every `SETTINGS_ROWS` row is accounted
+for, and its current answer is **34 switches, 34 rows, 57 sections**. At the
+2026-11-01 audit, of the 34 rows on the desktop page:
+
+- **22 name a `BoolSetting` and are adjustable by asking**, one of them the
+  new `one_moment`;
+- **2 are reached by another grammar** rather than a switch: `sky-show` ("show
+  the sun and moon") and `face-auto` ("turn on auto adjust"), both through
+  `jarvis_quick._animal`;
+- **9 are refused by name, in words** (`NOT_BY_ASKING`), because the value is
+  kept by a client and this backend has no route for it: app lock, Windows
+  Hello for memory lists, floating face, click-through, follow-Windows-theme,
+  the "I heard you" sound, the "open the Jarvis bar" button, desktop
+  supervision, and autostart;
+- **1 is not a preference at all** (`spd-accept`, the spending screen's hidden
+  "accept every column" control);
+
+and, outside those 34 rows, **2 are Settings-only by the owner's own decision**
+(Accounts and API keys; Restore backup), named in `SETTINGS_ONLY`.
+
+**What changed here:** "Say \"One moment\" if I'm kept waiting" left the refused
+nine and became `one_moment`. The PC keeps that answer itself now, so the thing
+the owner hears really stops (both apps gate on `flow.moment.enabled`, which is
+this switch). "I heard you" did NOT come with it, and that is not an oversight:
+that sound is made by each app from its own two tones, and the PC never makes,
+serves or hears it - there is nothing here for a sentence to change.
 
 # Talking to an AI chatbot for you, the core: `jarvis_chatbot.py` (2026-09-28)
 

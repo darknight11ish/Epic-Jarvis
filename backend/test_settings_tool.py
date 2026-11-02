@@ -785,10 +785,17 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     # 33 since 2026-10-29: `jarvis_calendar` (the Jarvis Calendar) joined. Its
     # setter calls jarvis_local_calendar's own handle_settings(), the same
     # function its route and its typed switch call.
-    check("the count is now 33: the 23 measured on 2026-10-19, the eight added"
+    # 34 since 2026-11-01: `one_moment` ("Say \"One moment\" if I'm kept
+    # waiting") joined, on the owner's own ask. Its setter calls
+    # jarvis_voice_flow's own request_one_moment(), whose value both apps read
+    # as `flow.moment.enabled` - so the tool reaches exactly the switch they
+    # obey. It LEFT NOT_BY_ASKING at the same time; t_the_one_moment_switch_is_
+    # reachable_and_cardless below drives it for real.
+    check("the count is now 34: the 23 measured on 2026-10-19, the eight added"
           " by the universal-control pass on 2026-10-22, antislop on"
-          " 2026-10-28, and the Jarvis calendar on 2026-10-29",
-          len(R.BOOL_SETTINGS) == 33, str(len(R.BOOL_SETTINGS)))
+          " 2026-10-28, the Jarvis calendar on 2026-10-29, and one moment on"
+          " 2026-11-01",
+          len(R.BOOL_SETTINGS) == 34, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:
@@ -1072,6 +1079,55 @@ def t_the_wake_word_and_the_browser_mode_are_reachable_by_the_tool():
         R.set_wake_word, R.set_browser_mode = real_w, real_b
 
 
+def t_the_one_moment_switch_is_reachable_and_cardless():
+    """2026-11-01, the owner's own ask: "id like the ability to tell jarvis in
+    jarvis live to adjust any settings, includimg no longer saying one moment
+    while it comprehends or calculates something".
+
+    Driven here through the REAL tool (`_settings_call`), the REAL setter and
+    jarvis_voice_flow's REAL state, in this suite's temporary config folder -
+    no recording stand-in, so what is measured is the switch the apps read, not
+    a promise about it. Before this change the row was in NOT_BY_ASKING: the
+    same call was answered "I cannot change that by asking", which is the
+    refusal this test replaces.
+
+    The temporary folder is checked first, because this suite's whole safety is
+    that it can never reach the owner's own settings (see its module docstring).
+    If the voice module's path were anywhere else, this SKIPs rather than
+    writing there - a check that could not run is never a pass."""
+    import jarvis_voice_flow as VF
+    here = str(VF.settings_path()).lower()
+    if not here.startswith(str(_TMP).lower()):
+        skipped("the one_moment switch is driven for real",
+                f"jarvis_voice_flow would write {VF.settings_path()}, which is not this "
+                f"suite's temporary folder - nothing was touched")
+        return
+    check("before: the PC has \"One moment.\" on", VF.one_moment_enabled() is True,
+          repr(VF.settings()))
+    got, _steps, _events, w = run_tool("saying one moment", "off")
+    check("the model's own words reach the switch (not the page-only refusal)",
+          got.get("ok") is True and got.get("changed") is True
+          and got.get("setting") == "one_moment", repr(got))
+    check("and the PC's own answer really changed", VF.one_moment_enabled() is False,
+          repr(VF.settings()))
+    check("no card was raised, in either direction", w.cards == 0, repr(w.cards))
+    check("the answer is the setter's own sentence, never invented here",
+          "One moment" in str(got.get("said") or ""), repr(got.get("said")))
+    check("the clip route now refuses it, with the reason",
+          VF.moment().get("ok") is False and "asked Jarvis" in VF.moment().get("why", ""),
+          repr(VF.moment()))
+    got2, _s2, _e2, w2 = run_tool("the one moment message", "on")
+    check("...and the other direction puts it back",
+          got2.get("changed") is True and VF.one_moment_enabled() is True
+          and w2.cards == 0, (repr(got2), repr(VF.settings())))
+    check("the switch is a real BoolSetting with its own setter, not a special case",
+          R.find_bool_setting_words("saying one moment") is not None
+          and R.find_bool_setting_words("saying one moment").set is R.set_one_moment)
+    signs = gate_signs_in((HERE / "jarvis_settings_registry.py").read_text(encoding="utf-8"),
+                          "set_one_moment")
+    check("set_one_moment raises no card of its own", signs == [], repr(signs))
+
+
 if __name__ == "__main__":
     for fn in (t_the_tool_exists_and_is_offered_only_when_enabled,
                t_asking_and_speaking_run_the_same_function,
@@ -1097,6 +1153,7 @@ if __name__ == "__main__":
                t_every_setter_calls_a_function_that_exists,
                t_a_pending_change_cannot_back_an_i_did_it_claim,
                t_every_one_of_the_22_switches_resolves_from_its_own_names,
+               t_the_one_moment_switch_is_reachable_and_cardless,
                t_it_ships_on_so_a_turn_really_offers_it,
                t_its_description_tells_the_model_to_call_it,
                t_the_tier_rule_is_untouched_by_the_wording):
