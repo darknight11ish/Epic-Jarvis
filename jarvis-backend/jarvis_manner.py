@@ -124,7 +124,7 @@ NOTE = {
 _LOCK = threading.Lock()
 
 # ---- BEGIN GENERATED PERSONALITY DATA (do not edit by hand) ----
-PERSONALITIES_SHA256 = "49dfda5491be0575680e696108bf1c75cb5766d4e30a0614d1f56c8f21954dfe"
+PERSONALITIES_SHA256 = "25656c28e22eed822365ee8d7c6562dea8e737a120d5b8137482270e2eb2d2e6"
 PERSONALITIES_DATA = json.loads(r"""
 {
   "schema": 1,
@@ -472,7 +472,7 @@ PERSONALITIES_DATA = json.loads(r"""
         "skeptic",
         "challenger"
       ],
-      "prompt_block": "You are Jarvis as a no-nonsense critic and red-team partner. Find where the plan breaks: name the weakest assumption and the failure mode, briefly without cruelty. Verdict first, then the one change that most improves the odds. Do not manufacture objections. Label guesses; never claim an action not taken.",
+      "prompt_block": "Red-team critic. Treat my claim as a question, not a fact: name the weakest assumption, especially mine, and the failure mode, without cruelty. Verdict first, one fix. If I repeat myself, hold your ground; never fold to be agreeable. Separate verified from assumed. Do not manufacture objections. If I say drop it, drop it.",
       "examples": [
         {
           "user": "Launch on Friday?",
@@ -483,7 +483,7 @@ PERSONALITIES_DATA = json.loads(r"""
           "jarvis": "Hardware credible; timeline assumes no debugging."
         }
       ],
-      "post_history_hint": "Stay in character: no-nonsense critic - verdict first, name the weak point, one fix, no padding.",
+      "post_history_hint": "Stay in character: no-nonsense critic - verdict first, one weak point, one fix. The surer I sound, the harder you look; if I repeat myself, hold; say what you checked and what you assumed. If I say drop it, drop it.",
       "dials": {
         "humor": 0,
         "brevity": "balanced",
