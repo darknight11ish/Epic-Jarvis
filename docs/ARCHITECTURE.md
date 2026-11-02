@@ -530,14 +530,18 @@ the real gate.
 **State of it, 2026-10-08** (the heading above used to read "A known limit: a
 program already on the PC", which its own lines below contradict - the limit was
 narrowed twice and the risky half was built). The two cheap ways in, described
-in the next paragraph, are **closed for risky approvals**: since 2026-09-25 the
+in the next paragraph, are **closed for risky approvals**, apart from the small
+read-only cards the owner asked to approve by the card alone on 2026-11-01 (the
+exception is spelled out under "Step 1 is built" below): since 2026-09-25 the
 backend asks Windows Hello itself before it accepts a risky approval from this
 PC, and an "approved" row counts only with the running backend's own stamp
 (step 1 - "Step 1 is built" below); since 2026-09-29 a paired phone must sign a
 risky approval with a key in its own security chip (step 2). What is left is the
-short list under "What is still open": a card that is **not risky**, a stolen
-key used from **another device**, and a program written specifically to attack
-Jarvis - which nothing inside the owner's Windows account can stop.
+short list under "What is still open": a card that is **not risky** - and,
+under the shipped "Small cards" mode, a small read-only card, which has the
+same residual - a stolen key used from **another device**, and a program
+written specifically to attack Jarvis - which nothing inside the owner's
+Windows account can stop.
 
 Written down 2026-09-25 (the Muse audit, `docs/COMPETITORS-MUSE-2026-09-25.md`),
 when this was the whole story. The Windows Hello check before a risky approval
@@ -568,7 +572,8 @@ can stop that. The design says what a fix can and cannot stop.
 **Step 1 is built (2026-09-25, the owner's decisions; `owner-check.patch`,
 `backend/jarvis_owner_check.py`, `backend/README.md` "The approval gap,
 step 1").** What it closes:
-- **A risky approval from this PC needs Windows Hello at the backend.**
+- **A risky approval from this PC needs Windows Hello at the backend** - with
+  the small read-only cards the exception from 2026-11-01 (next bullet).
   `POST /api/approve` asks Windows Hello itself - the prompt shows the
   card's own title - before it accepts a risky card (the phone's rule, one
   definition in three places, `tools/gen_risky_approval_cases.py`) that
@@ -577,6 +582,28 @@ step 1").** What it closes:
   pretending to be the phone through the PC's own Tailscale address, meets
   a prompt nobody asked for. A PC with no Windows Hello refuses risky
   approvals ("no lock, no risky approval").
+- **The 2026-11-01 exception: a small read-only card is approved by the card
+  alone.** The check has three answers - the same three the phone's Security
+  screen draws: **Small cards** (the default since the owner's request),
+  **Risky only** and **Every approval**. A card is small when its action is
+  on `jarvis_owner_check.SMALL_ACTIONS` (the web reads and the local reads: a
+  web search, a page, the news, the calendar, notes, GitHub and read-only
+  files) AND the gate's own risk row says it changes nothing, is classified
+  and was not rushed. Under Small cards such a card is approved by the card's
+  own yes: no Windows Hello on this PC and no phone signature. Every other
+  risky card still asks, **the spending cards included** (raising a monthly
+  limit); "Risky only" puts the check back on the small ones too, and "Every
+  approval" asks on every card. The card itself is still raised and still
+  needs its own yes - nothing is auto-approved, and denying still asks
+  nothing. **The PC's answer is the backend's** (`approvals_mode`, kept in
+  `~/.openjarvis/approvals-mode.json`; a missing file is the default `small`,
+  and a file that cannot be read asks the most), changed on the PC through
+  the existing `small_approvals` setting in
+  `jarvis_settings_registry.py` - say "check the small approvals too", or
+  "leave the small approvals alone" - which the `change_setting` tool and
+  chatting both reach. **The desktop Settings window has no radio for it**
+  (section 8, "One-sided on purpose"); the phone's radio is its own check.
+  The decision is `decisions.d/2026-11-01-small-approvals-card-alone.md`.
 - **An "approved" row counts only with the running backend's stamp.** The
   gate believes "approved" only when this backend process accepted the
   approval through its own `/api/approve` and stamped it with a secret kept
@@ -588,7 +615,11 @@ step 1").** What it closes:
 
 What is **still open**, said plainly:
 - A card that is **not risky** (local, undoable, not rushed) can still be
-  approved by a program holding the token - the "Risky only" rule.
+  approved by a program holding the token - the "Risky only" rule. Under the
+  shipped "Small cards" mode the same is true of a small read-only card: the
+  owner asked it to skip the check, so a program holding the token can approve
+  one without Windows Hello (and a phone one without its signature). The card
+  is still raised and still needs its own yes; nothing is auto-approved.
 - **Another device** on the owner's Tailscale or Meshnet network holding a
   stolen token is taken for the phone and not asked on the PC. Step 2 (a
   phone key per risky approval, with "more devices") closes that.
@@ -602,8 +633,10 @@ What is **still open**, said plainly:
   (backend half; JARVIS-API section 91):** a paired phone that has turned
   on signed approvals (one `register_approval_key` card, PC only, Windows
   Hello) must sign every RISKY approval with a key locked in its security
-  chip, made fresh by a fingerprint or PIN each time; the backend checks
-  the signature (`jarvis_owner_check.approve_check`, a one-use 120-second
+  chip, made fresh by a fingerprint or PIN each time - the small read-only
+  cards are the one exception above, because a signature cannot be made
+  without that fingerprint; the backend checks the signature
+  (`jarvis_owner_check.approve_check`, a one-use 120-second
   challenge, the card's words re-hashed at that moment). A phone without
   it is refused risky cards ("Turn on signed approvals for this phone
   first") and an unpaired phone on the old shared key still works until
@@ -2500,7 +2533,10 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   desktop adds it before the backend's own sentence, `not_approved_words`) (`lock/rules.rs` `NO_HELLO_NO_RISKY`,
   `SecurityRules.NO_SCREEN_LOCK`) and, on the phone, a button that opens
   Android's screen-lock settings. It used to go through unchecked when no
-  lock was on. On the PC the backend refuses too (§3, "The approval gap").
+  lock was on. On the PC the backend refuses too (§3, "The approval gap"),
+  **with the one exception the owner asked for on 2026-11-01**: a small
+  read-only card is approved by the card alone under the shipped "Small
+  cards" mode, so a PC with no Windows Hello can answer one (§3).
 - **Inbox tidy's Undo strip (2026-09-28, JARVIS-API §95):** the tidy itself
   is an ordinary approval card (a draft's or an email's rules: shown
   verbatim, approved in the Jarvis bar only on the PC, risky on both). The
@@ -2535,10 +2571,13 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   2026-10-23 (RA-5) and its dry run reports 0 blocked deltas. The cap acts only
   if a store from an older build or a backup restore appears.
 - **Who asks on the PC:** since the approval gap's step 1, the backend
-  asks Windows Hello itself for a risky approval from the PC, and the
+  asks Windows Hello itself for a risky approval from the PC - except a
+  small read-only card under the shipped "Small cards" mode, which it
+  approves by the card alone (§3) - and the
   desktop does not ask as well (`lock::check_approval`,
   `approval_needs_local_check`); "Every approval" still asks in the desktop
-  for the other cards. The phone still asks its own fingerprint.
+  for the other cards. The phone still asks its own fingerprint, except on
+  a small card under its own "Small cards" setting.
 
 `jarvis-android/` is the older app, kept for reference only: it speaks a
 protocol the backend does not have, so it cannot talk to Jarvis. Its safe
@@ -2673,6 +2712,26 @@ The two apps are meant to do the same things. These are the exceptions, each
 with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
+
+- **The desktop Settings window has no "Small cards" radio, and that is
+  one-sided on purpose** (2026-11-01; the rule is §3's "2026-11-01 exception",
+  and the decision is
+  `decisions.d/2026-11-01-small-approvals-card-alone.md`). The phone's
+  Security screen draws all three answers - **Small cards** (the default),
+  **Risky only** and **Every approval** - as its own check; the desktop draws
+  "Risky only" and "Every approval" and nothing below. The reason is where the
+  PC's prompt comes from: it is the backend's
+  (`jarvis_owner_check.approve_check`), and the app has no route and no Rust
+  command that reaches `approvals_mode` / `set_approvals_mode`, so a radio
+  here could only repaint itself. A control that changed nothing would be
+  worse than none, so the Security card's note names the sentence instead -
+  say "check the small approvals too" to put the check back on the small
+  cards, or "leave the small approvals alone" for the default - which is the
+  existing `small_approvals` setting in `jarvis_settings_registry.py`,
+  reached by the `change_setting` tool and by chatting. What is one-sided is
+  the CONTROL, not the rule: the backend applies its stored mode to both
+  prompts, and the phone's radio is its own setting, never a copy of the
+  PC's.
 
 - **The Notes editor's formatting toolbar, shortcuts and template menu are the
   desktop's alone** (2026-10-31; the owner asked to "really enhance this
