@@ -301,6 +301,12 @@ class World:
         profile.parent.mkdir(parents=True)
         self.patches = [
             mock.patch.object(S, "_config_dir", return_value=d),
+            # ... and the owner's own "One moment." answer file (2026-11-02):
+            # that clip's status is the TOML switch AND voice-flow.json in
+            # jarvis_voice_flow's config folder, so the producer owns that
+            # folder too rather than reading this PC's (or a runner's shared)
+            # answer.
+            mock.patch.object(F, "_config_dir", return_value=d),
             mock.patch.object(V, "PROFILE_PATH", profile),
             mock.patch.object(W, "model_dir",
                               return_value=missing_models("voice-models", "wakeword")),
