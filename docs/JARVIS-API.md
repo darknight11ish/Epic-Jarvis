@@ -3510,6 +3510,23 @@ know - gets `private_aloud`, `memory_aloud` and `sensitive_aloud` all
 the apps' rule below keeps it on screen. It also gets `screen_aloud`
 **false** (the owner's decision of 2026-09-28: an answer about the screen
 stays on screen), unless the owner chose `hands_free_screen: screen_aloud`.
+
+**A Live clip on the session's own verification (2026-11-01).** The owner's
+request - "once I actively verify my voice in a single Jarvis Live session,
+Jarvis shouldn't need to re-verify my voice" - makes ONE successful strict
+check verify that whole session, so a `source=live` clip from 1.5 s up runs
+without a speaker model and `trust.window_s` is the session, not a 120 s
+window. The three read-aloud fields above are still the settings' answers, and
+they are still ANDed with "the voice passed a real check" - for these clips
+"the real check" is the one that verified the SESSION, so its `strictness`
+travels with them (a session verified at `very_strict` keeps what that check
+earned; one verified at `balanced` does not read a private answer aloud). No
+setting is implied or loosened: a sensitive saved fact still needs
+`sensitive_memory: sensitive_aloud`, a private answer still needs
+`privacy: voice_is_enough`, and `screen_aloud` is unchanged. A >= 2.0 s clip
+still gets the silent strict check itself (what refuses another voice, and what
+a read-aloud answer needs), and a failed check or a re-enrolled print voids the
+session's verification.
 Under the default, `same_as_button`, nothing changes. The utterance route itself still reads a
 request with no `?source=` as `push_to_talk` (that line is in the owner's
 `jarvis_hud.py`), so **send `source` on every clip**: `push_to_talk` for

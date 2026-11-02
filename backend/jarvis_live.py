@@ -215,16 +215,70 @@ APP_STARTS = ("button", "tray", "hotkey")
 TRUST_LIVE = "live"
 TRUST_VOICE_STARTED = "live_voice"
 
-#: Session trust (owner's refinement, 2026-10-18): a clip >= TRUST_SPOT_S runs
-#: the full strict check and refreshes the window; 1.5-2.0 s clips run on the
-#: session's trust without refreshing; the window dies after TRUST_WINDOW_S or
-#: TRUST_MAX_SHORT short clips. The first clip is always a strict >= 2.0 s check.
+#: Session verification (the owner's request of 2026-11-01, replacing the
+#: 2026-10-18 window): "once I actively verify my voice in a single Jarvis
+#: Live session, Jarvis shouldn't need to re-verify my voice".
+#:
+#: ONE successful check verifies the whole session. The first clip must be a
+#: full sentence (>= TRUST_FIRST_S) and gets the real strict check; from then
+#: on NOTHING in this session asks the owner to verify again - a 1.5-2.0 s clip
+#: runs on the session's own trust with no speaker model, and the old
+#: TRUST_WINDOW_S / TRUST_MAX_SHORT expiry is gone, replaced by
+#: TRUST_SESSION_S. That expiry was what put "Say a full sentence so I can
+#: re-check your voice" back on the screen two minutes after the owner had
+#: already verified: it counted a window instead of the session.
+#:
+#: The strict check itself STILL RUNS, silently, on a >= TRUST_SPOT_S clip.
+#: That is not the owner being asked to verify again, and it is kept on
+#: purpose: it is what stops another voice in the room from being taken for
+#: the owner (the same rule as before - a failed one refuses that clip and
+#: ends the session's trust), and it is the real check a private answer needs
+#: before it may be read aloud (`_really_checked`). Session trust ends with
+#: the session, a failed or erroring check, a different device, or the
+#: enrolled print changing - see `_trust_print_changed`.
 TRUST_SPOT_S = 2.0
 TRUST_STEADY_S = 1.5
 TRUST_FIRST_S = 2.0
-TRUST_WINDOW_S = 120.0
-TRUST_MAX_SHORT = 16
+#: The whole session, in seconds - the value status reports as "window_s" now
+#: that the session (not a 120 s window) is the unit. A Live session is capped
+#: by MAX_MINUTES (opts.py's own limit), far below this.
+TRUST_SESSION_S = 2 * 3600.0
 SAY_RECHECK = "Say a full sentence so I can re-check your voice."
+
+
+def print_identity(device, label: str = "") -> str:
+    """The enrolled voice print a Live clip from `device` is checked against,
+    as one cheap identity: its label, the file's size and its write time.
+
+    It exists so a session's verification belongs to ONE print. A re-enrol (or
+    a re-train, or a different speaker model) rewrites that file, so a session
+    verified against the old print is not trusted against the new one - the
+    next clip is checked again rather than the session carrying on as if
+    nothing changed.
+
+    It never reads the print, keeps nothing and logs nothing. "" means it
+    could not be worked out at all - a jarvis_voice.py without `lookup_order`,
+    or a print that is not on disk. An empty identity is never treated as a
+    change: the guard simply has nothing to compare, and the check itself
+    stays the only thing that ever marks a session verified.
+    """
+    dev = _norm_device(device)
+    try:
+        import jarvis_voice as V
+        order = [(str(n), p) for n, p in (V.lookup_order(dev) or [])]
+    except Exception:
+        return ""
+    want = str(label or "").strip()
+    for name, path in order:
+        if want and name != want:
+            continue
+        try:
+            st = Path(path).stat()
+        except Exception:
+            continue
+        return f"{name}|{int(st.st_size)}|{int(st.st_mtime_ns)}"
+    return ""
+
 
 #: The ONE injected Live lane URL. The preset-lane patch will set this (or
 #: JARVIS_LIVE_OLLAMA_URL) to the 2080 SUPER's :11435; nothing else here names
@@ -331,9 +385,17 @@ def live_tool_limit() -> int:
 
 
 def live_limits() -> dict:
-    """The Live-only limits exposed in status; `[live]` may override them."""
-    return {"trust_window_s": _live_int("trust_window_s", int(TRUST_WINDOW_S), 10, 3600),
-            "trust_max_short_clips": _live_int("trust_max_short_clips", TRUST_MAX_SHORT, 1, 200),
+    """The Live-only limits exposed in status; `[live]` may override them.
+
+    `trust_window_s` is the SESSION now (`TRUST_SESSION_S`), and
+    `trust_max_short_clips` is 0 - no cap - because one successful check
+    verifies the whole session (the owner's request of 2026-11-01). The old
+    `[live] trust_window_s` and `[live] trust_max_short_clips` keys are
+    deliberately NOT read any more: an installed settings file still carrying
+    `trust_window_s = 120` must not put the "say a full sentence so I can
+    re-check your voice" line back two minutes after the owner verified.
+    """
+    return {"trust_window_s": int(TRUST_SESSION_S), "trust_max_short_clips": 0,
             "trust_first_s": TRUST_FIRST_S, "trust_steady_s": TRUST_STEADY_S,
             "trust_spot_s": TRUST_SPOT_S,
             "context_tokens": _live_int("context_tokens", 16384, 4096, 65536),
@@ -585,8 +647,12 @@ MODEL_NOTE = (
     "This is a live spoken conversation. The owner's very short replies, like yes or no, "
     "cannot be checked by their voice, so do not end with a yes-or-no question: when you "
     "need a choice, name the options in a few words each, so the owner can say one as a "
-    "full phrase. If these words were clearly said to someone else in the room and not to "
-    "you, reply with exactly " + SIDE_TALK_MARK + " and nothing else.")
+    "full phrase. When you already have the answer in hand - a tool result, a page you "
+    "read, a quick fact - SAY it: never answer that it is on the screen instead of saying "
+    "it, and use a screen line only for what you truly cannot say aloud, such as a table "
+    "of numbers, a picture or a long list. If these words were clearly said to someone "
+    "else in the room and not to you, reply with exactly " + SIDE_TALK_MARK + " and "
+    "nothing else.")
 
 
 def is_side_talk(answer) -> bool:
@@ -921,9 +987,11 @@ class Live:
         self.crisis = False
         self.awake_seen = False       # the power mode was not standby at some tick
         self._gen = 0
-        # Session trust (owner's refinement, 2026-10-18): verified time,
-        # short clips since it, and whether a 1.5-2.0 s clip may run without
-        # another strict check. Numbers/fixed words only - never audio or text.
+        # Session verification (the owner's request of 2026-11-01): the time
+        # ONE successful strict check this session happened, what it proved
+        # (its strictness, so an answer's read-aloud flags keep what the real
+        # check earned), and which enrolled print it verified. Numbers and
+        # fixed words only - never audio or text.
         self.trust_verified_at = 0.0
         self.trust_short_since = 0
         self.trust_active = False
@@ -932,6 +1000,9 @@ class Live:
         self.trust_checks = 0
         self.trust_short_clips = 0
         self.trust_aborts = 0
+        self.trust_strictness = ""
+        self.trust_print = ""
+        self.trust_print_id = ""
         self._warm = {}
 
     # -- plumbing" -----------------------------------------------------------------
@@ -1262,7 +1333,7 @@ class Live:
         if changed:
             self._emit()
 
-    # -- session trust (owner's refinement, 2026-10-18) -------------------------
+    # -- session verification (the owner's request of 2026-11-01) --------------
     def _trust_start(self) -> None:
         self.trust_verified_at = 0.0
         self.trust_short_since = 0
@@ -1272,36 +1343,65 @@ class Live:
         self.trust_checks = 0
         self.trust_short_clips = 0
         self.trust_aborts = 0
+        self.trust_strictness = ""
+        self.trust_print = ""
+        self.trust_print_id = ""
 
     def _trust_end(self) -> None:
         self.trust_active = False
         self.trust_first_done = False
         self.trust_expired = "ended"
+        self.trust_strictness = ""
+        self.trust_print = ""
+        self.trust_print_id = ""
 
-    def _trust_expire(self, now: float) -> None:
-        if self.trust_active and self.trust_verified_at:
-            if now - self.trust_verified_at >= float(live_limits()["trust_window_s"]):
-                self.trust_active = False
-                self.trust_expired = "time"
-        if self.trust_active and self.trust_short_since >= int(live_limits()["trust_max_short_clips"]):
-            self.trust_active = False
-            self.trust_expired = "count"
+    def _trust_print_changed(self, device) -> bool:
+        """Has the enrolled print this session was verified against changed?
+
+        Called with the lock held, once per clip. A re-enrol rewrites the
+        print's file, so its identity differs: this session's verification is
+        dropped and the next full sentence is checked again - "a changed voice
+        is never treated as verified". An identity that cannot be worked out at
+        all ("" on either side) is never read as a change, so a machine where
+        the print's file cannot be read is not pushed into asking the owner to
+        verify again; the check itself is unchanged there.
+        """
+        if not self.trust_first_done:
+            return False
+        was = self.trust_print_id
+        if not was:
+            return False
+        now_id = print_identity(device, self.trust_print)
+        if not now_id or now_id == was:
+            return False
+        self.trust_active = False
+        self.trust_first_done = False
+        self.trust_expired = "print"
+        self.trust_strictness = ""
+        self.trust_print = ""
+        self.trust_print_id = ""
+        return True
 
     def trust_decision(self, device, seconds) -> dict:
         """What to do with one Live clip, by its speech seconds.
 
         Returns {"action": ...}: "check" (run the full strict check and, on a
-        pass, refresh), "trusted_short" (1.5-2.0 s on session trust, no
-        refresh), "refuse_first"/"refuse_stale" (say a full sentence), or
-        "too_short" (the old under-1.5 s path). No audio/text is read here.
-        A session that is off, on another device, or paused-unknown fails
-        closed with "refuse_stale".
+        pass, verify this session), "trusted" (any 1.5 s+ clip after that
+        check: session trust, NO speaker model and nothing said about it),
+        "refuse_first"/"refuse_stale" (say a full sentence), or "too_short"
+        (the old under-1.5 s path). No audio/text is read here.
+
+        The owner's request of 2026-11-01 is why there is no window any more:
+        one successful check covers the session, so nothing asks the owner to
+        verify again for as long as it lasts. A session that is off, on another
+        device, or paused-unknown fails closed with "refuse_stale"; a session
+        whose verification was voided by a failed check or a re-enrolled print
+        asks for a full sentence once, exactly like a new session.
         """
         with self._lock:
             if not self._on() or _norm_device(device) != self.device:
                 return {"action": "refuse_stale", "words": SAY_RECHECK}
-            now = self.clock()
-            self._trust_expire(now)
+            self._trust_print_changed(device)
             try:
                 spoken = float(seconds or 0.0)
             except (TypeError, ValueError):
@@ -1311,37 +1411,53 @@ class Live:
                     return {"action": "refuse_first", "words": SAY_RECHECK}
                 return {"action": "check"}
             if spoken >= TRUST_SPOT_S:
+                # Still the silent spot check: it is what refuses a voice that
+                # is not the owner's, and what lets a private answer be read
+                # aloud. Nothing is said to the owner about it.
                 return {"action": "check"}
             if spoken >= TRUST_STEADY_S:
                 if self.trust_active:
-                    return {"action": "trusted_short"}
+                    # The strictness the session's own check earned travels
+                    # with it: an answer that uses what Jarvis remembers may be
+                    # read aloud on this clip exactly as it could on the clip
+                    # that passed (the owner's complaint of 2026-11-01: Live
+                    # saying "it's on your screen" for an answer it could say).
+                    return {"action": "trusted",
+                            "strictness": self.trust_strictness}
                 return {"action": "refuse_stale", "words": SAY_RECHECK}
             return {"action": "too_short"}
 
-    def note_verified(self, device) -> dict:
-        """A >= 2.0 s clip passed the full strict check: refresh the window."""
+    def note_verified(self, device, strictness: str = "", label: str = "") -> dict:
+        """A >= 2.0 s clip passed the full strict check: this session is verified.
+
+        `strictness` is the verdict's own ("very_strict", "balanced"), kept so
+        the clips that follow on session trust carry what this real check
+        proved; `label` is the print that passed ("phone", "desktop",
+        "general"), so a re-enrol can be told apart from the print verified
+        here. Neither is ever audio or text."""
         with self._lock:
-            self._trust_expire(self.clock())
             self.trust_verified_at = self.clock()
             self.trust_short_since = 0
             self.trust_active = True
             self.trust_first_done = True
             self.trust_expired = ""
             self.trust_checks += 1
+            self.trust_strictness = str(strictness or "")[:40]
+            self.trust_print = str(label or "")[:40]
+            self.trust_print_id = print_identity(device, self.trust_print)
             state = self.trust_state()
         _audit("voice.live", {"did": "trust_refresh", "device": _norm_device(device),
                               "short_since": state["short_clips_since"],
-                              "window_s": state["window_s"]})
+                              "window_s": state["window_s"],
+                              "strictness": state["strictness"]})
         return state
 
     def note_trusted_short(self, device) -> dict:
-        """One 1.5-2.0 s clip transcribed on session trust (no refresh)."""
+        """One 1.5 s+ clip transcribed on the session's verification."""
         with self._lock:
-            self._trust_expire(self.clock())
             if self.trust_active:
                 self.trust_short_since += 1
                 self.trust_short_clips += 1
-                self._trust_expire(self.clock())
             state = self.trust_state()
         _audit("voice.live", {"did": "trust_short", "device": _norm_device(device),
                               "short_since": state["short_clips_since"],
@@ -1355,6 +1471,9 @@ class Live:
             self.trust_active = False
             self.trust_first_done = False
             self.trust_expired = str(why or "check_failed")[:40]
+            self.trust_strictness = ""
+            self.trust_print = ""
+            self.trust_print_id = ""
             self.trust_aborts += 1
             state = self.trust_state()
         _audit("voice.live", {"did": "trust_abort", "why": self.trust_expired,
@@ -1362,10 +1481,14 @@ class Live:
         return state
 
     def trust_state(self) -> dict:
-        """Honest numbers for status/audit: no words, no audio."""
+        """Honest numbers for status/audit: no words, no audio.
+
+        `window_s` is the whole session now (the owner's request of
+        2026-11-01), and `max_short_clips` is 0 - no cap. Both are kept in the
+        payload so an app that reads them goes on working.
+        """
         with self._lock:
             now = self.clock()
-            self._trust_expire(now)
             last = self.trust_verified_at
             return {"active": bool(self.trust_active and self._on()),
                     "first_clip_done": bool(self.trust_first_done),
@@ -1376,6 +1499,8 @@ class Live:
                     "short_clips_total": int(self.trust_short_clips),
                     "checks": int(self.trust_checks),
                     "aborts": int(self.trust_aborts),
+                    "strictness": self.trust_strictness or None,
+                    "print": self.trust_print or None,
                     "window_s": int(live_limits()["trust_window_s"]),
                     "max_short_clips": int(live_limits()["trust_max_short_clips"]),
                     "expired": self.trust_expired or None,
@@ -1567,6 +1692,7 @@ class Live:
                     "first_clip_done": False, "last_verified_at": None,
                     "last_verified_ago_s": None, "short_clips_since": 0,
                     "short_clips_total": 0, "checks": 0, "aborts": 0,
+                    "strictness": None, "print": None,
                     "window_s": int(live_limits()["trust_window_s"]),
                     "max_short_clips": int(live_limits()["trust_max_short_clips"]),
                     "expired": self.trust_expired or None,
