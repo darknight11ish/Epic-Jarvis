@@ -2,6 +2,8 @@ package com.jarvis.client.data
 
 import com.jarvis.client.FaceState
 import com.jarvis.client.net.ChatHistory
+import com.jarvis.client.service.WakeListen
+import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -136,6 +138,25 @@ enum class PipLayout(val aspectW: Int, val aspectH: Int) {
     /** Whether this layout draws one short fixed line under its face. */
     val oneLineShown: Boolean get() = this == LIVE_OFF
 
+    /**
+     * Whether a RUNNING voice turn's one word ([PipWords.working]) is drawn over
+     * this layout - the owner's ask of 2026-11-02: while the small window is up,
+     * saying "hey Jarvis" should show that it is working.
+     *
+     * The two layouts that would otherwise say nothing draw it: [FACE] and
+     * [THREAD]. It is deliberately NOT drawn for:
+     *  - [HIDDEN] - hidden content outranks everything, and the window says its
+     *    one locked sentence and nothing else (§4, §9.1);
+     *  - [LIVE] and [LIVE_OFF] - they already carry their own status line, and a
+     *    second one would say two things at once;
+     *  - [OFF] - no window exists.
+     *
+     * It is a property of the LAYOUT (which shapes have room for the word), not
+     * of the turn: whether a word exists at all is [PipWords.working]'s answer,
+     * so the window can never invent one.
+     */
+    val turnWordShown: Boolean get() = this == FACE || this == THREAD
+
     /** Whether this layout draws the last few messages. */
     val threadShown: Boolean get() = this == THREAD
 
@@ -263,6 +284,46 @@ object PipWords {
         state == FaceState.SPEAKING -> SPEAKING
         state == FaceState.ERROR -> PROBLEM
         else -> STANDING_BY
+    }
+
+    /**
+     * The ONE word the small window shows while a voice turn is actually
+     * running, or null when nothing is happening.
+     *
+     * The owner's ask of 2026-11-02: *"whenever jarvis is in picture-in-picture
+     * mode ... I would like to be able to say hey jarvis to be able to say
+     * something to jarvis and have jarvis process what I said."* The reply is
+     * spoken, so the window's job is to show that he was heard - the same three
+     * words Home uses, and nothing else.
+     *
+     * WHY THE WAKE LISTENER IS AN INPUT. A push-to-talk turn has a
+     * [VoiceSession.Phase.CAPTURING] stretch, so the phase alone says
+     * "Listening". A "hey Jarvis" turn does NOT: the wake service records the
+     * sentence first and only calls the desktop afterwards, when the phase
+     * becomes VERIFYING. While the owner is speaking, the phase is still
+     * [VoiceSession.Phase.OFF] - so the listener's own [WakeListen.Heard] is
+     * what says the microphone has him. That is the only listener state read
+     * here: a listener that is merely WAITING for the phrase
+     * ([WakeListen.Listening]) draws nothing, because the resting window stays
+     * the face alone - the owner's 2026-10-31 revision ("just keep the model
+     * there without the wording"). So there is never a permanent word in it.
+     *
+     * @param phase this phone's voice turn, from
+     *   [com.jarvis.client.JarvisRuntime.voice]
+     * @param wake what the "hey Jarvis" listener is doing
+     *   ([com.jarvis.client.service.WakeWordService.state])
+     */
+    fun working(phase: VoiceSession.Phase, wake: WakeListen): String? = when (phase) {
+        // The talk button's stretch: the microphone is open and he is talking.
+        VoiceSession.Phase.CAPTURING -> LISTENING
+        // The desktop is checking the voice, then the model has the words. One
+        // word for both: from the owner's side "it is working on what I said".
+        VoiceSession.Phase.VERIFYING -> THINKING
+        VoiceSession.Phase.THINKING -> THINKING
+        VoiceSession.Phase.SPEAKING -> SPEAKING
+        // No turn has reached the desktop yet. Only the listener RECORDING the
+        // sentence (Heard) is worth a word; mere waiting for the phrase is not.
+        VoiceSession.Phase.OFF -> if (wake is WakeListen.Heard) LISTENING else null
     }
 }
 

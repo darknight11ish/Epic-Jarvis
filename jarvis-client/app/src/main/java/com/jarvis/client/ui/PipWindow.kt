@@ -57,9 +57,15 @@ import kotlinx.coroutines.launch
  *
  * WHAT IT MAY SHOW, in the design's own list (§4): the face, and - in Jarvis
  * Live - its status line and two ICON controls (end, mute). It draws NO answer
- * text and NO state word in the normal window (the owner's revision of
+ * text and NO resting state word in the normal window (the owner's revision of
  * 2026-10-31: "just keep the model there without the wording", after seeing the
  * face squeezed beside "Standing by" and a cut-off sentence), and nothing else.
+ * The ONE exception since 2026-11-02 is the word a RUNNING voice turn shows
+ * ([word], from `PipWords.working`): "Listening", "Thinking" or "Speaking", and
+ * only while it is happening - the owner asked to say "hey Jarvis" at the small
+ * window and see that it is working. It is never a transcript line and never
+ * the answer (§4.6 allows the state word and nothing else), and it is not drawn
+ * in the hidden, Off or Live layouts.
  * No approval's title, body, plan, recipients, search words or file names; no
  * card; no setting; no pairing token, server address or key. Nothing here
  * approves, denies, sends or forgets anything: the window's only system action
@@ -89,6 +95,17 @@ internal fun PipWindow(
     answer: String,
     /** What the conversation shows ([com.jarvis.client.net.ChatSession.thread]). */
     thread: List<ChatHistory.Exchange>,
+    /**
+     * The ONE word a running voice turn may show ([PipWords.working]), or null.
+     *
+     * Passed in rather than read here, so this window stays a pure function of
+     * its arguments and the word can only ever be the fixed one MainActivity
+     * computed from the voice phase and the wake listener's state. Since
+     * 2026-11-02 the owner can say "hey Jarvis" at the small window - the word
+     * is how he sees that it heard him, because the answer itself is spoken and
+     * never drawn (§4.6).
+     */
+    word: String?,
 ) {
     val chrome = LocalChrome.current
     Box(
@@ -111,6 +128,23 @@ internal fun PipWindow(
             PipLayout.LIVE_OFF -> PipFaceLine(face, PipWords.LIVE_OFF)
             PipLayout.THREAD -> PipThread(thread)
             PipLayout.LIVE -> PipLive(face)
+        }
+        // The turn word (2026-11-02): over the face in mode 1 and over the
+        // conversation in mode 2, and NOWHERE else - the hidden window keeps
+        // its one locked sentence, and Live already has its own status line.
+        // It is drawn OUTSIDE the `when` above, so no layout branch can grow a
+        // second copy of it, and it disappears the moment [word] is null.
+        if (word != null && layout.turnWordShown) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(chrome.well.copy(alpha = OVERLAY_ALPHA))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                PipLine(word, chrome.textHi, maxLines = 1)
+            }
         }
     }
 }

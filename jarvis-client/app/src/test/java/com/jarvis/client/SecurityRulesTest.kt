@@ -48,11 +48,13 @@ class SecurityRulesTest {
     // ---------------------------------------------------------- defaults --
 
     @Test
-    fun `the defaults are today's behaviour`() {
+    fun `the defaults are the shipped ones`() {
         val d = Security()
         assertFalse(d.appLock)
         assertEquals(RelockAfter.ONE_MINUTE, d.relockAfter)
-        assertEquals(ApprovalCheck.RISKY, d.approvals)
+        // ApprovalCheck.SMALL is the owner's request of 2026-11-01 and the
+        // shipped default since it. RISKY stays a choice: it is today's rule.
+        assertEquals(ApprovalCheck.SMALL, d.approvals)
         assertFalse(d.privateLists)
         assertEquals(CheckMethod.FINGERPRINT_OR_PIN, d.method)
         assertFalse(d.anyLockOn)
@@ -70,10 +72,88 @@ class SecurityRulesTest {
     @Test
     fun `every approval asks for the check, and risky only never asks for less than today`() {
         val every = Security(approvals = ApprovalCheck.EVERY)
+        val riskyOnly = Security(approvals = ApprovalCheck.RISKY)
         for (item in listOf(safe, outbound, irreversible, unclassified, rushed)) {
             assertTrue(SecurityRules.approvalNeedsCheck(every, item))
-            assertEquals(SecurityRules.riskyByToday(item), SecurityRules.approvalNeedsCheck(Security(), item))
+            assertEquals(SecurityRules.riskyByToday(item), SecurityRules.approvalNeedsCheck(riskyOnly, item))
         }
+    }
+
+    // ------------------------------------------------ the small cards ----
+
+    /** The owner's own example: one web search, outbound and undoable. */
+    private val search = PendingItem(
+        id = "w",
+        action = "search_the_web",
+        risk = Risk(reversible = "yes", reach = "outbound", classified = true),
+    )
+
+    /** A local read: NOT risky today, and small all the same. */
+    private val calendarRead = PendingItem(
+        id = "c",
+        action = "calendar_read",
+        risk = Risk(reversible = "yes", reach = "local", classified = true),
+    )
+
+    @Test
+    fun `a small card is a read-only action the gate says changes nothing`() {
+        assertTrue(SecurityRules.isSmall(search))
+        assertTrue(SecurityRules.isSmall(calendarRead))
+        // Outbound, so still risky: small and risky are two different answers.
+        assertTrue(SecurityRules.riskyByToday(search))
+        assertFalse(SecurityRules.riskyByToday(calendarRead))
+        // The same action, but the gate says it cannot be undone: not small.
+        assertFalse(SecurityRules.isSmall(search.copy(risk = Risk(reversible = "no", reach = "outbound", classified = true))))
+        // Not classified: not small (the fail-closed direction).
+        assertFalse(SecurityRules.isSmall(search.copy(risk = Risk(reversible = "yes", reach = "outbound", classified = false))))
+        // A rush latch: not small.
+        assertFalse(SecurityRules.isSmall(search.copy(raised = Raised(code = "rushed", quote = "hurry", countToday = 1))))
+        // A write, a spend, a send, a delete, a service stop: never on the list.
+        for (action in listOf("send_email", "spend_money", "docker_service_stop", "delete_calendar_event", "")) {
+            assertFalse(action, SecurityRules.isSmall(search.copy(action = action)))
+        }
+        // No action at all (the shapes the older tests build): not small.
+        assertFalse(SecurityRules.isSmall(outbound))
+    }
+
+    @Test
+    fun `the default leaves the small cards alone and every other risky card still asks`() {
+        val shopping = Security()
+        assertFalse(SecurityRules.approvalNeedsCheck(shopping, search))
+        assertFalse(SecurityRules.approvalNeedsCheck(shopping, calendarRead))
+        // Everything risky that is not small still asks, exactly as today.
+        for (item in listOf(outbound, irreversible, unclassified, rushed)) {
+            assertTrue(SecurityRules.approvalNeedsCheck(shopping, item))
+        }
+        // "Risky only" is today's rule, small cards included.
+        val riskyOnly = Security(approvals = ApprovalCheck.RISKY)
+        assertTrue(SecurityRules.approvalNeedsCheck(riskyOnly, search))
+        // "Every approval" asks even for the local reads.
+        val every = Security(approvals = ApprovalCheck.EVERY)
+        assertTrue(SecurityRules.approvalNeedsCheck(every, calendarRead))
+    }
+
+    @Test
+    fun `a card that must not ask is never signed either`() {
+        // A signature can only be made after a fingerprint, so the signed path
+        // follows the check, not the risk flag.
+        assertFalse(SecurityRules.approveTakesSignedPath(Security(), search))
+        assertTrue(SecurityRules.approveTakesSignedPath(Security(approvals = ApprovalCheck.RISKY), search))
+        assertFalse(SecurityRules.approveTakesSignedPath(Security(), calendarRead))
+        assertTrue(SecurityRules.approveTakesSignedPath(Security(approvals = ApprovalCheck.EVERY), outbound))
+    }
+
+    @Test
+    fun `moving down the three choices loosens, moving up does not`() {
+        val small = Security()
+        val riskyOnly = Security(approvals = ApprovalCheck.RISKY)
+        val every = Security(approvals = ApprovalCheck.EVERY)
+        assertTrue(SecurityRules.loosens(riskyOnly, small))    // today's rule -> small
+        assertTrue(SecurityRules.loosens(every, riskyOnly))
+        assertTrue(SecurityRules.loosens(every, small))
+        assertFalse(SecurityRules.loosens(small, riskyOnly))   // stricter: instant
+        assertFalse(SecurityRules.loosens(small, every))
+        assertFalse(SecurityRules.loosens(riskyOnly, every))
     }
 
     // ------------------------------------------------- no screen lock ----
@@ -201,7 +281,20 @@ class SecurityRulesTest {
                 Security(true, RelockAfter.FIVE_MINUTES, ApprovalCheck.EVERY, true, CheckMethod.FINGERPRINT_ONLY),
             ),
         )
-        assertEquals("App lock off, risky approvals ask, memory lists hidden.", SecurityRules.summary(Security(privateLists = true)))
+        // The default since 2026-11-01 says what it leaves alone, and the
+        // stricter choice keeps its own sentence: both are checked.
+        assertEquals(
+            "App lock off, risky approvals ask, apart from small ones, memory lists hidden.",
+            SecurityRules.summary(Security(privateLists = true)),
+        )
+        assertEquals(
+            "App lock off, risky approvals ask, memory lists hidden.",
+            SecurityRules.summary(Security(privateLists = true, approvals = ApprovalCheck.RISKY)),
+        )
+        assertTrue(
+            SecurityRules.summary(Security())
+                .startsWith("Off. Your fingerprint or PIN is asked for risky approvals only, apart from"),
+        )
     }
 
     // -------------------------------------------------------- storage ----
@@ -213,6 +306,21 @@ class SecurityRulesTest {
         assertEquals(s, SecurityRules.fromStored { stored[it] })
         assertEquals(Security(), SecurityRules.fromStored { null })
         assertEquals(Security(), SecurityRules.fromStored { "garbage" })
+    }
+
+    @Test
+    fun `the small choice is saved by its own word and an unreadable one is the default`() {
+        // A phone that has chosen "Small cards" keeps it; one that has never
+        // chosen, or saved something unreadable, is the shipped default.
+        val small = Security(approvals = ApprovalCheck.SMALL)
+        val stored = SecurityRules.toStored(small)
+        assertEquals(small, SecurityRules.fromStored { stored[it] })
+        assertEquals("small", stored[SecurityRules.KEY_APPROVALS])
+        assertEquals(ApprovalCheck.SMALL, ApprovalCheck.fromWire("small"))
+        assertEquals(ApprovalCheck.SMALL, ApprovalCheck.fromWire(null))
+        assertEquals(ApprovalCheck.SMALL, ApprovalCheck.fromWire("nonsense"))
+        assertEquals(ApprovalCheck.RISKY, ApprovalCheck.fromWire("risky"))
+        assertEquals(ApprovalCheck.EVERY, ApprovalCheck.fromWire("every"))
     }
 
     // ---------------------------------------------------- lock session ----

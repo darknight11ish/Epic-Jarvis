@@ -107,6 +107,25 @@ except Exception as _exc:                                  # noqa: BLE001
     GATE = None
     print(f"  NOTE  jarvis_gate could not be imported ({type(_exc).__name__}: {_exc})")
 
+# `control_computer` is driven on the REAL turn path in cases 4 and 8, only to
+# prove it still raises its own card while a grant is live - not to read a real
+# screen. Planning it reads a window through `jarvis_ui_control`'s injectable
+# reader, whose default needs Windows + `uiautomation`; on the CI runner that
+# module is absent, so the tool refused BEFORE any card
+# ("no UI reader was given and 'uiautomation' is not installed") and the Linux
+# run failed for a reason that had nothing to do with grants. The reader is
+# replaced with the two windows those cases name. No other check here reads a
+# screen, and the app's own behaviour is unchanged.
+try:
+    import jarvis_ui_control as _UIC  # noqa: E402
+
+    _UIC._default_read = lambda window: {
+        "Notepad": [{"name": "Save", "automation_id": "save", "enabled": True}],
+        "Booking - Chrome": [{"name": "Pay now", "automation_id": "pay", "enabled": True}],
+    }.get(window, [])
+except Exception as _exc:                                  # noqa: BLE001
+    print(f"  NOTE  jarvis_ui_control could not be imported ({type(_exc).__name__}: {_exc})")
+
 PASSED, FAILED, SKIPPED = [], [], []
 
 

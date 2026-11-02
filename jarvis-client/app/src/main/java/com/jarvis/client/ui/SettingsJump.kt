@@ -143,5 +143,13 @@ object SettingsJump {
         // arrives with the HUD half - so the words are this section's own title
         // rather than a desktop jump entry's.
         Entry("Jarvis Calendar", "calendar"),
+        // "Home screen" (2026-11-02): the phone's own Edit HUD - the four
+        // sections, the read-only built-in arrangements, the owner's copies and
+        // the JSON. It is the last row on the screen, so it is the last entry
+        // here too. The label is this section's own title: the desktop's jump
+        // list has no row of that name to copy words from, because the desktop
+        // edits its own HUD from the HUD window's header rather than from
+        // Settings (docs/ARCHITECTURE.md section 8).
+        Entry("Home screen", "edit-hud"),
     )
 }

@@ -182,8 +182,15 @@ fun SecurityScreen(
                         )
                         Gap(6)
                         Text(
-                            "Risky means it leaves your PC, cannot be undone, was not labelled " +
-                                "by Jarvis, or something tried to rush you. Denying never asks.",
+                            // The owner's request of 2026-11-01: a small card is
+                            // approved by the card alone. The list itself is
+                            // SecurityRules.SMALL_ACTIONS; these words say what it
+                            // means without naming every action on it.
+                            "Small cards are the read-only ones - a web search, a page, " +
+                                "the news, reading your calendar or notes - and they are " +
+                                "approved by the card alone. Risky still asks for anything " +
+                                "that leaves your PC with your words, cannot be undone, was " +
+                                "not labelled by Jarvis, or was rushed. Denying never asks.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,
                         )

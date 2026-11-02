@@ -1,5 +1,5 @@
 {
-  "_about": "Which approvals are risky (need Windows Hello on the PC, the fingerprint or PIN on the phone), and what that check's prompt says. `risky` and `message` are backend/jarvis_owner_check.py's own answers for each /api/pending row; the desktop (lock/rules.rs) and the phone (SecurityRules) must agree. Made by tools/gen_risky_approval_cases.py. Do not edit by hand: re-run the tool.",
+  "_about": "Which approvals are risky (need Windows Hello on the PC, the fingerprint or PIN on the phone) and which are SMALL (read-only, approved by the card alone - the owner's request of 2026-11-01), and what the check's prompt says. `risky`, `small` and `message` are backend/jarvis_owner_check.py's own answers for each /api/pending row; the desktop (lock/rules.rs) and the phone (SecurityRules) must agree. Made by tools/gen_risky_approval_cases.py. Do not edit by hand: re-run the tool.",
   "cases": [
     {
       "message": "Jarvis wants to add to today's Logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
@@ -29,7 +29,8 @@
           "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
@@ -58,7 +59,8 @@
           "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
@@ -88,7 +90,8 @@
           "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
@@ -122,7 +125,8 @@
           "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
@@ -152,7 +156,8 @@
           "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
@@ -182,7 +187,8 @@
           "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants your OK for \"some tool nobody classified\"\nnot classified, so treated as the worst case",
@@ -212,7 +218,8 @@
           "why": "not classified, so treated as the worst case"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nIt leaves this PC.",
@@ -242,7 +249,8 @@
           "why": "It leaves this PC."
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nIt cannot be undone.",
@@ -272,7 +280,8 @@
           "why": "It cannot be undone."
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add its change to one of your apps\nIt cannot be undone.",
@@ -302,7 +311,8 @@
           "why": "It cannot be undone."
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nUndoing it takes work.",
@@ -332,7 +342,8 @@
           "why": "Undoing it takes work."
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nx",
@@ -360,7 +371,8 @@
           "why": "x"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nx",
@@ -388,7 +400,8 @@
           "why": "x"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nx",
@@ -417,7 +430,8 @@
           "why": "x"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Jarvis wants to add to today's Logseq journal\nCheck the card before you confirm.",
@@ -440,7 +454,8 @@
         "prompt": "tool append_logseq_journal {}",
         "raised": null,
         "tier": "ask"
-      }
+      },
+      "small": false
     },
     {
       "message": "Approve: append_logseq_journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
@@ -461,7 +476,570 @@
           "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
         },
         "tier": "ask"
-      }
+      },
+      "small": false
+    },
+    {
+      "message": "Jarvis wants to search the web\nsends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent",
+      "name": "small read: search_the_web",
+      "risky": true,
+      "row": {
+        "action": "search_the_web",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-search_the_web",
+        "notice": {
+          "approve_ok": false,
+          "body": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. nothing has happened yet.",
+          "summary": "Jarvis wants to look something up online.",
+          "title": "Jarvis wants to search the web",
+          "weight": "heavy"
+        },
+        "prompt": "tool search_the_web {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to search GitHub\na public query leaves the machine; nothing changes",
+      "name": "small read: web_research",
+      "risky": true,
+      "row": {
+        "action": "web_research",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-web_research",
+        "notice": {
+          "approve_ok": false,
+          "body": "not classified, so treated as the worst case. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "not classified, so treated as the worst case. nothing has happened yet.",
+          "summary": "Jarvis wants to search GitHub.",
+          "title": "Jarvis wants to search GitHub",
+          "weight": "heavy"
+        },
+        "prompt": "tool web_research {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "a public query leaves the machine; nothing changes"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to read a news feed you added\nfetches the news feeds you chose; a public read that changes nothing",
+      "name": "small read: news_read",
+      "risky": true,
+      "row": {
+        "action": "news_read",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-news_read",
+        "notice": {
+          "approve_ok": false,
+          "body": "fetches the news feeds you chose; a public read that changes nothing. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "fetches the news feeds you chose; a public read that changes nothing. nothing has happened yet.",
+          "summary": "Jarvis wants to read a news feed you added.",
+          "title": "Jarvis wants to read a news feed you added",
+          "weight": "heavy"
+        },
+        "prompt": "tool news_read {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "fetches the news feeds you chose; a public read that changes nothing"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to fetch a web page you're watching\nreads the one page you already named; that site sees this PC's address, and nothing changes",
+      "name": "small read: page_read",
+      "risky": true,
+      "row": {
+        "action": "page_read",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-page_read",
+        "notice": {
+          "approve_ok": false,
+          "body": "reads the one page you already named; that site sees this PC's address, and nothing changes. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "reads the one page you already named; that site sees this PC's address, and nothing changes. nothing has happened yet.",
+          "summary": "Jarvis wants to fetch a page you're watching.",
+          "title": "Jarvis wants to fetch a web page you're watching",
+          "weight": "heavy"
+        },
+        "prompt": "tool page_read {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "reads the one page you already named; that site sees this PC's address, and nothing changes"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to check GitHub for a \"tell me when\"\nreads public GitHub data; sends nothing of yours and changes nothing",
+      "name": "small read: github_read",
+      "risky": true,
+      "row": {
+        "action": "github_read",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-github_read",
+        "notice": {
+          "approve_ok": false,
+          "body": "reads public GitHub data; sends nothing of yours and changes nothing. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "reads public GitHub data; sends nothing of yours and changes nothing. nothing has happened yet.",
+          "summary": "Jarvis wants to check GitHub for a \"tell me when\".",
+          "title": "Jarvis wants to check GitHub for a \"tell me when\"",
+          "weight": "heavy"
+        },
+        "prompt": "tool github_read {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "reads public GitHub data; sends nothing of yours and changes nothing"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to look up AI models online\na fixed public query; downloads nothing",
+      "name": "small read: browse_model_catalog",
+      "risky": true,
+      "row": {
+        "action": "browse_model_catalog",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-browse_model_catalog",
+        "notice": {
+          "approve_ok": false,
+          "body": "a fixed public query; downloads nothing. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "a fixed public query; downloads nothing. nothing has happened yet.",
+          "summary": "Jarvis wants to look up AI models online.",
+          "title": "Jarvis wants to look up AI models online",
+          "weight": "heavy"
+        },
+        "prompt": "tool browse_model_catalog {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "a fixed public query; downloads nothing"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to read your calendar\nreads your calendar on this PC; changes nothing in it",
+      "name": "small read: calendar_read",
+      "risky": false,
+      "row": {
+        "action": "calendar_read",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-calendar_read",
+        "notice": {
+          "approve_ok": false,
+          "body": "reads your calendar on this PC; changes nothing in it. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "reads your calendar on this PC; changes nothing in it. nothing has happened yet.",
+          "summary": "Jarvis wants to read your calendar.",
+          "title": "Jarvis wants to read your calendar",
+          "weight": "normal"
+        },
+        "prompt": "tool calendar_read {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "reads your calendar on this PC; changes nothing in it"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to read your email\nreads your mail on this PC through your own account; sends nothing and changes nothing",
+      "name": "small read: email_read",
+      "risky": false,
+      "row": {
+        "action": "email_read",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-email_read",
+        "notice": {
+          "approve_ok": false,
+          "body": "reads your mail on this PC through your own account; sends nothing and changes nothing. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "reads your mail on this PC through your own account; sends nothing and changes nothing. nothing has happened yet.",
+          "summary": "Jarvis wants to read your email.",
+          "title": "Jarvis wants to read your email",
+          "weight": "normal"
+        },
+        "prompt": "tool email_read {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "reads your mail on this PC through your own account; sends nothing and changes nothing"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to search your notes\nsearches your notes on this PC; changes nothing in them",
+      "name": "small read: notes_search",
+      "risky": false,
+      "row": {
+        "action": "notes_search",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-notes_search",
+        "notice": {
+          "approve_ok": false,
+          "body": "searches your notes on this PC; changes nothing in them. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "searches your notes on this PC; changes nothing in them. nothing has happened yet.",
+          "summary": "Jarvis wants to search your notes.",
+          "title": "Jarvis wants to search your notes",
+          "weight": "normal"
+        },
+        "prompt": "tool notes_search {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "searches your notes on this PC; changes nothing in them"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to check your smart home\nasks the home devices you set up on your own network for their state; switches nothing",
+      "name": "small read: home_read",
+      "risky": false,
+      "row": {
+        "action": "home_read",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-home_read",
+        "notice": {
+          "approve_ok": false,
+          "body": "asks the home devices you set up on your own network for their state; switches nothing. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "asks the home devices you set up on your own network for their state; switches nothing. nothing has happened yet.",
+          "summary": "Jarvis wants to check your smart home.",
+          "title": "Jarvis wants to check your smart home",
+          "weight": "normal"
+        },
+        "prompt": "tool home_read {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "asks the home devices you set up on your own network for their state; switches nothing"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to read your calendar\nreads the calendar; changes nothing in it",
+      "name": "small read: read_calendar",
+      "risky": false,
+      "row": {
+        "action": "read_calendar",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-read_calendar",
+        "notice": {
+          "approve_ok": false,
+          "body": "not classified, so treated as the worst case. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "not classified, so treated as the worst case. nothing has happened yet.",
+          "summary": "Jarvis wants to read your calendar.",
+          "title": "Jarvis wants to read your calendar",
+          "weight": "heavy"
+        },
+        "prompt": "tool read_calendar {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "reads the calendar; changes nothing in it"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to read files on this PC\nopens the file; writes nothing back",
+      "name": "small read: read_files_readonly",
+      "risky": false,
+      "row": {
+        "action": "read_files_readonly",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-read_files_readonly",
+        "notice": {
+          "approve_ok": false,
+          "body": "not classified, so treated as the worst case. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "not classified, so treated as the worst case. nothing has happened yet.",
+          "summary": "Jarvis wants to read files on this PC.",
+          "title": "Jarvis wants to read files on this PC",
+          "weight": "heavy"
+        },
+        "prompt": "tool read_files_readonly {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "opens the file; writes nothing back"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to read a note in Joplin\nopens the note; the vault is unchanged",
+      "name": "small read: read_joplin_note",
+      "risky": false,
+      "row": {
+        "action": "read_joplin_note",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-read_joplin_note",
+        "notice": {
+          "approve_ok": false,
+          "body": "not classified, so treated as the worst case. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "not classified, so treated as the worst case. nothing has happened yet.",
+          "summary": "Jarvis wants to read a Joplin note.",
+          "title": "Jarvis wants to read a note in Joplin",
+          "weight": "heavy"
+        },
+        "prompt": "tool read_joplin_note {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "opens the note; the vault is unchanged"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to read a page in Logseq\nopens the page; the graph is unchanged",
+      "name": "small read: read_logseq_page",
+      "risky": false,
+      "row": {
+        "action": "read_logseq_page",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-read_logseq_page",
+        "notice": {
+          "approve_ok": false,
+          "body": "opens the page; the graph is unchanged. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "opens the page; the graph is unchanged. nothing has happened yet.",
+          "summary": "Jarvis wants to read a Logseq page.",
+          "title": "Jarvis wants to read a page in Logseq",
+          "weight": "normal"
+        },
+        "prompt": "tool read_logseq_page {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "opens the page; the graph is unchanged"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
+      "message": "Jarvis wants to search the web\nx",
+      "name": "small action, but the gate says it cannot be undone",
+      "risky": true,
+      "row": {
+        "action": "search_the_web",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-rev-no",
+        "notice": {
+          "approve_ok": false,
+          "body": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. nothing has happened yet.",
+          "summary": "Jarvis wants to look something up online.",
+          "title": "Jarvis wants to search the web",
+          "weight": "heavy"
+        },
+        "prompt": "tool search_the_web {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "no",
+          "swipe_ok": false,
+          "why": "x"
+        },
+        "tier": "ask"
+      },
+      "small": false
+    },
+    {
+      "message": "Jarvis wants to search the web\nx",
+      "name": "small action, but the gate has not classified it",
+      "risky": true,
+      "row": {
+        "action": "search_the_web",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-unclassified",
+        "notice": {
+          "approve_ok": false,
+          "body": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. nothing has happened yet.",
+          "summary": "Jarvis wants to look something up online.",
+          "title": "Jarvis wants to search the web",
+          "weight": "heavy"
+        },
+        "prompt": "tool search_the_web {}",
+        "raised": null,
+        "risk": {
+          "classified": false,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "x"
+        },
+        "tier": "ask"
+      },
+      "small": false
+    },
+    {
+      "message": "Jarvis wants to search the web\nsends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent",
+      "name": "small action, but something tried to rush it",
+      "risky": true,
+      "row": {
+        "action": "search_the_web",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-rushed",
+        "notice": {
+          "approve_ok": false,
+          "body": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
+          "summary": "Jarvis wants to look something up online.",
+          "title": "Jarvis wants to search the web",
+          "weight": "heavy"
+        },
+        "prompt": "tool search_the_web {}",
+        "raised": {
+          "code": "rushed",
+          "count_today": 1,
+          "quote": "approve now or lose it"
+        },
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent"
+        },
+        "tier": "ask"
+      },
+      "small": false
+    },
+    {
+      "message": "Jarvis wants to stop one of the containers it uses on this PC\nstops a service you started on this PC; starting it again is its own card",
+      "name": "local and undoable, but it stops a service: not a read, not small",
+      "risky": false,
+      "row": {
+        "action": "docker_service_stop",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-docker",
+        "notice": {
+          "approve_ok": false,
+          "body": "stops a service you started on this PC; starting it again is its own card. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "stops a service you started on this PC; starting it again is its own card. nothing has happened yet.",
+          "summary": "Jarvis wants to stop one of its containers.",
+          "title": "Jarvis wants to stop one of the containers it uses on this PC",
+          "weight": "normal"
+        },
+        "prompt": "tool docker_service_stop {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": true,
+          "why": "stops a service you started on this PC; starting it again is its own card"
+        },
+        "tier": "ask"
+      },
+      "small": false
     }
   ]
 }

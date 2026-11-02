@@ -601,6 +601,22 @@ object SettingsSearch {
             ),
             source = JUMP + listOf("net/Calendar.kt", PLATES + "CalendarSettingsPlate.kt"),
         ),
+        // "Home screen" (2026-11-02): the phone's own Edit HUD. The words here
+        // are the ones the row and the editor print - "Home screen", "the
+        // layout", the four sections' names - so a search for how the app is
+        // arranged finds it, and "edit hud" (what the screen is called once it
+        // opens) finds it too.
+        Row(
+            key = "edit-hud", title = "Home screen",
+            label = "Home screen; my home screen; the main screen; edit hud; Edit HUD; " +
+                "the layout; rearrange; reorder; move cards; the top strip; the hero; " +
+                "the body; the composer; the four sections; presets; " +
+                "duplicate a preset; reset the layout; import a layout; export a layout",
+            quotes = listOf(
+                "The five built-in arrangements are read-only. Duplicate one to make it yours.",
+            ),
+            source = SCREEN,
+        ),
         Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
             label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),

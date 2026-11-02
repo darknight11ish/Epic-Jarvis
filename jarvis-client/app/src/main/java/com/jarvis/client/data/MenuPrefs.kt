@@ -158,6 +158,30 @@ class MenuPrefs(context: Context) {
     /** Back to the Default preset's arrangement. */
     fun resetLayout(): HudLayout.Layout = applyLayout(HudLayout.Action.Reset)
 
+    /**
+     * Saves a WHOLE layout in one write - what the Edit HUD screen's `Done`
+     * does (2026-11-02).
+     *
+     * [applyLayout] is one action at a time, which is right for a button that
+     * makes one change. The editor keeps its own draft and its own undo stack
+     * for the length of the visit, so a drag that moved a card around and then
+     * an Undo must not write the phone's preferences once per frame or once per
+     * step: it hands the finished document over here once, and this is the only
+     * write the visit makes. [HudLayout.normalize] runs first, so a document
+     * that arrived from a paste can never be stored outside the closed world -
+     * and it is the reason Done can be the only writer.
+     *
+     * Answers false when nothing changed (no write), true when it stored.
+     */
+    @Synchronized
+    fun saveLayout(layout: HudLayout.Layout): Boolean {
+        val safe = HudLayout.normalize(layout)
+        if (safe == _hud.value) return false
+        _hud.value = safe
+        saveHud(safe)
+        return true
+    }
+
     /** One of the five built-in presets, read-only. */
     fun applyPreset(presetId: String): HudLayout.Layout =
         applyLayout(HudLayout.Action.ApplyPreset(presetId))

@@ -149,14 +149,17 @@ private val FAQS = listOf(
     Faq(
         "Why does approving something ask for my fingerprint, but denying doesn't?",
         // Kept in step with SecurityScreen.kt and data/Security.kt.
-        "Out of the box, your fingerprint (or phone PIN) is asked only for " +
-            "the risky ones: actions that leave your PC, cannot be undone, " +
-            "were not labelled by Jarvis, or arrived flagged as rushed. A phone " +
+        "Out of the box, your fingerprint (or phone PIN) is asked for the risky " +
+            "ones: actions that leave your PC, cannot be undone, were not " +
+            "labelled by Jarvis, or arrived flagged as rushed - apart from the " +
+            "small read-only cards, like asking Jarvis to search the web or read " +
+            "the news, which are approved by the card alone. A phone " +
             "is the device most likely to be picked up by someone who is not " +
             "you, so approving one of those checks that whoever is holding it " +
-            "right now is really the owner. If you want it for every approval, " +
-            "open Platform checks, then Lock and fingerprint settings, and " +
-            "choose Every approval. Denying is always the safe direction, so it " +
+            "right now is really the owner. If you want it for the small ones " +
+            "too, open Platform checks, then Lock and fingerprint settings, and " +
+            "choose Risky only; for every approval, choose Every approval. " +
+            "Denying is always the safe direction, so it " +
             "is never gated behind anything — the cautious answer should never " +
             "be the slow one.",
     ),
