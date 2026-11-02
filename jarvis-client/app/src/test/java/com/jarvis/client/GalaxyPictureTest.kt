@@ -430,6 +430,76 @@ class GalaxyPictureTest {
         }
     }
 
+    /**
+     * The owner's screenshot, 2026-11-01: ONE saved name, and the plate drew a
+     * speck at the centre of a 264dp empty canvas - "it clearly doesn't show
+     * anything".
+     *
+     * One name is the one picture the fit had never been asked about.
+     * [GalaxyPicture.MAX_SCALE] exists so a TWO-name layout cannot grow into
+     * two blobs; with a single dot there is no layout to fit, so that cap was
+     * deciding the dot's own size. On a 2.625x phone the dot came out with an
+     * 8.83px radius (3.4dp, so about 7dp across) in a 693px-tall canvas.
+     * So the test is the fix's whole promise: the one node is really drawn, in
+     * the middle, at a size a thumb can see, and it is named.
+     */
+    @Test
+    fun aOneNamePictureIsADotYouCanSeeAndItIsNamed() {
+        val priya = Entities.Entity("1", "Priya", "person", listOf(7L))
+        val picture = GalaxyPicture.build(listOf(priya))
+        assertEquals("the one name must be drawn, not dropped", 1, picture.dots.size)
+        assertTrue("one name cannot share a fact with anything", picture.edges.isEmpty())
+        assertEquals(1, picture.total)
+
+        // The plate's own canvas on a Pixel-class phone: 360dp wide, the real
+        // 264dp tall, the plate's 14dp padding, at 2.625x.
+        val density = 2.625f
+        val width = 360f * density
+        val height = 264f * density
+        val padding = 14f * density
+        val dot = GalaxyPicture.fit(picture, width, height, padding).single()
+
+        // Where a one-dot layout is: the centre.
+        assertEquals(width / 2f, dot.x, 1e-3f)
+        assertEquals(height / 2f, dot.y, 1e-3f)
+
+        // How big: LONE_DOT_SHARE of the room's smaller side, about a 14dp
+        // radius (28dp across) - against the ~3dp radius MAX_SCALE alone gave.
+        val room = minOf(width, height) - 2f * padding
+        assertEquals(room * GalaxyPicture.LONE_DOT_SHARE, dot.r.toDouble(), 1e-3)
+        assertTrue(
+            "the lone dot is a speck again: ${dot.r / density}dp radius",
+            dot.r >= 10f * density,
+        )
+        assertTrue(
+            "the lone dot has grown into a blob: ${dot.r * 2f}px across",
+            dot.r * 2f <= room / 2f,
+        )
+
+        // The label, in both the places the owner can meet it: the dot's own
+        // TalkBack line, and the one visible line under the canvas.
+        assertEquals("Priya, 1 fact", Entities.galaxyNameLine(dot.name, dot.facts, dot.shared))
+        val line = Entities.lonePictureLine("Priya")
+        assertTrue("the one line does not name the dot: $line", line.startsWith("This dot is Priya."))
+        assertTrue(
+            "the one line does not say why the picture is otherwise empty: $line",
+            line.endsWith(Entities.ALONE_WHY),
+        )
+        // A blank name gets the reason alone, and nothing ever claims the
+        // owner has no memories (the same rule the empty list follows).
+        assertEquals(Entities.ALONE_WHY, Entities.lonePictureLine(""))
+        assertEquals(Entities.ALONE_WHY, Entities.lonePictureLine("   "))
+        assertFalse(line.contains("no memories", ignoreCase = true))
+
+        // And the bug itself, as a number: MAX_SCALE alone would have drawn
+        // this dot with an 8.83px radius, which is the speck the owner saw.
+        val capped = picture.dots.single().radius * GalaxyPicture.MAX_SCALE
+        assertTrue(
+            "the lone dot (${dot.r}px) is not clearly bigger than the cap that made it a speck ($capped px)",
+            dot.r > capped * 3,
+        )
+    }
+
     @Test
     fun hitPicksTheNearestDotAndTheEarlierOneWinsATie() {
         val dots = listOf(
@@ -798,6 +868,42 @@ class GalaxyPictureTest {
             "the picture hides names without saying so",
             plate.contains("Entities.showingLine(picture.dots.size, picture.total)"),
         )
+    }
+
+    /**
+     * A one-name picture is NAMED under the canvas, never on it (2026-11-02).
+     *
+     * The canvas draws no text - 48 names drawn as labels would collide into a
+     * smear - but one name has no neighbour to collide with, and a lone dot
+     * with nothing saying whose it is is exactly the state the owner read as
+     * broken. So the plate draws one line under the picture, and only for a
+     * single dot. That keeps the no-labels-on-the-canvas rule while giving the
+     * one case a label, which is why this is a caption and not canvas text.
+     */
+    @Test
+    fun aOneNamePictureIsNamedUnderTheCanvasNotOnIt() {
+        val plate = repoFile(main + "ui/screens/GalaxyPicturePlate.kt").readText()
+
+        assertTrue(
+            "a one-name picture is not named anywhere",
+            plate.contains("Entities.lonePictureLine(picture.dots.single().name)"),
+        )
+        val lineAt = plate.indexOf("Entities.lonePictureLine(")
+        val guard = plate.substring(maxOf(0, lineAt - 300), lineAt)
+        assertTrue(
+            "the one line is drawn for more than a single dot",
+            guard.contains("if (picture.dots.size == 1)"),
+        )
+
+        // Still no text ON the canvas: the rule that keeps a crowded picture
+        // readable is unchanged, and the caption sits in the plate's column.
+        assertFalse("the picture now draws text on the canvas", plate.contains("drawText"))
+        assertFalse("the picture now measures text to draw it", plate.contains("rememberTextMeasurer"))
+
+        // And it is a sentence, not a control: no tap, no button.
+        val word = plate.substring(lineAt, minOf(plate.length, lineAt + 320))
+        assertFalse("the one-name line is tappable", word.contains("onClick"))
+        assertFalse("the one-name line is a button", word.contains("Modifier.clickable"))
     }
 
     // ------------------------------------------- the ranking's tie-breaks ---
