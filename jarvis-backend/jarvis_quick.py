@@ -8312,6 +8312,15 @@ CHANGE_BY_ASKING = frozenset({
     # (`_read_jarvis_calendar`) answers a real True/False, so the read-back is a
     # read and not a claim.
     "jarvis_calendar",
+    # "Say \"One moment\" if I'm kept waiting" (2026-11-01). The same shape as
+    # the two above: `set_one_moment` calls jarvis_voice_flow's own
+    # `request_one_moment`, which is the one writer of the value BOTH apps gate
+    # the clip on; there is no card in either direction (one cosmetic sentence,
+    # and off only takes something away); and its reader
+    # (`_read_one_moment`) answers a real True/False, so the receipt below is a
+    # read and not a claim. It is here because the suite derives the allow-list
+    # from the table: a switch left out would be silently outside this lane.
+    "one_moment",
     # The five PC-notification switches. They ride `jarvis_limits.change`, and
     # all seven of those rows are `loosening="none"` on purpose: a switch that
     # only decides whether this PC shows its owner a toast may not wait behind
