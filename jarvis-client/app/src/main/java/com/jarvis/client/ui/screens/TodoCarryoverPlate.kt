@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 /**
  * Settings -> "To-do list carry-over" (2026-11-02; the owner's choice of BOTH
  * ways, full daily rollover as the DEFAULT; Gemini's ruling 8;
- * docs/JARVIS-API.md section 178; backend `jarvis_schedule.py`; the desktop's
+ * docs/JARVIS-API.md section 179; backend `jarvis_schedule.py`; the desktop's
  * `todo-carryover-settings.js` draws the same two from the same route).
  *
  * EVERY to-do item keeps the day it was written, for good. This picks only how

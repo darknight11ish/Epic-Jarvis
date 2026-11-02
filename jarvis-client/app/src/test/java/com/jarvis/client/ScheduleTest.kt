@@ -543,7 +543,7 @@ class ScheduleTest {
     }
 
     // ----------------------------------------------------------------------
-    // The to-do list's own day (2026-11-02; JARVIS-API section 178; the
+    // The to-do list's own day (2026-11-02; JARVIS-API section 179; the
     // owner's choice of both ways, full daily rollover as the default).
     // ----------------------------------------------------------------------
 

@@ -9623,7 +9623,7 @@ function wentOffRow(job) {
  * and words are gone (Rust took them out) and nothing is offered but Show.
  */
 /**
- * The to-do list in "Day by day" (2026-11-02; JARVIS-API section 178): the
+ * The to-do list in "Day by day" (2026-11-02; JARVIS-API section 179): the
  * SAME open items, grouped under the heading of the day the PC says each was
  * written ("Today", "Yesterday", "Friday (3d ago)", "Oct 26"). Nothing is
  * moved, copied or re-ordered by this - it is the rollover list's own rows,

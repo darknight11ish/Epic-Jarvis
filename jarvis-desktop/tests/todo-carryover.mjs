@@ -2,7 +2,7 @@
  * The to-do list's day carry-over, in the desktop half (2026-11-02; the
  * owner's choice of both modes with full daily rollover as the default;
  * Gemini's ruling 8; backend/jarvis_schedule.py; docs/JARVIS-API.md section
- * 178; src/coming-up.js and src/brain.js).
+ * 179; src/coming-up.js and src/brain.js).
  *
  * WHAT THIS PROVES, in the app's own words:
  *  1. the PC's own age tag reaches a row and is shown in the ROLLOVER list

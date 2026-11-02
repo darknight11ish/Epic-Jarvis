@@ -1085,7 +1085,7 @@ fn main() {
             // back on (ONE card on the PC), and the one Delete. Settings only.
             "media_index",
             // The to-do list's day carry-over (todo_carryover.rs; 2026-11-02;
-            // JARVIS-API section 178). Settings only: the read (the mode in
+            // JARVIS-API section 179). Settings only: the read (the mode in
             // force and the two modes in the PC's own words) and the one change.
             // It moves no item and re-stamps no day, so it raises no card either
             // way; the write is held on a stale link like every other write.

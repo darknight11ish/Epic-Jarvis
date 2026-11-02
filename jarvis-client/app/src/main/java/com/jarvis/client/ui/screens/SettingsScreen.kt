@@ -958,7 +958,7 @@ fun SettingsScreen(
             if (drawn("limits")) if (menus.shows("settings.limits")) item(key = "limits") {
                 MenuFrame(menus, "settings.limits") { LimitsSection(canAct = canAct) }
                 // The to-do list's day carry-over (2026-11-02; JARVIS-API
-                // section 178; backend/jarvis_schedule.py;
+                // section 179; backend/jarvis_schedule.py;
                 // TodoCarryoverPlate.kt): daily rollover (the default) or day by
                 // day, in the PC's own two modes. It sits under THIS card, with
                 // the scheduler's own limits - how a list is drawn is the same

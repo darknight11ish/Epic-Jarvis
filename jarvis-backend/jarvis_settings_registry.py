@@ -535,6 +535,25 @@ SECTIONS: tuple = (
     # answers where the CARD is, not what the phone can change.
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
             app="both"),
+    # "To-do list carry-over" (2026-11-02, the todo-carry-over lane; JARVIS-API
+    # section 179). The owner chose BOTH ways of showing the to-do list, with
+    # full daily rollover as the default, and this Section is the card that
+    # changes it. A card of its own on the desktop
+    # (settings.html#todo-carryover, src/todo-carryover-settings.js), drawn from
+    # GET /api/schedule and written through the SAME POST /api/schedule/act
+    # {"do": "todo_mode"} a spoken sentence reaches - so a tap and a sentence
+    # cannot disagree, and no approval card is raised either way because it
+    # moves no item.
+    #
+    # BOTH, but with no phone row of its own: the phone draws the same two
+    # choices INSIDE its Limits row (SettingsScreen.kt's TodoCarryoverSection
+    # under LimitsSection), so "open the to-do list carry-over" on the phone
+    # lands there - OpenPlace.kt maps this id to the phone's "limits" item.
+    # That is also why contract/feature-controls.json records in_phone_settings
+    # false: the evidence list only sees rows keyed by this id, and the phone
+    # has no such row by design, not by omission.
+    Section("todo-carryover", ("to-do list carry-over", "the to-do carry-over",
+                               "the to-do list mode", "the to-do list's own day")),
     # "All features and abilities" (2026-10-22, #749): the phone's directory of the
     # 140 features. PHONE ONLY, and the reason is the same one the desktop page
     # gives: the desktop's own directory card has NO `<section class="card" id>`
@@ -3565,13 +3584,15 @@ CHOICE_SETTINGS: tuple = (
     # (jarvis_schedule.set_todo_mode_here), so a sentence and a tap cannot
     # disagree. The names are the sentences he really says, and every one of
     # them keeps a word only this setting has ("to-do", "carry", "rollover"), so
-    # "day" cannot swallow the idle-new row.
+    # "day" cannot swallow the idle-new row. `where` is the card this change
+    # added to the desktop's Settings page; the phone draws the same two inside
+    # its Limits row, which is where OpenPlace sends "open" for this id.
     ChoiceSetting(
         "todo_carryover",
         ("the to-do carry-over", "the todo carry-over", "the to-do list carry-over",
          "the to-do list carryover", "how the to-do list carries over",
          "the to-do list mode", "the to-do mode", "the todo list mode"),
-        None, dict(_TODO_CARRYOVER_CHOICES), set_todo_carryover,
+        "todo-carryover", dict(_TODO_CARRYOVER_CHOICES), set_todo_carryover,
         "whether yesterday's unfinished items join today's to-do list with a tag "
         "saying how old they are (daily rollover, the default) or each day keeps "
         "its own list",
@@ -4174,6 +4195,7 @@ SECTION_PLAIN = {
     "phone-notify": "phone notifications",
     "watch-notify": "watch notifications",
     "prompt-coach": "the prompt coach",
+    "todo-carryover": "the to-do list carry-over",
 }
 
 # --------------------------------------------------------------------------

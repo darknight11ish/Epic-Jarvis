@@ -1,6 +1,6 @@
 //! The to-do list's day carry-over, for Settings (2026-11-02; the owner's
 //! choice of both modes, full daily rollover as the default; Gemini's ruling 8;
-//! `backend/jarvis_schedule.py`; JARVIS-API section 178).
+//! `backend/jarvis_schedule.py`; JARVIS-API section 179).
 //!
 //! ONE command, `todo_carryover`, Settings only, with two shapes:
 //!

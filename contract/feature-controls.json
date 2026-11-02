@@ -10813,6 +10813,19 @@
       "where": "settings",
       "in_desktop_settings": false,
       "in_phone_settings": true
+    },
+    {
+      "id": "todo-carryover",
+      "names": [
+        "to-do list carry-over",
+        "the to-do carry-over",
+        "the to-do list mode",
+        "the to-do list's own day"
+      ],
+      "app": "both",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": false
     }
   ],
   "known_gaps": [
@@ -13372,7 +13385,7 @@
           "the to-do mode",
           "the todo list mode"
         ],
-        "section": null,
+        "section": "todo-carryover",
         "options": {
           "rollover": "rollover",
           "daily rollover": "rollover",

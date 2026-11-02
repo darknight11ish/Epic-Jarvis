@@ -6724,7 +6724,7 @@ object JarvisRuntime {
      */
     /**
      * Change how the to-do list carries over (2026-11-02; the owner's choice of
-     * both ways, full daily rollover as the default; JARVIS-API section 178).
+     * both ways, full daily rollover as the default; JARVIS-API section 179).
      *
      * It posts ONE verb and ONE mode to [com.jarvis.client.net.Schedule.ACT_PATH]
      * - the scheduler's own write door for changes that need no card - which is

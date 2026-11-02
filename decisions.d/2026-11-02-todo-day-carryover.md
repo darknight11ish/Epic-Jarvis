@@ -25,5 +25,5 @@
   cannot disagree; no approval card either way, because it changes how the
   owner's own list is drawn and touches no row. Both apps draw it: the desktop's
   Brain "Coming up" card and its Settings card, and the phone's "Coming up"
-  plate and its control under Limits (JARVIS-API §178). The same night's second
+  plate and its control under Limits (JARVIS-API §179). The same night's second
   half - the phone's UI text removals - is a separate decision, not this one.

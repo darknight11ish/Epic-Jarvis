@@ -1,7 +1,7 @@
 /**
  * Settings -> "To-do list carry-over" (2026-11-02; the owner's choice of both
  * modes, full daily rollover as the default; Gemini's ruling 8;
- * backend/jarvis_schedule.py; docs/JARVIS-API.md section 178).
+ * backend/jarvis_schedule.py; docs/JARVIS-API.md section 179).
  *
  * ONE Rust command (`src-tauri/src/todo_carryover.rs` `todo_carryover`),
  * Settings only, with two shapes:

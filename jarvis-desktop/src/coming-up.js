@@ -292,7 +292,7 @@ export function readSchedule(answer) {
     showsAt: text(j.shows_at),
     snoozed: j.snoozed === true,
     wentOffAt: text(j.went_off_at),
-    // The to-do list's own day (2026-11-02; JARVIS-API section 178): the day
+    // The to-do list's own day (2026-11-02; JARVIS-API section 179): the day
     // this item was written, and the PC's own words for how old that is
     // ("from yesterday", "from Friday (3d ago)", "from Oct 26"). Both are
     // computed ON THE PC - the app never works out an age from its own clock,

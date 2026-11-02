@@ -90,7 +90,7 @@ object Schedule {
     /**
      * How the to-do list carries over (2026-11-02; the owner's choice of BOTH
      * ways, full daily rollover as the DEFAULT; Gemini's ruling 8;
-     * docs/JARVIS-API.md section 178; backend `jarvis_schedule.py`).
+     * docs/JARVIS-API.md section 179; backend `jarvis_schedule.py`).
      *
      * EVERY to-do item keeps the day it was written, for good (`created_date`,
      * written once when the item is created and never rewritten). The mode is

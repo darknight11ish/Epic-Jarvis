@@ -29960,7 +29960,7 @@ Also unchanged and worth saying: opening a media app takes it to the front, so a
 Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
 "One-sided on purpose").
 
-## 178. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
+## 179. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
 
 The owner's question of 2026-11-02 ~00:20 PT, and his answer the same night
 (`.dsh-scratch/OWNER-QUEUE-2026-11-02/OWNER-QUEUE.md` item 4): *is Jarvis smart
@@ -30064,7 +30064,12 @@ returns `[]` - this is the scheduler's to-do list, not the board.
 
 **THE FAILURE THAT WAS PRE-EXISTING, SAID PLAINLY.** `backend/test_pictures.py`'s
 contiguous-section check wants sections 129..N with no gap; this file adds
-**178**, and 175/176 are held by the in-flight #1074/#1073 sections, so on
-`main` that check fails on the gap 174 -> 178. This section number is
-deliberate (the brief reserved it), and the check is expected to go green the
-moment those two land. Verified at the desk, not assumed.
+**179**, and 175, 176, 177 and 178 are held by the in-flight #1074, #1073, #1091
+and #1092 sections, so on `main` that check fails on the gap 174 -> 179. This
+section number is deliberate (the Lead reassigned it from 178 on 2026-11-02, so
+it cannot collide with #1092's), and the check is expected to go green the
+moment those four land. Verified at the desk, not assumed. The separate ruling
+that replaces the contiguous check (Gemini's ruling 1: unique, ascending, no
+more than three missing between neighbours) allows three; this gap is four, so
+that rule must either rise to four or wait for one of the four to land - said
+here rather than left for the next person to discover.

@@ -240,7 +240,7 @@ internal fun ComingUpSection(
                         Text(Schedule.EMPTY_TODO, style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid)
                     }
-                    // 2026-11-02 (JARVIS-API section 178; the owner's choice of
+                    // 2026-11-02 (JARVIS-API section 179; the owner's choice of
                     // both ways, daily rollover the default). ROLLOVER: every
                     // open item, each older one carrying the PC's own tag ("from
                     // yesterday", "from Friday (3d ago)"). DAY BY DAY: the same

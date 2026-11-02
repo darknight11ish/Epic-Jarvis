@@ -1651,15 +1651,20 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-#: 178 - the to-do list's own day (2026-11-02, the todo-carry-over lane):
-#: declared EXPLICITLY rather than by extending the range, because 175, 176 and
-#: 177 are RESERVED by sections in flight (#1074 takes 175, #1073 176) and are
-#: not on main yet. `t_the_sections_after_129_run_without_a_gap_or_a_repeat`
+#: 179 - the to-do list's own day (2026-11-02, the todo-carry-over lane):
+#: declared EXPLICITLY rather than by extending the range, because 175, 176,
+#: 177 and 178 are RESERVED by sections in flight (#1074 takes 175, #1073 176,
+#: #1091 177, #1092 178) and are not on main yet. The section was written as
+#: 178 in its own branch and the Lead reassigned it to 179 on 2026-11-02, so it
+#: cannot collide with #1092's. `t_the_sections_after_129_run_without_a_gap_or_a_repeat`
 #: still reports that gap - deliberately: it is the honest state until those
-#: two land, and the fix is their merge, not a wider range here. When the
+#: four land, and the fix is their merge, not a wider range here. When the
 #: amended rule (Gemini ruling 1: uniqueness + ascending order, gaps <= 3 for
-#: reserved numbers) replaces this pin, this line goes back to one range.
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 175)) + (178,)   # 129 ..= 174 (170 "Protected from Jarvis", 2026-10-31, this lane; the notes-editor lane also took the next number, so one of the two is renumbered at merge, as 161/162 were; 169 the jobs create/answer routes, 2026-10-30; 146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 the blind-approval guards, 2026-10-21; 151 the Obsidian vault organizer, 2026-10-21; 152 the Notion export -> Obsidian vault routes, 2026-10-21; 153 the Live voice screen/selection reads, 2026-10-21; 154 the spoken-command normaliser and speaking-speed reflex, Voice Slice A, 2026-10-21; 155 Duet Wave D-2 (read-only continuation, outbound tiers, source provenance, walk brain-dump), 2026-10-22; 161 Google Calendar, both ways; 162 connecting an account by talking, both 2026-10-28; 163 a file in a chat, 2026-10-30; 164 Jarvis's own calendar, 2026-10-29; 165 what a parking stay costs, minute by minute, 2026-10-30; 166 building an Android app from chat and sideloading it, 2026-10-30; 167 the phone's notification styles, built from the owner's words, 2026-10-30; 168 the calendar in the desktop HUD, 2026-10-30; 169 starting a background job and answering a parked grant, 2026-10-30; 170 the Obsidian notes editor, 2026-10-31; 171 Protected from Jarvis, 2026-10-31; 172 sending one file from the PC to the phone; 173 the surface-aware answers, 2026-10-31; 174 opening an app on the phone and starting a media search, 2026-11-01)
+#: reserved numbers) replaces this pin, this line goes back to one range - but
+#: that rule allows three missing, and this gap is FOUR (175-178), so it must
+#: rise to four or the four reserved sections must land first. Said here so the
+#: next person does not discover it after a CI round trip.
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 175)) + (179,)   # 129 ..= 174 (170 "Protected from Jarvis", 2026-10-31, this lane; the notes-editor lane also took the next number, so one of the two is renumbered at merge, as 161/162 were; 169 the jobs create/answer routes, 2026-10-30; 146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 the blind-approval guards, 2026-10-21; 151 the Obsidian vault organizer, 2026-10-21; 152 the Notion export -> Obsidian vault routes, 2026-10-21; 153 the Live voice screen/selection reads, 2026-10-21; 154 the spoken-command normaliser and speaking-speed reflex, Voice Slice A, 2026-10-21; 155 Duet Wave D-2 (read-only continuation, outbound tiers, source provenance, walk brain-dump), 2026-10-22; 161 Google Calendar, both ways; 162 connecting an account by talking, both 2026-10-28; 163 a file in a chat, 2026-10-30; 164 Jarvis's own calendar, 2026-10-29; 165 what a parking stay costs, minute by minute, 2026-10-30; 166 building an Android app from chat and sideloading it, 2026-10-30; 167 the phone's notification styles, built from the owner's words, 2026-10-30; 168 the calendar in the desktop HUD, 2026-10-30; 169 starting a background job and answering a parked grant, 2026-10-30; 170 the Obsidian notes editor, 2026-10-31; 171 Protected from Jarvis, 2026-10-31; 172 sending one file from the PC to the phone; 173 the surface-aware answers, 2026-10-31; 174 opening an app on the phone and starting a media search, 2026-11-01; 179 the to-do list's own day, 2026-11-02)
 #: 156 is section 156, the private chat (backend Slice 1, 2026-10-25);
 #: 157 is the owner-secret hand-off card, wired 2026-10-26;
 #: 158 is updates in chat - "is there an update?", "what changed in the
