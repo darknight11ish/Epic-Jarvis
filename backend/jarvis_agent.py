@@ -7711,8 +7711,9 @@ def reset_sticky_tools(conversation_id=None) -> None:
 
 def sticky_tool_union(conversation_id, chosen, allowed, *, cap: int = MAX_STICKY_TOOLS) -> list:
     """The tool names this turn shows: `chosen`, plus what this conversation
-    already showed, in canonical order, at most `cap` (`MAX_STICKY_TOOLS`
-    normally; a Live turn passes its own smaller limit).
+    already showed, in canonical order, at most `cap` (`MAX_STICKY_TOOLS` for
+    every turn now; a Live turn's `[live] tool_limit` is a floor that can only
+    raise it, never a smaller cap - 2026-11-01).
 
     `chosen` - this turn's own diet pick - is never cut: a multi-step chain
     legitimately picks up to TOOL_DIET_MULTI_LIMIT tools, and must not lose
@@ -10267,7 +10268,10 @@ def _allowed_tools(enabled_tools, url: str, model: str, *, none: bool = False) -
 def _new_offer(names: list, opened=(), limit: Optional[int] = None) -> dict:
     """What a turn SHOWS the model, before the first round (see the short
     tool list above). Filled by _fill_offer. `limit` is the Live-only diet
-    size; None keeps the typed-chat TOOL_DIET_LIMIT."""
+    size; it may never be smaller than typed chat's TOOL_DIET_LIMIT (a
+    spoken turn must see every tool a typed one sees - jarvis_live
+    LIVE_TOOL_FLOOR, 2026-11-01). None keeps the typed-chat
+    TOOL_DIET_LIMIT."""
     return {"short": bool(names) and short_list_on(),
             "plugins": bool(names) and _plugins_configured(),
             "limit": limit,
@@ -10292,10 +10296,10 @@ def _fill_offer(offer: dict, names: list, question: str = "",
     if offer["short"] or not question or not tool_diet_on():
         offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
                                     plugins=offer["plugins"])
-        if offer.get("limit"):
-            # Live-only trim (2026-10-18): even when the top-K diet is off or
-            # the question is unrecognised, a Live turn shows only this many.
-            offer["shown"] = offer["shown"][:int(offer["limit"])]
+        # The Live-only trim that used to sit here (2026-10-18) is gone: with
+        # no diet selection to trim, it cut the full allowed list down to six
+        # names, so a spoken question was shown fewer tools than the same
+        # typed words (docs/LIVE-DESIGN.md 4.1, the parity fix of 2026-11-01).
         offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
         return
     # The top-K diet (F1, 2026-10-18): the short list keeps its fixed core +
@@ -10316,24 +10320,28 @@ def _fill_offer(offer: dict, names: list, question: str = "",
                                     extra_hints=extra_hints)
     diet = selection["tools"]
     offer["shown"] = diet + ([MORE_TOOLS] if more else [])
-    if offer.get("limit"):
-        # The Live cap also applies to the diet's full-list fallback, not only
-        # to the short-list branch: an unrecognised question must not hand a
-        # Live turn every tool description again.
-        keep = [n for n in offer["shown"] if n != MORE_TOOLS][:int(offer["limit"])]
-        offer["shown"] = keep + ([MORE_TOOLS] if MORE_TOOLS in offer["shown"] else [])
+    # The Live cap also used to trim the diet's full-list fallback, so an
+    # unrecognised question handed a Live turn six arbitrary tool descriptions
+    # where typed chat handed it every one. It no longer does: the selection's
+    # own `limit` is the only place the Live number applies, and it is at
+    # least typed chat's diet size (jarvis_live.LIVE_TOOL_FLOOR). A fallback
+    # shows what it shows for typed words too - all of it (2026-11-01).
     # KV prefix cache (Opt 2.1, 2026-10-20): a conversation carries its
     # earlier questions' tools forward in ONE canonical order, so this turn's
     # `tools` array is the same bytes as the last turn's once the
     # conversation's questions have named every tool it needs (see the
     # section above MAX_STICKY_TOOLS). A full-list fallback is not carried: it
     # selected nothing, and the next recognised question must still get the
-    # diet (the Live cap and the 2026-10-19 chain work both depend on that).
+    # diet (the 2026-10-19 chain work depends on that; the Live limit is a
+    # floor since 2026-11-01, not a cap).
     # A turn that offers no tools at all (a crisis turn, a model that cannot
     # use tools) changes nothing: its empty list is not a selection either.
     if not selection["fallback"] and names:
-        cap = MAX_STICKY_TOOLS if not offer.get("limit") else min(
-            MAX_STICKY_TOOLS, int(offer["limit"]))
+        # The same cap for every turn. It used to be min(MAX_STICKY_TOOLS, the
+        # Live limit), so a Live conversation carried three fewer forward
+        # (min(9, 6) = 6) than a typed one and could lose a tool it had already
+        # used - a narrower list by another route (2026-11-01).
+        cap = MAX_STICKY_TOOLS
         shown = sticky_tool_union(conversation_id,
                                   [n for n in offer["shown"] if n != MORE_TOOLS],
                                   base + extra_names, cap=cap)
@@ -10812,8 +10820,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             pass
     # Jarvis Live's own speed slice (2026-10-18): the Live-only model from
     # `[live]`, the one injected lane URL (the preset-lane patch supplies
-    # :11435 later - jarvis_model_lanes.py is not edited here), a 16K context
-    # and a shorter top-K tool list. Typed chat is untouched.
+    # :11435 later - jarvis_model_lanes.py is not edited here) and a 16K
+    # context. Its tool list is no longer shorter (2026-11-01: the Live limit is
+    # a floor, typed chat is the baseline), so typed chat is untouched.
     live_turn = bool(getattr(watch, "live", False))
     if live_turn:
         try:
