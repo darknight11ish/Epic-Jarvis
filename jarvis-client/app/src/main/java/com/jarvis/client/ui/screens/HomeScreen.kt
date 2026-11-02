@@ -570,7 +570,8 @@ data class HomeState(
     val pictureLine: String? = null,
     /**
      * The line for a document waiting to go with the next question
-     * ("taxes.pdf — 1.2 MB. Read on your PC."), or null when none is attached
+     * ("Attached to your next question — not sent yet. Type it and press Send.
+     * taxes.pdf — 1.2 MB. Read on your PC."), or null when none is attached
      * ([com.jarvis.client.net.AttachFile]). The file's bytes are never in this
      * state - only its name and size, in words.
      */
@@ -4466,11 +4467,18 @@ private fun Composer(
         TemporaryChatMarker(empty = state.lastUserText == null && state.conversationTurns == 0)
     }
     VoiceStrips(state, actions)
-    // A picture waiting to go with the next question. Dismiss drops it.
+    // A picture waiting to go with the next question. Remove drops it.
     if (state.pictureBusy) {
         VoiceStrip("Preparing the picture…", tone = chrome.textMid)
     } else if (state.pictureLine != null) {
-        VoiceStrip(state.pictureLine, tone = chrome.textMid, onDismiss = actions.onRemovePicture)
+        // The owner's own photo, waiting for the next question - so its action
+        // is Remove, not the Dismiss a notice gets (2026-11-02).
+        VoiceStrip(
+            state.pictureLine,
+            tone = chrome.textMid,
+            onDismiss = actions.onRemovePicture,
+            dismissLabel = com.jarvis.client.net.StagedLine.REMOVE,
+        )
         // "Photo to reminder": the PC reads the dates in it and proposes.
         Quiet(
             if (state.photoFinding) {
@@ -4482,12 +4490,19 @@ private fun Composer(
             onClick = actions.onFindDateInPicture,
         )
     }
-    // A document waiting to go with the next question. Dismiss drops it, and
+    // A document waiting to go with the next question. Remove drops it, and
     // its bytes with it - nothing was written anywhere to drop.
     if (state.attachBusy) {
         VoiceStrip("Reading the file…", tone = chrome.textMid)
     } else if (state.attachLine != null) {
-        VoiceStrip(state.attachLine, tone = chrome.textMid, onDismiss = actions.onRemoveAttach)
+        // The owner's own file, waiting for the next question: Remove, not
+        // Dismiss (2026-11-02).
+        VoiceStrip(
+            state.attachLine,
+            tone = chrome.textMid,
+            onDismiss = actions.onRemoveAttach,
+            dismissLabel = com.jarvis.client.net.StagedLine.REMOVE,
+        )
     }
     // Text shared from another app: sent as its own message, before what is
     // typed, never mixed into it. Dismiss drops it.

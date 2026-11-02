@@ -110,8 +110,13 @@ object AttachFile {
     const val OUTSIDE_TEXT =
         "The words count as outside text, so a web search in this chat will still ask first."
 
-    /** The chip under the composer while a file is attached. */
-    fun attachedLine(f: Ready): String = "${f.name} \u2014 ${sizeWords(f.size)}. $READ_ON_PC $OUTSIDE_TEXT"
+    /**
+     * The chip under the composer while a file is attached but NOT sent.
+     * Choosing a file sends nothing, so [StagedLine.HEAD] says that first;
+     * the name, the size and the two promises follow, unchanged.
+     */
+    fun attachedLine(f: Ready): String =
+        "${StagedLine.HEAD} ${f.name} \u2014 ${sizeWords(f.size)}. $READ_ON_PC $OUTSIDE_TEXT"
 
     /** A sentence for a file the picker could not read at all. */
     const val UNREADABLE = "That file could not be read."
