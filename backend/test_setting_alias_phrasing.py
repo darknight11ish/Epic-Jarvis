@@ -36,13 +36,10 @@ WHAT THIS PROVES
      READ_ONLY_INTENTS, carries no `made` receipt, and its runner touches the
      schedule only for the ordinary `mark_command` bookkeeping - a stand-in
      schedule raises on any other attribute, so a hidden write would fail this
-     suite. ONE test routes a settings_bool through `Q.answer`, which really
-     runs its setter (2026-11-02): that write goes to a throwaway settings
-     file, never to the run's shared config folder - see the comment in
-     t_the_one_moment_names_now_change_it_instead_of_refusing.
+     suite.
 
-No model, no network, no settings file left behind: the suite stops at
-`jarvis_quick`'s own fast path.
+No model, no network, no settings file: the suite stops at `jarvis_quick`'s
+own fast path.
 """
 from __future__ import annotations
 
@@ -287,43 +284,22 @@ def t_the_one_moment_names_now_change_it_instead_of_refusing():
     silently go wrong: the three names the old refusal listed must now reach the
     real switch (so the owner's own words are not still refused), and the
     page-only guard must not answer for this row any more (so it is not caught
-    one layer too early). `Q.answer` DOES run a settings_bool intent, so the
-    write below is real - but jarvis_voice_flow's settings file is pointed at a
-    throwaway file while it runs: nothing outside this suite changes, and the
-    run's shared config folder keeps no answer for a later suite to read.
+    one layer too early). Read-only: `settings_bool` is only ROUTED here, never
+    run - this suite stops at `jarvis_quick`'s fast path, and
     `backend/test_voice_flow.py` is where the switch is really changed."""
     old_refusal_names = ("the one moment sound", "the one moment message",
                          "say one moment if i am kept waiting")
-    # `Q.answer` RUNS a settings_bool intent, so the `ask()` calls below really
-    # write the PC's "One moment." answer - and this test asks for OFF. Under
-    # backend/run_suites.py every suite in a run shares ONE config folder, so
-    # that answer was still there when backend/test_voice_contract.py ran later
-    # in the same run: its three generated voice fixtures rendered
-    # `flow.moment.enabled: false` (jarvis_voice_flow's own
-    # <config>/voice-flow.json, 2026-11-01) against fixtures holding the
-    # default, ON - 8 checks red in the required backend job (measured
-    # 2026-11-02, run 41375447042). The producers are hermetic now; this keeps
-    # the promise this suite's own docstring makes ("NOTHING HERE CHANGES
-    # ANYTHING"): the setter writes a throwaway file while it runs, and nothing
-    # is left in the shared folder for a later suite to read. The routing under
-    # test is unchanged.
-    import tempfile
-    from unittest import mock
-    import jarvis_voice_flow as VF
-    with tempfile.TemporaryDirectory(prefix="jarvis-alias-") as _d, \
-            mock.patch.object(VF, "settings_path",
-                              lambda: Path(_d) / "voice-flow.json"):
-        for name in old_refusal_names:
-            for verb in ("turn on", "turn off"):
-                phrase = f"{verb} {name}"
-                intent = Q.match(phrase)
-                check(f"{phrase!r} reaches the one_moment switch",
-                      intent is not None and intent.name == "settings_bool"
-                      and intent.f == {"key": "one_moment", "on": verb == "turn on"},
-                      intent)
-            got, _ = ask(f"turn off {name}")
-            check(f"turn off {name!r} really turns it off, not a refusal",
-                  got is not None and got.intent == "settings_bool", got)
+    for name in old_refusal_names:
+        for verb in ("turn on", "turn off"):
+            phrase = f"{verb} {name}"
+            intent = Q.match(phrase)
+            check(f"{phrase!r} reaches the one_moment switch",
+                  intent is not None and intent.name == "settings_bool"
+                  and intent.f == {"key": "one_moment", "on": verb == "turn on"},
+                  intent)
+        got, _ = ask(f"turn off {name}")
+        check(f"turn off {name!r} really turns it off, not a refusal",
+              got is not None and got.intent == "settings_bool", got)
     check("the page-only guard no longer claims the row",
           R.find_not_by_asking_words("the one moment message") is None,
           R.find_not_by_asking_words("the one moment message"))

@@ -217,19 +217,6 @@ class World:
             # its own fixture (its World, VS._config_dir); this producer was the
             # one that did not.
             mock.patch.object(VOICES, "_config_dir", return_value=d),
-            # THE OWNER'S OWN ANSWER FOR "One moment." (2026-11-02). Since
-            # 2026-11-01 jarvis_voice_flow keeps it in <config>/voice-flow.json
-            # ("you asked Jarvis to stop saying it"), and this world pointed
-            # that module's folder nowhere: every flow.moment block below then
-            # printed THIS PC's answer - enabled:false with that sentence on the
-            # owner's PC, and enabled:false on the CI runner once an earlier
-            # suite had written the answer into the shared staged config folder
-            # - where the committed fixture holds the default, ON. Measured
-            # 2026-11-02: test_voice_contract.py 752 passed, 8 failed, in the
-            # required backend job. The producer's promise is one file on every
-            # machine, so the module reads this run's own folder, like the other
-            # voice modules above.
-            mock.patch.object(F, "_config_dir", return_value=d),
             mock.patch.object(V, "PROFILE_PATH", self.profile),
             mock.patch.object(W, "model_dir", return_value=wake_dir),
             mock.patch.object(T, "model_path", return_value=turn_file),
@@ -237,6 +224,15 @@ class World:
             # their own (jarvis_voice_flow): not started here, so every run
             # writes the same file.
             mock.patch.object(F, "_spawn", lambda fn: None),
+            # THE OWNER'S "One moment." ANSWER IS BUILT TOO - jarvis_voice_flow's
+            # own config folder, not the machine's (2026-11-02). That clip's
+            # status is the TOML switch AND the owner's own answer file
+            # (voice-flow.json, jarvis_voice_flow.settings_path): left to the
+            # machine, a PC - or a CI runner whose SHARED config folder an
+            # earlier suite had already written to - rendered "switched off on
+            # the PC (you asked Jarvis to stop saying it)" into every case, and
+            # the committed fixture went stale (measured 2026-11-02).
+            mock.patch.object(F, "_config_dir", return_value=d),
             # THE VOICE-ID MODEL IS BUILT, NEVER THE MACHINE'S - both ways
             # round, so the file this tool writes is the same everywhere (its
             # own docstring's promise, and what test_voice_contract.py

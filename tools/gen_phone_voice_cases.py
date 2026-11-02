@@ -225,6 +225,11 @@ class World:
         speaker_dir = missing_models("voice-models", "speaker")
         ps = [
             mock.patch.object(S, "_config_dir", return_value=d),
+            # ... and the owner's own "One moment." answer file (2026-11-02):
+            # the strict.status case below is jarvis_speech.status(), whose
+            # flow.moment is the TOML switch AND voice-flow.json in
+            # jarvis_voice_flow's config folder - so own that folder too.
+            mock.patch.object(F, "_config_dir", return_value=d),
             # The owner's CHOSEN PERSONALITY is not read at speech time any
             # more (2026-10-28): jarvis_speech.tts_voice() asks ONLY
             # jarvis_voices, and this world redirects that module's config
@@ -261,15 +266,6 @@ class World:
             mock.patch.object(E, "_audit", lambda *a: None),
             mock.patch.object(E, "_timeout", lambda: 180.0),
             mock.patch.object(VS, "_config_dir", lambda: d),
-            # THE OWNER'S OWN ANSWER FOR "One moment." (2026-11-02): it lives in
-            # jarvis_voice_flow's <config>/voice-flow.json (2026-11-01), and this
-            # world did not point that module anywhere - so status() printed
-            # whatever answer THIS machine held (off: "you asked Jarvis to stop
-            # saying it" on the owner's PC, and off on the CI runner once an
-            # earlier suite had written it into the shared staged config folder),
-            # where the fixture holds the default, ON. The same promise as the
-            # VS._config_dir pin above.
-            mock.patch.object(F, "_config_dir", lambda: d),
             mock.patch.object(VS, "_cfg", lambda k, default=None: default),
             mock.patch.object(VS, "_audit", lambda *a: None),
             mock.patch.object(VS, "_publish", lambda *a: None),
