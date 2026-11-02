@@ -514,10 +514,18 @@ fails closed for any source it does not know (`:1913-1915`).
 from email, calendar, notes, documents or any tool not on the read-aloud list
 stay on screen ("It's on your screen."); a sensitive saved fact keeps an
 answer on screen unless you allowed it; answers about the screen follow the
-2026-09-28 rule; web search, weather and home status are read aloud. The
-utterance reply for a `live` clip carries the same `private_aloud`,
-`memory_aloud`, `sensitive_aloud` and `screen_aloud` fields as any clip
-(`jarvis_speech.py:1757-1786`).
+2026-09-28 rule; web search, weather and home status are read aloud, as are a
+page handed over (`read_web_page`) and - since 2026-11-02 - `feature_guide`.
+**Why `feature_guide` is safe to add** (the owner's answer, "Yes, speak
+capability answers"): the guide reads Jarvis's own shipped feature list and its
+own on/off switch states, never the owner's data, and it changes nothing - no
+card and no outside text - so a spoken Live question answered from it is now
+spoken instead of pointed at the screen. That supersedes the 2026-09-27 list
+restriction for this one read-only tool only; every other tool it keeps on
+screen is unchanged, and the sensitive-fact, private-question and event-stream
+rules come first exactly as before. The utterance reply for a `live` clip
+carries the same `private_aloud`, `memory_aloud`, `sensitive_aloud` and
+`screen_aloud` fields as any clip (`jarvis_speech.py:1757-1786`).
 
 **Say it, do not point at the screen (the owner's request of 2026-11-01: "it
 will say 'it's on your screen' when it'd clearly capable of reading the info
@@ -538,11 +546,15 @@ out loud").** Two things were wrong, and only one of them was the wording:
   is for what it truly cannot say, such as a table of numbers, a picture or a
   long list.
 
-**What deliberately did NOT change:** the apps' own read-aloud rules, the
-private/email/calendar/notes list, the screen rule and the sensitive-fact rule.
-An answer the PC marks as staying on screen still stays on screen, and the one
-fixed line is still "It's on your screen." - the change is that a Live session
-the owner verified no longer loses the facts its own check earned.
+**What deliberately did NOT change in that 2026-11-01 change:** the apps' own
+read-aloud rules, the private/email/calendar/notes list, the screen rule and
+the sensitive-fact rule. An answer the PC marks as staying on screen still
+stays on screen, and the one fixed line is still "It's on your screen." - the
+change is that a Live session the owner verified no longer loses the facts its
+own check earned. **The per-tool list itself changed once, on 2026-11-02**,
+when `feature_guide` joined it by the owner's decision above
+(`decisions.d/2026-11-02-speak-capability-answers.md`); nothing else on the
+list moved, and no tool was taken off it.
 
 **Camera answers need a rule (question 2).** Today there is none: the PC
 records its reading of a picture's words as a reading tool
