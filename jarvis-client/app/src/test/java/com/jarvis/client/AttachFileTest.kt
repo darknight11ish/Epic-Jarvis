@@ -405,9 +405,12 @@ class AttachFileTest {
     // ------------------------------------------------------------ the chip ---
 
     @Test
-    fun `the chip says the name, the size, read on your PC, and the outside-text rule`() {
+    fun `the chip says it is not sent, then the name, the size, read on your PC, and the outside-text rule`() {
         val line = AttachFile.attachedLine(ready(bytes = "123456789012"))
-        assertTrue(line, line.startsWith("taxes.pdf \u2014 12 bytes. Read on your PC."))
+        // FIRST, because the chip is not an answer and nothing else said so
+        // (the owner's report of 2026-11-02).
+        assertTrue(line, line.startsWith(com.jarvis.client.net.StagedLine.HEAD))
+        assertTrue(line, line.contains("taxes.pdf \u2014 12 bytes. Read on your PC."))
         assertTrue(line, line.contains(AttachFile.OUTSIDE_TEXT))
         assertTrue(line, line.contains("web search"))
         assertEquals("1.2 MB", AttachFile.sizeWords(1_234_567))

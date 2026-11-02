@@ -14,8 +14,11 @@ import com.jarvis.client.net.MenuView
  * counterpart: the phone could reach a place only by already knowing which
  * screen it is on, or by saying "open ..." out loud. Settings grew its own
  * search box on 2026-10-09 ([SettingsSearch]), but that one only ever looks at
- * Settings' own rows - the Brain, History, the Inbox and every screen with no
- * settings card of its own were still unfindable by typing.
+ * Settings' own rows - plus, since 2026-11-02, a short hand-written list of
+ * features that are NOT in Settings and where each really is
+ * ([SettingsSearch.ELSEWHERE], one entry: the focus presets, drawn inside the
+ * Brain's Hardware plate) - so the Brain, History, the Inbox and every screen
+ * with no settings card of its own are still unfindable by typing in it.
  *
  * WHERE EVERY NAME COMES FROM: THE REAL CATALOGUE, never a second copy - the
  * same rule `palette.js` follows, for the same reason (a hand-typed list
@@ -142,6 +145,13 @@ object FindAnything {
      * on one - the entries in the phone's navigation. Each is where the
      * owner really lands when they tap that entry, which is what
      * `MenuPlaces.INSIDE` says in words.
+     *
+     * `entry.appearance` is NOT here, and that is the 2026-11-02 change: its
+     * Home button is gone (Appearance is Settings-only now), so there is no
+     * entry to land from. Appearance itself is still found by typing -
+     * through `settings.appearance-card`, the Settings row that opens the same
+     * screen - and `MenuPlaces.INSIDE` keeps the id listed so the phone's map
+     * of menus with no place of their own stays complete.
      */
     private val ENTRY_PLACES: Map<String, Pair<Screen, String?>> = mapOf(
         // The status line at the top of Home opens Platform checks, whose
@@ -151,7 +161,6 @@ object FindAnything {
         // Brain's own card for the same thing, `brain.model.tutorials`).
         "entry.help" to (Screen.FAQ to null),
         "entry.settings" to (Screen.SETTINGS to null),
-        "entry.appearance" to (Screen.APPEARANCE to null),
         "entry.voices" to (Screen.VOICES to null),
         "entry.voice-check" to (Screen.VOICE_CHECK to null),
         // A menu drawn inside something that is not a menu itself, so the

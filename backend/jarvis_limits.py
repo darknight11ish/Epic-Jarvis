@@ -335,6 +335,14 @@ class Limit:
     low: float = 0
     high: float = 0
     choices: tuple = ()          # when set, the value must be one of these
+    #: How far one tap of the two apps' -/+ control moves a number, when that
+    #: row has no `choices`. One whole number unless a row says otherwise; the
+    #: first row that does is the Live idle window (2026-11-01), where one
+    #: second a tap would make three minutes ninety taps away. It is a UI
+    #: STEP and nothing else: the value written can be any whole number inside
+    #: low..high (the spoken sentence sets 45 s happily), and the PC never
+    #: refuses a value for being off the step.
+    step: int = 1
     loosening: str = "none"      # which direction asks: "up" | "down" | "none"
     pc_only: bool = False        # may only be changed from this PC
     app: str = "both"            # "both" | "desktop" | "phone"
@@ -384,6 +392,22 @@ def _wait_says(v) -> str:
     return {5: "wait 5 minutes", 15: "wait 15 minutes",
             30: "wait half an hour", 60: "wait up to an hour"}.get(
                 mins, f"wait {mins} minutes")
+
+
+def _live_idle_says(v) -> str:
+    """The Live idle window in the owner's words: a length of time, never a bare
+    number of seconds ("90" reads as a counter, "1 minute and 30 seconds" reads
+    as a wait). The value stored is SECONDS, because that is the key
+    `jarvis_live.py` already reads (`[live].quiet_s`)."""
+    secs = int(v)
+    mins, rest = divmod(secs, 60)
+    if not mins:
+        return f"{secs} second" if secs == 1 else f"{secs} seconds"
+    minute = "minute" if mins == 1 else "minutes"
+    if not rest:
+        return f"{mins} {minute}"
+    seconds = "second" if rest == 1 else "seconds"
+    return f"{mins} {minute} and {rest} {seconds}"
 
 
 
@@ -522,6 +546,50 @@ LIMITS: tuple = (
                "refused. A longer wait gives you more time; it never approves "
                "anything by itself.",
           says=_wait_says),
+    # `[live].quiet_s` - HOW LONG JARVIS LIVE KEEPS LISTENING BEFORE IT TURNS
+    # ITSELF OFF (the owner's ask, 2026-11-01: "also id likee to he able to tell
+    # jarvis to change the setting that turns off jarvos live by extending how
+    # long ot takestoo turn off when it doesntt hear anything").
+    #
+    # THE KEY IS ONE THE ENGINE ALREADY READS. `jarvis_live.py` has always ended
+    # an idle session after its own `QUIET_S` (90 seconds); this row is that
+    # number, moved into the owner's settings file so the engine, the PC's
+    # Settings card and the phone's Limits plate all read the same value -
+    # `jarvis_live.quiet_seconds()` reads this exact key. 90 seconds is the
+    # default, so a PC that never touches this row behaves exactly as it did
+    # before the row existed.
+    #
+    # WHY 30 SECONDS TO 10 MINUTES, AND WHY THE WHOLE RANGE IS CARDLESS:
+    #   * BELOW 30 s Live would end in the pause between two thoughts - the
+    #     spoken-VAD floor alone is a couple of seconds of speech plus checking,
+    #     so a shorter window would cut the owner off mid-sentence.
+    #   * ABOVE 10 minutes an open microphone has been forgotten, which is the
+    #     very risk `QUIET_S` exists to bound (jarvis_live.py says so in its own
+    #     words), and the whole design note calls 90 s "short enough that an open
+    #     microphone is not forgotten".
+    #   * NEITHER DIRECTION LOOSENS ANYTHING, so no card: Live must ALREADY be
+    #     running - the owner started it, and the microphone was already open -
+    #     and this number only decides when an idle session ends. It opens no
+    #     door, reads and sends nothing, stores nothing, and cannot start Live.
+    #     The same session's own time limit already extends at once and without
+    #     a card ("give me twenty more minutes", jarvis_live.extend), so asking
+    #     a card to keep listening longer would be stricter than the control
+    #     beside it. This is the shape the owner's "One moment." switch took the
+    #     same day: the value is real, the change is instant, and the sentence
+    #     says what changed.
+    #
+    # `step=30`: one tap of the two apps' -/+ moves half a minute, because one
+    # second a tap would put three minutes ninety taps away from the default.
+    # The SPOKEN sentence is not limited to the step ("wait forty five seconds"
+    # is set exactly), and the range check is the plain 30..600 every row gets.
+    Limit("live_idle_seconds", "live", "quiet_s",
+          "How long Jarvis Live waits before it turns off",
+          "int", 90, low=30, high=600, step=30,
+          app="both", unit="seconds",
+          note="How long Live keeps listening after it last hears you before it "
+               "turns itself off. From 30 seconds to 10 minutes; it never "
+               "starts Live and never opens the microphone.",
+          says=_live_idle_says),
     # `[jobs].max_jobs_per_tick` - how much Jarvis gets on with at once.
     # Nothing leaves the PC and nothing is spent, so neither direction asks.
     Limit("jobs_per_tick", "jobs", "max_jobs_per_tick", "Jobs at once",
@@ -955,7 +1023,12 @@ def view(*, app: Optional[str] = None) -> dict:
                      "choices": list(limit.choices), "low": limit.low,
                      "high": limit.high, "unit": limit.unit, "note": limit.note,
                      "loosen_up": limit.loosen_up, "pc_only": limit.pc_only,
-                     "app": limit.app, "quiet_on": quiet_on})
+                     "app": limit.app, "quiet_on": quiet_on,
+                     # ADDITIVE, 2026-11-01, the same way `quiet_on` was: how far
+                     # one tap of the apps' -/+ moves this row. A screen that
+                     # ignores it steps by one, which is what every row but the
+                     # Live idle window wants anyway.
+                     "step": limit.step})
     return {"ok": True, "available": True, "limits": rows}
 
 

@@ -153,6 +153,14 @@ object Limits {
         /** Who owns this row: "both", "desktop" or "phone". */
         val app: String,
         /**
+         * How far one tap of the -/+ moves this row. The PC sends `step`
+         * (2026-11-01, the Live idle window: half a minute a tap, because one
+         * second a tap would put three minutes ninety taps away). A PC that
+         * does not send it means one, which is every other row - so an older
+         * PC keeps working exactly as it did.
+         */
+        val step: Long = 1,
+        /**
          * Is quiet hours on? The PC sends the same answer on every row
          * (`jarvis_limits.view`'s additive `quiet_on`), so a time row knows
          * whether it decides anything. A PC that does not send the field reads
@@ -176,10 +184,12 @@ object Limits {
         }
 
         /** The next value down, or null at the bottom of the PC's own range. */
-        val down: Long? get() = if (kind == "int" && choices.isEmpty() && number > low) number - 1 else null
+        val down: Long? get() = if (kind == "int" && choices.isEmpty() && number > low)
+            maxOf(low, number - step) else null
 
         /** The next value up, or null at the top of the PC's own range. */
-        val up: Long? get() = if (kind == "int" && choices.isEmpty() && number < high) number + 1 else null
+        val up: Long? get() = if (kind == "int" && choices.isEmpty() && number < high)
+            minOf(high, number + step) else null
     }
 
     private fun JsonObject.text(key: String): String? =
@@ -222,6 +232,7 @@ object Limits {
             loosenUp = o.flag("loosen_up") == true,
             pcOnly = o.flag("pc_only") == true,
             app = o.text("app") ?: "both",
+            step = (o.number("step") ?: 1L).coerceAtLeast(1L),
             quietOn = o.flag("quiet_on") != false,
         )
     }

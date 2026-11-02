@@ -109,12 +109,13 @@ object ChatPicture {
     }
 
     /**
-     * The line under the composer while a picture is attached. [wordsOnly]:
-     * no picture model sees it, and the PC reads the words in it instead
-     * (2026-09-26) - said, so the owner knows only the words are used.
+     * The line under the composer while a picture is attached but NOT sent.
+     * Choosing a picture sends nothing, so [StagedLine.HEAD] says that first.
+     * [wordsOnly]: no picture model sees it, and the PC reads the words in it
+     * instead (2026-09-26) - said, so the owner knows only the words are used.
      */
     fun attachedLine(p: Ready, wordsOnly: Boolean = false): String =
-        "Picture attached (${p.width} × ${p.height}, ${p.jpegBytes / 1024} KB). " +
+        "${StagedLine.HEAD} Picture (${p.width} × ${p.height}, ${p.jpegBytes / 1024} KB). " +
             (if (wordsOnly) WORDS_ONLY else "It goes only to your PC.") + " " + SECRETS_COVERED
 
     /**

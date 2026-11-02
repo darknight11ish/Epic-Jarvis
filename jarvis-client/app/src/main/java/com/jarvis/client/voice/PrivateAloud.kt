@@ -134,14 +134,17 @@ object PrivateAloud {
      * anything is fetched. Every earlier rule still comes first - a sensitive
      * saved fact, a private question, the router's private gate, a forgotten
      * event stream - and a stale or dropped stream keeps the answer on screen
-     * too. Exact names, as the `step` event carries them. The desktop's
+     * too. `feature_guide` is the PC's own shipped feature list (2026-11-01):
+     * its answer is Jarvis's own words and its own switch states, never the
+     * owner's data, so Live speaks it rather than saying "It's on your
+     * screen." Exact names, as the `step` event carries them. The desktop's
      * `READ_ALOUD_TOOLS` (private-speech.js) and the shared table
      * (private-aloud-cases.json) are checked against this list by
      * PrivateAloudContractTest, so a name added to one of the three alone
      * fails a test.
      */
     val READ_ALOUD_TOOLS: Set<String> =
-        setOf("home_read", "read_camera", "read_screen", "web_search", "read_web_page")
+        setOf("home_read", "read_camera", "read_screen", "web_search", "read_web_page", "feature_guide")
 
     /**
      * What the phone knows about tools at one moment: how many `step`

@@ -95,8 +95,16 @@ ON_SCREEN = "It's on your screen."
 #: sensitive saved fact, a private question, the router's private gate, a
 #: forgotten event stream. The owner can have it taken back off this list by
 #: saying so; it is one name here and the generated copies follow it.
+#:
+#: `feature_guide` is jarvis_agent.FEATURE_GUIDE_TOOL (2026-11-01): its answer
+#: is Jarvis's own shipped feature list and its own on/off switch reads, never
+#: the owner's data, and it changes nothing (no card; it is in
+#: jarvis_agent._NOT_READING, the tools that read no outside text). The
+#: owner's decision of 2026-11-01 is that Live speaks an answer it can say
+#: rather than "It's on your screen.", so a spoken question the model answered
+#: with the guide is read aloud like the others.
 READ_ALOUD_TOOLS = ("home_read", "read_camera", "read_screen", "web_search",
-                    "read_web_page")
+                    "read_web_page", "feature_guide")
 
 #: Names on READ_ALOUD_TOOLS that are recorded reads, not model tools, and
 #: the module constant that defines each one (checked in build()).
@@ -367,7 +375,9 @@ def build() -> dict:
                      "answer stays on screen unless the utterance reply says "
                      "screen_aloud: true (missing = false). Owner, 2026-09-28: answers "
                      "about what the camera sees in Jarvis Live (read_camera) follow "
-                     "exactly the same rule as the screen."),
+                     "exactly the same rule as the screen. Owner, 2026-11-01: an answer "
+                     "the PC gave from its own feature list (feature_guide) is read "
+                     "aloud too - Live speaks an answer it can say."),
         "on_screen": ON_SCREEN,
         "read_aloud_tools": list(READ_ALOUD_TOOLS),
         "cases": build_cases(),

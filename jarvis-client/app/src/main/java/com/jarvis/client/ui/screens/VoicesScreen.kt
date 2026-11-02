@@ -575,6 +575,11 @@ private fun SpeedPlate(
  * link, like every change sent to the PC. "Hear it" changes nothing, so it is
  * not held on a stale link; it plays the PC's sample and says what it is doing
  * in the desktop's words (`CustomVoices.HEAR_*`).
+ *
+ * The chip marked is the owner's SAVED voice ([CustomVoices.Speaker.chosen]),
+ * not necessarily the one that speaks: when the two differ the PC's own [CustomVoices.Speaker.note]
+ * says so ("You chose X ... Y speaks"), so the selection is never the pack
+ * default he did not pick (owner's report, 2026-11-02).
  */
 @Composable
 private fun SpeakerPlate(
@@ -587,6 +592,11 @@ private fun SpeakerPlate(
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
+    // The voice this picker marks as the owner's. Deliberately not `choice`:
+    // that is the voice that speaks, which is the pack default whenever the
+    // saved one cannot - and marking it is what made a reset read as "it
+    // forgot what I changed it to" (2026-11-02).
+    val chosen = sk.chosen
     // Which voice is being heard, which row the words belong to (kept after
     // it ends, so an error stays next to the voice that caused it), and the words.
     var hearing by remember { mutableStateOf<String?>(null) }
@@ -608,9 +618,9 @@ private fun SpeakerPlate(
                         OptionChip(
                             c.label,
                             modifier = Modifier.weight(1f),
-                            isSelected = c.id == sk.choice,
+                            isSelected = c.id == chosen,
                             enabled = !busy && linkBlocker == null,
-                            onClick = { if (c.id != sk.choice) onSet(c.id) },
+                            onClick = { if (c.id != chosen) onSet(c.id) },
                         )
                         if (hearing == c.id) {
                             // While a sample plays (or the PC is making it), this row's

@@ -45,10 +45,10 @@ def check(name, ok, detail=""):
 
 
 def t_the_list_is_real_and_only_reads():
-    check("the list is web_search, home_read, read_screen, read_camera and read_web_page, "
-          "nothing else",
-          sorted(G.READ_ALOUD_TOOLS) == ["home_read", "read_camera", "read_screen",
-                                         "read_web_page", "web_search"],
+    check("the list is web_search, home_read, read_screen, read_camera, read_web_page "
+          "and feature_guide, nothing else",
+          sorted(G.READ_ALOUD_TOOLS) == ["feature_guide", "home_read", "read_camera",
+                                         "read_screen", "read_web_page", "web_search"],
           G.READ_ALOUD_TOOLS)
     for name in G.READ_ALOUD_TOOLS:
         if name in G.RECORDED_READS:
@@ -92,6 +92,18 @@ def t_the_list_is_real_and_only_reads():
     # own yes - which is what makes being read aloud safe to allow here.
     check("... and it still needs a person's yes (NEEDS_A_PERSON)",
           "read_web_page" in _A.NEEDS_A_PERSON)
+    # The owner's decision of 2026-11-01: Live speaks an answer it can say,
+    # rather than "It's on your screen." feature_guide reads Jarvis's own
+    # shipped feature list - the PC's own words and switch states, never the
+    # owner's data - and changes nothing. This pin fails if the name is taken
+    # off the list again; the generated table carries the matching case into
+    # both apps.
+    check("feature_guide is on it, and is a real tool the model can call",
+          "feature_guide" in G.READ_ALOUD_TOOLS and "feature_guide" in _A.TOOLS,
+          G.READ_ALOUD_TOOLS)
+    check("... it only reads: no card, and it is not outside text",
+          "feature_guide" not in _A.NEEDS_A_PERSON
+          and "feature_guide" in _A._NOT_READING)
 
 
 def t_the_step_event_carries_the_real_name():

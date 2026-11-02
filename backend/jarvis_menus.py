@@ -827,8 +827,22 @@ MENUS: tuple = (
        why="Inside Watch, which can never be hidden."),
 
     # ---- Entry points (a button or row that only leads to a screen) ----
-    _m("entry.appearance", "Appearance button on Home", "The Appearance button in Home's row.",
-       (PHONE,), area="entry", kind="entry", names=("appearance button",)),
+    # The phone's Home row drew this button until 2026-11-02. The owner then
+    # asked for Appearance to be reachable only in Settings, and for a Reminders
+    # button in the place the Appearance one left (the phone's `HomeNavRowTest`
+    # is where that arrangement is held). So the id STAYS - ids are never reused
+    # or renamed, and this phone still HAS Appearance - but it is `hide=False`
+    # rather than the switch over a button that no longer exists: the Settings
+    # Appearance row has its own id, `settings.appearance-card`, and THAT is the
+    # one "Show or hide menus" offers. Left hideable, this would have been a
+    # switch that turns nothing off.
+    _m("entry.appearance", "Appearance",
+       "Theme, faces and how it all looks; on the phone it is a row in Settings.",
+       (PHONE,), area="entry", kind="entry", hide=False,
+       why="Its Home button went on 2026-11-02 - Appearance is Settings-only on the "
+           "phone now - so hiding this id would hide nothing. The Settings "
+           "Appearance row has its own id, settings.appearance-card.",
+       names=("appearance button",)),
     _m("entry.voice-check", "Voice check row", "The row that opens the voice check.", (PHONE,),
        area="entry", kind="entry", names=("voice check", "voice check row")),
     _m("entry.history", "History entry in Brain", "The row that opens your past chats.", (PHONE,),

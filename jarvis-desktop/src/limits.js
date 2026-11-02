@@ -51,6 +51,11 @@ export function normaliseLimits(body) {
         choices: Array.isArray(r.choices) ? r.choices.map(Number) : [],
         low: Number(r.low ?? 0),
         high: Number(r.high ?? 0),
+        // How far one tap of the -/+ moves this row. The PC sends `step`
+        // (2026-11-01, the Live idle window: half a minute a tap, because one
+        // second a tap would put three minutes ninety taps away). A PC that
+        // does not send it means one, which is every other row.
+        step: Math.max(1, Number(r.step ?? 1) || 1),
         unit: String(r.unit || ""),
         note: String(r.note || ""),
         loosenUp: r.loosen_up === true,
@@ -85,7 +90,9 @@ export function validTime(text) {
  * The value one step from `value`, in `direction` (-1 or +1), or null when
  * there is nowhere to go. With choices, a step is the next choice (so a limit
  * stored as 7 and offered as 1/24/168 steps to 24 rather than to 8, which the
- * backend would refuse); without them it is one whole number inside low..high.
+ * backend would refuse); without them it is one `step` (the row's own, one
+ * whole number unless it says otherwise) inside low..high, never past either
+ * end.
  */
 export function stepped(limit, direction) {
   // A bool has no steps, and neither has a clock time: an hour is chosen on a
@@ -98,8 +105,14 @@ export function stepped(limit, direction) {
                          : [...sorted].reverse().find((c) => c < limit.value);
     return next === undefined ? null : next;
   }
-  const next = limit.value + dir;
-  if (next < limit.low || next > limit.high) return null;
+  const step = Math.max(1, Number(limit.step || 1));
+  // A step that would go past an end lands ON the end (the phone's own
+  // [Limits.Row.down]/[up] do the same), and a step that cannot move at all is
+  // "nowhere to go" - so a button at the very end is still disabled rather
+  // than sending the value it already holds.
+  const next = dir > 0 ? Math.min(limit.high, limit.value + step)
+                       : Math.max(limit.low, limit.value - step);
+  if (next === limit.value) return null;
   return next;
 }
 

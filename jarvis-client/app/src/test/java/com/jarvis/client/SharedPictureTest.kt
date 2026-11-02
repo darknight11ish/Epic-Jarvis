@@ -106,15 +106,16 @@ class SharedPictureTest {
         assertTrue("a photo would be offered in the Attach row", SecondCard.picturesTaken(read))
         assertNull(ChatPicture.sharedRefusal(read))
         val p = ChatPicture.Ready("data:image/jpeg;base64,AA", 10, 20, 2048)
+        // FIRST, because the strip is not an answer (2026-11-02).
         assertEquals(
-            "Picture attached (10 × 20, 2 KB). " + ChatPicture.WORDS_ONLY + " " +
-                ChatPicture.SECRETS_COVERED,
+            "${com.jarvis.client.net.StagedLine.HEAD} Picture (10 × 20, 2 KB). " +
+                ChatPicture.WORDS_ONLY + " " + ChatPicture.SECRETS_COVERED,
             ChatPicture.attachedLine(p, wordsOnly = true),
         )
         // Both lines end with the PC's promise about secrets (the desktop's chip says the same).
         assertEquals(
-            "Picture attached (10 × 20, 2 KB). It goes only to your PC. " +
-                "Secrets in pictures you attach are covered with black boxes before Jarvis looks.",
+            "${com.jarvis.client.net.StagedLine.HEAD} Picture (10 × 20, 2 KB). " +
+                "It goes only to your PC. " + ChatPicture.SECRETS_COVERED,
             ChatPicture.attachedLine(p, wordsOnly = false),
         )
         assertTrue(ChatPicture.WORDS_ONLY.contains("outside text"))
