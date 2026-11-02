@@ -317,6 +317,61 @@ def t_the_document_extractor_counts_real_bytes():
 #   The captions the quiz is built from are outside text
 # --------------------------------------------------------------------------
 
+def _agent_tree(src):
+    """The agent module parsed, or None when it will not parse."""
+    try:
+        return ast.parse(src)
+    except SyntaxError:
+        return None
+
+
+def _agent_tool_strings(tree):
+    """Every string in the chat agent's `TOOLS` registry, or None if it is absent.
+
+    A turn can only start what is registered there - a tool's name, the
+    description the model reads, and the schema wording between them - so this
+    set, and not the whole file, is what answers "has the agent got a YouTube
+    tool?". Inspecting the nodes instead of searching the text matters: a COMMENT
+    may name an app ("open YouTube Music" is the phrase the phone nudge exists to
+    catch) without being a tool, and a tool genuinely added to the registry is
+    still found. None (rather than []) when there is no registry to read, so a
+    broken parse fails the check instead of making it pass over an empty set."""
+    if tree is None:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if value is not None and any(
+                isinstance(t, ast.Name) and t.id == "TOOLS" for t in targets):
+            return [c.value for c in ast.walk(value)
+                    if isinstance(c, ast.Constant) and isinstance(c.value, str)]
+    return None
+
+
+def _imports(tree, module):
+    """True when `tree` imports `module`, as `import x` or `from x import y`.
+
+    The second way a turn could start a captions quiz is agent code reaching the
+    quiz module itself, and nothing can use a module it never imported - so this
+    is the structural form of what a "the word is absent" pin used to stand for."""
+    if tree is None:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(a.name == module or a.name.startswith(module + ".")
+                   for a in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            name = node.module or ""
+            if name == module or name.startswith(module + "."):
+                return True
+    return False
+
+
 def t_caption_text_is_outside_text_and_cannot_be_kept():
     """The other half of the area: a subtitle file is someone else's words.
 
@@ -345,8 +400,30 @@ def t_caption_text_is_outside_text_and_cannot_be_kept():
           "outside_text_turn" in y_src, "")
     check("a question about words the text does not contain is dropped",
           "_norm(passage) not in haystack" in q_src, "")
+    # What a turn can START is the registry, so that is what this asks. The word
+    # "youtube" legitimately appears in the agent in three comments and in the
+    # phone nudge's own app names - "I'll open YouTube Music and play The
+    # Weeknd" is the phrase that nudge exists to catch - and none of those is a
+    # tool. A YouTube tool really added to `TOOLS`, or the quiz module imported
+    # into the agent, is still caught; those are the two ways a turn could start
+    # one, so the guard is not narrowed by no longer objecting to a comment.
+    agent_tree = _agent_tree((HERE / "jarvis_agent.py").read_text(encoding="utf-8"))
+    agent_tools = _agent_tool_strings(agent_tree)
+    named_youtube = [s for s in (agent_tools or []) if "youtube" in s.lower()]
     check("the chat agent has no YouTube tool at all (so no turn can start one)",
-          "youtube" not in (HERE / "jarvis_agent.py").read_text(encoding="utf-8").lower(), "")
+          agent_tools is not None and not named_youtube
+          and not _imports(agent_tree, "jarvis_youtube"),
+          "the agent's TOOLS registry could not be read, so this check would "
+          "prove nothing" if agent_tools is None else
+          f"the agent's TOOLS registry names youtube: {named_youtube}")
+    check("BITE: a YouTube tool added to the agent's registry would be named",
+          any("youtube" in s.lower() for s in (
+              _agent_tool_strings(_agent_tree(
+                  'TOOLS = {"youtube_quiz": Tool("youtube_quiz", "Quiz me on '
+                  'a video", {}, None, None)}')) or [])), "")
+    check("BITE: the youtube module imported into the agent would be named",
+          _imports(_agent_tree("from jarvis_youtube import start_quiz"), "jarvis_youtube")
+          and not _imports(_agent_tree("import jarvis_agent"), "jarvis_youtube"), "")
 
 
 def t_a_fence_word_is_not_one_the_captions_can_guess():
