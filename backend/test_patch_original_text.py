@@ -146,8 +146,13 @@ def t_the_late_patches_are_pinned_and_not_new():
     # jobs-routes.patch, the LAST core patch at position 164 (all four of its
     # hunks read the owner's original jarvis_hud.py job routes). PIN and the
     # tool's docstring name all three, so the count moved with them.
-    check("the twenty-two exceptions the tool's docstring names are the "
-          "twenty-two the walk finds", len(late) == 22,
+    # 2026-11-01: web-search-grant.patch at position 165 raises it by one more.
+    # TWO of its three hunks read the owner's own jarvis_gate.py text
+    # (`_SAFE_KEYS` and `_audit()`'s body); the third - two rows at the TOP of
+    # `_RISK` - costs nothing, because its context is text an earlier patch
+    # writes. The pin and the tool's docstring name it.
+    check("the twenty-three exceptions the tool's docstring names are the "
+          "twenty-three the walk finds", len(late) == 23,
           f"the walk found {len(late)}: {late}")
 
 

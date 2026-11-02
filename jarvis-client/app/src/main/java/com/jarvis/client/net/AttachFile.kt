@@ -27,9 +27,11 @@ import java.util.Locale
  * THE PC DOES THE READING. The phone does not extract text, render a page or
  * preview anything: the PC turns the bytes into at most 12,000 characters with
  * the same converter `my_files` already uses, and the answer says how much was
- * left out. A picture is NOT one of these - it keeps its own path
- * ([ChatPicture]), which covers secrets with black boxes before any model
- * sees it.
+ * left out. A picture is NOT read as one of these, even when it is picked
+ * through the same "Attach a file" row: [goesToPicture] decides that, and the
+ * picture then takes its own path ([ChatPicture]), which covers secrets with
+ * black boxes before any model sees it. Nothing here ever reads a picture's
+ * bytes as a document.
  *
  * THE CAP IS THE REASON THIS FILE EXISTS. Base64 grows the bytes by a third, so
  * 2,500,000 bytes becomes 3,333,336 characters of JSON; with the most
@@ -72,11 +74,70 @@ object AttachFile {
     )
 
     /**
-     * The system picker's own filter. Narrow on purpose: a picker offering
-     * every type would let the owner choose a 400 MB video and learn the cap
-     * from a refusal instead of from the list.
+     * The system picker's own filter for DOCUMENTS. Narrow on purpose: a
+     * picker offering every type would let the owner choose a 400 MB video
+     * and learn the cap from a refusal instead of from the list.
+     *
+     * Since 2026-11-01 the one "Attach a file" row opens this list (or
+     * [mimeTypes], which adds images) - there is no separate Photo control.
      */
     val MIME_TYPES: Array<String> = KINDS.map { it.mime }.distinct().toTypedArray()
+
+    /** The picker's word for "any picture", when the PC's Pictures works. */
+    const val IMAGE_MIME = "image/*"
+
+    /**
+     * The filter the ONE "Attach a file" row opens (the owner's ask of
+     * 2026-11-01: "remove the photo option because ATTach a file on my
+     * Android phone will bring up the option to add a photo").
+     *
+     * [withPictures] is the Photo row's old gate, kept: a PC whose Pictures
+     * feature is off must not even be shown images, because it could do
+     * nothing with one. The images that ARE offered still go down the
+     * picture path ([goesToPicture]), never this file's document path.
+     */
+    fun mimeTypes(withPictures: Boolean): Array<String> =
+        if (withPictures) MIME_TYPES + IMAGE_MIME else MIME_TYPES
+
+    /** Photo extensions that are a picture by name alone, when a provider says nothing useful. */
+    private val PHOTO_EXTENSIONS =
+        setOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp")
+
+    /**
+     * Does one pick go down the PICTURE path ([ChatPicture] - vision and
+     * black-boxed secrets, via `MainActivity.attachPicture`) instead of the
+     * document path here ([picked])?
+     *
+     * The name decides first, the same way [kindFor] does: an extension this
+     * file reads as a document is a document whatever type a provider claims,
+     * so a `.pdf` can never be swallowed by a wrong image type. Then a
+     * provider's `image/...` type, then the photo's own extension - which is
+     * what catches an image a provider typed `application/octet-stream`.
+     *
+     * Pure on purpose (no Android, no bytes): a JVM test holds every case.
+     */
+    fun goesToPicture(name: String?, mime: String?): Boolean {
+        if (kindOf(name) != null) return false
+        val providerType = mime?.trim()?.lowercase(Locale.ROOT)?.substringBefore(';').orEmpty()
+        if (providerType.startsWith("image/")) return true
+        val ext = extensionOf(name) ?: return false
+        return ext in PHOTO_EXTENSIONS
+    }
+
+    /**
+     * What is said when a picture arrives while the PC's Pictures feature is
+     * off - the Photo row's old gate, now asked AFTER the pick instead of
+     * before it. Plain words, and never a fall-back to reading it as a
+     * document: a photo is not a kind this file reads.
+     *
+     * [why] is the PC's own sentence where it has one ([ChatPicture.notWorkingWhy]).
+     */
+    fun photoNeedsPictures(why: String? = null): String =
+        "That is a photo. Photos need Pictures on the second graphics card (or a PC that " +
+            "reads the words in them), and that is not working right now" +
+            (why?.let { " ($it)" } ?: "") +
+            ". Nothing was attached. Turn Pictures on in Brain, then try again - or " +
+            "attach a document instead."
 
     /** A file ready to send, held in memory only. */
     class Ready(
@@ -189,11 +250,16 @@ object AttachFile {
 
     /** The kind a file's extension names, or null when the list does not read it. */
     fun kindOf(name: String?): Kind? {
+        val ext = extensionOf(name) ?: return null
+        return KINDS.firstOrNull { it.extension == ext }
+    }
+
+    /** A file's extension, lowercased, or null when its name has none to speak of. */
+    private fun extensionOf(name: String?): String? {
         val base = baseName(name) ?: return null
         val dot = base.lastIndexOf('.')
         if (dot <= 0 || dot == base.length - 1) return null
-        val ext = base.substring(dot + 1).lowercase(Locale.ROOT)
-        return KINDS.firstOrNull { it.extension == ext }
+        return base.substring(dot + 1).lowercase(Locale.ROOT)
     }
 
     /** The kind a provider's MIME type names, for a file with no usable extension. */

@@ -468,6 +468,24 @@
        "title": "Search the web"
       },
       {
+       "action": "grant_web_search_conversation",
+       "fixed": false,
+       "id": "grant_web_search_conversation",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let web searches in this chat stop asking"
+      },
+      {
+       "action": "revoke_web_search_grant",
+       "fixed": false,
+       "id": "revoke_web_search_grant",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Ask before every web search in this chat again"
+      },
+      {
        "action": "web_search_enable",
        "fixed": false,
        "id": "web_search_enable",
@@ -1359,7 +1377,9 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone"
+       "send_file_to_phone",
+       "approve_web_search_for_conversation",
+       "stop_web_search_approval"
       ],
       "title": "Safety and sharing"
      }
@@ -1531,6 +1551,22 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "approve_web_search_for_conversation",
+      "last": null,
+      "on": false,
+      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "stop_web_search_approval",
+      "last": null,
+      "on": false,
+      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -2056,6 +2092,24 @@
        "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
+      },
+      {
+       "action": "grant_web_search_conversation",
+       "fixed": false,
+       "id": "grant_web_search_conversation",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let web searches in this chat stop asking"
+      },
+      {
+       "action": "revoke_web_search_grant",
+       "fixed": false,
+       "id": "revoke_web_search_grant",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Ask before every web search in this chat again"
       },
       {
        "action": "web_search_enable",
@@ -2949,7 +3003,9 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone"
+       "send_file_to_phone",
+       "approve_web_search_for_conversation",
+       "stop_web_search_approval"
       ],
       "title": "Safety and sharing"
      }
@@ -3121,6 +3177,22 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "approve_web_search_for_conversation",
+      "last": null,
+      "on": false,
+      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "stop_web_search_approval",
+      "last": null,
+      "on": false,
+      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -3643,6 +3715,24 @@
        "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
+      },
+      {
+       "action": "grant_web_search_conversation",
+       "fixed": false,
+       "id": "grant_web_search_conversation",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let web searches in this chat stop asking"
+      },
+      {
+       "action": "revoke_web_search_grant",
+       "fixed": false,
+       "id": "revoke_web_search_grant",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Ask before every web search in this chat again"
       },
       {
        "action": "web_search_enable",
@@ -4534,7 +4624,9 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone"
+       "send_file_to_phone",
+       "approve_web_search_for_conversation",
+       "stop_web_search_approval"
       ],
       "title": "Safety and sharing"
      }
@@ -4706,6 +4798,22 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "approve_web_search_for_conversation",
+      "last": null,
+      "on": false,
+      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "stop_web_search_approval",
+      "last": null,
+      "on": false,
+      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -5223,6 +5331,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Search the web"
+      },
+      {
+       "action": "grant_web_search_conversation",
+       "fixed": false,
+       "id": "grant_web_search_conversation",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let web searches in this chat stop asking"
+      },
+      {
+       "action": "revoke_web_search_grant",
+       "fixed": false,
+       "id": "revoke_web_search_grant",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Ask before every web search in this chat again"
       },
       {
        "action": "web_search_enable",
@@ -6114,7 +6240,9 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone"
+       "send_file_to_phone",
+       "approve_web_search_for_conversation",
+       "stop_web_search_approval"
       ],
       "title": "Safety and sharing"
      }
@@ -6286,6 +6414,22 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "approve_web_search_for_conversation",
+      "last": null,
+      "on": false,
+      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "stop_web_search_approval",
+      "last": null,
+      "on": false,
+      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -6803,6 +6947,24 @@
        "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
+      },
+      {
+       "action": "grant_web_search_conversation",
+       "fixed": false,
+       "id": "grant_web_search_conversation",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let web searches in this chat stop asking"
+      },
+      {
+       "action": "revoke_web_search_grant",
+       "fixed": false,
+       "id": "revoke_web_search_grant",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Ask before every web search in this chat again"
       },
       {
        "action": "web_search_enable",
@@ -7694,7 +7856,9 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone"
+       "send_file_to_phone",
+       "approve_web_search_for_conversation",
+       "stop_web_search_approval"
       ],
       "title": "Safety and sharing"
      }
@@ -7866,6 +8030,22 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "approve_web_search_for_conversation",
+      "last": null,
+      "on": false,
+      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "stop_web_search_approval",
+      "last": null,
+      "on": false,
+      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -8397,6 +8577,24 @@
        "title": "Search the web"
       },
       {
+       "action": "grant_web_search_conversation",
+       "fixed": false,
+       "id": "grant_web_search_conversation",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let web searches in this chat stop asking"
+      },
+      {
+       "action": "revoke_web_search_grant",
+       "fixed": false,
+       "id": "revoke_web_search_grant",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Ask before every web search in this chat again"
+      },
+      {
        "action": "web_search_enable",
        "fixed": false,
        "id": "web_search_enable",
@@ -9288,7 +9486,9 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone"
+       "send_file_to_phone",
+       "approve_web_search_for_conversation",
+       "stop_web_search_approval"
       ],
       "title": "Safety and sharing"
      }
@@ -9460,6 +9660,22 @@
       "last": null,
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "approve_web_search_for_conversation",
+      "last": null,
+      "on": false,
+      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "stop_web_search_approval",
+      "last": null,
+      "on": false,
+      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
       "waiting": false
      }
     ],
@@ -9982,6 +10198,24 @@
        "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
+      },
+      {
+       "action": "grant_web_search_conversation",
+       "fixed": false,
+       "id": "grant_web_search_conversation",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let web searches in this chat stop asking"
+      },
+      {
+       "action": "revoke_web_search_grant",
+       "fixed": false,
+       "id": "revoke_web_search_grant",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Ask before every web search in this chat again"
       },
       {
        "action": "web_search_enable",
@@ -10873,7 +11107,9 @@
       "ids": [
        "protect_from_jarvis",
        "github_search",
-       "send_file_to_phone"
+       "send_file_to_phone",
+       "approve_web_search_for_conversation",
+       "stop_web_search_approval"
       ],
       "title": "Safety and sharing"
      }
@@ -11046,6 +11282,22 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "approve_web_search_for_conversation",
+      "last": null,
+      "on": false,
+      "title": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "waiting": false
+     },
+     {
+      "group": "Safety and sharing",
+      "id": "stop_web_search_approval",
+      "last": null,
+      "on": false,
+      "title": "Putting the card back in front of every web search in this chat (instant, no card)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
@@ -11147,6 +11399,8 @@
   "protect_from_jarvis",
   "github_search",
   "send_file_to_phone",
+  "approve_web_search_for_conversation",
+  "stop_web_search_approval",
   "email_check",
   "send_email",
   "draft_email",
