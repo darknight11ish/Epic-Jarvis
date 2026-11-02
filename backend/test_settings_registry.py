@@ -250,8 +250,13 @@ def t_every_real_settings_card_is_listed():
     # Home used (no new setting, no new registry setter), so it is a phone-only
     # card with no desktop settings card and no registry Section - deliberately
     # named here rather than given a registry id it would not use.
+    # "edit-hud" (2026-11-02) is the same shape once more: the phone's own
+    # "Home screen" row opens the phone's own Edit HUD (EditHudScreen.kt), a
+    # display preference saved on this phone only - no route, no approval card,
+    # nothing sent to the PC - so the desktop registry has no card for it and
+    # the row is always drawn.
     phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify",
-                "app-control", "model-lane"}
+                "app-control", "model-lane", "edit-hud"}
     check("every desktop settings card is a SECTION",
           not (desktop_ids - listed), sorted(desktop_ids - listed))
     check("every phone Settings row is a SECTION (bar the named spacers)",
