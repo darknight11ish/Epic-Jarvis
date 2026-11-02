@@ -663,7 +663,7 @@ GROUPS = (
     ("The internet", ["search_the_web",
                       # The conversation-scoped web-search approval and its
                       # instant stop (jarvis_agent.py, the owner's ask of
-                      # 2026-11-01; JARVIS-API section 174). Both are actions a
+                      # 2026-11-01; JARVIS-API section 175). Both are actions a
                       # card can be raised under, so both are rows on this page:
                       # the grant is the ONE card that stands in for
                       # search_the_web for the rest of one chat, and the stop is

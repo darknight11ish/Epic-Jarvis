@@ -130,7 +130,7 @@ export const ROWS = [
   },
   {
     "id": "voice-one-moment",
-    "setting": null,
+    "setting": "one_moment",
     "owner": "desktop",
     "section": "voice",
     "order": 6,

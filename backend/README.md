@@ -191,7 +191,7 @@ on a throwaway copy instead.
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 | `model-lanes.patch` | `jarvis_hud.py` | **"Start the local model"** (the owner's decision of 2026-10-13, after both of his Ollama lanes were dead for about five hours and the standing warning deliberately did nothing). `GET /api/model-lanes` and `POST /api/model-lanes/start`, behind the same origin and token checks as `/api/status`. The one action runs **HIS OWN Windows logon task**, found on that PC with `schtasks` and matched by the half of its name a rename does not touch - never `ollama serve`, never a name typed from memory - and then watches that lane's own `/api/tags` every 3 s for up to 90 s, so "starting" is never reported as "up": a lane that does not come up settles as `down` with a plain sentence and leaves the warning standing. One lane, the one Jarvis talks to (`OLLAMA_URL`'s port - 11436 on his PC), never both; nothing is started twice (answering, already watched, or the Task Scheduler says it is running). No gate file: the same task his own logon already runs unattended, so a card would only be stricter than the thing it duplicates. One `install()` block, appended to the chain `pictures.patch` writes and immediately before `plugin-loader.patch`, whose hunk was re-anchored onto this block's last two printed lines (`tools/check_plugins.py` checks that). Needs `jarvis_model_lanes.py`, in both shipped lists and in the base. See "Start the local model", at the very end. |
 | `unknown-risk-approvable.patch` | `jarvis_gate.py` | **An action the gate has no risk row for is approvable, with maximum friction** (Gemini's Q2 ruling of 2026-10-30; `.dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md`, `docs/JARVIS-API.md`'s pending/risk contract). On 2026-10-30 the owner's PC showed the app builder's build card, he pressed Approve, and nothing happened: a risky card needs a Windows Hello prompt, a prompt may only ask about something Jarvis can NAME, and an action with no risk row and no written words was refused outright by `jarvis_owner_check` (`UNLABELLED`, 403) - a dead end that looked alive. Five hunks: (1) the end of `_RISK` gains the EIGHT actions that had an `auto` line and no row (`calendar_read`, `email_read`, `notes_search`, `home_read`, `news_read`, `page_read`, `github_read`, `docker_service_stop`), each with the sentence its tier line already implies, so the rule below changes nothing the owner uses today - the NINTH of that shape, `lower_api_limit`, is left to `chatbot-limits.patch`, because a second row would be dead code (the LAST one wins) and `test_gate_risk_words.py` fails exactly that; (2) `UNCLASSIFIED_WARNING` and `_UNKNOWN_RISK`'s new words - **"Unclassified action - treated as permanent and able to leave this PC"**; (3) `risk_for`'s docstring says what `classified: false` now means; (4) `notice_for` puts the warning line on the card and says why the worst case was chosen; (5) `check()` forces every unclassified action to tier `"ask"` - whatever `[autonomy.tiers]` or `unknown_action_tier` says, `"never"` still stricter and untouched - except the tool literals `action_for_tool()` sets directly ("calculator" -> auto, "memory_store" -> notify), which are not actions the risk table classifies. **The owner approves only through the human check**: `jarvis_owner_check.approve_check()` lets an unclassified card reach the Windows Hello prompt (or the phone's own lock/signature) instead of refusing it, and a yes recorded WITHOUT that check is refused by the gate (`_unstamped_approval`), so nothing auto-approves, nothing bulk-approves. **CI stays strict**: `backend/test_gate_unknown_risk.py` fails a tree where an action that can run unattended has no row, and names it. Its `jarvis_owner_check.py` and `jarvis_asks_first.py` halves are SHIPPED modules (no patch), so their changes ship by the `$SHIPPED` copy; `jarvis_asks_first.request_tier` now refuses to loosen an unclassified action (409, "not classified", nothing written) and the page offers no switch for it. Last in the list, and measured rather than chosen: no patch after it writes `jarvis_gate.py`, and its eight rows sit at the table's TOP because the table's END is different on a PC whose stack has run (`chatbot-limits.patch` writes rows there) and on one where it has not, while the opening is the same in both. Its own suite reverses and re-applies it byte for byte. See "An unclassified action is approvable, with maximum friction", at the very end. |
-| `web-search-grant.patch` | `jarvis_gate.py` | **"You have full approval to search the web for this conversation": ONE card, once, and search only** (the owner's ask of 2026-11-01; `docs/JARVIS-API.md` section 174). ONE approval card stands in for the ordinary `search_the_web` card for the rest of ONE conversation - and for nothing else: the only code that reads the grant is `jarvis_agent._web_search_call` (the one place whose gate action is `search_the_web`), so booking a flight, sending an email, spending money, deleting, running a command, changing a setting and working a browser each raise their own card with a grant live. The model may ASK for the grant and may never decide it: the store is written only on the generic prepare()/gate/execute() path after a verdict from a card, the tool is in `NEEDS_A_PERSON` so a loosened tier still cannot self-approve, and a denied or unanswered card writes nothing. It dies by itself - keyed on the request's own `conversation_id` (a chat with no id can neither give nor use one), capped at 8 hours, in memory only so a restart ends it - and the stop tool runs at tier `auto` with no card, because revoking only takes permission away. Lockdown outranks it. Four hunks, all in `jarvis_gate.py`: one `_RISK.update({...})` at the END OF THE FILE (`grant_web_search_conversation` is `yes`/`outbound`, a risky approval a lock screen may not swipe through; `revoke_web_search_grant` is `yes`/`local`) - the end of the file because it is the only place no earlier patch's hunk reaches in both the published base and `backend/_stack.py`'s walk: written inside `_RISK` the walk duplicated `read_web_page`'s row at the table's end, and at its top the rows landed between the two lines `unknown-risk-approvable.patch` anchors on (both caught by a suite; `_RISK.update` runs at import, so the gate sees the rows as if they were in the table) - then the word `grant` added to `_SAFE_KEYS` so a grant's id survives redaction, and the three audit writers after `_audit` (`grant_made`, `granted`, `grant_ended`) - so every search that ran unasked is in the gate's own log with the grant's id, and the CONVERSATION ID IS NEVER WRITTEN DOWN. A fourth hunk adds the two `_TOOL_ACTIONS` entries the two tools need (`approve_web_search_for_conversation` -> `grant_web_search_conversation`, `stop_web_search_approval` -> `revoke_web_search_grant`), so `action_for_tool()` answers the action each one is really put to the gate under instead of `unclassified_tool` - added 2026-11-02, after main's `gate-tool-actions-gap.patch` merged, because without them `backend/test_gate_tool_actions.py` (merged from main) fails and "What can Jarvis reach" calls both tools unclassified. Its context is that patch's own four lines, so this patch must stay applied after it. The rest is the SHIPPED `jarvis_agent.py` (the two tools, the in-memory store, and the one place a grant is read) plus the two tier lines in both settings copies, which `backend/_apply_toml_tiers.py` adds to an existing PC's file at the next update. Both tools are switched on in Settings -> Tools -> "Safety and sharing" and are NOT fresh-install defaults. Applied immediately before `unknown-risk-approvable.patch` (moved there 2026-11-02 - the same move main made for `gate-tool-actions-gap.patch` in #1065: a patch that writes `jarvis_gate.py` and sits after that one defeats its guard, `backend/test_gate_unknown_risk.py`, which requires it to stay the last writer of that file), so no later patch that writes `jarvis_gate.py` has to carry its context; `backend/test_web_search_grant.py` applies and reverses it against `jarvis-backend/jarvis_gate.py` byte for byte. |
+| `web-search-grant.patch` | `jarvis_gate.py` | **"You have full approval to search the web for this conversation": ONE card, once, and search only** (the owner's ask of 2026-11-01; `docs/JARVIS-API.md` section 175). ONE approval card stands in for the ordinary `search_the_web` card for the rest of ONE conversation - and for nothing else: the only code that reads the grant is `jarvis_agent._web_search_call` (the one place whose gate action is `search_the_web`), so booking a flight, sending an email, spending money, deleting, running a command, changing a setting and working a browser each raise their own card with a grant live. The model may ASK for the grant and may never decide it: the store is written only on the generic prepare()/gate/execute() path after a verdict from a card, the tool is in `NEEDS_A_PERSON` so a loosened tier still cannot self-approve, and a denied or unanswered card writes nothing. It dies by itself - keyed on the request's own `conversation_id` (a chat with no id can neither give nor use one), capped at 8 hours, in memory only so a restart ends it - and the stop tool runs at tier `auto` with no card, because revoking only takes permission away. Lockdown outranks it. Four hunks, all in `jarvis_gate.py`: one `_RISK.update({...})` at the END OF THE FILE (`grant_web_search_conversation` is `yes`/`outbound`, a risky approval a lock screen may not swipe through; `revoke_web_search_grant` is `yes`/`local`) - the end of the file because it is the only place no earlier patch's hunk reaches in both the published base and `backend/_stack.py`'s walk: written inside `_RISK` the walk duplicated `read_web_page`'s row at the table's end, and at its top the rows landed between the two lines `unknown-risk-approvable.patch` anchors on (both caught by a suite; `_RISK.update` runs at import, so the gate sees the rows as if they were in the table) - then the word `grant` added to `_SAFE_KEYS` so a grant's id survives redaction, and the three audit writers after `_audit` (`grant_made`, `granted`, `grant_ended`) - so every search that ran unasked is in the gate's own log with the grant's id, and the CONVERSATION ID IS NEVER WRITTEN DOWN. A fourth hunk adds the two `_TOOL_ACTIONS` entries the two tools need (`approve_web_search_for_conversation` -> `grant_web_search_conversation`, `stop_web_search_approval` -> `revoke_web_search_grant`), so `action_for_tool()` answers the action each one is really put to the gate under instead of `unclassified_tool` - added 2026-11-02, after main's `gate-tool-actions-gap.patch` merged, because without them `backend/test_gate_tool_actions.py` (merged from main) fails and "What can Jarvis reach" calls both tools unclassified. Its context is that patch's own four lines, so this patch must stay applied after it. The rest is the SHIPPED `jarvis_agent.py` (the two tools, the in-memory store, and the one place a grant is read) plus the two tier lines in both settings copies, which `backend/_apply_toml_tiers.py` adds to an existing PC's file at the next update. Both tools are switched on in Settings -> Tools -> "Safety and sharing" and are NOT fresh-install defaults. Applied immediately before `unknown-risk-approvable.patch` (moved there 2026-11-02 - the same move main made for `gate-tool-actions-gap.patch` in #1065: a patch that writes `jarvis_gate.py` and sits after that one defeats its guard, `backend/test_gate_unknown_risk.py`, which requires it to stay the last writer of that file), so no later patch that writes `jarvis_gate.py` has to carry its context; `backend/test_web_search_grant.py` applies and reverses it against `jarvis-backend/jarvis_gate.py` byte for byte. |
 
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
@@ -8555,6 +8555,26 @@ finish, an app can play a short "One moment." in the voice Jarvis is using.
 The PC makes it once per voice and keeps it; the apps decide when to play it,
 and never over the answer.
 
+**"Stop saying one moment" - added 2026-11-01, your own words:** *"id like the
+ability to tell jarvis in jarvis live to adjust any settings, includimg no
+longer saying one moment while it comprehends or calculates something"*. It
+used to be the one "One moment." switch the PC could not change: the row was
+in `jarvis_settings_registry.NOT_BY_ASKING` and answered "I cannot change that
+by asking", because each app kept its own value. Now the PC keeps your answer
+too, in `voice-flow.json` in the settings folder, and
+`/api/voice/status`'s `flow.moment.enabled` - the value BOTH apps already gate
+on - is false when either that file or `[voice] one_moment_enabled` says off.
+So in Jarvis Live you can type or say **"stop saying one moment"** (or "turn
+off the one moment message", or just ask - the model's own wording reaches the
+same setter), and **"start saying one moment again"** brings it back. No card
+either way: it is one cosmetic sentence in Jarvis's own voice, and switching
+it off only takes something away. The TOML line is still the hard switch and
+still wins - asking for it back while that says `false` answers that it is
+still off instead of pretending. **What is not done here:** the desktop
+Settings row and the phone's own switch still mean "may THIS device play it",
+and neither shows the PC-wide answer; `docs/ARCHITECTURE.md` section 8 records
+that follow-up. `docs/JARVIS-API.md` section 17 part 3 has the wire shape.
+
 **What the apps do with it (2026-09-25).** While Jarvis talks and "hey
 Jarvis" listening is on, half a second of your speech **pauses** Jarvis at
 once, and about two seconds of it go to the PC with the question above: your
@@ -15122,6 +15142,39 @@ has the phone-parity row.
   is in `jarvis_settings_registry.py`'s own module header and
   `docs/JARVIS-API.md` section 58.2/58.3.
 
+## The 2026-11-01 audit, and the switch it made reachable
+
+The counts above are the 2026-09-27 slice, kept as they were written. The
+table grew after it, and the owner's standing requirement ("tell jarvis in
+jarvis live to adjust any settings") is checked against the tables themselves
+rather than against a number here: `tools/check_feature_controls.py` fails
+unless every `BOOL_SETTINGS` switch and every `SETTINGS_ROWS` row is accounted
+for, and its current answer is **34 switches, 34 rows, 57 sections**. At the
+2026-11-01 audit, of the 34 rows on the desktop page:
+
+- **22 name a `BoolSetting` and are adjustable by asking**, one of them the
+  new `one_moment`;
+- **2 are reached by another grammar** rather than a switch: `sky-show` ("show
+  the sun and moon") and `face-auto` ("turn on auto adjust"), both through
+  `jarvis_quick._animal`;
+- **9 are refused by name, in words** (`NOT_BY_ASKING`), because the value is
+  kept by a client and this backend has no route for it: app lock, Windows
+  Hello for memory lists, floating face, click-through, follow-Windows-theme,
+  the "I heard you" sound, the "open the Jarvis bar" button, desktop
+  supervision, and autostart;
+- **1 is not a preference at all** (`spd-accept`, the spending screen's hidden
+  "accept every column" control);
+
+and, outside those 34 rows, **2 are Settings-only by the owner's own decision**
+(Accounts and API keys; Restore backup), named in `SETTINGS_ONLY`.
+
+**What changed here:** "Say \"One moment\" if I'm kept waiting" left the refused
+nine and became `one_moment`. The PC keeps that answer itself now, so the thing
+the owner hears really stops (both apps gate on `flow.moment.enabled`, which is
+this switch). "I heard you" did NOT come with it, and that is not an oversight:
+that sound is made by each app from its own two tones, and the PC never makes,
+serves or hears it - there is nothing here for a sentence to change.
+
 # Talking to an AI chatbot for you, the core: `jarvis_chatbot.py` (2026-09-28)
 
 Step 1 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`, the owner's
@@ -20452,3 +20505,192 @@ entry); `jarvis_owner_check.py`, `jarvis_asks_first.py` and
 owner's drifted install the patcher refuses, and the honest route is the one
 `#997` used plus a reconcile delta - see
 `.dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md` section 6.
+
+# `control_phone` can open a listed app and start a media search: `jarvis_android_control.py` (2026-11-01)
+
+The owner asked, in their own words:
+
+> "id like jarvis live to be able to open certain apps on my android phone if i
+> ask it (during a live session on my android phone) and to be able to perform
+> certain actions like if i aaid 'hey jarvis open yourube music and play the
+> weekend'"
+
+Nothing new was added to the backend's routes, and no `.patch` file was needed:
+both files this touches (`jarvis_android_control.py`, `jarvis_agent.py`) are
+shipped whole, so they go to the base by the ordinary two-file rule.
+
+## In plain words
+
+Before this, the model could tap, swipe, type, press a key and take a
+screenshot - but it had no way to say "open an app", even though the module
+underneath had known how since 5A. The tool's own `requests` list stopped at
+five actions, so the one thing the owner actually asked for was unreachable: the
+model could not name it, so it could never ask for it.
+
+Now it can: "open YouTube Music", and "open YouTube Music and play The Weeknd".
+The first starts the app; the second starts it on a search for those words.
+
+And the owner chooses which apps exist as far as Jarvis is concerned. A new
+`[phone_apps]` table in `jarvis-framework.toml` is one line per app - the name
+you would say out loud, and the package behind it - and it ships **empty**.
+Empty means nothing is allowed, and asking anyway gets one plain sentence
+saying so.
+
+## The three actions, and the exact commands
+
+| Action | What the card prints |
+|---|---|
+| `list_apps` | **nothing** - answered from the settings file, no card, no adb |
+| `open_app` | `adb -s <serial> shell monkey -p <package> -c android.intent.category.LAUNCHER 1` |
+| `play` | `adb -s <serial> shell am start -a android.intent.action.VIEW -d <search address> -p <package>` |
+
+For "play The Weeknd" in YouTube Music, the whole command is:
+
+```
+adb -s <serial> shell am start -a android.intent.action.VIEW -d 'https://music.youtube.com/search?q=The%20Weeknd' -p com.google.android.apps.youtube.music
+```
+
+`monkey` is Android's own "launch this package's launcher activity", so there is
+no activity name to guess. `play` uses `-p`, so only the allowed app can receive
+the intent - no browser can quietly answer it instead.
+
+## Why "play" is that and not something cleverer
+
+There is no platform API for "play this song in that app". `SEARCH_LINKS` holds
+the search addresses whose own app documents them, and today that is YouTube
+Music alone (`music.youtube.com` is the app's own domain and `/search?q=` is the
+address its site uses). An app that is not in there can be **opened** and not
+asked to search, and `play` says exactly that in words - "Jarvis can open 'Maps'
+on your phone, but it does not know how to ask it to search ... Ask it to open
+the app instead." Pretending otherwise would be a lie told by a card.
+
+What `play` honestly does: it opens the app on that search. Whether the music
+starts without one tap is the app's business, and both the tool description and
+the card say "one tap may still be needed".
+
+## What is refused, and before what
+
+All of this happens in `jarvis_android_control.py`, in `plan()`, which runs
+nothing - so a refused request is a refusal **before any card exists**:
+
+- an app that is not in `[phone_apps]` - and the refusal names the apps that are;
+- an empty list (or no table at all) - the one `NO_APPS_LINE` sentence, which the
+  model can repeat to the owner word for word;
+- a name and a package that disagree - refused rather than picked between,
+  because a wrong app opened on purpose is worse than a question;
+- anything that is not a plain dotted package name (`_safe_package`), including
+  a settings line somebody typed wrong - it is left out of the list and counted,
+  never trusted;
+- anything under `com.jarvis.` - Jarvis never starts its own app, so no tap on a
+  card can reach an Approve button;
+- an empty or over-120-character search;
+- an app with no known search address (for `play`);
+- any character that would mean something to the phone's own shell: the words are
+  percent-encoded with `urllib.parse.quote(..., safe="")`, so `;`, `&`, `"`,
+  backticks and `$(...)` arrive as `%3B`, `%26`, `%22`, `%60`, `%24%28...` - and
+  the finished address is then checked against `_SAFE_URL`, which does not admit
+  `&` at all, because `adb shell` hands the line to `/system/bin/sh` where an
+  unquoted `&` starts a background job.
+
+`list_apps` is never a command: `plan()` refuses it outright, so there is no
+argv it could ever become. It answers from the settings file with the friendly
+names only - never the phone's installed apps, and never a package the owner did
+not write down.
+
+## Why a list and a refusal raise no card
+
+`_prepare_control_phone` returns one of two stand-ins instead of a plan, and
+`_one_call` answers both **before** the gate:
+
+- `_PhoneApps` - a list-only call. Nothing is sent to the phone, so there is
+  nothing to approve.
+- `_PhoneRefused` - nothing became a command (an app off the list, an empty list,
+  no phone connected). A card would ask the owner to approve an empty plan; the
+  reasons go back to the model instead, which can repeat them.
+
+A **mixed** call (one good step and one bad one) still raises a card, and the
+card prints the bad one under "will NOT run" - the same shape every other plan
+in this module has always had.
+
+## The phone is the one connected, not a guessed serial
+
+`control_phone` used to be handed whatever the model wrote in `device`, which for
+"open YouTube Music" is nothing at all - and a model was never told a serial, so
+the only way it could work was by luck. `resolve_device()` now answers that from
+`adb devices`: exactly one connected device means that one; zero or several
+means a plain refusal ("no phone is connected over adb right now ..." / "more
+than one device is connected over adb (A, B), so Jarvis did not guess which
+one"), never a guess. A serial the caller DOES name is passed through untouched:
+`run()` already re-checks it before every step, and a second opinion here is how
+two answers to one question start. `device` is therefore no longer a required
+field on the tool.
+
+## It has to work FROM the phone, which is where Live is
+
+The owner asked for this "during a live session on my android phone" - so the
+Jarvis app is the app **in front**. `run()` has always refused every step that
+sends input while a `com.jarvis.` app is in front (and with the screen off,
+`dumpsys window` says nothing at all, which the guard reads as "could not tell"
+and refuses too). That guard exists to stop a TAP landing on Jarvis's own
+Approve button - and an unconditional one refused the exact request this
+feature exists for, every time it was asked from the phone.
+
+`PACKAGE_PINNED_ACTIONS = ("open_app", "play")` is the fix, and its argument is
+that neither can do what the guard exists to prevent: both commands pin the
+package themselves (`monkey -p X`, `am start -p X`), and a `com.jarvis.` package
+is refused before a command exists at all, so X can never be Jarvis. A `tap`
+is still refused in front of the Jarvis app, and so is every other input step -
+`test_android_control.py` pins both halves.
+
+## A launch that did not happen is not reported as done
+
+`am start` and `monkey` both print their failure on **stdout** and still exit 0:
+`Error: Activity not started, unable to resolve Intent {...}` and
+`** No activities found to run, monkey aborted. **`. Reading only the exit code
+reported `done` for an app that never opened. `run()` now reads that line for
+`open_app` and `play` and stops the plan with the phone's own words, so a
+successful `am start` ("Starting: Intent ...") and a successful `monkey`
+("Events injected") stay `done` and a failed one does not.
+
+## Still opt-in, and that did not change
+
+`control_phone` is NOT in the shipped `[tools].enabled`, so a fresh install
+offers no tool that can touch a phone. To turn it on, add `"control_phone"` to
+`[tools].enabled` and add the apps to `[phone_apps]`. Its tier is unchanged
+(`control_phone = "ask"`), the tool still resolves to `jarvis_android_control_run`,
+and it is still in the agent's `NEEDS_A_PERSON` set - one card per plan, every
+literal command printed, nothing auto-approved. Both files are re-read while
+Jarvis runs, so a settings edit takes effect on the next message; a change to the
+CODE needs the reconciled backend and a restart.
+
+## Test it
+
+```powershell
+py -3 backend\test_android_control.py
+py -3 backend\test_phone_app_launch.py
+python -B backend\run_suites.py test_android_control.py test_phone_app_launch.py
+```
+
+`test_android_control.py` grew from 197 to 251 checks: the allow-list, the exact
+`open_app`/`play` argv, the encoding, every refusal, `resolve_device`, and the
+launch-that-failed. `test_phone_app_launch.py` (new, 62 checks) proves the agent
+half against the real `_one_call`: the schema the model is SENT names the three
+actions, a list-only call and a refusal raise **no** card, a real plan goes to
+the same gate action and prints the literal command on the card, and the tier,
+the gate mapping and the opt-in are unchanged.
+
+Neither suite starts `adb` or touches a phone: every one runs against an injected
+fake, and `NoRealProcess` raises if a real process is ever started.
+
+## What this repository cannot prove
+
+That YouTube Music's own App Link accepts `https://music.youtube.com/search?q=...`
+on the owner's phone, lands on the search, and whether it then starts playing
+without a tap. That is measured on the real device by the Lead, not here. If the
+address turns out not to work, the honest fix is one line in `SEARCH_LINKS`, not
+a different claim on a card.
+
+Recorded as JARVIS-API §174, and as the "One-sided on purpose" row in
+`docs/ARCHITECTURE.md` §8: the ability is in both apps' chats, the permission
+(`[phone_apps]` and `[tools].enabled`) is the PC's alone because it is deep
+config editing.

@@ -214,8 +214,17 @@ def t_setting_links_are_real():
            if r.setting and r.setting not in keys]
     check("every row's `setting` names a real BoolSetting", not bad, "; ".join(bad))
     linked = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.setting)
-    check("eighteen desktop rows are the same switch as a spoken setting",
-          len(linked) == 18, f"{linked} - if this grew, the row was given a setter")
+    check("nineteen desktop rows are the same switch as a spoken setting",
+          len(linked) == 19, f"{linked} - if this grew, the row was given a setter")
+    # NINETEEN SINCE 2026-11-01: `voice-one-moment` ("Say \"One moment\" if I'm
+    # kept waiting") became a real switch, `one_moment`, on the owner's own ask
+    # ("...includimg no longer saying one moment while it comprehends or
+    # calculates something"). Its setter calls jarvis_voice_flow's own
+    # `request_one_moment`, and the value both apps obey
+    # (`flow.moment.enabled`) is read from it. It LEFT `NOT_BY_ASKING` at the
+    # same time, which is what `t_the_deliberate_open_only_switches_stay_
+    # unreachable` in test_settings_registry.py now checks for the remaining
+    # nine.
     # The spoken settings with no desktop toggle. Two have no switch row at
     # all on this page (one is a row inside "What asks first", one is the
     # 30B coder's own opt-in), two are the phone's own, and the rest are
@@ -339,9 +348,17 @@ def t_bool_settings_is_the_measured_thirteen():
     calendar's switch. Cardless either way, ON by default, OFF keeps every
     event; an orphan above too, because the Calendar Settings card that will
     draw it is the UI slice's.
+
+    Thirty-four since 2026-11-01: `one_moment`, "Say \"One moment\" if I'm kept
+    waiting". Cardless either way (one cosmetic sentence in Jarvis's own
+    voice), and NOT an orphan: it is one of the nineteen linked rows above,
+    because `voice-one-moment` already existed on the page - only the setter
+    was missing. Its `section` is None, like antislop's, because that field
+    says which FEATURE a switch belongs to and the "voice" card is the wake
+    word's; its own comment says so.
     """
-    check("BOOL_SETTINGS holds its thirty-three spoken settings",
-          len(R.BOOL_SETTINGS) == 33, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-four spoken settings",
+          len(R.BOOL_SETTINGS) == 34, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

@@ -860,7 +860,7 @@ def _treq(body, tools, *, here, tiers=None, gate=None, armed=True, spawn=None):
 
 def t_offering_a_tool_is_a_different_thing_from_loosening():
     # 23 since 2026-11-01: the conversation-scoped web-search approval and its
-    # instant stop (jarvis_agent.py, JARVIS-API section 174) are chat abilities
+    # instant stop (jarvis_agent.py, JARVIS-API section 175) are chat abilities
     # the owner switches on here, in "Safety and sharing", like
     # protect_from_jarvis and send_file_to_phone beside them.
     check("the tiered in-app list is Tier A + Tier B, 23 tools, calendar_read kept",

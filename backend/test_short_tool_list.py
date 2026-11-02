@@ -287,7 +287,7 @@ def t_what_it_saves():
     # estimate_tokens: `approve_web_search_for_conversation` (277 tokens) and
     # `stop_web_search_approval` (204) are the conversation-scoped web-search
     # approval and its instant stop (jarvis_agent.WEB_SEARCH_GRANT, JARVIS-API
-    # section 174). They are NOT in the core: 481 tokens on EVERY turn would be
+    # section 175). They are NOT in the core: 481 tokens on EVERY turn would be
     # more than a third of the short list's whole budget, on a card whose total
     # working memory is about 8,000. Their own group costs 27 - the name "web
     # search grant" and its one line, in more_tools' description and in its
@@ -340,7 +340,7 @@ def t_what_it_saves():
     # Pinned 380 -> 395 on 2026-11-01, by the same rule and written down for the
     # same reason: the `web_search_grant` group ("let web searches in this chat
     # stop asking", the conversation-scoped web-search approval and its instant
-    # stop, JARVIS-API section 174) is one more group name and one more line in
+    # stop, JARVIS-API section 175) is one more group name and one more line in
     # this text. Measured with this module's own estimate_tokens rule on this
     # tree: without the group 360, with it 387 - so the old 380 had 20 tokens
     # spare and the group needs 27. 395 leaves 8. The alternative was a wider
