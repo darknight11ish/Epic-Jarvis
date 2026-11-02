@@ -353,6 +353,37 @@ instruction tries to wear a person into pressing Approve without reading.
 The limit is a refusal, never a grant. `backend/README.md`, "The approval
 gate, tightened".
 
+**A standing permission is allowed for exactly ONE action, and it is never a
+setting** (the owner's ask, 2026-11-01: *"you have full approval to search the
+web for anything during this conversation ... make sure a card comes up that I
+have to approve before this happens"*, and *"if I ask anything further like book
+a flight for me online then it will have to have another card"*; `docs/JARVIS-API.md`
+section 175). ONE card, once, stands in for the `search_the_web` card for the rest
+of ONE conversation - and for nothing else. The four rules that make it a
+permission model rather than a hole in it:
+
+- **One action.** The only code that reads a grant is `_web_search_call`, the one
+  place whose gate action is `search_the_web`; the only code that writes or
+  clears one is the pair of tools that ask for it and stop it. Every other
+  action keeps its own tier, its own card and its own yes - "book a flight" is
+  `browser_control` and still asks, with a grant live.
+- **A card first, always.** The model may ask for the grant; it may never decide
+  it. The store is written only down the ordinary prepare()/gate/execute() path
+  after a verdict from a card, a denial or an unanswered card writes nothing, and
+  the tool is in `NEEDS_A_PERSON`, so a settings file that loosened its tier
+  still cannot make it self-approve.
+- **It dies by itself.** Keyed on the request's own `conversation_id` (so one
+  chat's grant cannot reach another, and a request with no id can neither give
+  nor use one), capped at 8 hours, in memory only - no file, no setting, nothing
+  that survives a restart - and ended instantly by the stop tool, which is tier
+  `auto` because revoking only ever takes permission away. Lockdown outranks it.
+- **Always logged.** `gate.grant_made`, one `gate.granted` per search it covered
+  (with the grant's id) and `gate.grant_ended` go in the gate's own audit log,
+  written through `jarvis_gate`'s own functions. The conversation id is never
+  written down, so the log says a search ran unasked without becoming a way to
+  link chats together. A backend whose gate is too old to write those lines
+  refuses to create a grant at all.
+
 **What changed on 2026-09-26** (the approvals audit,
 `docs/APPROVALS-AUDIT-2026-09-26.md`; the owner's four decisions): a plain
 repeating alarm, reminder or standby schedule has no card (the briefing and
@@ -3618,7 +3649,7 @@ are deliberate and recorded rather than left to be discovered:
 | Setting an API chatbot's monthly money limit, or correcting its price (`py -3 jarvis_chatbot_api.py limit <service> <dollars>`, `price <service> <in> <out>`, `spent`), 2026-09-28 | Set on the PC only, the same place a key is added, as the owner decided ("a monthly amount per service, set on the PC"). Raising a limit or lowering a price is a loosening - more money can leave - and a person typing at the PC's own command line is how every other loosening of this feature is done (a key, the model line); there is no route for either, so no app, and nothing that holds the pairing token, can raise one. Both apps READ it: the chooser shows "About $X of $Y left this month for <company> (prices are estimates you can correct on the PC)" under each API service with a limit, and the approval card (written on the PC) says the same. Lowering is on the PC too, to keep ONE place for the numbers. |
 | Jarvis Live's always-on-top badge, its tray row and the red mark on the tray icon, and ending Live when Windows locks (and pausing it when the lock cannot be read) | The badge is the PC's always-visible Live sign (docs/LIVE-DESIGN.md); the phone's sign is its Live screen, a strip on Home and an ongoing notification (the row in the phone table). Windows' lock is a PC thing; on the phone, App lock and the screen do that job. |
 | Jarvis Live's "End Live when" as a PC voice setting (`live_end`: when App lock would ask again, or - looser, with an approval card - only when Windows locks) | The owner's decision of 2026-09-28 is about the PC, where Live can outlast App lock while the owner walks away from a desk. **The phone has its own "End Live when" since 2026-09-28 (the Jarvis Live extras)**, on its Security screen, saved on the phone: "When App lock would ask again" (default) or "Only when the phone's screen locks" (looser, so it asks for the fingerprint or PIN, like every loosening there - not a card, because the phone's lock settings never go to the PC). Each app keeps its own, because each app's App lock is its own. |
-| **"Voice: <the voice in use>, from your PC" under the phone's Live controls** (2026-10-28; JARVIS-API §15, `voice/VoiceNow.kt`) | **One-sided on purpose, and it is the phone's by nature: the two apps' Live screens are not the same screen.** The voice itself is NOT one-sided - Live on both devices asks the PC's `/api/voice/say` for its sound, in the one PC-wide setting either app can change. What only the phone has is the *sentence*: on the phone the reply is played by the app from a WAV the PC made, so the app can be the one that says which voice that was and can say plainly when the PC had no voice engine and the phone's own offline voice spoke instead (a voice no PC setting can change). On the desktop Live is the PC's own session speaking through the PC's own voice path, and Settings -> Voice already shows that voice on the same machine - a second line in the HUD would repeat it and, worse, could disagree with it. No route was added, so `tools/check_parity.py` has nothing new to classify. |
+| **"Voice: <the voice in use>, from your PC" under the phone's Live controls - REMOVED 2026-11-02** (it was added 2026-10-28; JARVIS-API §15, `voice/VoiceNow.kt`) | **No longer a one-sided exception: neither app draws it.** The owner asked for it to go on 2026-11-02 - "i dontt need this to say Microphone: this phone'sVoice: American (female) - Heart, at the bottom of the screen during jarvis live" - and the microphone line above it went with it. The two fixed lines were removed from the phone's Live notes plate, and `voice/VoiceNow.kt`'s formatter and its test stay. The voice itself was never one-sided: Live on both devices asks the PC's `/api/voice/say` for its sound, in the one PC-wide setting either app can change, and the sentence only said which voice that was. No route was added or removed, so `tools/check_parity.py` has nothing to classify. |
 | The "Start or end Jarvis Live" hotkey (`hotkeys.rs` `toggle_live`, off until the owner picks a key; Alt+Shift+L suggested), 2026-09-28 | A key on a PC's keyboard. The phone's one-tap equivalents are its Quick Settings tile and the headset button (the phone table). |
 | Jarvis Live noticing "another program is using the microphone" (Windows' own record) and muting itself | The PC's way of noticing a call (the owner's answer, 2026-09-28). The phone notices a call from Android's audio mode instead (the phone row). When Windows' record cannot be read, the PC's sign says "Jarvis can't tell when you're on a call - use Mute". |
 | "This looks like a game, so nothing in it is kept or learned." strip under the Jarvis bar (the second chat audit, 2026-09-28) | The bar has a strip for the chat's own state ("Temporary chat: ..."); a game or role-play the PC made temporary by itself gets one too, so a chat that never reaches History says so. The phone has no such strip: it only avoids saying "the last one is in History" for a game (`ChatSession.game`), and "New conversation"/"After 30 quiet minutes" say the plain thing. |

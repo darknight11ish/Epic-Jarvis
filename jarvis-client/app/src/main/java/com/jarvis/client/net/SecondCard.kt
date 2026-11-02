@@ -491,8 +491,9 @@ object SecondCard {
 
     /**
      * Whether a picture sent now is of any use: the second card's picture
-     * model sees it, or the PC reads the words in it (2026-09-26). The Photo
-     * button and every send go by this.
+     * model sees it, or the PC reads the words in it (2026-09-26). The phone's
+     * one Attach a file row and every send go by this - the Attach row's
+     * photo half replaced the Photo button on 2026-11-01.
      */
     fun picturesTaken(read: Read): Boolean = visionAvailable(read) || pictureTextAvailable(read)
 

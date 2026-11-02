@@ -1651,7 +1651,7 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 175)) + (177,)   # 129 ..= 174 then 177 (170 "Protected from Jarvis", 2026-10-31, this lane; the notes-editor lane also took the next number, so one of the two is renumbered at merge, as 161/162 were; 169 the jobs create/answer routes, 2026-10-30; 146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 the blind-approval guards, 2026-10-21; 151 the Obsidian vault organizer, 2026-10-21; 152 the Notion export -> Obsidian vault routes, 2026-10-21; 153 the Live voice screen/selection reads, 2026-10-21; 154 the spoken-command normaliser and speaking-speed reflex, Voice Slice A, 2026-10-21; 155 Duet Wave D-2 (read-only continuation, outbound tiers, source provenance, walk brain-dump), 2026-10-22; 161 Google Calendar, both ways; 162 connecting an account by talking, both 2026-10-28; 163 a file in a chat, 2026-10-30; 164 Jarvis's own calendar, 2026-10-29; 165 what a parking stay costs, minute by minute, 2026-10-30; 166 building an Android app from chat and sideloading it, 2026-10-30; 167 the phone's notification styles, built from the owner's words, 2026-10-30; 168 the calendar in the desktop HUD, 2026-10-30; 169 starting a background job and answering a parked grant, 2026-10-30; 170 the Obsidian notes editor, 2026-10-31; 171 Protected from Jarvis, 2026-10-31; 172 sending one file from the PC to the phone; 173 the surface-aware answers, 2026-10-31; 174 opening an app on the phone and starting a media search, 2026-11-01; 177 approving a card from its Android notification, 2026-11-02 - three above the tail because #1074 takes 175 and #1073 takes 176, both in flight and merging before this one, so no two PRs claim one number; see RESERVED_SECTION_NUMBERS below)
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 176)) + (177,)   # 129 ..= 175 then 177 (175 "a conversation may search the web after one Allow", 2026-11-02, this branch; 170 "Protected from Jarvis", 2026-10-31, this lane; the notes-editor lane also took the next number, so one of the two is renumbered at merge, as 161/162 were; 169 the jobs create/answer routes, 2026-10-30; 146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 the blind-approval guards, 2026-10-21; 151 the Obsidian vault organizer, 2026-10-21; 152 the Notion export -> Obsidian vault routes, 2026-10-21; 153 the Live voice screen/selection reads, 2026-10-21; 154 the spoken-command normaliser and speaking-speed reflex, Voice Slice A, 2026-10-21; 155 Duet Wave D-2 (read-only continuation, outbound tiers, source provenance, walk brain-dump), 2026-10-22; 161 Google Calendar, both ways; 162 connecting an account by talking, both 2026-10-28; 163 a file in a chat, 2026-10-30; 164 Jarvis's own calendar, 2026-10-29; 165 what a parking stay costs, minute by minute, 2026-10-30; 166 building an Android app from chat and sideloading it, 2026-10-30; 167 the phone's notification styles, built from the owner's words, 2026-10-30; 168 the calendar in the desktop HUD, 2026-10-30; 169 starting a background job and answering a parked grant, 2026-10-30; 170 the Obsidian notes editor, 2026-10-31; 171 Protected from Jarvis, 2026-10-31; 172 sending one file from the PC to the phone; 173 the surface-aware answers, 2026-10-31; 174 opening an app on the phone and starting a media search, 2026-11-01; 177 approving a card from its Android notification, 2026-11-02 - 176 is RESERVED by #1073, still in flight, so this branch's section is 177 and no two PRs claim one number; see RESERVED_SECTION_NUMBERS below)
 #: 156 is section 156, the private chat (backend Slice 1, 2026-10-25);
 #: 157 is the owner-secret hand-off card, wired 2026-10-26;
 #: 158 is updates in chat - "is there an update?", "what changed in the
@@ -1685,16 +1685,16 @@ EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 175)) + (177,)   # 129 ..= 174 the
 #: This list names the RELEASED tail, so a dropped section anywhere in it is
 #: caught, and a section above it is reported rather than silently accepted.
 
-#: 175 AND 176 ARE RESERVED, NOT MISSING. Two pull requests in flight before
-#: this branch add them - #1074 takes 175 and #1073 takes 176 - so the Lead
-#: gave THIS feature 177 rather than let two PRs claim one number. Until both
-#: land, `docs/JARVIS-API.md` legitimately reads 129 ..= 174 then 177, and the
-#: contiguity check below would call that a hole. Naming the two numbers here
-#: keeps that check biting on every OTHER number - a third hole, a repeat, or
-#: 175/176 arriving before their own PRs land all still fail - instead of
+#: 176 IS RESERVED, NOT MISSING. #1073 adds it and is still in flight; #1074's
+#: 175 landed on main on 2026-11-02 and is in the list above. This branch's new
+#: section is 177 - the Lead's numbering, so no two PRs claim one number - so
+#: `docs/JARVIS-API.md` legitimately reads 129 ..= 175 then 177 until #1073
+#: lands, and the contiguity check below would call that a hole. Naming the
+#: number here keeps that check biting on every OTHER number - a second hole, a
+#: repeat, or 176 arriving before #1073 lands all still fail - instead of
 #: switching the check off. Delete this tuple, and 177's entry in
-#: `EXPECTED_SECTIONS_FROM_129`, in the commit that brings #1074 and #1073 in.
-RESERVED_SECTION_NUMBERS = (175, 176)
+#: `EXPECTED_SECTIONS_FROM_129`, in the commit that brings #1073 in.
+RESERVED_SECTION_NUMBERS = (176,)
 
 
 def t_every_section_from_129_up_is_still_in_the_document():
@@ -1778,9 +1778,10 @@ def t_the_sections_after_129_run_without_a_gap_or_a_repeat():
               "there is no section 129, so the run cannot be checked")
         return
     tail = numbered[numbered.index(129):]
-    # 175 and 176 are RESERVED by the in-flight PRs #1074 and #1073, so the
-    # document has 177 without them on purpose - see RESERVED_SECTION_NUMBERS.
-    # Every OTHER number in the run must still be present exactly once.
+    # 176 is RESERVED by the in-flight PR #1073 (175 landed with #1074 on
+    # 2026-11-02), so the document has 177 without 176 on purpose - see
+    # RESERVED_SECTION_NUMBERS. Every OTHER number in the run must be present
+    # exactly once.
     expected = [n for n in range(129, max(tail) + 1)
                 if n not in RESERVED_SECTION_NUMBERS]
     missing = [n for n in expected if n not in tail]

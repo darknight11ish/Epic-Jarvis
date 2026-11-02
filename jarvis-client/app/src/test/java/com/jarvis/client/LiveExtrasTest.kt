@@ -108,7 +108,7 @@ class LiveExtrasTest {
     }
 
     @Test
-    fun `the Bluetooth headset's microphone is preferred, and the screen says which`() {
+    fun `the Bluetooth headset's microphone is preferred, and its words name it`() {
         val phone = LiveExtras.Mic(15, "")
         val sco = LiveExtras.Mic(7, "Buds")
         val le = LiveExtras.Mic(26, "LE Buds")
@@ -137,24 +137,29 @@ class LiveExtrasTest {
      *    three phrases, so the raw text held only one of them (measured on the
      *    file the paragraph was removed from).
      * 2. Every `add(...)` in the notes plate is given a quoted note the plate
-     *    itself writes, or the microphone line `add(it)`. A note kept in a
-     *    constant or a field - or a lookup whose key is quoted,
-     *    `SEEN.getValue("x")` - is caught here, whatever its wrapping and
-     *    whatever its words.
+     *    itself writes. A note kept in a constant or a field - or a lookup
+     *    whose key is quoted, `SEEN.getValue("x")` - is caught here, whatever
+     *    its wrapping and whatever its words.
      * 3. The plate's own literals are short. 112 characters is the honest
-     *    boundary: the plate already RENDERS a 110-character note, joined from
-     *    two literals at LiveScreen.kt:515-516 (79 + 31), so "no note of 90+"
-     *    was measuring something the screen was already doing. The rule is
-     *    stated on the source, not on the note, because a note can be joined
-     *    from literals or built by a call such as `BargeIn.describe(...)`, and
-     *    a text test cannot see the rendered length. What it can see is that
-     *    no literal - and no run of literals joined by + - in the plate is 112
-     *    characters or longer. The longest single literal in the plate today
-     *    is 79 characters of text (81 counting its quotes).
+     *    boundary: the plate RENDERS a 110-character note joined from two
+     *    literals (79 + 31), so "no note of 90+" was measuring something the
+     *    screen was already doing. The rule is stated on the source, not on
+     *    the note, because a note can be joined from literals or built by a
+     *    call such as `BargeIn.describe(...)`, and a text test cannot see the
+     *    rendered length. What it can see is that no literal - and no run of
+     *    literals joined by + - in the plate is 112 characters or longer. The
+     *    longest single literal in the plate today is 79 characters of text
+     *    (81 counting its quotes).
      *
      * The words are deliberately not pinned by their old constant name: the
      * constant is gone, and "never approves anything" legitimately remains in
      * LiveExtras's own KDoc.
+     *
+     * The microphone line ("Microphone: this phone's", or a Bluetooth
+     * headset's) was removed with the voice line on the owner's request of
+     * 2026-11-02, so this test now checks the other way: `add(it)` must not be
+     * back. `LiveExtras.micWords` still words the route (its own test keeps
+     * that); it is simply no longer drawn here.
      */
     @Test
     fun `the Live screen does not carry the long headset explanation`() {
@@ -184,10 +189,10 @@ class LiveExtrasTest {
         // whole file (a KDoc comment then made the old ". " rule fire).
         val plate = notesPlate(screen)
 
-        // 2a. Every add(...) is a quoted note the plate itself writes, or the
-        // microphone line. A constant, a field, or a lookup whose *key* is
-        // quoted (`SEEN.getValue("x")`) are all caught here, whatever the note
-        // says and however it is wrapped.
+        // 2a. Every add(...) is a quoted note the plate itself writes. A
+        // constant, a field, or a lookup whose *key* is quoted
+        // (`SEEN.getValue("x")`) are all caught here, whatever the note says
+        // and however it is wrapped.
         val args = addArguments(plate)
         assertTrue(
             "no add(...) calls were found in the notes plate - the plate moved, update this test",
@@ -222,8 +227,11 @@ class LiveExtrasTest {
             SENTENCE_THEN_SEAM.containsMatchIn(plate),
         )
 
-        // The one short line the owner kept is still required.
-        assertTrue("the microphone line is still in the notes", plate.contains("mic?.let { add(it) }"))
+        // The microphone line the owner removed on 2026-11-02 is not back.
+        assertFalse(
+            "the microphone line is back in the notes",
+            plate.contains("mic?.let { add(it) }"),
+        )
     }
 
     /** The `" + "` seam between two string literals, and any whitespace around the +. */
@@ -279,10 +287,9 @@ class LiveExtrasTest {
     }
 
     /**
-     * Is this `add(...)` argument a note the plate itself writes? True for the
-     * microphone line (`it`) and for an argument that carries a string literal
-     * outside every bracket - `"note"`, `"a" + "b"`, or the real plate's
-     * `if (...) { "a note" } else { "another" }`.
+     * Is this `add(...)` argument a note the plate itself writes? True for an
+     * argument that carries a string literal outside every bracket - `"note"`,
+     * `"a" + "b"`, or the real plate's `if (...) { "a note" } else { "another" }`.
      *
      * A literal *inside* brackets is a key, not a note: `SEEN.getValue("x")`
      * and `SEEN["x"]` both render a string the plate does not write, so both
@@ -291,7 +298,6 @@ class LiveExtrasTest {
      * quoted key through.
      */
     private fun isQuotedNote(arg: String): Boolean {
-        if (arg == "it") return true
         var depth = 0
         var i = 0
         while (i < arg.length) {

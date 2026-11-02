@@ -74,9 +74,10 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The Tier A + Tier B tools that may be OFFERED to the AI model at all from
 /// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word (the
-/// 2026-10-31 tiered ruling, 21 tools). A DIFFERENT list from [`SWITCHABLE`],
+/// 2026-10-31 tiered ruling, 23 tools since 2026-11-01). A DIFFERENT
+/// list from [`SWITCHABLE`],
 /// and desktop only; Tier C and the unlisted tools stay settings-file choices.
-pub(crate) const TOOLS_SWITCHABLE: [&str; 21] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 23] = [
     "calendar_read",
     "notes_search",
     "append_obsidian_daily",
@@ -90,6 +91,13 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 21] = [
     "protect_from_jarvis",
     "github_search",
     "send_file_to_phone",
+    // The conversation-scoped web-search approval and its instant stop
+    // (jarvis_agent.py, 2026-11-01; JARVIS-API section 175): chat abilities
+    // the owner switches on here, like protect_from_jarvis above. Neither is
+    // a fresh-install default, and turning the grant tool on approves nothing
+    // by itself - every grant still needs its own card.
+    "approve_web_search_for_conversation",
+    "stop_web_search_approval",
     "email_check",
     "send_email",
     "draft_email",

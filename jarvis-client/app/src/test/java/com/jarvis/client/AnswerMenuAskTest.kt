@@ -91,6 +91,43 @@ class AnswerMenuAskTest {
         assertFalse(AnswerMenuAsk.matches("?"))
     }
 
+    // The one decision every Send shares (2026-11-02). The face bar's box was
+    // added without it and sent "was this answer right?" to the PC.
+
+    @Test
+    fun `an ordinary question the caller may send is sent`() {
+        assertEquals(AnswerMenuAsk.Decision.SEND, AnswerMenuAsk.decide("what time is it", true, true))
+        assertEquals(AnswerMenuAsk.Decision.SEND, AnswerMenuAsk.decide("what time is it", true, false))
+    }
+
+    @Test
+    fun `a held send does nothing, and does not use the words up`() {
+        assertEquals(AnswerMenuAsk.Decision.HELD, AnswerMenuAsk.decide("what time is it", false, true))
+        assertEquals(AnswerMenuAsk.Decision.HELD, AnswerMenuAsk.decide("", false, false))
+        // No link and a picture still being prepared are the same decision:
+        // nothing is sent, and the words stay in the box.
+        assertEquals(AnswerMenuAsk.Decision.HELD, AnswerMenuAsk.decide("what time is it", false, false))
+    }
+
+    @Test
+    fun `the menu is decided before the link, and only for a finished answer`() {
+        // On a dead link the menu still opens: it is local, and nothing is sent.
+        assertEquals(
+            AnswerMenuAsk.Decision.OPEN_MENU,
+            AnswerMenuAsk.decide("was this answer right?", canSend = false, hasFinishedAnswer = true),
+        )
+        // Half a reply, or none: the words stay and the caller says NO_ANSWER.
+        assertEquals(
+            AnswerMenuAsk.Decision.NEEDS_ANSWER,
+            AnswerMenuAsk.decide("was this answer right?", canSend = true, hasFinishedAnswer = false),
+        )
+        // A real question is never taken for the menu, whatever is on screen.
+        assertEquals(
+            AnswerMenuAsk.Decision.SEND,
+            AnswerMenuAsk.decide("was this right for you", canSend = true, hasFinishedAnswer = true),
+        )
+    }
+
     @Test
     fun `the line said when there is no finished answer is one short sentence`() {
         assertTrue(AnswerMenuAsk.NO_ANSWER.endsWith("."))

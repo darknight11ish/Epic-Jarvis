@@ -159,7 +159,16 @@ class AsksFirstTest {
         assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
-        assertEquals("21 one-tool switches", 21, rawIds.size)
+        // 21 Tier A + Tier B switches when this surface landed, PLUS the two the
+        // conversation-scoped web-search grant added on 2026-11-01
+        // (`approve_web_search_for_conversation`, `stop_web_search_approval`).
+        // Both are ordinary read-only rows here: the phone shows them in the
+        // PC's own words and cannot switch them, like every other one.
+        assertEquals("23 one-tool switches", 23, rawIds.size)
+        for (id in listOf("approve_web_search_for_conversation", "stop_web_search_approval")) {
+            assertTrue("the web-search grant's tool $id is missing from the phone's view",
+                rawIds.contains(id))
+        }
         assertEquals("every tool, in the PC's own order",
             rawIds, t.groups.flatMap { g -> g.rows.map { it.id } })
         assertEquals("the PC's four group titles, in order",
