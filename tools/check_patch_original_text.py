@@ -323,6 +323,35 @@ PIN = {
     # backend/test_gate_unknown_risk.py, which reverses this patch out of the
     # published base and applies it forwards again, byte for byte.
     "unknown-risk-approvable.patch":            (5, 42),    # position 163
+    # 2026-11-01, web-search-grant.patch (the owner's ask: "you have full
+    # approval to search the web for anything during this conversation ... make
+    # sure a card comes up that I have to approve"). ALL THREE of its hunks read
+    # text only the owner's PC holds, and every one is honest rather than drift
+    # - no patch in this walk writes any of it:
+    #   * the tail of the `if __name__` block, where one `_RISK.update({...})`
+    #     adds the two risk rows. The END OF THE FILE is the only place in this
+    #     file that belongs to no earlier patch's hunk in either tree. Inside
+    #     `_RISK` it cost more than lines: at the table's END the preceding row
+    #     is `read_web_page` here and `chatbot-limits.patch`'s rows in the walk,
+    #     so the walk pasted a second copy of the row
+    #     (backend/test_gate_risk_words.py caught it), and a hunk with no
+    #     trailing context avoided that but needs `git apply --unidiff-zero`,
+    #     which scripts/apply-patches.ps1 does not pass - so it would not apply
+    #     on the owner's PC; at the table's TOP the rows landed between the two
+    #     lines `unknown-risk-approvable.patch` anchors on, so that patch could
+    #     no longer be reversed out of the base (backend/test_gate_unknown_risk.py
+    #     caught that). `_RISK.update` runs at import, before any `check()`, so
+    #     the gate sees both rows exactly as if they were in the table;
+    #   * `_SAFE_KEYS`, which gains the one word "grant" so a grant's id
+    #     survives redaction. That line is the owner's own and no patch rewrites
+    #     it;
+    #   * `_audit()`'s body (and the two blank lines and rule after it), under
+    #     which the three audit writers are added. `_audit` is the owner's own
+    #     function and no patch touches it.
+    # Checked the other way by backend/test_web_search_grant.py, which applies
+    # this patch to jarvis-backend/jarvis_gate.py forwards and reverses it byte
+    # for byte.
+    "web-search-grant.patch":                   (3, 14),    # position 165
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under

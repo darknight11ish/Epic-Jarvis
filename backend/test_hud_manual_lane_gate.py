@@ -164,7 +164,8 @@ def t_the_patch_and_the_base():
     # POST route list and the initiative start-up block), no gate row and no
     # install block of its own. None of the four moves the loader's anchor.
     later = {"learning-extract-reason.patch", "attached-file.patch",
-             "unknown-risk-approvable.patch", "jobs-routes.patch"}
+             "unknown-risk-approvable.patch", "jobs-routes.patch",
+             "web-search-grant.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

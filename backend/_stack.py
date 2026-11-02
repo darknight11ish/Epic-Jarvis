@@ -567,7 +567,38 @@ RATCHET = {
     #: `unknown-risk-approvable.patch: 5`; backend/test_gate_unknown_risk.py
     #: proves the after-image is still the base, byte for byte. A ratchet: it
     #: may still only go down.
-    "jarvis_gate.py": 55,
+    #:
+    #: RAISED 2026-11-01, 55 -> 58, for `web-search-grant.patch` (the owner's
+    #: "full approval to search the web for this conversation"). ALL THREE of its
+    #: hunks read text only the owner's PC holds, and every one is honest rather
+    #: than drift - no earlier patch writes any of it:
+    #:
+    #:   * the tail of the `if __name__` block, where one `_RISK.update({...})`
+    #:     adds the two risk rows (3 lines). The END OF THE FILE is the only
+    #:     place in this file that belongs to no earlier patch's hunk in either
+    #:     tree. Written INSIDE `_RISK` the walk costs this patch one or two
+    #:     hunks AND breaks something: at the table's END the preceding row is
+    #:     `read_web_page` in the published base and `chatbot-limits.patch`'s
+    #:     rows in this walk, so the walk pasted a second copy of the row
+    #:     (backend/test_gate_risk_words.py caught it), and a hunk with no
+    #:     trailing context avoided the duplicate but needs `git apply
+    #:     --unidiff-zero`, which scripts/apply-patches.ps1 does not pass, so it
+    #:     would not apply on the owner's PC; at the table's TOP the rows landed
+    #:     between the very two lines `unknown-risk-approvable.patch` anchors on,
+    #:     so that patch could no longer be reversed out of the base
+    #:     (backend/test_gate_unknown_risk.py caught that);
+    #:   * `_SAFE_KEYS`, which gains the one word "grant" so a grant's id
+    #:     survives redaction (3 lines); the line is the owner's own;
+    #:   * `_audit()`'s body, under which the three audit writers
+    #:     (grant_made / granted / grant_ended) are added (8 lines). `_audit` is
+    #:     the owner's own function and no patch touches it.
+    #:
+    #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 58 and
+    #: `by_patch` names `web-search-grant.patch: 3` (14 lines in all, pinned by
+    #: tools/check_patch_original_text.py). backend/test_web_search_grant.py
+    #: applies the patch to the published base and reverses it byte for byte. A
+    #: ratchet: it may still only go down.
+    "jarvis_gate.py": 58,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

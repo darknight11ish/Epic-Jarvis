@@ -382,8 +382,18 @@ def t_the_patch_is_registered_and_its_place_is_measured():
           names[-1] == "plugin-loader.patch", names[-1])
     after = names[names.index(PATCH.name) + 1:]
     writers = [n for n in after if "jarvis_gate.py" in _patch_targets(n)]
-    check("no patch after it writes jarvis_gate.py - so it cannot disturb one",
-          not writers, writers)
+    # ONE patch after it writes jarvis_gate.py, and only one: 2026-11-01's
+    # web-search-grant.patch (the owner's "full approval to search the web for
+    # this conversation"). It cannot disturb this patch's lines, and that is
+    # measured rather than promised: its three hunks are two rows at the TOP of
+    # `_RISK` (this patch's eight rows sit BELOW them, untouched), the word
+    # "grant" in `_SAFE_KEYS`, and the three audit writers after `_audit()`.
+    # None of those is a line this patch wrote, and its own suite
+    # (backend/test_web_search_grant.py) applies and reverses it byte for byte
+    # against the published base.
+    check("no patch after it writes jarvis_gate.py, bar web-search-grant.patch, "
+          "whose hunks touch none of its lines",
+          writers in ([], ["web-search-grant.patch"]), writers)
     check("it comes after readpage.patch, so the table is already its full height",
           names.index(PATCH.name) > names.index("readpage.patch"))
     # The rows are the FIRST thing in the table rather than the last, and that

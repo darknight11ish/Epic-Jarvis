@@ -859,9 +859,13 @@ def _treq(body, tools, *, here, tiers=None, gate=None, armed=True, spawn=None):
 
 
 def t_offering_a_tool_is_a_different_thing_from_loosening():
-    check("the tiered in-app list is Tier A + Tier B, 21 tools, calendar_read kept",
+    # 23 since 2026-11-01: the conversation-scoped web-search approval and its
+    # instant stop (jarvis_agent.py, JARVIS-API section 174) are chat abilities
+    # the owner switches on here, in "Safety and sharing", like
+    # protect_from_jarvis and send_file_to_phone beside them.
+    check("the tiered in-app list is Tier A + Tier B, 23 tools, calendar_read kept",
           AF.TOOLS_SWITCHABLE == tuple(AF.TIER_A) + tuple(AF.TIER_B)
-          and "calendar_read" in AF.TIER_A and len(AF.TOOLS_SWITCHABLE) == 21)
+          and "calendar_read" in AF.TIER_A and len(AF.TOOLS_SWITCHABLE) == 23)
     check("Tier C and the nine unlisted tools are NOT switchable in-app",
           not (set(AF.TIER_C) | set(AF.TIER_UNLISTED)) & set(AF.TOOLS_SWITCHABLE),
           (AF.TIER_C, AF.TIER_UNLISTED))
@@ -987,9 +991,9 @@ def t_the_tools_status_and_the_page():
     AF.tools_enabled_set = tools.enabled
     try:
         st = AF.tools_status(here=True)
-        check("the label, the 21 grouped items, the vault row and the not-offered list",
+        check("the label, the 23 grouped items, the vault row and the not-offered list",
               st["label"] == AF.TOOLS_LABEL and st["can_enable"] is True
-              and len(st["items"]) == 21
+              and len(st["items"]) == 23
               and [g["title"] for g in st["groups"]]
               == [title for title, _tools in AF.TOOL_GROUPS]
               and st["items"][0]["group"] == AF.TOOL_GROUPS[0][0]

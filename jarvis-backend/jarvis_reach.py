@@ -155,6 +155,16 @@ TOOL_NAMES = {
     # test_reach.py requires every tool to have plain words for the page.
     "connect_account": "Connecting a calendar or GitHub (one card on this PC; you "
                        "type the details, never the model)",
+    # The conversation-scoped web-search approval (jarvis_agent.py, the owner's
+    # ask of 2026-11-01). The page lists every tool the model can offer, so both
+    # halves get plain words - and the page's own sentence has to say what the
+    # grant does NOT reach, because that is the whole safety story: it covers
+    # web searches in one chat, and every other act keeps its own card.
+    "approve_web_search_for_conversation": "Letting web searches in THIS chat run "
+                                           "without a card each time (one card, once; search only - "
+                                           "everything else still asks; until you say stop or 8 hours pass)",
+    "stop_web_search_approval": "Putting the card back in front of every web search "
+                                "in this chat (instant, no card)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as

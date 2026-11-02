@@ -1952,6 +1952,27 @@ $PATCHES = @(
     # backend/test_jobs.py rehearses this patch against
     # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
     'jobs-routes.patch'
+    # "You have full approval to search the web in this conversation" (the
+    # owner's ask of 2026-11-01; docs/JARVIS-API.md section 174). ONE card,
+    # once, that stands in for the `search_the_web` card for the rest of ONE
+    # chat - search only, revocable instantly, capped at 8 hours, and every
+    # search it covers is logged with the grant's id. Its three hunks are all in
+    # jarvis_gate.py: one `_RISK.update({...})` at the END OF THE FILE (two risk
+    # rows; the end of the file is the only place no earlier patch's hunk
+    # reaches, in the published base and in backend/_stack.py's walk alike - see
+    # the RATCHET note there and tools/check_patch_original_text.py's pin for the
+    # two placements that were tried and broke a real suite), the word "grant"
+    # added to `_SAFE_KEYS` so the id survives redaction, and the three audit
+    # writers (grant_made / granted / grant_ended) after `_audit`. The rest of
+    # the feature is in the SHIPPED jarvis_agent.py (the two tools, the in-memory
+    # store, and the one place a grant is read), so it goes immediately before
+    # plugin-loader.patch, and every patch that enumerates "the patches written
+    # after me" (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
+    # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py,
+    # tools/check_patch_original_text.py) has had its name added there.
+    # backend/test_web_search_grant.py rehearses it against
+    # jarvis-backend/jarvis_gate.py: apply, reverse, byte for byte.
+    'web-search-grant.patch'
     'plugin-loader.patch'
 )
 

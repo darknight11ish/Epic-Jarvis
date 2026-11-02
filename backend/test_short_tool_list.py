@@ -280,8 +280,22 @@ def t_what_it_saves():
     print(f"      (info) every tool but browser_control: {full} tokens; short list: {short} "
           f"(saves {full - short}, {round(100 * (full - short) / full)}%)")
     check("the short list is well under half of the full one", short * 2 < full)
-    check("the short list stays small (pinned: at most 1,550 tokens)", short <= 1550,
+    check("the short list stays small (pinned: at most 1,560 tokens)", short <= 1560,
           str(short))
+    # Pinned 1,550 -> 1,560 on 2026-11-01, by the same rule and for the same
+    # reason, and the numbers are measured on that tree with this module's own
+    # estimate_tokens: `approve_web_search_for_conversation` (277 tokens) and
+    # `stop_web_search_approval` (204) are the conversation-scoped web-search
+    # approval and its instant stop (jarvis_agent.WEB_SEARCH_GRANT, JARVIS-API
+    # section 174). They are NOT in the core: 481 tokens on EVERY turn would be
+    # more than a third of the short list's whole budget, on a card whose total
+    # working memory is about 8,000. Their own group costs 27 - the name "web
+    # search grant" and its one line, in more_tools' description and in its
+    # enum - so the short list reads 1,528 -> 1,555, and 1,560 leaves 5 tokens
+    # spare. The cost is paid only with `[tools] short_list = true`, which ships
+    # OFF, and neither tool is offered at all until the owner enables it in
+    # Settings -> Tools ("Safety and sharing"): a fresh install's list is
+    # unchanged, and test_tool_defaults.py pins that.
     # Pinned 300 -> 325 on 2026-10-05, and here is exactly why, because a pin
     # is a decision: `read_web_page` (jarvis_readpage.py, JARVIS-API section
     # 115) is a way out with a 289-token description of its own, so it must
@@ -323,9 +337,18 @@ def t_what_it_saves():
     # room at all), and with it 360. 380 leaves 20 tokens spare rather than 0.
     # The cost is paid only with `[tools] short_list = true`, which ships OFF;
     # the deterministic answer in jarvis_quick.py needs no tool and no tokens.
-    check("more_tools itself stays small (at most 380 tokens)",
+    # Pinned 380 -> 395 on 2026-11-01, by the same rule and written down for the
+    # same reason: the `web_search_grant` group ("let web searches in this chat
+    # stop asking", the conversation-scoped web-search approval and its instant
+    # stop, JARVIS-API section 174) is one more group name and one more line in
+    # this text. Measured with this module's own estimate_tokens rule on this
+    # tree: without the group 360, with it 387 - so the old 380 had 20 tokens
+    # spare and the group needs 27. 395 leaves 8. The alternative was a wider
+    # group whose own one line would tell the model something untrue about what
+    # it opens, which this note has already turned down twice.
+    check("more_tools itself stays small (at most 395 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 380)
+          <= 395)
 
 
 if __name__ == "__main__":
