@@ -421,6 +421,19 @@ fun SettingsScreen(
      * Picture mode (which also needs it). Null hides the button.
      */
     onOpenLookSwitch: (() -> Unit)? = null,
+    /**
+     * Opens a feature the search box found OUTSIDE Settings - the focus
+     * presets, which the phone draws inside the Brain's Hardware plate
+     * (`SettingsSearch.ELSEWHERE`, the owner's bug of 2026-11-02: he typed
+     * "presets" into this box and nothing came up). The row says where the
+     * feature is and calls this with the entry; `MainActivity` turns it into
+     * the same one-time section scroll the Find box uses.
+     *
+     * Null means "do not offer the row" rather than "offer one that goes
+     * nowhere" - the same rule the other optional actions on this screen
+     * follow. Navigation only: nothing here changes a setting.
+     */
+    onOpenElsewhere: ((SettingsSearch.Elsewhere) -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // The same gate every other write on this screen already uses
@@ -472,6 +485,11 @@ fun SettingsScreen(
         // a keystroke, not a frame.
         val matching: Set<String> = SettingsSearch.matching(query).toSet()
         val shownCount = SettingsSearch.SECTION_KEYS.count { it in matching }
+        // ...and the features that are not in Settings at all (2026-11-02):
+        // "presets" hides every card, and without this the screen answered
+        // "Nothing here matches" and stopped. Worked out from the same folded
+        // query, once per keystroke, and it changes nothing.
+        val elsewhere = SettingsSearch.elsewhereMatching(query)
         // Which sections this screen draws. Read as a lambda so the sections
         // that do not match are simply not composed, and so a section added
         // later is filtered without a second list to keep in step.
@@ -503,6 +521,8 @@ fun SettingsScreen(
                     query = query,
                     onQueryChange = { typed -> query = typed },
                     shown = shownCount,
+                    elsewhere = elsewhere,
+                    onOpenElsewhere = onOpenElsewhere,
                 )
             }
 
@@ -1021,6 +1041,8 @@ private fun SettingsSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     shown: Int,
+    elsewhere: List<SettingsSearch.Elsewhere> = emptyList(),
+    onOpenElsewhere: ((SettingsSearch.Elsewhere) -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
@@ -1069,7 +1091,7 @@ private fun SettingsSearchField(
             color = chrome.textMid,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
-        if (query.isNotBlank() && shown == 0) {
+        if (query.isNotBlank() && shown == 0 && elsewhere.isEmpty()) {
             Text(
                 SettingsSearchWords.none(query),
                 style = MaterialTheme.typography.bodyMedium,
@@ -1080,6 +1102,35 @@ private fun SettingsSearchField(
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textLo,
             )
+        }
+        // "Not in Settings" (2026-11-02): the owner typed "presets" here and
+        // the screen hid every card and stopped. These rows are the box's third
+        // answer - the feature is real, it is just not a Settings thing on this
+        // phone - and each one says where it is in the app's own words and
+        // opens it. Drawn whether or not a Settings card also matched, because
+        // a feature that lives elsewhere is worth saying either way; with no
+        // card and no row the box still answers "Nothing here matches" above.
+        for (e in elsewhere) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        SettingsSearch.elsewhereLine(e),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = chrome.textHi,
+                    )
+                    Text(
+                        SettingsSearch.elsewhereWhere(e),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                }
+                if (onOpenElsewhere != null) {
+                    Quiet(SettingsSearch.ELSEWHERE_OPEN, onClick = { onOpenElsewhere(e) })
+                }
+            }
         }
     }
 }

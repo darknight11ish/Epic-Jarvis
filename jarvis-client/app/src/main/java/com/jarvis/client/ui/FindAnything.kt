@@ -14,8 +14,11 @@ import com.jarvis.client.net.MenuView
  * counterpart: the phone could reach a place only by already knowing which
  * screen it is on, or by saying "open ..." out loud. Settings grew its own
  * search box on 2026-10-09 ([SettingsSearch]), but that one only ever looks at
- * Settings' own rows - the Brain, History, the Inbox and every screen with no
- * settings card of its own were still unfindable by typing.
+ * Settings' own rows - plus, since 2026-11-02, a short hand-written list of
+ * features that are NOT in Settings and where each really is
+ * ([SettingsSearch.ELSEWHERE], one entry: the focus presets, drawn inside the
+ * Brain's Hardware plate) - so the Brain, History, the Inbox and every screen
+ * with no settings card of its own are still unfindable by typing in it.
  *
  * WHERE EVERY NAME COMES FROM: THE REAL CATALOGUE, never a second copy - the
  * same rule `palette.js` follows, for the same reason (a hand-typed list
