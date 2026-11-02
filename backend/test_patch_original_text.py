@@ -151,8 +151,18 @@ def t_the_late_patches_are_pinned_and_not_new():
     # docstring and the `_gate(...)` call), which is one of the five the
     # patcher edits and is not in this repository - so nothing earlier in the
     # walk could have written those lines.
-    check("the twenty-three exceptions the tool's docstring names are the "
-          "twenty-three the walk finds", len(late) == 23,
+    # 2026-11-01: web-search-grant.patch at position 165 raises it by one more.
+    # TWO of its three hunks read the owner's own jarvis_gate.py text
+    # (`_SAFE_KEYS` and `_audit()`'s body); the third - two rows at the TOP of
+    # `_RISK` - costs nothing, because its context is text an earlier patch
+    # writes. The pin and the tool's docstring name it.
+    # ...and 2026-11-02 (this branch): skill-install-note.patch is the
+    # TWENTY-FOURTH. All three of its hunks read the owner's own
+    # jarvis_skills.py (install()'s signature, docstring and the `_gate(...)`
+    # call), which is one of the five the patcher edits and is not in this
+    # repository - so nothing earlier in the walk could have written them.
+    check("the twenty-four exceptions the tool's docstring names are the "
+          "twenty-four the walk finds", len(late) == 24,
           f"the walk found {len(late)}: {late}")
 
 

@@ -227,7 +227,8 @@ await check("the tool switch: ON held on a stale link and off the PC, OFF never,
 
 await check("the tiered tool surface: groups, the vault row and the not-offered note", async () => {
   const pc = readAsksFirst(C.pc_shipped);
-  assert.equal(pc.tools.items.length, 21, "the 21 Tier A + Tier B switches");
+  assert.equal(pc.tools.items.length, 23,
+    "the 23 Tier A + Tier B switches (21 plus 2026-11-01's two web-search-grant tools)");
   assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
   const groups = toolGroupsView(pc.tools);
   assert.deepEqual(groups.map((g) => g.title), C.pc_shipped.tools.groups.map((g) => g.title));

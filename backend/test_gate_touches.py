@@ -725,6 +725,12 @@ def t_the_patch_is_registered_and_carries_the_change():
              # nothing this patch wrote. Its own suite reverses this patch's
              # output out of the published gate, which is what proves it.
              "unknown-risk-approvable.patch",
+# web-search-grant.patch (2026-11-01, the owner's "full approval to search
+             # the web for this conversation"): three hunks, all in jarvis_gate.py -
+             # two rows at the END of _RISK, the word "grant" in _SAFE_KEYS and
+             # three audit writers after _audit. It adds lines and rewrites none of
+             # this patch's, which the later_rewriting() half proves.
+             "web-search-grant.patch",
              # picture-card.patch (2026-10-11) is the first patch to take that
              # advice: it sits immediately BEFORE plugin-loader.patch, and it
              # touches jarvis_gate.py not at all (ONE hunk, in jarvis_hud.py, on

@@ -436,6 +436,19 @@ stop_asking_before_every_web_search       = "ask"
 # search, is one card (turning it off is immediate). Must stay "ask": anything
 # else and the switch stays off.
 web_search_enable                         = "ask"
+# "You have full approval to search the web in this conversation" (the owner's
+# ask of 2026-11-01): ONE card, once, that lets the searches in THIS one chat
+# run without a card each time, until the owner says stop, the chat ends, 8
+# hours pass or Jarvis restarts. Search only - every other action keeps its own
+# card. Must stay "ask": the model may ask for this card, never decide it, and
+# nothing is approved before a person's yes on the card.
+grant_web_search_conversation             = "ask"
+# Stopping that approval asks nothing (revoking is the safe direction, like
+# turning "Ask before every web search" OFF above). Must stay "auto": at "ask"
+# the owner would be sent a card to STOP what they had just asked to stop -
+# and a stop that waits for a card is not the instant revocation they were
+# promised.
+revoke_web_search_grant                   = "auto"
 
 # --- Power: turning the assistant down, at two depths --------------------
 # Putting Jarvis into quiet/standby, or waking it, is the safe direction

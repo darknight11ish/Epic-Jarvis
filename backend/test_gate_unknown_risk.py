@@ -382,6 +382,13 @@ def t_the_patch_is_registered_and_its_place_is_measured():
           names[-1] == "plugin-loader.patch", names[-1])
     after = names[names.index(PATCH.name) + 1:]
     writers = [n for n in after if "jarvis_gate.py" in _patch_targets(n)]
+    # No whitelist and no exception, and nothing to maintain when the next patch
+    # arrives: a patch that writes jarvis_gate.py and sits after this one is a
+    # patch whose hunks may rewrite the lines this one's six hunks anchor on, so
+    # the rule is simply that there is none. 2026-11-01's web-search-grant.patch
+    # moved BEFORE this patch on 2026-11-02 for exactly this reason - the same
+    # move main made for gate-tool-actions-gap.patch in #1065 - rather than being
+    # named here as an allowed exception.
     check("no patch after it writes jarvis_gate.py - so it cannot disturb one",
           not writers, writers)
     check("it comes after readpage.patch, so the table is already its full height",

@@ -353,7 +353,9 @@ one switch per feature. Turning one on raises the approval card; the switch
 says "Waiting for your approval. Approve it on your PC or on this phone's
 Home screen." until you answer it. If the card ends without turning the
 switch on, a line under the switch says how (for example "You said no, so
-"Pictures" stays off."). With Pictures working, chat gets a Photo button.
+"Pictures" stays off."). With Pictures working, the phone's one **Attach a
+file** row offers photos too (it was a Photo button of its own before
+2026-11-01).
 
 **On the desktop:** Settings, "Second graphics card". The same list, the main
 switch and one switch per feature; turning one on raises the same approval

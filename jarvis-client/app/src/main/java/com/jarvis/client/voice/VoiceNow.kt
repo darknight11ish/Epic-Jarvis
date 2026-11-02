@@ -64,8 +64,9 @@ object VoiceNow {
             "speaks with the phone's, and changing it on your PC changes nothing here."
 
     /**
-     * The one line under the Live controls, or null when there is nothing
-     * honest to say (nothing has been spoken here yet).
+     * The one line that used to sit under the Live controls, or null when
+     * there is nothing honest to say (nothing has been spoken here yet). The
+     * owner removed that line on 2026-11-02; the formatter stays, tested.
      *
      * A reply from the PC names the voice the Voices screen names, so a change
      * made in either app is visible here as well as heard. A reply from the

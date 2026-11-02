@@ -171,6 +171,9 @@ def t_the_patch_and_the_base():
     later = {"learning-extract-reason.patch", "attached-file.patch",
              "unknown-risk-approvable.patch", "jobs-routes.patch",
              "gate-tool-actions-gap.patch",
+             # web-search-grant.patch (2026-11-01): ONE added gate-table row and
+             # one `_audit` line in jarvis_gate.py, and no jarvis_hud.py hunk.
+             "web-search-grant.patch",
              # skill-install-note.patch (2026-11-02): ONE additive parameter and
              # a tier check inside jarvis_skills.py's install(), for the skills
              # menu's card. It is a code patch and it sits before the loader; it
