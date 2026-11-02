@@ -1935,7 +1935,7 @@
     "id": "phone-pip",
     "group": "Phone",
     "title": "Picture-in-picture",
-    "what": "A small Jarvis window that stays on screen while you use other apps - the face and the first line of the answer, the last few messages, or Jarvis Live.",
+    "what": "A small Jarvis window that stays on screen while you use other apps - the face, one word while Jarvis is working on what you said, the last few messages, or Jarvis Live.",
     "where": "Settings, Picture-in-picture.",
     "asks": "No card. The window never approves anything, and tapping it brings Jarvis back.",
     "limit": "It never shows hidden or locked content, never approves a card and never changes a setting. What it shows is chosen on this phone only.",

@@ -1,9 +1,21 @@
 # Picture-in-picture: a small Jarvis window over other apps (design)
 
-**Status: DESIGN ONLY - nothing built, nothing measured on a phone.** Written
-2026-10-11 on branch `docs/pip-design`, off `main` at `5f382aff`. **Every
-question this design raised has been answered by the owner (§9), so the design
-is settled and nothing is left open.**
+**Status: BUILT on the phone (2026-10-30, #1013 - `71d0bae9c`), mechanics
+driven on a real phone (field-test pass 10, 2026-10-31), content and owner steps
+still unverified.** Written 2026-10-11 on branch `docs/pip-design`, off `main` at
+`5f382aff`. **Every question this design raised has been answered by the owner
+(§9), so the design is settled and nothing is left open.** Two things have
+changed since it was written, and both are in this document rather than in a
+branch that is gone: the owner's revision of 2026-10-31 (the window is the face
+alone - no resting words, no answer line, §2.3), and **2026-11-02: "hey Jarvis"
+said at the small window is one single voice input** (§2.5).
+
+**What "driven" means here, dated rather than current:** the window appears and
+closes, Expand returns the app, and all three non-Off modes enter it -
+`docs/FIELD-TEST-2026-10-31-RUN.md`, pass 10. The content checks (hidden
+wording, app lock, approvals, the face's frame budget) are NOT verified: the app
+window carries `FLAG_SECURE`, so PiP screencaps are black by design, and the
+owner-only steps are BLOCKED. §7 and §8 keep those as they are.
 
 **The owner's words (2026-10-11):** *"can you add a picture in picture mode to
 jarvis that's similar to Google maps"* - and when asked what the little window
@@ -22,8 +34,11 @@ should not be able to leave a Live session invisible in a window that is already
 up. Mode 3 joins the default automatically while Live runs and steps aside when
 it ends, so "1 or 3" is one preference, not two things to keep in sync.
 
-**Unverified everywhere below** means: not tried on a real phone. Nothing in
-this document has been run.
+**Unverified everywhere below** means: not tried on a real phone. The window's
+mechanics were driven on 2026-10-31 (pass 10, §7); every claim still marked
+unverified below - the content, the hidden/locked wording, the face's frame
+budget, Android's own PiP chrome - is still unverified, and saying so is the
+point of the marking.
 
 **In one paragraph:** Jarvis gets a small window that stays on screen when the
 owner leaves the app - Android's own picture-in-picture, like Maps' next-turn
@@ -126,27 +141,31 @@ A PiP window is not a phone screen. On a 1080×2400 phone it is roughly
 **1/3 of the screen's width** in portrait, taller in landscape. Maps shows the
 next turn, not the map, and the same discipline applies here.
 
-**Mode 1 - the face and the answer** (the default, the Maps shape):
+**Mode 1 - the face** (the default, the Maps shape; revised by the owner
+2026-10-31, and the one word below added 2026-11-02):
 
 ```
 ┌──────────────────────────┐
-│  [face]    Listening     │   face: the existing FaceView, small
-│                          │   state line: the ONE word/short phrase that
-│  Let me check the        │   already exists (Listening / Thinking /
-│  weather for…            │   Waiting for you / Not connected)
-│                          │
-│            ⤢ Expand      │   body: first line of chat.reply, ellipsised
-└──────────────────────────┘
+│                          │   the SAME FaceView the app draws, filling
+│         [face]           │   the window - the model alone while nothing
+│                          │   is happening
+│        Listening         │   ONLY while a voice turn runs: Listening /
+└──────────────────────────┘   Thinking / Speaking (§2.5)
 ```
 
-- The face is the SAME `FaceView` the app already draws, at a smaller size - not
+- The face is the SAME `FaceView` the app already draws, filling the window - not
   a new drawing. If the face costs too much in the PiP frame budget it shows as
   a still frame of the same face; that is a build-time measurement, not a
   design choice (**unmeasured**).
-- The answer body is **`ChatSession.reply`'s first line**, truncated to one
-  line. `reply` is `StateFlow<String>` (`net/ChatSession.kt:74`, "The reply so
-  far. Grows as chunks land."), so this needs no new data plumbing - and while
-  an answer streams the line grows, which is exactly Maps' behaviour.
+- **At rest it is the face alone.** The owner's revision of 2026-10-31 - *"just
+  keep the model there without the wording"* - after seeing the face squeezed
+  beside "Standing by" and a cut-off answer sentence. No state word and no
+  answer line while nothing is happening, and no answer line ever
+  (`PipLayout.answerShown` is `false` for every layout).
+- **While a voice turn is running, one word:** `Listening`, `Thinking` or
+  `Speaking` - the app's own three words, the only thing a turn may put in the
+  window (§4.6). It is drawn by `ui/PipWindow.kt` from `PipWords.working`, and
+  it disappears the moment the turn ends. §2.5 is why it exists.
 - **Dropped:** every button, the sources list, the read-outside-text note, the
   table, any card. Mode 1 never shows a second line, by construction.
 
@@ -155,9 +174,10 @@ next turn, not the map, and the same discipline applies here.
 newest at the bottom, scrolled to the bottom on open, and **scrollable in the
 window** (a PiP window does take touch in its own bounds). The owner's own
 messages are right-aligned and short; Jarvis's answers are clipped to a couple
-of lines each. **Dropped:** the input box (typing into a PiP window is a bad
-surface - the keyboard would cover the whole thing), the send button, the
-toolbar, and any card.
+of lines each. While a voice turn is running, the same one word (§2.5) is drawn
+along the bottom, over the list. **Dropped:** the input box (typing into a PiP
+window is a bad surface - the keyboard would cover the whole thing), the send
+button, the toolbar, and any card.
 
 **Mode 3 - Jarvis Live:** the existing Live screen at its smallest useful size -
 whether Jarvis is listening, the mute/end controls, and the camera preview only
@@ -186,7 +206,7 @@ written:
 
 **If Live is not running and the setting is `live`:** the window does NOT close
 (it is the owner's window, and closing it would look like a crash). It shows
-mode 1's face and state line with one plain line above the answer slot:
+mode 1's face, with one plain fixed line along the bottom:
 
 > Live is off. Start it and it shows here.
 
@@ -194,6 +214,66 @@ mode 1's face and state line with one plain line above the answer slot:
 window animation - the face and "Live is off" replace the Live view. The "Live
 ended - Resume" notification already exists (`LiveService`) and is unchanged; the
 PiP window does not duplicate it.
+
+### 2.5 Saying "hey Jarvis" at the window (2026-11-02)
+
+**The owner's ask (2026-11-01 ~21:47 PT, with a screenshot of the window on his
+home screen):** *"whenever jarvis is in picture-in-picture mode like in this
+screenshot I would like to be able to say hey jarvis to be able to say something
+to jarvis and have jarvis process what I said. if it's not in live mode don't
+have a turn on live mode but comprehend it as a single input."*
+
+**What was already true, read from the code before changing anything** (this
+worktree, 2026-11-02, at `9a971f3e6`; the tests in `PipWakeWordTest.kt` pin
+it):
+
+- **The listener keeps running while the window is up.** `service/WakeWordService.kt`
+  pauses for exactly two things - the talk button owning the microphone, and
+  Jarvis Live running on this phone (`voice.phase.value == CAPTURING ||
+  JarvisRuntime.liveOnHere()`) - and it never mentions picture-in-picture. The
+  activity leaving the foreground does not stop it: PiP is a paused activity,
+  and the listener is a microphone foreground service that was already running.
+- **One "hey Jarvis" is one clip, on the ordinary route.** The service records
+  the phrase plus the sentence until a pause, and posts it to
+  `/api/voice/utterance?source=wake_word` - the same route and path as outside
+  the window (`VoiceSession.deliverWakeClip` -> one `api.utterance` call). The PC
+  re-checks the phrase, checks the owner's voice, then transcribes.
+- **The answer is spoken by the existing path.** `VoiceSession.answer` ->
+  `speakStreamed` runs in the runtime's own scope, not in the activity, so a
+  paused (PiP) activity does not stop it. Nothing on that path needs the screen.
+- **Nothing starts Live and nothing leaves the window.** The wake path contains
+  no `liveStart`, no `LiveService`, no `startActivity` and no
+  `enterPictureInPictureMode`; the window's only system action is still
+  `Expand`, which the owner taps. (One deliberate exception, unchanged: saying
+  *"open a chat"* while Floating Jarvis is on still brings the app up - that is
+  a different phrase, `net/OpenChatPhrase.kt`, and the owner's own request.)
+
+**So the only thing missing was that the window said nothing.** A wake turn has
+no `CAPTURING` phase - the service records the sentence before the desktop is
+asked - so the face could change but no word appeared, and the resting window is
+deliberately wordless (§2.3). The change is therefore the smallest one:
+
+- `data/PipMode.kt` gets `PipWords.working(phase, wake)`: `Listening` while the
+  listener has him (or a push-to-talk capture), `Thinking` while the desktop
+  verifies and the model works, `Speaking` while the answer plays, and **null
+  when nothing is happening**. A listener merely waiting for the phrase is
+  silent, so the resting window keeps the owner's 2026-10-31 revision.
+- `PipLayout.turnWordShown` is true for `FACE` and `THREAD` only. The `HIDDEN`
+  window still draws nothing but its locked sentence (privacy outranks
+  everything, §4), and the two Live layouts already have their own status line.
+- `MainActivity` hands the word to `ui/PipWindow.kt` from the voice phase and
+  `WakeWordService.state`; the window draws no word of its own, so it can never
+  invent one.
+
+**What this deliberately is not:** not a second listener, not a new route, not a
+new permission, not a backend change, not a new dependency, and no
+speech-to-text on the phone (the PC still does that). It does not start Live and
+does not need one: a "hey Jarvis" turn is one input and one answer, exactly as
+outside the window.
+
+**NOT verified on a phone** (§7 step 14): that the word is readable at PiP size
+and that the answer is heard while another app is in front. Both are phone
+steps, not JVM claims.
 
 ## 3. The one architecture decision: a PiP layout, not a shrunken screen
 
@@ -207,6 +287,12 @@ So: `MainActivity` carries a `pipShowing` state (set from
 layout instead of the current `Screen`** while it is true. The PiP layout is its
 own small composable per mode, fed by the same `JarvisRuntime` flows the full
 screens already use.
+
+The same rule covers the one word a running turn shows (2026-11-02, §2.5):
+`MainActivity` computes it (`PipWords.working`, from the voice phase and the wake
+listener's state) and hands it to `ui/PipWindow.kt`, which draws text it was
+given and never chooses one. So "the window cannot invent words" is a property
+of the call shape, not a promise in a comment.
 
 - Entering PiP is `setPictureInPictureParams(...)` on every composition where
   the relevant state changes (aspect ratio 16:9, the `Expand` action, and the
@@ -264,6 +350,11 @@ section says what is forbidden AND how each is proven to hold (§6).
 6. **Anything heard or seen by voice or camera** beyond the state word
    (`Listening`) - never a transcript line, never a camera frame in mode 1 or 2.
    A camera preview exists only in mode 3, where the owner turned the camera on.
+   **Since 2026-11-02 the window really does draw that one word while a voice
+   turn runs** (`PipWords.working` -> `Listening` / `Thinking` / `Speaking`,
+   §2.5): the word and nothing else - no transcript, no answer, no source, no
+   card - and only for as long as the turn lasts. `PipWakeWordTest` holds the
+   value to that three-word set, so a future edit cannot smuggle words in.
 
 **What the window shows when the content IS hidden - DECIDED BY THE OWNER,
 2026-10-11 (§10): a dimmed face that says why.**
@@ -385,18 +476,19 @@ absence of an error):**
 | # | Do this | Pass looks like |
 |---|---|---|
 | 1 | Open Jarvis, ask something, then swipe up to Home | `dumpsys activity activities` shows `mLastPinnedStackInfo`/`pinned=true` for `com.jarvis.client/.MainActivity`; the window is on screen |
-| 2 | Read the window | `adb shell uiautomator dump` shows the face's state node AND a text node whose content equals the FIRST LINE of the answer just given - matched as a string, not "there was some text" |
-| 3 | Put a long answer on screen (ask for a list), enter PiP | the dump shows ONE answer line and no second line |
+| 2 | Read the window with nothing happening | `adb shell uiautomator dump` shows the face and **no words at all** - the resting window is the face alone (the owner's 2026-10-31 revision, §2.3) |
+| 3 | Say "hey Jarvis, what time is it?" and read the window while it answers | the dump contains exactly ONE turn word - `Listening`, then `Thinking`, then `Speaking` - and no transcript line and no answer line. Step 14 is the full check |
 | 4 | Settings -> Picture-in-picture -> The conversation, enter PiP | the dump shows at least two message lines; `adb shell input swipe` inside the window scrolls it |
 | 5 | Settings -> Picture-in-picture -> Jarvis Live, start Live, then Home | the window shows the Live controls; `adb shell dumpsys activity services | Select-String JarvisLive` still shows `LiveService` running |
-| 6 | While mode 1 is set, start Live, then Home | the window shows the LIVE view, not the answer (the §2.4 automatic swap) |
+| 6 | While mode 1 is set, start Live, then Home | the window shows the LIVE view, not the face alone (the §2.4 automatic swap) |
 | 7 | End Live from the window | the window still exists and shows the face with the "Live is off" line; it does **not** close |
-| 8 | Turn ON "Hide memory lists and chat history", enter PiP | the dump contains **neither** the answer's first line **nor** any memory word, and **does** contain the decided line from §9.1: "Hidden while Jarvis is locked." |
+| 8 | Turn ON "Hide memory lists and chat history", enter PiP | the dump contains **no** chat text, **no** turn word and **no** memory word, and **does** contain the decided line from §9.1: "Hidden while Jarvis is locked." |
 | 9 | Turn ON App lock, lock, enter PiP | same as 8, with the App-lock wording |
 | 10 | Raise an approval on the PC while the window is up | the PiP window's dump contains **no** approval title, body, recipient or plan word, and **no** action other than Expand: `adb shell dumpsys activity activities | Select-String -Pattern "approve|deny"` finds nothing for the PiP session |
 | 11 | Tap `Expand` in the window | the full app returns with the same screen it left on |
 | 12 | Settings -> Picture-in-picture -> Off, then swipe Home | no PiP window; `dumpsys activity activities` shows no pinned stack; the app is simply in the background and Live, if on, keeps running |
 | 13 | With Floating Jarvis = Overlay AND PiP on, enter PiP | exactly ONE Jarvis window is visible; the overlay is hidden while PiP is up and returns when it ends |
+| 14 | **"Hey Jarvis" at the window (§2.5, 2026-11-02).** Turn on "Listen on this phone" (Settings -> Voice), get into PiP, then say *"hey Jarvis, what time is it?"* | the window shows `Listening`, then `Thinking`, then `Speaking`; the answer is HEARD from the phone's speaker; the window is STILL the picture-in-picture window - the full app did not come up - and `adb shell dumpsys activity services | Select-String JarvisLive` shows **no** `LiveService` running (a normal question never starts Live); after the answer the window is the face alone again. **NOT YET RUN (2026-11-02): this is the step that makes §2.5 a PASS, and it is not one yet.** |
 
 ### 7.1 The negative controls - not optional, and not tidied away
 
@@ -441,6 +533,12 @@ are forbidden counts as a pass.
 - **A PiP window is a new place an approval's words could leak** (§5). The
   build step must not add any approval text to the PiP layout "just for the
   state word" - the state word is fixed and already exists.
+- **The turn word's size is unmeasured** (2026-11-02, §2.5). `Listening`,
+  `Thinking` and `Speaking` are drawn at 10sp along the bottom of the window; at
+  a third of the screen's width they should read, but nobody has looked. If it
+  is too small, the fix is the label's size in `ui/PipWindow.kt`, not a longer
+  sentence. And whether the answer is actually HEARD while another app is in
+  front is a phone step too (§7 step 14) - nothing in a JVM test can prove it.
 
 ## 9. The owner's answers (2026-10-11) - all four decided, nothing left open
 

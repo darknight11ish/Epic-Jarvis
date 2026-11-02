@@ -1676,8 +1676,16 @@ def t_the_docs_say_it():
     arch = (REPO / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
     check("ARCHITECTURE section 4 names it as a way out of the PC, with what it gets and what stops it",
           "**the headless browser, Obscura**" in arch and "obscura_enable" in arch)
+    # Section 8 is read from its OWN heading to the next top-level one. It used
+    # to be `arch.split("One-sided on purpose")[1]`, which is only section 8
+    # while no earlier section quotes that phrase - §3 now does (the 2026-11-01
+    # small-approval exception's cross-reference), so the slice stopped short of
+    # §8. The doc has not stopped saying this: §8's "The headless browser
+    # (Obscura) runs on the PC only" entry carries "**The chatbot driver ... keep
+    # using the visible browser on purpose**" (docs/ARCHITECTURE.md:3676).
+    sec8 = arch.split("### One-sided on purpose", 1)[1].split("\n## ", 1)[0]
     check("ARCHITECTURE section 8 says why the chatbot driver keeps the visible browser",
-          "headless browser" in arch.lower() and "chatbot driver" in arch.split("One-sided on purpose")[1].lower())
+          "headless browser" in arch.lower() and "chatbot driver" in sec8.lower())
 
 
 if __name__ == "__main__":

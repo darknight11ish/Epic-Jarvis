@@ -89,6 +89,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -123,6 +124,8 @@ import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.net.ChatLog
+import com.jarvis.client.net.HudLayout
+import com.jarvis.client.net.MenuView
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
@@ -132,6 +135,7 @@ import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.Chevron
+import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.FormattedAnswer
 import com.jarvis.client.ui.parts.Gap
@@ -222,6 +226,21 @@ private const val REPLY_KEY = "reply"
  * (2026-11-01) - so this name is the only thing said about it out loud.
  */
 private const val FACE_TYPE_HINT = "Type a message to Jarvis"
+
+/**
+ * The Home HUD's key in the conversation list (2026-11-02). It is the list's
+ * first item, so it has a key of its own like every other row: the walk that
+ * scrolls to an approval card must not count it by position, and a drag cannot
+ * mistake it for one of the safety plates below.
+ */
+private const val HUD_KEY = "home-hud"
+
+/**
+ * The Home HUD's tray height. It is bounded so that the first-run layout - which
+ * holds every card the phone has - cannot push the conversation off Home: the
+ * tray scrolls inside itself and the list scrolls it away.
+ */
+private val HUD_TRAY_MAX = 260.dp
 
 /** Where one paragraph of a reply ends: a blank line, however it is spaced. */
 private val PARAGRAPH_BREAK = Regex("\n\\s*\n")
@@ -879,6 +898,14 @@ data class HomeActions(
      */
     val onOpenSettings: () -> Unit,
     val onOpenFaq: () -> Unit,
+    /**
+     * One of this phone's own Home cards, opened from the Home HUD
+     * (2026-11-02). The id is a [HudLayout][com.jarvis.client.net.HudLayout]
+     * card id - a real `MenuCatalog` id for an ordinary card, or one of the
+     * three fixed safety ids - and how it resolves is [hudCardPlace]'s own
+     * answer. Nothing here decides where a card goes: the layout already did.
+     */
+    val onOpenHudCard: (String) -> Unit = {},
     val blockerFor: (PendingItem) -> String?,
     /**
      * The deny direction's blocker, which is the same rule minus the stale arm:
@@ -1168,6 +1195,28 @@ fun HomeScreen(
     val motion = LocalMotion.current
     val density = LocalDensity.current
 
+    // The phone's own Home HUD (2026-11-02): the arrangement the owner saved in
+    // the editor, and the hide rules the rest of the screen already reads.
+    // Collected once here rather than inside HomeHud, so the whole screen works
+    // from one answer - and so a hidden menu empties its Home card exactly as it
+    // empties its settings row.
+    val hudLayout by com.jarvis.client.JarvisRuntime.menus.hudLayout.collectAsState()
+    val hudMenus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
+    // The emergency stop is an ACTION, not a door: the HUD's own card runs the
+    // same `onStopEverything` the Stop plate below already runs.
+    val stopScope = rememberCoroutineScope()
+
+    // The one slot both conversation lists draw: the list is built twice (the
+    // face pane and the no-face layout), and the HUD must not be two different
+    // things depending on which one is on screen.
+    val hudSlot: @Composable () -> Unit = {
+        HomeHud(
+            layout = hudLayout,
+            menus = hudMenus,
+            onOpen = actions.onOpenHudCard,
+            onStop = { stopScope.launch { actions.onStopEverything() } },
+        )
+    }
     // Only the navigation row is ever hidden. The status line above it is
     // always on screen - see StatusLine for why that is not negotiable.
     // rememberSaveable, so turning the phone does not snap an open row shut.
@@ -1496,6 +1545,7 @@ fun HomeScreen(
                         openAnswerMenuTick = answerMenuTick,
                         openAnswerMenuServed = answerMenuServed,
                         onAnswerMenuServed = { answerMenuServed = it },
+                        hud = hudSlot,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                 }
@@ -1547,6 +1597,7 @@ fun HomeScreen(
                             openAnswerMenuTick = answerMenuTick,
                             openAnswerMenuServed = answerMenuServed,
                             onAnswerMenuServed = { answerMenuServed = it },
+                            hud = hudSlot,
                             modifier = Modifier.layoutId(PANE_LIST),
                         )
                     },
@@ -1665,6 +1716,14 @@ private fun ConversationList(
     openAnswerMenuServed: Int = 0,
     /** The answer has looked at that request, so it is used up. */
     onAnswerMenuServed: (Int) -> Unit = {},
+    /**
+     * The phone's own editable Home HUD (2026-11-02): the four sections, drawn
+     * as the list's first item so it scrolls away under the conversation
+     * instead of holding a fixed slice of the screen - a first-run layout holds
+     * every card, and a fixed block of them would push the chat off Home.
+     * Empty for a caller that has no HUD to draw (the screen always does).
+     */
+    hud: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -1683,6 +1742,11 @@ private fun ConversationList(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // The owner's own Home cards, first, in the layout they chose
+        // (2026-11-02). Above "Stop everything" on purpose: the safety plates
+        // below are about what is happening NOW, and a card that is merely a
+        // door must not come between the owner and one.
+        item(key = HUD_KEY) { hud() }
         // "Stop everything" (the owner's decision of 2026-09-25; the
         // desktop's Alt+Shift+X). Shown whenever Jarvis is doing anything -
         // on the PC, or talking on this phone - and never held on a stale
@@ -2334,6 +2398,185 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/**
+ * Where one of the phone's Home cards opens (2026-11-02).
+ *
+ * The layout names a card; the card is a real `MenuCatalog` id for an ordinary
+ * one, so the place it opens is the place that menu already lives in - the same
+ * answer `MenuPlaces` gives the finder and the "open <a place>" by voice. A card
+ * that the catalogue no longer describes, or that is not this app's, answers
+ * null and is then drawn but opens nothing: the layout is never trusted to name
+ * a destination by itself.
+ *
+ * The three safety surfaces are fixed ids, not menus: Live and the approvals
+ * queue are screens of their own, and the emergency stop is an ACTION rather
+ * than a place - the caller draws it as the button it already is
+ * (`HomeActions.onStopEverything`) instead of a door.
+ */
+internal fun hudCardPlace(id: String): Pair<Screen, String?>? {
+    when (id) {
+        HudLayout.LIVE -> return Screen.LIVE to null
+        HudLayout.APPROVALS -> return Screen.APPROVALS to null
+        // The stop is not a door. See the doc above.
+        HudLayout.EMERGENCY_STOP -> return null
+        // The entry rows the catalogue carries, and their destinations.
+        // `FindAnything`'s own table says the same, and neither reads the other:
+        // a card id is a menu id, and a menu id's destination is the catalogue's
+        // business.
+        //
+        // `entry.appearance` is answered here because the id still exists and
+        // the phone still has the screen (#1077 kept it, Settings-owned), but no
+        // layout can reach this line: 2026-11-02 took the Appearance CARD out of
+        // [HudLayout.CARDS] and out of every preset, so `normalize` drops it from
+        // any document that names it - a layout cannot put Appearance back on
+        // Home (`HudLayoutTest`). The destination stays the catalogue's answer,
+        // not evidence that a card exists.
+        "entry.appearance" -> return Screen.APPEARANCE to null
+        "entry.voice-check" -> return Screen.VOICE_CHECK to null
+        "entry.settings" -> return Screen.SETTINGS to null
+        "entry.help" -> return Screen.FAQ to null
+        "entry.history" -> return Screen.HISTORY to null
+        "entry.checks" -> return Screen.CHECKS to null
+    }
+    val menu = com.jarvis.client.net.MenuLogic.menu(id) ?: return null
+    if (!menu.phone) return null
+    return when (menu.area) {
+        // The row's own `item(key = ...)`, so a card lands on its section rather
+        // than at the top of a long screen. Null when the menu has no row of its
+        // own (it lives inside another one), which is still a real destination.
+        "brain" -> Screen.BRAIN to com.jarvis.client.ui.MenuPlaces.BRAIN.entries
+            .firstOrNull { it.value == id }?.key
+        "settings", "safety" -> Screen.SETTINGS to com.jarvis.client.ui.MenuPlaces.SETTINGS.entries
+            .firstOrNull { it.value == id }?.key
+        else -> null
+    }
+}
+
+/**
+ * The owner's own Home cards, drawn from the layout they chose (the Android
+ * `A2` slice of the editable-HUD design, 2026-11-02).
+ *
+ * Four ordered sections, each card in its section and in its order, and the body
+ * in one column below [HudLayout.TWO_COLUMN_DP] dp and two at or above it -
+ * [HudLayout.columnsAt] is the one answer to that, shared with the editor's own
+ * note. The layout only decides WHERE and IN WHICH ORDER a card draws: what each
+ * card says and where its tap goes is [hudCardPlace]'s, exactly as before.
+ *
+ * THE HIDE RULES STILL WIN. [HudLayout.visible] is applied on top of the layout
+ * with the same [MenuView] the rest of the screen reads, so a menu hidden by
+ * voice or in Settings empties its Home card here too. A protected card ignores
+ * hiding altogether - that rule lives in [HudLayout.visible] and is not repeated
+ * here - and the three indicators are not cards, so no layout can move them.
+ *
+ * WHY IT IS BOUNDED. A first-run layout holds every card the phone has, and a
+ * fixed block that tall would push the conversation off Home. The tray is capped
+ * at [HUD_TRAY_MAX] and scrolls inside itself, and the conversation list scrolls
+ * it away like any other row. It draws nothing at all when every card in it is
+ * hidden, so a Home with no cards carries no empty frame.
+ */
+@Composable
+private fun HomeHud(
+    layout: HudLayout.Layout,
+    menus: MenuView,
+    onOpen: (String) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = LocalChrome.current
+    val shown = HudLayout.visible(layout, menus)
+    val total = shown.values.sumOf { it.size }
+    if (total == 0) return
+    val columns = HudLayout.columnsAt(LocalConfiguration.current.screenWidthDp)
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Kicker(if (total == 1) "Your Home screen · 1 card" else "Your Home screen · $total cards")
+            Spacer(Modifier.weight(1f))
+            Text(
+                "Rearrange it in Settings, Home screen",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = HUD_TRAY_MAX)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            for (section in HudLayout.SECTIONS) {
+                val ids = shown.getValue(section)
+                if (ids.isEmpty()) continue
+                Gap(8)
+                Kicker(HUD_SECTION_WORDS.getValue(section), color = chrome.textLo)
+                // Only the body is a grid; the strip, the hero and the composer
+                // are columns of full-width cards in the layout's sense, and a
+                // 2-column hero would be a second, different layout.
+                val perRow = if (section == HudLayout.BODY) columns else 1
+                for (row in ids.chunked(perRow)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        for (id in row) {
+                            HudCard(
+                                id = id,
+                                onOpen = onOpen,
+                                onStop = onStop,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        // Keeps a half-filled last row the same width as a full
+                        // one, so a two-column body does not stretch its last card.
+                        repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                    Gap(6)
+                }
+            }
+        }
+    }
+}
+
+/** One card in the Home HUD: its own words, and one tap. */
+@Composable
+private fun HudCard(
+    id: String,
+    onOpen: (String) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = LocalChrome.current
+    val card = HudLayout.card(id) ?: return
+    val isStop = id == HudLayout.EMERGENCY_STOP
+    Column(
+        modifier
+            .clip(LocalRadii.current.insetShape)
+            .background(chrome.surface1)
+            .pressable(onClick = { if (isStop) onStop() else onOpen(id) })
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .semantics { contentDescription = "${card.title}. ${card.about}" },
+    ) {
+        Text(
+            card.title,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (HudLayout.isProtected(id)) chrome.warnInk else chrome.textHi,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            card.about,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

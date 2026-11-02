@@ -86,7 +86,7 @@ await check("the section sits after Shortcuts and paints the owner's defaults", 
   assert.deepEqual(errors, []);
 });
 
-await check("approvals: two choices and nothing below \"Risky only\"; the phone's rule and APPROVE_WHERE in words", async () => {
+await check("approvals: two choices here, and the small cards the backend leaves alone said plainly", async () => {
   const page = await settingsPage();
   const s = await look(page);
   await page.close();
@@ -95,6 +95,11 @@ await check("approvals: two choices and nothing below \"Risky only\"; the phone'
   assert.ok(s.approvalsNote.includes(`approved ${APPROVE_WHERE}`), "not the one APPROVE_WHERE phrase");
   assert.match(s.approvalsNote, /Deny never asks/);
   assert.match(s.approvalsNote, /notification can deny but never approve/);
+  // The owner's request of 2026-11-01, which is the backend's default: a small
+  // read-only card is approved by the card alone, and the way back is said.
+  assert.match(s.approvalsNote, /A small read-only card - a web search, a page, the news/);
+  assert.match(s.approvalsNote, /approved by the card alone/);
+  assert.match(s.approvalsNote, /check the small approvals too/);
 });
 
 await check("what each lock covers is said plainly, gaps included", async () => {

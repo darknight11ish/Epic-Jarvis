@@ -473,9 +473,13 @@ class MenuVisibilityTest {
         // "The local model" (2026-10-31) joined them: the automatic-restart
         // sentence and switch moved out of Home into a Settings card, and there
         // is no catalogue menu id for that card (it is not a feature switch).
+        // "Home screen" (2026-11-02) is the same shape again: it is the phone's
+        // own Edit HUD, a display preference rather than a feature switch, so
+        // there is no menu to hide it under and the row is always drawn. Its
+        // CARDS are menu ids and keep their own places; the EDITOR row has none.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
-                "files", "protection", "model-lane")
+                "files", "protection", "model-lane", "edit-hud")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

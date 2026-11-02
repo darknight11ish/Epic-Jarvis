@@ -15,8 +15,12 @@ import com.jarvis.client.net.SignedApproval
  *
  * - [Security.appLock]: opening Jarvis needs the fingerprint or phone PIN.
  * - [Security.relockAfter]: how long Jarvis may be away before it locks again.
- * - [Security.approvals]: which approvals need the fingerprint. Never fewer
- *   than today's rule ([SecurityRules.riskyByToday]).
+ * - [Security.approvals]: which approvals need the fingerprint. The default,
+ *   [ApprovalCheck.SMALL], is the owner's request of 2026-11-01: a small
+ *   read-only card - a web search, a page, the news - is approved by the card
+ *   alone, and everything else that is risky still asks. [ApprovalCheck.RISKY]
+ *   is today's rule (every risky card asks, the small ones included) and
+ *   [ApprovalCheck.EVERY] asks on every card.
  * - [Security.privateLists]: Mind's memory lists stay hidden behind a Show.
  * - [Security.method]: fingerprint or PIN, or fingerprint only.
  *
@@ -26,7 +30,7 @@ import com.jarvis.client.net.SignedApproval
 data class Security(
     val appLock: Boolean = false,
     val relockAfter: RelockAfter = RelockAfter.ONE_MINUTE,
-    val approvals: ApprovalCheck = ApprovalCheck.RISKY,
+    val approvals: ApprovalCheck = ApprovalCheck.SMALL,
     val privateLists: Boolean = false,
     val method: CheckMethod = CheckMethod.FINGERPRINT_OR_PIN,
     /**
@@ -108,13 +112,31 @@ enum class LiveEnd(val wire: String, val label: String) {
 
 /** Which approvals ask for the fingerprint. */
 enum class ApprovalCheck(val wire: String, val label: String) {
+    /**
+     * THE OWNER'S REQUEST OF 2026-11-01: *"for small approvals like asking
+     * jarvis to search the web (for things like weather or the news or
+     * anything small) i would like to only have to approve the card, not
+     * necessarily use my fingerprint on top of approving the card."*
+     *
+     * A SMALL card - a read-only action on [SecurityRules.SMALL_ACTIONS] whose
+     * own risk row says it changes nothing - is approved by the card alone.
+     * Every other risky card still asks, and anything unclassified, anything
+     * that writes, spends, sends, deletes or changes an account, a device, the
+     * network, an app or a permission is not small and still asks. The default.
+     */
+    SMALL("small", "Small cards"),
+
     /** Today's rule: outbound, cannot be undone, unclassified, or rushed. */
     RISKY("risky", "Risky only"),
+
     EVERY("every", "Every approval"),
     ;
 
     companion object {
-        fun fromWire(s: String?): ApprovalCheck = entries.firstOrNull { it.wire == s } ?: RISKY
+        /** Missing or unreadable is the SHIPPED default, never something
+         *  stricter: a phone that has never saved this setting behaves like a
+         *  freshly paired one, which is the owner's request of 2026-11-01. */
+        fun fromWire(s: String?): ApprovalCheck = entries.firstOrNull { it.wire == s } ?: SMALL
     }
 }
 
@@ -178,6 +200,44 @@ enum class CheckAvailability {
 object SecurityRules {
 
     /**
+     * Every action that is SMALL: an explicit list, never a guess from the
+     * words on a card. The same list, the same name and the same order as
+     * `jarvis_owner_check.SMALL_ACTIONS` on the PC, and the subset of it whose
+     * action can reach this phone at all.
+     *
+     *   the web reads   search_the_web (one web search's words), web_research,
+     *                   news_read, page_read, github_read, browse_model_catalog
+     *   the local reads calendar_read, email_read, notes_search, home_read,
+     *                   read_calendar, read_files_readonly, read_joplin_note,
+     *                   read_logseq_page
+     *
+     * Each one has a row in the gate's own risk table saying it changes
+     * nothing, and every one is a READ. What is deliberately NOT here:
+     * anything that writes, spends, sends, deletes, or changes an account, a
+     * credential, a device, the network, an app or a permission -
+     * `docker_service_stop` is the nearest miss (local and undoable, and it
+     * stops something).
+     */
+    val SMALL_ACTIONS: Set<String> = setOf(
+        // the web reads
+        "search_the_web",
+        "web_research",
+        "news_read",
+        "page_read",
+        "github_read",
+        "browse_model_catalog",
+        // the local reads
+        "calendar_read",
+        "email_read",
+        "notes_search",
+        "home_read",
+        "read_calendar",
+        "read_files_readonly",
+        "read_joplin_note",
+        "read_logseq_page",
+    )
+
+    /**
      * Today's rule, unchanged: anything that leaves the machine, cannot be
      * undone, or was not classified by the server (which arrives as both),
      * plus anything outside text tried to rush.
@@ -192,9 +252,57 @@ object SecurityRules {
         return false
     }
 
-    /** Whether approving [item] asks for the check. Never less than [riskyByToday]. */
-    fun approvalNeedsCheck(s: Security, item: PendingItem): Boolean =
-        riskyByToday(item) || s.approvals == ApprovalCheck.EVERY
+    /**
+     * True when [item] is a SMALL approval: a read-only action on
+     * [SMALL_ACTIONS] whose own risk row says it changes nothing.
+     *
+     * Fails toward asking. Anything this cannot read - no action, an action
+     * that is not on the list, a `risk` the PC did not classify, a
+     * `reversible` that is not "yes", a rush latch - is not small, so the
+     * card keeps the check it has today. `is_risky`'s fail-closed default is
+     * the same direction.
+     *
+     * The PC decides this same question itself (`jarvis_owner_check.is_small`)
+     * and the shared `contract/risky-approval-cases.json` carries both
+     * answers for every row, so the two cannot drift (SmallApprovalContractTest).
+     */
+    fun isSmall(item: PendingItem): Boolean {
+        val action = item.action ?: return false
+        if (action !in SMALL_ACTIONS) return false
+        if (!item.risk.classified) return false
+        if (item.risk.reversible != "yes") return false
+        if (item.risk.reach != "local" && item.risk.reach != "outbound") return false
+        if (item.raised != null) return false
+        return true
+    }
+
+    /**
+     * Whether approving [item] asks for the check.
+     *
+     * [ApprovalCheck.SMALL], the default, is the owner's request of
+     * 2026-11-01: the small read-only cards skip it, and [riskyByToday] holds
+     * for every other card - so this is never less than today's rule for a
+     * card that is not small. [ApprovalCheck.RISKY] is exactly today's rule;
+     * [ApprovalCheck.EVERY] asks on every card.
+     */
+    fun approvalNeedsCheck(s: Security, item: PendingItem): Boolean = when (s.approvals) {
+        ApprovalCheck.SMALL -> riskyByToday(item) && !isSmall(item)
+        ApprovalCheck.RISKY -> riskyByToday(item)
+        ApprovalCheck.EVERY -> true
+    }
+
+    /**
+     * Whether pressing Approve on [item] takes the SIGNED path - the phone's
+     * approval key, unlocked by the fingerprint (net/SignedApproval.kt).
+     *
+     * A signature can only be made after the fingerprint, so a card that must
+     * not ask cannot be signed: it goes the plain way, and the PC accepts that
+     * for a small card because it reads the same rule (`jarvis_owner_check.
+     * approve_check`: a card that is small in the same mode needs no device
+     * signature). A card that is not risky never needed one.
+     */
+    fun approveTakesSignedPath(s: Security, item: PendingItem): Boolean =
+        riskyByToday(item) && approvalNeedsCheck(s, item)
 
     /**
      * THE OWNER'S RULING OF 2026-10-30, ON THE CARD ITSELF: *"if there is
@@ -485,13 +593,24 @@ object SecurityRules {
     fun loosens(from: Security, to: Security): Boolean =
         (from.appLock && !to.appLock) ||
             to.relockAfter.ms > from.relockAfter.ms ||
-            (from.approvals == ApprovalCheck.EVERY && to.approvals == ApprovalCheck.RISKY) ||
+            approvalRank(to.approvals) < approvalRank(from.approvals) ||
             (from.privateLists && !to.privateLists) ||
             (from.method == CheckMethod.FINGERPRINT_ONLY && to.method == CheckMethod.FINGERPRINT_OR_PIN) ||
             (!from.swipeDecides && to.swipeDecides) ||
             (from.liveEnd == LiveEnd.APP_LOCK && to.liveEnd == LiveEnd.SCREEN_LOCK) ||
             (!from.screenRead && to.screenRead) ||
             ScreenNever.removes(from.neverApps, to.neverApps)
+
+    /**
+     * How much asking each choice does, smallest first: Small cards, then
+     * Risky only (today's rule), then Every approval. Moving DOWN this ladder
+     * is a loosening, so it asks for the fingerprint or PIN first.
+     */
+    fun approvalRank(mode: ApprovalCheck): Int = when (mode) {
+        ApprovalCheck.SMALL -> 0
+        ApprovalCheck.RISKY -> 1
+        ApprovalCheck.EVERY -> 2
+    }
 
     /**
      * Why a tightening cannot be taken, or null when it can. [availability]
@@ -538,10 +657,22 @@ object SecurityRules {
     fun summary(s: Security): String {
         val swipeOff = (if (s.swipeDecides) "" else " $SWIPE_OFF_SUMMARY") +
             (if (s.appLock && s.liveEnd == LiveEnd.SCREEN_LOCK) " $LIVE_END_SUMMARY" else "")
-        if (!s.anyLockOn) return "Off. Your fingerprint or PIN is asked for risky approvals only.$swipeOff"
+        if (!s.anyLockOn) {
+            return when (s.approvals) {
+                ApprovalCheck.SMALL -> "Off. Your fingerprint or PIN is asked for risky approvals only, " +
+                    "apart from the small read-only ones.$swipeOff"
+                else -> "Off. Your fingerprint or PIN is asked for risky approvals only.$swipeOff"
+            }
+        }
         val parts = buildList {
             add(if (s.appLock) "App lock on (${s.relockAfter.label.lowercase()})" else "App lock off")
-            add(if (s.approvals == ApprovalCheck.EVERY) "every approval asks" else "risky approvals ask")
+            add(
+                when (s.approvals) {
+                    ApprovalCheck.EVERY -> "every approval asks"
+                    ApprovalCheck.RISKY -> "risky approvals ask"
+                    ApprovalCheck.SMALL -> "risky approvals ask, apart from small ones"
+                },
+            )
             if (s.privateLists) add("memory lists hidden")
             if (s.method == CheckMethod.FINGERPRINT_ONLY) add("fingerprint only")
         }

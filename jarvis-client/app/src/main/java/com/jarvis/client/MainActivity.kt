@@ -1691,6 +1691,13 @@ class MainActivity : FragmentActivity() {
         val absent by JarvisRuntime.absent.collectAsState()
         val streaming by chat.streaming.collectAsState()
         val voicePhase by voice.phase.collectAsState()
+        // What the "hey Jarvis" listener is doing, for the picture-in-picture
+        // window's one word (2026-11-02): a wake-word turn has no CAPTURING
+        // phase - the service records the sentence before the desktop is asked -
+        // so the window cannot tell "he is talking to me" from the phase alone.
+        // Collected here, read only by `PipWords.working` below and only while
+        // the window is up; nothing starts or stops the listener from it.
+        val wakeListenState by WakeWordService.state.collectAsState()
         val voiceStatus by voice.status.collectAsState()
         // The stricter voice check, from the same status read.
         val voiceStrict by voice.strict.collectAsState()
@@ -2472,6 +2479,13 @@ class MainActivity : FragmentActivity() {
                     face = faceHolder,
                     answer = pipAnswer,
                     thread = pipThread,
+                    // The ONE word a running voice turn may show (2026-11-02):
+                    // the owner can say "hey Jarvis" at the small window and
+                    // this is how he sees it heard him. Null when nothing is
+                    // happening, so the resting window stays the face alone.
+                    // Drawn only in the layouts with room for it
+                    // (`PipLayout.turnWordShown`); the hidden one never has it.
+                    word = PipWords.working(voicePhase, wakeListenState),
                 )
                 return@JarvisTheme
             }
@@ -3475,6 +3489,24 @@ class MainActivity : FragmentActivity() {
                         },
                     )
 
+                    // "Edit HUD" (2026-11-02): the phone's own editor for what
+                    // its Home screen shows - the four sections, the five
+                    // read-only built-in arrangements, the owner's copies and
+                    // the layout's JSON. Reached from Settings' "Home screen"
+                    // row, and from nowhere else: the editor is a settings
+                    // screen, not a second Home.
+                    //
+                    // It takes no `canAct`, no `stale` and no `paired`: a
+                    // layout is a display preference stored on THIS phone, it
+                    // sends nothing to the PC, and it raises no approval card
+                    // (docs/ARCHITECTURE.md section 8). `Done` is the one write
+                    // (`MenuPrefs.saveLayout`); a phone with no desktop can
+                    // arrange its Home screen.
+                    Screen.EDIT_HUD -> com.jarvis.client.ui.screens.EditHudScreen(
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+
                     Screen.LIVE -> com.jarvis.client.ui.screens.LiveScreen(
                         onBack = { nav.back() },
                         // "Show the card": the cards are on Home. Back comes
@@ -3683,6 +3715,15 @@ class MainActivity : FragmentActivity() {
                         } else {
                             null
                         },
+                        // "Home screen" (2026-11-02; the owner's words: "add
+                        // building the real editor to the queue"): the phone's
+                        // own Edit HUD. Never null and never `paired`-gated,
+                        // unlike the three above it: the layout is stored on
+                        // THIS phone, it sends nothing to the PC, and it raises
+                        // no approval card - a display preference, the same
+                        // class as the theme. A phone with no desktop still has
+                        // a Home screen to arrange.
+                        onOpenEditHud = { nav.go(Screen.EDIT_HUD) },
                         floatingAvatar = floatingAvatar,
                         onFloatingAvatarChange = { JarvisRuntime.settings.setFloatingAvatar(it) },
                         // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md):
@@ -4349,6 +4390,25 @@ class MainActivity : FragmentActivity() {
                                 // and Home has no Appearance button any more.
                                 onOpenSettings = { nav.go(Screen.SETTINGS) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
+                                // A card on the owner's Home HUD (2026-11-02).
+                                // The layout says WHICH cards are on Home and in
+                                // what order; where one opens is the card's own
+                                // business, and `hudCardPlace` answers it from
+                                // the same catalogue `MenuPlaces` gives the
+                                // finder. A card with no place (or a safety
+                                // surface drawn as an action) opens nothing here
+                                // rather than guessing at a screen.
+                                onOpenHudCard = { cardId: String ->
+                                    val place = com.jarvis.client.ui.screens.hudCardPlace(cardId)
+                                    if (place != null) {
+                                        val section = place.second
+                                        if (section != null) {
+                                            pendingSection = section
+                                            pendingSectionScreen = place.first.name
+                                        }
+                                        nav.go(place.first)
+                                    }
+                                },
                                 // Jarvis Live (ui/screens/LiveScreen.kt).
                                 onOpenLive = { nav.go(Screen.LIVE) },
                                 // "Try again" under a failed question: the same
@@ -4645,6 +4705,11 @@ class MainActivity : FragmentActivity() {
      * not know signed approvals, or a PC that could not be read - takes
      * today's way, and the PC says `no_approval_key` if it needed one.
      *
+     * A SMALL card in the default mode is the one card that is risky and still
+     * takes today's way: its signature would need the very fingerprint the
+     * owner asked not to give for it ([SecurityRules.approveTakesSignedPath]),
+     * and the PC's own rule exempts the same card from the signature.
+     *
      * The PLAIN branch's POST is awaited, because its answer is what the
      * card needs; the SIGNED branch dispatches its POST on the runtime's own
      * scope (a signature is made once and is already sent by the time it
@@ -4653,10 +4718,15 @@ class MainActivity : FragmentActivity() {
      * decision is only ever sent after the owner's own answer.
      */
     private suspend fun approveItem(item: PendingItem): Boolean {
-        val risky = SecurityRules.riskyByToday(item)
+        // A SMALL card in the default mode is approved by the card alone (the
+        // owner's request of 2026-11-01), and a signature can only be made
+        // after a fingerprint - so it goes the plain way, and the PC accepts
+        // that because it reads the same rule (jarvis_owner_check.is_small).
+        // Every other risky card keeps today's signed path.
+        val signed = SecurityRules.approveTakesSignedPath(currentSecurity(), item)
         // pcOnly and needsChoice cards are refused in decide() with their own words.
-        val read = if (risky && !item.pcOnly && !item.needsChoice) JarvisRuntime.signedApprovalRead() else null
-        return when (val path = SignedApproval.pathFor(risky, read?.state)) {
+        val read = if (signed && !item.pcOnly && !item.needsChoice) JarvisRuntime.signedApprovalRead() else null
+        return when (val path = SignedApproval.pathFor(signed, read?.state)) {
             SignedApproval.Path.PLAIN -> {
                 if (confirmed(item)) {
                     // Awaited, not dispatched and answered `true`: a POST the
