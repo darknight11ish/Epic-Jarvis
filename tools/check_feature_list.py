@@ -310,6 +310,22 @@ INTERNAL = {
     # is a Settings menu id (never hideable: it is the phone's map of where each
     # control lives), not an ability of its own.
     "settings.all-features": "the phone directory row itself: it indexes the 140 features, and every ability it lists has its own row",
+    # 2026-11-02, the todo-carry-over lane (JARVIS-API section 179): the
+    # desktop's "To-do list carry-over" card, which picks daily rollover or day
+    # by day. It is a choice INSIDE an existing feature, not an ability of its
+    # own, and the contract says so in its own words: `coming-up` ("Timers,
+    # alarms, reminders and lists") is deliberately recorded as Command-Only -
+    # "there is nothing to turn on/off or set ... where part of it has a switch,
+    # that switch has its own row" - and that row is
+    # `contract/feature-controls.json`'s `choice_settings` entry
+    # `todo_carryover`. Naming it in `coming-up`'s covers list would NOT be a
+    # free edit: the guide derives the command-side status from covers, so it
+    # turns `coming-up` from not-a-setting into open-only, and that moves the
+    # owner-approved five-label counts in the contract (measured: the checker
+    # reports "coming-up: command-side status differs"). That reclassification
+    # is the contract owner's decision, not a fix PR's, so the honest record
+    # here is the truth: a setting inside a feature, with its own choice row.
+    "settings.todo-carryover": "the day-carry-over choice inside 'Timers, alarms, reminders and lists'; its own contract row is the `todo_carryover` choice setting, and reclassifying that feature is the contract owner's call",
 }
 
 #: The lessons a feature may be taught by, read from the real catalogue. A

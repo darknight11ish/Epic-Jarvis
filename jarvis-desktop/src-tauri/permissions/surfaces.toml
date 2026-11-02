@@ -1734,6 +1734,18 @@ description = "Read the searchable-recordings switch, the stored counts and the 
 permissions = ["allow-media-index"]
 
 # ---------------------------------------------------------------------------
+# The to-do list's day carry-over, for Settings (2026-11-02; JARVIS-API
+# section 179; `todo_carryover.rs`, `backend/jarvis_schedule.py`). Read the
+# mode in force and the two modes in the PC's own words; change it, held on a
+# stale link like every other write. It moves no item, deletes nothing and
+# re-stamps no day, so it raises no approval card either way.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "todo-carryover"
+description = "Read how the to-do list carries over (daily rollover, the default, or day by day) and change it. Settings only; it moves no item, deletes nothing, re-stamps no day and raises no card."
+permissions = ["allow-todo-carryover"]
+
+# ---------------------------------------------------------------------------
 # Chat history's switch and retention for Settings (2026-10-22, task-79 +
 # voiceprint-wiring's #734 typed `chat_history`/`chat_keep_days`; backend
 # `jarvis_chat_log.py`, route added by `backend/chat-history.patch`). Read the

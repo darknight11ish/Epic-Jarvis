@@ -100,6 +100,12 @@ pub mod system_theme;
 pub mod talk_type;
 pub mod token_store;
 pub mod tool_updates;
+// The to-do list's day carry-over, for Settings (todo_carryover.rs;
+// 2026-11-02; JARVIS-API section 179). Two shapes of ONE command: the read
+// (GET /api/schedule's todo_mode + todo_modes) and the one change
+// (POST /api/schedule/act {"do": "todo_mode", "mode": ...}). It moves no
+// item, re-stamps no day and raises no card either way.
+pub mod todo_carryover;
 pub mod tray;
 pub mod tutorials;
 pub mod update;
@@ -1514,6 +1520,13 @@ pub fn run() {
             // disclosure, turn it off at once, ask to turn it back on (ONE
             // normal approval card), and the one Delete of the stored words.
             media_index::media_index,
+            // The to-do list's day carry-over (todo_carryover.rs; 2026-11-02;
+            // JARVIS-API section 179). Settings only: no mode given reads the
+            // mode in force and the two modes in the PC's own words; {"mode":
+            // "rollover"|"day"} changes it. It moves no item and re-stamps no
+            // day, so it raises no approval card either way; the write is held
+            // on a stale link like every other write in this app.
+            todo_carryover::todo_carryover,
             big_coder::big_coder,
             history_settings::history_settings,
             // The Jarvis Calendar's ONE switch (calendar_settings.rs;
