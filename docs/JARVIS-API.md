@@ -30232,7 +30232,7 @@ plan-choice cards are Review, the exact public words, the cancel-on-clear rule, 
 source pins that the notifier is private/redacted and the two approve routes re-check before
 sending. `AppProjectsTest`, `NotificationStyleTest`, `MainActivityLaunchTest` and
 `ApprovalDecisionTest` were updated to the new envelope; the other existing suites still pass. The
-whole command is **3,204 tests, 0 failed, `BUILD SUCCESSFUL`**; the one pre-existing `main` failure
+whole command is **3,223 tests, 0 failed, `BUILD SUCCESSFUL`**; the one pre-existing `main` failure
 this branch inherited (`SettingsSearchTest`, after #1079 added the `edit-hud` row) was fixed by
 #1089 and merged in, and is nothing this feature changed.
 
