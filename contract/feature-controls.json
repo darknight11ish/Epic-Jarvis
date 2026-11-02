@@ -13303,7 +13303,43 @@
       "handler": "jarvis_settings_registry.set_antislop_mode",
       "status": "enforced",
       "proof": "backend/test_antislop.py: 'set anti-slop mode to after' resolves through jarvis_quick.match() to the settings_choice intent with the antislop_mode value and the filter's own state really reads mode 'after' afterwards (t_every_named_sentence_resolves_with_zero_cards); the POST body is driven through jarvis_antislop.handle_post in t_the_routes_answer_through_the_core_handler"
-    }
+    },
+      {
+        "key": "small_approvals",
+        "names": [
+          "the fingerprint for small approvals",
+          "the fingerprint on small approvals",
+          "the fingerprint for small things",
+          "the fingerprint for small cards",
+          "the fingerprint for small cards and approvals",
+          "small approvals"
+        ],
+        "section": "security",
+        "options": {
+          "ask": true,
+          "ask me": true,
+          "ask for them": true,
+          "ask on them": true,
+          "ask for small approvals": true,
+          "fingerprint": true,
+          "on": true,
+          "yes": true,
+          "skip": false,
+          "skip them": false,
+          "skip small cards": false,
+          "skip the small ones": false,
+          "leave them": false,
+          "leave them alone": false,
+          "do not ask": false,
+          "off": false,
+          "no": false
+        },
+        "desktop_found": false,
+        "phone_found": true,
+        "handler": "jarvis_settings_registry.set_small_approvals",
+        "status": "enforced",
+        "proof": "backend/test_settings_registry.py: 'set the fingerprint for small approvals to ask' resolves through the registry to set_small_approvals, the value the approval itself reads really moves (jarvis_owner_check.approvals_mode), and a phone peer is refused (t_the_small_approvals_setting_is_one_rule); backend/test_owner_check.py drives approve_check itself: in the default 'small' mode the Windows Hello prompt is not shown for a small card and the phone's signature is not needed, and in 'risky' both are back (t_the_small_card_exemption_is_the_rule_that_asks)"
+      }
   ],
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {

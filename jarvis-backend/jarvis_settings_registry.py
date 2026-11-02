@@ -3034,6 +3034,81 @@ def set_focus_preset(value: str, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+# --- the fingerprint on SMALL approvals (jarvis_owner_check.py) ------------
+#
+# THE OWNER'S REQUEST OF 2026-11-01: *"for small approvals like asking jarvis to
+# search the web (for things like weather or the news or anything small) i
+# would like to only have to approve the card, not necessarily use my
+# fingerprint on top of approving the card. make this setting adjustable in
+# settings or through chatting to jarvis."*
+#
+# The rule and the list of small actions live in jarvis_owner_check.py
+# (`is_small`, `SMALL_ACTIONS`), which is the module that decides both prompts
+# on this PC: the Windows Hello prompt for a risky card approved here, and the
+# device signature a phone's approval needs. This is the ONE setting that
+# turns the exemption off again ("ask me for my fingerprint on everything
+# again"), so the two prompts can never disagree about which cards are small.
+#
+# IT IS NOT A SECOND WAY TO CHANGE ANYTHING. It calls exactly the function that
+# stores the answer (`jarvis_owner_check.set_approvals_mode`), the same one the
+# per-approval rule reads. Stricter - asking for the small ones too - is
+# immediate, like every other change in the owner's direction. Looser - leaving
+# the small ones alone, which is the shipped default - is this PC only:
+# `peer`/`local` are passed through to `jarvis_owner_check.from_this_pc`, the
+# same test the approval itself makes, so a phone cannot turn a check off.
+def set_small_approvals(ask: bool, *, peer=None, local=None) -> Outcome:
+    """Ask for the fingerprint/PIN on the small read-only cards as well.
+
+    `ask=True`  - every risky approval asks, the small ones included (today's
+                  rule before the owner's request; the stricter direction).
+    `ask=False` - a small card is approved by the card alone (the default).
+    """
+    try:
+        import jarvis_owner_check as OC
+    except Exception:
+        return _missing("the fingerprint for small approvals")
+    try:
+        here = OC.from_this_pc(peer, local)
+    except Exception:
+        here = False
+    if not here:
+        return Outcome(False, _SMALL_APPROVALS_PC_ONLY, refused_pc_only=True)
+    was = OC.approvals_mode()
+    if ask and was in (OC.MODE_RISKY, OC.MODE_EVERY):
+        return Outcome(True, "Every risky approval already asks for your fingerprint, "
+                             "the small read-only ones too.")
+    if not ask and was == OC.MODE_SMALL:
+        return Outcome(True, "Small read-only cards are already approved by the card "
+                             "alone, and everything else that is risky still asks.")
+    try:
+        OC.set_approvals_mode(OC.MODE_RISKY if ask else OC.MODE_SMALL)
+    except Exception as exc:
+        return Outcome(False, "That setting could not be saved "
+                              f"({type(exc).__name__}), so nothing was changed.")
+    if ask:
+        return Outcome(True, "Every risky approval asks for your fingerprint again, the "
+                             "small read-only ones included.")
+    return Outcome(True, "Small read-only cards - a web search, a page, the news - are "
+                         "approved by the card alone. Everything else that is risky still "
+                         "asks.")
+
+
+#: Said when a phone (or another device) asks for the loosening. It is this
+#: PC's own check, so the PC is where it can be turned off.
+_SMALL_APPROVALS_PC_ONLY = (
+    "The fingerprint for small approvals can only be changed on your PC - it is "
+    "this PC's own check. Nothing was changed.")
+
+_SMALL_APPROVALS_CHOICES = {
+    "ask": True, "ask me": True, "ask for them": True, "ask on them": True,
+    "ask for small approvals": True, "fingerprint": True,
+    "on": True, "yes": True,
+    "skip": False, "skip them": False, "skip small cards": False,
+    "skip the small ones": False, "leave them": False, "leave them alone": False,
+    "do not ask": False, "off": False, "no": False,
+}
+
+
 CHOICE_SETTINGS: tuple = (
     ChoiceSetting(
         "handoff_mode",
@@ -3117,6 +3192,22 @@ CHOICE_SETTINGS: tuple = (
         "manner", {"during": "during", "after": "after"}, set_antislop_mode,
         "whether the Anti-Slop filter works as it writes (during) or audits "
         "first (after)"),
+    # THE FINGERPRINT ON SMALL APPROVALS (the owner's request of 2026-11-01).
+    # One setting, two answers, and the SAME function the approval itself reads
+    # (jarvis_owner_check.set_approvals_mode / approvals_mode) - so "ask me for
+    # my fingerprint on everything again" changes the rule that actually asks,
+    # not a second copy of it. "small" is the shipped default; see that
+    # module's SMALL_ACTIONS for the exact list of cards it covers.
+    ChoiceSetting(
+        "small_approvals",
+        ("the fingerprint for small approvals", "the fingerprint on small approvals",
+         "the fingerprint for small things", "the fingerprint for small cards",
+         "the fingerprint for small cards and approvals", "small approvals"),
+        "security", dict(_SMALL_APPROVALS_CHOICES), set_small_approvals,
+        "whether the small read-only approvals (a web search, a page, the news, "
+        "reading your calendar or notes) ask for your fingerprint as well as the "
+        "card's own yes",
+    ),
 )
 
 

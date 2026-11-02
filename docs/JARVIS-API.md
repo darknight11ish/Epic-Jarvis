@@ -653,8 +653,34 @@ confirmed check. The only cards with no Approve at all are the PC's own
 ceremonies (`jarvis_owner_check.PC_ONLY_ACTIONS`, refused `pc_only` - a decision
 about WHERE a thing can happen, not about how much checking) and a proposal that
 needs a named plan (`needsChoice`, which the decide route cannot carry yet).
-The phone's Security screen can only make the rule stricter ("Every approval");
-its loosest choice is the rule above.
+
+**The small read-only cards (the owner's request of 2026-11-01).** The owner
+asked to approve a small card - a web search, a page, the news, a calendar or
+notes read - with the card's own yes and no fingerprint on top:
+
+> "for small approvals like asking jarvis to search the web (for things like
+> weather or the news or anything small) i would like to only have to approve
+> the card, not necessarily use my fingerprint on top of approving the card.
+> make this setting adjustable in settings or through chatting to jarvis."
+
+So the approval check has a third value, **`small`** (`small` / `risky` /
+`every` on the phone's `ApprovalCheck`, and `jarvis_owner_check.approvals_mode`
+on the PC), and it is the default. A card is `small` when BOTH hold: its action
+is on the explicit read-only list (`jarvis_owner_check.SMALL_ACTIONS`, mirrored
+in `SecurityRules.SMALL_ACTIONS`), and the gate's own risk row for it says it
+changes nothing (`reversible` "yes"), has classified it, and nothing rushed it.
+Anything unclassified, irreversible, rushed, or on no list is not small and
+keeps the check. The backend answers it once, in `is_small`, and applies the
+same answer to both prompts: no Windows Hello for it on this PC, and a phone's
+approval of it needs no device signature (a signature can only be made after a
+fingerprint). `risky` is today's rule - every risky card asks, small ones
+included - and `every` asks on every card. The phone's Security screen draws all
+three; on the PC, say "check the small approvals too" (the
+`small_approvals` setting in `jarvis_settings_registry.py`) to put the check
+back on the small cards as well, and "leave the small approvals alone" for the
+default. The rule and the shared rows are held by
+`tools/gen_risky_approval_cases.py`, `backend/test_owner_check.py`,
+`SmallApprovalContractTest` (phone) and `RiskyApprovalContractTest`.
 
 **What the person sees.** The buttons keep the shared words on both apps
 (`CardWords.BUTTONS`: "Deny", "Approve"), and under them one line says what the

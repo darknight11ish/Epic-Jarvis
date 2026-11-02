@@ -135,11 +135,17 @@ export function relockNote(settings) {
 /** `where` is APPROVE_WHERE (jarvis-link.js), the one phrase for it. */
 export function approvalsNote(where) {
   return `Risky only asks for ${RISKY_WORDS} - the same rule as the phone's ` +
-    "fingerprint check. Every approval asks every time. There is nothing below " +
-    `Risky only. Cards are still approved ${where}; on this PC, Windows Hello ` +
+    "fingerprint check. A small read-only card - a web search, a page, the " +
+    "news, reading your calendar or notes - is approved by the card alone " +
+    "(the owner's request of 2026-11-01); everything else that is risky still " +
+    "asks, and Every approval asks for every card the backend does not. There " +
+    `is nothing below Risky only in this app. Cards are still approved ${where}; ` +
+    "on this PC, Windows Hello " +
     "checks it is you before an approval counts. For a risky one, an " +
     "up-to-date Jarvis backend asks itself, so you are asked once, and a " +
-    "program that goes around this app is asked too. With no Windows Hello set up, risky " +
+    "program that goes around this app is asked too. The small read-only cards " +
+    "are the backend's own choice: say \"check the small approvals too\" to ask " +
+    "for those as well. With no Windows Hello set up, risky " +
     "approvals are refused. Deny never asks, and a notification can deny but " +
     "never approve.";
 }
