@@ -80,6 +80,7 @@ import com.jarvis.client.net.PromptCoach
 import com.jarvis.client.net.Provenance
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.SignedApproval
+import com.jarvis.client.net.StagedLine
 import com.jarvis.client.net.UpdateCheck
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import com.jarvis.client.platform.ApprovalKey
@@ -669,6 +670,31 @@ class MainActivity : FragmentActivity() {
             }
             pictureBusy.value = false
         }
+    }
+
+    /**
+     * A send that failed puts back what it was carrying.
+     *
+     * The strip goes as the bytes leave (so nobody reads "attached" over an
+     * answer that is already arriving), and the bytes are held nowhere else -
+     * [AttachFile] and [ChatPicture] promise never to write, keep or log them.
+     * So a send that comes back with no answer and the chat's own error on
+     * screen (offline, a stale link, the PC refusing, an oversize body) puts
+     * the file and the picture back under the composer; otherwise the owner's
+     * only copy is gone and nothing but the error is left.
+     *
+     * Stop is NOT a failure: the answer is null there too, but the chat puts
+     * no error on screen because the bytes were already on their way. Putting
+     * them back would invite a second copy of a file the PC already read
+     * ([StagedLine.comesBack] is that rule, and is tested apart from this).
+     *
+     * A slot is only filled while it is still empty: a file the owner picked
+     * during the failing send is theirs, not this one's.
+     */
+    private fun putBackUnsent(answer: String?, doc: AttachFile.Ready?, pic: ChatPicture.Ready?) {
+        if (!StagedLine.comesBack(answer, JarvisRuntime.chat.error.value != null)) return
+        if (doc != null && attachedFile.value == null) attachedFile.value = doc
+        if (pic != null && picture.value == null) picture.value = pic
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -3986,9 +4012,15 @@ class MainActivity : FragmentActivity() {
                                         // not re-sent (nothing about it is kept).
                                         attachedFile.value = null
                                         scope.launch {
-                                            JarvisRuntime.sendTypedChat(
+                                            val answer = JarvisRuntime.sendTypedChat(
                                                 text, provenance = tag, shared = shared, attachment = doc,
                                             )
+                                            // A failure here is the owner's
+                                            // file, back under the box - and
+                                            // the chat's error is already on
+                                            // screen (chat.error, collected
+                                            // above). Stop puts nothing back.
+                                            putBackUnsent(answer, doc, null)
                                         }
                                     } else {
                                         // With a picture, the PC is asked first
@@ -4006,10 +4038,13 @@ class MainActivity : FragmentActivity() {
                                                 if (sharedHeld == shared) sharedHeld = null
                                                 picture.value = null
                                                 attachedFile.value = null
-                                                JarvisRuntime.sendTypedChat(
+                                                val answer = JarvisRuntime.sendTypedChat(
                                                     text, picture = pic.dataUri, provenance = tag,
                                                     shared = shared, attachment = doc,
                                                 )
+                                                // Both rode in that one request:
+                                                // a failure gives both back.
+                                                putBackUnsent(answer, doc, pic)
                                             }
                                         }
                                     }
@@ -4199,10 +4234,35 @@ class MainActivity : FragmentActivity() {
                                 // Jarvis Live (ui/screens/LiveScreen.kt).
                                 onOpenLive = { nav.go(Screen.LIVE) },
                                 // "Try again" under a failed question: the same
-                                // words, tag and shared text, asked again.
+                                // words, tag and shared text, asked again - and
+                                // with the file or picture that question carried.
+                                // Those bytes are held nowhere else (AttachFile),
+                                // so a retry that dropped them would ask about a
+                                // file the PC never got.
                                 onRetryQuestion = {
                                     JarvisRuntime.clearNotice()
-                                    scope.launch { chat.retryLast() }
+                                    val doc = attachedFile.value
+                                    val pic = picture.value
+                                    if (doc != null) attachedFile.value = null
+                                    if (pic != null) picture.value = null
+                                    scope.launch {
+                                        val started = chat.retryLast(
+                                            attachment = doc,
+                                            picture = pic?.dataUri,
+                                        )
+                                        // It never started (nothing left to ask
+                                        // again) or it failed: neither was sent,
+                                        // so both come back. Stop puts nothing
+                                        // back - the bytes had already gone.
+                                        if (!started || chat.error.value != null) {
+                                            if (doc != null && attachedFile.value == null) {
+                                                attachedFile.value = doc
+                                            }
+                                            if (pic != null && picture.value == null) {
+                                                picture.value = pic
+                                            }
+                                        }
+                                    }
                                 },
                                 blockerFor = { item: PendingItem ->
                                     JarvisRuntime.decisionBlocker(item, approve = true)
