@@ -1164,6 +1164,41 @@ def set_better_voice(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+def set_one_moment(on: bool, *, peer=None, local=None) -> Outcome:
+    """`jarvis_voice_flow.request_one_moment({"enabled": ...})` - the PC's own
+    answer to "One moment.", at once, no card either way (2026-11-01).
+
+    WHAT THIS FIXES, IN THE OWNER'S WORDS: "id like the ability to tell jarvis
+    in jarvis live to adjust any settings, includimg no longer saying one
+    moment while it comprehends or calculates something". Until today this row
+    was in `NOT_BY_ASKING` - refused in words, because the row's own value was
+    kept by each app and this backend had no function to call. The PC now keeps
+    the owner's answer itself (jarvis_voice_flow.py's own `voice-flow.json`),
+    and `/api/voice/status` reports it as `flow.moment.enabled`, which is the
+    value BOTH apps already obey - so one sentence here silences the desktop
+    bar and the phone with no client change.
+
+    No card: cosmetic, it sends nothing and acts on nothing, and turning it off
+    only takes something away - jarvis_voice_flow.py's own rule for its three
+    voice switches. Turning it back on can never override
+    `[voice] one_moment_enabled = false`, the PC's hand-edited hard switch: it
+    stays off and the answer says so."""
+    try:
+        import jarvis_voice_flow as VF
+    except Exception:
+        return _missing("\"One moment.\"")
+    try:
+        code, out = VF.request_one_moment({"enabled": bool(on)})
+    except Exception as exc:
+        return Outcome(False, f"That could not be saved ({type(exc).__name__}), "
+                              f"so nothing was changed.")
+    out = out if isinstance(out, dict) else {}
+    if code >= 400:
+        return Outcome(False, str(out.get("error") or "That could not be saved, "
+                                                      "so nothing was changed."))
+    return _say(code, out)
+
+
 # --- the universal-control pass (2026-10-22) ------------------------------
 # The owner's requirement: every function or feature can be turned on or off
 # by typing at Jarvis on either app. These switches already had a real route
@@ -1625,7 +1660,7 @@ SETTINGS_ROWS: tuple = (
         has_detail=True),
     SettingRow(
         "voice-one-moment",
-        None,
+        "one_moment",
         "",
         "",
         "voice-one-moment-detail",
@@ -2273,6 +2308,35 @@ BOOL_SETTINGS: tuple = (
                 "custom voices on the second card",
                 "make custom voices on the second graphics card"),
                "voices", set_better_voice),
+    # "Say \"One moment\" if I'm kept waiting" (id="voice-one-moment").
+    # REACHABLE BY ASKING SINCE 2026-11-01 - the owner's own ask: "id like the
+    # ability to tell jarvis in jarvis live to adjust any settings, includimg no
+    # longer saying one moment while it comprehends or calculates something".
+    # It used to be one of NOT_BY_ASKING's ten, refused in words, because the
+    # value was each app's own. The PC keeps the owner's answer now
+    # (jarvis_voice_flow.py) and reports it as `flow.moment.enabled`, which both
+    # apps already obey - so the sentence reaches the thing they actually hear.
+    # Cosmetic, no card either way (`set_one_moment` above says why).
+    #
+    # `section` IS None ON PURPOSE, and this is the SECOND switch where that is
+    # the reason (see the anti-slop entry above for the first). The Settings
+    # card this switch is drawn on ("voice") is ALSO the section the feature
+    # "Say Hey Jarvis" covers, and `jarvis_feature_guide.switches_for()` reads
+    # `section` to decide WHICH SWITCHES A FEATURE ROW COVERS - so naming
+    # "voice" here would put this switch under "turn on Say Hey Jarvis" and
+    # teach that phrase to change the wrong setting. The row link below
+    # (`SETTINGS_ROWS`'s `setting="one_moment"`) is what "where is this row"
+    # reads; `section` is not a place.
+    #
+    # THE NAMES a person really uses are here, including the three the old
+    # page-only refusal listed ("the one moment sound", "say one moment if i am
+    # kept waiting", "the one moment message") - those are now the phrases that
+    # WORK, and `backend/test_setting_alias_phrasing.py` pins them.
+    BoolSetting("one_moment",
+               ("the one moment message", "one moment", "saying one moment",
+                "the one moment sound", "say one moment if i am kept waiting",
+                "the one moment clip", "one moment while you think"),
+               None, set_one_moment),
     # --- the universal-control pass (2026-10-22): switches that had a real
     # route/control but no spoken name. See the setters above; every section
     # is the Settings card that already draws the control.
@@ -2459,12 +2523,23 @@ def cannot_change_setting_words(words: str = "") -> str:
 #   told it cannot - so "the failure looks like success". Every name below is
 #   answered in words instead, and nothing is changed.
 #
-#   THE TEN NAMES ARE THE ONES WITH NO ROUTE AT ALL. Each is a real switch on
+#   THE NINE NAMES ARE THE ONES WITH NO ROUTE AT ALL. Each is a real switch on
 #   the desktop's Settings page whose value is kept by the DESKTOP APP (a
 #   Tauri command, or `localStorage`), so this backend has no function to call
 #   and a phrase alone could not work. Checked one by one: no `/api/theme`,
 #   `/api/security`, `/api/autostart`, `/api/supervis*`, `hud_open_bar` or
 #   `click_through` route exists in this backend.
+#
+#   NINE, NOT TEN, SINCE 2026-11-01: "Say \"One moment\" if I'm kept waiting"
+#   (`voice-one-moment`) LEFT this table and became a real BoolSetting
+#   (`one_moment`). The owner asked to be able to tell Jarvis to stop saying it
+#   ("...includimg no longer saying one moment while it comprehends or
+#   calculates something"), so the PC keeps that answer itself now and both
+#   apps already obey it through `flow.moment.enabled`. `voice-heard-sound`
+#   STAYS, and the difference is real rather than an oversight: that sound is
+#   made and played by each app alone (desktop `voice-flow.js`'s HEARD_SOUND,
+#   phone `HeardSound`), the PC never makes it, serves it or hears it, so there
+#   is still nothing here for a backend sentence to change.
 #
 #   NOT INCLUDED, deliberately, and this is the trap: "Show the sun and moon
 #   behind the face" (`sky-show`) and "Auto adjust" (`face-auto`) ALSO have no
@@ -2485,8 +2560,6 @@ NOT_BY_ASKING: dict = {
                                "click-through"),
     "follow-system": ("match windows light or dark mode", "follow windows light or dark mode",
                       "windows light or dark mode", "follow the windows theme"),
-    "voice-one-moment": ("the one moment sound", "say one moment if i am kept waiting",
-                         "the one moment message"),
     "voice-heard-sound": ("the i heard you sound", "i heard you sound",
                           "the short sound when i finish speaking",
                           "the listening sound"),

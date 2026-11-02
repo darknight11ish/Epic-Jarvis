@@ -663,6 +663,25 @@ def t_the_desktop_fixture_is_fresh():
           f"world (saved state: {saved!r}) and {outside!r} outside it - so "
           f"flow.moment.key would be this PC's voice, not the state the case names")
 
+    # THE SAME PREMISE ONE MODULE FURTHER (2026-11-02): the "One moment." clip's
+    # status is the TOML switch AND the owner's own answer file - voice-flow.json
+    # in jarvis_voice_flow's config folder (jarvis_voice_flow.settings_path()).
+    # The producers must own THAT folder too, or a PC that once said "stop saying
+    # one moment" - or a CI runner whose shared config folder an earlier suite
+    # wrote to - renders "switched off on the PC (you asked Jarvis to stop saying
+    # it)" into every case, and the three comparisons below fail for a state this
+    # run did not choose. Named here for the same reason as the two above.
+    outside_flow = str(F._config_dir())
+    with G.World():
+        inside_flow = str(F._config_dir())
+        # ... asked INSIDE the world: its folder is removed when it closes.
+        answer_existed = F.settings_path().exists()
+    check("the producer's cases read the One moment answer of their own, not this PC's",
+          inside_flow != outside_flow and not answer_existed,
+          f"jarvis_voice_flow._config_dir() answered {inside_flow!r} inside the "
+          f"producer's world and {outside_flow!r} outside it; an answer file existed "
+          f"inside the world: {answer_existed}")
+
     check("voice-status-cases.json equals a fresh run of the producer",
           G.main(["--check"]) == 0, "run python3 tools/gen_voice_status_cases.py")
     # The training and custom-voice screens are tested against their own
