@@ -223,7 +223,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
-| `step` | Rendered in Brain → Now (the tab was "Live" until 2026-09-28; `brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen`, `read_camera` or `read_web_page` (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
+| `step` | Rendered in Brain → Now (the tab was "Live" until 2026-09-28; `brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen`, `read_camera`, `read_web_page` or `feature_guide` (Jarvis's own feature list, 2026-11-02) (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen). Since 2026-09-28 it also rings when an animal switch changes (`{"part": "animal", "animal": {...}}`, §93); the document then carries the new `animal` values, and every window keeps them for its face frames (`jarvis-link.js`, `animal-shared.js`) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`), `animal` included (`AppearanceStore.animal`) |
 | `sky` | **Since 2026-09-28** (`jarvis_sky.py`, §89): `{"changed": true}` only - never the town, a position or the weather - on every change that lands (and a card raised or answered). Fanned out; `sky-feed.js` (Settings, the Widget, the floating face) and Settings' own section read `GET /api/sky` again at once | Reads `GET /api/sky` again (`JarvisRuntime.onEvent` -> `sky()`), so the face and Appearance show it now |
@@ -3836,12 +3836,15 @@ for a question that came by VOICE and reply `private_aloud: false`:
    **Which tools are private** (the owner's decision of 2026-09-27: "Read
    aloud answers from web search, weather and home status. Email,
    calendar, notes, memory and any unknown tool still stay on screen"):
-   every tool EXCEPT the ones on the read-aloud list, `web_search` and
-   `home_read` - and, since the owner's answer of 2026-09-28 (§62),
-   `read_screen`, an answer about the screen: a read the PC records, not a
-   model tool (`jarvis_agent.STEP_READS` lets the `step` event carry its
-   name; nothing sends it yet) - matched exactly against the `step`
-   event's `tool`. Weather
+   every tool EXCEPT the ones on the read-aloud list - `web_search` and
+   `home_read` (that decision), `read_screen`, an answer about the screen
+   (the owner's answer of 2026-09-28, §62: a read the PC records, not a
+   model tool; `jarvis_agent.STEP_READS` lets the `step` event carry its
+   name), `read_camera`, the same read for what the camera sees in Jarvis
+   Live (2026-09-28), `read_web_page`, one page the owner handed over
+   (2026-10-05), and `feature_guide`, Jarvis's own shipped feature list
+   (2026-11-01: Live speaks an answer it can say, rather than "It's on your
+   screen.") - matched exactly against the `step` event's `tool`. Weather
    has no tool of its own - "what's the weather?" is answered by the quick
    path with no tool, and the model reads the weather device with
    `home_read`. So email, calendar, notes and the note writers, documents
