@@ -3510,6 +3510,23 @@ know - gets `private_aloud`, `memory_aloud` and `sensitive_aloud` all
 the apps' rule below keeps it on screen. It also gets `screen_aloud`
 **false** (the owner's decision of 2026-09-28: an answer about the screen
 stays on screen), unless the owner chose `hands_free_screen: screen_aloud`.
+
+**A Live clip on the session's own verification (2026-11-01).** The owner's
+request - "once I actively verify my voice in a single Jarvis Live session,
+Jarvis shouldn't need to re-verify my voice" - makes ONE successful strict
+check verify that whole session, so a `source=live` clip from 1.5 s up runs
+without a speaker model and `trust.window_s` is the session, not a 120 s
+window. The three read-aloud fields above are still the settings' answers, and
+they are still ANDed with "the voice passed a real check" - for these clips
+"the real check" is the one that verified the SESSION, so its `strictness`
+travels with them (a session verified at `very_strict` keeps what that check
+earned; one verified at `balanced` does not read a private answer aloud). No
+setting is implied or loosened: a sensitive saved fact still needs
+`sensitive_memory: sensitive_aloud`, a private answer still needs
+`privacy: voice_is_enough`, and `screen_aloud` is unchanged. A >= 2.0 s clip
+still gets the silent strict check itself (what refuses another voice, and what
+a read-aloud answer needs), and a failed check or a re-enrolled print voids the
+session's verification.
 Under the default, `same_as_button`, nothing changes. The utterance route itself still reads a
 request with no `?source=` as `push_to_talk` (that line is in the owner's
 `jarvis_hud.py`), so **send `source` on every clip**: `push_to_talk` for
@@ -13690,6 +13707,18 @@ the words couldn't be made out - say it again" and keeps listening.
   `jarvis_chat_log.record_turn` answers `{"recorded": false, "why": ...}`).
   An older history that still holds the marker shows it as "(not for
   Jarvis)" in both apps.
+- **The same tools, plans and cards as a typed turn** (2026-11-01, the
+  owner's request: *"also, id like javis live to be able to reasonably do
+  anything that jarvis can do through chat"*). The PC shows a Live turn the
+  same tool list it shows a typed turn for the same words - the same top-K
+  diet, the same full-list fallback, the same carried-forward list - so a
+  spoken request can reach every tool a typed one can. `[live] tool_limit` is
+  a **floor** at typed chat's own diet size (8), never a cut: a configured 3
+  still shows 8. Cards are raised by the same gate, under the same action,
+  and are still decided by tapping only. What stays Live-only is the speed
+  half: the `[live]` model, its lane, and the 16K window
+  (`docs/LIVE-DESIGN.md` 4.1). Measured before the fix: an unrecognised
+  question was shown 32 tools typed and 6 spoken; after: identical.
 - **Tap buttons** after a spoken answer that ends with a question, sent as
   the owner's TYPED words; never while a card is on screen. **Typed
   questions** during Live keep typed-answer rules.
@@ -13809,14 +13838,15 @@ transport behind them.
   the SAME one-shot check every Live clip goes through
   (`jarvis_speech.hear(wav, source="live", mic="phone")`: session, cards,
   mute, the owner check, then words), asks its OWN `/api/chat` route over
-  127.0.0.1 with the chat message marked `live: true` (so the Live note and
-  side-talk rules apply) and the phone's own token, then speaks the answer
-  with `jarvis_speech.say()` and sends its PCM as the design's frames. A
-  voice that is not the owner, and a clip that made no words, are silent: no
-  answer, no speech. **The hand-off is whole-WAV for now** - the owner hears
-  nothing until the whole answer exists; first-fragment TTS streaming is a
-  later phase, and the extra loopback hop is measured in the design's G4
-  slice rather than assumed cheap.
+  127.0.0.1 with the chat message marked `live: true` AND
+  `provenance: "voice"` (the two marks both apps send, so the Live note,
+  side-talk rules and the same tool list as a typed turn apply) and the
+  phone's own token, then speaks the answer with `jarvis_speech.say()` and
+  sends its PCM as the design's frames. A voice that is not the owner, and a
+  clip that made no words, are silent: no answer, no speech. **The hand-off is
+  whole-WAV for now** - the owner hears nothing until the whole answer exists;
+  first-fragment TTS streaming is a later phase, and the extra loopback hop is
+  measured in the design's G4 slice rather than assumed cheap.
 - **It is switched OFF and nothing turns it on automatically.** The switch is
   the owner's: one approval card raised from either app (design section 8),
   and that card path is a later slice too. The switch is the only way in.
