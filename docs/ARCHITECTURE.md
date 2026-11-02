@@ -2674,6 +2674,25 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Opening a listed app on the phone and starting a media search: the ability
+  is on both apps' chats, the SETTINGS are the PC's alone, and that is
+  one-sided on purpose** (2026-11-01; the owner's words: *"id like jarvis live
+  to be able to open certain apps on my android phone if i ask it ... like if i
+  aaid 'hey jarvis open yourube music and play the weekend'"*; JARVIS-API
+  §174). There is no new route and no new screen on either app: this is the
+  existing `control_phone` tool and `jarvis_android_control.py`, so the same
+  sentences work in either app's chat and on either app's Live, and the same
+  one approval card is drawn by both. What is **PC-only** is the permission
+  itself - `[phone_apps]` (the app allow-list) and `"control_phone"` in
+  `[tools].enabled` are two lines in `jarvis-framework.toml`, which is deep
+  config editing and stays off the phone (`CLAUDE.md`). Neither app lists or
+  edits the allowed apps; `list_apps` reads the same file for the model, so the
+  phone never becomes a second authority on what may be opened. **One honest
+  cost, said plainly:** opening a media app brings it to the front, so a Live
+  session running on that phone is backgrounded by the very thing it asked for
+  - the sound carries on, the conversation is behind the app. Nothing here
+  merges, adds a route, or touches `tools/check_parity.py` (no route changed).
+
 - **The Notes editor's formatting toolbar, shortcuts and template menu are the
   desktop's alone** (2026-10-31; the owner asked to "really enhance this
   customizability for notes"). The notes editor itself is in both apps and

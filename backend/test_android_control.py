@@ -15,6 +15,7 @@ import sys
 import tempfile
 import traceback
 from pathlib import Path
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import jarvis_android_control as A
@@ -734,28 +735,351 @@ def t_long_press_is_a_clamped_swipe_to_itself():
           p.steps == [] and len(p.rejected) == 1, repr(p.rejected))
 
 
-def t_open_app_refuses_jarvis_and_anything_that_is_not_a_package():
+def t_open_app_needs_the_owners_allow_list():
+    """open_app used to start ANY package the model named, and had no idea what
+    the owner had chosen (2026-11-01). Now `[phone_apps]` is the permission."""
+    #: The list these checks plan against, exactly as the settings table holds
+    #: it. Passed in rather than read from a file, so this suite never depends
+    #: on the owner's own settings.
+    allow = {"YouTube Music": "com.google.android.apps.youtube.music",
+             "Maps": "com.google.android.apps.maps"}
     for bad in ("com.jarvis.client", "com.jarvis.assistant.debug", "com.jarvis",
                 "not a package", "com.example;reboot", "com.example.app -n evil",
-                "-n", ""):
+                "-n", "", "com.example.timer"):
         with NoRealProcess():
             p = A.plan("EMULATOR123", "open it",
-                       [{"action": "open_app", "package": bad, "why": "x"}])
+                       [{"action": "open_app", "package": bad, "why": "x"}], apps=allow)
         check(f"open_app refuses {bad!r}", p.steps == [] and len(p.rejected) == 1,
               repr(p.rejected))
-    for good in ("com.example.timer", "com.android.settings"):
-        with NoRealProcess():
-            p = A.plan("EMULATOR123", "open it",
-                       [{"action": "open_app", "package": good, "why": "x"}])
-        check(f"open_app accepts {good}", len(p.steps) == 1, repr(p.rejected))
     with NoRealProcess():
         p = A.plan("EMULATOR123", "open it",
-                   [{"action": "open_app", "package": "com.example.timer", "why": "x"}])
+                   [{"action": "open_app", "package": "com.google.android.apps.maps",
+                     "why": "x"}], apps=allow)
+    check("... and accepts a package that IS on the list", len(p.steps) == 1,
+          repr(p.rejected))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open YouTube Music",
+                   [{"action": "open_app", "app": "YouTube Music", "why": "x"}],
+                   apps=allow)
+    check("... and an app by the name the owner wrote", len(p.steps) == 1,
+          repr(p.rejected))
     check("... and starts it with Android's own launcher, as argv",
           p.steps[0].argv == ["adb", "-s", "EMULATOR123", "shell", "monkey",
-                              "-p", "com.example.timer", "-c",
+                              "-p", "com.google.android.apps.youtube.music", "-c",
                               "android.intent.category.LAUNCHER", "1"],
           p.steps[0].argv)
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open it",
+                   [{"action": "open_app", "app": "TikTok", "why": "x"}], apps=allow)
+    check("an app that is not on the list is refused, not guessed",
+          p.steps == [] and len(p.rejected) == 1, repr(p.rejected))
+    check("... and the refusal names the apps that ARE allowed",
+          "YouTube Music" in p.rejected[0]["reason"]
+          and "Maps" in p.rejected[0]["reason"], p.rejected[0]["reason"])
+    check("... in the owner's own words, not the module's",
+          "not in your phone's app list" in p.rejected[0]["reason"],
+          p.rejected[0]["reason"])
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open it",
+                   [{"action": "open_app", "app": "YouTube Music",
+                     "package": "com.example.other", "why": "x"}], apps=allow)
+    check("a name and a package that disagree are refused, not picked between",
+          p.steps == [] and "do not agree" in p.rejected[0]["reason"], repr(p.rejected))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open it",
+                   [{"action": "open_app", "app": "com.jarvis.client", "why": "x"}],
+                   apps={"Jarvis": "com.jarvis.client"})
+    check("... and a list that names Jarvis's own app is still refused",
+          p.steps == [] and "com.jarvis" not in str(p.steps), repr(p.rejected))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open it", [{"action": "open_app", "app": "Maps"}],
+                   apps={})
+    check("an EMPTY allow-list refuses everything",
+          p.steps == [] and len(p.rejected) == 1, repr(p.rejected))
+    check("... with the one sentence that says how to add one",
+          p.rejected[0]["reason"] == A.NO_APPS_LINE
+          and "[phone_apps]" in p.rejected[0]["reason"], p.rejected[0]["reason"])
+
+
+def t_play_is_one_literal_intent_with_the_words_url_encoded():
+    allow = {"YouTube Music": "com.google.android.apps.youtube.music"}
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "play The Weeknd",
+                   [{"action": "play", "app": "YouTube Music",
+                     "query": "The Weeknd", "why": "x"}], apps=allow)
+    check("play builds exactly one step", len(p.steps) == 1, repr(p.rejected))
+    check("... and it is Android's own VIEW intent, resolved inside that app",
+          p.steps[0].argv == [
+              "adb", "-s", "EMULATOR123", "shell", "am", "start", "-a",
+              "android.intent.action.VIEW", "-d",
+              "https://music.youtube.com/search?q=The%20Weeknd",
+              "-p", "com.google.android.apps.youtube.music"], p.steps[0].argv)
+    check("... and the words are the app's own search address, not a guess",
+          "music.youtube.com/search?q=" in p.steps[0].argv[
+              p.steps[0].argv.index("-d") + 1], p.steps[0].argv)
+    #: Every one of these would be a shell metacharacter on the phone if the
+    #: words went into the command unencoded. `adb shell` hands the whole line
+    #: to the device's own /system/bin/sh, so this is the injection surface.
+    for words in ("The Weeknd; reboot", 'a"b', "a&b", "x$(reboot)", "x`id`",
+                  "a b", "50% off", "--es hacked"):
+        with NoRealProcess():
+            p = A.plan("EMULATOR123", "play",
+                       [{"action": "play", "app": "YouTube Music",
+                         "query": words}], apps=allow)
+        url = (p.steps[0].argv[p.steps[0].argv.index("-d") + 1]
+               if p.steps and "-d" in p.steps[0].argv else "")
+        check(f"{words!r}: nothing a phone's shell would split on",
+              bool(p.steps) and not any(ch in url for ch in (';', "&", '"', "`", "$", " ",
+                                                             "|", "<", ">", "\n")), url)
+        check(f"{words!r}: the words arrive percent-encoded, not as typed",
+              url == "https://music.youtube.com/search?q=" + quote(words, safe=""), url)
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "play",
+                   [{"action": "play", "app": "YouTube Music", "query": " "}],
+                   apps=allow)
+    check("no words at all is refused, not played",
+          p.steps == [] and "say what to search for" in p.rejected[0]["reason"],
+          repr(p.rejected))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "play",
+                   [{"action": "play", "app": "YouTube Music", "query": "x" * 121}],
+                   apps=allow)
+    check("a search longer than the limit is refused",
+          p.steps == [] and "too long" in p.rejected[0]["reason"], repr(p.rejected))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "play",
+                   [{"action": "play", "app": "Maps", "query": "home"}],
+                   apps={"Maps": "com.google.android.apps.maps"})
+    check("an app with no known search address is refused, not pretended",
+          p.steps == [] and "does not know how to ask it to search"
+          in p.rejected[0]["reason"], repr(p.rejected))
+    check("... and it still tells the owner that opening it works",
+          "Ask it to open the app instead" in p.rejected[0]["reason"],
+          p.rejected[0]["reason"])
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "play",
+                   [{"action": "play", "app": "YouTube Music", "query": "x"}],
+                   apps=allow)
+    check("play's own step has a word for the live status line",
+          A._STEP_WORD.get("play") == "opening an app and asking it to search",
+          A._STEP_WORD)
+
+
+def t_list_apps_names_only_what_the_owner_wrote():
+    made = A.list_apps(apps={"YouTube Music": "com.google.android.apps.youtube.music",
+                             "Maps": "com.google.android.apps.maps"})
+    check("it lists the friendly names the owner wrote",
+          [a["name"] for a in made["apps"]] == ["Maps", "YouTube Music"], made)
+    check("... and says which ones can also search",
+          {a["name"]: a["can_play"] for a in made["apps"]}
+          == {"Maps": False, "YouTube Music": True}, made)
+    check("... and NEVER a package name", "com.google" not in json.dumps(made), made)
+    empty = A.list_apps(apps={})
+    check("an empty list is 0 apps, not an error",
+          empty["ok"] is True and empty["apps"] == [] and empty["count"] == 0, empty)
+    check("... and it says how to add one, in the same words the refusal uses",
+          A.NO_APPS_LINE in empty["note"], empty["note"])
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "list them",
+                   [{"action": "list_apps", "why": "x"}],
+                   apps={"YouTube Music": "com.google.android.apps.youtube.music"})
+    check("list_apps is NEVER turned into an adb command", p.steps == [], repr(p.steps))
+    check("... and the plan says why instead of dropping it",
+          "never a phone command" in p.rejected[0]["reason"], p.rejected)
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "list then tap",
+                   [{"action": "list_apps"}, {"action": "tap", "x": 1, "y": 2}],
+                   apps={"YouTube Music": "com.google.android.apps.youtube.music"})
+    check("... so a plan that mixes it with a real step still refuses the list",
+          len(p.steps) == 1 and len(p.rejected) == 1, repr(p.steps))
+    check("only_lists_apps is true for a list on its own",
+          A.only_lists_apps([{"action": "list_apps"}]) is True)
+    check("... and false as soon as anything else is asked for",
+          A.only_lists_apps([{"action": "list_apps"}, {"action": "tap"}]) is False
+          and A.only_lists_apps([]) is False and A.only_lists_apps(None) is False)
+
+
+def t_the_allow_list_is_read_from_the_settings_file_and_bad_lines_are_dropped():
+    """The settings table is not a place to smuggle a command into an argv."""
+    try:
+        import jarvis_framework as FW
+    except Exception:
+        # A direct run: the rebuilt modules live one folder down.
+        # run_suites.py flattens them, `python backend/test_x.py` does not.
+        sys.path.append(str(Path(__file__).resolve().parent / "rebuilt"))
+        try:
+            import jarvis_framework as FW
+        except Exception as exc:            # pragma: no cover - not this PC
+            skip(f"[phone_apps] read from the settings file (no config layer: {exc})")
+            return
+    real = FW.section
+
+    def fake(name):
+        if name != "phone_apps":
+            return real(name)
+        return {"YouTube Music": "com.google.android.apps.youtube.music",
+                "Jarvis": "com.jarvis.client",          # refused: Jarvis's own app
+                "Broken": "not a package",              # refused: not a name
+                "Empty": "",                            # refused: no package
+                "": "com.example.blank",                # refused: no name
+                "Count": 3,                             # refused: not a string
+                "Sub": {"nested": "x"}}                 # refused: a sub-table
+    FW.section = fake
+    try:
+        apps, ignored = A.read_phone_apps()
+    finally:
+        FW.section = real
+    check("only the one real line is allowed", apps ==
+          {"YouTube Music": "com.google.android.apps.youtube.music"}, apps)
+    check("... every rejected line is reported rather than forgotten",
+          len(ignored) == 6 and "Jarvis" in ignored and "Broken" in ignored, ignored)
+    FW.section = lambda name: {} if name == "phone_apps" else real(name)
+    try:
+        apps, ignored = A.read_phone_apps()
+    finally:
+        FW.section = real
+    check("... and a settings file with no table at all allows nothing",
+          apps == {} and ignored == [], (apps, ignored))
+
+
+def t_the_phone_is_the_one_connected_not_a_guess():
+    def devices(text):
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, text)
+            raise AssertionError(f"only `adb devices` should run here: {argv}")
+        return caller
+    one = devices(b"List of devices attached\nR58M12345\tdevice\n\n")
+    check("one phone connected: that is the serial, with no card-time guessing",
+          A.resolve_device("", run_adb=one) == ("R58M12345", ""), A.resolve_device("", run_adb=one))
+    none = devices(b"List of devices attached\n\n")
+    serial, why = A.resolve_device("", run_adb=none)
+    check("no phone: no serial, and a plain sentence", serial == "" and
+          "no phone is connected" in why, why)
+    two = devices(b"List of devices attached\nA\tdevice\nB\tdevice\n\n")
+    serial, why = A.resolve_device("", run_adb=two)
+    check("two phones: neither is guessed, and both are named",
+          serial == "" and "A, B" in why, why)
+    check("a serial the caller named is passed through untouched",
+          A.resolve_device("MINE", run_adb=none) == ("MINE", ""))
+    def boom(argv):
+        raise FileNotFoundError("adb is not installed")
+    serial, why = A.resolve_device("", run_adb=boom)
+    check("no adb at all is a sentence, never a traceback",
+          serial == "" and "could not ask adb" in why, why)
+
+
+def t_opening_and_playing_work_from_the_phone_where_jarvis_is_in_front():
+    """The owner's request: this is asked in a LIVE SESSION ON THE PHONE, so
+    the Jarvis app is what is in front (or, screen off, `dumpsys` says nothing
+    and the guard reads that as "could not tell"). An unconditional
+    Jarvis-in-front guard refused the one request this feature exists for."""
+    allow = {"YouTube Music": "com.google.android.apps.youtube.music"}
+    JARVIS_FOCUS = (b"  mCurrentFocus=Window{1a2b u0 com.jarvis.client/"
+                    b"com.jarvis.client.MainActivity}\n")
+
+    def front(text):
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, DEVICES_OUT)
+            if "dumpsys" in argv:
+                return Result(0, text)
+            return Result(0, b"")
+        return caller
+
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "play The Weeknd",
+                   [{"action": "play", "app": "YouTube Music",
+                     "query": "The Weeknd"}], apps=allow)
+        out = A.run(p, run_adb=front(JARVIS_FOCUS), approved=True,
+                    receipt=lambda *a, **k: "")
+    check("play runs while the Jarvis app is in front - it cannot tap inside it",
+          out["ok"] is True, repr(out))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open YouTube Music",
+                   [{"action": "open_app", "app": "YouTube Music"}], apps=allow)
+        out = A.run(p, run_adb=front(b""), approved=True, receipt=lambda *a, **k: "")
+    check("and so does open_app when the phone will not say what is in front",
+          out["ok"] is True, repr(out))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 2}])
+        out = A.run(p, run_adb=front(JARVIS_FOCUS), approved=True,
+                    receipt=lambda *a, **k: "")
+    check("a TAP is still refused while the Jarvis app is in front",
+          out["ok"] is False, repr(out))
+    check("... and the refusal is still the Jarvis-in-front one",
+          "does not tap inside its own app" in out.get("reason", ""), repr(out))
+    check("the guard's list of package-pinned actions is exactly the two",
+          A.PACKAGE_PINNED_ACTIONS == ("open_app", "play"), A.PACKAGE_PINNED_ACTIONS)
+    check("... and neither of them is a read-only action",
+          not set(A.PACKAGE_PINNED_ACTIONS) & set(A.READ_ONLY_ACTIONS))
+
+
+def t_a_search_template_with_nowhere_to_put_the_words_is_refused():
+    allow = {"Nowhere": "com.example.nowhere"}
+
+    class FakeLinks:
+        def __enter__(self):
+            self.real = dict(A.SEARCH_LINKS)
+            A.SEARCH_LINKS["com.example.nowhere"] = "https://example.test/search"
+            return self
+
+        def __exit__(self, *a):
+            A.SEARCH_LINKS.clear()
+            A.SEARCH_LINKS.update(self.real)
+            return False
+
+    with FakeLinks(), NoRealProcess():
+        p = A.plan("EMULATOR123", "play",
+                   [{"action": "play", "app": "Nowhere", "query": "x"}], apps=allow)
+    check("a template with no {query} is refused, not a search for nothing",
+          p.steps == [] and "no place for your words" in p.rejected[0]["reason"],
+          repr(p.rejected))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open",
+                   [{"action": "open_app", "app": "YouTube Music"}],
+                   apps={"YouTube Music": "com.google.android.apps.youtube.music"})
+    check("... and an ordinary open still works",
+          len(p.steps) == 1, repr(p.rejected))
+
+
+def t_a_launch_that_did_not_happen_is_never_reported_as_done():
+    """`am start` and `monkey` print their failure on STDOUT and still exit 0.
+    Reading only the exit code reported `done` for an app that never opened."""
+    allow = {"YouTube Music": "com.google.android.apps.youtube.music"}
+
+    def says(words):
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, DEVICES_OUT)
+            if "dumpsys" in argv:
+                return Result(0, FOCUS_OUT)
+            return Result(0, words)
+        return caller
+
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "play",
+                   [{"action": "play", "app": "YouTube Music", "query": "x"}],
+                   apps=allow)
+        out = A.run(p, run_adb=says(b"Starting: Intent { act=android.intent.action.VIEW }\n"),
+                    approved=True, receipt=lambda *a, **k: "")
+    check("a launch that really happened is done", out["ok"] is True, repr(out))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "play",
+                   [{"action": "play", "app": "YouTube Music", "query": "x"}],
+                   apps=allow)
+        out = A.run(p, run_adb=says(b"Error: Activity not started, unable to resolve Intent\n"),
+                    approved=True, receipt=lambda *a, **k: "")
+    check("`Error: Activity not started` is NOT done",
+          out["ok"] is False and "did not start anything" in out["reason"], repr(out))
+    check("... and nothing is claimed to have run", out["done"] == [], repr(out))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open",
+                   [{"action": "open_app", "app": "YouTube Music"}], apps=allow)
+        out = A.run(p, run_adb=says(b"** No activities found to run, monkey aborted. **\n"),
+                    approved=True, receipt=lambda *a, **k: "")
+    check("... and monkey's own words are read the same way",
+          out["ok"] is False and "did not start anything" in out["reason"], repr(out))
 
 
 def t_ui_dump_is_read_only_and_never_heavy():
@@ -892,8 +1216,9 @@ def t_the_three_new_actions_are_literal_argv_and_never_a_shell_string():
     with NoRealProcess():
         p = A.plan("EMULATOR123", "the new three", [
             {"action": "long_press", "x": 1, "y": 2, "why": "w"},
-            {"action": "open_app", "package": "com.example.timer", "why": "w"},
-            {"action": "ui_dump", "why": "w"}])
+            {"action": "open_app", "app": "Timer", "why": "w"},
+            {"action": "ui_dump", "why": "w"}],
+            apps={"Timer": "com.example.timer"})
     check("all three built", len(p.steps) == 3, repr(p.rejected))
     for step in p.steps:
         check(f"{step.action}: a list of plain strings, not a shell string",
@@ -1092,7 +1417,7 @@ RUN = (
     t_inspect_ui_says_when_it_cannot_tell_which_app_is_in_front,
     t_run_still_refuses_a_tap_when_it_cannot_tell_which_app_is_in_front,
     t_long_press_is_a_clamped_swipe_to_itself,
-    t_open_app_refuses_jarvis_and_anything_that_is_not_a_package,
+    t_open_app_needs_the_owners_allow_list,
     t_ui_dump_is_read_only_and_never_heavy,
     t_a_ui_dump_step_runs_even_with_jarvis_in_front_like_a_screenshot,
     t_resolve_node_to_tap_by_id_text_and_resource_id,
@@ -1102,6 +1427,14 @@ RUN = (
     t_the_five_original_actions_are_still_exactly_what_they_were,
     t_the_three_new_actions_are_literal_argv_and_never_a_shell_string,
     t_the_new_steps_have_their_own_words_and_leak_no_content,
+    # 2026-11-01: a listed app, and a search in it
+    t_play_is_one_literal_intent_with_the_words_url_encoded,
+    t_list_apps_names_only_what_the_owner_wrote,
+    t_the_allow_list_is_read_from_the_settings_file_and_bad_lines_are_dropped,
+    t_the_phone_is_the_one_connected_not_a_guess,
+    t_opening_and_playing_work_from_the_phone_where_jarvis_is_in_front,
+    t_a_search_template_with_nowhere_to_put_the_words_is_refused,
+    t_a_launch_that_did_not_happen_is_never_reported_as_done,
     t_run_hands_the_receipt_recorder_what_really_happened,
     t_a_run_that_sent_nothing_writes_no_receipt,
     t_a_real_receipt_is_written_for_the_phone,
