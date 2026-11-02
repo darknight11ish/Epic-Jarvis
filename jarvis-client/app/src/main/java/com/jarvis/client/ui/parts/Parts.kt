@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
@@ -494,13 +495,23 @@ fun RowScope.Refuse(
     }
 }
 
-/** A quiet text action. 48dp of touch target regardless of how small it looks. */
+/**
+ * A quiet text action. 48dp of touch target regardless of how small it looks.
+ *
+ * [maxLines] and [overflow] exist for a label in a cell with a fixed width
+ * that must not grow or be cut without a sign (the full-screen face bar at a
+ * large text size, 2026-11-02): pass `1` with [TextOverflow.Ellipsis] and the
+ * words end in "…" instead of overflowing the cell or wrapping it taller.
+ * Left at the default, a label wraps as it always has.
+ */
 @Composable
 fun Quiet(
     text: String,
     modifier: Modifier = Modifier,
     color: Color? = null,
     enabled: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
     onClick: () -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -516,6 +527,8 @@ fun Quiet(
             text,
             style = MaterialTheme.typography.labelMedium,
             color = if (enabled) (color ?: LocalAccent.current) else chrome.textLo,
+            maxLines = maxLines,
+            overflow = overflow,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
         )
     }

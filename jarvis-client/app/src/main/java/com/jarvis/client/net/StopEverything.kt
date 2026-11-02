@@ -24,10 +24,6 @@ object StopEverything {
     /** The button's words - the desktop's hotkey is called this too. */
     const val LABEL = "Stop everything"
 
-    /** The line under the button. */
-    const val HINT = "Stops Jarvis talking and anything it is doing on the PC or this phone. " +
-        "Asks nothing first; approves nothing."
-
     /** Always true by the time the PC answers: the phone stopped its own speech first. */
     const val SPEECH = "Stopped speaking."
 

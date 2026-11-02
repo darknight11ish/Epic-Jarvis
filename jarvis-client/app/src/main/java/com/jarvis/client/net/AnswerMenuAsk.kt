@@ -64,6 +64,56 @@ object AnswerMenuAsk {
         .trim()
 
     /**
+     * What one press of Send should do with the words in the box.
+     *
+     * There is more than one Send on this screen - the chat bar's button and
+     * its keyboard key, the prompt coach's "Send mine", and the full-screen
+     * face bar's small box - and they must all decide the same way, or one of
+     * them sends a menu request to the PC as a question. [decide] is that one
+     * decision; the callers only do what it says.
+     */
+    enum class Decision {
+        /** An ordinary question, and it may be sent now: send it. */
+        SEND,
+
+        /** The words asked for the answer's menu and there is a finished answer: open it. */
+        OPEN_MENU,
+
+        /** The words asked for the menu but there is no finished answer: say [NO_ANSWER]. */
+        NEEDS_ANSWER,
+
+        /** Nothing to send, or nothing may be sent right now: do nothing at all. */
+        HELD,
+    }
+
+    /**
+     * THE one send decision, shared by the chat box and the full-screen face
+     * bar's box (2026-11-02: the face box was added without it and would send
+     * "was this answer right?" to the PC as a question).
+     *
+     * The menu is decided BEFORE [canSend] on purpose: opening a local menu
+     * must not depend on the PC being reachable, and a dead link used to leave
+     * the words in the box with nothing happening. Only the menu's own actions
+     * (a mark) need the link. Everything else that is not sendable yet -
+     * nothing typed, no link, a picture or file still being prepared - is
+     * [Decision.HELD]: nothing is sent and nothing is used up.
+     *
+     * @param text the words in the box, read at the press.
+     * @param canSend the caller's own "there is something to send and it may
+     *   go now" rule. The chat box and the face bar differ in exactly one
+     *   atom - the face bar also refuses while an answer is streaming - and
+     *   that is why this is a parameter, not a rule here.
+     * @param hasFinishedAnswer whether there is a finished answer on screen
+     *   for the menu to be about; the caller knows that, not this file.
+     */
+    fun decide(text: String?, canSend: Boolean, hasFinishedAnswer: Boolean): Decision =
+        when {
+            matches(text) -> if (hasFinishedAnswer) Decision.OPEN_MENU else Decision.NEEDS_ANSWER
+            canSend -> Decision.SEND
+            else -> Decision.HELD
+        }
+
+    /**
      * Do these typed words ask for the answer's own menu?
      *
      * True only for a whole sentence on [PHRASES], optionally after "hey

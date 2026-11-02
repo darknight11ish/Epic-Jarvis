@@ -10,13 +10,14 @@ import java.util.Base64
 /**
  * A photo sent in chat, and the numbers that keep it inside what the PC accepts.
  *
- * ONLY WHILE PICTURES WORKS. The attach button is offered only while the PC
- * says its second graphics card's Pictures feature is `available`
- * ([SecondCard.visionAvailable]) - or, since 2026-09-26, that it reads the
- * WORDS in a picture itself ([SecondCard.pictureTextAvailable]; backend
- * `jarvis_ocr.py`, which marks them as outside text) - and the send checks
- * again first ([SecondCard.picturesTaken]). Without either the everyday
- * model gets the picture and cannot see it.
+ * ONLY WHILE PICTURES WORKS. Images are offered in the phone's one "Attach a
+ * file" picker only while the PC says its second graphics card's Pictures
+ * feature is `available` ([SecondCard.visionAvailable]) - or, since
+ * 2026-09-26, that it reads the WORDS in a picture itself
+ * ([SecondCard.pictureTextAvailable]; backend `jarvis_ocr.py`, which marks
+ * them as outside text) - and the send checks again first
+ * ([SecondCard.picturesTaken]). Without either the everyday model gets the
+ * picture and cannot see it.
  *
  * PRIVATE. A photo can show anything. It goes to the owner's PC and nowhere
  * else: the PC's router keeps any message with a picture on the local model
@@ -95,10 +96,10 @@ object ChatPicture {
 
     /**
      * Why a picture shared from another app is NOT attached, or null when it
-     * is. The Photo button's own rule ([SecondCard.visionAvailable], read
-     * fresh): a share is attached only when that button would be offered, and
-     * is never dropped without a word. Sending checks again, as it does for a
-     * picked photo.
+     * is. The same rule a picked photo goes by ([SecondCard.picturesTaken],
+     * read fresh): a share is attached only while the PC's Pictures feature
+     * works or it can read a picture's words, and is never dropped without a
+     * word. Sending checks again, as it does for a picked photo.
      */
     fun sharedRefusal(read: SecondCard.Read): String? {
         if (SecondCard.picturesTaken(read)) return null

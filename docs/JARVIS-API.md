@@ -2401,7 +2401,8 @@ carries the note's text.** Clients show `message` and nothing of their own.
 Replaces what `POST /api/note` in §8 suggested. The desktop's `#log` / `#obs` /
 `#joplin` / quick note / widget capture use it (`capture_note`,
 `capture_note_status`); the chat turn with a routing system message is gone.
-The phone uses it too: Home's "Quick note…" field, opened directly or by the
+The phone uses it too: Home's Quick note sheet, opened by the More menu's
+Quick note row or by the
 home-screen widget's Note button (`JarvisApi.captureNote`, `noteStatus`,
 `JarvisRuntime.fileNote`). The phone keeps asking while a card waits and
 shows the desktop's own sentence in its notice.
@@ -2470,7 +2471,9 @@ link and let going quieter through.
 `backend/second-card.patch` and `backend/jarvis_second_card.py`. The owner's
 guide is `docs/SECOND-CARD.md`. **Both apps call both** (2026-09-24). The
 phone: Brain screen, "Second graphics card" (`SecondCardPlate.kt` /
-`net/SecondCard.kt`), and chat's photo button. The desktop: Settings, "Second
+`net/SecondCard.kt`), and chat's one `Attach a file` row, which takes a photo as
+well as a document since 2026-11-01 (it was a Photo button of its own before).
+The desktop: Settings, "Second
 graphics card" (`get_second_card` / `set_second_card` in `commands.rs`,
 granted to the settings window only), and `vision.rs`, which reads it before
 deciding whether pictures can be sent. `tools/check_parity.py` records
@@ -2498,7 +2501,8 @@ Since 2026-09-26 it also carries `"picture_text": {"available": bool,
 itself when the model answering cannot see it (section 36). Both apps read
 it where they already read this route before a picture goes: the desktop's
 `vision.rs` (`reads_text`) sends the picture without asking; the phone
-offers its Photo button (`SecondCard.picturesTaken`). An older PC sends
+offers photos in its one `Attach a file` row (`SecondCard.picturesTaken`, read
+as `HomeState.pictureOffered`). An older PC sends
 none: both apps behave as before.
 
 ```
@@ -2868,9 +2872,13 @@ go to <model> on the second graphics card."); otherwise do what it does
 today. The phone does the same wherever it decides whether to send a
 picture. The route header then carries `second_card: "vision"` on that turn.
 
-**The phone's picture** (2026-09-24): a Photo button in chat, shown only
-while the `vision` row's `available` is true, and checked again (a fresh
-`GET`) before the send. Android's photo picker, no storage permission; the
+**The phone's picture** (2026-09-24; one `Attach a file` row since 2026-11-01):
+a photo is picked through the chat's one `Attach a file` row, and the picker
+offers images only while the `vision` row's `available` is true (or the PC
+reads the words in pictures - section 36's `picture_text`), checked again (a
+fresh `GET`) before the send. Android's system file picker, no storage
+permission; a picked image is sent to the picture path by
+`AttachFile.goesToPicture` and is never read as a document. The
 photo is shrunk in memory to 1920 pixels on its long side at JPEG quality 82
 (the desktop's `MAX_CAPTURE_WIDTH` and `JPEG_QUALITY`), then lower quality or
 smaller until it is at most 1.5 MB, which stays well inside `MAX_BODY` (4 MiB)
@@ -8102,8 +8110,8 @@ its answer, except that its switch example is now the sentence that works
 ("switch to the Classic Butler personality").
 
 What it changes in a turn, and only this: the local model's request gets the
-active preset's compact `<jarvis_persona>` block (measured at most 722 characters
-with each preset's own dials - 730 with the longest word on every dial - under the
+active preset's compact `<jarvis_persona>` block (measured at most 738 characters
+with each preset's own dials - 747 with the longest word on every dial - under the
 750-character ~180-token cap) plus a one-line recency
 hint just before the newest question; the block's spoken-live variant keeps
 `Jarvis Live` answers to 1-3 sentences with no Markdown; a **crisis turn
@@ -9591,7 +9599,8 @@ No new route and no new field.
 whether it works; `why` is a plain sentence when it does not ("Windows has
 no text recognition for your language installed. Settings -> Time &
 language -> ..."). The desktop sends a picture without its "can't see
-pictures" notice when it works; the phone offers its Photo button and says
+pictures" notice when it works; the phone offers photos in its one `Attach a
+file` row and says
 under an attached picture: "It goes only to your PC, which reads the words
 in it for Jarvis - the layout and anything else in it are not seen. The
 words count as outside text." While it runs, the `activity` event says
@@ -13881,11 +13890,12 @@ each uses the ones above.
   `MODE_IN_COMMUNICATION` and the car as the communication device, and puts the
   previous mode and device back when Live stops (2026-11-02; the decision is
   pure and JVM-tested, `voice/LiveAudioRoute.kt`). Where it cannot be used the
-  phone's own microphone is, and the Live screen says which ("Microphone: your
-  Bluetooth headset (Buds)"); Bluetooth that has no microphone (A2DP only) is
-  named as such. On the PC Windows picks the microphone (the default one), and
-  the Voice settings already say which it is. No route changed for this: the
-  clip still goes to `/api/voice/utterance` with `mic=phone`.
+  phone's own microphone is, and the route's own words say which ("Microphone:
+  your Bluetooth headset (Buds)"); Bluetooth that has no microphone (A2DP only)
+  is named as such. Those words were drawn on the Live screen until 2026-11-02,
+  when the owner removed that line. On the PC Windows picks the microphone (the
+  default one), and the Voice settings already say which it is. No route changed
+  for this: the clip still goes to `/api/voice/utterance` with `mic=phone`.
 - **"Talk about this in Live"** (phone): a second entry in the Share sheet
   (text only). The text waits on the Live screen as a "Shared text" chip and
   goes, on Send, as its own message tagged `provenance: "shared"` - outside
@@ -27902,6 +27912,17 @@ the model - the picture path's rule of 2026-09-29.
 | the converter is not installed | `That file was not read: the part of Jarvis that reads PDF, Word, Excel and PowerPoint files (MarkItDown) is not installed on this PC.` |
 | no words in it | `That file was not read: it has no words in it to read.` |
 
+**The picture row is the PC's own sentence, quoted and not corrected here**
+(checked 2026-11-02). `jarvis_attached_file.WHY_PICTURE` still says "attach it
+with the picture button", because the phone's one **Attach a file** row
+(2026-11-01) is newer than that text. This page quotes the PC's wording rather
+than pretending it moved: the phone routes an image it can recognise down the
+picture path before a byte is read (`AttachFile.goesToPicture`), so this
+sentence is normally the desktop's, and the phone reads it only for a file the
+PC's own bytes check finds is a picture. Changing it means editing
+`backend/jarvis_attached_file.py` and its `jarvis-backend/` twin (and the test
+that quotes it) - a known follow-up, not a phone-UI change.
+
 ### 163.5 What it deliberately does not do, and exactly what is stored
 
 No upload route, no upload folder, no temporary file, no chunking, no resume, no
@@ -27940,9 +27961,14 @@ your PC", the refusal sentences, and the attachment on the newest message of the
 `send()` body. **No Rust**, no new command, no new window.
 
 **Phone** (`jarvis-client`, a separate agent's slice): an `OpenDocument` picker
-with the same narrow MIME list, the same chip and the same refusal sentences,
-the cap enforced by reading one byte over the limit, and no storage permission.
-`tools/check_parity.py` sees no new route on either side.
+with the same document list, plus an image wildcard only while the PC's
+Pictures feature works (or it reads the words in pictures - section 36), so it
+is not the document list alone any more (2026-11-01). Same chip and the same
+refusal sentences, the cap enforced by reading one byte over the limit, and no
+storage permission. A picked image is routed BEFORE a byte is read
+(`AttachFile.goesToPicture`), down the picture path (`ChatPicture`), and is
+never read as a document. `tools/check_parity.py` sees no new route on either
+side.
 
 ### 163.7 Tests
 
@@ -29960,6 +29986,163 @@ Also unchanged and worth saying: opening a media app takes it to the front, so a
 Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
 "One-sided on purpose").
 
+## 175. "You have full approval to search the web for this conversation": ONE card, and search only (added 2026-11-01)
+
+The owner's own words, two messages the same day:
+
+> "also if I ask jarvis and say you have full approval to search the web for
+> anything during this conversation. give jarvis the approval to search the web
+> for the entire conversation until I say it doesn't have authorization to do
+> that. make sure a card comes up that I have to approve before this happens"
+
+> "and if I ask anything further like book a flight for me online then it will
+> have to have another card to approve further action beyond just searching the
+> web."
+
+Section number: main ended at 173 when this was written, and #1067 (the phone app launch, merged first) took 174, so this one is 175.
+
+### 175.1 What it is, and what it is not
+
+ONE approval card, once, that stands in for the ordinary `search_the_web` card
+for the rest of ONE conversation. It is a **standing permission for exactly one
+action**, not a general "trust me" switch:
+
+- it covers `search_the_web` and nothing else. The ONLY code that reads a grant
+  is `_web_search_call` (the one place whose gate action is
+  `jarvis_search.ACTION_SEARCH`), and the only things that write or clear one
+  are the two tools below. "Book a flight for me" is `browser_control` (or
+  `read_web_page` for one page) and still raises its own card with a grant live;
+  so do `send_email`, `control_computer`, `control_phone`, `spend_money`,
+  `delete_file`, `run_shell_on_host`, `change_own_config` and everything else.
+  `backend/test_web_search_grant.py` names six of them and proves each still
+  asks;
+- it cannot be made by the words alone. The model asks for the card; a person
+  answers it. The store is written only on the generic
+  prepare()/gate/execute() path after a verdict that came from a card, so a
+  denied, timed-out or unanswered card writes nothing, and a verdict with
+  nobody asked (`outcome` `auto`) is refused by `NEEDS_A_PERSON` even if someone
+  loosens its tier in their own settings;
+- it dies with the conversation, and on its own. The key is the request's own
+  `conversation_id`, so conversation A's grant cannot cover conversation B, and
+  a request with no conversation id can neither give nor use one (it is refused
+  with no card at all). It is capped at 8 hours, and it is **in memory only** -
+  no file, no database, no setting - so a restart ends it;
+- Lockdown wins. `jarvis_asks_first.lockdown_on()` stops a grant being used for
+  as long as it is on, and the card says so.
+
+### 175.2 The two tools and the two gate actions
+
+| model tool | gate action | tier | card? |
+|---|---|---|---|
+| `approve_web_search_for_conversation` | `grant_web_search_conversation` | `ask` | ONE card, once |
+| `stop_web_search_approval` | `revoke_web_search_grant` | `auto` | none - instant |
+
+Both tier lines are in **both** shipped settings copies
+(`backend/rebuilt/jarvis-framework.toml` and
+`jarvis-backend/jarvis-framework.toml`); `backend/_apply_toml_tiers.py` adds
+them to an existing PC's file at the next update, the same way every other new
+action reaches it. Both actions have their own `_RISK` row in
+`jarvis_gate.py` (the grant is `reversible: yes` / `reach: outbound`, so a
+risky approval that a lock screen may not swipe through; the stop is
+`yes` / `local`), so neither is an unclassified action - which matters: without
+its row the stop would be forced to tier "ask" and the owner would be sent a
+card to STOP something they had just asked to stop. The rows are added by one
+`_RISK.update({...})` at the END of `jarvis_gate.py`, not inside the table's own
+literal: every line in there is some earlier patch's hunk context, and both
+placements that were tried inside it broke a real suite (the numbers and the
+two failures are in `backend/_stack.py`'s RATCHET note). `_RISK.update` runs at
+import, before any `check()` call.
+
+`more_tools` group `web_search_grant`; both tools are switched on from
+Settings -> Tools -> "Safety and sharing" (`jarvis_asks_first.TIER_A`), never
+by default - `[tools].enabled` does not name them, so a fresh install's offered
+list and `test_tool_defaults.py`'s pinned defaults are unchanged.
+
+### 175.3 What the card says
+
+The four things the owner asked to see, and nothing else:
+
+    Allow web searches in this chat to run without a card each time?
+
+    While this is on, a web search in THIS conversation runs without asking you
+    again - including one whose words repeat something Jarvis has saved about
+    you, which would otherwise get its own card.
+
+    Nothing else is covered. Sending an email or a file, booking or buying
+    anything, spending money, deleting a file, running a command, changing a
+    setting, using a browser, your accounts and your phone each still raise
+    their own card and still need your yes. This can never widen to them,
+    however open-ended the words that asked for it were.
+
+    It ends when you say stop ("stop searching without asking", "you don't have
+    approval", "revoke that"), when this chat ends, after 8 hours, or when
+    Jarvis restarts. Every search it covers is written in the approval log with
+    this grant's id. Lockdown still asks: while it is on, no search runs without
+    its card.
+
+    If you say no, every search keeps asking, exactly as it does now.
+
+The `jarvis_card_words` rows are `grant_web_search_conversation` -> "let web
+searches in this chat stop asking" (short summary: "search this chat without
+asking each time") and `revoke_web_search_grant` -> "ask before every web search
+in this chat again". The words the owner actually says are matched by the model,
+not by a phrase list: "you have full approval to search the web for anything
+during this conversation", "don't ask me about searches for this chat"; and, to
+stop, "stop searching without asking", "you don't have approval", "revoke
+that", "ask me before searching again".
+
+### 175.4 What is written down
+
+Three events in the gate's own audit log, written through `jarvis_gate`'s three
+new functions (`grant_made`, `granted`, `grant_ended`) rather than by the agent
+calling `audit_log` itself - the event names and the redaction rules are the
+gate's:
+
+    gate.grant_made   {grant, seconds}          the card was approved
+    gate.granted      {action, grant}           ONE search ran with no card
+    gate.grant_ended  {grant, state}            state: revoked | expired
+
+`grant` is this process's own random 12 hex characters. The CONVERSATION ID IS
+NEVER WRITTEN DOWN - not in the log, not on disk anywhere - so the log says a
+search ran unasked and under which grant, and cannot be joined back to a chat.
+`gate.granted` is written before the search, because a search that starts is a
+search that happened. If the backend's `jarvis_gate.py` is older than its
+`jarvis_agent.py` (a half-applied update), the grant is REFUSED rather than
+allowed unlogged: "every search under a grant is logged" is part of what the
+owner approved.
+
+### 175.5 One-sided? No.
+
+Both apps get this with no new UI: the owner says the sentence in a chat and the
+model calls the tools, exactly as with any other tool. Nothing is desktop-only
+or phone-only, no route was added, and `tools/check_parity.py` is unchanged. A
+"web searches approved for this chat" indicator is deliberately NOT built - the
+approval log and the card are the record, and a second on-screen state would be
+a thing to keep in sync for no gain.
+
+### 175.6 What proves it
+
+- `backend/test_web_search_grant.py` - 95 checks, all nine cases the brief
+  names, driven through the REAL turn loop, the real `jarvis_search` planning
+  and the real `jarvis_gate` audit writers, against a throwaway config and log
+  folder: no card means no grant; one card and a denial grants nothing; an
+  approved grant runs the search with no second card and the log carries
+  `gate.granted` with the grant id; six other actions still ask (two of them
+  driven on the real path); conversation A does not cover B; revocation is
+  instant, logged and idempotent; the 8-hour cap and a restart end it; "book a
+  flight" still raises its own card; open-ended words grant search only. It also
+  applies `backend/web-search-grant.patch` to `jarvis-backend/jarvis_gate.py`
+  and reverses it byte for byte.
+- `tools/check_patch_original_text.py` - the patch's four hunks and 21 lines of
+  the owner's original text are pinned, with the reason written beside the pin.
+- the existing suites: `test_web_search.py` (the search path it sits in),
+  `test_card_words.py` and `test_card_short_words.py` (both actions have plain
+  words), `test_tool_contract.py`, `test_tool_text.py`, `test_short_tool_list.py`,
+  `test_tool_defaults.py` (no fresh-install default changed),
+  `test_reach.py`, `test_smarter_answers.py`, `test_asks_first.py` (the two tools
+  are listed in "Safety and sharing"), `test_gate_risk_words.py`,
+  `test_gate_names.py`, `test_gate_unknown_risk.py`.
+
 ## 179. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
 
 The owner's question of 2026-11-02 ~00:20 PT, and his answer the same night
@@ -30062,14 +30245,13 @@ about adding, ticking off or removing an item (`done` and `delete` are exactly
 what they were). The Today board's own `rollover_cards` is untouched and still
 returns `[]` - this is the scheduler's to-do list, not the board.
 
-**THE FAILURE THAT WAS PRE-EXISTING, SAID PLAINLY.** `backend/test_pictures.py`'s
-contiguous-section check wants sections 129..N with no gap; this file adds
-**179**, and 175, 176, 177 and 178 are held by the in-flight #1074, #1073, #1091
-and #1092 sections, so on `main` that check fails on the gap 174 -> 179. This
-section number is deliberate (the Lead reassigned it from 178 on 2026-11-02, so
-it cannot collide with #1092's), and the check is expected to go green the
-moment those four land. Verified at the desk, not assumed. The separate ruling
-that replaces the contiguous check (Gemini's ruling 1: unique, ascending, no
-more than three missing between neighbours) allows three; this gap is four, so
-that rule must either rise to four or wait for one of the four to land - said
-here rather than left for the next person to discover.
+**THE SECTION NUMBER, AND THE CHECK THAT USED TO FAIL.** The rule in
+`backend/test_pictures.py` used to want sections 129..N with no gap; it now
+wants them unique and strictly ascending, with at most three missing between
+neighbours (Gemini's ruling 1, 2026-11-02, which replaced the contiguous pin).
+This file adds **179**: 175 is on `main` from #1074's squash merge, and 176,
+177 and 178 are held by the in-flight #1073, #1091 and #1092, so exactly three
+are missing between 175 and 179 - the most that rule allows - and the check
+passes. The number is deliberate: the Lead reassigned it from 178 on
+2026-11-02 so it cannot collide with #1092's. Verified at the desk, not
+assumed.

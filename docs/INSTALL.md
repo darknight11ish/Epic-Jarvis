@@ -833,7 +833,7 @@ switch cannot lift.
 Jarvis can file a note you type straight into a notes app on this PC:
 `#log` for today's Logseq journal, `#joplin` (or `#jop`) for a new Joplin
 note, `#obs` for today's Obsidian daily note. On the phone it is Home →
-**Quick note…**. No model is involved: what you typed is what gets written,
+**More** → **Quick note**. No model is involved: what you typed is what gets written,
 and nothing leaves the PC.
 
 **Only the apps that are set up on the PC are shown** — in the quickbar's

@@ -150,6 +150,82 @@ class AttachFileTest {
         assertFalse(AttachFile.MIME_TYPES.contains("audio/*"))
     }
 
+    // ------------------------------------- one Attach row: documents OR photos ---
+    //
+    // The owner's ask of 2026-11-01: "remove the photo option because ATTach a
+    // file on my Android phone will bring up the option to add a photo". So
+    // the ONE row's picker filters for documents AND images, and a picked
+    // image must be routed to the PICTURE path (ChatPicture: vision, and
+    // secrets covered with black boxes) - never read as a document.
+
+    @Test
+    fun `the one Attach row offers images only while the PC can take a picture`() {
+        // The documents are exactly the same eight, unchanged.
+        assertEquals(AttachFile.MIME_TYPES.toList(), AttachFile.mimeTypes(false).toList())
+        // ...and the image wildcard is ADDED on top, never instead of one.
+        assertEquals(
+            AttachFile.MIME_TYPES.toList() + AttachFile.IMAGE_MIME,
+            AttachFile.mimeTypes(true).toList(),
+        )
+        assertEquals("image/*", AttachFile.IMAGE_MIME)
+    }
+
+    @Test
+    fun `a photo picked through the one Attach row goes down the picture path`() {
+        assertTrue(AttachFile.goesToPicture("IMG_20261101_183000.jpg", "image/jpeg"))
+        assertTrue(AttachFile.goesToPicture("photo.png", "image/png"))
+        assertTrue(AttachFile.goesToPicture("holiday.heic", "image/heic"))
+        // A provider that says nothing useful: the photo's own extension still
+        // says it is one.
+        assertTrue(AttachFile.goesToPicture("holiday.jpg", "application/octet-stream"))
+        assertTrue(AttachFile.goesToPicture("holiday.webp", null))
+        // No extension at all, and the provider says it is an image.
+        assertTrue(AttachFile.goesToPicture("scan", "image/jpeg"))
+        assertTrue(AttachFile.goesToPicture(null, "image/jpeg"))
+        // Case and a charset parameter do not change the decision.
+        assertTrue(AttachFile.goesToPicture("A.JPG", "IMAGE/JPEG; charset=binary"))
+    }
+
+    @Test
+    fun `a document never goes to the picture path, whatever a provider claims`() {
+        assertFalse(AttachFile.goesToPicture("taxes.pdf", "application/pdf"))
+        assertFalse(
+            AttachFile.goesToPicture(
+                "report.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+        )
+        assertFalse(AttachFile.goesToPicture("list.csv", "text/csv"))
+        // The NAME decides, as it does for the kinds: a PDF a provider
+        // mislabels as an image is still read as the document it is.
+        assertFalse(AttachFile.goesToPicture("taxes.pdf", "image/jpeg"))
+        // A name that is NOT one of the eight documents gets no such
+        // protection: a provider that types a .zip as an image sends it to the
+        // picture path, where the encoder refuses it in plain words. It is
+        // never read as a document either way, which is the promise that
+        // matters.
+        assertFalse(AttachFile.goesToPicture("notes.zip", "application/zip"))
+        assertTrue(AttachFile.goesToPicture("notes.zip", "image/png"))
+        // ...but a file the owner really means as a document is still one.
+        assertFalse(AttachFile.goesToPicture("holiday.mp4", "video/mp4"))
+        assertFalse(AttachFile.goesToPicture("taxes.zip", "application/pdf"))
+        assertFalse(AttachFile.goesToPicture(null, "application/pdf"))
+    }
+
+    @Test
+    fun `a photo refused because Pictures is off says so, and offers the way on`() {
+        val why = AttachFile.photoNeedsPictures()
+        assertTrue(why, why.contains("photo"))
+        assertTrue(why, why.contains("Pictures"))
+        assertTrue("it does not say where the switch is: $why", why.contains("Brain"))
+        assertTrue("it does not offer a document instead: $why", why.contains("document"))
+        assertTrue("it does not say nothing was attached: $why", why.contains("Nothing was attached"))
+        // The PC's own sentence rides in brackets where there is one - the
+        // same shape ChatPicture.sharedRefusal uses.
+        val withWhy = AttachFile.photoNeedsPictures("pictures are off")
+        assertTrue(withWhy, withWhy.contains("(pictures are off)"))
+    }
+
     @Test
     fun `the wire type is our own for the extension, not the provider's guess`() {
         val f = AttachFile.picked("%PDF".toByteArray(), "taxes.pdf", "text/plain")
@@ -378,6 +454,13 @@ class AttachFileTest {
         assertFalse(src.contains("FileOutputStream"))
         // ...and the picker is the one already used for a WAV: no new contract.
         assertTrue(src.contains("ActivityResultContracts.OpenDocument()"))
-        assertTrue(src.contains("AttachFile.MIME_TYPES"))
+        // ONE row, one picker: documents, and images only while Pictures works.
+        assertTrue(src.contains("AttachFile.mimeTypes("))
+        // A photo is routed BEFORE a byte is read, and to the picture path.
+        // The name and type come from ONE read of the provider (2026-11-02).
+        assertTrue(src.contains("AttachFile.goesToPicture(info.name, info.mime)"))
+        assertTrue(src.contains("attachPickedPicture(uri)"))
+        // The old separate photo picker is gone with the Photo row.
+        assertFalse("the photo picker is back beside the one Attach row", src.contains("PickVisualMedia"))
     }
 }

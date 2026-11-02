@@ -773,8 +773,9 @@ question reads best.
     temporary file, and never kept with the chat. Only the words it read are
     used, for that one turn, up to 12,000 characters — a longer file says how
     much was left out. PDF, Word, Excel, PowerPoint, text, Markdown and CSV are
-    the kinds it reads, one file per turn, up to 2.5 MB; a picture goes in with
-    the picture button, and a bigger file belongs in a folder Jarvis may look
+    the kinds it reads, one file per turn, up to 2.5 MB; a picture goes in
+    through the same **Attach a file** row (the picker offers photos too while
+    Pictures works), and a bigger file belongs in a folder Jarvis may look
     in. The reader used to lose the first 16 KB of every PDF and Office file;
     that was fixed on 2026-10-30, so the whole file is read now.
 
