@@ -39,7 +39,21 @@ delivered", 2026-11-01):
   5. a carried step that fails says so in code's own words, and never claims it
      ran;
   6. the record and the replay are in the audit log, names and ids only - the
-     card's words and the owner's question are not in it.
+     card's words and the owner's question are not in it;
+  7. THE YES IS RE-MADE AT REPLAY TIME, against the gate's CURRENT decision: a
+     Stop everything pressed after the approval, a crisis turn in the same
+     conversation after it, the tool switched off, or its action now at tier
+     "never" all DROP the step (agent.owed_dropped) instead of running it -
+     nothing the gate would now refuse is ever run, and no second card is
+     raised to ask again;
+  8. THE REPORTED SEAM IS DRIVEN END TO END (`run_local_turn`, not its pieces):
+     an approved web_search whose card turn died with the app's stream really
+     runs on the next turn, once, its result is in the first round of the
+     answering turn, and a second re-sent turn runs nothing;
+  9. a picture-lane turn and a turn whose model cannot use tools run no tool,
+     so they leave the step owed rather than spending it; and a replay that
+     raises after its tool-call message was appended leaves a result beside it,
+     never a tool call with no answer.
 
 The model's side of every turn is Ollama's real /v1/chat/completions stream
 (_ollama_wire.py). Nothing here opens a socket, needs a phone, or touches the
@@ -178,6 +192,28 @@ def calc_call(expr="2+2"):
     return ("tool_calls", [{"name": "calculator", "arguments": {"expression": expr}}])
 
 
+def search_call(query="what is new on the graphics card?"):
+    """One model round that asks for a web search - the call the owner's own
+    measured run lost."""
+    return ("tool_calls", [{"name": "web_search", "arguments": {"query": query}}])
+
+
+def _press_stop_all():
+    """Press Stop everything for real, without touching a real task: the same
+    jarvis_stop_all.stop_all() the route calls, with a stand-in task list."""
+    import jarvis_stop_all as SA
+
+    class NoTask:
+        def running(self):
+            return []
+
+        def handle_post(self, *a, **k):
+            return (409, {})
+
+    SA.stop_all(by="test", task_control=NoTask())
+    return SA
+
+
 def opener_for(*bodies):
     """Each model request gets the next body: a list of stream events, in
     Ollama's real format (_ollama_wire.py)."""
@@ -224,7 +260,7 @@ CONV = "conv-approval-0001"      # what the phone sends; _CID_OK allows it
 
 def _turn(events, *, answer=None, conversation_id=CONV, gate=None, stream_out=None,
           status_delay=0.02, enabled_tools=("calculator",), request=None,
-          private=False, announce=None):
+          private=False, announce=None, lane=None):
     """One local turn. Its model answers with `events`; `answer` is a second
     round, for the cases where the turn goes on after a refusal. The calculator
     counts its own runs."""
@@ -241,7 +277,8 @@ def _turn(events, *, answer=None, conversation_id=CONV, gate=None, stream_out=No
         gate_check=gate if gate is not None else Gate(),
         keepalive_seconds=1000, status_delay=status_delay,
         context_length=16384, request=body, private=private,
-        announce=announce, record_chain=lambda s: None)
+        announce=announce, record_chain=lambda s: None,
+        lane_choice=lane if lane is not None else "auto")
     return summary, calls
 
 
@@ -432,6 +469,92 @@ def t_the_carried_web_search_runs_with_no_second_card():
           "web_search" in watch.read, repr(sorted(watch.read)))
 
 
+def t_the_reported_seam_end_to_end_a_lost_search_runs_once_and_answers():
+    """THE OWNER'S OWN PATH, END TO END, not in pieces.
+
+    This is the reported seam driven through `run_local_turn` itself, with
+    only the wire (Ollama's stream) and the search's own module stubbed - no
+    phone, no network, no socket:
+
+        turn 1  the model asks for a web search; its card is approved while
+                the app's stream is dead; the search does NOT run;
+        turn 2  the app re-sends the SAME conversation: the search really
+                runs, exactly once, and its result is in the transcript of
+                the round that writes the answer;
+        turn 3  a second re-sent turn runs nothing again.
+
+    The search-specific checks above drive `_web_search_call` directly; this
+    one proves the seam the owner actually hit - `_one_call`'s web_search
+    branch, `owed_record`, the start of the next turn, `_web_search_call`
+    under the carried verdict, and the ordinary answer round - in one turn
+    sequence."""
+    AG.forget_owed()
+    try:
+        import jarvis_search as WS
+    except Exception as exc:                                  # noqa: BLE001
+        return skip(f"jarvis_search is not importable here ({type(exc).__name__}: {exc})")
+    import types
+    query = "what is new on the graphics card?"
+    ran = []
+    gate = Gate(wait=0.15)
+    real = {name: getattr(WS, name) for name in
+            ("settings", "plan", "describe", "run", "tool_result")}
+    result = {"ok": True, "results": [
+        {"title": "A new card", "url": "https://example.invalid/news"}]}
+    try:
+        # "Ask before every web search": a real reason for a real card.
+        WS.settings = lambda: {"ask_every_time": True}
+        WS.plan = lambda q, s=None: types.SimpleNamespace(
+            problem="", query=q, providers=["stub"])
+        WS.describe = lambda p: f"Search the web for: {p.query}"
+        WS.run = lambda p, approved=False: ran.append(p.query) or dict(result)
+        WS.tool_result = lambda r: r
+
+        # --- turn 1: the card is approved, and the app is already gone.
+        dead = _dead_stream_after_the_card()
+        s1, _calls1 = _turn([search_call(query), ("done", "stop")], gate=gate,
+                            stream_out=dead, enabled_tools=("web_search",))
+        check("the reported seam happened: the turn found the app gone",
+              s1["client_gone"] is True, repr(s1))
+        check("and the approved search did NOT run into an empty room",
+              ran == [], repr(ran))
+        check("the owner's yes is remembered for this conversation",
+              AG.owed_pending(CONV) is True)
+        check("only one card was raised", len(gate.asked) == 1, repr(gate.asked))
+
+        # --- turn 2: the app re-sends the same conversation (91 ms later).
+        out2 = []
+        s2, calls2 = _turn([("content", "It is the new card."), ("done", "stop")],
+                           gate=gate, stream_out=out2.append,
+                           enabled_tools=("web_search",))
+        check("the search really ran on the next turn, exactly once",
+              ran == [query], repr(ran))
+        check("no second card was raised for the same approval",
+              len(gate.asked) == 1 and gate.asked[0][0] == WS.ACTION_SEARCH,
+              repr(gate.asked))
+        results = tool_messages(calls2, 0)
+        check("its result is in the transcript of the FIRST round - before the "
+              "answer was written",
+              any("example.invalid" in (m.get("content") or "") for m in results),
+              repr(results))
+        check("the turn's own record names the search it ran",
+              "web_search" in (s2.get("tools_ran") or []), repr(s2))
+        check("the answer went out", b"It is the new card." in b"".join(out2),
+              repr(b"".join(out2)[:300]))
+        check("the record is cleared, so it cannot run again",
+              AG.owed_pending(CONV) is False)
+
+        # --- turn 3: a second re-send of the same conversation runs nothing.
+        s3, _calls3 = _turn([("content", "Still the new card."), ("done", "stop")],
+                            gate=gate, enabled_tools=("web_search",))
+        check("a second re-sent turn does not run it again",
+              ran == [query] and s3["tools_ran"] == [],
+              repr((ran, s3.get("tools_ran"))))
+    finally:
+        for name, fn in real.items():
+            setattr(WS, name, fn)
+
+
 # --------------------------------------------------------------------------
 #   2. Nothing a person did not approve is ever carried
 # --------------------------------------------------------------------------
@@ -612,6 +735,215 @@ def t_a_private_turn_leaves_it_owed_for_an_ordinary_one():
 
 
 # --------------------------------------------------------------------------
+#   3b. The yes is a decision of the moment: the gate's CURRENT policy is
+#       made again at replay time, and a withdrawn approval is dropped
+# --------------------------------------------------------------------------
+
+def _dropped_lines():
+    return [l for l in audit_lines() if l.get("event") == "agent.owed_dropped"]
+
+
+def t_a_stop_all_after_the_approval_drops_the_step():
+    """Stop everything is a standing "do less" (jarvis_stop_all.py): a card
+    approved before the press must not run after it, however long the app took
+    to re-send the conversation."""
+    AG.forget_owed()
+    ran = []
+    real = _count_runs(ran)
+    gate = Gate(wait=0.12)
+    SA = None
+    try:
+        _turn([calc_call(), ("done", "stop")], gate=gate,
+              stream_out=_dead_stream_after_the_card())
+        check("the step is owed after the approval", AG.owed_pending(CONV) is True)
+        SA = _press_stop_all()
+        out = []
+        s2, calls2 = _turn([("content", "I did not do that."), ("done", "stop")],
+                           gate=gate, stream_out=out.append)
+        said = b"".join(out).decode("utf-8", "replace")
+        check("Stop everything after the approval means it does NOT run",
+              ran == [] and s2["tools_ran"] == [], repr((ran, s2.get("tools_ran"))))
+        check("the owner is told why, in code's own words",
+              "was not run" in said and "Stop everything" in said, repr(said[:400]))
+        check("nothing was invented for the model to read as its result",
+              tool_messages(calls2) == [], repr(tool_messages(calls2)))
+        drops = _dropped_lines()
+        check("the drop is in the audit log, with its reason",
+              bool(drops) and drops[-1]["detail"].get("reason") == "stop_all",
+              repr(drops[-1:]))
+        check("the record is spent, so it cannot run on a later question",
+              AG.owed_pending(CONV) is False)
+        s3, _ = _turn([("content", "ok"), ("done", "stop")], gate=gate)
+        check("and a later turn does not run it either",
+              ran == [] and s3["tools_ran"] == [], repr((ran, s3.get("tools_ran"))))
+    finally:
+        AG.TOOLS["calculator"].execute = real
+        if SA is not None:
+            SA._reset_for_tests()
+
+
+def t_a_crisis_after_the_approval_drops_the_step():
+    """A crisis message is not an ordinary question: after one, a search
+    approved before it is stale, not something to run quietly. The crisis
+    turn itself runs no tool and leaves the step owed; the next ordinary turn
+    drops it and says why."""
+    AG.forget_owed()
+    ran = []
+    real = _count_runs(ran)
+    gate = Gate(wait=0.12)
+    try:
+        import jarvis_wellbeing as WB
+    except Exception as exc:                                  # noqa: BLE001
+        return skip(f"jarvis_wellbeing is not importable here ({type(exc).__name__}: {exc})")
+    real_crisis = WB.crisis_in_turn
+    try:
+        _turn([calc_call(), ("done", "stop")], gate=gate,
+              stream_out=_dead_stream_after_the_card())
+        check("the step is owed after the approval", AG.owed_pending(CONV) is True)
+        # A real turn whose distress check fires, without depending on the
+        # exact phrase list: the check itself is the stand-in.
+        WB.crisis_in_turn = lambda *a, **k: True
+        c, _ = _turn([("content", "I am here."), ("done", "stop")], gate=gate)
+        check("a crisis turn runs nothing and keeps the step owed",
+              ran == [] and AG.owed_pending(CONV) is True
+              and c["tools_ran"] == [], repr((ran, c.get("tools_ran"))))
+        WB.crisis_in_turn = real_crisis
+        out = []
+        s2, calls2 = _turn([("content", "ok"), ("done", "stop")],
+                           gate=gate, stream_out=out.append)
+        said = b"".join(out).decode("utf-8", "replace")
+        check("the next ordinary turn drops it, because the crisis came after "
+              "the approval",
+              ran == [] and s2["tools_ran"] == [], repr((ran, s2.get("tools_ran"))))
+        check("the owner is told a crisis message came after the approval",
+              "was not run" in said and "crisis" in said, repr(said[:400]))
+        drops = _dropped_lines()
+        check("the audit log says it was the crisis, not a TTL or a denial",
+              bool(drops) and drops[-1]["detail"].get("reason") == "crisis",
+              repr(drops[-1:]))
+        check("the record is spent", AG.owed_pending(CONV) is False)
+    finally:
+        WB.crisis_in_turn = real_crisis
+        AG.TOOLS["calculator"].execute = real
+
+
+def t_a_tier_turned_to_never_after_the_approval_drops_the_step():
+    """The owner can set an action to "never" between the tap and the re-sent
+    turn (Settings). The gate would refuse it with no card; the carried step
+    must not run something the gate would now refuse."""
+    AG.forget_owed()
+    ran = []
+    real = _count_runs(ran)
+    gate = Gate(wait=0.12)
+    real_tier = AG._tier_of
+    try:
+        _turn([calc_call(), ("done", "stop")], gate=gate,
+              stream_out=_dead_stream_after_the_card())
+        check("the step is owed after the approval", AG.owed_pending(CONV) is True)
+        AG._tier_of = lambda action: "never"
+        out = []
+        s2, _ = _turn([("content", "I did not do that."), ("done", "stop")],
+                      gate=gate, stream_out=out.append)
+        said = b"".join(out).decode("utf-8", "replace")
+        check("an action now at tier \"never\" is not run",
+              ran == [] and s2["tools_ran"] == [], repr((ran, s2.get("tools_ran"))))
+        check("the owner is told the setting changed", "never run" in said,
+              repr(said[:400]))
+        drops = _dropped_lines()
+        check("the audit log carries the tier reason",
+              bool(drops) and drops[-1]["detail"].get("reason") == "tier_never",
+              repr(drops[-1:]))
+        check("the record is spent", AG.owed_pending(CONV) is False)
+    finally:
+        AG._tier_of = real_tier
+        AG.TOOLS["calculator"].execute = real
+
+
+def t_a_tool_switched_off_after_the_approval_drops_the_step():
+    """A tool turned off in Settings after the approval is no longer offered;
+    its card's yes cannot bring it back."""
+    AG.forget_owed()
+    ran = []
+    real = _count_runs(ran)
+    gate = Gate(wait=0.12)
+    try:
+        _turn([calc_call(), ("done", "stop")], gate=gate,
+              stream_out=_dead_stream_after_the_card())
+        check("the step is owed after the approval", AG.owed_pending(CONV) is True)
+        out = []
+        s2, _ = _turn([("content", "I did not do that."), ("done", "stop")],
+                      gate=gate, stream_out=out.append, enabled_tools=())
+        said = b"".join(out).decode("utf-8", "replace")
+        check("a tool switched off after the approval is not run",
+              ran == [] and s2["tools_ran"] == [], repr((ran, s2.get("tools_ran"))))
+        check("the owner is told it is no longer switched on",
+              "was not run" in said and "no longer switched on" in said,
+              repr(said[:400]))
+        drops = _dropped_lines()
+        check("the audit log carries the tool-off reason",
+              bool(drops) and drops[-1]["detail"].get("reason") == "tool_off",
+              repr(drops[-1:]))
+        check("the record is spent", AG.owed_pending(CONV) is False)
+    finally:
+        AG.TOOLS["calculator"].execute = real
+
+
+def t_a_picture_turn_does_not_spend_or_run_it():
+    """A picture turn on the vision lane offers no tool (_allowed_tools(none)),
+    so it must not spend the owner's yes on a turn that could never use it."""
+    AG.forget_owed()
+    ran = []
+    real = _count_runs(ran)
+    gate = Gate(wait=0.12)
+    lane = AG.LaneChoice("http://127.0.0.1:11434", "jarvis-vision", 16384,
+                         "vision", "test")
+    try:
+        _turn([calc_call(), ("done", "stop")], gate=gate,
+              stream_out=_dead_stream_after_the_card())
+        c, calls = _turn([("content", "I see a picture."), ("done", "stop")],
+                         gate=gate, lane=lane)
+        check("a picture turn runs nothing and keeps the step owed",
+              ran == [] and AG.owed_pending(CONV) is True
+              and c["tools_ran"] == [], repr((ran, c.get("tools_ran"))))
+        check("and it offered no tools at all",
+              not (calls[0] or {}).get("tools"), repr((calls[0] or {}).get("tools")))
+        _turn([("content", "4."), ("done", "stop")], gate=gate)
+        check("the next ordinary turn still gets it",
+              ran == [{"expression": "2+2"}], repr(ran))
+    finally:
+        AG.TOOLS["calculator"].execute = real
+
+
+def t_a_model_that_cannot_take_tools_does_not_spend_or_run_it():
+    """A model that cannot use tools is offered none; the same bound applies -
+    the yes waits for a turn that can use it, and the TTL ends the wait."""
+    AG.forget_owed()
+    ran = []
+    real = _count_runs(ran)
+    gate = Gate(wait=0.12)
+    real_can = AG._model_can_use_tools
+    try:
+        _turn([calc_call(), ("done", "stop")], gate=gate,
+              stream_out=_dead_stream_after_the_card())
+        AG._model_can_use_tools = lambda url, model: False
+        c, calls = _turn([("content", "I answered without tools."), ("done", "stop")],
+                         gate=gate)
+        check("a turn whose model cannot use tools runs nothing and keeps the "
+              "step owed",
+              ran == [] and AG.owed_pending(CONV) is True
+              and c["tools_ran"] == [], repr((ran, c.get("tools_ran"))))
+        check("and the request offered no tools at all",
+              not (calls[0] or {}).get("tools"), repr((calls[0] or {}).get("tools")))
+        AG._model_can_use_tools = real_can
+        _turn([("content", "4."), ("done", "stop")], gate=gate)
+        check("the next ordinary turn still gets it",
+              ran == [{"expression": "2+2"}], repr(ran))
+    finally:
+        AG._model_can_use_tools = real_can
+        AG.TOOLS["calculator"].execute = real
+
+
+# --------------------------------------------------------------------------
 #   4. Honesty: a carried step that fails says so, and is in the audit log
 # --------------------------------------------------------------------------
 
@@ -660,8 +992,8 @@ def t_a_replay_that_raises_still_gives_the_owner_an_answer():
     AG._one_call = exploding
     try:
         out = []
-        s2, _ = _turn([("content", "I could not do it."), ("done", "stop")],
-                      gate=gate, stream_out=out.append)
+        s2, calls2 = _turn([("content", "I could not do it."), ("done", "stop")],
+                           gate=gate, stream_out=out.append)
     finally:
         AG._one_call = real
     said = b"".join(out).decode("utf-8", "replace")
@@ -671,6 +1003,21 @@ def t_a_replay_that_raises_still_gives_the_owner_an_answer():
           "it did not work" in said, repr(said[:400]))
     check("the record is spent, so it cannot run on every later question",
           AG.owed_pending(CONV) is False)
+    # The assistant tool-call message was appended before the raise. The
+    # model must never receive a tool call with no result beside it.
+    asked = assistant_calls(calls2)
+    tools = tool_messages(calls2)
+    check("the half-built transcript was repaired: the tool call has its result",
+          len(asked) == 1 and len(tools) == 1
+          and tools[0].get("tool_call_id") == asked[0]["tool_calls"][0].get("id"),
+          repr((asked, tools)))
+    check("and that result says plainly that nothing was run",
+          "could not be run" in (tools[0].get("content") or "")
+          and "no result from it" in (tools[0].get("content") or ""),
+          repr(tools))
+    check("and the turn does not claim the step ran",
+          "calculator" not in (s2.get("tools_ran") or []),
+          repr(s2.get("tools_ran")))
 
 
 def t_the_record_and_the_replay_are_in_the_audit_log():
@@ -804,6 +1151,7 @@ if __name__ == "__main__":
                t_the_gate_is_never_asked_for_the_same_approval_twice,
                t_the_carried_step_goes_through_prepare_and_execute_like_any_call,
                t_the_carried_web_search_runs_with_no_second_card,
+               t_the_reported_seam_end_to_end_a_lost_search_runs_once_and_answers,
                t_a_denied_card_is_never_carried_or_run,
                t_a_card_nobody_answered_is_never_carried,
                t_a_card_that_never_got_an_answer_is_never_carried,
@@ -812,6 +1160,12 @@ if __name__ == "__main__":
                t_a_different_conversation_never_inherits_it,
                t_an_owed_step_ages_out_after_ten_minutes,
                t_a_private_turn_leaves_it_owed_for_an_ordinary_one,
+               t_a_stop_all_after_the_approval_drops_the_step,
+               t_a_crisis_after_the_approval_drops_the_step,
+               t_a_tier_turned_to_never_after_the_approval_drops_the_step,
+               t_a_tool_switched_off_after_the_approval_drops_the_step,
+               t_a_picture_turn_does_not_spend_or_run_it,
+               t_a_model_that_cannot_take_tools_does_not_spend_or_run_it,
                t_a_failed_carried_step_is_said_plainly,
                t_a_replay_that_raises_still_gives_the_owner_an_answer,
                t_the_record_and_the_replay_are_in_the_audit_log,
