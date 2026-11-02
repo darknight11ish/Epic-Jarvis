@@ -2401,7 +2401,8 @@ carries the note's text.** Clients show `message` and nothing of their own.
 Replaces what `POST /api/note` in §8 suggested. The desktop's `#log` / `#obs` /
 `#joplin` / quick note / widget capture use it (`capture_note`,
 `capture_note_status`); the chat turn with a routing system message is gone.
-The phone uses it too: Home's "Quick note…" field, opened directly or by the
+The phone uses it too: Home's Quick note sheet, opened by the More menu's
+Quick note row or by the
 home-screen widget's Note button (`JarvisApi.captureNote`, `noteStatus`,
 `JarvisRuntime.fileNote`). The phone keeps asking while a card waits and
 shows the desktop's own sentence in its notice.
@@ -2470,7 +2471,9 @@ link and let going quieter through.
 `backend/second-card.patch` and `backend/jarvis_second_card.py`. The owner's
 guide is `docs/SECOND-CARD.md`. **Both apps call both** (2026-09-24). The
 phone: Brain screen, "Second graphics card" (`SecondCardPlate.kt` /
-`net/SecondCard.kt`), and chat's photo button. The desktop: Settings, "Second
+`net/SecondCard.kt`), and chat's one `Attach a file` row, which takes a photo as
+well as a document since 2026-11-01 (it was a Photo button of its own before).
+The desktop: Settings, "Second
 graphics card" (`get_second_card` / `set_second_card` in `commands.rs`,
 granted to the settings window only), and `vision.rs`, which reads it before
 deciding whether pictures can be sent. `tools/check_parity.py` records
@@ -2498,7 +2501,8 @@ Since 2026-09-26 it also carries `"picture_text": {"available": bool,
 itself when the model answering cannot see it (section 36). Both apps read
 it where they already read this route before a picture goes: the desktop's
 `vision.rs` (`reads_text`) sends the picture without asking; the phone
-offers its Photo button (`SecondCard.picturesTaken`). An older PC sends
+offers photos in its one `Attach a file` row (`SecondCard.picturesTaken`, read
+as `HomeState.pictureOffered`). An older PC sends
 none: both apps behave as before.
 
 ```
@@ -2868,9 +2872,13 @@ go to <model> on the second graphics card."); otherwise do what it does
 today. The phone does the same wherever it decides whether to send a
 picture. The route header then carries `second_card: "vision"` on that turn.
 
-**The phone's picture** (2026-09-24): a Photo button in chat, shown only
-while the `vision` row's `available` is true, and checked again (a fresh
-`GET`) before the send. Android's photo picker, no storage permission; the
+**The phone's picture** (2026-09-24; one `Attach a file` row since 2026-11-01):
+a photo is picked through the chat's one `Attach a file` row, and the picker
+offers images only while the `vision` row's `available` is true (or the PC
+reads the words in pictures - section 36's `picture_text`), checked again (a
+fresh `GET`) before the send. Android's system file picker, no storage
+permission; a picked image is sent to the picture path by
+`AttachFile.goesToPicture` and is never read as a document. The
 photo is shrunk in memory to 1920 pixels on its long side at JPEG quality 82
 (the desktop's `MAX_CAPTURE_WIDTH` and `JPEG_QUALITY`), then lower quality or
 smaller until it is at most 1.5 MB, which stays well inside `MAX_BODY` (4 MiB)
@@ -8102,8 +8110,8 @@ its answer, except that its switch example is now the sentence that works
 ("switch to the Classic Butler personality").
 
 What it changes in a turn, and only this: the local model's request gets the
-active preset's compact `<jarvis_persona>` block (measured at most 722 characters
-with each preset's own dials - 730 with the longest word on every dial - under the
+active preset's compact `<jarvis_persona>` block (measured at most 738 characters
+with each preset's own dials - 747 with the longest word on every dial - under the
 750-character ~180-token cap) plus a one-line recency
 hint just before the newest question; the block's spoken-live variant keeps
 `Jarvis Live` answers to 1-3 sentences with no Markdown; a **crisis turn
@@ -9591,7 +9599,8 @@ No new route and no new field.
 whether it works; `why` is a plain sentence when it does not ("Windows has
 no text recognition for your language installed. Settings -> Time &
 language -> ..."). The desktop sends a picture without its "can't see
-pictures" notice when it works; the phone offers its Photo button and says
+pictures" notice when it works; the phone offers photos in its one `Attach a
+file` row and says
 under an attached picture: "It goes only to your PC, which reads the words
 in it for Jarvis - the layout and anything else in it are not seen. The
 words count as outside text." While it runs, the `activity` event says
@@ -27903,6 +27912,17 @@ the model - the picture path's rule of 2026-09-29.
 | the converter is not installed | `That file was not read: the part of Jarvis that reads PDF, Word, Excel and PowerPoint files (MarkItDown) is not installed on this PC.` |
 | no words in it | `That file was not read: it has no words in it to read.` |
 
+**The picture row is the PC's own sentence, quoted and not corrected here**
+(checked 2026-11-02). `jarvis_attached_file.WHY_PICTURE` still says "attach it
+with the picture button", because the phone's one **Attach a file** row
+(2026-11-01) is newer than that text. This page quotes the PC's wording rather
+than pretending it moved: the phone routes an image it can recognise down the
+picture path before a byte is read (`AttachFile.goesToPicture`), so this
+sentence is normally the desktop's, and the phone reads it only for a file the
+PC's own bytes check finds is a picture. Changing it means editing
+`backend/jarvis_attached_file.py` and its `jarvis-backend/` twin (and the test
+that quotes it) - a known follow-up, not a phone-UI change.
+
 ### 163.5 What it deliberately does not do, and exactly what is stored
 
 No upload route, no upload folder, no temporary file, no chunking, no resume, no
@@ -27941,9 +27961,14 @@ your PC", the refusal sentences, and the attachment on the newest message of the
 `send()` body. **No Rust**, no new command, no new window.
 
 **Phone** (`jarvis-client`, a separate agent's slice): an `OpenDocument` picker
-with the same narrow MIME list, the same chip and the same refusal sentences,
-the cap enforced by reading one byte over the limit, and no storage permission.
-`tools/check_parity.py` sees no new route on either side.
+with the same document list, plus an image wildcard only while the PC's
+Pictures feature works (or it reads the words in pictures - section 36), so it
+is not the document list alone any more (2026-11-01). Same chip and the same
+refusal sentences, the cap enforced by reading one byte over the limit, and no
+storage permission. A picked image is routed BEFORE a byte is read
+(`AttachFile.goesToPicture`), down the picture path (`ChatPicture`), and is
+never read as a document. `tools/check_parity.py` sees no new route on either
+side.
 
 ### 163.7 Tests
 

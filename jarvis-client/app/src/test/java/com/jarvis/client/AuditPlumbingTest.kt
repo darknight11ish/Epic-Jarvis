@@ -291,8 +291,9 @@ class AuditPlumbingTest {
         // offer gates the controls themselves used. Since 2026-10-30 the three
         // chat modes sit one tap deeper in HomeMoreModes, and the rows that left
         // the menu (Earlier chats, Pinned messages, Jarvis Presets) are gone.
+        // Since 2026-11-01 the Photo row is gone too: its photo half lives in
+        // the one Attach row, routed to the picture path by AttachFile.
         for (word in listOf(
-            "MoreMenuWords.PHOTO",
             "MoreMenuWords.FILE",
             "MoreMenuWords.MODES",
             "MoreMenuWords.NOTIFICATIONS",
@@ -314,6 +315,25 @@ class AuditPlumbingTest {
         )) {
             assertFalse("the short More menu still draws $gone", menu.contains(gone))
         }
+        // The owner's ask of 2026-11-01 - "remove the photo option" - is NOT
+        // pinned as `menu.contains("MoreMenuWords.PHOTO")` or
+        // `menu.contains("actions.onAttachPicture()")` any more: both names
+        // were deleted with the row (2026-11-02 review, finding (g)), so a
+        // search for either in the menu could never match and the assertion
+        // could never fail - it held nothing. What the row left behind is
+        // pinned instead: ONE Attach row, opening the picker with the Pictures
+        // gate, which is the only door a second photo path could reappear
+        // through.
+        assertEquals(
+            "the short More menu no longer has exactly one Attach row",
+            1,
+            // \b so FILE_DETAIL (the row's own detail line) is not counted.
+            Regex("MoreMenuWords\\.FILE\\b").findAll(menu).count(),
+        )
+        assertTrue(
+            "the Attach row does not carry the Pictures gate into its picker",
+            menu.contains("actions.onAttachFile(state.pictureOffered)"),
+        )
         // The coach button left PromptCoachBar for the menu: the bar must be
         // able to hide its own button and to be asked to coach from outside.
         val coachBar = source("ui/screens/PromptCoachBar.kt")
