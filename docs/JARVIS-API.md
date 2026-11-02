@@ -30050,6 +30050,9 @@ plan-choice cards are Review, the exact public words, the cancel-on-clear rule, 
 source pins that the notifier is private/redacted and the two approve routes re-check before
 sending. `AppProjectsTest`, `NotificationStyleTest`, `MainActivityLaunchTest` and
 `ApprovalDecisionTest` were updated to the new envelope; the other existing suites still pass.
+One failure is **not this branch's**: `SettingsSearchTest`'s "presets" assertion was already red on
+`main` after #1079 added the `edit-hud` row, and open PR #1089 is its test-only fix. With that fix
+applied the whole command is `BUILD SUCCESSFUL`; without it, it is the only failure.
 
 **NOT-TESTABLE without the owner's phone:** that Android really draws two actions in the collapsed
 shade, that the lock screen shows the redacted sentence and refuses Approve until unlock, that the
