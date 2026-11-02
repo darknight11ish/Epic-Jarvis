@@ -3,7 +3,7 @@
 The owner's feature list, as data: 168 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 82f0499231d6068aead1e0baba78036c0dbc505a5f5f6f3567f3c98b8648d7f0); the apps' Features pages read their own
+`features/features.json` (sha256 e98669b1ea43adcf2ef78d8fc8b0b04332d5234f60a79d8f9189ac63b0451fc8); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "82f0499231d6068aead1e0baba78036c0dbc505a5f5f6f3567f3c98b8648d7f0"
+SOURCE_SHA256 = "e98669b1ea43adcf2ef78d8fc8b0b04332d5234f60a79d8f9189ac63b0451fc8"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1319,7 +1319,7 @@ FEATURES = (
         "asks": "Installing or removing one is its own decision.",
         "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing one happens only on the PC, and no app can install one. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
         "surface": "both",
-        "covers": ["skills", "brain.model.skills", "model-page"],
+        "covers": ["skills", "brain.model.skills", "model-page", "settings.skills-menu"],
     },
     {
         "id": "model-memory",
