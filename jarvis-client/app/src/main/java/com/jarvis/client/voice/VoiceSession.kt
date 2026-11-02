@@ -248,8 +248,8 @@ class VoiceSession(
      */
     @Volatile private var flow: FlowStatus = FlowStatus()
 
-    /** The "One moment." clip and its key (`flow.moment.key`). */
-    @Volatile private var momentClip: Pair<String, ByteArray>? = null
+    /** The "One moment." clip and its key (`flow.moment.key`); only its own key may play it. */
+    private val momentClip = MomentClip()
 
     /** "One moment." while it plays: the reply waits for it, never plays over it. */
     @Volatile private var momentJob: Job? = null
@@ -363,24 +363,58 @@ class VoiceSession(
         if (turn.silenced) return
         val now = _phase.value
         if (now != Phase.THINKING && now != Phase.SPEAKING) return
-        val clip = momentClip
-        if (!moment.toolStarted(oneMoment() && flow.momentUsable, clip != null) || clip == null) return
-        momentJob = scope.launch { speaker.play(clip.second) }
-    }
-
-    /** Fetches the "One moment." clip when the PC's key for it changed. */
-    private suspend fun refreshMoment() {
         val f = flow
-        if (!f.momentUsable) return
-        val key = f.moment.key
-        if (momentClip?.first == key) return
-        (api.voiceMoment() as? ApiResult.Ok)?.let { momentClip = key to it.value }
+        // Only the bytes made for the voice the PC is speaking in NOW may
+        // play: a clip fetched before the owner changed the speaker is the
+        // old voice, and this phone used to play it anyway (2026-11-01).
+        val clip = momentClip.playable(f.moment.key, f.momentUsable)
+        if (!moment.toolStarted(oneMoment() && f.momentUsable, clip != null) || clip == null) return
+        momentJob = scope.launch { speaker.play(clip) }
     }
 
-    /** The `flow` block again, quietly: only this class's own copy changes. */
+    /**
+     * Fetches the "One moment." clip when the PC's key for it changed, and
+     * drops the held one first: a failed, empty or 503 answer then leaves
+     * SILENCE, never yesterday's voice. [force] (a spoken turn is starting)
+     * fetches even when `flow.moment.ready` is false - the route makes the
+     * clip - so the voice the owner has just chosen is heard in this turn.
+     */
+    private suspend fun refreshMoment(force: Boolean = false) {
+        val f = flow
+        val key = f.moment.key
+        if (!f.momentWanted) {
+            momentClip.clear()
+            return
+        }
+        if (!momentClip.missing(key)) return
+        // Bytes held for another key, or none: never playable. Drop them
+        // before the wait below, so nothing can use them meanwhile.
+        momentClip.clear()
+        if (!force && !f.moment.ready) return
+        val got = (api.voiceMoment() as? ApiResult.Ok)?.value
+        momentClip.store(key, got, flow.moment.key)
+    }
+
+    /**
+     * The `flow` block again, quietly: only this class's own copy changes.
+     *
+     * Called when a spoken turn starts - push-to-talk, "hey Jarvis" and
+     * Jarvis Live alike ([deliverLiveClip]) - so the clip belongs to the voice
+     * the PC is using for THAT turn. Live used to skip this, which is how a
+     * clip fetched before the owner changed the voice kept playing.
+     */
     private suspend fun refreshFlow() {
         flow = (api.voiceStatus() as? ApiResult.Ok)?.value?.flow ?: FlowStatus()
-        refreshMoment()
+        refreshMoment(force = true)
+        // The PC makes a new voice's clip in about a second. One retry, once,
+        // while this turn still has no clip for the current key - never a
+        // loop, and silence (not the old voice) if it still does not arrive.
+        // A clip that is held but not yet `ready` is already the right voice,
+        // so it is not fetched again.
+        if (momentClip.missing(flow.moment.key) && flow.momentWanted) {
+            delay(MOMENT_RETRY_MS)
+            if (momentClip.missing(flow.moment.key)) refreshMoment(force = true)
+        }
     }
 
     /**
@@ -654,6 +688,11 @@ class VoiceSession(
      * answer. Null when it could not be sent.
      */
     suspend fun deliverLiveClip(wav: ByteArray, waitedMs: Long? = null): Heard? {
+        // A Live question is a spoken turn too: read the flow and fetch the
+        // "One moment." clip for the voice the PC uses NOW. Live used to keep
+        // whatever a screen last read, so a voice changed on the PC still
+        // played the old clip (the owner's report, 2026-11-01).
+        scope.launch { runCatching { refreshFlow() } }
         val result = api.utterance(wav, JarvisApi.SOURCE_LIVE, waitedMs)
         val heard = (result as? ApiResult.Ok)?.value ?: return null
         if (LiveRules.reply(heard.liveIn()).action != LiveRules.Action.ANSWER) {
@@ -1489,6 +1528,9 @@ class VoiceSession(
 
         /** A Live answer with no sound after this says "One moment." (under its own switch). */
         const val LIVE_SLOW_MS = 2500L
+
+        /** One retry, this soon after a turn's clip fetch, when no clip for its key came back. */
+        const val MOMENT_RETRY_MS = 700L
     }
 }
 
