@@ -7632,6 +7632,14 @@ TOOL_HINTS = {
     "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|account)\b",
                         r"\b(?:set ?up|link|sign in|log ?in)\b.*\b(?:calendar|caldav|"
                         r"github|account)\b"),
+    # PHONE_APPS (2026-11-02): the [phone_apps] allow-list itself - "add YouTube
+    # Music to my phone apps", "which apps can you open", "remove it from that
+    # list", "what is on the allow-list". Deliberately narrow: "open YouTube on
+    # my phone" is control_phone's job, so each pattern here names the LIST, or
+    # the adding/removing of an app rather than the opening of one.
+    "phone_apps": (r"\bphone apps?\b", r"\ballow[- ]?list\b", r"\bwhich apps\b",
+                   r"\bapps?\b.*\b(?:add|remove|allow|approve|list)\b",
+                   r"\b(?:add|remove|allow|approve)\b.*\bapps?\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}

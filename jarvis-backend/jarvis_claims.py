@@ -160,6 +160,12 @@ ACTING_TOOLS = frozenset({
     "send_file_to_phone",
     "set_reminder", "set_timer", "shell_exec", "tidy_inbox", "todo_add",
     "todo_done",
+    # "phone_apps" (2026-11-02): the mixed shape browser_control already has.
+    # Its `list` action reads the settings file and changes nothing, while
+    # `add` and `remove` write one line of it - and only after a card. It stays
+    # an ACTION tool, the direction that cannot wrongly correct a true
+    # "I've added it to your phone apps".
+    "phone_apps",
 })
 
 #: The line added to a typed answer that claimed an action nobody took.
