@@ -493,7 +493,8 @@ HARD_LIMITS = frozenset({
     "search_the_web", "web_research", "research_authenticated",
     "write_notes_after_outside_text", "change_own_config", "modify_own_code",
     LOOSEN_ACTION, "stop_asking_before_every_web_search", "web_search_enable", "learning_enable",
-    "learning_auto_enable", "learning_sensitive_enable", "history_enable",
+    "learning_auto_enable", "learning_sensitive_enable",
+    "learning_paraphrase_enable", "history_enable",
     "second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
     "second_card_third_assign", "chat_card_pin", "screen_picture_enable", "obscura_enable",
     "big_model_enable", "custom_voice",
@@ -542,7 +543,8 @@ MUST_ASK = frozenset({
     "models_create", "second_card_enable", "second_card_browser_enable",
     "second_card_combined_enable", "second_card_third_assign", "chat_card_pin",
     "screen_picture_enable",
-    "obscura_enable", "big_model_enable", "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
+    "obscura_enable", "big_model_enable", "learning_enable", "learning_auto_enable", "learning_sensitive_enable",
+    "learning_paraphrase_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "desktop_update", "run_plan",
@@ -709,7 +711,8 @@ GROUPS = (
     ("Talking with Jarvis", ["fixed:live", "fixed:screen"]),
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
-        "learning_auto_enable", "learning_sensitive_enable", "history_enable",
+        "learning_auto_enable", "learning_sensitive_enable",
+        "learning_paraphrase_enable", "history_enable",
         "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
         # Action receipts (jarvis_receipts.py, 2026-10-14): putting ONE recorded
         # change back - what changed, from the receipt Jarvis wrote before it

@@ -47,6 +47,10 @@ import {
   rememberedLine,
   saidAgainWords,
   savedIds,
+  PARAPHRASE_DETAIL,
+  PARAPHRASE_LABEL,
+  REWORDED_MARK,
+  REWORDED_TITLE,
   SENSITIVE_DETAIL,
   SENSITIVE_LABEL,
   SENSITIVE_NEEDS_AUTO,
@@ -96,6 +100,13 @@ await check("the wording is the contract's, word for word (section 5)", async ()
   assert.equal(rememberedLine(0), "");
   assert.equal(SWITCHES.auto.action, "learning_auto_enable");
   assert.equal(SWITCHES.sensitive.action, "learning_sensitive_enable");
+  // 2026-11-02 (option C1): the third switch, off by default, and the mark a
+  // fact saved under it carries.
+  assert.equal(PARAPHRASE_LABEL, "Save facts even when Jarvis had to reword them");
+  assert.equal(SWITCHES.paraphrase.action, "learning_paraphrase_enable");
+  assert.equal(SWITCHES.paraphrase.command, "brain_memory_learning_paraphrase");
+  assert.equal(REWORDED_MARK, "Jarvis's own words");
+  assert.match(REWORDED_TITLE, /may not say what you said/);
 });
 
 await check("the list is read as the PC sends it; a switch is on only when the PC says true", async () => {
@@ -104,7 +115,15 @@ await check("the list is read as the PC sends it; a switch is on only when the P
   assert.equal(v.auto, true);
   assert.equal(v.sensitive, false);
   assert.deepEqual(v.facts[0], { id: 12, text: "Is building Jarvis, a local assistant.",
-    savedAt: NOW - 300.5, provenance: "typed", device: "desktop", saidAgain: 0, trueFrom: "" });
+    savedAt: NOW - 300.5, provenance: "typed", device: "desktop", saidAgain: 0, trueFrom: "",
+    reworded: false });
+  // 2026-11-02: a fact saved in Jarvis's own words carries the mark's flag,
+  // and the switch (off unless the PC says true) rides on the list too.
+  const reworded = readAuto({ auto: true, paraphrase: true,
+    facts: [{ id: 9, text: "Owner works at Google", saved_at: NOW - 10, reworded: true }] });
+  assert.equal(reworded.facts[0].reworded, true);
+  assert.equal(reworded.paraphrase, true);
+  assert.equal(readAuto(LIST).paraphrase, false);
   // Missing or damaged: off, never assumed on.
   const bare = readAuto({ facts: [] });
   assert.equal(bare.auto, false);
@@ -215,13 +234,15 @@ const settingsText = (page) => page.locator("#memory-auto").innerText();
 const listText = (page) => page.locator("#memory-auto-list").innerText();
 const autoState = (page) => page.evaluate(() => window.__auto);
 
-await check("both switches sit with the learning switch, in the contract's words, as the PC has them", async () => {
+await check("all three switches sit with the learning switch, in the contract's words, as the PC has them", async () => {
   const page = await memoryTab({ facts: LIST.facts });
   const inLearning = await page.locator("#view-memory .card", { has: page.locator("#memory-learning") })
     .locator("#memory-auto").count();
   const text = await settingsText(page);
   const auto = await page.locator("#memory-auto-on").isChecked();
   const sensitive = await page.locator("#memory-sensitive-on").isChecked();
+  // 2026-11-02: the third switch, drawn the same way and OFF by default.
+  const paraphrase = await page.locator("#memory-paraphrase-on").isChecked();
   const roles = await page.locator("#memory-auto [role=switch]").count();
   const heading = await page.locator("#memory-auto-card h2").textContent();
   const errors = page.__errors;
@@ -229,10 +250,31 @@ await check("both switches sit with the learning switch, in the contract's words
   assert.equal(inLearning, 1, "the switches are not in the Learning card");
   assert.ok(text.includes(AUTO_LABEL) && text.includes(AUTO_DETAIL), text);
   assert.ok(text.includes(SENSITIVE_LABEL) && text.includes(SENSITIVE_DETAIL), text);
+  assert.ok(text.includes(PARAPHRASE_LABEL) && text.includes(PARAPHRASE_DETAIL), text);
   assert.equal(auto, true);
   assert.equal(sensitive, false);
-  assert.equal(roles, 2);
+  assert.equal(paraphrase, false);
+  assert.equal(roles, 3);
   assert.equal(heading, "Saved automatically");
+  assert.deepEqual(errors, []);
+});
+
+await check("a fact in Jarvis's own words is marked, and Forget stays beside it", async () => {
+  const facts = [{ id: 21, text: "Owner works at Google", saved_at: NOW - 40,
+    provenance: "typed", device: "desktop", reworded: true }];
+  const page = await memoryTab({ facts });
+  const mark = page.locator("#memory-auto-list .history-mark-reworded");
+  const text = await mark.textContent();
+  const title = await mark.getAttribute("title");
+  const marks = await page.locator("#memory-auto-list .history-mark-voice").count();
+  const forget = await page.locator("#memory-auto-list .row-item button", { hasText: "Forget" }).count();
+  const errors = page.__errors;
+  await page.close();
+  assert.equal(text, REWORDED_MARK);
+  assert.equal(title, REWORDED_TITLE);
+  // Only a reworded fact carries it; a voice mark is a different fact's.
+  assert.equal(marks, 0);
+  assert.equal(forget, 1, "the one-press Forget must stay on the row");
   assert.deepEqual(errors, []);
 });
 

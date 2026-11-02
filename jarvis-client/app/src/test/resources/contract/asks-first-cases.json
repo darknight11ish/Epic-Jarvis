@@ -1007,6 +1007,15 @@
        "title": "Also learn sensitive topics automatically"
       },
       {
+       "action": "learning_paraphrase_enable",
+       "fixed": false,
+       "id": "learning_paraphrase_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save facts in Jarvis's own words"
+      },
+      {
        "action": "history_enable",
        "fixed": false,
        "id": "history_enable",
@@ -2588,6 +2597,15 @@
        "title": "Also learn sensitive topics automatically"
       },
       {
+       "action": "learning_paraphrase_enable",
+       "fixed": false,
+       "id": "learning_paraphrase_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save facts in Jarvis's own words"
+      },
+      {
        "action": "history_enable",
        "fixed": false,
        "id": "history_enable",
@@ -4164,6 +4182,15 @@
        "title": "Also learn sensitive topics automatically"
       },
       {
+       "action": "learning_paraphrase_enable",
+       "fixed": false,
+       "id": "learning_paraphrase_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save facts in Jarvis's own words"
+      },
+      {
        "action": "history_enable",
        "fixed": false,
        "id": "history_enable",
@@ -5735,6 +5762,15 @@
        "title": "Also learn sensitive topics automatically"
       },
       {
+       "action": "learning_paraphrase_enable",
+       "fixed": false,
+       "id": "learning_paraphrase_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save facts in Jarvis's own words"
+      },
+      {
        "action": "history_enable",
        "fixed": false,
        "id": "history_enable",
@@ -7304,6 +7340,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Also learn sensitive topics automatically"
+      },
+      {
+       "action": "learning_paraphrase_enable",
+       "fixed": false,
+       "id": "learning_paraphrase_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save facts in Jarvis's own words"
       },
       {
        "action": "history_enable",
@@ -8891,6 +8936,15 @@
        "title": "Also learn sensitive topics automatically"
       },
       {
+       "action": "learning_paraphrase_enable",
+       "fixed": false,
+       "id": "learning_paraphrase_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save facts in Jarvis's own words"
+      },
+      {
        "action": "history_enable",
        "fixed": false,
        "id": "history_enable",
@@ -10465,6 +10519,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Also learn sensitive topics automatically"
+      },
+      {
+       "action": "learning_paraphrase_enable",
+       "fixed": false,
+       "id": "learning_paraphrase_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save facts in Jarvis's own words"
       },
       {
        "action": "history_enable",

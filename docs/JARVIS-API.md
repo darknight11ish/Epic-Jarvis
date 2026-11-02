@@ -2170,6 +2170,7 @@ neither app says it would.
 | `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Brain, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
 | `/api/memory/learning/auto` | POST | `{"enabled": bool}` | `brain_memory_learning_auto` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Learn automatically" (on by default). The shape of `/api/memory/learning`: **OFF** 200 at once, never a card, withdraws a waiting ON; **ON** 202 `{"waiting": true, ...}` and ONE approval card, action `learning_auto_enable`; on only when it is approved. Already on: 200, no card. A second ON while one waits: 202, no second card. Tier other than `ask`: **503**. Bad body: `400`. Every reply carries the `GET /api/memory/learning` fields (not `enabled`). |
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
+| `/api/memory/learning/paraphrase` | POST | `{"enabled": bool}` | `brain_memory_learning_paraphrase` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Save facts even when Jarvis had to reword them" (off by default, 2026-11-02). The same shape, action `learning_paraphrase_enable`. It relaxes ONE check - the words not being the owner's own - and nothing else; a fact it saves is marked `meta.reworded` and listed in "Saved automatically" with the "Jarvis's own words" mark. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted (the deletion runs before the window is saved, and a failure there answers 500 with what really happened - see §18.3). Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
@@ -5498,8 +5499,8 @@ while an approved card is being applied waits for it, then turns the switch
 off - it can no longer be answered "off" and then overwritten by the card
 (red team R5). The same holds for background learning and chat history.
 
-`POST /api/memory/learning/auto` and `POST /api/memory/learning/sensitive`,
-`{"enabled": true | false}`:
+`POST /api/memory/learning/auto`, `POST /api/memory/learning/sensitive` and
+`POST /api/memory/learning/paraphrase`, `{"enabled": true | false}`:
 
 - `false` - 200 at once. It also withdraws a waiting ON card.
 - `true` - **202** `{"ok": true, "waiting": true, "message", ...}` and ONE
@@ -5510,15 +5511,44 @@ off - it can no longer be answered "off" and then overwritten by the card
 Every reply carries the `GET /api/memory/learning` fields except `enabled`,
 `floor`, `auto_active` and `note`.
 
+**The third switch (2026-11-02, option C1 of the memory-card research).**
+"Save facts even when Jarvis had to reword them" - off by default - is the
+same shape again: `paraphrase`, `paraphrase_waiting` and `paraphrase_last` on
+`GET /api/memory/learning`, and `POST /api/memory/learning/paraphrase` with
+the same `{"enabled": bool}` body, the same 202/503/400 answers, and one
+approval card under `learning_paraphrase_enable`.
+
+It relaxes exactly ONE check: a fact whose words are not the owner's own
+(`jarvis_auto_learn.check_grounded`, which also runs `check_meaning` and
+`check_tense`). **Every other card trigger is unchanged**: health, money and
+other people's private details still wait unless "Also remember sensitive
+topics automatically" is on; passwords, PINs, account and ID numbers, birthdays,
+phone numbers and email addresses always wait; pasted text, a tool's reading,
+a shared / pasted / clipboard / incognito / unverified-voice provenance, a
+fact that would change a stored one, a forgotten fact, an instruction in the
+fact, the topic controls and the switches themselves all still make their card.
+The order of the checks in `after_pass` is the enforcement, and
+`backend/test_auto_learn.py` names every one of them with the switch ON.
+
+A fact it saves has `source="auto"` and `meta.reworded`; it is listed in
+`GET /api/memory/auto` with `"reworded": true`, marked "Jarvis's own words" in
+both apps, and forgotten with one tap like any other. At most five facts are
+saved this way in one learning pass (`REWORDED_MAX_PER_PASS`); the rest stay
+cards whose reason says it is a ceiling. A wrong paraphrase can then be stored
+and recalled - the card says so in those words before it is turned on.
+
 `GET /api/memory/auto?limit=30&before=<saved_at>`
 
 ```json
 {"facts": [{"id": 41, "text": "The owner is learning Kotlin",
             "saved_at": 1790000300, "provenance": "typed", "device": "phone"},
+           {"id": 42, "text": "The owner works at Google",
+            "saved_at": 1790000250, "provenance": "typed", "device": "desktop",
+            "reworded": true},
            {"id": 40, "text": "Owner moved to Leeds in 2021",
             "saved_at": 1790000200, "provenance": "voice", "device": "desktop",
             "true_from": "2021-01-01"}],
- "auto": true, "auto_sensitive": false}
+ "auto": true, "auto_sensitive": false, "paraphrase": false}
 ```
 
 Facts saved automatically that are still current (Forget retires them),
@@ -5527,6 +5557,12 @@ the last row's `saved_at`. It may carry a fraction; it is floored, and means
 "strictly older seconds". **A page never splits a second** - rows sharing
 the last row's second come with it - so nothing is skipped or repeated.
 `provenance` is `"typed"` or `"voice"` (show a small "said aloud" mark).
+A fact saved under "Save facts even when Jarvis had to reword them"
+(2026-11-02, §19) carries `"reworded": true` - its words are Jarvis's, not
+the owner's - and both apps show it as "Jarvis's own words" with a one-tap
+Forget like any other. `paraphrase` is that switch's state, carried here so
+the two apps can draw it from a PC whose `GET /api/memory/learning` is
+missing.
 A fact the owner has said again since it was saved also carries
 `"said_again": {"count": 3, "last": 1790000900}` (memory idea 3, §34);
 both apps add "said again 3 times" to the row's small line. No field when

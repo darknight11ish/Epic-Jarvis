@@ -1744,7 +1744,7 @@
         <h2>Learning</h2>
         <p class="note">
           Jarvis learns facts about you and your projects from your own words
-          only - never from web pages, emails, documents or notes. These two
+          only - never from web pages, emails, documents or notes. These
           switches decide whether it does that by itself. Everything it saved,
           and the "Learn automatically" switch beside it, are in the Brain
           under Memory.
@@ -1764,6 +1764,13 @@
           </label>
           <p class="note" id="learning-sensitive-line"></p>
           <p class="note" id="learning-sensitive-waiting" data-tone="warn" hidden></p>
+
+          <label class="toggle">
+            <input id="learning-paraphrase" type="checkbox" />
+            <span id="learning-paraphrase-label">Save facts even when Jarvis had to reword them</span>
+          </label>
+          <p class="note" id="learning-paraphrase-line"></p>
+          <p class="note" id="learning-paraphrase-waiting" data-tone="warn" hidden></p>
 
           <span class="status" id="learning-status" role="status"></span>
         </div>

@@ -1777,11 +1777,12 @@ permissions = [
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "learning-settings"
-description = "Read the two learning switches and their waiting cards, turn background learning on (one approval card on this PC) or off at once, and turn automatic remembering of sensitive topics on (one card) or off. Settings only; it never reads a saved fact, never forgets one and never exports anything."
+description = "Read the three learning switches and their waiting cards, turn background learning on (one approval card on this PC) or off at once, turn automatic remembering of sensitive topics on (one card) or off, and turn \"Save facts even when Jarvis had to reword them\" on (one card) or off (2026-11-02). Settings only; it never reads a saved fact, never forgets one and never exports anything."
 permissions = [
   "allow-brain-memory-learning",
   "allow-brain-memory-learning-status",
   "allow-brain-memory-learning-sensitive",
+  "allow-brain-memory-learning-paraphrase",
 ]
 
 # ---------------------------------------------------------------------------

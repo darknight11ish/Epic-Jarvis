@@ -8457,6 +8457,9 @@ CHANGE_BY_ASKING = frozenset({
     # (and is immediate on the narrowing direction). The lane does not decide
     # that - the setter does, exactly as it does for the Settings switch.
     "ask_before_every_search", "background_learning", "learn_sensitive_topics",
+    # 2026-11-02: "Save facts even when Jarvis had to reword them" - ON is one
+    # card (learning_paraphrase_enable), OFF is immediate.
+    "learn_paraphrase",
     "web_search", "smartwatch_notifications", "phone_notifications",
     "screen_picture", "headless_browser", "sandbox_exec", "media_index",
     "briefing_senders", "big_coder", "better_voice", "chat_history",

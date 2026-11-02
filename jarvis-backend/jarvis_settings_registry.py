@@ -64,6 +64,7 @@ choice function, picked because each already has a proven `handle_*`/
                             path: "from now on ..."; registered the same way)
   * background_learning   - jarvis_auto_learn.handle_post()
   * learn_sensitive_topics- jarvis_auto_learn.handle_post()
+  * learn_paraphrase      - jarvis_auto_learn.handle_post()  (2026-11-02)
   * lights_without_card   - jarvis_asks_first.handle_lights()
   * ask_before_every_search - jarvis_search.request_ask_every_time()
   * web_search            - jarvis_search.request_enabled() (2026-09-30): OFF at once,
@@ -806,6 +807,16 @@ def set_learn_sensitive(on: bool, *, peer=None, local=None) -> Outcome:
     except Exception:
         return _missing("automatic learning")
     code, out = AL.handle_post("/api/memory/learning/sensitive", {"enabled": bool(on)})
+    return _say(code, out)
+
+
+def set_learn_paraphrase(on: bool, *, peer=None, local=None) -> Outcome:
+    """Save facts even when Jarvis had to reword them (2026-11-02)."""
+    try:
+        import jarvis_auto_learn as AL
+    except Exception:
+        return _missing("automatic learning")
+    code, out = AL.handle_post("/api/memory/learning/paraphrase", {"enabled": bool(on)})
     return _say(code, out)
 
 
@@ -1842,12 +1853,14 @@ SETTINGS_ROWS: tuple = (
         indent=8,
         has_detail=True,
         fallback=True),
-    # "Learning" (2026-10-28, the settings audit's G1): the two switches that
-    # had a route and a spoken name but no Settings row anywhere. Both are the
-    # SAME switch as the Brain's: `set_background_learning` posts
-    # /api/memory/learning and `set_learn_sensitive` posts
-    # /api/memory/learning/sensitive, through the same Rust commands the Brain
-    # uses (learning-settings.js). ON raises one approval card; OFF is at once.
+    # "Learning" (2026-10-28, the settings audit's G1): the switches that had
+    # a route and a spoken name but no Settings row anywhere. Each is the SAME
+    # switch as the Brain's: `set_background_learning` posts
+    # /api/memory/learning, `set_learn_sensitive` posts
+    # /api/memory/learning/sensitive and `set_learn_paraphrase` (2026-11-02)
+    # posts /api/memory/learning/paraphrase, through the same Rust commands the
+    # Brain uses (learning-settings.js). ON raises one approval card; OFF is at
+    # once.
     # The row's own words are this page's, always: the state line under each
     # row is the PC's (GET /api/memory/learning), so no fallback flag.
     SettingRow(
@@ -1877,6 +1890,19 @@ SETTINGS_ROWS: tuple = (
         indent=10,
         label_span_is_wrapper=True),
     SettingRow(
+        "learning-paraphrase",
+        "learn_paraphrase",
+        "",
+        "learning-paraphrase-label",
+        "",
+        'Save facts even when Jarvis had to reword them',
+        "",
+        21,
+        "learning",
+        "desktop",
+        indent=10,
+        label_span_is_wrapper=True),
+    SettingRow(
         "cv-face-switch",
         "voice_follows_face",
         "",
@@ -1884,7 +1910,7 @@ SETTINGS_ROWS: tuple = (
         "cv-face-detail",
         'Voice follows the face',
         '',
-        21,
+        22,
         "voices",
         "desktop",
         indent=12,
@@ -1898,7 +1924,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Make custom voices on the second graphics card',
         'A more natural copy of the voice. Turning it on shows you an approval card first; turning it off happens at once.',
-        22,
+        23,
         "voices",
         "desktop",
         indent=12,
@@ -1911,7 +1937,7 @@ SETTINGS_ROWS: tuple = (
         "ws-enabled-detail",
         'Web search',
         '',
-        23,
+        24,
         "web-search",
         "desktop",
         indent=10,
@@ -1925,7 +1951,7 @@ SETTINGS_ROWS: tuple = (
         "ws-ask-detail",
         'Ask before every web search',
         '',
-        24,
+        25,
         "web-search",
         "desktop",
         indent=10,
@@ -1939,7 +1965,7 @@ SETTINGS_ROWS: tuple = (
         "",
         '',
         "",
-        25,
+        26,
         "spending",
         "desktop",
         indent=12,
@@ -1956,7 +1982,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Turn on Picture mode (slow)',
         "",
-        26,
+        27,
         "screen-look",
         "desktop",
         indent=10,
@@ -1969,7 +1995,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis use the windowless browser (Obscura)',
         "",
-        27,
+        28,
         "browser-engine",
         "desktop",
         indent=10,
@@ -1998,7 +2024,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Making pictures',
         "",
-        28,
+        29,
         "pictures",
         "desktop",
         indent=10,
@@ -2011,7 +2037,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis Desktop start and stop Jarvis',
         "",
-        29,
+        30,
         "start-jarvis",
         "desktop",
         indent=10),
@@ -2023,7 +2049,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Start Jarvis Desktop when Windows starts',
         "",
-        30,
+        31,
         "more-options",
         "desktop",
         indent=10),
@@ -2039,7 +2065,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis run small Python scripts for sums and averages',
         "",
-        31,
+        32,
         "sandbox",
         "desktop",
         indent=10,
@@ -2146,6 +2172,16 @@ BOOL_SETTINGS: tuple = (
                 "also remember sensitive topics automatically",
                 "sensitive topics automatically", "auto-remembering sensitive topics"),
                "learning", set_learn_sensitive),
+    # 2026-11-02, "Save facts even when Jarvis had to reword them" (off by
+    # default). A spoken name like the other two, so "turn on saving facts in
+    # Jarvis's own words" reaches the same route the Brain's switch and the
+    # phone post to. Its section is "learning": it is one of the learning
+    # switches and it belongs in that card, not a new one.
+    BoolSetting("learn_paraphrase",
+               ("saving facts in Jarvis's own words",
+                "saving facts even when Jarvis had to reword them",
+                "facts in Jarvis's own words", "reworded facts"),
+               "learning", set_learn_paraphrase),
     BoolSetting("lights_without_card",
                ("lights without asking", "lights, plugs and fans without a card",
                 "lights without a card", "switching lights without asking"),

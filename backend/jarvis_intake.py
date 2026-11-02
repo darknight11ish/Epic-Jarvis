@@ -421,16 +421,25 @@ def temporary_body(body) -> bool:
 
 
 # --------------------------------------------------------------------------
-#   2. "Remember: ..."
+#   2. "Remember: ..." and its four siblings
 # --------------------------------------------------------------------------
 #
-# "remember" then a colon, comma or dash, at the very start. Deliberately NOT
-# "remember this:", "remember that", or "remember when": the gate's denial
-# proposal used to open "Remember this: ..." when you turned an action down
-# (since 2026-10-10 it opens "Jarvis noticed a \"no\" ..." and says it is a
-# guess), and "remember when we went to Porto" is conversation, not a request.
-# The gate's text never reaches this code anyway - it goes straight to
-# propose() - but the pattern does not match it either, on purpose.
+# "remember", then one of the ways the owner actually writes the request, at
+# the very start: a colon, comma or dash ("Remember: ...", "Remember, ..."),
+# "remember that ...", "remember this: ...", or "please remember: ..."
+# (2026-11-02, C2a - the memory-card research measured all of these being
+# ignored while the literal colon was accepted).
+#
+# Still NOT "remember when": "remember when we went to Porto" is conversation,
+# not a request. And still not "remember my sister's birthday is ..." with no
+# separator at all - that stays the ordinary learner's job rather than a
+# verbatim queue, because guessing where the request ends is how a sentence
+# becomes a stored fact word for word.
+#
+# The old reason for excluding "remember this:" is gone: the gate's denial
+# proposal used to open that way when you turned an action down, and since
+# 2026-10-10 it opens "Jarvis noticed a \"no\" ...". The gate's text never
+# reaches this code anyway - it goes straight to propose().
 #
 # By voice: the owner-voice check runs before any words exist
 # (jarvis_speech.hear), so a spoken "Remember: ..." has already been proven
@@ -439,8 +448,10 @@ def temporary_body(body) -> bool:
 # writes "remember my sister's birthday is ..." with no punctuation, this does
 # not fire and the ordinary learner reads the sentence instead.
 
-_REMEMBER = re.compile(r"^\s*remember\s*[:,–—-]\s*(?P<rest>\S.*)$",
-                       re.IGNORECASE | re.DOTALL)
+_REMEMBER = re.compile(
+    r"^\s*(?:please\s+)?remember\s*(?:[:,–—-]\s*|\bthis\s*:\s*|\bthat\b\s+)"
+    r"(?P<rest>\S.*)$",
+    re.IGNORECASE | re.DOTALL)
 REMEMBER_MAX_CHARS = 1000
 
 _remember_last: Optional[dict] = None

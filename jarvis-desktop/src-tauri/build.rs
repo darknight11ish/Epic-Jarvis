@@ -279,6 +279,9 @@ fn main() {
             "brain_memory_auto_list",
             "brain_memory_learning_auto",
             "brain_memory_learning_sensitive",
+            // "Save facts even when Jarvis had to reword them" (2026-11-02).
+            // Its own command and its own route; ON is one approval card.
+            "brain_memory_learning_paraphrase",
             // How many facts were saved automatically while the Brain was
             // closed - ids only, never the words. Brain only.
             "brain_memory_saved_unseen",
