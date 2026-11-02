@@ -14737,7 +14737,7 @@ the list "Windows Hello for memory lists" hides (`lock/rules.rs`
   5. Press Enter for the next." or "No name matches that." It matches the
   name, names joined to it, and what the owner calls it ("sister").
 
-The phone now has a read-only Galaxy picture (owner, 2026-10-26: at most 48 names, the desktop's zen-ring layout, no labels, a tap opens the existing facts view): the *editable* memory graph stays off the phone (CLAUDE.md), and no route is added - it reuses `/api/memory/entities`. On the desktop, picking a dot also lists the facts that name it, read-only, in their own words - see §106.4.
+The phone now has a read-only Galaxy picture (owner, 2026-10-26: at most 48 names, the desktop's zen-ring layout, no labels on the canvas - a picture of one name names its dot in one line below it - a tap opens the existing facts view): the *editable* memory graph stays off the phone (CLAUDE.md), and no route is added - it reuses `/api/memory/entities`. On the desktop, picking a dot also lists the facts that name it, read-only, in their own words - see §106.4.
 
 ### 71.4 Not checked, said plainly
 
