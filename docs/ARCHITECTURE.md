@@ -2686,7 +2686,7 @@ backend routes, in both directions; the rest are listed here only.
   itself - `[phone_apps]` (the app allow-list) and `"control_phone"` in
   `[tools].enabled` are two lines in `jarvis-framework.toml`, which is deep
   config editing and stays off the phone (`CLAUDE.md`). The list itself is now
-  managed by card (2026-11-02, JARVIS-API §175, and the bullet below), and the
+  managed by card (2026-11-02, JARVIS-API §176, and the bullet below), and the
   phone reads it read-only; `list_apps` reads the same file for the model, so the
   phone never becomes a second authority on what may be opened. **One honest
   cost, said plainly:** opening a media app brings it to the front, so a Live
@@ -2699,7 +2699,7 @@ backend routes, in both directions; the rest are listed here only.
   *"i would need to approve a card with the apps i would like it to manipulate
   first and i can remove or add any android app to that list any time with an
   approval card... or by going to the settings and changing it there too"*;
-  JARVIS-API §175, `docs/DECISIONS.md` 2026-11-02). The two write paths - the
+  JARVIS-API §176, `docs/DECISIONS.md` 2026-11-02). The two write paths - the
   model's `phone_apps` tool in either app's chat/Live, and the PC's Settings
   through `POST /api/phone/apps` - are ONE permission model: each add and each
   removal raises ONE `change_own_config` card naming the friendly name and the

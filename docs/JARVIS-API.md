@@ -29836,7 +29836,7 @@ Also unchanged and worth saying: opening a media app takes it to the front, so a
 Live session on the phone is backgrounded by it (see `docs/ARCHITECTURE.md` §8,
 "One-sided on purpose").
 
-## 175. The phone's app list, managed: add or remove one app, card first (added 2026-11-02)
+## 176. The phone's app list, managed: add or remove one app, card first (added 2026-11-02)
 
 The owner asked for this in their own words: *"any apps that i ask if to open or
 do something with. i would need to approve a card with the apps i would like it
@@ -29847,7 +29847,7 @@ empty - so before this the only way to use the feature was to hand-edit
 `jarvis-framework.toml`. Now the table is managed, by chat and by the settings
 routes below, and every change is ONE approval card that names the app.
 
-### 175.1 The model's tool: `phone_apps`
+### 176.1 The model's tool: `phone_apps`
 
 One tool, three actions, in chat and in Live on both apps (it is in the shipped
 `[tools].enabled` - see 175.5):
@@ -29894,7 +29894,7 @@ without it `action_for_tool()` would answer `unclassified_tool`.
 after the write succeeded. A refused or failed write leaves no line claiming it
 happened.
 
-### 175.2 `GET /api/phone/apps` - the list (read-only)
+### 176.2 `GET /api/phone/apps` - the list (read-only)
 
 Behind `X-Jarvis-Token` like every settings route, from either app. It reads
 `[phone_apps]` and nothing else; it never lists the phone's installed apps and
@@ -29913,7 +29913,7 @@ never runs an adb command.
 package is left out of `apps` (the reader's rule, the same one the phone tool
 uses) and counted in `note` - it is not silently hidden.
 
-### 175.3 `POST /api/phone/apps` - ONE change, and its card
+### 176.3 `POST /api/phone/apps` - ONE change, and its card
 
 `{"action": "add", "name": "YouTube Music", "package": "com.google.android.apps.youtube.music"}`
 or `{"action": "remove", "name": "YouTube Music"}`. The module
@@ -29933,7 +29933,7 @@ card waited (the app was added or removed meanwhile), so the write re-validates
 against the list as it is NOW and says so rather than writing twice or removing
 something the card did not show.
 
-### 175.4 The file: one line, the same way the other settings are written
+### 176.4 The file: one line, the same way the other settings are written
 
 `jarvis_phone_apps.write` follows `jarvis_limits.py` and `jarvis_notify_prefs.py`
 exactly: read the owner's bytes, change ONE line of their own text (comments,
@@ -29944,7 +29944,7 @@ and `os.replace` with the file's own permissions, and
 `open(path, "w")` anywhere in this feature. A line the owner wrote by hand, in
 either TOML quoting style, can be found and removed.
 
-### 175.5 The surfaces, and the phone decision
+### 176.5 The surfaces, and the phone decision
 
 - **Chat and Live, both apps**: the `phone_apps` tool (175.1). It ships ON in
   `[tools].enabled`, because a tool that is itself the only way to fill a list
@@ -29964,7 +29964,7 @@ either TOML quoting style, can be found and removed.
   (2026-11-02) and `docs/ARCHITECTURE.md` §8. *(This screen is the remaining
   half of this slice too - the route it reads is `GET /api/phone/apps`.)*
 
-### 175.6 What has NOT changed
+### 176.6 What has NOT changed
 
 `control_phone` and its own one-card plan (§174) are untouched: opening an app
 still goes to `jarvis_android_control_run` → `control_phone`, still one card

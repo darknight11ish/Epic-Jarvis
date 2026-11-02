@@ -1455,7 +1455,7 @@ SHIPPED = (
     # the Models page and the preset card already use. Shipped whole, no route.
     "jarvis_model_knowledge.py",
     # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
-    # JARVIS-API section 175): reads and writes ONE table of the owner's
+    # JARVIS-API section 176): reads and writes ONE table of the owner's
     # settings file, [phone_apps], one line at a time - card first, through
     # the same atomic section writer the other settings use. Shipped whole,
     # no patch of its own; phone-apps.patch is the two routes that reach it.
