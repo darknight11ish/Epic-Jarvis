@@ -3355,6 +3355,24 @@ class MainActivity : FragmentActivity() {
                         },
                     )
 
+                    // "Edit HUD" (2026-11-02): the phone's own editor for what
+                    // its Home screen shows - the four sections, the five
+                    // read-only built-in arrangements, the owner's copies and
+                    // the layout's JSON. Reached from Settings' "Home screen"
+                    // row, and from nowhere else: the editor is a settings
+                    // screen, not a second Home.
+                    //
+                    // It takes no `canAct`, no `stale` and no `paired`: a
+                    // layout is a display preference stored on THIS phone, it
+                    // sends nothing to the PC, and it raises no approval card
+                    // (docs/ARCHITECTURE.md section 8). `Done` is the one write
+                    // (`MenuPrefs.saveLayout`); a phone with no desktop can
+                    // arrange its Home screen.
+                    Screen.EDIT_HUD -> com.jarvis.client.ui.screens.EditHudScreen(
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+
                     Screen.LIVE -> com.jarvis.client.ui.screens.LiveScreen(
                         onBack = { nav.back() },
                         // "Show the card": the cards are on Home. Back comes
@@ -3546,6 +3564,15 @@ class MainActivity : FragmentActivity() {
                         } else {
                             null
                         },
+                        // "Home screen" (2026-11-02; the owner's words: "add
+                        // building the real editor to the queue"): the phone's
+                        // own Edit HUD. Never null and never `paired`-gated,
+                        // unlike the three above it: the layout is stored on
+                        // THIS phone, it sends nothing to the PC, and it raises
+                        // no approval card - a display preference, the same
+                        // class as the theme. A phone with no desktop still has
+                        // a Home screen to arrange.
+                        onOpenEditHud = { nav.go(Screen.EDIT_HUD) },
                         floatingAvatar = floatingAvatar,
                         onFloatingAvatarChange = { JarvisRuntime.settings.setFloatingAvatar(it) },
                         // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md):
@@ -4184,6 +4211,25 @@ class MainActivity : FragmentActivity() {
                                 // Settings from Home's own row (2026-10-08).
                                 onOpenSettings = { nav.go(Screen.SETTINGS) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
+                                // A card on the owner's Home HUD (2026-11-02).
+                                // The layout says WHICH cards are on Home and in
+                                // what order; where one opens is the card's own
+                                // business, and `hudCardPlace` answers it from
+                                // the same catalogue `MenuPlaces` gives the
+                                // finder. A card with no place (or a safety
+                                // surface drawn as an action) opens nothing here
+                                // rather than guessing at a screen.
+                                onOpenHudCard = { cardId: String ->
+                                    val place = com.jarvis.client.ui.screens.hudCardPlace(cardId)
+                                    if (place != null) {
+                                        val section = place.second
+                                        if (section != null) {
+                                            pendingSection = section
+                                            pendingSectionScreen = place.first.name
+                                        }
+                                        nav.go(place.first)
+                                    }
+                                },
                                 // Jarvis Live (ui/screens/LiveScreen.kt).
                                 onOpenLive = { nav.go(Screen.LIVE) },
                                 // "Try again" under a failed question: the same

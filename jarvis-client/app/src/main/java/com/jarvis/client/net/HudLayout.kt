@@ -259,6 +259,16 @@ object HudLayout {
         /** Put it last in a section (the target section when given). */
         data class Last(val id: String, val section: String? = null) : Action
 
+        /**
+         * Put a card that the layout does not hold anywhere into [section]
+         * (the editor's "Add" - A3). It is an ACTION rather than a second
+         * writer so that a card can only ever arrive through the same reducer
+         * a move does, with the same normalisation behind it. Refused for an
+         * unknown id, an indicator, a card already in the layout, or a section
+         * that does not exist.
+         */
+        data class Add(val id: String, val section: String, val index: Int? = null) : Action
+
         /** The whole layout goes back to one built-in preset / the default. */
         data class ApplyPreset(val presetId: String) : Action
 
@@ -278,6 +288,7 @@ object HudLayout {
             BUILT_IN_PRESETS.firstOrNull { it.id == action.presetId }?.layout
                 ?: normalize(layout)
         is Action.Move -> move(layout, action.id, action.section, action.index) ?: layout
+        is Action.Add -> add(layout, action.id, action.section, action.index) ?: layout
         is Action.Earlier -> shift(layout, action.id, -1) ?: layout
         is Action.Later -> shift(layout, action.id, 1) ?: layout
         is Action.First -> place(layout, action.id, action.section) { 0 } ?: layout
@@ -308,6 +319,22 @@ object HudLayout {
             return normalize(Layout(layout.version, map))
         }
         return normalize(Layout(layout.version, layout.sections.toMutableMap().also { it[section] = target }))
+    }
+
+    /**
+     * A card the layout does not hold arrives in [section] - the editor's
+     * "Add". Null when the card is unknown, is an indicator (never a stored
+     * card), is already somewhere in the layout, or names no section. The
+     * result is normalised, so the protected cards are still forced present.
+     */
+    fun add(layout: Layout, id: String, section: String, index: Int? = null): Layout? {
+        if (section !in SECTIONS) return null
+        val card = byId[id] ?: return null
+        if (card.indicator) return null
+        if (layout.contains(id)) return null
+        val ids = layout.items(section).toMutableList()
+        ids.add((index ?: ids.size).coerceIn(0, ids.size), id)
+        return normalize(Layout(layout.version, layout.sections.toMutableMap().also { it[section] = ids }))
     }
 
     /** One place earlier (-1) or later (+1); null when it cannot move. */
