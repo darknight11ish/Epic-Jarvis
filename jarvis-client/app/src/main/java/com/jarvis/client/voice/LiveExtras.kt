@@ -21,7 +21,8 @@ import kotlinx.serialization.json.intOrNull
  *    of the PC's 10 minutes;
  *  - the microphone ([pickHeadset], [micWords]): a Bluetooth headset's
  *    microphone is preferred while one is connected, the phone's own
- *    otherwise, and the Live screen says which.
+ *    otherwise, and [micWords] names which (the Live screen drew that line
+ *    until 2026-11-02, when the owner removed it).
  */
 object LiveExtras {
 
@@ -146,7 +147,10 @@ object LiveExtras {
     const val MIC_MEDIA_ONLY = "Microphone: this phone's - the Bluetooth audio here has no microphone"
 
     /**
-     * What the Live screen says about the microphone in use.
+     * The microphone route's own words ("Microphone: ..."), for a screen that
+     * shows them - the Live screen drew this line until 2026-11-02, when the
+     * owner removed it. The words stay, tested, so the route can be named
+     * wherever it is shown again.
      *
      * [mediaOnly] is the 2026-11-02 car case: Bluetooth sound is connected but
      * there is no hands-free microphone in it (a car whose call profile did not

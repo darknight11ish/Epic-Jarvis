@@ -394,6 +394,15 @@ TIER_A = (
     "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
     "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
     "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
+    # The conversation-scoped web-search approval and its instant stop
+    # (jarvis_agent.py, the owner's ask of 2026-11-01): both are chat abilities
+    # the owner switches on here, like protect_from_jarvis and
+    # send_file_to_phone beside them. Neither is a default on a fresh install
+    # (`[tools].enabled` does not name them): a standing approval that lets
+    # searches leave this PC unasked is the owner's choice to make, not a
+    # default. Turning the grant tool ON here cannot approve anything by itself
+    # - every grant still needs its own card and a person's yes.
+    "approve_web_search_for_conversation", "stop_web_search_approval",
 )
 TIER_B = (
     "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
@@ -420,7 +429,8 @@ TOOL_GROUPS = (
      ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
     ("Connected accounts & home", TIER_B),
     ("Safety and sharing",
-     ("protect_from_jarvis", "github_search", "send_file_to_phone")),
+     ("protect_from_jarvis", "github_search", "send_file_to_phone",
+      "approve_web_search_for_conversation", "stop_web_search_approval")),
 )
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
@@ -462,7 +472,8 @@ TOOL_GROUPS = (
      ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
     ("Connected accounts & home", TIER_B),
     ("Safety and sharing",
-     ("protect_from_jarvis", "github_search", "send_file_to_phone")),
+     ("protect_from_jarvis", "github_search", "send_file_to_phone",
+      "approve_web_search_for_conversation", "stop_web_search_approval")),
 )
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
@@ -651,7 +662,19 @@ GROUPS = (
                             # test_asks_first.py requires every action a card can
                             # name to have a row on this page.
                             "google_calendar_write"]),
-    ("The internet", ["search_the_web", "web_search_enable", "web_research", "research_authenticated",
+    ("The internet", ["search_the_web",
+                      # The conversation-scoped web-search approval and its
+                      # instant stop (jarvis_agent.py, the owner's ask of
+                      # 2026-11-01; JARVIS-API section 175). Both are actions a
+                      # card can be raised under, so both are rows on this page:
+                      # the grant is the ONE card that stands in for
+                      # search_the_web for the rest of one chat, and the stop is
+                      # the instant revocation (tier "auto", so its row says it
+                      # does not ask). Neither has an app switch: the page lists
+                      # the actions, and the two TOOLS are switched in "Safety
+                      # and sharing" below.
+                      "grant_web_search_conversation", "revoke_web_search_grant",
+                      "web_search_enable", "web_research", "research_authenticated",
                       "control_browser", "browser_form_submit", "obscura_enable",
                       "post_to_external_service",
                       "open_public_tunnel",

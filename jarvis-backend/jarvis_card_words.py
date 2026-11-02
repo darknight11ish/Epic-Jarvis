@@ -94,6 +94,13 @@ TITLES = {
     "web_research": "search GitHub",
     "research_authenticated": "search GitHub signed in as you",
     "search_the_web": "search the web",
+    # The conversation-scoped web-search approval (jarvis_agent.py; the owner's
+    # ask of 2026-11-01). The title is the ONE card that stops a card being
+    # raised for every search in a chat; the stop beside it is the instant
+    # revocation, which raises no card at all but still needs its words for the
+    # notification a row with no card can send.
+    "grant_web_search_conversation": "let web searches in this chat stop asking",
+    "revoke_web_search_grant": "ask before every web search in this chat again",
     # jarvis_chatbot.py: ONE card per conversation with an AI chatbot (not routed yet)
     "chatbot_session": "hold a conversation with an AI chatbot for you",
     # jarvis_chatbot_limits.py (2026-10-06): raising a monthly API limit is a
@@ -344,6 +351,11 @@ SUMMARY = {
     "web_research": "search GitHub",
     "research_authenticated": "search GitHub signed in as you",
     "search_the_web": "look something up online",
+    # The conversation-scoped web-search approval (2026-11-01). Nine words is
+    # the cap (SUMMARY_MAX_WORDS); the first says it is for THIS chat, because
+    # "stop asking about searches" alone would read as a setting that lasts.
+    "grant_web_search_conversation": "search this chat without asking each time",
+    "revoke_web_search_grant": "ask before searches in this chat again",
     "chatbot_session": "talk to an AI chatbot for you",
     "raise_api_limit": "raise a chatbot's monthly limit",
     "lower_api_limit": "lower a chatbot's monthly limit",

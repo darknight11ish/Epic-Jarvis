@@ -93,10 +93,11 @@ import kotlinx.coroutines.sync.withLock
  *    app that played sound last, so with music playing elsewhere the other
  *    app may get it; and on some phones holding it opens the phone's
  *    assistant instead. The Live screen says so.
- *  - A BLUETOOTH (OR CAR) MICROPHONE is used while one is connected, and the
- *    Live screen says which ([JarvisRuntime.liveMicWords]). A car's Bluetooth
- *    is a HANDS-FREE device: its microphone only exists in a CALL, so that
- *    route records on `VOICE_COMMUNICATION` with the phone in
+ *  - A BLUETOOTH (OR CAR) MICROPHONE is used while one is connected, and its
+ *    route's own words name which ([JarvisRuntime.liveMicWords]) - the Live
+ *    screen drew that line until 2026-11-02, when the owner removed it. A
+ *    car's Bluetooth is a HANDS-FREE device: its microphone only exists in a
+ *    CALL, so that route records on `VOICE_COMMUNICATION` with the phone in
  *    `MODE_IN_COMMUNICATION` and the car as the communication device
  *    ([LiveAudioRoute] decides it, [applyRoute] does it). The phone's own
  *    microphone is used where there is no such device, and if Android refuses
@@ -513,9 +514,10 @@ class LiveService : Service() {
      * The route to record on for this moment, applied to the phone: the pure
      * decision ([LiveAudioRoute.decide]) plus the one thing only Android can
      * answer - whether it accepted it. When the car's microphone cannot be
-     * made available the phone's own is used, and the Live screen says the
-     * Bluetooth one could not be used ([LiveAudioRoute.fallback]). Never
-     * leaves the phone in a route that was not applied.
+     * made available the phone's own is used, and the route says the
+     * Bluetooth one could not be used ([LiveAudioRoute.fallback]); the Live
+     * screen drew that line until 2026-11-02. Never leaves the phone in a
+     * route that was not applied.
      */
     private suspend fun routeFor(speaking: Boolean): LiveAudioRoute.Route {
         var inputs = routeInputs(speaking)
@@ -549,7 +551,7 @@ class LiveService : Service() {
 
     /**
      * Record from the phone's own microphone instead: undo what was tried,
-     * apply the fallback, say so on the Live screen, and remember not to ask
+     * apply the fallback (whose own words name it), and remember not to ask
      * for that device again this session.
      */
     private suspend fun fellBackTo(inputs: LiveAudioRoute.Inputs, refused: Int?): LiveAudioRoute.Route {

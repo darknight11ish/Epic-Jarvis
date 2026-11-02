@@ -187,6 +187,10 @@
       "title": "Jarvis wants to add, change or delete an event in your Google Calendar"
     },
     {
+      "action": "grant_web_search_conversation",
+      "title": "Jarvis wants to let web searches in this chat stop asking"
+    },
+    {
       "action": "handoff_bring_to_front",
       "title": "Jarvis wants to bring the stuck browser window to the front"
     },
@@ -349,6 +353,10 @@
     {
       "action": "restore_backup",
       "title": "Jarvis wants to restore from a backup, replacing what it knows now"
+    },
+    {
+      "action": "revoke_web_search_grant",
+      "title": "Jarvis wants to ask before every web search in this chat again"
     },
     {
       "action": "rollback_model",
@@ -1005,6 +1013,18 @@
       }
     },
     {
+      "action": "grant_web_search_conversation",
+      "notice": {
+        "title": "Jarvis wants to let web searches in this chat stop asking",
+        "summary": "Jarvis wants to search this chat without asking each time.",
+        "full": "lets web searches in THIS one chat run without asking you each time, until you say stop, the chat ends, 8 hours pass or Jarvis restarts; the grant itself sends nothing, every other action still gets its own card, and saying stop is instant. nothing has happened yet.",
+        "body": "lets web searches in THIS one chat run without asking you each time, until you say stop, the chat ends, 8 hours pass or Jarvis restarts; the grant itself sends nothing, every other action still gets its own card, and saying stop is instant. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "handoff_bring_to_front",
       "notice": {
         "title": "Jarvis wants to bring the stuck browser window to the front",
@@ -1491,6 +1511,18 @@
         "summary": "Jarvis wants to restore from a backup.",
         "full": "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone. nothing has happened yet.",
         "body": "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "revoke_web_search_grant",
+      "notice": {
+        "title": "Jarvis wants to ask before every web search in this chat again",
+        "summary": "Jarvis wants to ask before searches in this chat again.",
+        "full": "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on. nothing has happened yet.",
+        "body": "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on. nothing has happened yet.",
         "weight": "normal",
         "deny_ok": true,
         "approve_ok": false

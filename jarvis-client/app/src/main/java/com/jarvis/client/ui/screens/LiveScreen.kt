@@ -41,7 +41,6 @@ import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Face
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.net.Provenance
-import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
@@ -53,7 +52,6 @@ import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.LiveMicGate
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.VoiceSession
-import com.jarvis.client.voice.VoiceNow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -173,10 +171,12 @@ private fun LiveFacePane(face: LiveFace, modifier: Modifier = Modifier) {
  *   it ends (the review's #1: it kept the phone awake and unlocked). The
  *   camera switch appears only when the PC says it is ready - it is off until
  *   the 12 GB graphics card is in and passes the photo test.
- * - The Live extras (the owner's decisions of 2026-09-28): which microphone
- *   it listens through (a Bluetooth headset's is preferred), and text shared
- *   with "Talk about this in Live" - held here as a "Shared text" chip and
- *   sent, tagged "shared" (outside text), only when the owner taps Send.
+ * - The Live extras (the owner's decisions of 2026-09-28): text shared with
+ *   "Talk about this in Live" - held here as a "Shared text" chip and sent,
+ *   tagged "shared" (outside text), only when the owner taps Send. The
+ *   microphone (a Bluetooth headset's is preferred) and the voice are still
+ *   chosen exactly as before, but the two lines that named them at the bottom
+ *   of this screen were removed on the owner's request of 2026-11-02.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -213,12 +213,6 @@ fun LiveScreen(
     val interrupt by JarvisRuntime.settings.interrupt.collectAsState()
     val security by JarvisRuntime.settings.security.collectAsState()
     val voiceStatus by JarvisRuntime.voice.status.collectAsState()
-    val mic by JarvisRuntime.liveMic.collectAsState()
-    // Which voice the last reply was really spoken in, and the PC's one voice
-    // setting that names it (voice/VoiceNow.kt): the Live notes underneath say
-    // both, so a voice change made in either app can be seen as well as heard.
-    val voiceNow by JarvisRuntime.voice.voiceNow.collectAsState()
-    val voices by JarvisRuntime.customVoices.collectAsState()
     // Temporary chat is on: a Live session is then not kept in History either
     // (the owner, 2026-09-29), so this screen says so - before it starts, too.
     val temporary by JarvisRuntime.chat.temporary.collectAsState()
@@ -494,26 +488,26 @@ fun LiveScreen(
                 }
             }
 
-            // What the owner should know while Live is on: which microphone is
-            // in use, App lock ends it (the review's #3), and interrupting by
-            // voice needs an echo canceller on this phone and the PC's voice
-            // check. The long headset-button explanation that used to open this
-            // plate was removed on the owner's request of 2026-10-26 ("get rid
-            // of the long explanation on jarvis live"): the button still does
-            // the same things, it is just not explained on screen any more.
+            // What the owner should know while Live is on: App lock ends it
+            // (the review's #3), and interrupting by voice needs an echo
+            // canceller on this phone and the PC's voice check. The long
+            // headset-button explanation that used to open this plate was
+            // removed on the owner's request of 2026-10-26 ("get rid of the
+            // long explanation on jarvis live"): the button still does the
+            // same things, it is just not explained on screen any more.
+            //
+            // The two fixed lines that used to open this plate - which
+            // microphone Live listens through ("Microphone: this phone's", or
+            // a Bluetooth headset's) and which voice it speaks in ("Voice:
+            // American (female) - Heart, from your PC") - were removed on the
+            // owner's request of 2026-11-02: "i dontt need this to say
+            // Microphone: this phone'sVoice: American (female) - Heart, at the
+            // bottom of the screen during jarvis live." The microphone route
+            // and the PC's voice are unchanged; only their lines on this
+            // screen are gone, and the plate is not drawn at all when the
+            // remaining notes below are empty.
             if (on) {
                 val notes = buildList {
-                    mic?.let { add(it) }
-                    // WHICH VOICE Live IS SPEAKING IN (2026-10-28, the owner:
-                    // "when i change the jarvis voice in the android app it
-                    // still stays the same in jarvis live in the android app").
-                    // Live asks the PC for the sound of every reply, in the one
-                    // voice both apps show, so this names that voice from the
-                    // same read the Voices screen uses - and says plainly when
-                    // the phone is on its own voice instead, which no PC
-                    // setting can change (voice/VoiceNow.kt).
-                    val voicesNow = (voices as? CustomVoices.Read.Loaded)?.status
-                    VoiceNow.line(voicesNow, voiceNow)?.let { add(it) }
                     if (security.appLock) {
                         add(
                             if (security.liveEnd == LiveEnd.SCREEN_LOCK) {
