@@ -292,6 +292,14 @@ export function readSchedule(answer) {
     showsAt: text(j.shows_at),
     snoozed: j.snoozed === true,
     wentOffAt: text(j.went_off_at),
+    // The to-do list's own day (2026-11-02; JARVIS-API section 178): the day
+    // this item was written, and the PC's own words for how old that is
+    // ("from yesterday", "from Friday (3d ago)", "from Oct 26"). Both are
+    // computed ON THE PC - the app never works out an age from its own clock,
+    // which can be a day out from the one that wrote the item - and `carry` is
+    // absent for an item written today.
+    createdDate: text(j.created_date),
+    carry: text(j.carry),
   });
   const lists = Array.isArray(a.lists) ? a.lists.filter((l) => l && typeof l === "object"
     && typeof l.name === "string" && l.name && Number.isInteger(l.open) && l.open > 0)
@@ -317,6 +325,26 @@ export function readSchedule(answer) {
     // board route at all sends no marker, so the page can tell "nothing is
     // due" from "I could not ask" instead of drawing both the same way.
     cockpitError: available && a.cockpit_error === true,
+    // How the to-do list carries over (2026-11-02): "rollover" (the default:
+    // today's list is everything still open, each older item tagged) or "day"
+    // (each item stays on the day it was written). An older PC sends neither
+    // key: it is then read as rollover, which is what it really does.
+    todoMode: available && a.todo_mode === "day" ? "day" : "rollover",
+    todoModes: available && Array.isArray(a.todo_modes)
+      ? a.todo_modes.filter((m) => m && (m.value === "rollover" || m.value === "day"))
+        .map((m) => ({ value: m.value, label: text(m.label), detail: text(m.detail) }))
+      : [],
+    // The same open items grouped by the day they were written, for the
+    // day-labelled mode: [{date, label, count, items}], today first. Each
+    // entry's `items` are ids into this same `todo` list, so no item is ever
+    // sent twice.
+    todoDays: available && Array.isArray(a.todo_days)
+      ? a.todo_days.filter((d) => d && typeof d.date === "string"
+        && Array.isArray(d.items)).map((d) => ({
+        date: d.date, label: text(d.label) || d.date,
+        count: Number(d.items.length) || 0, items: d.items.map(String),
+      }))
+      : [],
   };
 }
 
@@ -330,6 +358,58 @@ export function leftNow(job, sinceMs) {
 /** The to-do list's own items: those on no named list. */
 export function todoItems(view) {
   return view ? view.todo.filter((j) => !j.list) : [];
+}
+
+/**
+ * The tag under one to-do item, in the PC's own words: "from yesterday",
+ * "from Friday (3d ago)", "from Oct 26" - or "" for an item written today.
+ *
+ * The words are the PC's (`jarvis_schedule.carry_words`), passed in the item's
+ * `carry` field. This function does NOT work an age out from the app's clock:
+ * the PC and the phone can disagree about what day it is, and the one that
+ * wrote the item is the one that knows. While the private lists are hidden
+ * there is no tag to show - the words are gone, and an age would be a fact
+ * about them.
+ */
+export function carryOf(job) {
+  if (!job || job.hidden) return "";
+  return String(job.carry || "");
+}
+
+/**
+ * The day-labelled view of the same to-do list, for the "Day by day" mode:
+ * [{date, label, count, items}] with the items themselves (not ids), today
+ * first. Nothing is moved, copied or re-ordered: the same rows the rollover
+ * list draws, grouped by the day the PC says each was written.
+ *
+ * A view from a PC that does not send `todo_days` (an older backend) falls back
+ * to one day - the rollover list - so the screen still shows every open item
+ * rather than an empty list.
+ */
+export function todoDays(view) {
+  if (!view) return [];
+  const byId = new Map(view.todo.map((j) => [j.id, j]));
+  const days = view.todoDays
+    .map((d) => ({
+      date: d.date,
+      label: d.label,
+      count: d.count,
+      items: d.items.map((id) => byId.get(id)).filter(Boolean),
+    }))
+    .filter((d) => d.items.length);
+  if (days.length) return days;
+  return view.todo.length
+    ? [{ date: "", label: "", count: view.todo.length, items: view.todo }]
+    : [];
+}
+
+/** The two modes, the PC's words first and a plain fallback if it sent none. */
+export function todoModes(view) {
+  if (view && view.todoModes.length) return view.todoModes;
+  return [
+    { value: "rollover", label: "Daily rollover", detail: "" },
+    { value: "day", label: "Day by day", detail: "" },
+  ];
 }
 
 /**
@@ -398,7 +478,7 @@ export function titleOf(job) {
 }
 
 /** The lines under a row's title. `sinceMs`: how long ago the PC said it. */
-export function metaOf(job, sinceMs = 0) {
+export function metaOf(job, sinceMs = 0, carry = "") {
   const out = [];
   if (job.state === "waiting") {
     if (job.repeat) out.push(job.repeat);
@@ -427,6 +507,10 @@ export function metaOf(job, sinceMs = 0) {
     return out;
   }
   if (job.repeats && job.repeat) out.push(job.repeat);
+  // A to-do's own age, in the PC's words (2026-11-02). Only in the rollover
+  // list: the day-labelled view puts the day on the group's heading instead, so
+  // the same fact is not said twice.
+  if (job.kind === "todo" && carry) out.push(carry);
   if (job.state === "paused") out.push("Paused");
   else if (job.when) out.push(job.repeats ? `next: ${job.when}` : job.when);
   if (job.missed) out.push(`Went off late (${job.missed}) - the PC was off or asleep.`);

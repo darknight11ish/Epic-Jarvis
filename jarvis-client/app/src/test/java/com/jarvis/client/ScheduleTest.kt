@@ -541,4 +541,104 @@ class ScheduleTest {
         // jobs", never "the PC could not be asked".
         assertEquals(emptySet<String>(), Schedule.knownIds(Schedule.parse(obj("""{"available":true,"jobs":[],"todo":[]}"""))!!))
     }
+
+    // ----------------------------------------------------------------------
+    // The to-do list's own day (2026-11-02; JARVIS-API section 178; the
+    // owner's choice of both ways, full daily rollover as the default).
+    // ----------------------------------------------------------------------
+
+    private val carryList = obj(
+        """{"available":true,"jobs":[],"todo":[
+          {"id":"s0000000011","kind":"todo","text":"call the dentist","state":"active",
+           "list":"","created_date":"2026-10-30","carry":"from Friday (3d ago)"},
+          {"id":"s0000000012","kind":"todo","text":"renew the prescription","state":"active",
+           "list":"","created_date":"2026-11-01","carry":"from yesterday"},
+          {"id":"s0000000013","kind":"todo","text":"buy milk","state":"active",
+           "list":"","created_date":"2026-11-02"}],
+          "todo_mode":"day",
+          "todo_modes":[{"value":"rollover","label":"Daily rollover","detail":"everything open"},
+                        {"value":"day","label":"Day by day","detail":"each day its own"}],
+          "todo_days":[{"date":"2026-11-02","label":"Today","count":1,"items":["s0000000013"]},
+                       {"date":"2026-11-01","label":"Yesterday","count":1,"items":["s0000000012"]},
+                       {"date":"2026-10-30","label":"Friday (3d ago)","count":1,
+                        "items":["s0000000011"]}]}""",
+    )
+
+    @Test
+    fun theDayAnItemWasWrittenAndItsAgeAreReadFromThePc() {
+        val v = Schedule.parse(carryList)!!
+        val old = v.todo.first { it.id == "s0000000011" }
+        assertEquals("2026-10-30", old.createdDate)
+        assertEquals("from Friday (3d ago)", old.carry)
+        // The words are the PC's: a 3-day-old item must never say "from
+        // yesterday", and the phone never works an age out for itself.
+        assertTrue(Schedule.carryOf(old) != "from yesterday")
+        assertEquals("from yesterday", Schedule.carryOf(v.todo.first { it.id == "s0000000012" }))
+        assertEquals("", Schedule.carryOf(v.todo.first { it.id == "s0000000013" }))
+        // The tag is one more line under a rollover row, and only for a to-do.
+        assertEquals(listOf("from Friday (3d ago)"),
+            Schedule.metaOf(old, 0L, Schedule.carryOf(old)))
+        assertEquals(emptyList<String>(),
+            Schedule.metaOf(v.todo.first { it.id == "s0000000013" }, 0L,
+                Schedule.carryOf(v.todo.first { it.id == "s0000000013" })))
+        assertEquals(emptyList<String>(),
+            Schedule.metaOf(old.copy(kind = "alarm"), 0L, Schedule.carryOf(old)))
+    }
+
+    @Test
+    fun dayByDayIsTheSameRowsGroupedAndRolloverIsUnchanged() {
+        val v = Schedule.parse(carryList)!!
+        assertEquals(Schedule.MODE_DAY, v.todoMode)
+        val days = Schedule.todoDays(v)
+        assertEquals(listOf("Today", "Yesterday", "Friday (3d ago)"), days.map { it.label })
+        assertEquals(listOf("buy milk"), days[0].items.map { it.text })
+        assertEquals(listOf("call the dentist"), days[2].items.map { it.text })
+        // The SAME items, in the same order, are still on the flat list - so
+        // switching back to rollover is the identical list.
+        assertEquals(listOf("s0000000011", "s0000000012", "s0000000013"), v.todo.map { it.id })
+        assertEquals(listOf("s0000000011", "s0000000012", "s0000000013"),
+            Schedule.todoItems(v).map { it.id })
+        // And the two modes are the PC's own.
+        assertEquals(listOf("rollover", "day"), Schedule.todoModes(v).map { it.value })
+        assertEquals("Daily rollover", Schedule.todoModes(v)[0].label)
+    }
+
+    @Test
+    fun aPcFromBeforeTheFeatureReadsAsRolloverAndLosesNothing() {
+        val old = Schedule.parse(obj(
+            """{"available":true,"jobs":[],"todo":[
+               {"id":"s0000000011","kind":"todo","text":"call the dentist","state":"active"}]}""",
+        ))!!
+        assertEquals(Schedule.MODE_ROLLOVER, old.todoMode)
+        assertEquals(emptyList<Schedule.Mode>(), old.todoModes)
+        // The list is still shown - as ONE day - rather than as an empty screen.
+        val days = Schedule.todoDays(old)
+        assertEquals(1, days.size)
+        assertEquals(listOf("call the dentist"), days[0].items.map { it.text })
+        // ...and the switch still offers both, in plain words.
+        assertEquals(listOf("rollover", "day"), Schedule.todoModes(old).map { it.value })
+    }
+
+    @Test
+    fun theModeFinallyCanBeChangedAndOnlyWithARealMode() {
+        assertEquals("""{"do":"todo_mode","mode":"day"}""", Schedule.todoModeBody(Schedule.MODE_DAY))
+        assertEquals("""{"do":"todo_mode","mode":"rollover"}""",
+            Schedule.todoModeBody(Schedule.MODE_ROLLOVER))
+        // Not a mode, not a request - and never a second field (nothing else
+        // is sent: this changes how the list is drawn, not the list).
+        assertNull(Schedule.todoModeBody("both"))
+        assertNull(Schedule.todoModeBody(""))
+        assertNull(Schedule.todoModeBody("Day"))
+    }
+
+    @Test
+    fun theWordsAreGoneWhileThePrivateListsAreHidden() {
+        val hidden = Schedule.hide(Schedule.parse(carryList)!!)
+        assertEquals("", Schedule.carryOf(hidden.todo.first()))
+        assertEquals(emptyList<String>(),
+            Schedule.metaOf(hidden.todo.first(), 0L, Schedule.carryOf(hidden.todo.first())))
+        // The mode itself is not the owner's words about anything: it is still
+        // read, so the switch keeps showing which of the two is on.
+        assertEquals(Schedule.MODE_DAY, hidden.todoMode)
+    }
 }

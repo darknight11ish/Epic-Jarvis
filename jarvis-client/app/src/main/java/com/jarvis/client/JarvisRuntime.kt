@@ -6722,6 +6722,33 @@ object JarvisRuntime {
      * One new to-do item, in the owner's words - on a named list when [list]
      * says one ("shopping"). Held on a stale link.
      */
+    /**
+     * Change how the to-do list carries over (2026-11-02; the owner's choice of
+     * both ways, full daily rollover as the default; JARVIS-API section 178).
+     *
+     * It posts ONE verb and ONE mode to [com.jarvis.client.net.Schedule.ACT_PATH]
+     * - the scheduler's own write door for changes that need no card - which is
+     * the SAME method a typed or spoken sentence reaches on the PC, so a tap
+     * here and "set the to-do list mode to day by day" cannot disagree. It
+     * moves no item, deletes nothing and re-stamps no day, so it raises no
+     * approval card either way; it is held on a stale link like every write
+     * here. The PC's own sentence is returned, never one invented here.
+     */
+    suspend fun setTodoMode(mode: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.todoModeBody(mode)
+            ?: return false to "The to-do list is either daily rollover or day by day."
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ACT_PATH, body)) {
+            is ApiResult.Ok -> {
+                _scheduleTick.update { n -> n + 1 }
+                // The PC's own sentence, read the same way every other schedule
+                // write reads it (Schedule.said), never one invented here.
+                true to com.jarvis.client.net.Schedule.said(r.value).second
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+    }
+
     suspend fun addTodo(text: String, list: String? = null): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         val body = com.jarvis.client.net.Schedule.todoBody(text, list)
