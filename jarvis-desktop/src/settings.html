@@ -143,6 +143,7 @@
             <a href="#briefing-settings">Morning briefing</a>
             <a href="#calendar">Jarvis Calendar</a>
             <a href="#notifications">Notifications</a>
+            <a href="#todo-carryover">To-do list carry-over</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">This page</span>
@@ -1462,6 +1463,41 @@
         <div class="row">
           <button class="btn" id="notif-send-test" type="button">Send test notification</button>
           <span class="status" id="notif-status" role="status"></span>
+        </div>
+      </section>
+
+      <!-- ── The to-do list's day carry-over ────────────────────────────────
+           The owner's choice of 2026-11-02: BOTH ways of showing the to-do
+           list, with full daily rollover as the DEFAULT (Gemini's ruling 8;
+           docs/JARVIS-API.md section 179; backend/jarvis_schedule.py's
+           TODO_MODE_WORDS and `todo_carry_over`; todo-carryover-settings.js;
+           src-tauri/src/todo_carryover.rs). Read from GET /api/schedule, written
+           through POST /api/schedule/act {"do": "todo_mode", "mode": ...} -
+           the SAME method a spoken sentence runs, so a tap here and "set the
+           to-do list mode to day by day" cannot disagree. It moves no item,
+           deletes nothing and re-stamps no day: `created_date` is written once,
+           when an item is created, so switching back and forth loses nothing.
+           No approval card either way. The TWO MODES' own labels and details
+           are drawn from the PC's answer (the buttons are built there, not
+           typed here), so this page cannot invent a third one. The phone's
+           Settings draws the same two from the same route.
+
+           IT SITS WITH THE SCHEDULES, not where it was first inserted: the
+           to-do list is drawn on the same Coming up plate as the timers and
+           reminders, so its card follows Notifications - and its jump link is
+           the last one in that place row, which is what
+           backend/test_settings_registry.py's t_jump_list_matches_the_page
+           means by "the page's own order". -->
+      <section class="card" id="todo-carryover">
+        <h2 id="tc-heading">To-do list carry-over</h2>
+        <p class="note" id="tc-detail">Whether yesterday's unfinished items join today's list, each one saying how old it is, or each day keeps its own list.</p>
+        <fieldset class="theme-list" id="tc-list">
+          <legend class="label">Show the to-do list</legend>
+          <div id="tc-choices"></div>
+        </fieldset>
+        <p class="note" id="tc-tail">Saved on your PC, so both apps and anything you say to Jarvis agree. Nothing is moved or lost by changing it.</p>
+        <div class="row">
+          <span class="status" id="tc-status" role="status"></span>
         </div>
       </section>
 
@@ -3668,6 +3704,7 @@
     <script type="module" src="calendar-settings.js"></script>
     <script type="module" src="voiceprint-settings.js"></script>
     <script type="module" src="idle-new-settings.js"></script>
+<script type="module" src="todo-carryover-settings.js"></script>
     <script type="module" src="prompt-coach-settings.js"></script>
     <script type="module" src="thinking-settings.js"></script>
     <script type="module" src="menu-visibility-settings.js"></script>
