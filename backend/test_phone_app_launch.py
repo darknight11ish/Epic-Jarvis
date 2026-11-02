@@ -20,6 +20,7 @@ model actually touches:
 
     python -B backend/test_phone_app_launch.py
 """
+import ast
 import json
 import sys
 import traceback
@@ -282,11 +283,13 @@ def t_the_gate_action_the_tier_and_the_opt_in_are_unchanged():
           tool.gate_lookup_name({}) == "jarvis_android_control_run")
     check("... and it is still one of the tools that must ask a person",
           "control_phone" in AG.NEEDS_A_PERSON, sorted(AG.NEEDS_A_PERSON))
-    gate_src = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    gate = _gate_base_tables()
     check("the gate base still maps that name to the control_phone action",
-          '"jarvis_android_control_run": "control_phone"' in gate_src)
+          gate["tool_actions"].get("jarvis_android_control_run") == "control_phone",
+          repr(gate["tool_actions"].get("jarvis_android_control_run")))
+    risk = gate["risk"].get("control_phone")
     check("... and still calls it outbound and not reversible",
-          '"control_phone":' in gate_src and '"outbound"' in gate_src)
+          bool(risk) and risk[0] == "no" and risk[1] == "outbound", repr(risk))
     for label, path in (("shipped template", HERE / "rebuilt" / "jarvis-framework.toml"),
                         ("published base", REPO / "jarvis-backend" / "jarvis-framework.toml")):
         text = path.read_text(encoding="utf-8")
@@ -323,6 +326,36 @@ def _only_comments(block) -> bool:
         if stripped and not stripped.startswith("#"):
             return False
     return True
+
+
+def _gate_base_tables() -> dict:
+    """The published gate base's own two tables, read STRUCTURALLY (`ast`), not
+    pinned as source text.
+
+    The check that used to live here compared the file's spelling against two
+    string literals, which is the shape `tools/check_no_source_pins.py` exists
+    to stop: it goes red when the code is renamed or reformatted and stays green
+    when the mapping is wrong. `ast.literal_eval` reads the same table the
+    module loads - it refuses anything that is not a literal, so a computed
+    table raises and the check fails loudly instead of drifting quietly.
+    """
+    source = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+    tables = {"tool_actions": {}, "risk": {}}
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        for target in targets:
+            if not isinstance(target, ast.Name):
+                continue
+            if target.id == "_TOOL_ACTIONS":
+                tables["tool_actions"] = ast.literal_eval(node.value)
+            elif target.id == "_RISK":
+                tables["risk"] = ast.literal_eval(node.value)
+    return tables
 
 
 def t_the_shipped_module_and_the_agent_agree_on_the_actions():
