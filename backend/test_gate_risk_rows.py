@@ -316,7 +316,13 @@ def t_the_patch_is_registered_last():
              # adds rows at the other end of the table - and its own suite pins
              # that, so it cannot quietly rewrite them.
              "unknown-risk-approvable.patch",
-             "cloud-honesty.patch"}
+             "cloud-honesty.patch",
+             # gate-tool-actions-gap.patch (2026-11-01): ONE hunk in
+             # jarvis_gate.py, four ADDED lines at the END of `_TOOL_ACTIONS`
+             # (after gate-entries.patch's own last entry, `change_setting`) -
+             # it adds no `_RISK` row at all, so it rewrites neither of the two
+             # stale rows this patch removes.
+             "gate-tool-actions-gap.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

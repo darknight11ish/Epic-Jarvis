@@ -1019,6 +1019,40 @@ _TOOL_ACTIONS: dict[str, str] = {
     # CONSERVATIVE answer for the page - the true answer depends on which
     # setting is named, which jarvis_reach's own plain name for the tool says.
     "change_setting": "change_own_config",
+    # gate-tool-actions-gap.patch (2026-11-01). The four tools below are in
+    # jarvis_agent.py's own TOOLS table and ship today, but none of them had an
+    # entry here, so action_for_tool() fell through to "unclassified_tool" -
+    # fail-safe (that name takes unknown_action_tier, "ask") and still wrong:
+    # the card the owner was shown was never the one the tool raises, and
+    # "What can Jarvis reach" called each of them unclassified. No patch in the
+    # stack named any of the four, which is why this repository's own copy of
+    # this file and the patch both carry these lines.
+    #
+    # Each maps to an action that ALREADY exists and already owns its tier, so
+    # no new action, tier or card wording is invented - the same rule the
+    # readpage and change_setting rows above were written to.
+    #   send_file_to_phone - the tool's own name IS its action
+    #     (jarvis_send_file.ACTION, jarvis_agent.SEND_FILE_ACTION), and the
+    #     shipped "send_file_to_phone = ask" line is already in [autonomy.tiers].
+    #   protect_from_jarvis - asked under protect_item (jarvis_agent.
+    #     PROTECT_ACTION, jarvis_protection.ACTION_PROTECT), shipped as "ask".
+    #     The tool's name is NOT its action name; the removal half is
+    #     unprotect_item, and that is its own route, not a model tool.
+    #   connect_account - change_own_config, an existing action, on the
+    #     change_setting row's reasoning just above: _one_call intercepts this
+    #     tool by name before the gate (_connect_call), so no tier here decides
+    #     whether a card is raised - it states the conservative answer for the
+    #     Reach page. Connecting stores one credential, i.e. changes one of
+    #     Jarvis's own settings.
+    #   rea_investigate - run_shell_on_host, shipped as "ask". jarvis_rea.py
+    #     starts a local MCP program and puts read-only questions to it, and
+    #     jarvis_protection.py names it beside shell_exec and run_data_script as
+    #     "run programs or scripts"; that action's worst-case risk row is the
+    #     one this gate already uses for a spawned program.
+    "send_file_to_phone": "send_file_to_phone",
+    "protect_from_jarvis": "protect_item",
+    "connect_account": "change_own_config",
+    "rea_investigate": "run_shell_on_host",
 }
 
 # Arguments that ESCALATE a shell-class tool. Regex on model-written text is
