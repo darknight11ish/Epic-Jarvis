@@ -1992,10 +1992,15 @@ quiet_end = "07:00"
 
 [live]
 # Live speed slice (2026-10-18): the spoken lane only. Typed chat is untouched.
+# The model and the context window stay Live-only. tool_limit is a FLOOR, not
+# a cut (2026-11-01): a spoken turn is never shown fewer tools than a typed
+# one, so the value can only raise the diet size above typed chat's own 8. A
+# spoken request must be able to reach every tool a typed one can reach
+# (docs/LIVE-DESIGN.md 4.1).
 model = "qwen3:8b"
 fallback_model = "qwen3.5:9b"
 context_tokens = 16384
-tool_limit = 6
+tool_limit = 8
 trust_window_s = 120
 trust_max_short_clips = 16
 max_pause_ms = 1500
