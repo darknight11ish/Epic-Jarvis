@@ -322,10 +322,10 @@ PIN = {
     # own added block and costs nothing. Checked the other way by
     # backend/test_gate_unknown_risk.py, which reverses this patch out of the
     # published base and applies it forwards again, byte for byte.
-    "unknown-risk-approvable.patch":            (5, 42),    # position 163
+    "unknown-risk-approvable.patch":            (5, 42),    # position 165 (163 before gate-tool-actions-gap.patch and web-search-grant.patch were moved before it)
     # 2026-11-01, web-search-grant.patch (the owner's ask: "you have full
     # approval to search the web for anything during this conversation ... make
-    # sure a card comes up that I have to approve"). ALL THREE of its hunks read
+    # sure a card comes up that I have to approve"). ALL FOUR of its hunks read
     # text only the owner's PC holds, and every one is honest rather than drift
     # - no patch in this walk writes any of it:
     #   * the tail of the `if __name__` block, where one `_RISK.update({...})`
@@ -347,11 +347,22 @@ PIN = {
     #     it;
     #   * `_audit()`'s body (and the two blank lines and rule after it), under
     #     which the three audit writers are added. `_audit` is the owner's own
-    #     function and no patch touches it.
+    #     function and no patch touches it;
+    #   * `_TOOL_ACTIONS`' tail (added 2026-11-02, after main's
+    #     gate-tool-actions-gap.patch merged): the two entries the two new tools
+    #     need - `approve_web_search_for_conversation` ->
+    #     `grant_web_search_conversation`, `stop_web_search_approval` ->
+    #     `revoke_web_search_grant`. Seven lines of the owner's own table end
+    #     (four `_TOOL_ACTIONS` lines, the closing brace, the blank line and the
+    #     `# Arguments that ESCALATE` comment). Without the entries
+    #     action_for_tool() answers `unclassified_tool` and the Reach page calls
+    #     both tools unclassified - backend/test_gate_tool_actions.py, merged
+    #     from main, is what caught it. Its context is that patch's four lines,
+    #     so it must stay applied after gate-tool-actions-gap.patch.
     # Checked the other way by backend/test_web_search_grant.py, which applies
     # this patch to jarvis-backend/jarvis_gate.py forwards and reverses it byte
     # for byte.
-    "web-search-grant.patch":                   (3, 14),    # position 165
+    "web-search-grant.patch":                   (4, 21),    # position 164 - moved before unknown-risk-approvable.patch on 2026-11-02, so that patch stays the last writer of jarvis_gate.py (the same move main made for gate-tool-actions-gap.patch)
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under

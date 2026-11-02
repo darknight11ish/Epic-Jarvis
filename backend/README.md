@@ -191,7 +191,7 @@ on a throwaway copy instead.
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 | `model-lanes.patch` | `jarvis_hud.py` | **"Start the local model"** (the owner's decision of 2026-10-13, after both of his Ollama lanes were dead for about five hours and the standing warning deliberately did nothing). `GET /api/model-lanes` and `POST /api/model-lanes/start`, behind the same origin and token checks as `/api/status`. The one action runs **HIS OWN Windows logon task**, found on that PC with `schtasks` and matched by the half of its name a rename does not touch - never `ollama serve`, never a name typed from memory - and then watches that lane's own `/api/tags` every 3 s for up to 90 s, so "starting" is never reported as "up": a lane that does not come up settles as `down` with a plain sentence and leaves the warning standing. One lane, the one Jarvis talks to (`OLLAMA_URL`'s port - 11436 on his PC), never both; nothing is started twice (answering, already watched, or the Task Scheduler says it is running). No gate file: the same task his own logon already runs unattended, so a card would only be stricter than the thing it duplicates. One `install()` block, appended to the chain `pictures.patch` writes and immediately before `plugin-loader.patch`, whose hunk was re-anchored onto this block's last two printed lines (`tools/check_plugins.py` checks that). Needs `jarvis_model_lanes.py`, in both shipped lists and in the base. See "Start the local model", at the very end. |
 | `unknown-risk-approvable.patch` | `jarvis_gate.py` | **An action the gate has no risk row for is approvable, with maximum friction** (Gemini's Q2 ruling of 2026-10-30; `.dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md`, `docs/JARVIS-API.md`'s pending/risk contract). On 2026-10-30 the owner's PC showed the app builder's build card, he pressed Approve, and nothing happened: a risky card needs a Windows Hello prompt, a prompt may only ask about something Jarvis can NAME, and an action with no risk row and no written words was refused outright by `jarvis_owner_check` (`UNLABELLED`, 403) - a dead end that looked alive. Five hunks: (1) the end of `_RISK` gains the EIGHT actions that had an `auto` line and no row (`calendar_read`, `email_read`, `notes_search`, `home_read`, `news_read`, `page_read`, `github_read`, `docker_service_stop`), each with the sentence its tier line already implies, so the rule below changes nothing the owner uses today - the NINTH of that shape, `lower_api_limit`, is left to `chatbot-limits.patch`, because a second row would be dead code (the LAST one wins) and `test_gate_risk_words.py` fails exactly that; (2) `UNCLASSIFIED_WARNING` and `_UNKNOWN_RISK`'s new words - **"Unclassified action - treated as permanent and able to leave this PC"**; (3) `risk_for`'s docstring says what `classified: false` now means; (4) `notice_for` puts the warning line on the card and says why the worst case was chosen; (5) `check()` forces every unclassified action to tier `"ask"` - whatever `[autonomy.tiers]` or `unknown_action_tier` says, `"never"` still stricter and untouched - except the tool literals `action_for_tool()` sets directly ("calculator" -> auto, "memory_store" -> notify), which are not actions the risk table classifies. **The owner approves only through the human check**: `jarvis_owner_check.approve_check()` lets an unclassified card reach the Windows Hello prompt (or the phone's own lock/signature) instead of refusing it, and a yes recorded WITHOUT that check is refused by the gate (`_unstamped_approval`), so nothing auto-approves, nothing bulk-approves. **CI stays strict**: `backend/test_gate_unknown_risk.py` fails a tree where an action that can run unattended has no row, and names it. Its `jarvis_owner_check.py` and `jarvis_asks_first.py` halves are SHIPPED modules (no patch), so their changes ship by the `$SHIPPED` copy; `jarvis_asks_first.request_tier` now refuses to loosen an unclassified action (409, "not classified", nothing written) and the page offers no switch for it. Last in the list, and measured rather than chosen: no patch after it writes `jarvis_gate.py`, and its eight rows sit at the table's TOP because the table's END is different on a PC whose stack has run (`chatbot-limits.patch` writes rows there) and on one where it has not, while the opening is the same in both. Its own suite reverses and re-applies it byte for byte. See "An unclassified action is approvable, with maximum friction", at the very end. |
-| `web-search-grant.patch` | `jarvis_gate.py` | **"You have full approval to search the web for this conversation": ONE card, once, and search only** (the owner's ask of 2026-11-01; `docs/JARVIS-API.md` section 174). ONE approval card stands in for the ordinary `search_the_web` card for the rest of ONE conversation - and for nothing else: the only code that reads the grant is `jarvis_agent._web_search_call` (the one place whose gate action is `search_the_web`), so booking a flight, sending an email, spending money, deleting, running a command, changing a setting and working a browser each raise their own card with a grant live. The model may ASK for the grant and may never decide it: the store is written only on the generic prepare()/gate/execute() path after a verdict from a card, the tool is in `NEEDS_A_PERSON` so a loosened tier still cannot self-approve, and a denied or unanswered card writes nothing. It dies by itself - keyed on the request's own `conversation_id` (a chat with no id can neither give nor use one), capped at 8 hours, in memory only so a restart ends it - and the stop tool runs at tier `auto` with no card, because revoking only takes permission away. Lockdown outranks it. Three hunks, all in `jarvis_gate.py`: one `_RISK.update({...})` at the END OF THE FILE (`grant_web_search_conversation` is `yes`/`outbound`, a risky approval a lock screen may not swipe through; `revoke_web_search_grant` is `yes`/`local`) - the end of the file because it is the only place no earlier patch's hunk reaches in both the published base and `backend/_stack.py`'s walk: written inside `_RISK` the walk duplicated `read_web_page`'s row at the table's end, and at its top the rows landed between the two lines `unknown-risk-approvable.patch` anchors on (both caught by a suite; `_RISK.update` runs at import, so the gate sees the rows as if they were in the table) - then the word `grant` added to `_SAFE_KEYS` so a grant's id survives redaction, and the three audit writers after `_audit` (`grant_made`, `granted`, `grant_ended`) - so every search that ran unasked is in the gate's own log with the grant's id, and the CONVERSATION ID IS NEVER WRITTEN DOWN. The rest is the SHIPPED `jarvis_agent.py` (the two tools, the in-memory store, and the one place a grant is read) plus the two tier lines in both settings copies, which `backend/_apply_toml_tiers.py` adds to an existing PC's file at the next update. Both tools are switched on in Settings -> Tools -> "Safety and sharing" and are NOT fresh-install defaults. Applied last of the core patches, immediately before `plugin-loader.patch`, so no later patch has to carry its context; `backend/test_web_search_grant.py` applies and reverses it against `jarvis-backend/jarvis_gate.py` byte for byte. |
+| `web-search-grant.patch` | `jarvis_gate.py` | **"You have full approval to search the web for this conversation": ONE card, once, and search only** (the owner's ask of 2026-11-01; `docs/JARVIS-API.md` section 174). ONE approval card stands in for the ordinary `search_the_web` card for the rest of ONE conversation - and for nothing else: the only code that reads the grant is `jarvis_agent._web_search_call` (the one place whose gate action is `search_the_web`), so booking a flight, sending an email, spending money, deleting, running a command, changing a setting and working a browser each raise their own card with a grant live. The model may ASK for the grant and may never decide it: the store is written only on the generic prepare()/gate/execute() path after a verdict from a card, the tool is in `NEEDS_A_PERSON` so a loosened tier still cannot self-approve, and a denied or unanswered card writes nothing. It dies by itself - keyed on the request's own `conversation_id` (a chat with no id can neither give nor use one), capped at 8 hours, in memory only so a restart ends it - and the stop tool runs at tier `auto` with no card, because revoking only takes permission away. Lockdown outranks it. Four hunks, all in `jarvis_gate.py`: one `_RISK.update({...})` at the END OF THE FILE (`grant_web_search_conversation` is `yes`/`outbound`, a risky approval a lock screen may not swipe through; `revoke_web_search_grant` is `yes`/`local`) - the end of the file because it is the only place no earlier patch's hunk reaches in both the published base and `backend/_stack.py`'s walk: written inside `_RISK` the walk duplicated `read_web_page`'s row at the table's end, and at its top the rows landed between the two lines `unknown-risk-approvable.patch` anchors on (both caught by a suite; `_RISK.update` runs at import, so the gate sees the rows as if they were in the table) - then the word `grant` added to `_SAFE_KEYS` so a grant's id survives redaction, and the three audit writers after `_audit` (`grant_made`, `granted`, `grant_ended`) - so every search that ran unasked is in the gate's own log with the grant's id, and the CONVERSATION ID IS NEVER WRITTEN DOWN. A fourth hunk adds the two `_TOOL_ACTIONS` entries the two tools need (`approve_web_search_for_conversation` -> `grant_web_search_conversation`, `stop_web_search_approval` -> `revoke_web_search_grant`), so `action_for_tool()` answers the action each one is really put to the gate under instead of `unclassified_tool` - added 2026-11-02, after main's `gate-tool-actions-gap.patch` merged, because without them `backend/test_gate_tool_actions.py` (merged from main) fails and "What can Jarvis reach" calls both tools unclassified. Its context is that patch's own four lines, so this patch must stay applied after it. The rest is the SHIPPED `jarvis_agent.py` (the two tools, the in-memory store, and the one place a grant is read) plus the two tier lines in both settings copies, which `backend/_apply_toml_tiers.py` adds to an existing PC's file at the next update. Both tools are switched on in Settings -> Tools -> "Safety and sharing" and are NOT fresh-install defaults. Applied immediately before `unknown-risk-approvable.patch` (moved there 2026-11-02 - the same move main made for `gate-tool-actions-gap.patch` in #1065: a patch that writes `jarvis_gate.py` and sits after that one defeats its guard, `backend/test_gate_unknown_risk.py`, which requires it to stay the last writer of that file), so no later patch that writes `jarvis_gate.py` has to carry its context; `backend/test_web_search_grant.py` applies and reverses it against `jarvis-backend/jarvis_gate.py` byte for byte. |
 
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
@@ -239,6 +239,133 @@ on a throwaway copy instead.
 | `cloud-honesty.patch` | `jarvis_hud.py` | **The cloud lane gets the honesty lines, and a crisis turn is never answered by one** (2026-10-28, from the 2026-10-27 AI-safety audit's H1 and M1: `.dsh-scratch/AUDITS-2026-10-27/partner-ai-safety.md`). Three hunks and no install block. (1) The route header's crisis flag comes from `jarvis_wellbeing.crisis_in_turn` - the SAME rule the answering turn now uses - so the calm panel both apps draw and the 988/911 line the answer carries are decided from the same words; it used to test `messages[-1]` here while the turn tested the owner's own words only (typed/voice), so a distress message pasted, shared, captioning a picture or said with a failed voice print showed the panel and never the line. (2) A crisis turn on a cloud lane is answered on THIS PC: the lane is rebound to the local model, the payload rebuilt as a local turn's, and `X-Jarvis-Route` says so in a new field, `cloud_refused: "crisis"` (JARVIS-API section 145.2). (3) The cloud relay asks `jarvis_agent.cloud_postscript` for the lines the answer cannot back - `postscript_lines` with an empty step list, the same function the local answer appends, so a cloud turn and a local one cannot say different things - and writes them through `CloudAnswer.close(tail=...)`, after the model's words and BEFORE the `finish_reason`/`[DONE]` events every reader finalizes on. A cloud lane offers no tools at all, so on that lane a claim of action is unbackable by construction; before this it was the one lane with no correction. It sits before `cloud-escalate.patch` (whose `_says = _api.CloudAnswer(...)` line its third hunk follows) and so before `f01-manual-lane-gate.patch`, which stays the last code patch; one of its three hunks reads text only the owner's PC holds (the re-take's `_says.close()` block), pinned in `tools/check_patch_original_text.py` and proved by `backend/test_cloud_honesty.py` applying it to the published base and reversing it byte for byte. A backend whose `jarvis_chatbot_api.py` predates `answer_text()` keeps its old relay behaviour rather than erroring. |
 
 | `learning-extract-reason.patch` | `jarvis_extract.py` | **A failed local-model call says WHY it failed** (2026-10-28, `docs/defect-register.tsv` DEF-017). `jarvis_extract._local_llm()`'s `except Exception: return None` threw away the exception class, the HTTP status and the body, so the learner's only message was "reached no model at http://127.0.0.1:11436 ... Is it pulled?" - while on 2026-10-28 the owner's own PC had `qwen3.5:9b` loaded (9.86 GB VRAM) and answered a one-token `POST /api/generate` in **1.969 s**, with an EMPTY `response` and `done_reason: "length"`. It now records a CLOSED-WORLD reason - the exception class or the kind of empty answer, the HTTP status, the wall duration and Ollama's own `done_reason`; never a prompt word and never an answer word - keeps returning `None`, and hands the reason to `jarvis_auto_learn.note_model_failure`, which `/api/memory/learning` already reads back in `counters.model_failures`, `counters.last_model_error` and the human `counters.note`. **And it asks the model to answer, not to think:** `qwen3.5:9b` is a hybrid reasoning model, and with a small budget it can spend the whole of it in `thinking` and return that same empty 200 (the measured `thinking: "Okay"`), so the request now carries `"think": False`; an Ollama old enough not to know the field ignores it, so no version probe is needed (Gemini Edition-3 review F1). **No HUD hunk and no app change**: the counters path is the shipped `jarvis_auto_learn.py`. ONE file, no install block, no route, no gate row, no tier row - so it is appended immediately before `plugin-loader.patch` (which must stay LAST of all), after `f01-manual-lane-gate.patch`, and its context is the `_local_llm` block of the owner's own file, which no earlier patch writes. `backend/test_learning_local_llm_reason.py` is the proof, including the bite proof: with this patch taken back off the published base, the old code has no way to say why, records nothing, and sends no `think` flag at all. |
+
+| `gate-tool-actions-gap.patch` | `jarvis_gate.py` | **Four tools resolved to NO gate action at all** (2026-11-01; the residue PR #1064 made visible by making two suites hermetic). `jarvis_agent.py` offers `send_file_to_phone`, `protect_from_jarvis`, `connect_account` and `rea_investigate`, and not one of them had a line in `jarvis_gate._TOOL_ACTIONS` - so `action_for_tool()` answered `unclassified_tool` for every one of them. Fail-SAFE (that name takes `unknown_action_tier`, "ask") and still wrong: the card the owner was shown was never the one the tool raises, and "What can Jarvis reach" listed all four as unclassified. **No patch in `backend/` named any of the four**, which is why no run of `apply-patches.ps1` could ever have added them. ONE hunk, four ADDED lines at the END of `_TOOL_ACTIONS`, each on an action that ALREADY exists and already owns its tier and its card words - `send_file_to_phone` itself, `protect_item`, `change_own_config`, `run_shell_on_host` - so no new action, tier or card wording is invented. **It sits BEFORE `unknown-risk-approvable.patch`**, whose own guard (`backend/test_gate_unknown_risk.py`) requires that patch to be the last one that writes `jarvis_gate.py`; the two do not interact (its eight rows go at the TOP of `_RISK`, these four lines at the END of `_TOOL_ACTIONS`). Its context is `gate-entries.patch`'s own last line, so the stack walk invents no pre-image and `_stack.py`'s `jarvis_gate.py` RATCHET does not move. `jarvis-backend/jarvis_gate.py` - the published base, which is meant to be the state AFTER the patches - carries the same four lines. Proved by `backend/test_gate_tool_actions.py`, the CI-visible half of `test_agent.py`'s `t_every_tool_resolves_to_a_real_jarvis_gate_action` (which prints `skip` in CI, where `jarvis_gate` cannot be imported): at the desk, against a copy of the installed backend, `test_agent.py` went **311 passed / 4 failed -> 315 passed / 0 failed**. See "Four tools that reached the gate with no action". |
+
+## Four tools that reached the gate with no action (2026-11-01)
+
+**`gate-tool-actions-gap.patch`.** Four added lines in one table. Nothing else
+about the gate changed, and no tier, action or card wording was invented.
+
+**What was wrong.** `jarvis_agent.TOOLS` offered the model four tools that had
+no entry in `jarvis_gate._TOOL_ACTIONS`:
+
+| the tool | what it does |
+| --- | --- |
+| `send_file_to_phone` | makes ONE file from the owner's listed folders fetchable by the phone |
+| `protect_from_jarvis` | adds a folder, file or program to "Protected from Jarvis" |
+| `connect_account` | raises the connect-a-calendar-or-GitHub card |
+| `rea_investigate` | starts REA and inspects a program, app or binary |
+
+None of the four carries a `gate_lookup_name` of its own, so the name handed to
+`action_for_tool()` is the tool's own name - and that name was not a key of the
+table. `action_for_tool()` therefore returned `unclassified_tool`, which is in
+no `[autonomy.tiers]` line and so took `unknown_action_tier` ("ask" as
+shipped). That is fail-SAFE: nothing ran unattended. It was still wrong in two
+ways a person can see. The card the owner was shown was never the card those
+tools raise - "Run a command on this PC" instead of the send-file card, for
+example - and `jarvis_reach`'s "What can Jarvis reach" page told him each of the
+four was unclassified, which reads as "cannot be undone and can leave this PC".
+
+**Why nobody had noticed.** The one check written for exactly this,
+`test_agent.py`'s `t_every_tool_resolves_to_a_real_jarvis_gate_action`, needs
+`import jarvis_gate`. `jarvis_gate.py` is the owner's own file: it is not in
+`backend/`, and a plain clone has no install to import it from, so in CI that
+check printed `skip` and always would. It failed only at his desk - and until
+PR #1064 made two suites hermetic, even there it was buried in unrelated
+failures. **CI was structurally unable to see this defect**, which is the part
+worth fixing alongside the four lines.
+
+**What each line maps to, and the evidence for it.** Every one is an action
+that already exists, already has a shipping tier, and already has its card
+words; that is the rule this table's `readpage` and `change_setting` rows were
+written to, and none of these four needed a new name.
+
+- **`"send_file_to_phone": "send_file_to_phone"`** - the tool's own name IS its
+  action. `jarvis_send_file.ACTION` and `jarvis_agent.SEND_FILE_ACTION` both
+  name it, `jarvis_card_words.TITLES` already has its plain title, and
+  `send_file_to_phone = "ask"` is already in BOTH copies of
+  `jarvis-framework.toml`, because the tool shipped with it. This is the one
+  self-map of the four.
+- **`"protect_from_jarvis": "protect_item"`** - the tool name is deliberately
+  NOT the action name. `jarvis_agent.PROTECT_ACTION` and
+  `jarvis_protection.ACTION_PROTECT` are both `protect_item`, whose shipped
+  tier is `"ask"`; the removal half is `unprotect_item`, and that one is its own
+  route (`POST /api/protection/remove`), not a model tool, so it gets no
+  `_TOOL_ACTIONS` line of its own.
+- **`"connect_account": "change_own_config"`** - an existing action, on the
+  `change_setting` row's own reasoning one screen up: `_one_call` intercepts
+  this tool by name BEFORE the gate (`_connect_call`), so no tier here decides
+  whether a card is raised - the connect card is a host-side card with its own
+  TTL and never enters `/api/pending` (`docs/DECISIONS.md`, 2026-10-28).
+  What the entry does say is the conservative answer for the Reach page.
+  Connecting stores one credential, i.e. changes one of Jarvis's own settings;
+  `change_own_config` already carries the `"ask"` tier and the card words, so
+  nothing is invented.
+- **`"rea_investigate": "run_shell_on_host"`** - `jarvis_rea.py` starts a local
+  MCP program and then puts read-only questions to it, and
+  `jarvis_protection.py` names it beside `shell_exec` and `run_data_script` as
+  the things that "run programs or scripts". `run_shell_on_host` ships as
+  `"ask"` and its own risk row is the worst case this gate already uses for a
+  spawned program ("a shell can do anything, including reach the network"), so
+  this is the conservative classification, never a looser one. One side effect
+  is worth recording: `action_for_tool()` runs `_SHELL_NEVER` over the
+  arguments of anything that resolves to `run_shell_on_host`, so a REA query
+  whose own text says `git push` would escalate to a stricter card. That is the
+  direction the gate permits - regex on model-written text may make things
+  stricter, never looser - and it cannot happen on a path that does not ask.
+
+**Where the patch sits, and why it is not in `gate-entries.patch`.** Appended
+after everything it could disturb, and immediately before
+`web-search-grant.patch` and `unknown-risk-approvable.patch` (that guard requires
+`unknown-risk-approvable.patch` to stay the last writer of `jarvis_gate.py`; the
+rows it adds are at the table's top and these four
+lines at the table's end, so neither sees the other). It is a NEW patch rather than a line added to
+`gate-entries.patch` because every later patch's hunks were written against
+that patch's exact output: `readpage.patch`'s `_TOOL_ACTIONS` hunk anchors on
+the `"tidy_inbox"` line `inbox-tidy.patch` writes and on the `# plan.patch:`
+comment `gate-entries.patch` itself writes, so inserting four lines into
+`gate-entries.patch` would move or break that context. Its own context is
+`gate-entries.patch`'s LAST line (`"change_setting"`) plus the closing brace
+that hunk already carries, so the walk invents no pre-image and `_stack.py`'s
+`jarvis_gate.py` RATCHET does not move (it stands at 58, raised by
+`web-search-grant.patch`; this patch adds nothing to it).
+
+**The published base carries the same four lines.**
+`jarvis-backend/jarvis_gate.py` is meant to be the state AFTER the patches -
+commit `b908d7368` says so in as many words, and it is the commit that fixed
+exactly this shape of drift for `readpage.patch`'s `read_web_page` line. A line
+only the patch carries would leave every clone that runs from the base
+unfixed, so the base has it too.
+
+**Two halves of proof, because the defect had two.**
+
+- **CI can now see it.** `backend/test_gate_tool_actions.py` asks the same
+  question with no import: it rebuilds the table an install really gets from
+  the two halves that produce it - the published base, plus the `+` lines of
+  every patch `apply-patches.ps1` applies - and fails if ANY tool
+  `jarvis_agent.py` offers resolves to no real gate action. It checks that each
+  of the four comes from a PATCH (the half that reaches his PC on the next
+  deploy) and from the BASE (the half a clone gets), that each action is a tier
+  word or a real `[autonomy.tiers]` key, and it carries a bite proof: with the
+  four lines taken back out of the base and this patch taken out of the list,
+  the same check reports exactly those four tools. The next tool someone adds
+  without an entry is caught the same way.
+- **The desk numbers.** Against a copy of the installed backend (its
+  `jarvis_gate.py` sha256 `39a0c407…`), with `OPENJARVIS_CONFIG_DIR` empty:
+  `python -B backend/test_agent.py` read **311 passed, 4 failed** before the
+  patch and **315 passed, 0 failed** after it. `test_runtime_identity.py` stays
+  **13 passed, 0 failed**, and `python -B backend/run_suites.py test_agent.py`
+  stays green in CI's own staged backend (279 passed, 1 skipped, 0 failed - the
+  skip is the pre-existing one that needs a live install).
+
+**What this does not do.** It adds no `_RISK` row, so the gate still treats
+these four actions as unclassified and forces them to "ask" - which is exactly
+what each of their tier lines already says, so the owner sees no change in
+behaviour, only the right card and the right action name. `jarvis_protection.py`
+and `jarvis_agent.py` both record in their own docstrings that a risk row "can"
+be written by a follow-up patch; that is a separate change with its own card
+wording to get right, and it is deliberately not bundled here.
 
 ## The gate reads what an action touches, not the words on its card
 
@@ -16291,10 +16418,59 @@ all of it is in the files shipped whole):
 
 Nothing new to run on the PC beyond `apply-patches.ps1` as usual.
 
+## The parity fix (2026-11-01, branch `feat/live-parity-2026-11-01`)
+
+The owner asked for Jarvis Live to be able to *"reasonably do anything that
+jarvis can do through chat"*. A Live turn already went through the same
+`/api/chat` route, the same agent, the same gate and the same approval cards as
+a typed one - what made it narrower was the tool LIST it was shown: the model
+was never told a hidden tool's name or its arguments, so a spoken request would
+not reach it in practice, even though the gate would still accept a call to any
+allowed tool.
+
+- `backend/jarvis_live.py`: `LIVE_TOOL_FLOOR` (8, typed chat's own
+  `TOOL_DIET_LIMIT`); `live_tool_limit()` returns `max(floor, [live] tool_limit)`,
+  so a configured value can raise the number of tools a spoken turn sees and
+  can never lower it below typed chat's.
+- `backend/jarvis_agent.py`: `_fill_offer` no longer trims the short-list /
+  no-diet offer or the diet's full-list fallback for a Live turn, and the
+  carried (prefix-cache) list uses the same cap as typed chat. **Measured on
+  `1861485da` before the fix:** for "book a table for two at the italian
+  place" a typed turn was shown all 32 tools and a Live turn 6 - 26 hidden,
+  `notes_search`, `append_obsidian_daily`, `set_timer`, `set_reminder`,
+  `todo_add`, `send_email`, `change_setting` and `connect_account` among them;
+  a many-match question showed 12 typed and 6 spoken, a multi-step question 9
+  and 6. **After:** the same list, tool for tool, in every case measured.
+- `backend/jarvis_live_turn.py`: the switched-OFF stream path now marks its
+  loopback message `provenance: "voice"` as well as `live: true` - the shape
+  both apps already send, without which the server does not treat the turn as
+  a spoken Live turn at all.
+- `backend/rebuilt/jarvis-framework.toml` (and the base twin): `[live]
+  tool_limit = 8`, with the floor explained beside it.
+- `backend/test_live_parity.py` (new): 40 checks - tool-list equality for six
+  kinds of question, the floor, the carried list, a whole Live turn reaching
+  the tool path and raising the same ONE card with nothing run first, the
+  prompt's only difference being the Live note, the server's marks, the fast
+  path's identical answer, and the deliberate rules (no voice-approval
+  surface, the card pause, side talk). `test_live.py` and `test_agent.py`
+  each had one assertion that pinned the OLD cap; both now assert the floor
+  rule instead.
+
+Nothing about permission changed: the same gate checks the same actions and
+raises the same cards, still decided by tapping only, and Live still pauses
+while a card waits. The `[live]` model, its lane and the 16K window are the
+speed slice (`docs/LIVE-DESIGN.md` 4.1) and stay.
+
+**Not checked, said plainly:** no real model chose a tool from a spoken
+sentence, no phone was driven, and no Live session was run end to end on the
+owner's PC for this change. The proof is headless (fake model, stub tool, stub
+gate, real module code).
+
 ## Test it
 
 ```
 python3 backend/test_live.py
+python3 backend/test_live_parity.py
 python3 backend/test_voice_strict.py
 python3 backend/test_chat_log.py
 python3 tools/gen_live_cases.py --check
@@ -16328,11 +16504,12 @@ the switch on, and a real phone + PC measurement is still the next slice.**
   uses (session, cards, mute, the owner check, then words); a voice that is
   not the owner, or a clip with no words, is silent. The words are asked
   through the PC's OWN `/api/chat` route over 127.0.0.1, with the message
-  marked `live: true` and the phone's own token, and the answer is spoken
-  with `say()` and sent as 16 kHz PCM frames. **The hand-off is whole-WAV for
-  now** - the owner hears nothing until the whole answer exists;
-  first-fragment TTS streaming is a later phase, and the extra loopback hop
-  is measured in the design's G4 slice.
+  marked `live: true` AND `provenance: "voice"` (the shape both apps send) and
+  the phone's own token, and the answer is spoken with `say()` and sent as
+  16 kHz PCM frames. **The hand-off is whole-WAV for now** - the owner hears
+  nothing until the whole answer exists; first-fragment TTS streaming is a
+  later phase, and the extra loopback hop is measured in the design's G4
+  slice.
 - `backend/jarvis_live.py`: the route hands the socket over only when
   `stream_enabled()`; the speech sink is `jarvis_live_turn.turn`
   (`_STREAM_SINK` stays a test/override seam). With the switch OFF the stub

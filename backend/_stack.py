@@ -569,9 +569,9 @@ RATCHET = {
     #: may still only go down.
     #:
     #: RAISED 2026-11-01, 55 -> 58, for `web-search-grant.patch` (the owner's
-    #: "full approval to search the web for this conversation"). ALL THREE of its
-    #: hunks read text only the owner's PC holds, and every one is honest rather
-    #: than drift - no earlier patch writes any of it:
+    #: "full approval to search the web for this conversation"). ALL THREE of the
+    #: hunks it had then read text only the owner's PC holds, and every one is
+    #: honest rather than drift - no earlier patch writes any of it:
     #:
     #:   * the tail of the `if __name__` block, where one `_RISK.update({...})`
     #:     adds the two risk rows (3 lines). The END OF THE FILE is the only
@@ -593,12 +593,28 @@ RATCHET = {
     #:     (grant_made / granted / grant_ended) are added (8 lines). `_audit` is
     #:     the owner's own function and no patch touches it.
     #:
-    #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 58 and
-    #: `by_patch` names `web-search-grant.patch: 3` (14 lines in all, pinned by
+    #: RAISED 2026-11-01, 58 -> 59, for `web-search-grant.patch`'s FOURTH hunk
+    #: (added the same day, after main's `gate-tool-actions-gap.patch` was
+    #: merged): `_TOOL_ACTIONS` gains the two entries the two new tools need -
+    #: `approve_web_search_for_conversation` -> `grant_web_search_conversation`
+    #: and `stop_web_search_approval` -> `revoke_web_search_grant`. Without them
+    #: `action_for_tool()` answers `unclassified_tool` for both, so "What can
+    #: Jarvis reach" calls them unclassified and the card shown is not the one
+    #: the tool raises - the very gap `gate-tool-actions-gap.patch` fixed for
+    #: four tools, and `backend/test_gate_tool_actions.py` (merged from main)
+    #: caught it the first time this branch met that test. The hunk's seven
+    #: lines of pre-image are the owner's own table end (the four `_TOOL_ACTIONS`
+    #: lines, the closing brace, the blank line and the `# Arguments that
+    #: ESCALATE` comment). Its context is `gate-tool-actions-gap.patch`'s own
+    #: four lines, so this patch must stay applied AFTER that one - it is, at
+    #: position 164 to that patch's 163.
+    #:
+    #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 59 and
+    #: `by_patch` names `web-search-grant.patch: 4` (21 lines in all, pinned by
     #: tools/check_patch_original_text.py). backend/test_web_search_grant.py
     #: applies the patch to the published base and reverses it byte for byte. A
     #: ratchet: it may still only go down.
-    "jarvis_gate.py": 58,
+    "jarvis_gate.py": 59,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

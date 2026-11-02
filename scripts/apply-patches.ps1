@@ -1895,6 +1895,79 @@ $PATCHES = @(
     # is refused in plain words and nothing is read.
     'attached-file.patch'
 
+
+    # gate-tool-actions-gap.patch (2026-11-01) - four tools jarvis_agent.py
+    # offers the model had NO entry in jarvis_gate.py's `_TOOL_ACTIONS`, so
+    # action_for_tool() fell through to "unclassified_tool" for every one of
+    # them: send_file_to_phone, protect_from_jarvis, connect_account and
+    # rea_investigate. No patch in this list named any of the four, so no run
+    # of this script could ever have added them. ONE hunk, four ADDED lines at
+    # the END of the table, and each maps to an action that ALREADY exists and
+    # already owns its tier and its card words - send_file_to_phone itself,
+    # protect_item, change_own_config, run_shell_on_host - so this invents no
+    # new action, no new tier and no new card wording.
+    #
+    # WHY IT IS HERE, BEFORE unknown-risk-approvable.patch
+    # (moved 2026-11-02): that patch's own guard - backend/test_gate_unknown_
+    # risk.py - requires it to stay the LAST patch that writes jarvis_gate.py,
+    # and this patch writes one too, so a required CI job went red while this
+    # sat after it. The two do not interact: unknown-risk's eight rows go at
+    # the TOP of `_RISK`, these four lines at the END of `_TOOL_ACTIONS`, and
+    # the file state this hunk sees is identical before or after it (neither
+    # unknown-risk nor anything else between them touches the table's end).
+    # It is still appended after every patch whose context it could move - it
+    # comes after gate-entries.patch and readpage.patch - so no earlier
+    # patch's context lines move. Its context is gate-entries.patch's own
+    # last `_TOOL_ACTIONS` line (`change_setting`) plus the closing brace that
+    # patch's hunk already carries, so the stack walk invents no pre-image for
+    # it and _stack.py's jarvis_gate.py RATCHET does not move. Every suite
+    # that enumerates "the patches written after me" (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py) still sees its
+    # name. backend/test_gate_tool_actions.py is the proof: it reads THIS
+    # list, then every patch's added lines, and fails if any tool
+    # jarvis_agent.py offers still resolves to no real gate action in CI,
+    # where jarvis_gate.py itself cannot be imported.
+    'gate-tool-actions-gap.patch'
+    # "You have full approval to search the web in this conversation" (the
+    # owner's ask of 2026-11-01; docs/JARVIS-API.md section 174). ONE card,
+    # once, that stands in for the `search_the_web` card for the rest of ONE
+    # chat - search only, revocable instantly, capped at 8 hours, and every
+    # search it covers is logged with the grant's id. Its FOUR hunks are all in
+    # jarvis_gate.py: one `_RISK.update({...})` at the END OF THE FILE (two risk
+    # rows; the end of the file is the only place no earlier patch's hunk
+    # reaches, in the published base and in backend/_stack.py's walk alike - see
+    # the RATCHET note there and tools/check_patch_original_text.py's pin for the
+    # two placements that were tried and broke a real suite), the word "grant"
+    # added to `_SAFE_KEYS` so the id survives redaction, the three audit
+    # writers (grant_made / granted / grant_ended) after `_audit`, and the two
+    # `_TOOL_ACTIONS` entries the two tools need (approve_web_search_for_
+    # conversation -> grant_web_search_conversation, stop_web_search_approval ->
+    # revoke_web_search_grant; added 2026-11-02 after main's
+    # gate-tool-actions-gap.patch merged, because without them action_for_tool()
+    # answers "unclassified_tool" and backend/test_gate_tool_actions.py fails -
+    # that hunk's context is gate-tool-actions-gap.patch's own four lines, so it
+    # must stay applied AFTER it). The rest of
+    # the feature is in the SHIPPED jarvis_agent.py (the two tools, the in-memory
+    # store, and the one place a grant is read).
+    #
+    # WHY IT IS HERE, BEFORE unknown-risk-approvable.patch (moved 2026-11-02 -
+    # the same move main made for gate-tool-actions-gap.patch in #1065): a patch
+    # that writes jarvis_gate.py and sits AFTER that one defeats its guard -
+    # backend/test_gate_unknown_risk.py requires it to stay the LAST patch that
+    # writes jarvis_gate.py, because its own lines are what its hunks anchor on.
+    # This patch's four hunks touch none of them: the `_RISK.update` at the end
+    # of the file, the `_SAFE_KEYS` line, `_audit`'s tail and the `_TOOL_ACTIONS`
+    # entries are the owner's own
+    # text and no patch writes any of it. Before it is therefore where it
+    # belongs, and the guard is left exactly as strict as it was - no whitelist.
+    # Every patch that enumerates "the patches written after me"
+    # (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
+    # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py,
+    # tools/check_patch_original_text.py) has had its name added there.
+    # backend/test_web_search_grant.py rehearses it against
+    # jarvis-backend/jarvis_gate.py: apply, reverse, byte for byte.
+    'web-search-grant.patch'
     # unknown-risk-approvable.patch (2026-10-30, Gemini's Q2 ruling:
     # .dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md). An action the gate has
     # no risk row for is no longer a dead end: it is given the worst case
@@ -1952,27 +2025,6 @@ $PATCHES = @(
     # backend/test_jobs.py rehearses this patch against
     # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
     'jobs-routes.patch'
-    # "You have full approval to search the web in this conversation" (the
-    # owner's ask of 2026-11-01; docs/JARVIS-API.md section 174). ONE card,
-    # once, that stands in for the `search_the_web` card for the rest of ONE
-    # chat - search only, revocable instantly, capped at 8 hours, and every
-    # search it covers is logged with the grant's id. Its three hunks are all in
-    # jarvis_gate.py: one `_RISK.update({...})` at the END OF THE FILE (two risk
-    # rows; the end of the file is the only place no earlier patch's hunk
-    # reaches, in the published base and in backend/_stack.py's walk alike - see
-    # the RATCHET note there and tools/check_patch_original_text.py's pin for the
-    # two placements that were tried and broke a real suite), the word "grant"
-    # added to `_SAFE_KEYS` so the id survives redaction, and the three audit
-    # writers (grant_made / granted / grant_ended) after `_audit`. The rest of
-    # the feature is in the SHIPPED jarvis_agent.py (the two tools, the in-memory
-    # store, and the one place a grant is read), so it goes immediately before
-    # plugin-loader.patch, and every patch that enumerates "the patches written
-    # after me" (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
-    # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py,
-    # tools/check_patch_original_text.py) has had its name added there.
-    # backend/test_web_search_grant.py rehearses it against
-    # jarvis-backend/jarvis_gate.py: apply, reverse, byte for byte.
-    'web-search-grant.patch'
     'plugin-loader.patch'
 )
 

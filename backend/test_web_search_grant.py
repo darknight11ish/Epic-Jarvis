@@ -817,10 +817,15 @@ def t_the_patch_and_the_tables():
         skip("the patch or the published base is not in this checkout")
         return
     text = patch.read_text(encoding="utf-8")
-    check("the patch is in the stack, immediately before plugin-loader.patch",
-          ("'web-search-grant.patch'\n    'plugin-loader.patch'"
-           in (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")),
-          "not found in apply-patches.ps1")
+    ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
+    entry = "'web-search-grant.patch'"
+    tail = ps1.split(entry, 1)[1] if entry in ps1 else ""
+    after = next((ln.strip() for ln in tail.splitlines() if ln.strip().startswith("'")), "")
+    check("the patch is in the stack, immediately before "
+          "unknown-risk-approvable.patch (whose guard requires that patch to stay "
+          "the LAST writer of jarvis_gate.py, so this one may not sit after it)",
+          after == "'unknown-risk-approvable.patch'",
+          f"not found in apply-patches.ps1, or the entry after it is {after!r}")
     check("its header is the bare `a/`/`b/` form every patch here uses",
           text.startswith("--- a/jarvis_gate.py\n+++ b/jarvis_gate.py\n@@"), text[:80])
     work = Path(tempfile.mkdtemp(prefix="jarvis-wsgrant-patch-"))

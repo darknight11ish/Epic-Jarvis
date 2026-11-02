@@ -1,5 +1,22 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
+@@ -1052,7 +1052,16 @@
+     "send_file_to_phone": "send_file_to_phone",
+     "protect_from_jarvis": "protect_item",
+     "connect_account": "change_own_config",
+     "rea_investigate": "run_shell_on_host",
++    # web-search-grant.patch (2026-11-01): the conversation-scoped web-search
++    # approval's two tools, each on the action the agent puts it to the gate
++    # under (jarvis_agent.GRANT_ACTION / REVOKE_ACTION). Without these,
++    # action_for_tool() answers "unclassified_tool" - the Reach page calls both
++    # unclassified and the card shown is not the one the tool raises, the same
++    # gap gate-tool-actions-gap.patch fixed above. Its context is that patch's
++    # own four lines, so this patch must be applied AFTER it.
++    "approve_web_search_for_conversation": "grant_web_search_conversation",
++    "stop_web_search_approval": "revoke_web_search_grant",
+ }
+ 
+ # Arguments that ESCALATE a shell-class tool. Regex on model-written text is
 @@ -2594,3 +2594,36 @@
              print(f"  {r['id']}  {r['tier']:6} {r['action']}")
          sys.exit(0)
