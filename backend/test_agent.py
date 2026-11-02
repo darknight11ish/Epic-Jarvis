@@ -1439,8 +1439,15 @@ def t_a_live_turn_uses_the_live_model_lane_and_short_tool_list():
           urls == ["http://127.0.0.1:11435/v1/chat/completions"], urls)
     offer = AG._new_offer(list(AG.TOOLS), limit=6)
     AG._fill_offer(offer, list(AG.TOOLS), "what is on the screen")
-    check("...and the Live-only offer is capped at the short tool limit",
-          len(offer["shown"]) <= 6, len(offer["shown"]))
+    # 2026-11-01: the Live-only limit became a FLOOR, not a cut. A spoken
+    # question the diet does not recognise must see what typed chat sees; the
+    # old assertion (`<= 6`) was the restriction the parity fix removed.
+    typed_offer = AG._new_offer(list(AG.TOOLS))
+    AG._fill_offer(typed_offer, list(AG.TOOLS), "what is on the screen")
+    check("...and the Live-only offer is no narrower than typed chat's",
+          offer["shown"] == typed_offer["shown"]
+          and len(offer["shown"]) >= AG.TOOL_DIET_LIMIT,
+          (len(offer["shown"]), len(typed_offer["shown"])))
 
 
 # --------------------------------------------------------------------------
