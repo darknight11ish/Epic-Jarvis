@@ -625,6 +625,16 @@ def speaker_view() -> dict:
     if K.family(kind) == K.V1 and kind != K.V1MIX and K.blend_state(_voices_file()) != "ready":
         make_line = K.MAKE_LINE
     return {"choice": choice, "value": now["sid"], "default": K.default_name(kind),
+            # The owner's OWN saved choice, kept even when it is not the voice
+            # that speaks (a pack without that name, a blend still being
+            # checked, a voice that was refused). `choice` is the voice that
+            # SPEAKS - every screen marks it, because that is the sound the
+            # owner hears - so without this an app has no way to say "you
+            # chose X" once the default is speaking, and the owner reads the
+            # default as the choice he made (2026-11-02; the owner's "*it
+            # doesn't seem to remember what I changed it to*"). None when the
+            # owner never chose one (a fresh install, or a hand-set number).
+            "saved": now["chosen"],
             "title": SPEAKER_TITLE, "detail": SPEAKER_DETAIL, "note": note,
             "make_line": make_line,
             "choices": rows, "pack": K.pack_words(kind)}
@@ -1632,8 +1642,21 @@ def _read_state() -> dict:
 
 
 def _write_state(**changes) -> Optional[str]:
-    """None on success, else the error in words."""
+    """None on success, else the error in words.
+
+    ABSENT AND UNREADABLE ARE DIFFERENT ANSWERS (2026-11-02). `_read_state`
+    answers the full DEFAULTS for a file it cannot read - the safe reading for
+    a screen - but a WRITE must not merge a change onto those defaults, or one
+    changed key rewrites the owner's whole voice: `speaker`, `speed`,
+    `face_voice`, every animal. That is exactly "the voice went back to the
+    default", and it was silent (a 200 OK). So the write refuses first and
+    says so, and the damaged file is left untouched for the owner (or a
+    repair) to fix. Same rule, same reason, as `jarvis_manner`'s
+    `_read_settings_for_write` (data-integrity audit F3, 2026-10-28)."""
     with _STATE_LOCK:
+        problem = _state_problem()
+        if problem:
+            return problem
         cur = _read_state()
         cur.update(changes)
         p = _state_path()
@@ -1646,6 +1669,33 @@ def _write_state(**changes) -> Optional[str]:
         except OSError as exc:
             return f"could not save the setting ({type(exc).__name__})"
     return None
+
+
+#: Said when `voices/state.json` exists but cannot be read. One sentence, in
+#: the same plain words `jarvis_manner` uses for its own damaged file: what was
+#: refused, that nothing changed, and what to do about it.
+STATE_DAMAGED = ("The voice setting could not be read, so nothing was changed: "
+                 "voices/state.json is damaged{why}. Move it aside and choose your "
+                 "voice again.")
+
+
+def _state_problem() -> str:
+    """"" when `voices/state.json` may be written (absent, or a JSON object);
+    else the plain-words refusal. Never raises."""
+    p = _state_path()
+    if not p.exists():
+        return ""
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return STATE_DAMAGED.format(why=f" ({type(exc).__name__})")
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        return STATE_DAMAGED.format(why="")
+    if not isinstance(doc, dict):
+        return STATE_DAMAGED.format(why=" (it does not hold a voice setting)")
+    return ""
 
 
 # --------------------------------------------------------------------------
