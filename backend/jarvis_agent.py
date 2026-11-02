@@ -6531,6 +6531,16 @@ class _TurnWatch:
             self.crisis = bool(jarvis_wellbeing.crisis_in_turn(raw or messages))
         except Exception:
             self.crisis = False
+        if self.crisis:
+            # Remember THAT this conversation has just had a crisis turn, so
+            # a carried approval that predates it is dropped rather than run
+            # after it ("An approved step the answer never delivered", the
+            # replay-time re-authorisation - owed_may_run). The helper is
+            # defined with the owed record, below; it is only called at run
+            # time, never during import - and it is called at the START of
+            # the crisis turn, before any approval of that turn could be
+            # recorded, so the order it writes is always the later one.
+            _note_crisis(self.conversation_id)
 
     # -- Stop everything -----------------------------------------------------
     def stopped(self) -> bool:
@@ -7680,6 +7690,544 @@ def prefix_compacted(messages, budget) -> bool:
     try:
         return bool(fit_messages_detailed(list(messages or []), int(budget))[1])
     except Exception:                                            # noqa: BLE001
+        return False
+
+
+# --------------------------------------------------------------------------
+#   An approved step the answer never delivered (2026-11-01)
+# --------------------------------------------------------------------------
+#
+# WHAT WAS WRONG. The owner reported "approved card, then Jarvis forgets my
+# question": he taps Approve, both apps say "Approved. Carrying on." - which is
+# the app's own fixed sentence for a real yes (jarvis_card_words.VOICE / the
+# HUD page's CARD_VOICE), never the model - and the question is then answered
+# in one short round that used no tool. Measured on his own run (2026-11-01,
+# 15:44-15:47; `.dsh-scratch/APPROVAL-CONTINUITY-2026-11-01/EVIDENCE.md`):
+# jarvis_gate.decide() consumed the tap and NULLed the card's own prompt and
+# detail, then this turn found `out.gone` - the app's stream had ended while
+# the card waited - and unwound through ClientGone WITHOUT running the approved
+# tool. The app re-sent the same conversation 91 ms later, and nothing on this
+# PC remembered that a search had been approved: the new turn made ONE model
+# round, ran no tool and answered in 17 tokens. The tap was used, the action
+# dropped, the owner's question forgotten.
+#
+# WHAT THIS DOES. When a card's turn is the `out.gone` one and the gate has
+# already said yes, that ONE approved step is kept for that ONE conversation.
+# At the start of the next turn for the same conversation it is run - through
+# the same prepare()/gate/execute() contract as any call - and its result is
+# put in that turn's transcript, so the answer the owner gets is the one his
+# tap was for.
+#
+# WHAT IT NEVER DOES. Each of these is proved in
+# backend/test_approval_continuity.py:
+#   * never runs an approval the policy has since withdrawn: the yes is
+#     re-made at replay time by owed_may_run(), against the gate's CURRENT
+#     decision - Stop everything pressed after the approval, a crisis turn in
+#     this conversation after it, the tool no longer enabled or offered, or
+#     its action now at tier "never" all DROP the step (agent.owed_dropped)
+#     instead of running it, and the answer says so in code's own words;
+#   * never replays a denied, timed-out, expired or never-answered card: the
+#     only recording call is a turn's `out.gone` branch, which is reached only
+#     after `allowed` AND `_a_person_said_yes(verdict)` held, and owed_record()
+#     asks `_a_person_said_yes` again for itself rather than trusting a caller;
+#   * never raises a second card for the same approval, and auto-approves
+#     nothing new: the replay carries the card's own verdict, so the gate is not
+#     asked again (and owed_may_run() never asks it either - a refusal drops
+#     the step, it does not raise a card). The contract is unchanged - one card
+#     per action, nothing runs before its yes;
+#   * never runs one card twice (_OWED_DONE), however often the app re-sends;
+#   * never crosses conversations, never survives a restart, and never outlives
+#     OWED_TTL_SECONDS: a step approved ten minutes ago, or in another chat, is
+#     not this turn's to run;
+#   * never claims it ran when it did not: a replay that fails, or cannot run
+#     at all, says so in the answer in code's own words - and a replay that
+#     raises AFTER the assistant tool-call message was appended leaves a
+#     result beside it, never a tool call with no answer.
+#
+# Everything is in memory, keyed by conversation_id, bounded, gone on restart -
+# the same shape as `_OPENED` and `_STICKY` above. Nothing is written to disk,
+# and no text from the card or from the question is kept: the record holds the
+# call the model made, the action's name and the card's id.
+
+#: How long an approved-but-undelivered step stays owed. Ten minutes: the
+#: app's own re-send arrives in about a tenth of a second (91 ms, measured), and
+#: a person who comes back after ten minutes is asking a new question.
+OWED_TTL_SECONDS = 600.0
+#: Conversations still owing one step, and card ids whose one run is spent.
+#: Both bounded the way `_OPENED` and `_STICKY` are: this is a memory, never a
+#: queue.
+_OWED_MAX = 64
+_OWED_DONE_MAX = 256
+_OWED: "dict[str, dict]" = {}          # conversation_id -> the one owed step
+_OWED_DONE: "dict[str, float]" = {}    # card id -> when its run was taken
+_OWED_LOCK = threading.Lock()
+
+#: What the answer says when a carried step could not run. Code's own words,
+#: never left to the model to pass on, and never a claim that anything ran:
+#: "was tried ... did not work" covers both halves, a step that ran and failed
+#: and a step that could not be run at all.
+OWED_FAILED_LINE = ("The {tool} you approved a moment ago was tried when this question "
+                    "arrived, and it did not work - so this answer has no result from it, "
+                    "and nothing is being claimed about what it found.")
+#: What the answer says when the yes is no longer one the policy would give:
+#: the rule changed between the tap and the turn that could use it. Code's own
+#: words, and never a claim that anything ran.
+OWED_DROPPED_LINE = ("The {tool} you approved a moment ago was not run: {why}. Nothing "
+                     "was run, and nothing is being claimed about what it would have "
+                     "found.")
+#: Why a carried step may no longer run, in the owner's own words. The record
+#: and the audit line carry the short code (`reason`), never a sentence with
+#: the card's words; these phrases are the answer's half.
+OWED_NOT_NOW = {
+    "stop_all": "you pressed Stop everything, and a stop wins over an approval",
+    "crisis": "a crisis message came after you approved it",
+    "tool_off": "it is no longer switched on",
+    "tier_never": "it is set to never run now",
+}
+#: conversation id -> the order in which a crisis turn last happened in it.
+#: A crisis message after an approval makes that yes stale - the safety path
+#: took over - so the carried step is dropped, never run after it. In memory,
+#: bounded, cleared by forget_owed(), exactly like the record it guards.
+#:
+#: AN ORDER, NOT A CLOCK. time.monotonic() on Windows has millisecond
+#: resolution, and the re-sent turn can begin in the same millisecond the
+#: approval was recorded (measured: both read 683627.703 on this PC), so
+#: `crisis_at > approved_at` is not a reliable test of "after". A counter
+#: incremented under _OWED_LOCK is exact, and order is all this rule asks.
+_OWED_SEQ = 0
+_CRISIS_SEQ: "dict[str, int]" = {}
+_CRISIS_SEQ_MAX = 64
+
+
+def _owed_audit(event: str, detail: dict) -> None:
+    """One audit line, in the style every other writer here uses
+    (`jarvis_framework.audit_log`): best-effort, and names and ids only - never
+    the card's words, never the question, never a result."""
+    try:
+        import jarvis_framework
+        jarvis_framework.audit_log(event, detail)
+    except Exception:
+        pass
+
+
+def _owed_card(verdict) -> str:
+    """The approval card's own id - what "this yes, exactly once" is keyed on.
+    "" when the verdict carries none (a gate from before gate-outcome.patch),
+    and then the step is not carried at all: it could not be de-duplicated."""
+    rid = getattr(verdict, "request_id", None)
+    return rid if isinstance(rid, str) and rid else ""
+
+
+def _note_crisis(conversation_id) -> None:
+    """Remember that a crisis turn just happened in this conversation, so an
+    approval that predates it is never replayed after it. Called by
+    _TurnWatch (defined earlier in this file) at the START of a crisis turn -
+    before anything of that turn can be recorded - so the order it writes is
+    always later than an approval it must invalidate."""
+    global _OWED_SEQ
+    if not _usable_conversation_id(conversation_id):
+        return
+    with _OWED_LOCK:
+        _OWED_SEQ += 1
+        _CRISIS_SEQ.pop(conversation_id, None)
+        _CRISIS_SEQ[conversation_id] = _OWED_SEQ
+        while len(_CRISIS_SEQ) > _CRISIS_SEQ_MAX:
+            _CRISIS_SEQ.pop(next(iter(_CRISIS_SEQ)))
+
+
+def _crisis_since(conversation_id, seq) -> bool:
+    """True when a crisis turn happened in this conversation after the approval
+    whose order is `seq`."""
+    if not _usable_conversation_id(conversation_id):
+        return False
+    try:
+        when = int(seq)
+    except (TypeError, ValueError):
+        return True                      # no readable order: fail closed
+    with _OWED_LOCK:
+        last = _CRISIS_SEQ.get(conversation_id)
+    return last is not None and last > when
+
+
+def _owed_sweep(now: float) -> None:
+    """Drop everything past OWED_TTL_SECONDS. The caller holds _OWED_LOCK."""
+    for cid in [c for c, r in _OWED.items()
+                if now - float(r.get("at") or 0.0) > OWED_TTL_SECONDS]:
+        _OWED.pop(cid, None)
+    for card in [k for k, t in _OWED_DONE.items() if now - t > OWED_TTL_SECONDS]:
+        _OWED_DONE.pop(card, None)
+
+
+def owed_record(conversation_id, verdict, tool_name: str, action: str,
+                call: dict, args: dict, *, stop_mark=None) -> bool:
+    """Remember that `tool_name` was approved and its answer never went out.
+
+    Only ever called from a turn's `out.gone` branch, AFTER the gate said yes -
+    but the "a person said yes" test is made again HERE rather than trusted
+    from the caller, because this is the one function that decides something
+    will run later with no card in front of the owner: a denied, timed-out,
+    "notify" or auto verdict must never get past it.
+
+    `stop_mark` is the CALLER'S TURN mark (`watch.stop_mark`, taken by
+    jarvis_stop_all.begin_turn() before the card was raised), never a mark
+    taken now. That is what lets the replay refuse a yes given after a Stop
+    everything press: the product rule is already that a press while a card
+    waits wins over the approval that follows it (`_one_call`'s own
+    `watch.stopped()` branch), and the dead stream must not become a way round
+    it. A mark taken at record time would already include a press that
+    happened during the wait, and the replay could no longer tell."""
+    global _OWED_SEQ
+    if not _usable_conversation_id(conversation_id):
+        return False                     # no conversation to carry it into
+    if not _a_person_said_yes(verdict):
+        return False                     # nothing a person approved
+    card = _owed_card(verdict)
+    if not card or not isinstance(call, dict) or not isinstance(tool_name, str) or not tool_name:
+        return False                     # nothing to run it by, or to de-dupe on
+    now = time.monotonic()
+    # Stop everything's own mark AT THE START OF THE TURN THAT WAITED for the
+    # card (`watch.stop_mark`, passed by both call sites). A press after that
+    # makes stopped_since(mark) true at replay - including a press made while
+    # the card waited and approved afterwards, which the product's own rule
+    # already refuses. A caller with no mark (outside a turn) gets the current
+    # generation: nothing before this line can then be missed.
+    if stop_mark is None:
+        sa = _stop_all()
+        try:
+            stop_mark = sa.generation() if sa is not None else None
+        except Exception:
+            stop_mark = None
+    with _OWED_LOCK:
+        _owed_sweep(now)
+        if card in _OWED_DONE:
+            return False                 # this card's one run is already spent
+        _OWED_SEQ += 1
+        _OWED.pop(conversation_id, None)
+        _OWED[conversation_id] = {"card": card, "tool": tool_name,
+                                  "action": str(action or tool_name),
+                                  "call": dict(call),
+                                  "args": dict(args) if isinstance(args, dict) else {},
+                                  "stop_mark": stop_mark,
+                                  "seq": _OWED_SEQ,
+                                  "at": now}
+        while len(_OWED) > _OWED_MAX:
+            _OWED.pop(next(iter(_OWED)))
+    _owed_audit("agent.owed",
+                {"card": card, "tool": tool_name, "action": str(action or tool_name),
+                 "why": "approved by a person, and the chat that asked for it was "
+                        "closed before the step could run"})
+    return True
+
+
+def owed_pending(conversation_id) -> bool:
+    """Whether this conversation still owes an approved step. Sweeps what has
+    aged out first, so a stale record is never reported as owed. A test-facing
+    reading only: the turn itself calls owed_take()."""
+    if not _usable_conversation_id(conversation_id):
+        return False
+    now = time.monotonic()
+    with _OWED_LOCK:
+        _owed_sweep(now)
+        rec = _OWED.get(conversation_id)
+        if rec is None:
+            return False
+        if (now - float(rec.get("at") or 0.0) <= OWED_TTL_SECONDS
+                and rec.get("card") not in _OWED_DONE):
+            return True
+        _OWED.pop(conversation_id, None)
+        return False
+
+
+def owed_take(conversation_id) -> Optional[dict]:
+    """The step this conversation still owes - and it is no longer owed:
+    exactly once, whatever happens to the turn that takes it. None when there
+    is none, when the conversation id is not one this module keys
+    per-conversation state on, when the record has aged out, or when its card's
+    one run has already been taken."""
+    if not _usable_conversation_id(conversation_id):
+        return None
+    now = time.monotonic()
+    with _OWED_LOCK:
+        _owed_sweep(now)
+        rec = _OWED.pop(conversation_id, None)
+        if rec is None:
+            return None
+        card = rec.get("card") or ""
+        if now - float(rec.get("at") or 0.0) > OWED_TTL_SECONDS:
+            _owed_audit("agent.owed_dropped",
+                        {"card": card, "tool": rec.get("tool"),
+                         "why": "it aged out before the next question"})
+            return None
+        if not card or card in _OWED_DONE:
+            _owed_audit("agent.owed_dropped",
+                        {"card": card, "tool": rec.get("tool"),
+                         "why": "its one run had already been taken"})
+            return None
+        _OWED_DONE[card] = now
+        while len(_OWED_DONE) > _OWED_DONE_MAX:
+            _OWED_DONE.pop(next(iter(_OWED_DONE)))
+    return dict(rec)
+
+
+def owed_put_back(conversation_id, rec) -> None:
+    """It is still owed: the replay got as far as looking and found the app
+    gone again before anything ran. Puts the SAME record back - its age is
+    kept, so OWED_TTL_SECONDS still ends it - and takes the card's "spent" mark
+    off, which is the one place that happens."""
+    if not _usable_conversation_id(conversation_id) or not isinstance(rec, dict):
+        return
+    with _OWED_LOCK:
+        _OWED_DONE.pop(rec.get("card") or "", None)
+        if conversation_id in _OWED:
+            return                       # a newer step is already waiting
+        _OWED[conversation_id] = dict(rec)
+        while len(_OWED) > _OWED_MAX:
+            _OWED.pop(next(iter(_OWED)))
+
+
+def owed_may_run(owed: dict, names, extra: dict,
+                 watch: Optional["_TurnWatch"]) -> str:
+    """Why this carried step may NOT run now - "" when it may.
+
+    THE YES IS RE-MADE HERE, at replay time, against the gate's CURRENT
+    decision. An approval is a decision about one action at one moment, not a
+    standing permission: between the tap and the turn that can use it the
+    owner can press Stop everything, a crisis message can arrive, a tool can be
+    switched off, or an action's tier can be set to "never". A fresh call
+    would obey the policy of the moment; so does this one.
+
+    The four refusals, in the order they are checked, each a short code:
+      * "stop_all"   - Stop everything was pressed after the approval
+                       (jarvis_stop_all's generation at the tap), or during
+                       this turn before the replay;
+      * "crisis"     - a crisis turn happened in this conversation after it;
+      * "tool_off"   - the tool is not in the set this turn allows and offers
+                       (the owner's [tools].enabled, its own switch, the lane);
+      * "tier_never" - the action's current tier is "never", which the gate
+                       refuses with no card.
+
+    It NEVER raises and never asks the gate: asking would raise a second card,
+    which this feature exists to avoid. An unreadable record fails closed.
+    """
+    if not isinstance(owed, dict):
+        return "tool_off"                # nothing runnable: fail closed, drop it
+    name = str(owed.get("tool") or "")
+    action = str(owed.get("action") or name)
+    if _stopped_since(owed.get("stop_mark")):
+        return "stop_all"
+    if watch is not None and watch.stopped():
+        return "stop_all"
+    if _crisis_since(getattr(watch, "conversation_id", ""), owed.get("seq")):
+        return "crisis"
+    offered = set(names or ())
+    if isinstance(extra, dict):
+        offered.update(extra)
+    if name not in offered:
+        return "tool_off"
+    if _tier_of(action) == "never":
+        return "tier_never"
+    return ""
+
+
+def _owed_leave_result(convo: list, steps: list, at: int, call_id: str,
+                       name: str, exc: BaseException) -> None:
+    """Make sure a tool call this replay appended is never left without its
+    result: a model reading a tool_calls message with no answer below it is a
+    broken transcript. Appends an honest failure result when the dispatch
+    raised before it could write one, and the turn's step record says it did
+    not run. Never raises - this is the repair path."""
+    try:
+        present = any(isinstance(m, dict) and m.get("role") == "tool"
+                      and m.get("tool_call_id") == call_id
+                      for m in convo[at:])
+        if not present:
+            convo.append({"role": "tool", "tool_call_id": call_id,
+                          "content": _tool_content({
+                              "ok": False,
+                              "error": (f"refused: the approved step could not be run "
+                                        f"({type(exc).__name__}), so this answer has no "
+                                        f"result from it.")})})
+        if not any(isinstance(s, dict) and s.get("tool") == name for s in steps):
+            steps.append({"tool": name, "ran": False, "ok": False,
+                          "outcome": "refused"})
+    except Exception:                    # noqa: BLE001 - a repair that fails changes nothing
+        pass
+
+
+def forget_owed(conversation_id=None) -> None:
+    """Forget one conversation's owed step (`None`: every one) and the card ids
+    already run. Called by the tests; nothing in the product calls it - a
+    conversation that ends simply never asks again, and the TTL clears it."""
+    with _OWED_LOCK:
+        if conversation_id is None:
+            _OWED.clear()
+            _OWED_DONE.clear()
+            _CRISIS_SEQ.clear()
+            return
+        rec = _OWED.pop(conversation_id, None)
+        if isinstance(rec, dict):
+            _OWED_DONE.pop(rec.get("card") or "", None)
+        _CRISIS_SEQ.pop(conversation_id, None)
+
+
+class _AlreadyApproved:
+    """The verdict a carried step runs under: a person really did approve THIS
+    action on THIS card a moment ago, so the gate is not asked a second time.
+    It carries the same fields jarvis_gate's verdict does (allowed / outcome /
+    tier / action / request_id), which is all anything downstream reads."""
+
+    allowed = True
+    outcome = "approved"
+    tier = "ask"
+    reason = ""
+
+    def __init__(self, card: str, action: str):
+        self.request_id = card
+        self.action = action
+
+
+def _owed_replay(owed: dict, convo: list, steps: list, say_step, announce,
+                 out: "_Out", watch: "_TurnWatch", names: list, extra: dict,
+                 checker, tell_owner: Optional[Callable[[str], None]]) -> bool:
+    """Run the one approved step this conversation owed, and put its result in
+    `convo` for the model to answer from. True when it was put there.
+
+    The transcript it leaves is the one an ordinary multi-step turn has: the
+    assistant message that asked for the tool, then its result. The model DID
+    ask for this call - that is where the card came from - so it answers from
+    the result exactly as it would in a turn of its own.
+
+    The gate's CURRENT decision is made again FIRST, by owed_may_run(): a yes
+    is not a standing permission, so an approval the policy has since
+    withdrawn (Stop everything, a crisis turn, the tool switched off, tier
+    "never") is dropped here - audited, and said in the answer - instead of
+    being run. Nothing is put to the gate a second time."""
+    call = owed.get("call") if isinstance(owed.get("call"), dict) else {}
+    fn = call.get("function") if isinstance(call.get("function"), dict) else {}
+    name = str(owed.get("tool") or "")
+    if not name or fn.get("name") != name:
+        _owed_audit("agent.owed_dropped",
+                    {"card": owed.get("card"), "tool": name,
+                     "why": "the call recorded with it was not usable"})
+        return False
+    why = owed_may_run(owed, names, extra, watch)
+    if why:
+        _owed_audit("agent.owed_dropped",
+                    {"card": owed.get("card"), "tool": name, "reason": why,
+                     "why": "it may not run now: "
+                            + OWED_NOT_NOW.get(why, "the permission changed")})
+        if tell_owner is not None:
+            try:
+                tell_owner(OWED_DROPPED_LINE.format(
+                    tool=name, why=OWED_NOT_NOW.get(why, "the permission changed")))
+            except Exception:
+                pass
+        return False
+    if out.gone:
+        # The app has gone again before anything ran. Nothing ran, so the yes
+        # is still owed: put it back rather than spend it on a turn nobody saw.
+        owed_put_back(watch.conversation_id, owed)
+        return False
+    verdict = _AlreadyApproved(str(owed.get("card") or ""),
+                               str(owed.get("action") or name))
+    at = len(convo)
+    call_id = str(call.get("id") or verdict.request_id)
+    convo.append({"role": "assistant", "content": "",
+                  "tool_calls": [{"id": call_id,
+                                  "type": "function",
+                                  "function": {"name": name,
+                                               "arguments": fn.get("arguments")}}]})
+    try:
+        if name == "web_search":
+            _web_search_call(dict(owed.get("args") or {}), call, convo, steps, checker,
+                             announce, out, say_step, watch=watch,
+                             tell_owner=tell_owner, pre_approved=verdict)
+        else:
+            # The tool is still enabled and offered - owed_may_run() checked
+            # that before anything was appended. A new question's own diet is
+            # not a reason to lose it (the diet only hides), but a tool
+            # switched off IS, and that dropped the step above.
+            _one_call(call, list(names or []), convo, steps, checker, announce, out,
+                      say_step, watch=watch, tell_owner=tell_owner, tools=extra,
+                      pre_approved=verdict)
+    except ClientGone:
+        if not any(s.get("ran") for s in steps):
+            # It never got as far as running: still owed, not lost.
+            owed_put_back(watch.conversation_id, owed)
+        raise
+    except Exception as exc:             # noqa: BLE001
+        # Something unexpected after the assistant tool-call message was
+        # appended: never leave that call without a result (a transcript the
+        # model cannot read), and never turn the question into a 500. The
+        # card's one run was taken already, so it never runs again; the owner
+        # is told in code's own words.
+        _owed_leave_result(convo, steps, at, call_id, name, exc)
+        _owed_audit("agent.owed_dropped",
+                    {"card": owed.get("card"), "tool": name,
+                     "why": f"the replay raised {type(exc).__name__}"})
+        if watch.read and not watch.noted:
+            convo.insert(at, {"role": "system", "content": OUTSIDE_NOTE})
+            watch.noted = True
+        if tell_owner is not None:
+            try:
+                tell_owner(OWED_FAILED_LINE.format(tool=name))
+            except Exception:
+                pass
+        return False
+    # Outside text is in this turn before its first round: the note that says
+    # so goes ABOVE the result, which is where the loop's own insert puts it.
+    if watch.read and not watch.noted:
+        convo.insert(at, {"role": "system", "content": OUTSIDE_NOTE})
+        watch.noted = True
+    ran = [s for s in steps if s.get("tool") == name]
+    step = ran[-1] if ran else {}
+    ok = step.get("ok") is True
+    _owed_audit("agent.owed_ran",
+                {"card": verdict.request_id, "tool": name, "action": verdict.action,
+                 "ran": bool(step.get("ran")), "ok": ok})
+    if not ok and tell_owner is not None:
+        try:
+            tell_owner(OWED_FAILED_LINE.format(tool=name))
+        except Exception:
+            pass
+    return True
+
+
+def owed_run_turn(conversation_id, convo: list, steps: list, say_step, announce,
+                  out: "_Out", watch: "_TurnWatch", names: list, extra: dict,
+                  checker, tell_owner: Optional[Callable[[str], None]]) -> bool:
+    """The start of a turn: run the approved step this conversation still owes,
+    once, before the first model round. False when nothing was owed.
+
+    The caller does not call this at all on a private turn, a crisis turn, a
+    picture turn or a turn whose model cannot use tools - none of those runs a
+    tool (the architect's H10 ruling, the owner's crisis decision, the vision
+    lane's own rule) - so the step stays owed for the next ordinary turn
+    instead of being spent on one that could never have used it. The TTL is
+    what bounds that wait."""
+    owed = owed_take(conversation_id)
+    if not owed:
+        return False
+    try:
+        return _owed_replay(owed, convo, steps, say_step, announce, out, watch,
+                            names, extra, checker, tell_owner)
+    except ClientGone:
+        raise                            # the app has gone: the turn unwinds as before
+    except Exception as exc:             # noqa: BLE001
+        # A BELT: _owed_replay() already catches what can happen after its own
+        # assistant message, repairs the transcript and returns False. This
+        # covers anything outside that (and that path is proved by a test): a
+        # replay that raises must never turn a question into a 500 - the owner
+        # still gets an answer, it just has to be honest about the step. Its
+        # card's one run was taken already, so it never runs again.
+        _owed_audit("agent.owed_dropped",
+                    {"card": owed.get("card"), "tool": owed.get("tool"),
+                     "why": f"the replay raised {type(exc).__name__}"})
+        if tell_owner is not None:
+            try:
+                tell_owner(OWED_FAILED_LINE.format(tool=owed.get("tool") or "step"))
+            except Exception:
+                pass
         return False
 
 
@@ -11407,6 +11955,28 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             cold_load_note(probe, announce=announce, activity=_activity_now)
         except Exception:
             waking = False
+        # An approved step the last answer never delivered (2026-11-01): the
+        # owner tapped Approve, the app's stream was already gone, and the app
+        # has re-sent this same conversation. Run that one step here - through
+        # the same prepare()/gate/execute() contract, under the card's own
+        # verdict, so no second card and no auto-approve - and put its result
+        # in front of the model, so the answer is the one the tap was for. See
+        # "An approved step the answer never delivered" above. Inside
+        # owed_run_turn the gate's CURRENT decision is made again first
+        # (owed_may_run): Stop everything after the approval, a crisis turn, a
+        # tool switched off or an action now at tier "never" drops it, audited,
+        # rather than running something the gate would now refuse.
+        #
+        # Not on a private turn, a crisis turn, a picture turn or a turn whose
+        # model cannot use tools: none of those runs a tool at all (the H10
+        # ruling, the owner's crisis decision, the vision lane's own rule,
+        # _allowed_tools), so the step stays owed - owed_take is not called -
+        # for the next ordinary turn instead of being spent where it could
+        # never have been used. OWED_TTL_SECONDS bounds that wait.
+        if (not private and not watch.crisis and cur["feature"] != "vision"
+                and not model_said_no):
+            owed_run_turn(conv_id, convo, steps, say_step, announce, out, watch,
+                          names, offer["extra"], checker, tell_owner)
         last: Optional[_Round] = None
         # When this answer started calling tools, for the turn-level bound
         # below (2026-10-06).
@@ -12466,10 +13036,18 @@ def _protection_path_args(name: str, args: dict) -> str:
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,
               announce, out: "_Out", say_step, *, watch: Optional[_TurnWatch] = None,
               tell_owner: Optional[Callable[[str], None]] = None,
-              tools: Optional[dict] = None) -> None:
+              tools: Optional[dict] = None, pre_approved=None) -> None:
     """One tool call the model asked for: check it, gate it, run it if
     allowed, and put the result in `convo` for the model to read. `tools`:
-    this turn's plug-in tools (jarvis_mcp.py), by name, beside TOOLS."""
+    this turn's plug-in tools (jarvis_mcp.py), by name, beside TOOLS.
+
+    `pre_approved`, when given, is the verdict of a card this call ALREADY had
+    a person's yes on - the carried step of "An approved step the answer never
+    delivered" (2026-11-01). Then no card is raised and `checker` is not
+    called: there is nothing left to ask. Everything else - check_call,
+    prepare(), the refusals, execute(), the outside-text label - is exactly
+    what an ordinary call goes through. None (every ordinary call) is
+    unchanged."""
     watch = watch if watch is not None else _TurnWatch()
     every = dict(TOOLS, **tools) if tools else TOOLS
     fn = (call.get("function") or {})
@@ -12838,7 +13416,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         plan_text = f"{plan_text}\n\n{sandbox_why}"
     if shaped:
         plan_text = f"{plan_text}\n\nWhat shaped this request:\n{shaped}"
-    if _card_would_be_cut(name, action_name, plan_text):
+    if pre_approved is None and _card_would_be_cut(name, action_name, plan_text):
         # Refused BEFORE a card is raised - see _card_would_be_cut.
         convo.append({"role": "tool",
                       "tool_call_id": call.get("id", ""),
@@ -12855,7 +13433,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         return
-    if watch.cards >= _card_limit(watch, name) and not lights_ok and _would_ask(name, action_name):
+    if (pre_approved is None and watch.cards >= _card_limit(watch, name)
+            and not lights_ok and _would_ask(name, action_name)):
         # Refused BEFORE a card is raised - see CARDS_PER_TURN.
         convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                       "content": _tool_content(
@@ -12872,6 +13451,12 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # the gate and not an approval - nobody is asked, and the audit log
         # says so.
         verdict = _LightsNoCard()
+    elif pre_approved is not None:
+        # A carried step ("An approved step the answer never delivered",
+        # 2026-11-01): a person's yes on this very card, given a moment ago
+        # and lost with the app's stream. No second card, so nothing to wait
+        # for and nothing to say about one.
+        verdict = pre_approved
     else:
         # The gate may wait minutes for a person. Say so to the app (after a
         # moment, so a tool the gate lets straight through never flashes it).
@@ -12958,6 +13543,14 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # Approved - but the app that asked has gone, so nobody would see
         # what it did or the answer that followed. Not run; the owner is told
         # on the event bus, where they still are.
+        #
+        # The owner's own yes is KEPT (2026-11-01, "An approved step the answer
+        # never delivered"): the tap really happened, the gate consumed it, and
+        # the app is about to re-send this same conversation. owed_record
+        # refuses anything that is not a person's approval, so this branch is
+        # the only way a step can become owed at all.
+        owed_record(watch.conversation_id, verdict, name, action_name, call, args,
+                    stop_mark=watch.stop_mark)
         say_step("tool_refused", name)
         if announce:
             try:
@@ -13083,11 +13676,19 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
 
 def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
                      announce, out: "_Out", say_step, *, watch: "_TurnWatch",
-                     tell_owner: Optional[Callable[[str], None]] = None) -> None:
+                     tell_owner: Optional[Callable[[str], None]] = None,
+                     pre_approved=None) -> None:
     """One web_search call: planned (no socket), refused outright when its
     words hold a secret or the provider is not ready, put to a card when
     private things could slip in (web_search_card_lines), and otherwise run
-    straight away. The result is outside text, like a web page's."""
+    straight away. The result is outside text, like a web page's.
+
+    `pre_approved`, when given, is the verdict of the card this very search
+    already had a person's yes on - the carried step of "An approved step the
+    answer never delivered" (2026-11-01). Then no card is raised and `checker`
+    is not called; the card's own text is not rebuilt either, because it was
+    shown and approved once already. None (every ordinary call) is unchanged.
+    """
     name = "web_search"
 
     def reply(result: dict) -> None:
@@ -13123,7 +13724,13 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
     lines = web_search_card_lines(watch, bool(s.get("ask_every_time")), p.query)
     step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
     card_note = None
-    if lines:
+    # A carried step ("An approved step the answer never delivered", 2026-11-01):
+    # this very search already had a person's yes and lost it with the app's
+    # stream, so there is no card left to raise and nothing left to ask.
+    verdict = pre_approved
+    if pre_approved is not None:
+        step["outcome"] = "approved"
+    elif lines:
         if watch.cards >= CARDS_PER_TURN:
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
@@ -13177,6 +13784,13 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
     if out.gone:
         steps.append(step)
         say_step("tool_refused", name)
+        # The owner's own yes for this search is kept for the app's re-send
+        # (2026-11-01, "An approved step the answer never delivered"). Only
+        # when it really had a card: a search that needed none was never
+        # approved by anybody, so there is nothing to carry.
+        if lines or pre_approved is not None:
+            owed_record(watch.conversation_id, verdict, name, WS.ACTION_SEARCH, call, args,
+                        stop_mark=watch.stop_mark)
         raise ClientGone()
     if watch.stopped():
         # Stop everything while the search's card waited (jarvis_stop_all.py).
