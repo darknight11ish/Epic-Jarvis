@@ -240,6 +240,9 @@ def _norm(text: str) -> str:
 #   The promises. Each entry is the mapping the audit proved by breaking it.
 #
 #   promise  the project's own words (checked against the file named in `doc`)
+#   also_says  optional further quotes from the SAME file, checked the same way,
+#            for a promise the record now states in more than one place. Kept
+#            apart from `promise` so a failure names the half that drifted.
 #   doc      where those words are written. The owner's dated decisions moved out of
 #            CLAUDE.md into docs/DECISIONS.md on 2026-10-12, so a promise whose words
 #            moved names the record - and the rest still name CLAUDE.md, because the
@@ -385,7 +388,34 @@ PROMISES = (
     },
     {
         "id": "P13",
-        "promise": "A risky approval from this PC needs Windows Hello at the backend.",
+        # The promise is now two halves, because the owner made the small
+        # read-only cards an exception on 2026-11-01: the headline says the
+        # rule (quoted from §3 as it now reads), and `also_says` pins the
+        # words that say WHICH cards still ask - every other risky card,
+        # the spending cards included - and WHERE the PC's answer lives
+        # (the backend's `approvals_mode` / the `small_approvals` setting
+        # reached by `change_setting`; the desktop Settings window has no
+        # radio for it). All three quotes are docs/ARCHITECTURE.md §3.
+        "promise": (
+            "**A risky approval from this PC needs Windows Hello at the backend** "
+            "- with the small read-only cards the exception from 2026-11-01 (next "
+            "bullet)."
+        ),
+        "also_says": (
+            "Under Small cards such a card is approved by the card's own yes: no "
+            "Windows Hello on this PC and no phone signature. Every other risky "
+            "card still asks, **the spending cards included** (raising a monthly "
+            "limit);",
+            "**The PC's answer is the backend's** (`approvals_mode`, kept in "
+            "`~/.openjarvis/approvals-mode.json`; a missing file is the default "
+            "`small`, and a file that cannot be read asks the most), changed on "
+            "the PC through the existing `small_approvals` setting in "
+            "`jarvis_settings_registry.py` - say \"check the small approvals too\", "
+            "or \"leave the small approvals alone\" - which the `change_setting` "
+            "tool and chatting both reach. **The desktop Settings window has no "
+            "radio for it** (section 8, \"One-sided on purpose\"); the phone's "
+            "radio is its own check.",
+        ),
         "doc": "docs/ARCHITECTURE.md",
         "module": "jarvis_owner_check.py",
         "symbols": (("approve_check", "function"), ("is_risky", "function"),
@@ -450,6 +480,10 @@ def t_the_promise_sentences_are_still_written():
         check(f"{p['id']}: {p['doc']} still says it ({p['promise'][:52]}...)",
               p["promise"] in _norm(text),
               f"the sentence is no longer in {p['doc']}: reworded, or moved")
+        for also in p.get("also_says", ()):
+            check(f"{p['id']}: {p['doc']} still says it ({also[:52]}...)",
+                  also in _norm(text),
+                  f"the sentence is no longer in {p['doc']}: reworded, or moved")
 
 
 def t_the_audit_table_is_here():
