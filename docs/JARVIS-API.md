@@ -4108,13 +4108,19 @@ Token and `X-Jarvis-Client: hud` as always; 401 / 403 as for any route.
   before anyone asks. Making it never starts the better voice's program on
   the second card.
 - **For the apps:** fetch it when `flow.moment.key` differs from the one you
-  have, and keep it. When the owner has finished speaking and **no reply
-  sound has started** about `after_ms` later (the apps decide the exact
-  time), play it - **once per turn at most, and never over the reply**: if
-  the reply's first sound arrives while it plays, stop it (or let it end,
-  it is under a second) before the reply starts. Not after a refused clip,
-  a barge-in, or a "stop". It is Jarvis's own voice, so the barge-in check
-  above already counts it as Jarvis, not the owner.
+  have, and keep it only for that key. A refused, empty or 503 answer drops
+  the clip you held: silence is right, the OLD voice is not. Read `flow`
+  again when a spoken turn starts - Jarvis Live's included (the phone did not
+  until 2026-11-02, so it played a clip fetched before the owner changed the
+  voice: a male "One moment." over female answers); `ready: false` is not a
+  reason to skip that turn-start fetch, because GET makes the clip. Then play
+  it when the owner has finished speaking and **no reply sound has started**
+  about `after_ms` later (the apps decide the exact time) - **once per turn at
+  most, and never over the reply**: if the reply's first sound arrives while
+  it plays, stop it (or let it end, it is under a second) before the reply
+  starts. Not after a refused clip, a barge-in, or a "stop". It is Jarvis's
+  own voice, so the barge-in check above already counts it as Jarvis, not the
+  owner.
 - **At today's speeds, `after_ms: 1000` would fire on most spoken turns.**
   From the owner finishing to Jarvis's first sound is estimated at roughly
   2.5-4 s with the voice on the PC's processor (making the first
@@ -4259,12 +4265,13 @@ Jarvis while it talks" is on - the switch both apps already had; no new one.
    before, so "hey Jarvis, ..." said over a reply is still a new question.
 
 **"One moment."** Each app fetches the clip when `flow.moment.key` changes
-(the phone on every status read, the desktop when listening starts, when the
-talk button is pressed and with every spoken question), and plays it when a
-`step` event says `tool_started` during a spoken question - **once per
-question**, only **before the answer has made a sound** (the answer's first
-sound waits for it to end; it is under a second), never after "stop" or an
-interruption, and only with the app's own switch on and
+(the phone on every status read and when every spoken turn starts, Live's
+included; the desktop when listening starts, when the talk button is pressed
+and with every spoken question), never plays one fetched for another key, and
+plays it when a `step` event says `tool_started` during a spoken question -
+**once per question**, only **before the answer has made a sound** (the
+answer's first sound waits for it to end; it is under a second), never after
+"stop" or an interruption, and only with the app's own switch on and
 `flow.moment.enabled`. Not on a timer. The new switch, in both apps, is the
 one this section suggested: **"Say "One moment" if I'm kept waiting"**, on
 by default, per device (desktop Settings -> Voice, "While you wait"; phone

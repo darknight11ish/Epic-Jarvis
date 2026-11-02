@@ -220,8 +220,16 @@ data class FlowStatus(
     /** May a clip heard over a reply be sent as `source=barge_in`? Only when the PC says so. */
     val bargeInUsable: Boolean get() = available && bargeIn.enabled && bargeIn.available
 
-    /** Does the PC hand out a "One moment." clip right now? */
-    val momentUsable: Boolean get() = available && moment.enabled && moment.ready && moment.key.isNotEmpty()
+    /**
+     * Does this PC offer a "One moment." clip at all? True while the feature is
+     * on and a key is known, whether or not the clip has been made yet -
+     * `GET /api/voice/moment` makes it, so a turn that is starting may ask for
+     * a clip whose `ready` is still false.
+     */
+    val momentWanted: Boolean get() = available && moment.enabled && moment.key.isNotEmpty()
+
+    /** Is the clip for [FlowMoment.key] made, so playing it needs no wait? */
+    val momentUsable: Boolean get() = momentWanted && moment.ready
 }
 
 /** `flow.barge_in`: may the owner interrupt Jarvis by talking? */
