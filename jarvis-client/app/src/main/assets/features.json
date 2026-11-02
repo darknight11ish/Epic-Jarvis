@@ -2265,7 +2265,8 @@
     "covers": [
       "skills",
       "brain.model.skills",
-      "model-page"
+      "model-page",
+      "settings.skills-menu"
     ],
     "must_mention": [
       "skill"
