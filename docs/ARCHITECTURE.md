@@ -2713,6 +2713,29 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **The skills menu installs, turns on and edits on the PC alone, and that is
+  one-sided on purpose** (2026-11-02; the owner's decision, the Hermes-skills
+  research document's scope B; JARVIS-API §177). The phone keeps exactly what
+  it had: the list it always read (`GET /api/skills`, `net/Skills.kt`) and
+  Remove with its "are you sure?" (`POST /api/skills/decide`). What is
+  PC-only is the five new doors - `GET /api/skills/menu`,
+  `POST /api/skills/install`, `POST /api/skills/import/scan`,
+  `POST /api/skills/state` and `POST /api/skills/edit` - and the reasons are
+  the ones that already govern the phone: a skill is instructions the model
+  will follow, so an install, a turn-on and an edit each raise ONE
+  `modify_own_code` card, and the PC is where the scanner, the card and the
+  files are; the sources are a folder or a `.zip` on this PC, which the phone
+  has no picker to reach; and editing a `SKILL.md` is deep config editing,
+  which `CLAUDE.md` keeps off the phone. The phone is **not** missing a
+  capability it can use: it still lists every installed skill and can still
+  remove one, and the index the PC's menu keeps honest is the same one the
+  phone's list reads. `tools/check_parity.py` carries all five as
+  `deliberate`, with this paragraph named in each. **The honest follow-up,
+  recorded rather than implied:** an ON/OFF switch is a switch, not a file
+  editor, so a phone toggle for `/api/skills/state` is the one piece of this
+  that could reasonably go on both apps next - `install` and `edit` should
+  not, for the reasons above.
+
 - **The desktop Settings window has no "Small cards" radio, and that is
   one-sided on purpose** (2026-11-01; the rule is §3's "2026-11-01 exception",
   and the decision is

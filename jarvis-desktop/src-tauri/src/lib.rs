@@ -90,6 +90,7 @@ pub mod screen_work;
 pub mod selection;
 pub mod setup_questionnaire;
 pub mod sidecar;
+pub mod skills_menu;
 pub mod sky;
 pub mod spec;
 pub mod spec_drift;
@@ -1507,6 +1508,15 @@ pub fn run() {
             // on the PC) or off at once. Settings only; it runs no script and
             // sees no data.
             sandbox_exec::sandbox_exec,
+            // The skills menu's PC doors (skills_menu.rs; the owner's decision
+            // of 2026-11-02, JARVIS-API section 177). Settings only, ONE
+            // command: read the list, pick a folder or a .zip, scan it (no
+            // card), install it (the SAME scanner, then ONE modify_own_code
+            // card), scan `%USERPROFILE%\.hermes\skills` read-only, turn a
+            // skill off at once or back on behind one card, and edit a SKILL.md
+            // behind the same card. It downloads nothing, runs nothing inside a
+            // skill, and installs nothing before a person answers.
+            skills_menu::skills_menu,
             // Searchable recordings and videos (media_index.rs; F5 S2, the
             // owner's decision of 2026-10-19: readable transcript text kept,
             // ON by default). Settings only: read the counts and the

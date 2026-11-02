@@ -566,6 +566,11 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # at all, so it leaves devices.patch's gate lines
                                 # alone.
                                 "jobs-routes.patch",
+                                # skill-install-note.patch (2026-11-02): ONE additive parameter and a
+                                # tier check inside jarvis_skills.py's install() - the skills menu's
+                                # card. It has no hunk in jarvis_hud.py, jarvis_gate.py or any
+                                # table they write, so it rewrites nothing this patch wrote.
+                                "skill-install-note.patch",
                                 # gate-tool-actions-gap.patch (2026-11-01) is
                                 # appended after this patch, immediately BEFORE
                                 # unknown-risk-approvable.patch (whose guard needs

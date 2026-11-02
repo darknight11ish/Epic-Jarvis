@@ -681,6 +681,11 @@ def t_the_patch_and_the_lists():
              # plugin-loader.patch - it adds no tier row, no _RISK row and no
              # _TOOL_ACTIONS line, so it rewrites nothing referee.patch wrote.
              "jobs-routes.patch",
+             # skill-install-note.patch (2026-11-02): ONE additive parameter and a
+             # tier check inside jarvis_skills.py's install() - the skills menu's
+             # card. It has no hunk in jarvis_hud.py, jarvis_gate.py or any
+             # table they write, so it rewrites nothing this patch wrote.
+             "skill-install-note.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing referee.patch wrote.

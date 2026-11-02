@@ -3404,6 +3404,69 @@
         </div>
       </section>
 
+      <!-- ── Skills ────────────────────────────────────────────
+           The skills menu (the owner's decision of 2026-11-02, scope B of
+           .dsh-scratch/OWNER-QUEUE-2026-11-02/HERMES-SKILLS-RESEARCH.md;
+           skills-menu-settings.js; skills_menu.rs skills_menu; backend
+           jarvis_skill_menu.py; the drop-in folder plugins/ready/skill-menu;
+           JARVIS-API section 177). A skill is a folder with a SKILL.md in it:
+           instructions the AI model reads and follows. Here the owner adds
+           one from a folder or a .zip on this PC, imports one from Hermes's
+           own folder, turns one off and back on, edits one, and removes one.
+           NOTHING is installed, turned on or saved before ONE approval card
+           on the PC is answered, a skill the scanner refuses never becomes a
+           card at all, and nothing is downloaded from anywhere. A skill's
+           scripts/ folder is kept and never run: that is said on the row, on
+           the card, and in the picker's own words. -->
+      <section class="card" id="skills-menu">
+        <h2>Skills</h2>
+        <p class="note">A skill is a folder with a SKILL.md in it - instructions Jarvis reads and follows when one fits. Nothing here installs, turns a skill on or saves an edit until you answer ONE card on this PC. A skill the scanner refuses is kept out of the reach of the model, and it never becomes a card at all. Nothing is downloaded from anywhere: the only places a skill can come from are a folder or a .zip on this PC, or your own Hermes folder.</p>
+
+        <p class="state" id="sk-state" role="status">Asking Jarvis…</p>
+
+        <div id="sk-body" hidden>
+          <ul class="sc-cards" id="sk-list"></ul>
+          <p class="note" id="sk-empty" hidden></p>
+
+          <h3 class="subhead" id="sk-off-title" hidden>Turned off</h3>
+          <ul class="sc-cards" id="sk-off-list" hidden></ul>
+
+          <div class="row">
+            <button class="btn small" id="sk-install-folder" type="button">Install from a folder…</button>
+            <button class="btn small" id="sk-install-zip" type="button">Install from a .zip…</button>
+            <button class="btn small" id="sk-hermes" type="button">Import my Hermes skills…</button>
+          </div>
+          <p class="note" id="sk-hermes-why" hidden></p>
+          <p class="note" id="sk-hermes-root" hidden></p>
+          <ul class="sc-cards" id="sk-import-list"></ul>
+          <p class="note" id="sk-import-note" hidden></p>
+
+          <h3 class="subhead" id="sk-pick-title"></h3>
+          <p class="note" id="sk-pick-detail"></p>
+          <p class="note" id="sk-pick-inert" hidden></p>
+          <ul class="caps" id="sk-pick-findings" hidden></ul>
+          <p class="note" id="sk-pick-findings-none" hidden></p>
+          <div class="row">
+            <button class="btn small" id="sk-pick-go" type="button" hidden>Install it…</button>
+            <button class="btn small" id="sk-pick-cancel" type="button" hidden>Not this one</button>
+          </div>
+
+          <h3 class="subhead" id="sk-edit-title"></h3>
+          <label class="field">
+            <span class="label">The SKILL.md <span class="hint">what the model will read</span></span>
+            <textarea id="sk-edit-text" rows="14" spellcheck="false"></textarea>
+          </label>
+          <p class="note" id="sk-edit-inert" hidden></p>
+          <p class="note" id="sk-edit-note"></p>
+          <div class="row">
+            <button class="btn small" id="sk-edit-save" type="button">Save it…</button>
+            <button class="btn small" id="sk-edit-cancel" type="button">Close the editor</button>
+          </div>
+
+          <p class="status" id="sk-status" role="status"></p>
+        </div>
+      </section>
+
       <!-- ── Limits and frequency ─────────────────────────────────────────
            The audit of every feature (2026-10-08) found the numbers the owner
            could see and change nowhere: how long an Undo stays possible, how
@@ -3679,5 +3742,6 @@
 <script type="module" src="chat-history-settings.js"></script>
     <script type="module" src="learning-settings.js"></script>
     <script type="module" src="setup-settings.js"></script>
+    <script type="module" src="skills-menu-settings.js"></script>
   </body>
 </html>

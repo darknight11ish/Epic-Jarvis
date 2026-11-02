@@ -1986,6 +1986,18 @@ $PATCHES = @(
     # backend/test_jobs.py rehearses this patch against
     # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
     'jobs-routes.patch'
+    # A skill's ONE install card can now carry a line the caller wrote
+    # (`jarvis_skills.install(..., note=...)`), and the card is only a card on
+    # the tiers where a person really answers: `jarvis_gate.check` returns
+    # allowed=True on `notify` and `auto`, so before this the install path
+    # could have gone through with nobody asked, if a config listed
+    # `modify_own_code` that way. `refine()` already re-checks the tier for
+    # exactly this reason; `install()` did not, because nothing called it
+    # until the skills menu did. Additive: with no `note` the card's words are
+    # unchanged. Appended last (before the loader) so every other patch's
+    # context is untouched; backend/test_skill_menu.py rehearses it against
+    # jarvis-backend/jarvis_skills.py, apply and reverse.
+    'skill-install-note.patch'
     'plugin-loader.patch'
 )
 
@@ -2715,6 +2727,17 @@ $SHIPPED = @(
     # 2026-10-31): shipped whole, no patch; reads the model/preset and the
     # measured rows, and asks the EXISTING switch/apply cards.
     'jarvis_model_knowledge.py'
+    # The skills menu's PC doors (jarvis_skill_menu.py, 2026-11-02; owner's
+    # Hermes-skills scope B): install a skill from a folder or a .zip, import
+    # one from %USERPROFILE%\.hermes\skills, turn an installed one off and back
+    # on, and edit its SKILL.md. Shipped whole, no patch of its own - its five
+    # routes come from plugins\ready\skill-menu. Every install, every turn-on
+    # and every edit is ONE modify_own_code card raised by the EXISTING
+    # jarvis_skills.install(), whose scanner refuses (and never asks) on a
+    # block finding. Nothing here re-implements the scanner, the card, the
+    # quarantine or the skill index. The same entry is at the end of
+    # backend/_where.py's SHIPPED list.
+    'jarvis_skill_menu.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

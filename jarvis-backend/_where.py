@@ -1454,6 +1454,15 @@ SHIPPED = (
     # doors - the same jarvis_models.switch_to and jarvis_presets.apply_from_body
     # the Models page and the preset card already use. Shipped whole, no route.
     "jarvis_model_knowledge.py",
+    # The skills menu's PC doors (jarvis_skill_menu.py, 2026-11-02; the owner's
+    # Hermes-skills scope B): install a skill from a folder or a .zip, import
+    # one from %USERPROFILE%\.hermes\skills, turn an installed one off and back
+    # on, and edit its SKILL.md. Shipped whole, no patch of its own - its five
+    # routes come from plugins/ready/skill-menu, the same way jarvis_skill_hub's
+    # do. It re-implements none of jarvis_skills.py: the scanner, the ONE
+    # modify_own_code card, the quarantine and the index are all CALLED. The
+    # same entry is at the end of the script's $SHIPPED.
+    "jarvis_skill_menu.py",
 )
 
 

@@ -208,6 +208,16 @@ PIN = {
     "attention-settings.patch":                (2, 13),    # position 125 - _stack.py: the new hunk invents the dispatch tuple's own lines
     "limits-read.patch":                       (2, 13),    # position 127 - _stack.py: names limits-read.patch: 2
     "retrieve-count.patch":                    (2, 17),    # position 131 - _stack.py: names retrieve-count.patch: 2
+    # position 166 - the skills menu's install card (2026-11-02). HONEST, not
+    # drift: all three hunks read the owner's own `jarvis_skills.py` - install()'s
+    # signature, its docstring, and the `_gate(...)` call it already makes.
+    # `jarvis_skills.py` is one of the five files the patcher edits and is NOT in
+    # this repository, so `backend/_stack.py` has no stand-in for those lines and
+    # nothing earlier in the walk could have written them. No other patch has a
+    # hunk in install(), so this one cannot collide with one either - and
+    # backend/test_skill_menu.py applies it to the published base forwards and
+    # reverses it back byte for byte.
+    "skill-install-note.patch":                (3, 22),    # position 166
     # position 137 - 2 hunks / 15 lines were the PROTECTED-rule change. RAISED
     # 2026-10-18 to 5/59 for the DEF-012 and I6 hunks: gate_tool's whole-args
     # prompt, latch_taint's process-local fallback, and clear_taint's reset are
