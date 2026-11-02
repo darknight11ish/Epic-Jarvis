@@ -176,12 +176,13 @@
   "type": "function",
   "function": {
    "name": "control_phone",
-   "description": "Tap, swipe, type, press a key or take a screenshot on the owner's paired Android phone.",
+   "description": "Tap, swipe, type, press a key or take a screenshot on the owner's paired Android phone. Or: list_apps names the apps the owner allows (alone it costs no card); open_app starts one by \"app\"; play starts it and searches for \"query\" (one tap in the app may still be needed). An app off that list is refused, not guessed.",
    "parameters": {
     "type": "object",
     "properties": {
      "device": {
-      "type": "string"
+      "type": "string",
+      "description": "adb serial; leave it out for the one phone connected"
      },
      "goal": {
       "type": "string"
@@ -198,8 +199,25 @@
           "swipe",
           "key",
           "text",
-          "screenshot"
+          "screenshot",
+          "long_press",
+          "open_app",
+          "play",
+          "ui_dump",
+          "list_apps"
          ]
+        },
+        "app": {
+         "type": "string",
+         "description": "the app's name from list_apps"
+        },
+        "query": {
+         "type": "string",
+         "description": "play: the words to search for"
+        },
+        "package": {
+         "type": "string",
+         "description": "open_app/play: only if already listed"
         },
         "x": {
          "type": "integer"
@@ -219,11 +237,16 @@
         "y2": {
          "type": "integer"
         },
+        "duration_ms": {
+         "type": "integer",
+         "description": "long_press: 500-5000 ms"
+        },
         "key": {
          "type": "string"
         },
         "value": {
-         "type": "string"
+         "type": "string",
+         "description": "text: the words to type"
         },
         "why": {
          "type": "string"
@@ -239,7 +262,6 @@
      }
     },
     "required": [
-     "device",
      "goal",
      "requests"
     ]

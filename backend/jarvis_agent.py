@@ -444,9 +444,59 @@ def _prepare_control_phone(args: dict):
     except Exception as exc:
         return None, f"Control the phone: {json.dumps(args, ensure_ascii=False)} " \
                       f"(unavailable: {exc})"
-    p = A.plan(str(args.get("device", "")), str(args.get("goal", "")),
-               args.get("requests") or [])
+    requests = args.get("requests") or []
+    if A.only_lists_apps(requests):
+        # READ-ONLY and no card: the friendly names the owner wrote down, read
+        # from the settings file. No adb command exists for it (the module's
+        # plan() refuses it), so nothing can reach the phone this way.
+        return _PhoneApps(A.list_apps()), "List the apps Jarvis may open on the phone"
+    # Which phone, before anything is planned: "open YouTube Music" said out
+    # loud carries no serial, and a model was never told one. With an empty
+    # `device` this is the one phone connected over adb, or a plain reason
+    # there is none (see jarvis_android_control.resolve_device).
+    serial, why = A.resolve_device(args.get("device", ""))
+    if why:
+        return _PhoneRefused(why), f"Control the phone: {why}"
+    p = A.plan(serial, str(args.get("goal", "")), requests)
+    if not p.steps:
+        # Nothing became a command. A card here would ask the owner to approve
+        # an empty plan, so the reasons - an app that is not on their list, an
+        # empty list, an app that cannot search - go straight back to the
+        # model instead, before any card is raised.
+        reasons = "; ".join(str(r.get("reason") or "that step could not be built")
+                            for r in p.rejected) \
+            or "the request named no steps at all"
+        return _PhoneRefused(reasons), f"Control the phone: {reasons}"
     return p, A.describe(p)
+
+
+class _PhoneApps:
+    """A control_phone call that asked only for the owner's app list.
+
+    Nothing is sent to the phone and nothing is started, so there is nothing
+    to approve: `list_apps()` reads the owner's own `[phone_apps]` table and
+    the model reads the answer straight away. The same shape as `_NoBrowser`
+    below - a plan object that is not a plan, recognised BEFORE the gate, so
+    the owner is never asked to approve a list.
+    """
+
+    def __init__(self, listed: dict) -> None:
+        self.listed = listed
+
+
+class _PhoneRefused:
+    """A control_phone call that could not become ONE command.
+
+    `problem` is the plan's own plain words: an app the owner did not allow, an
+    empty `[phone_apps]`, no phone connected over adb, an app that cannot
+    search. A card showing none of these would ask the owner to approve
+    nothing, so the reasons go back to the model instead, BEFORE any card -
+    and the model can tell the owner, or ask differently, with what it is
+    allowed.
+    """
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
 
 
 def _run_control_phone(args: dict, plan_obj, *, announce=None, checkpoint=None) -> dict:
@@ -2555,21 +2605,42 @@ TOOLS: dict = {
     "control_phone": Tool(
         "control_phone",
         "Tap, swipe, type, press a key or take a screenshot on the owner's "
-        "paired Android phone.",
+        "paired Android phone. Or: list_apps names the apps the owner allows "
+        "(alone it costs no card); open_app starts one by \"app\"; play starts "
+        "it and searches for \"query\" (one tap in the app may still be "
+        "needed). An app off that list is refused, not guessed.",
         {"type": "object", "properties": {
-            "device": {"type": "string"},
+            "device": {"type": "string", "description":
+                "adb serial; leave it out for the one phone connected"},
             "goal": {"type": "string"},
             "requests": {"type": "array", "items": {"type": "object", "properties": {
                 "action": {"type": "string",
-                    "enum": ["tap", "swipe", "key", "text", "screenshot"]},
+                    "enum": ["tap", "swipe", "key", "text", "screenshot",
+                             "long_press", "open_app", "play", "ui_dump",
+                             "list_apps"]},
+                "app": {"type": "string", "description":
+                    "the app's name from list_apps"},
+                "query": {"type": "string", "description":
+                    "play: the words to search for"},
+                "package": {"type": "string", "description":
+                    "open_app/play: only if already listed"},
                 "x": {"type": "integer"}, "y": {"type": "integer"},
                 "x1": {"type": "integer"}, "y1": {"type": "integer"},
                 "x2": {"type": "integer"}, "y2": {"type": "integer"},
-                "key": {"type": "string"}, "value": {"type": "string"},
+                "duration_ms": {"type": "integer",
+                    "description": "long_press: 500-5000 ms"},
+                "key": {"type": "string"},
+                "value": {"type": "string", "description":
+                    "text: the words to type"},
                 "why": {"type": "string"},
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean"}}}}},
-         "required": ["device", "goal", "requests"]},
+         # `device` is NOT required any more (2026-11-01): "open YouTube Music"
+         # said out loud carries no serial, so leaving it out now means the one
+         # phone connected over adb (jarvis_android_control.resolve_device) -
+         # and zero or several connected phones is a plain refusal, never a
+         # guess. `goal` and `requests` are what a plan is made of, so they stay.
+         "required": ["goal", "requests"]},
         _prepare_control_phone,
         lambda args, state, **kw: _run_control_phone(args, state, announce=kw.get("announce"),
                                                 checkpoint=kw.get("checkpoint")),
@@ -4589,7 +4660,13 @@ _NUDGE_TOOL_WORDS = {
     "read_web_page": ("web page", "url"),
     "github_search": ("github", "library"),
     "control_computer": ("click", "type", "window"),
-    "control_phone": ("phone", "screenshot"),
+    "control_phone": ("phone", "screenshot",
+                      # 2026-11-01: "I'll open YouTube Music and play The Weeknd"
+                      # said out loud is exactly the announcement this nudge
+                      # exists to turn into the real call. Two app names, not
+                      # "open" or "play" - those would fire on answers about a
+                      # file or a video on this PC.
+                      "youtube", "music"),
     "browser_control": ("browser", "tab"),
     "run_data_script": ("script", "csv", "data"),
     "my_spending": ("spending", "bank", "bill"),
@@ -12704,6 +12781,30 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                                     f"arguments: {type(exc).__name__}: {exc}"})})
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
         say_step("tool_finished", name, ok=False)
+        return
+    if name == "control_phone" and isinstance(state, (_PhoneApps, _PhoneRefused)):
+        # NOTHING TO APPROVE, so no card (2026-11-01). One of two things came
+        # back from _prepare_control_phone instead of a plan: the owner's own
+        # app list (read from [phone_apps], no adb command at all), or a plain
+        # reason nothing could become a command (an app that is not on their
+        # list, an empty list, no phone connected). A card showing either would
+        # ask the owner to approve nothing; the model is told instead, and it
+        # can repeat the reason in the owner's own words or ask differently.
+        if isinstance(state, _PhoneApps):
+            result = dict(state.listed)
+            say_step("tool_started", name)
+            say_step("tool_finished", name, ok=True)
+            ran = True
+        else:
+            result = {"ok": False,
+                      "error": f"refused: {state.problem} Nothing was sent and "
+                               f"nobody was asked."}
+            say_step("tool_refused", name)
+            ran = False
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
+                      "outcome": "no card needed" if ran else "refused"})
         return
     if name == "send_email":
         # A plan that says why nothing could be sent (a bad address, too

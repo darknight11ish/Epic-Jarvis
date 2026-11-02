@@ -50,11 +50,27 @@ MEASURED = ("calculator", "memory_search", "file_read", "shell_exec", "control_c
 #: at all. 2700 leaves 35 tokens spare rather than the 3 the old one had.
 #: Nothing else in this list grew; if anything does, this number is the thing
 #: to look at first.
-MEASURED_BUDGET = 2700
+#: RAISED 2700 -> 2970 on 2026-11-01, by the same rule, for one tool. The owner
+#: asked to open an allowed app on their phone and start a media search from
+#: Live ("hey jarvis open yourube music and play the weekend"). `control_phone`
+#: gained three actions (`list_apps`, `open_app`, `play`), a description that
+#: says what they do and that an app off the owner's list is refused, and two
+#: parameter names with their one-line meanings. Held to the same estimate_tokens
+#: rule on this tree: `control_phone` 265 -> 506 and the sixteen 2665 -> 2906,
+#: so 2700 had no room at all (it was already 35 under). 2970 leaves 64 tokens
+#: spare. The tool sits in the "control" group and is only sent when that group
+#: is opened, never on every turn - see test_short_tool_list.py, whose own
+#: 1550/380 pins are unchanged by this and still pass.
+MEASURED_BUDGET = 2970
 PER_TOOL = 300
 #: browser_control drives a page with seven kinds of step; its parameters
 #: alone are most of this.
-PER_TOOL_EXCEPT = {"browser_control": 600}
+#: control_phone is here for the same reason as of 2026-11-01: three app
+#: actions, a description that has to tell the model what they do (and that
+#: an app off the owner's list is refused), and the words for `app`/`query`.
+#: Measured at 506 with this module's own rule; its old 265 was the whole of
+#: PER_TOOL's room, so there was no way to add the actions inside 300.
+PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540}
 
 #: The pairs the research found the model mixes up, each told apart both ways.
 CONFUSABLE = (("memory_search", "notes_search"), ("home_read", "home_control"),

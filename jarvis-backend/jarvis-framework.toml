@@ -1906,6 +1906,46 @@ star_floor = 25        # ...but never fewer than this many
 enabled = ["web_search", "change_setting", "feature_guide", "calculator", "memory_search", "my_files"]
 
 # ------------------------------------------------------------------------
+# YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)
+# ------------------------------------------------------------------------
+# The owner asked for this in these words: "id like jarvis live to be able to
+# open certain apps on my android phone if i ask it (during a live session on my
+# android phone) and to be able to perform certain actions like if i aaid 'hey
+# jarvis open yourube music and play the weekend'". This table is the whole of
+# what Jarvis is allowed to do it to.
+#
+# ONE LINE PER APP: a friendly name you would say out loud, and the package name
+# Android knows that app by. The name in quotes is what you say and what Jarvis
+# looks up; the package is what the phone is told to start.
+#
+#   "YouTube Music" = "com.google.android.apps.youtube.music"
+#
+# It ships EMPTY, and empty (or no [phone_apps] table at all) means NOTHING is
+# allowed: asking Jarvis to open an app then gets one plain sentence saying so.
+# Nothing is guessed, and no app on the phone is ever listed or searched for by
+# itself - only the names written here exist as far as Jarvis is concerned.
+#
+# To find a package name, connect the phone to the PC and run:
+#   adb shell pm list packages | findstr -i youtube
+# It prints `package:com.google.android.apps.youtube.music`, and the part after
+# `package:` is what goes here.
+#
+# "open YouTube Music" uses Android's own launcher. "open YouTube Music and play
+# The Weeknd" also needs a search address Jarvis already knows for that app:
+# today that is YouTube Music only (SEARCH_LINKS in
+# backend/jarvis_android_control.py). Any other app can be OPENED and not asked
+# to search, and Jarvis says exactly that instead of pretending.
+#
+# Two more switches decide whether any of this is offered at all: `control_phone`
+# must be in [tools].enabled above (it is opt-in - a fresh install offers no tool
+# that can touch a phone), and its tier is [autonomy.tiers]'s
+# `control_phone = "ask"`, so every plan is still one approval card that prints
+# the exact adb command. Both files are re-read while Jarvis runs, so an edit
+# here takes effect on the next message; a change to the CODE needs the
+# reconciled backend and a restart.
+[phone_apps]
+
+# ------------------------------------------------------------------------
 # ENERGY - what one answer cost the graphics card (jarvis_energy.py)
 # ------------------------------------------------------------------------
 # OFF, and left off. Turned on, Jarvis reads the card's own power draw through
