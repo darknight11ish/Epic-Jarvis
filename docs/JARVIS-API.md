@@ -1318,7 +1318,7 @@ here does **not** set it - it is recorded on the turn (`outside_flags` in
 | Endpoint | Method | Body / params | Desktop | Android | Notes |
 |---|---|---|---|---|---|
 | `/api/voice/status` | GET | — | **no** | `JarvisApi.kt:553` | Phone calls it before showing a mic button; failure returns refusing defaults. |
-| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop`; since 2026-09-24 also `source=barge_in` and `&waited_ms=` (section 17; both apps since 2026-09-25) | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. `source=barge_in` answers "stop or not" and is never transcribed (`voice-flow.patch`). |
+| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop`; since 2026-09-24 also `source=barge_in` and `&waited_ms=` (section 17; both apps since 2026-09-25) | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. `source=barge_in` answers "stop or not" and is never transcribed (`voice-flow.patch`). Since 2026-11-02 `source=push_to_talk&mic=phone` - the phone's talk button - is the one clip that skips the owner check; every other combination still runs it (section 5, "The phone's mic press is not voice-checked"). |
 | `/api/voice/moment` | GET | - → WAV bytes | `voice_flow.rs` `get_voice_moment` | `JarvisApi.voiceMoment` | The "One moment." clip in the voice in use now (section 17, `voice-flow.patch`). 503 with `why` when there is none. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
@@ -1673,7 +1673,11 @@ repository holds only as its published base
 
 **A client must not do speech-to-text.** That is a standing rule in
 `CLAUDE.md`, and it is why `utterance` posts a complete recorded clip rather
-than streaming: the phone's voice-print gate needs the whole clip to check it.
+than streaming: the voice-print gate needs the whole clip to check it - and
+still does on every surface that checks (Jarvis Live, "hey Jarvis", and the
+desktop's talk button). The phone's mic press no longer runs that gate
+(2026-11-02, above), but it keeps the complete-clip shape like every other
+caller: one WAV in, one verdict out.
 
 **The owner check and the words: made beside each other, used by permission
 (2026-10-20, the voice-latency work order's Opt 3.1).** `jarvis_speech.hear()`
@@ -1736,6 +1740,43 @@ the borderline fallback, the switch-off, a worker that raises, the refusal's
 kept cost, the sinks for an unverified clip, and the streaming path's
 end-of-speech wait with slow stand-ins - test-mode numbers only),
 `backend/test_live.py` and `backend/test_turn.py`.
+
+**The phone's mic press is not voice-checked (2026-11-02).** The owner asked
+that "when i do the mic press to make a short verbal message to jarvis" it
+not "confirm my voice through the voice id". A clip with `?source=push_to_talk`
+**and** `&mic=phone` - the phone's own talk button, and only that - skips the
+owner check entirely, and the "a command needs enough speech" refusal goes
+with it (that minimum exists only to give the speaker model enough audio), so
+a short "remind me at five" is transcribed and answered. The reply is honest
+about what did not happen: `strictness: ""`, `mode: "quick_message"`,
+`voice_print: ""`, `threshold: 0`, `score: 0` - and the phone's
+`Heard.Outcome` reads `threshold: 0` as "no check ran" (only a refusal that
+really ran the check answers above 0). **What an unchecked clip may not do is
+unchanged:** no answer that uses email, the calendar, notes or memory, and no
+answer that uses a saved fact, is READ ALOUD on its say-so (`private_aloud`,
+`memory_aloud` and `sensitive_aloud` are all false; the answer is on the
+phone's screen), and automatic learning refuses it (§19.2 item 5 - the voice
+was not checked at `very_strict` in mode `owner`), so a fact it mentions
+waits for a card instead of being learned silently. `screen_aloud` is
+unchanged: a screen answer never rested on the voice check (§16). **Every
+other surface still checks every clip:** Jarvis Live's `source=live` clips
+(§63.3), the phone's `source=wake_word` clips, the desktop's talk button
+(`mic=desktop`), and any clip that names no microphone (fail closed). The
+button's own readiness gate (`listening.push_to_talk`: a trained voice print,
+the voice-ID model and speech-to-text) is unchanged as well - this removes
+the per-clip confirmation, not the enrolment. **It does not open Jarvis Live
+either.** A "let's talk" said with the phone's press is an ordinary message:
+the ways into a Live session stay a passed check (the desktop's talk button,
+"Hey Jarvis, let's talk") or the app's own Start control, so the owner's
+2026-09-28 rule "NO LIVE WITHOUT A REAL VOICE CHECK" is not loosened by the
+one surface that skips the check. The honest cost, said plainly:
+a voice the check would refuse is answered on this one surface, because the
+press on the owner's own paired phone is now the act, the way typing a
+message is. Decided by the owner on 2026-11-02
+(`decisions.d/2026-11-02-quick-mic-no-voice-print.md`); tested in
+`backend/test_quick_mic.py` (and the unchanged halves in
+`backend/test_voice_mic.py`, `backend/test_live.py` and
+`backend/test_voice_strict.py`).
 
 **Jarvis's own voice is not the owner's (F3, landed 2026-10-20).** On open
 speakers - especially with a cloned custom voice - Jarvis's own answer can
@@ -3516,6 +3557,11 @@ mode only when `gate.training` says the PC understands it:
   `wake_word` clip that is only "hey Jarvis" may be short: it still opens
   the listening window (`awake: true`). A short `wake_word` clip that has a
   command in it answers `too_short: true`, `wake_heard: true`, `text: ""`.
+  **The phone's mic press is the one exception** (2026-11-02, §5): a
+  `source=push_to_talk` clip from `mic=phone` has no check and no minimum, so
+  a short "remind me at five" is transcribed, and its reply carries
+  `too_short: false`, `strictness: ""`, `mode: "quick_message"` and
+  `threshold: 0`.
   Only once a voice is trained - with none, the reply is "no enrolled voice
   profile", as before.
 - **The one-shot training still works** (`{"clips": [...]}`, as today): it
@@ -4369,8 +4415,8 @@ Apache-2.0); nothing of it is copied.
   the TV heard through the microphone cannot take it. The first clip that
   passes does. It is a hands-free clip in every other way: under "Only
   trust the talk button" it is trusted like any "hey Jarvis" clip.
-  Push-to-talk is unchanged. "Hey Jarvis, ..." said anyway is answered with
-  the words after the phrase.
+  Push-to-talk opens no such window. "Hey Jarvis, ..." said anyway is
+  answered with the words after the phrase.
 - **The desktop** needs nothing more: its listener sends every utterance
   anyway. **The phone** (hands-free only, and only when the status says
   `flow.after_question: true`): when the answer it just spoke
@@ -13782,7 +13828,10 @@ Only while Live is on for the clip's `mic`. The order is the same as every
 clip: speech found, too short?, **the owner check**, with speech-to-text
 running beside it since 2026-10-20 and its words used only where the check
 passed (section 5, "The owner check and the words"; a paused-Live re-check
-keeps the older serial order). Extra reply fields: `live` (the session after the clip, or
+keeps the older serial order). Live's own clips always run it - the phone's
+mic press is the only surface that does not, and it cannot be used as a Live
+clip or to start a session (a "let's talk" from it is an ordinary message;
+section 5, "The phone's mic press is not voice-checked"). Extra reply fields: `live` (the session after the clip, or
 `started`/`refused` for "let's talk"), `live_pause`, `live_hint`, `live_say`
 (a FIXED line to say now), `live_ended`, `live_short` (`owner` or `other`:
 a too-short clip is checked, never turned into words, to tell "say a bit
