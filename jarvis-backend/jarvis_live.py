@@ -309,8 +309,10 @@ def turn_overrides(model: str, ollama_url: str, context_length=None) -> dict:
 
     `model` and `ollama_url` are the typed-chat call's arguments; this replaces
     them for a Live turn with `[live]` model and the one injected lane URL.
-    Context is capped at `[live] context_tokens` (16K) and the tool diet is
-    shortened. Typed chat never calls this.
+    Context is capped at `[live] context_tokens` (16K). The tool limit is a
+    floor, never a cut: it is at least typed chat's own diet size, so a spoken
+    turn is never shown a narrower tool list than a typed one (2026-11-01).
+    Typed chat never calls this.
     """
     limits = live_limits()
     cap = int(limits["context_tokens"])
@@ -320,14 +322,28 @@ def turn_overrides(model: str, ollama_url: str, context_length=None) -> dict:
             "lane_url": lane_url()}
 
 
-def live_tool_limit() -> int:
-    """How many tools Live shows the model (typed chat keeps its own limit).
+#: Typed chat's own diet size (jarvis_agent.TOOL_DIET_LIMIT). A Live turn may
+#: be shown MORE tools than this, never fewer: a spoken request must be able
+#: to reach every tool a typed one can reach (the parity fix of 2026-11-01,
+#: docs/LIVE-DESIGN.md 4.1). test_live_parity.py pins the two numbers equal, so
+#: they cannot drift apart.
+LIVE_TOOL_FLOOR = 8
 
-    The measured warm saving is mostly prompt/context; a Live turn is a
-    spoken question, so the top-K diet is cut to LIVE_TOOL_LIMIT names. It
-    changes what is SHOWN, never what is allowed or what asks.
+
+def live_tool_limit() -> int:
+    """How many tools Live shows the model - never fewer than typed chat.
+
+    The measured warm saving is mostly prompt/context, so the top-K diet was
+    cut to `[live] tool_limit` names on 2026-10-18. That cut also applied to
+    the diet's full-list fallback, which meant a spoken question that matched
+    no tool's hints was shown six arbitrary tools while the same typed words
+    were shown every tool - a spoken request could not reach most of what
+    Jarvis can do. Since 2026-11-01 the value is a FLOOR: at least
+    LIVE_TOOL_FLOOR (typed chat's own limit), and more if the owner raises
+    `[live] tool_limit`. It still changes what is SHOWN, never what is
+    allowed or what asks.
     """
-    return _live_int("tool_limit", 6, 3, 12)
+    return max(LIVE_TOOL_FLOOR, _live_int("tool_limit", LIVE_TOOL_FLOOR, 3, 12))
 
 
 def live_limits() -> dict:

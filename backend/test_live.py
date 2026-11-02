@@ -1073,7 +1073,8 @@ def t_too_short_clips():
 
 def t_live_model_fallback_and_limits_are_one_injected_value():
     """The `[live]` model/fallback and the one lane URL are settings, not a
-    second model loader; context 16K and a 6-tool diet are Live-only."""
+    second model loader; context 16K is Live-only and the tool limit is a
+    FLOOR, never fewer tools than typed chat (2026-11-01)."""
     old_cfg, old_models = L._live_cfg, L._installed_models
     old_warm = getattr(L.ENGINE, "_warm", {})
     L._live_cfg = lambda key, default=None: {
@@ -1091,9 +1092,11 @@ def t_live_model_fallback_and_limits_are_one_injected_value():
         check("a Live turn uses the Live model on the one injected lane URL",
               ov["model"] == "qwen3.5:9b" and ov["ollama_url"] == L.lane_url()
               and ov["lane_url"] == L.lane_url(), ov)
-        check("...and a 16K context and the short tool limit (typed chat unchanged)",
-              ov["context_length"] == 16384 and ov["tool_limit"] == 6
+        check("...and a 16K context, and a tool limit that is a floor at typed chat's own size",
+              ov["context_length"] == 16384 and ov["tool_limit"] >= 8
               and L.live_limits()["context_tokens"] == 16384, ov)
+        check("...so a configured 6 cannot hand a spoken turn fewer tools than typed chat",
+              ov["tool_limit"] == 8, ov)
         check("the model is a setting, not a hard-coded second loader",
               "[live]" in (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
               and "qwen3:8b" in (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8"))

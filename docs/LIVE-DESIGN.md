@@ -555,6 +555,36 @@ shared read-aloud table (`private-aloud-cases.json`).
   (`jarvis_chat_log.py:48`: "A picture: its words only ... The picture
   never.").
 
+### 3.8 The same powers as a typed turn (2026-11-01)
+
+The owner's request: *"also, id like javis live to be able to reasonably do
+anything that jarvis can do through chat."* A Live turn is an ordinary chat
+turn with two marks on it (`live: true`, `provenance: "voice"`), so it always
+had the same tools, the same gate and the same cards - but until 2026-11-01 it
+was **shown** a narrower tool list, and a model cannot call a tool it is not
+shown.
+
+**What was wrong (measured on `1861485da`).** A Live turn's offer was cut to
+`[live] tool_limit` (6), and the cut also applied to the diet's full-list
+fallback. For words no tool's hints recognised - "book a table for two at the
+italian place" - a typed turn was shown **32** tools and a Live turn **6**; 26
+were hidden, including `notes_search`, `append_obsidian_daily`,
+`create_joplin_note`, `set_timer`, `set_reminder`, `todo_add`, `todo_done`,
+`send_email`, `change_setting`, `feature_guide`, `connect_account` and
+`propose_plan`. A question matching many tools showed 12 typed and 6 spoken; a
+multi-step question showed 9 and 6. The per-conversation list carried forward
+for the prefix cache was capped one smaller than typed chat's as well.
+
+**What it is now.** A Live turn is shown exactly what a typed turn is shown for
+the same words: the same top-K diet, the same full-list fallback, the same
+carried list. `jarvis_live.LIVE_TOOL_FLOOR` is typed chat's own
+`TOOL_DIET_LIMIT` (8) and `[live] tool_limit` can only raise it, never lower it;
+`backend/test_live_parity.py` pins the two numbers equal so they cannot drift.
+Nothing about permission changed: the same gate checks the same actions and
+raises the same one card, tap-decided only, and Live still pauses while a card
+waits (§6). What remains Live-only is the **speed** half: the `[live]` model,
+its lane, and the 16K window (§4.1).
+
 ## 4. How long a turn takes
 
 All numbers per turn, from "you stop talking" to "Jarvis's first sound".
@@ -574,11 +604,17 @@ the owner's PC** (`backend/README.md:7583-7596`).
 | Phone only: fetching the sound | 0.1-0.2 s | estimate |
 | **Total, voice only** | **PC about 2-3.5 s; phone about 2.3-4 s** | agrees with the 2.5-4 s already written in `JARVIS-API.md:2755` |
 
-**One card vs two, voice only:** the same. Live's turns are answered by the
-everyday model on the main card either way. When a long Live chat outgrows
-the main card's room and "Longer conversations" is on, that answer moves to
-the second card, which is slower per word (about two thirds of the memory
-speed, `MODEL-TOPOLOGY.md:335-339`, published figures).
+**One card vs two, voice only:** not the same as typed chat, deliberately.
+Live's turns are answered on the `[live]` lane at its `[live] context_tokens`
+window (16K), on whichever card that lane runs - today the everyday Ollama at
+`:11434`. Typed chat's
+"Longer conversations" move to the second card does **not** apply to a Live
+turn: `jarvis_agent.run_local_turn` pins the Live lane and refuses the
+second-card choice for it (2026-10-18, the measured speed slice §4.1), so a
+long Live conversation is bounded by its 16K window rather than moved to the
+bigger card. **This paragraph said the opposite until 2026-11-01** ("that
+answer moves to the second card"); the code has pinned the lane since
+2026-10-18 and the words were never updated with it.
 
 **With the camera on (§5):**
 
@@ -647,10 +683,14 @@ therefore **pre-warms STT, Kokoro and the Live model at Start Live**, so no firs
 clip pays a cold load; the warm path is still one thing per turn and nothing
 parallel is trusted before the voice check.
 
-**Live-only 16K and a short tool list.** A Live turn uses `[live] context_tokens`
-(default 16384) and `[live] tool_limit` (default 6) names in the top-K diet;
-typed chat keeps its own context and tool list. This changes what is shown,
-never what is allowed, what asks, or what a card says.
+**Live-only 16K, and a tool list that is a floor (2026-11-01).** A Live turn
+uses `[live] context_tokens` (default 16384); typed chat keeps its own
+context. The tool list used to be cut to `[live] tool_limit` (default 6) as
+well, and that cut - including on the diet's full-list fallback - is gone: a
+spoken turn is now shown exactly the tools a typed turn is shown (§3.8).
+`[live] tool_limit` is a FLOOR at typed chat's own diet size (8), so the value
+can raise the number of tools Live shows and can never lower it. What the
+speed slice still saves on a turn is the model and the context window.
 
 **The Live model setting.** `[live] model` defaults to `qwen3:8b` and
 `fallback_model` to `qwen3.5:9b`. If Ollama positively reports the primary
@@ -804,7 +844,8 @@ PC with the picture model it will use.
   "Approved. Carrying on.", "OK, I won't do that." or "That card timed out,
   so nothing was done." (`net/CardWords.kt:48-52`, the same on the desktop,
   `card-words.js`). Fixed words, never the card's contents, so it is safe in
-  any room.
+  any room. It is the same gate card a typed turn raises, under the same
+  action - `backend/test_live_parity.py` proves a Live turn takes that route.
 - **While a card waits, Live pauses listening** (the sign: "Waiting for your
   tap on the card"). It carries on once the card is decided or times out.
   The End button and Stop everything still work.

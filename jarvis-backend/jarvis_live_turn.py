@@ -107,12 +107,14 @@ def ask_pc(text: str, *, token: str, port: int, timeout: float = CHAT_TIMEOUT_S)
     """Ask the PC's own `/api/chat` for one answer -> {"ok", "text"|"why"}.
 
     It sends the same token the phone's stream arrived with (never logged),
-    marks the message `live: true` so the Live note applies, and reads the
-    OpenAI-style SSE chunks the route already produces. It talks to 127.0.0.1
-    only - the same listener that is serving this stream.
+    marks the message `live: true` AND `provenance: "voice"` - the two marks
+    both apps already put on a spoken Live message - so this turn is a real
+    spoken Live turn (the Live note, side talk) and not an untagged typed one,
+    and reads the OpenAI-style SSE chunks the route already produces. It talks
+    to 127.0.0.1 only - the same listener that is serving this stream.
     """
     body = json.dumps({"messages": [{"role": "user", "content": text,
-                                     "live": True}],
+                                     "live": True, "provenance": "voice"}],
                        "stream": True}).encode("utf-8")
     conn = http.client.HTTPConnection("127.0.0.1", int(port), timeout=timeout)
     try:
