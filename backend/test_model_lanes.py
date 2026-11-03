@@ -1267,8 +1267,14 @@ def t_the_automatic_half_has_the_same_safety_properties():
     def boom(*a, **k):
         raise AssertionError("the named-lane start asked the approval gate")
 
-    real_gate = L._pooled_gate
+    real_gate, real_host = L._pooled_gate, L._host_reason
     L._pooled_gate = boom
+    # `start()` refuses off Windows BEFORE it looks at any task ("starting a
+    # model lane is a Windows thing"), and this suite runs on both operating
+    # systems in CI. The host answer is the ONE thing faked here: with it empty
+    # the rest of the path is the shipped code, and the gate is watched by a
+    # function that raises if it is ever called.
+    L._host_reason = lambda: ""
     try:
         code, body = L.start(
             lane=L.lane_by_key("coding"), probe_fn=lambda port: False,
@@ -1276,10 +1282,29 @@ def t_the_automatic_half_has_the_same_safety_properties():
             tasks_fn=lambda: ("Jarvis Ollama - Coding model (RTX 2080 Super)",),
             running_fn=lambda task: False, watch=False)
     finally:
-        L._pooled_gate = real_gate
+        L._pooled_gate, L._host_reason = real_gate, real_host
     check("the named-lane start never asks the approval gate - no card on that "
           "path, and rule 4 is untouched",
           code == 202 and body.get("changed") is True, (code, body))
+    # The other host answer: a PC that cannot run the task at all refuses in
+    # words BEFORE anything is run - and still never asks the gate. This is the
+    # answer a Linux runner gets, so the check does not depend on the OS this
+    # suite happens to run on.
+    L._pooled_gate = boom
+    L._host_reason = lambda: ("Starting a model lane is a Windows thing: this "
+                              "PC's own Task Scheduler holds the task.")
+    try:
+        code2, body2 = L.start(
+            lane=L.lane_by_key("coding"), probe_fn=lambda port: False,
+            run_fn=lambda task: (0, b""),
+            tasks_fn=lambda: ("Jarvis Ollama - Coding model (RTX 2080 Super)",),
+            running_fn=lambda task: False, watch=False)
+    finally:
+        L._pooled_gate, L._host_reason = real_gate, real_host
+    check("... and a PC that cannot start a lane refuses in words, before any "
+          "task is run and still without the gate",
+          code2 == 503 and "Windows thing" in (body2.get("error") or ""),
+          (code2, body2))
     check("it still runs exactly one external program, as argv, and never a "
           "shell", "shell=True" not in text and text.count("schtasks") >= 3,
           text.count("schtasks"))
