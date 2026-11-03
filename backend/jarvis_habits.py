@@ -409,7 +409,11 @@ def record_tick(habit_id, *, day=None, words="", source="app") -> dict:
         tick = c.execute("SELECT * FROM ticks WHERE habit = ? AND day = ?",
                          (hid, day)).fetchone()
     if added:
-        _audit("habits.tick", {"id": hid, "day": day, "source": str(source or "")})
+        # `source` comes from the caller (a route body, the reminder lane) and
+        # is NOT the owner's words: it is a short tag. Capped here so a client
+        # cannot push an unbounded string into the audit log through it.
+        _audit("habits.tick", {"id": hid, "day": day,
+                               "source": str(source or "")[:40]})
     return {"ok": True, "added": bool(added), "tick": _tick_view(tick),
             "said": WORDS["ticked"] if added else WORDS["already"]}
 
