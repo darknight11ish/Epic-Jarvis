@@ -1100,8 +1100,15 @@ def self_check() -> int:
             check("no settings file means ON (the owner's default)",
                   settings()["on"] is True and settings()["source"] == "default")
             today = _today()
-            tuesday = today + datetime.timedelta(days=(1 - today.weekday()) % 7 or 7)
-            code, added = handle_add({"title": "Dentist", "date": tuesday.isoformat(),
+            # "The coming Tuesday", but never exactly 7 days out: the 7-day
+            # window's `end` is EXCLUSIVE (today .. today+6, see _occurrences),
+            # so the old `or 7` fallback put this event OUTSIDE the very list
+            # that has to find it - on every Tuesday. CI caught it on a Tuesday
+            # (2026-11-03, 00:37 UTC): "list: the event is in the next 7 days,
+            # once" with `events: []`. Tomorrow is inside the window on every
+            # weekday, so a Tuesday uses that.
+            soon = today + datetime.timedelta(days=(1 - today.weekday()) % 7 or 1)
+            code, added = handle_add({"title": "Dentist", "date": soon.isoformat(),
                                       "time": "14:30", "place": "High Street",
                                       "notes": "Bring the form",
                                       "remind_minutes": 30})
@@ -1110,7 +1117,7 @@ def self_check() -> int:
                   and added["event"]["source"] == "local", added)
             check("add: the owner's words come back exactly",
                   added["event"]["title"] == "Dentist"
-                  and added["event"]["date"] == tuesday.isoformat()
+                  and added["event"]["date"] == soon.isoformat()
                   and added["event"]["time"] == "14:30"
                   and added["event"]["recurrence"] == "none", added["event"])
             listing = list_events(7)
@@ -1128,7 +1135,7 @@ def self_check() -> int:
             check("update: one field changes, the rest stays",
                   code == 200 and changed["event"]["title"] == "Dentist (moved)"
                   and changed["event"]["time"] == "15:00"
-                  and changed["event"]["date"] == tuesday.isoformat(), changed)
+                  and changed["event"]["date"] == soon.isoformat(), changed)
             code, _ = handle_act({"do": "delete_all"})
             check("there is no delete-all", code == 400)
             code, _ = handle_act({"id": added["event"]["id"], "do": "delete"})

@@ -155,6 +155,13 @@ TOOL_NAMES = {
     # test_reach.py requires every tool to have plain words for the page.
     "connect_account": "Connecting a calendar or GitHub (one card on this PC; you "
                        "type the details, never the model)",
+    # PHONE_APPS (2026-11-02): the [phone_apps] allow-list's own management - the
+    # list of apps `control_phone` is allowed to open. `list` reads the settings
+    # file and changes nothing; `add` and `remove` write ONE line of it after an
+    # approval card, one app per call. Listed here because test_reach.py
+    # requires every tool to have plain words for the page.
+    "phone_apps": "Managing the apps Jarvis may open on your phone (one card per "
+                  "app; the list itself stays in your settings file)",
     # The conversation-scoped web-search approval (jarvis_agent.py, the owner's
     # ask of 2026-11-01). The page lists every tool the model can offer, so both
     # halves get plain words - and the page's own sentence has to say what the
