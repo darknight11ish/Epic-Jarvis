@@ -134,6 +134,10 @@ READ_ONLY_TOOLS = frozenset({
     "calendar_read", "email_check", "notes_search", "my_files", "my_spending", "retirement_whatif", "home_read",
     "coming_up", "more_tools",
     "read_web_page", "propose_plan", "feature_guide", "rea_investigate",
+    # goals_list (2026-11-02): it reads the owner's goals and their progress
+    # back out of the store and changes nothing - the three goal WRITES are
+    # in ACTING_TOOLS below.
+    "goals_list",
 })
 
 #: The other half of the same classification (audit H4): every tool that can
@@ -168,6 +172,11 @@ ACTING_TOOLS = frozenset({
     "approve_web_search_for_conversation", "stop_web_search_approval",
     "set_reminder", "set_timer", "shell_exec", "tidy_inbox", "todo_add",
     "todo_done",
+    # The goals writes (2026-11-02): adding a goal, recording a progress line
+    # and marking one done all CHANGE the owner's own store, so "nothing was
+    # done" after one of them is the same false claim a to-do tick would be.
+    # `goals_list` is absent on purpose - it reads.
+    "goal_add", "goal_progress", "goal_done",
 })
 
 #: The line added to a typed answer that claimed an action nobody took.

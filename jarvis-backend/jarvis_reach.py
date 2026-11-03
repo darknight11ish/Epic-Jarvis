@@ -144,6 +144,13 @@ TOOL_NAMES = {
     # reach page lists every tool the model can offer, so this one has plain
     # words too. It SENDS (outbound) - one file, one card, ten minutes.
     "send_file_to_phone": "Sending one file from your PC to your phone (one card each)",
+    # The goals and their progress (2026-11-02). No card on any of them: a goal
+    # and a progress line are the owner's own words in the owner's own store,
+    # the same shape as the to-do list above. Nothing here deletes anything.
+    "goals_list": "Reading your goals and what you have recorded on them",
+    "goal_add": "Adding a goal, in your words",
+    "goal_progress": "Recording one progress line on one of your goals",
+    "goal_done": "Marking one of your goals done (kept, with its progress)",
     # REA (2026-10-20): the reverse-engineering tool ships OFF and asks a person
     # for every call; the page still needs plain words for it, like every tool
     # (test_reach.py).

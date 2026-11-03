@@ -99,6 +99,34 @@ nudge line is kept as the job's `note()` (shown under it in both apps'
 Coming up) - never learned as a fact, never counted as an offer
 (jarvis_backoff is not involved: this is the owner's own already-accepted
 repeat firing on schedule, not something asked for the first time).
+
+PROGRESS, IN THE REMINDER AREA (2026-11-02)
+
+The owner asked for "a goals section in the reminder area and a way for me to
+record progress there along with talking to jarvis". The reminder area is the
+phone's Reminders screen (PR #1102), and this module is the goals store it
+already had - so the progress log was ADDED HERE rather than built as a second,
+parallel "goals" feature. One goal is one row; its progress is an append-only
+list of lines, each with an optional number and an optional date, and nothing
+in this module ever edits or deletes one of those lines. The only deletion is
+`remove()`, which takes a whole goal and its log together, on the owner's own
+tap - and no agent tool offers it, so talking to Jarvis can never delete what
+the owner wrote.
+
+The states the reminder area shows are the same `status` this module already
+kept: `draft` and `active` are the open goals, `paused` is a goal that is
+temporarily not being tracked, `done` is one that was reached, and `stopped`
+is the existing "stop tracking this". `paused` is new; `done` already existed
+in STATES. `create(start=True)` makes a goal that is open at once, with no
+plan acceptance and no weekly check-in - that is what the reminder area's own
+"Add" does, because a two-tap acceptance step followed by a weekly nudge is
+not what the owner asked for there. The draft/accept path is untouched.
+
+STORAGE. The same `goals.db` in the Jarvis settings folder (`~/.openjarvis`,
+beside schedule.db and memory.db) - a second table in the same file, not a
+second file. `JARVIS_GOALS_DB` still overrides it for the tests. Two columns,
+`target` and `notes`, are added to the existing `goals` table by a guarded
+ALTER TABLE on open, so a database made before this change keeps working.
 """
 from __future__ import annotations
 
@@ -124,10 +152,17 @@ except Exception:  # pragma: no cover - shipped beside it on the PC
 # --------------------------------------------------------------------------
 
 MAX_TEXT = 300           # a goal's own words, and a step's
+MAX_TARGET = 200         # the optional target ("100 km", "$2,000")
+MAX_NOTES = 2000         # the optional longer note about a goal
+MAX_PROGRESS = 500       # one progress line
 MAX_STEPS = 7            # "keep plans short" (idea 3's own risk mitigation)
 MAX_GOALS = 20           # active + draft goals together
 MAX_BY = 40              # a step's rough date/label ("before winter")
 MAX_NEEDS = 3            # a step may wait on at most 3 other steps
+#: How many recent progress lines a goal's own view carries. The full log has
+#: its own read (`GET /api/goals/<id>/progress`); this is what the reminder
+#: area shows under a goal without a second request.
+RECENT_PROGRESS = 3
 STEP_IDS = tuple(f"s{i}" for i in range(1, 10))     # "s1".."s9"
 _BENCH_ID = re.compile(r"[0-9a-f]{32}")
 
@@ -138,7 +173,10 @@ KIND = "goal_checkin"
 #: a time for this (it is not a repeat they typed, like a reminder).
 DEFAULT_RULE = {"every": "week", "at": "09:00", "days": [0]}
 
-STATES = ("draft", "active", "done", "stopped")
+#: `draft` and `active` are open; `paused` is new on 2026-11-02 and is one of
+#: the states the reminder area offers; `done` and `stopped` are the two ways
+#: a goal can be finished.
+STATES = ("draft", "active", "paused", "done", "stopped")
 
 # --------------------------------------------------------------------------
 #   Where
@@ -169,9 +207,41 @@ CREATE TABLE IF NOT EXISTS goals (
     status       TEXT NOT NULL,
     created      REAL NOT NULL,
     changed      REAL NOT NULL,
-    checkin_job  TEXT
+    checkin_job  TEXT,
+    target       TEXT NOT NULL DEFAULT '',
+    notes        TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS goal_progress (
+    id           TEXT PRIMARY KEY,
+    goal_id      TEXT NOT NULL,
+    text         TEXT NOT NULL,
+    value        REAL,
+    at           REAL NOT NULL,
+    created      REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS goal_progress_by_goal
+    ON goal_progress (goal_id, at DESC, created DESC);
 """
+
+#: Columns added after the first version of `goals.db` was made. SQLite's
+#: `CREATE TABLE IF NOT EXISTS` does not add a column to an existing table, so
+#: a database made before 2026-11-02 has neither `target` nor `notes` and an
+#: INSERT naming either raises `no such column`. Applied on open, guarded by
+#: what the table already has, so the same code runs on every database.
+_ADDED_COLUMNS = (
+    ("target", "TEXT NOT NULL DEFAULT ''"),
+    ("notes", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _add_missing_columns(c) -> None:
+    """Add the columns `_ADDED_COLUMNS` names that this database lacks."""
+    have = {row[1] for row in c.execute("PRAGMA table_info(goals)").fetchall()}
+    for name, decl in _ADDED_COLUMNS:
+        if name not in have:
+            # The name and declaration are this file's own constants, never
+            # anything off a request, which is why the interpolated SQL is safe.
+            c.execute(f"ALTER TABLE goals ADD COLUMN {name} {decl}")
 
 
 # --------------------------------------------------------------------------
@@ -185,6 +255,53 @@ def _clean_text(text, limit: int, what: str) -> str:
     if len(t) > limit:
         raise ValueError(f"{what} is longer than {limit} characters - say it more briefly")
     return t
+
+
+def _clean_optional(text, limit: int, what: str) -> str:
+    """The same clean-up as `_clean_text`, but "" is allowed: `target` and
+    `notes` are optional, and a blank one is kept as "" rather than refused."""
+    t = " ".join(str(text or "").split())
+    if len(t) > limit:
+        raise ValueError(f"{what} is longer than {limit} characters - say it more briefly")
+    return t
+
+
+def _clean_value(value):
+    """A progress line's optional number, or None. Refuses a bool and
+    anything that is not a finite number, in plain words. A number written as
+    text ("7") is accepted: a model that puts 7 in quotes still means 7."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValueError("a progress value has to be a number")
+    if isinstance(value, str):
+        try:
+            value = float(value.strip())
+        except ValueError:
+            raise ValueError("a progress value has to be a number") from None
+    if not isinstance(value, (int, float)):
+        raise ValueError("a progress value has to be a number")
+    got = float(value)
+    if got != got or got in (float("inf"), float("-inf")):
+        raise ValueError("a progress value has to be a real number")
+    return got
+
+
+def _parse_at(at, now: float) -> float:
+    """When a progress line happened: now, an epoch number, or "YYYY-MM-DD"
+    (local midnight). Anything else is refused in plain words."""
+    if at is None or at == "":
+        return float(now)
+    if isinstance(at, bool):
+        raise ValueError("the date has to be YYYY-MM-DD or a number of seconds")
+    if isinstance(at, (int, float)):
+        return float(at)
+    text = str(at).strip()
+    try:
+        import datetime as _dt
+        return _dt.datetime.strptime(text, "%Y-%m-%d").timestamp()
+    except ValueError:
+        raise ValueError(f'the date "{_short(text)}" is not a date - use YYYY-MM-DD') from None
 
 
 #: The sentences both apps show for a step's lock, word for word
@@ -492,6 +609,7 @@ class Goals:
         self._lock = threading.RLock()
         with self._db() as c:
             c.executescript(_SCHEMA)
+            _add_missing_columns(c)
 
     def _db(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -511,7 +629,7 @@ class Goals:
     def _row(self, c, goal_id: str):
         return c.execute("SELECT * FROM goals WHERE id = ?", (str(goal_id),)).fetchone()
 
-    def _view(self, row) -> dict:
+    def _view(self, row, c=None) -> dict:
         plan = load_plan(row["plan"])
         states = step_states(plan, self._bench_reader)
         names = {st["id"]: st["step"] for st in plan}
@@ -536,9 +654,16 @@ class Goals:
                     latest=_with_unit(b["latest"]["value"], unit),
                     target=_with_unit(b["target"], unit))
             steps.append(v)
+        if c is None:
+            with self._lock, self._db() as conn:
+                recent, count = self._progress_summary(conn, row["id"])
+        else:
+            recent, count = self._progress_summary(c, row["id"])
         return {
             "id": row["id"], "text": row["text"], "plan": steps,
             "status": row["status"], "created": row["created"], "changed": row["changed"],
+            "target": row["target"] or "", "notes": row["notes"] or "",
+            "progress": recent, "progress_count": count,
         }
 
     def _check_measure(self, project: str, bench: str, step: str) -> str:
@@ -556,6 +681,167 @@ class Goals:
 
     # ---- reading ------------------------------------------------------------
 
+    # ---- the progress log (2026-11-02) --------------------------------------
+
+    @staticmethod
+    def _progress_view(row) -> dict:
+        return {"id": row["id"], "text": row["text"], "value": row["value"],
+                "at": row["at"], "created": row["created"]}
+
+    def _progress_summary(self, c, goal_id: str) -> tuple:
+        """(the newest RECENT_PROGRESS lines, how many there are in all)."""
+        rows = c.execute(
+            "SELECT * FROM goal_progress WHERE goal_id = ? "
+            "ORDER BY at DESC, created DESC, id DESC LIMIT ?",
+            (str(goal_id), RECENT_PROGRESS)).fetchall()
+        count = int(c.execute("SELECT COUNT(*) FROM goal_progress WHERE goal_id = ?",
+                              (str(goal_id),)).fetchone()[0])
+        return [self._progress_view(r) for r in rows], count
+
+    def progress(self, goal_id: str, limit=None) -> list:
+        """One goal's whole progress log, newest first. Never edits anything -
+        the log is append-only, so there is no update or delete here."""
+        with self._lock, self._db() as c:
+            if self._row(c, goal_id) is None:
+                raise KeyError("no such goal")
+            sql = ("SELECT * FROM goal_progress WHERE goal_id = ? "
+                   "ORDER BY at DESC, created DESC, id DESC")
+            args = [str(goal_id)]
+            if limit is not None:
+                sql += " LIMIT ?"
+                args.append(int(limit))
+            rows = c.execute(sql, args).fetchall()
+        return [self._progress_view(r) for r in rows]
+
+    def add_progress(self, goal_id: str, text: str, value=None, at=None) -> dict:
+        """Append one line to a goal's progress log. No card - the same shape
+        as ticking off a to-do item - and nothing an earlier line says is
+        changed. Returns the entry and the goal as it now stands."""
+        line = _clean_text(text, MAX_PROGRESS, "a progress line")
+        got = _clean_value(value)
+        when = _parse_at(at, self.now())
+        with self._lock, self._db() as c:
+            if self._row(c, goal_id) is None:
+                raise KeyError("no such goal")
+            pid = "p" + uuid.uuid4().hex[:10]
+            now = self.now()
+            c.execute("INSERT INTO goal_progress (id, goal_id, text, value, at, created) "
+                      "VALUES (?,?,?,?,?,?)",
+                      (pid, str(goal_id), line, got, when, now))
+        self._audit("goals.progress", {"id": goal_id, "entry": pid})
+        entry = {"id": pid, "text": line, "value": got, "at": when, "created": now}
+        return {"goal": self.get(goal_id), "entry": entry}
+
+    # ---- done, paused, resumed, removed -------------------------------------
+
+    def _job_act(self, job, do: str) -> None:
+        """One scheduler action on a goal's check-in job - never fails the
+        owner's tap. No job (a goal made by the reminder area, which has no
+        check-in) is not an error: there is simply nothing to act on."""
+        if job and self._scheduler is not None:
+            try:
+                self._scheduler.act(job, do)
+            except Exception:
+                pass
+
+    def mark_done(self, goal_id: str) -> dict:
+        """Done, one tap - no card. If the goal has a weekly check-in it is
+        deleted, so a finished goal is never nudged again."""
+        with self._lock, self._db() as c:
+            row = self._row(c, goal_id)
+            if row is None:
+                raise KeyError("no such goal")
+            if row["status"] == "stopped":
+                raise ValueError("that goal was stopped - it is not being tracked any more")
+            job = row["checkin_job"]
+            now = self.now()
+            c.execute("UPDATE goals SET status = 'done', changed = ? WHERE id = ?",
+                      (now, goal_id))
+        self._job_act(job, "delete")
+        self._audit("goals.done", {"id": goal_id})
+        return self.get(goal_id)
+
+    def pause(self, goal_id: str) -> dict:
+        """Paused: temporarily not being tracked. The weekly check-in, if there
+        is one, is paused too - it starts again the moment Resume is tapped."""
+        with self._lock, self._db() as c:
+            row = self._row(c, goal_id)
+            if row is None:
+                raise KeyError("no such goal")
+            if row["status"] == "stopped":
+                raise ValueError("that goal was stopped - it is not being tracked any more")
+            job = row["checkin_job"]
+            now = self.now()
+            c.execute("UPDATE goals SET status = 'paused', changed = ? WHERE id = ?",
+                      (now, goal_id))
+        self._job_act(job, "pause")
+        self._audit("goals.pause", {"id": goal_id})
+        return self.get(goal_id)
+
+    def resume(self, goal_id: str) -> dict:
+        """Open again after a pause (or after Done, when the owner changes
+        their mind). No card, immediate. Refused when the open-goal limit is
+        already full, because `_count_open` does not count a paused goal - so
+        without this check pausing one, adding MAX_GOALS more and resuming
+        would leave more open goals than the limit allows."""
+        with self._lock, self._db() as c:
+            row = self._row(c, goal_id)
+            if row is None:
+                raise KeyError("no such goal")
+            if row["status"] == "stopped":
+                raise ValueError("that goal was stopped - it is not being tracked any more")
+            if row["status"] not in ("draft", "active") and self._count_open(c) >= MAX_GOALS:
+                raise OverflowError(f"there are already {MAX_GOALS} open goals - "
+                                    "stop tracking one before opening this one again")
+            job = row["checkin_job"]
+            now = self.now()
+            c.execute("UPDATE goals SET status = 'active', changed = ? WHERE id = ?",
+                      (now, goal_id))
+        self._job_act(job, "resume")
+        self._audit("goals.resume", {"id": goal_id})
+        return self.get(goal_id)
+
+    def remove(self, goal_id: str) -> dict:
+        """Take one goal, and its progress log, off this PC. The ONLY delete
+        in this module, and deliberately the owner's own tap - no agent tool
+        offers it, so talking to Jarvis cannot throw away what was written."""
+        with self._lock, self._db() as c:
+            row = self._row(c, goal_id)
+            if row is None:
+                raise KeyError("no such goal")
+            job, text = row["checkin_job"], row["text"]
+            c.execute("DELETE FROM goal_progress WHERE goal_id = ?", (str(goal_id),))
+            c.execute("DELETE FROM goals WHERE id = ?", (str(goal_id),))
+        self._job_act(job, "delete")
+        self._audit("goals.remove", {"id": goal_id})
+        _leave_balance_chart(goal_id)
+        return {"removed": str(goal_id), "text": text}
+
+    def find_one(self, words: str) -> dict:
+        """The ONE goal a plain-words name means, by id, exact words or a
+        part of them. A refusal (KeyError / ValueError) when none or several
+        match, so a tool never guesses which goal the owner meant."""
+        q = " ".join(str(words or "").split())
+        if not q:
+            raise ValueError("which goal? Give me its name or the words in it")
+        goals = self.list()
+        if not goals:
+            raise KeyError("there are no goals yet")
+        for goal in goals:
+            if goal["id"] == q:
+                return goal
+        exact = [g for g in goals if g["text"].strip().lower() == q.lower()]
+        if len(exact) == 1:
+            return exact[0]
+        low = q.lower()
+        hits = [g for g in goals if low in g["text"].lower()]
+        if len(hits) == 1:
+            return hits[0]
+        if not hits:
+            raise KeyError(f'no goal matches "{_short(q)}"')
+        names = ", ".join(f'"{_short(g["text"], 40)}"' for g in hits[:4])
+        raise ValueError(f"more than one goal matches: {names} - say which one")
+
     def get(self, goal_id: str) -> Optional[dict]:
         with self._lock, self._db() as c:
             row = self._row(c, goal_id)
@@ -564,20 +850,30 @@ class Goals:
     def list(self) -> list:
         with self._lock, self._db() as c:
             rows = c.execute("SELECT * FROM goals ORDER BY created DESC").fetchall()
-        return [self._view(r) for r in rows]
+            return [self._view(r, c) for r in rows]
 
     # ---- creating a draft ---------------------------------------------------
 
-    def create(self, text: str, plan=None) -> dict:
+    def create(self, text: str, plan=None, *, target="", notes="", start=False) -> dict:
         """A new goal, in the owner's own words, with a plan - either given
         (the owner's own edit, or something they asked Jarvis to suggest in
         an ordinary chat message first and pasted in here) or, if none was
         given yet, a single-step placeholder made of the goal's own words.
         Calls no gate and raises no card: a draft is content, not action,
-        exactly like an email draft (JARVIS-API.md section 40)."""
+        exactly like an email draft (JARVIS-API.md section 40).
+
+        `target` and `notes` are optional free text ("100 km", "why I am
+        doing this"). `start=True` makes the goal OPEN straight away -
+        `active`, with NO weekly check-in and NO acceptance step - which is
+        what the phone's reminder area and the agent's `goal_add` use, since
+        a two-tap accept followed by a weekly nudge is not what was asked for
+        there. The draft/`accept` path is unchanged."""
         text = _clean_text(text, MAX_TEXT, "a goal")
+        target = _clean_optional(target, MAX_TARGET, "a target")
+        notes = _clean_optional(notes, MAX_NOTES, "a note")
         clean = (clean_plan(plan, None, self.now(), self._check_measure) if plan is not None
                  else _default_plan(text))
+        status = "active" if start else "draft"
         with self._lock, self._db() as c:
             if self._count_open(c) >= MAX_GOALS:
                 raise OverflowError(f"there are already {MAX_GOALS} goals - "
@@ -585,9 +881,9 @@ class Goals:
             gid = "g" + uuid.uuid4().hex[:10]
             now = self.now()
             c.execute("INSERT INTO goals (id, text, plan, status, created, changed, "
-                      "checkin_job) VALUES (?,?,?,?,?,?,NULL)",
-                      (gid, text, json.dumps(clean), "draft", now, now))
-        self._audit("goals.draft", {"id": gid})
+                      "checkin_job, target, notes) VALUES (?,?,?,?,?,?,NULL,?,?)",
+                      (gid, text, json.dumps(clean), status, now, now, target, notes))
+        self._audit("goals.start" if start else "goals.draft", {"id": gid})
         return self.get(gid)
 
     # ---- accepting: the one line that touches the gate ----------------------
@@ -934,12 +1230,17 @@ def register() -> None:
 # --------------------------------------------------------------------------
 
 PATH = "/api/goals"
-_TAILS = ("accept", "step", "stop")
+#: `progress`, `done`, `pause`, `resume` and `remove` are the reminder area's
+#: own writes (2026-11-02). `remove` is a POST, not a DELETE: the server wraps
+#: do_GET and do_POST for every optional feature, and a do_DELETE this module
+#: invented would be a second mechanism. It is still the ONLY delete, and no
+#: model tool offers it.
+_TAILS = ("accept", "step", "stop", "progress", "done", "pause", "resume", "remove")
 
 
 def _goal_route(route: str):
     """None, or (goal_id, tail) for PATH itself (tail ""), PATH/<id>
-    (tail ""), or PATH/<id>/(accept|step|stop)."""
+    (tail ""), or PATH/<id>/<one of _TAILS>."""
     if not isinstance(route, str) or route == PATH:
         return None
     if not route.startswith(PATH + "/"):
@@ -973,10 +1274,21 @@ def handle_get(route: str) -> tuple:
     if route == PATH:
         return 200, {"ok": True, "goals": get().list(),
                      "limits": {"text": MAX_TEXT, "steps": MAX_STEPS, "goals": MAX_GOALS,
-                               "by": MAX_BY, "needs": MAX_NEEDS},
+                                "by": MAX_BY, "needs": MAX_NEEDS,
+                                "target": MAX_TARGET, "notes": MAX_NOTES,
+                                "progress": MAX_PROGRESS},
                      "words": dict(WORDS)}
     hit = _goal_route(route)
-    if hit is None or hit[1] != "":
+    if hit is None:
+        return 404, {"ok": False, "error": "no such goal"}
+    if hit[1] == "progress":
+        # The full log, newest first. A read: it changes nothing.
+        try:
+            log = get().progress(hit[0])
+        except Exception as exc:
+            return _err(exc)
+        return 200, {"ok": True, "id": hit[0], "progress": log, "count": len(log)}
+    if hit[1] != "":
         return 404, {"ok": False, "error": "no such goal"}
     goal = get().get(hit[0])
     if goal is None:
@@ -989,7 +1301,10 @@ def handle_post(route: str, body) -> tuple:
         return 400, {"ok": False, "error": "need a JSON object"}
     if route == PATH:
         try:
-            goal = get().create(body.get("text"), body.get("plan"))
+            goal = get().create(body.get("text"), body.get("plan"),
+                                target=body.get("target") or "",
+                                notes=body.get("notes") or "",
+                                start=body.get("start") is True)
         except Exception as exc:
             return _err(exc)
         return 200, {"ok": True, "goal": goal}
@@ -1008,6 +1323,19 @@ def handle_post(route: str, body) -> tuple:
             goal = get().mark_step(goal_id, index, done, step_id=sid)
         elif tail == "stop":
             goal = get().stop(goal_id)
+        elif tail == "progress":
+            out = get().add_progress(goal_id, body.get("text"),
+                                     body.get("value"), body.get("date"))
+            return 200, {"ok": True, **out}
+        elif tail == "done":
+            goal = get().mark_done(goal_id)
+        elif tail == "pause":
+            goal = get().pause(goal_id)
+        elif tail == "resume":
+            goal = get().resume(goal_id)
+        elif tail == "remove":
+            out = get().remove(goal_id)
+            return 200, {"ok": True, **out}
         else:
             return 404, {"ok": False, "error": "no such goal"}
     except Exception as exc:

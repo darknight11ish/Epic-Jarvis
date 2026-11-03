@@ -1005,6 +1005,100 @@
  {
   "type": "function",
   "function": {
+   "name": "goals_list",
+   "description": "List the owner's goals on this PC, each with its newest progress lines. Read-only.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "include_done": {
+      "type": "boolean",
+      "description": "also list done and stopped goals"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "goal_add",
+   "description": "Add one goal, in the owner's own words, on this PC. It is open straight away. `target` is optional, e.g. \"100 km\"; `notes` is optional.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "the goal, in their words"
+     },
+     "target": {
+      "type": "string",
+      "description": "optional, e.g. 100 km"
+     },
+     "notes": {
+      "type": "string",
+      "description": "optional longer note"
+     }
+    },
+    "required": [
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "goal_progress",
+   "description": "Record one progress line on one of the owner's goals. It is added to the log and never replaces an earlier line. `goal` is the goal's words, or enough of them to pick it out; `value` is an optional number.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "goal": {
+      "type": "string",
+      "description": "the goal's words, or enough of them"
+     },
+     "text": {
+      "type": "string",
+      "description": "what happened, in their words"
+     },
+     "value": {
+      "type": "number",
+      "description": "optional, e.g. 5"
+     },
+     "date": {
+      "type": "string",
+      "description": "optional YYYY-MM-DD"
+     }
+    },
+    "required": [
+     "goal",
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "goal_done",
+   "description": "Mark one of the owner's goals as done. The goal is kept, with its progress log; nothing is deleted.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "goal": {
+      "type": "string",
+      "description": "the goal's words, or enough of them"
+     }
+    },
+    "required": [
+     "goal"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "change_setting",
    "description": "Call this tool when the owner asks you to change one of Jarvis's own settings, in any words - do not ask first, just call it. Examples: \"turn on humour\", \"switch the prompt coach off\", \"enable web search\", \"turn on quiet hours\". \"setting\" is their words for it, e.g. \"humour\"; \"value\" is on or off, or a named choice such as \"faster\". Its own result says what happened: a loosening waits for one approval card, cosmetic ones at once; never say a setting changed when it did not.",
    "parameters": {

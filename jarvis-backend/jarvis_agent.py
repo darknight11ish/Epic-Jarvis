@@ -1857,14 +1857,15 @@ PLAN_STEP_ASK_ACTION = "run_plan"
 
 def _plan_step_excluded(tool_name: str) -> bool:
     """True for a tool a plan step may never name (see _PLAN_EXCLUDED_STEPS
-    just above). Checks SCHEDULE_TOOLS by NAME, not by copying its members
-    into a second set here - SCHEDULE_TOOLS is defined further down in this
-    file, but that is fine: this function is only ever called once a turn
+    just above). Checks SCHEDULE_TOOLS and GOAL_TOOLS by NAME, not by copying
+    their members into a second set here - both are defined further down in
+    this file, but that is fine: this function is only ever called once a turn
     is actually running, by which point the whole module has loaded, and a
     second, hand-kept copy of its members is exactly the kind of list that
     quietly drifts from the one it was copied from (CLAUDE.md: the phone's
     and desktop's own "open a chat" phrase lists, before they were unified)."""
-    return tool_name in _PLAN_EXCLUDED_STEPS or tool_name in SCHEDULE_TOOLS
+    return (tool_name in _PLAN_EXCLUDED_STEPS or tool_name in SCHEDULE_TOOLS
+            or tool_name in GOAL_TOOLS)
 
 
 class _PlanStepVerdict:
@@ -2751,6 +2752,18 @@ def _run_stop_web_search(args: dict, state, *, watch=None, **_unused) -> dict:
     return {"ok": True, "stopped": True, "note": WEB_SEARCH_GRANT_OFF}
 
 
+#: The gate action the goals tools resolve under, when anything asks the table
+#: (jarvis_gate.action_for_tool, and jarvis_reach's "What can Jarvis reach"
+#: page). DELIBERATELY the to-do list's own action, not a new one: recording a
+#: goal and a progress line is the SAME kind of cardless personal logging as
+#: adding or ticking off a to-do item, and the owner's own decision behind
+#: that row (2026-09-25/26) is the analogue this feature follows. No new
+#: action, tier, patch or card wording is invented - the same rule
+#: FEATURE_GUIDE_TOOL follows by resolving under `skill_list`. Nothing here
+#: can reach the gate anyway: _one_call intercepts GOAL_TOOLS by name first.
+GOAL_GATE_ACTION = "todo_add"
+
+
 TOOLS: dict = {
     "calculator": Tool(
         "calculator", "Evaluate a plain arithmetic expression.",
@@ -3307,6 +3320,56 @@ TOOLS: dict = {
         "coming_up", "List the owner's timers, alarms, reminders and to-do list on this PC.",
         {"type": "object", "properties": {}},
         _plain_prepare("Coming up"), lambda args, state, **_: {"ok": False}),
+    # Goals and their progress (jarvis_goals.py, 2026-11-02; the owner's ask:
+    # "a goals section in the reminder area and a way for me to record
+    # progress there along with talking to jarvis"). Cardless, like the to-do
+    # list above: a goal and a progress line are the owner's own words, never
+    # an action, and every one of these is intercepted by name in _one_call
+    # BEFORE the gate (see GOAL_TOOLS). There is deliberately NO tool that
+    # deletes a goal or a progress line - the owner's own screen has Remove,
+    # and talking to Jarvis can never throw away what was written.
+    "goals_list": Tool(
+        "goals_list",
+        "List the owner's goals on this PC, each with its newest progress lines. "
+        "Read-only.",
+        {"type": "object", "properties": {
+            "include_done": {"type": "boolean",
+                             "description": "also list done and stopped goals"}}},
+        _plain_prepare("Goals"), lambda args, state, **_: {"ok": False},
+        gate_lookup_name=lambda args: GOAL_GATE_ACTION),
+    "goal_add": Tool(
+        "goal_add",
+        "Add one goal, in the owner's own words, on this PC. It is open straight away. "
+        "`target` is optional, e.g. \"100 km\"; `notes` is optional.",
+        {"type": "object", "properties": {
+            "text": {"type": "string", "description": "the goal, in their words"},
+            "target": {"type": "string", "description": "optional, e.g. 100 km"},
+            "notes": {"type": "string", "description": "optional longer note"}},
+         "required": ["text"]},
+        _plain_prepare("Goal"), lambda args, state, **_: {"ok": False},
+        gate_lookup_name=lambda args: GOAL_GATE_ACTION),
+    "goal_progress": Tool(
+        "goal_progress",
+        "Record one progress line on one of the owner's goals. It is added to the log "
+        "and never replaces an earlier line. `goal` is the goal's words, or enough of "
+        "them to pick it out; `value` is an optional number.",
+        {"type": "object", "properties": {
+            "goal": {"type": "string", "description": "the goal's words, or enough of them"},
+            "text": {"type": "string", "description": "what happened, in their words"},
+            "value": {"type": "number", "description": "optional, e.g. 5"},
+            "date": {"type": "string", "description": "optional YYYY-MM-DD"}},
+         "required": ["goal", "text"]},
+        _plain_prepare("Goal progress"), lambda args, state, **_: {"ok": False},
+        gate_lookup_name=lambda args: GOAL_GATE_ACTION),
+    "goal_done": Tool(
+        "goal_done",
+        "Mark one of the owner's goals as done. The goal is kept, with its progress "
+        "log; nothing is deleted.",
+        {"type": "object", "properties": {
+            "goal": {"type": "string", "description": "the goal's words, or enough of them"}},
+         "required": ["goal"]},
+        _plain_prepare("Goal done"), lambda args, state, **_: {"ok": False},
+        gate_lookup_name=lambda args: GOAL_GATE_ACTION),
     # Changing one of Jarvis's own settings by name - see SETTINGS_TOOL above
     # for why this is not put to the gate here, and why that is not a weakening.
     # Its prepare/execute are deliberately unreachable: _one_call hands it to
@@ -3420,6 +3483,29 @@ SCHEDULE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done"
 SCHEDULE_AFTER_OUTSIDE = ("refused: outside text shaped this turn, so Jarvis does not set or "
                           "change timers, reminders or the to-do list from it. Nothing was "
                           "changed. Tell the owner they can type or say it themselves.")
+
+#: The owner's goals and their progress (jarvis_goals.py, 2026-11-02). NOT put
+#: to the gate in _one_call, for the SAME reason as SCHEDULE_TOOLS: making a
+#: goal, recording a progress line and marking one done are the owner's own
+#: words going into the owner's own store, like ticking off a to-do item or
+#: accepting a goal on the PC (the owner's 2026-09-28 decision, and the
+#: `fixed:goals` row in jarvis_asks_first: a goal's own actions never ask).
+#: The stricter half is the same too: in a turn shaped by outside text a goal
+#: write changes nothing, so a web page or an email cannot invent a goal or
+#: put words in the owner's log. `goals_list` only reads the owner's own
+#: words back AND is exempt from that guard in the same turn (`ignore_read`),
+#: because "what are my goals and add one" is one request; everything else
+#: read in the turn still refuses the write.
+GOAL_TOOLS = frozenset({"goals_list", "goal_add", "goal_progress", "goal_done"})
+
+#: The one read among GOAL_TOOLS - allowed in a shaped turn, and exempt from
+#: the shaped-turn guard for a write in the same sentence. Same shape as
+#: `coming_up` in SCHEDULE_TOOLS.
+GOAL_READ_TOOLS = ("goals_list",)
+
+GOAL_AFTER_OUTSIDE = ("refused: outside text shaped this turn, so Jarvis does not add a goal "
+                      "or write in a goal's progress log from it. Nothing was changed. Tell the "
+                      "owner they can type or say it themselves.")
 
 SETTINGS_AFTER_OUTSIDE = ("refused: outside text shaped this turn, so Jarvis does not change a "
                           "setting from it. Nothing was changed. Tell the owner plainly that "
@@ -3567,6 +3653,77 @@ def _schedule_call(name: str, args: dict, call: dict, convo: list, steps: list, 
         # reading stored text, not hearing the owner's newest words, which is
         # why a note write after it asks (NOTE_AFTER_READING).
         result = watch.took_in("coming_up", result)
+    convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                  "content": _tool_content(result)})
+
+
+def _goal_run(name: str, args: dict) -> dict:
+    """One of GOAL_TOOLS against jarvis_goals.py - the whole body, so the
+    dispatch below and a test can drive the same code without a turn."""
+    import jarvis_goals as G
+    store = G.get()
+    if name == "goals_list":
+        goals = store.list()
+        if args.get("include_done") is not True:
+            goals = [g for g in goals if g["status"] in ("draft", "active", "paused")]
+        # The same fields the reminder area reads, and nothing more: a goal's
+        # plan is not needed to answer "what are my goals" and would bloat the
+        # result the model is handed.
+        return {"ok": True, "goals": [
+            {"id": g["id"], "text": g["text"], "target": g["target"],
+             "status": g["status"], "progress": g["progress"],
+             "progress_count": g["progress_count"]} for g in goals]}
+    if name == "goal_add":
+        goal = store.create(str(args.get("text") or ""),
+                            target=str(args.get("target") or ""),
+                            notes=str(args.get("notes") or ""), start=True)
+        return {"ok": True, "said": f'Added the goal "{goal["text"]}".', "goal": goal}
+    goal = store.find_one(str(args.get("goal") or ""))
+    if name == "goal_progress":
+        out = store.add_progress(goal["id"], args.get("text"),
+                                 args.get("value"), args.get("date"))
+        return {"ok": True,
+                "said": (f'Recorded "{" ".join(str(args.get("text") or "").split())}" '
+                         f'on "{goal["text"]}".'),
+                **out}
+    # goal_done
+    done = store.mark_done(goal["id"])
+    return {"ok": True, "said": f'Marked "{done["text"]}" done.', "goal": done}
+
+
+def _goal_call(name: str, args: dict, call: dict, convo: list, steps: list, say_step,
+               watch) -> None:
+    """A goals tool: straight to jarvis_goals, no gate (GOAL_TOOLS)."""
+    step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
+    steps.append(step)
+    if name not in GOAL_READ_TOOLS and watch is not None and watch.note_needs_a_person(
+            ignore_read=GOAL_READ_TOOLS):
+        say_step("tool_refused", name)
+        step["outcome"] = "refused"
+        result = {"ok": False, "error": GOAL_AFTER_OUTSIDE}
+    else:
+        say_step("tool_started", name)
+        step["ran"] = True
+        try:
+            result = _goal_run(name, args)
+        except KeyError as exc:
+            result = {"ok": False, "error": str(exc.args[0] if exc.args else exc)}
+        except (ValueError, OverflowError) as exc:
+            result = {"ok": False, "error": str(exc)}
+        except Exception as exc:
+            result = {"ok": False, "error": f"the goals list is not available here "
+                                            f"({type(exc).__name__})"}
+        step["ok"] = result.get("ok") is True
+        say_step("tool_finished", name, ok=step["ok"])
+    if name == "goals_list" and watch is not None:
+        # The goal's own words are stored text - typed on the phone's Goals
+        # tab, or written by an earlier turn - so they reach the model through
+        # the SAME outside-text boundary as every other tool result, exactly
+        # as `coming_up` does two functions up. The read mark is the correct
+        # one: listing goals is reading stored text, not hearing the owner's
+        # newest words. A goal write in the same turn is exempt from THAT one
+        # read by GOAL_READ_TOOLS; anything else read still refuses it.
+        result = watch.took_in("goals_list", result)
     convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                   "content": _tool_content(result)})
 
@@ -4915,6 +5072,10 @@ _NUDGE_TOOL_WORDS = {
     "calculator": ("calculate", "percent", "math"),
     "memory_search": ("remember", "memory", "what i said"),
     "coming_up": ("timers", "reminders", "coming up"),
+    "goals_list": ("goals", "goal", "progress"),
+    "goal_add": ("goal", "aim", "target"),
+    "goal_progress": ("progress", "so far", "how i am doing"),
+    "goal_done": ("goal", "finished", "done"),
     "draft_email": ("draft",),
     "tidy_inbox": ("archive", "trash", "mark read"),
     "retirement_whatif": ("retirement", "pension"),
@@ -7485,6 +7646,12 @@ MORE_TOOLS = "more_tools"
 TOOL_GROUPS = (
     ("timers", "a timer, the to-do list, what is coming up",
      ("set_timer", "todo_add", "todo_done", "coming_up")),
+    # The owner's goals and their progress (2026-11-02). Its own group, not
+    # the timers group: "what are my goals" must not also put the alarm tool
+    # in front of the model, and the goal tools are offered only when the
+    # owner's settings name them, like every tool here.
+    ("goals", "the owner's goals and what they have recorded so far",
+     ("goals_list", "goal_add", "goal_progress", "goal_done")),
     ("send_email", "send an email", ("send_email",)),
     # tidy_inbox (jarvis_inbox_tidy.py) shares this group rather than adding
     # a fifth-from-last name to more_tools' own description (see propose_plan
@@ -7722,6 +7889,15 @@ TOOL_HINTS = {
     "todo_done": (r"mark done", r"\bcomplete", r"\bfinished\b", r"tick off", r"marked done"),
     "coming_up": (r"coming up", r"what'?s next", r"my timers", r"my alarms", r"my reminders",
                   r"to-?do list"),
+    # The goals tools (2026-11-02). "my goals" / "how am I doing on ..." /
+    # "log 5 km" - the owner's own words, never a "what is a goal" question.
+    "goals_list": (r"\bmy goals?\b", r"\bgoals?\b.*\bprogress\b", r"how am i doing"),
+    "goal_add": (r"\badd\b.*\bgoal\b", r"\bnew goal\b", r"\bset\b.*\bgoal\b",
+                 r"\bi want to\b.*\bby\b"),
+    "goal_progress": (r"\bprogress\b", r"\bso far\b", r"\bi (?:ran|walked|did|saved|read)\b",
+                      r"\blog\b.*\bgoal\b"),
+    "goal_done": (r"\bgoal\b.*\b(?:done|finished|complete|reached)\b",
+                  r"\bhit my goal\b", r"\bmark\b.*\bgoal\b.*\bdone\b"),
     "change_setting": (r"\bsettings?\b", r"\benable\b", r"\bdisable\b",
                        r"\bturn\b.*\b(?:on|off)\b"),
     # FEATURE_GUIDE_TOOL (2026-10-20): "what is the prompt coach", "is it on",
@@ -13584,6 +13760,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # Timers, alarms, reminders and the to-do list - not put to the gate
         # here. See SCHEDULE_TOOLS for why.
         _schedule_call(name, args, call, convo, steps, say_step, watch)
+        return
+    if name in GOAL_TOOLS:
+        # The owner's goals and their progress - not put to the gate here,
+        # for the same reason as the scheduler's tools above. See GOAL_TOOLS.
+        _goal_call(name, args, call, convo, steps, say_step, watch)
         return
     if name == SETTINGS_TOOL and not outside_program:
         # Not put to the gate here either, and for the same kind of reason: the
