@@ -74,6 +74,52 @@ await check("the rail badge counts what is waiting", async () => {
     "nobody asked for the proposals, so the badge is the only thing that says they arrived");
 });
 
+/* ── Where the queue sits ────────────────────────────────────────────────── */
+
+await check("the cards waiting for you are the FIRST card on the Memory tab, above everything saved", async () => {
+  // The owner, 2026-11-03: "when i click on the memory cards waiting
+  // notification, these pending memory cards should be at the top of the
+  // list, not towards the bottom." The HUD's "N memory cards waiting for
+  // you" notice opens the Brain, whose landing view is this tab - so the
+  // queue has to be the first card in it and on screen with the view at its
+  // own top, not nine cards down behind Learning and every saved list.
+  const page = await memoryTab();
+  const out = await page.evaluate(() => {
+    const pane = document.getElementById("view-memory");
+    const first = pane.querySelector(".panes > .card");
+    const waiting = document.getElementById("memory-waiting-card");
+    const saved = document.getElementById("memory-auto-list");
+    const row = document.querySelector("#memory-proposals .row-item");
+    const heading = (node) => (node && node.querySelector("h2")
+      ? node.querySelector("h2").textContent.trim() : "");
+    return {
+      firstId: first ? first.id : "",
+      firstHeading: heading(first),
+      waitingHeading: heading(waiting),
+      // 4 is DOCUMENT_POSITION_FOLLOWING: what is saved comes AFTER the queue.
+      aboveSaved: Boolean(waiting && saved &&
+        (waiting.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING)),
+      queueFromViewTop: waiting
+        ? Math.round(waiting.getBoundingClientRect().top - pane.getBoundingClientRect().top)
+        : null,
+      rowInWindow: Boolean(row &&
+        row.getBoundingClientRect().top >= 0 &&
+        row.getBoundingClientRect().bottom <= window.innerHeight),
+    };
+  });
+  await page.close();
+  assert.equal(out.firstId, "memory-waiting-card",
+    `the first card on the Memory tab is #${out.firstId}, not the queue`);
+  assert.equal(out.firstHeading, "Waiting for you");
+  assert.equal(out.waitingHeading, "Waiting for you",
+    "the moved card lost its own heading, so a screen reader loses the section");
+  assert.equal(out.aboveSaved, true, "the queue is still below the saved list");
+  assert.ok(out.queueFromViewTop !== null && out.queueFromViewTop <= 8,
+    `the queue starts ${out.queueFromViewTop}px down its own view`);
+  assert.equal(out.rowInWindow, true,
+    "the first card waiting for you is off screen in a fresh window");
+});
+
 /* ── One fact, one decision ──────────────────────────────────────────────── */
 
 await check("keeping one proposal sends exactly one decision, with its id", async () => {
