@@ -3,7 +3,7 @@
 The owner's feature list, as data: 168 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 7cf37af23b1f53125e8b95d5ba9cd5bfe627b2d92771b37f5b27e6aa8d4112c4); the apps' Features pages read their own
+`features/features.json` (sha256 1274df47e768e66e637f683fa71ce02d38a10ddd7a93b7ad11d5a4280318fe2c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "7cf37af23b1f53125e8b95d5ba9cd5bfe627b2d92771b37f5b27e6aa8d4112c4"
+SOURCE_SHA256 = "1274df47e768e66e637f683fa71ce02d38a10ddd7a93b7ad11d5a4280318fe2c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -49,8 +49,8 @@ FEATURES = (
         "title": "The talk button",
         "what": "You hold a button, speak, and let go.",
         "where": "On the PC, hold the talk button in the Jarvis bar. On the phone, the talk button on Home - hold it, or tap it to talk and stop at a pause.",
-        "asks": "No card. What you said is checked as your voice on the PC first.",
-        "limit": "The phone needs your voice trained, and the PC able to turn speech into words.",
+        "asks": "No card. On the PC, what you said is checked as your voice first. On the phone's talk button the voice is not checked - a press is your act, like typing (2026-11-02).",
+        "limit": "The phone needs your voice trained before it offers the button, and the PC able to turn speech into words.",
         "surface": "both",
         "covers": ["phone-talking"],
     },
