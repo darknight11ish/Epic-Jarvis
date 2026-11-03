@@ -4,11 +4,21 @@ connect-account card.
 WHAT THIS IS
 
 `jarvis_connect_account.py` is the service table and the card state machine.
-This module is the thin host half: three routes, and nothing else.
+This module is the thin host half: four routes, and nothing else.
 
   GET  /api/connect-account/pending   the waiting card (metadata only)
+  GET  /api/accounts                  every account family, read-only
   POST /api/connect-account/save      ONE card id + its field values
   POST /api/connect-account/cancel    ONE card id
+
+TWO DIFFERENT AUTH RULES, ON PURPOSE
+
+The card's three routes are for THIS PC only (loopback), because a value is typed
+on this PC and a phone has no card to type it into. `GET /api/accounts` is a
+different class: it carries no value, opens no socket and writes nothing, so the
+origin and the pairing token are its whole gate and there is no loopback rule on
+it. That is what lets the phone's read-only plate draw it later. The loopback
+rule on the card routes is unchanged, and no POST path is touched.
 
 It is installed by `jarvis_secret_handoff_wiring.install()`, the one entry
 point `secret-handoff.patch` already calls - so this feature needs no patch of
@@ -41,9 +51,13 @@ from jarvis_connect_account import (  # noqa: F401 - the one place the rules liv
 )
 
 PENDING_PATH = "/api/connect-account/pending"
+#: The one READ-ONLY account list (contract section 6). One path, no query, and
+#: `probe` is never available over HTTP in this PR: `view()` is called with its
+#: own default, so nothing a client sends can make the backend open a socket.
+ACCOUNTS_PATH = "/api/accounts"
 SAVE_PATH = "/api/connect-account/save"
 CANCEL_PATH = "/api/connect-account/cancel"
-PATHS = (PENDING_PATH,)
+PATHS = (PENDING_PATH, ACCOUNTS_PATH)
 POST_PATHS = (SAVE_PATH, CANCEL_PATH)
 
 #: The largest body this module accepts, in bytes: a card id, up to four field
@@ -72,6 +86,18 @@ def _refusal(code: int, words: str) -> tuple:
 
 
 def handle_get(path: str, *, peer=None, local=None) -> tuple:
+    if path == ACCOUNTS_PATH:
+        # A read that carries no value, opens no socket and writes nothing, so
+        # origin + pairing token are its whole gate - NO loopback check here
+        # (contract section 6). The accounts module is imported lazily like
+        # every other cross-module use, and a backend without it answers in
+        # words rather than putting a traceback on the wire.
+        try:
+            import jarvis_accounts
+            return 200, jarvis_accounts.accounts_view()
+        except Exception as exc:            # noqa: BLE001 - the NAME only
+            return _refusal(503, "the accounts list is not available on this PC "
+                                 f"({type(exc).__name__})")
     if path != PENDING_PATH:
         return _refusal(404, "no such route")
     if not _from_this_pc(peer, local):
@@ -153,7 +179,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
 
     def do_GET(self):
         route = _route(self)
-        if route != PENDING_PATH:
+        if route not in PATHS:
             return get0(self)
         if not _allowed(self):
             return None
@@ -194,5 +220,5 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     return "  connect    Connect-account card: on"
 
 
-__all__ = ["PENDING_PATH", "SAVE_PATH", "CANCEL_PATH", "PATHS", "POST_PATHS",
-           "MAX_BODY_BYTES", "handle_get", "handle_post", "install"]
+__all__ = ["PENDING_PATH", "ACCOUNTS_PATH", "SAVE_PATH", "CANCEL_PATH", "PATHS",
+           "POST_PATHS", "MAX_BODY_BYTES", "handle_get", "handle_post", "install"]

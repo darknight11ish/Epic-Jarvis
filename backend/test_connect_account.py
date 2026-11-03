@@ -57,6 +57,21 @@ because the review found the claim untested, or the code wrong):
   * THE HUD'S FIRST CARD IS THE NEWEST WAITING ONE, and a "not connected yet"
     answer keeps #960's jump to Settings, Accounts; the phone's question never
     reaches this path.
+
+ADDED 2026-11-03: REMOVING AN ACCOUNT, AND THE ONE READ-ONLY ROUTE
+
+  * `disconnect()` deletes exactly ONE service's own Credential Manager entries,
+    through an injected store, and names what went; another service's entries
+    are checked to still be there afterwards. A store that refuses is `ok`
+    False, claims nothing as removed, and says so in words.
+  * An environment variable that is SET is named in the answer and in
+    `removability()`: deleting an entry must never read as a disconnect while a
+    variable still wins.
+  * `removability()` returns its documented shape, and its `how` sentence
+    promises no Remove button this PR does not ship.
+  * `GET /api/accounts` is served to another machine (origin + pairing token
+    only, no loopback) while the card route beside it keeps its loopback rule,
+    and no stored value reaches the body.
 """
 from __future__ import annotations
 
@@ -1130,10 +1145,13 @@ def t_the_required_credential_manager_check_covers_the_new_entries():
 
 def t_this_adds_no_key_route_and_no_key_service():
     import jarvis_connect_account_wiring as W
-    check("the connect routes are the card's three and nothing else",
+    check("the connect routes are the card's three and the one read, and nothing else",
           set(W.PATHS) | set(W.POST_PATHS) ==
           {"/api/connect-account/pending", "/api/connect-account/save",
-           "/api/connect-account/cancel"}, f"{W.PATHS} {W.POST_PATHS}")
+           "/api/connect-account/cancel", "/api/accounts"}, f"{W.PATHS} {W.POST_PATHS}")
+    check("the accounts read is a GET path and never one a POST answers",
+          W.ACCOUNTS_PATH in W.PATHS and W.ACCOUNTS_PATH not in W.POST_PATHS,
+          f"{W.PATHS} {W.POST_PATHS}")
     names = " ".join(s.name + " " + " ".join(s.words) for s in C.SERVICES.values()).lower()
     for forbidden in ("openai", "exa", "tavily", "brave", "chatbot", "groq", "mistral",
                       "openrouter", "xai", "deepseek"):
@@ -1141,6 +1159,305 @@ def t_this_adds_no_key_route_and_no_key_service():
     check("no service stores a value anywhere but Credential Manager",
           all(v.startswith("Jarvis Backend/") for sid in C.SERVICES
               for v in C.targets(sid).values()))
+
+
+# --------------------------------------------------------------------------
+#   9. Removing an account (2026-11-03): its own entries, by NAME
+# --------------------------------------------------------------------------
+
+def t_disconnect_removes_exactly_its_own_entries():
+    """A removal deletes ONE service's own Credential Manager entries and
+    nothing else, and names what it removed.
+
+    The store is injected (`store=` has the same factory shape
+    `jarvis_token_store._STORE_FACTORY` has - one stand-in per entry name), so
+    the answer's claim can be checked against what the store was really asked
+    about: exactly the asked-for service's own entry names, the other services'
+    entries still saved, and no value anywhere in the answer.
+    """
+    shelf = StoreShelf()
+    for sid in C.SERVICES:
+        for entry in C.targets(sid).values():
+            shelf.by_target[entry] = FakeStore("stored-for-" + entry)
+
+    def run():
+        out = C.disconnect("calendar_caldav", store=shelf)
+        check("a removal answers exactly the documented keys",
+              set(out) == {"ok", "service", "removed", "still_wins", "said"},
+              f"{sorted(out)}")
+        check("... and succeeds for a service it knows", out["ok"] is True, json.dumps(out))
+        check("... naming the service that was asked for",
+              out["service"] == "calendar_caldav", out["service"])
+        check("... having removed exactly that service's own two entries",
+              out["removed"] == list(C.targets("calendar_caldav").values()),
+              f"{out['removed']}")
+        check("... and leaving no environment variable in `still_wins`",
+              out["still_wins"] == [], f"{out['still_wins']}")
+        check("... with the sentence naming each entry it removed",
+              all(e in out["said"] for e in out["removed"]), out["said"])
+        check("... and saying where they came from",
+              "Windows Credential Manager" in out["said"], out["said"])
+        check("the private iCal link and the GitHub token are untouched",
+              shelf.value(CAL.ICS_URL_TARGET) == "stored-for-" + CAL.ICS_URL_TARGET and
+              shelf.value(RES.TOKEN_TARGET) == "stored-for-" + RES.TOKEN_TARGET,
+              "another service's entry was deleted")
+
+        # Put GitHub's value back, then prove a SET variable is reported by
+        # NAME: deleting the entry does not disconnect while a variable wins.
+        shelf.by_target[RES.TOKEN_TARGET] = FakeStore("stored-again")
+        os.environ[RES.TOKEN_ENV] = CANARY
+        out = C.disconnect("github", store=shelf)
+        check("a variable that is set is reported, by NAME",
+              out["still_wins"] == [RES.TOKEN_ENV], f"{out['still_wins']}")
+        check("... and the entry was removed anyway",
+              out["removed"] == [RES.TOKEN_TARGET], f"{out['removed']}")
+        check("... and the sentence says the account is still reachable",
+              RES.TOKEN_ENV in out["said"] and "still" in out["said"], out["said"])
+        check("... and says the token is not revoked at GitHub",
+              "does not revoke it" in out["said"], out["said"])
+        check("... and no value from the environment is in the answer",
+              CANARY not in json.dumps(out), out["said"])
+
+        out = C.disconnect("github", store=shelf)
+        check("removing one that is already gone is not an error, and claims nothing",
+              out["ok"] is True and out["removed"] == [] and
+              "nothing to remove" in out["said"], json.dumps(out))
+
+    without_env(run)
+
+
+def t_a_refusing_store_removes_nothing():
+    """A store that refuses must never read as "disconnected": `ok` False, no
+    entry claimed as removed, and a sentence that says so. Both shapes of
+    refusal are driven - an entry whose delete throws, and a PC with no
+    Credential Manager at all (which `default_store` reports as a StoreError
+    object rather than a store)."""
+    class Refusing(FakeStore):
+        def delete(self):
+            raise TS.StoreError("deleting failed (Windows error 5)")
+
+    shelf = StoreShelf()
+    shelf.by_target[RES.TOKEN_TARGET] = Refusing(CANARY)
+
+    def run():
+        out = C.disconnect("github", store=shelf)
+        check("a store that refuses is not reported as removed",
+              out["ok"] is False, json.dumps(out))
+        check("... and nothing is claimed as removed",
+              out["removed"] == [], f"{out['removed']}")
+        check("... and the sentence says nothing was removed",
+              "nothing was removed" in out["said"].lower(), out["said"])
+        check("... and says which store refused",
+              "Windows Credential Manager refused" in out["said"], out["said"])
+        check("... and the value is still there, exactly as it was",
+              shelf.value(RES.TOKEN_TARGET) == CANARY)
+        check("... and the value is in no part of the answer",
+              CANARY not in json.dumps(out), out["said"])
+
+        out = C.disconnect("github", store=lambda entry: TS.StoreError("no store here"))
+        check("a PC with no Credential Manager refuses the same way",
+              out["ok"] is False and out["removed"] == [] and
+              "nothing was removed" in out["said"].lower(), json.dumps(out))
+
+        # A refusal on the SECOND of two entries cannot claim a clean sweep: it
+        # must report exactly what had already gone, and say it cannot be undone.
+        def half_refusing(entry):
+            return Refusing(CANARY) if entry == CAL.PASSWORD_TARGET else FakeStore("stored")
+
+        out = C.disconnect("calendar_caldav", store=half_refusing)
+        check("a refusal on the second entry reports exactly what had already gone",
+              out["ok"] is False and out["removed"] == [CAL.USER_TARGET],
+              json.dumps(out))
+        check("... and says the removed entry cannot be put back",
+              "cannot be put back" in out["said"], out["said"])
+        check("... and never claims that nothing was removed",
+              "nothing was removed" not in out["said"].lower(), out["said"])
+
+    without_env(run)
+
+
+def t_an_unknown_service_refuses_by_name():
+    """Nothing called "email" is on THIS module's card table (email is a
+    Settings family, not a connect-card service), and a made-up name is no
+    better: both are refused in words that name them, and nothing at all is
+    asked of a store."""
+    for bad in ("email", "not_a_service", ""):
+        shelf = StoreShelf()
+        try:
+            C.disconnect(bad, store=shelf)
+            said = None
+        except C.ConnectAccountError as exc:
+            said = str(exc)
+        check(f"{bad!r} is refused as unknown, not answered as a removal",
+              said is not None, str(said))
+        if bad:
+            check(f"... and the refusal names {bad!r}", bad in said, str(said))
+        check("... and names what this PC really can connect",
+              "Calendar" in said and "GitHub" in said, str(said))
+        check("... and no store was even asked",
+              shelf.by_target == {}, f"{sorted(shelf.by_target)}")
+        try:
+            C.removability(bad)
+            said = None
+        except C.ConnectAccountError as exc:
+            said = str(exc)
+        check(f"{bad!r}: removability refuses by name too",
+              said is not None and (not bad or bad in said), str(said))
+
+
+def t_removability_says_the_honest_way():
+    """`removability()` is the "how would this be removed?" answer BEFORE
+    anything is deleted: the documented shape, the entry names a removal would
+    delete, the variable names that would keep it reachable, and a `how` that
+    promises no Remove button this PR does not ship."""
+    def run():
+        for sid in C.SERVICES:
+            out = C.removability(sid)
+            check(f"{sid}: has exactly the documented keys",
+                  set(out) == {"removable", "removed", "still_wins", "how"},
+                  f"{sorted(out)}")
+            check(f"{sid}: is removable, and names the entries a removal would delete",
+                  out["removable"] is True and
+                  out["removed"] == list(C.targets(sid).values()), f"{out}")
+            check(f"{sid}: nothing is winning in an empty environment",
+                  out["still_wins"] == [], f"{out['still_wins']}")
+            check(f"{sid}: `how` is a real sentence", len(out["how"]) > 40, out["how"])
+            check(f"{sid}: `how` promises no button this PR does not ship",
+                  "button" not in out["how"].lower() and
+                  "next slice" not in out["how"].lower(), out["how"])
+        ics = C.removability("calendar_ics")["how"]
+        check("the iCal link sends the owner to the one box that really has Remove",
+              "Settings > Accounts" in ics and "same box" in ics, ics)
+        check("the iCal answer says the link keeps working until it is reset",
+              "keeps working" in ics, ics)
+        for sid in ("calendar_caldav", "github"):
+            how = C.removability(sid)["how"]
+            check(f"{sid}: says plainly that no screen removes it yet",
+                  how.startswith("Nothing on any screen removes this one yet"), how)
+            check(f"{sid}: does not send the owner to a Settings box that has none",
+                  "Settings > Accounts" not in how, how)
+            check(f"{sid}: names the exact entry to delete by hand",
+                  all(e in how for e in C.targets(sid).values()), how)
+        check("the GitHub answer says the token is not revoked at GitHub",
+              "does not revoke it" in C.removability("github")["how"],
+              C.removability("github")["how"])
+
+        os.environ[RES.TOKEN_ENV] = CANARY
+        out = C.removability("github")
+        check("a variable that would keep the account reachable is named before any delete",
+              out["still_wins"] == [RES.TOKEN_ENV] and RES.TOKEN_ENV in out["how"],
+              out["how"])
+        check("... and its value is never in the answer",
+              CANARY not in json.dumps(out), out["how"])
+
+    without_env(run)
+
+
+def t_the_accounts_route_is_read_by_another_machine_and_carries_no_value():
+    """`GET /api/accounts` is the one route in this module another machine may
+    read: origin + the pairing token are its whole gate, because it carries no
+    value, opens no socket and writes nothing (contract section 6). Driven
+    through `install()`'s own do_GET - not `handle_get` alone - so the wrapper's
+    dispatch and its auth are what is proven, and the card route beside it
+    keeps its loopback rule."""
+    import jarvis_connect_account_wiring as W
+
+    class Handler:
+        def do_GET(self):
+            return "original-get"
+
+    class Conn:
+        def getsockname(self):
+            return ("127.0.0.1", 80)
+
+    class Fake:
+        connection = Conn()
+
+        def __init__(self, path, peer="192.168.1.30"):
+            self.path = path
+            self.client_address = (peer, 5150)
+            self.sent = None
+
+        def _send(self, code, obj):
+            self.sent = (code, obj)
+
+    gate = {"origin": True, "token": True}
+    shelf = StoreShelf()
+    shelf.by_target[RES.TOKEN_TARGET] = FakeStore(CANARY)
+
+    def read_body(_self):
+        raise AssertionError("a GET route must never read a body")
+
+    def run():
+        os.environ[RES.TOKEN_ENV] = CANARY
+        banner = W.install(Handler, origin_ok=lambda s: gate["origin"],
+                           token_ok=lambda s: gate["token"], read_body=read_body)
+        check("the one install call adds the accounts path",
+              "Connect-account card: on" in banner, banner)
+
+        away = Fake(W.ACCOUNTS_PATH)
+        Handler.do_GET(away)
+        check("another machine may READ the accounts list",
+              away.sent is not None and away.sent[0] == 200, f"{away.sent}")
+        body = json.dumps(away.sent[1]) if away.sent else ""
+        check("... and it is one JSON object, like every other route",
+              away.sent is not None and isinstance(away.sent[1], dict), body[:120])
+        check("... and it is the accounts overview, not the addresses answer",
+              away.sent is not None and isinstance(away.sent[1], dict) and
+              away.sent[1].get("available") is True and
+              isinstance(away.sent[1].get("families"), list) and
+              "fields" not in away.sent[1], body[:200])
+        check("... and no stored secret value is anywhere in the body",
+              bool(body) and CANARY not in body, "the body carried the canary value")
+
+        asked = Fake(W.ACCOUNTS_PATH + "?probe=1&service=github")
+        Handler.do_GET(asked)
+        check("a query string is not parsed, and cannot switch a probe on",
+              asked.sent is not None and asked.sent[0] == 200 and
+              (not isinstance(asked.sent[1], dict) or
+               asked.sent[1].get("probed") is not True), f"{asked.sent}")
+
+        # A backend where the accounts module is broken must answer in words,
+        # not put a traceback on the wire (the route's own 503 branch).
+        class BrokenAccounts:
+            @staticmethod
+            def accounts_view(*, probe=False):
+                raise RuntimeError("the accounts list is unreadable")
+
+        saved_module = sys.modules.get("jarvis_accounts")
+        sys.modules["jarvis_accounts"] = BrokenAccounts
+        broken = Fake(W.ACCOUNTS_PATH)
+        try:
+            Handler.do_GET(broken)
+        finally:
+            if saved_module is None:
+                sys.modules.pop("jarvis_accounts", None)
+            else:
+                sys.modules["jarvis_accounts"] = saved_module
+        check("a broken accounts module answers 503 in words, never a traceback",
+              broken.sent is not None and broken.sent[0] == 503 and
+              "Traceback" not in json.dumps(broken.sent[1]), f"{broken.sent}")
+
+        gate["origin"] = False
+        refused = Fake(W.ACCOUNTS_PATH)
+        Handler.do_GET(refused)
+        check("a cross-origin read is still refused by the wrapper",
+              refused.sent is not None and refused.sent[0] == 403, f"{refused.sent}")
+        gate["origin"], gate["token"] = True, False
+        refused = Fake(W.ACCOUNTS_PATH)
+        Handler.do_GET(refused)
+        check("... and so is one with a bad token",
+              refused.sent is not None and refused.sent[0] == 401, f"{refused.sent}")
+
+        gate["token"] = True
+        pending = Fake(W.PENDING_PATH)
+        Handler.do_GET(pending)
+        check("the card route beside it keeps its loopback rule",
+              pending.sent is not None and pending.sent[0] == 403, f"{pending.sent}")
+
+    without_env(lambda: with_store(shelf, run))
+    check("reading the list wrote nothing to the store",
+          shelf.wrote(RES.TOKEN_TARGET) == [])
 
 
 if __name__ == "__main__":
@@ -1175,6 +1492,11 @@ if __name__ == "__main__":
         t_the_route_is_installed_through_the_secret_handoff_entry_point,
         t_the_required_credential_manager_check_covers_the_new_entries,
         t_this_adds_no_key_route_and_no_key_service,
+        t_disconnect_removes_exactly_its_own_entries,
+        t_a_refusing_store_removes_nothing,
+        t_an_unknown_service_refuses_by_name,
+        t_removability_says_the_honest_way,
+        t_the_accounts_route_is_read_by_another_machine_and_carries_no_value,
     ):
         print(f"\n--- {fn.__name__} ---")
         try:
