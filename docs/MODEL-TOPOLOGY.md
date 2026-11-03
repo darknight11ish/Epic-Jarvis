@@ -693,6 +693,54 @@ has been run.
 
 ---
 
+## The Coding preset's pooled both-card lane, measured (2026-11-02)
+
+The Coding preset's model is `qwen3-coder-30b-a3b-ud-q3-k-xl`, about 14.8 GB of
+GPU-resident memory. That fits neither card alone, so its lane is neither
+11436 (2060) nor 11435 (2080 SUPER): it is ONE Ollama on **port 11450**,
+started on demand by the preset apply with **no card pin**, so the engine sees
+both cards (`jarvis_model_lanes.start_pooled_lane`, reusing `jarvis_big_coder`'s
+server, pause, load and restore). `docs/JARVIS-API.md` §145.1 is the contract.
+
+Measured on this PC on 2026-11-02, through that shipped path, with both lane
+models paused first and put back afterwards:
+
+| What | Measured |
+|---|---|
+| Cold load (the model's own `load_duration`) | **32.5 s** |
+| Whole apply, pause and restores included | 69.9 s |
+| Whole stop, both lane models reloaded | 59.1 s |
+| Decode, three fixed coding prompts | **77.5 / 85.3 / 85.6 tok/s** (median 85.3) |
+| The model in `/api/ps` | 15,609,312,049 B size, **the same in video memory: zero spill** |
+| RTX 2060 while it ran | 11,899 of 12,288 MiB used |
+| RTX 2080 SUPER while it ran | 7,674 of 8,192 MiB used |
+| After the stop | `qwen3.5:9b ctx=196608` on 11436 and `qwen3:8b ctx=16384` on 11435, both zero spill |
+
+**The zero-spill context on this PC today is 16,384, not 28,672.** Measured as
+a ladder with every model unloaded, each rung a real cold load:
+
+| `num_ctx` | Size | In video memory | Spilled |
+|---|---|---|---|
+| 28,672 | 16,114 MiB | 15,902 MiB | **212 MiB** |
+| 24,576 | 15,722 MiB | 15,514 MiB | **208 MiB** |
+| 20,480 | 15,326 MiB | 15,123 MiB | **204 MiB** |
+| 16,384 | 14,886 MiB | **14,886 MiB** | **0** |
+
+So the Coding preset asks for 16,384, and the pooled start refuses (503, in the
+machine's own words) rather than loading a model that spills. The 2026-10-18
+measurement's 28,672 rung is kept in `jarvis_big_coder.NUM_CTX` for that mode
+and was not changed; the ladder above is why the preset does not use it.
+`OLLAMA_SCHED_SPREAD=1` was tried at 28,672 and did not change the split
+(212 MiB spilled, 68.4 tok/s). The whole measurement, the method and the undo
+are in `docs/MEASURED-2026-11-02-POOLED-LANE.md`.
+
+A sixth Ollama, or a model left loaded on port 11434 (Ollama's own default
+server), does not need to be stopped: measured on the same day, that server's
+model held no video memory when its process was idle, and freeing it changed
+the 2060's used memory by 89 MiB.
+
+---
+
 ## The picture reader on the processor (one-card PCs, 2026-09-29)
 
 The owner's decision of 2026-09-29: a PC with ONE graphics card may switch on a

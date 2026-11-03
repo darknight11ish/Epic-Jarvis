@@ -23,7 +23,7 @@ def check(name, cond, detail=""):
 class Deps:
     def __init__(self, start_ok=True, switch_ok=True, set_ok=True, *,
                  set_fail_first_only=False, set_raises_after_first=False,
-                 choice_ok=True, rollback_ok=True):
+                 choice_ok=True, rollback_ok=True, pooled_running=False):
         self.calls = []
         self.start_ok, self.switch_ok, self.set_ok = start_ok, switch_ok, set_ok
         # The rollback's own stubs (silent-failure audit 2026-10-27, row 2):
@@ -33,6 +33,7 @@ class Deps:
         self.set_raises_after_first = set_raises_after_first
         self.choice_ok = choice_ok
         self.rollback_ok = rollback_ok
+        self.pooled_running = pooled_running
         self.set_calls = 0
         self.lane = "http://127.0.0.1:11436"
         self.choice = None
@@ -74,13 +75,20 @@ class Deps:
         self.calls.append(("rollback",))
         return {"ok": True} if self.rollback_ok else {"ok": False, "reason": "no previous model"}
 
+    def stop_pooled(self):
+        # Recorded only when the pooled lane was really running, which is the
+        # contract `_default_stop_pooled` keeps: "ran" is the evidence.
+        if self.pooled_running:
+            self.calls.append(("stop_pooled",))
+        return {"ok": True, "ran": self.pooled_running, "reason": ""}
+
 
 def apply(body, d):
     return P.apply_from_body(body) if d is None else P.apply_preset(
         body.get("preset"), start_lane=d.start, switch_model=d.switch,
         active_url=d.get_url, set_active_url=d.set_url,
         read_choice=d.read_choice, write_choice=d.write_choice,
-        rollback_model=d.rollback_model)
+        rollback_model=d.rollback_model, stop_pooled=d.stop_pooled)
 
 
 def t_default_unchanged_without_a_call():
@@ -123,9 +131,29 @@ def t_refusals_change_nothing():
     check("a pending preset refuses in plain words, no calls",
           code == 409 and "waiting for the model" in out["error"] and d.calls == [], out)
     code, out = apply({"preset": "coding"}, d)
-    check("heavy-mode Coding refuses and says the both-card lane is arriving",
-          code == 409 and "heavy mode needs the both-card lane, arriving later" in out["error"]
-          and d.calls == [], out)
+    check("Coding no longer refuses before trying: its pooled lane is asked, and "
+          "this fake one starts it",
+          code == 200 and d.calls[0] == ("start", "pooled")
+          and d.calls[-1] == ("choice", "coding"), (code, d.calls, out))
+
+    # A card the owner DENIES on the pooled lane: the lane start answers a 200
+    # refusal (nothing was touched, because the card comes before the first
+    # unload), and the apply turns that into a 409 that says nothing changed.
+    class Denied(Deps):
+        def start(self, key):
+            self.calls.append(("start", key))
+            return 200, {"ok": False, "changed": False, "outcome": "denied",
+                         "message": "Not started - nothing was paused and nothing was loaded."}
+
+    dd = Denied()
+    dd.choice = "general"
+    code, out = apply({"preset": "coding"}, dd)
+    check("a denied card on Coding refuses (409), says nothing changed, and writes "
+          "nothing",
+          code == 409 and out["changed"] is False and out["outcome"] == "denied"
+          and "nothing was changed" in out["error"]
+          and [c[0] for c in dd.calls] == ["start"] and dd.choice == "general",
+          (code, out, dd.calls))
 
 
 def t_lane_start_failure_stops_before_the_switch():
@@ -173,7 +201,8 @@ def t_a_later_failure_rolls_the_model_back_too():
     code, out = P.apply_preset("fast", start_lane=d.start, switch_model=d.switch,
                                active_url=d.get_url, set_active_url=d.set_url,
                                read_choice=d.read_choice, write_choice=d.write_choice,
-                               rollback_model=d.rollback_model)
+                               rollback_model=d.rollback_model,
+                               stop_pooled=d.stop_pooled)
     check("a failure AFTER the switch rolls the switched model back (auto tier)",
           code == 409 and ("rollback",) in d.calls, (code, d.calls, out))
     check("... and all three restores are named, because all three were seen",
@@ -241,7 +270,8 @@ def t_a_rollback_never_claims_what_it_could_not_restore():
     code, out = P.apply_preset("fast", start_lane=d.start, switch_model=d.switch,
                                active_url=d.get_url, set_active_url=d.set_url,
                                read_choice=d.read_choice, write_choice=d.write_choice,
-                               rollback_model=d.rollback_model)
+                               rollback_model=d.rollback_model,
+                               stop_pooled=d.stop_pooled)
     check("a model rollback that says ok:false is 'could not be restored', not a claim",
           code == 409 and out["not_restored"] == ["the model"]
           and "the model could not be restored" in out["error"], out)
@@ -258,11 +288,23 @@ def t_install_wires_only_the_apply_route():
             seen.append((code, body))
             return code
 
-    P.install(H, origin_ok=lambda h: True, token_ok=lambda h: True,
-              read_body=lambda h: json.dumps({"preset": "coding"}).encode())
-    h = H(); h.path = "/api/work/apply"
-    got = h.do_POST()
-    check("the install wraps POST /api/work/apply", got == 409 and seen, seen)
+    # The route must answer through the REAL apply, so its two external steps
+    # are faked here: the pooled lane's start (no graphics card in a test) and
+    # the model record. Nothing else is stubbed - the body parsing, the apply
+    # itself and the answer are the shipped code.
+    real_start, real_adopt = P._default_start_lane, P._default_adopt
+    P._default_start_lane = lambda key: (200, {"ok": True, "changed": True})
+    P._default_adopt = lambda ref: {"ok": True, "ref": ref}
+    try:
+        P.install(H, origin_ok=lambda h: True, token_ok=lambda h: True,
+                  read_body=lambda h: json.dumps({"preset": "coding"}).encode())
+        h = H(); h.path = "/api/work/apply"
+        got = h.do_POST()
+    finally:
+        P._default_start_lane, P._default_adopt = real_start, real_adopt
+    check("the install wraps POST /api/work/apply, through the real apply",
+          got == 200 and seen and seen[-1][1].get("changed") is True
+          and seen[-1][1].get("preset", {}).get("id") == "coding", (got, seen))
     h2 = H(); h2.path = "/api/other"
     check("... and leaves every other POST alone", h2.do_POST() == "original")
 

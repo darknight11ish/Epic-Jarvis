@@ -15,9 +15,9 @@
  *   - a SUCCESSFUL apply re-renders the page's lanes without throwing (P1-3 of
  *     the 2026-10-27 HUD audit: the three old lane modes are gone, but
  *     renderLanes() is still called from the apply and #lanes must stay);
- *   - Coding, which the PC always refuses (heavy mode), is NOT a button: it is
- *     drawn with the phone's own sentence, and the stub refuses it as the real
- *     PC does (contract audit F1 - the old stub pinned a fiction);
+ *   - Coding IS a button since 2026-11-02 (the PC's pooled both-card lane runs
+ *     it), with its cost said underneath; it used to be drawn as words and
+ *     refused by the stub (contract audit F1, the old stub pinned a fiction);
  *   - the top-right model name is the door to the Current Models panel, and
  *     Ambient's pill is a second door to the same panel (HUD audit P1-1/P1-2);
  *   - the panel says plainly when the PC has nothing loaded or did not answer,
@@ -286,14 +286,10 @@ async function openHud(browser, options = {}) {
           return json(route, 409, { ok: false, changed: false,
             error: "the Coding preset is being prepared; nothing was changed" });
         }
-        // The REAL PC's refusal for a heavy preset (contract audit F1): both
-        // cards as one pooled lane is not built, so `coding` always answers
-        // 409. The stub must not pretend otherwise, or the suite pins a
-        // fiction.
-        if (chosen === "coding") {
-          return json(route, 409, { ok: false, changed: false,
-            error: "heavy mode needs the both-card lane, arriving later; nothing was changed." });
-        }
+        // The heavy preset is applied like any other since 2026-11-02 (the
+        // PC's pooled both-card lane runs it). The stub used to answer 409 for
+        // `coding`, which is what pinned the old dead-button behaviour; there
+        // is no such refusal any more, and inventing one would pin a fiction.
         if (state.applyMode === "hold") {
           // The PC raises its ONE card and the POST waits for the owner. The
           // page's 30 s poll (and apprPoll on the event) paints it; the test
@@ -416,24 +412,32 @@ await check("a click posts /api/work/apply once with the right preset id, then m
   assert.deepEqual(problems, []);
 });
 
-await check("Coding is drawn, but it cannot be applied: the PC always refuses heavy mode", async () => {
-  // Contract audit F1: the PC answers 409 for `coding` (both cards as one
-  // pooled lane is not built), so neither the rail nor the menu may offer the
-  // click. The stub refuses it too, so nothing here can pin a fiction.
+await check("Coding is drawn AND can be applied: the PC's pooled both-card lane runs it", async () => {
+  // 2026-11-02: the pooled both-card lane exists, so the PC no longer answers
+  // 409 for `coding` and the rail must offer the click. The button still says
+  // what choosing it costs, and the stub applies it like any other preset.
   const { page, state, problems } = await openHud(browser);
   const coding = await page.evaluate(() => {
     const b = document.querySelector('#presets .preset[data-preset="coding"]');
     return { disabled: b.disabled, title: b.title, label: b.getAttribute("aria-label"),
       model: b.querySelector(".preset-model").textContent };
   });
-  await page.click('#presets .preset[data-preset="coding"]', { force: true }).catch(() => {});
-  await page.waitForTimeout(400);
+  await page.click('#presets .preset[data-preset="coding"]');
+  await page.waitForTimeout(700);
+  const rows = await presetRows(page);
   await page.close();
-  assert.equal(coding.disabled, true, "Coding is still a live apply button");
-  assert.match(coding.title, /needs both cards at once as one pooled lane/,
-    `Coding does not say why it cannot be used: ${coding.title}`);
-  assert.match(coding.model, /needs both cards/, "Coding still advertises a model it cannot run");
-  assert.equal(state.applyBody, null, "a disabled heavy preset still reached the PC");
+  assert.equal(coding.disabled, false, "Coding is still not a live apply button");
+  assert.match(coding.title, /both cards at once as one pooled lane/,
+    `Coding does not say what it costs: ${coding.title}`);
+  assert.match(coding.title, /paused/,
+    `Coding does not say the other models pause: ${coding.title}`);
+  assert.doesNotMatch(coding.title, /refuses|cannot be used/,
+    `Coding still says it cannot be used: ${coding.title}`);
+  assert.match(coding.model, /needs both cards/, "Coding no longer says it needs both cards");
+  assert.equal(state.applyBody && state.applyBody.preset, "coding",
+    "the click did not reach POST /api/work/apply");
+  assert.deepEqual(rows.filter((r) => r.pressed === "true").map((r) => r.id), ["coding"],
+    "the rail did not follow the PC's answer");
   assert.deepEqual(problems, []);
 });
 
@@ -830,12 +834,13 @@ async function menuReport(page) {
         disabled: b.disabled === true,
       })),
       notes: [...group.querySelectorAll(".hud-presets-empty")].map((p) => p.textContent),
-      // A heavy preset is drawn as words, not as a button (contract audit F1).
-      blocked: [...group.querySelectorAll(".hud-presets-empty[data-preset]")]
-        .map((p) => ({ preset: p.dataset.preset, text: p.textContent })),
+      // A heavy preset is a BUTTON with its cost said underneath (2026-11-02);
+      // it used to be words instead of a button (contract audit F1).
+      costs: [...group.querySelectorAll(".hud-presets-empty[data-preset-cost]")]
+        .map((p) => ({ preset: p.dataset.presetCost, text: p.textContent })),
     }));
     const rows = (heading) => (groups.find((g) => g.heading === heading) || { items: [] }).items;
-    const blocked = (heading) => (groups.find((g) => g.heading === heading) || { blocked: [] }).blocked;
+    const blocked = (heading) => (groups.find((g) => g.heading === heading) || { costs: [] }).costs;
     const line = menu.querySelector(".hud-presets-line");
     const cloudBox = document.getElementById("hud-presets-cloud-menu");
     const cloudRow = menu.querySelector('[data-cloud-action="open"]');
@@ -847,7 +852,7 @@ async function menuReport(page) {
       headings: groups.map((g) => g.heading),
       groups,
       model: rows("Focus presets").filter((row) => row.preset),
-      blocked: blocked("Focus presets"),
+      costs: blocked("Focus presets"),
       cloudRow: cloudRow ? {
         text: cloudRow.textContent.trim(),
         label: cloudRow.getAttribute("aria-label") || "",
@@ -902,16 +907,20 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
   // all say "Focus presets" (contract audit F5).
   assert.deepEqual(menu.headings.slice(0, 3), ["Focus presets", "Personality", "Built-in layouts"],
     `the PC's own lists do not come before the layouts: ${JSON.stringify(menu.headings)}`);
-  // Coding is drawn as the PC's refusal, not as a row that always 409s (F1).
-  const live = FIXTURE.presets.filter((p) => p.heavy_mode !== true);
+  // Every preset is a row, including the heavy one (2026-11-02).
+  const live = FIXTURE.presets;
   assert.deepEqual(menu.model.map((r) => r.preset), live.map((p) => p.id),
-    "the menu does not list the PC's applicable presets in its order");
+    "the menu does not list the PC's presets in its order");
   assert.deepEqual(menu.model.map((r) => r.text), live.map((p) => p.title),
     "the presets' visible labels are not the PC's own titles");
-  assert.deepEqual(menu.blocked.map((r) => r.preset), ["coding"],
-    `the heavy preset is not drawn as unavailable: ${JSON.stringify(menu.blocked)}`);
-  assert.match(menu.blocked[0].text, /needs both cards at once as one pooled lane/,
-    `the PC's own heavy-mode sentence is missing: ${menu.blocked[0].text}`);
+  assert.deepEqual(menu.costs.map((r) => r.preset), ["coding"],
+    `the heavy preset's cost is not said under it: ${JSON.stringify(menu.costs)}`);
+  assert.match(menu.costs[0].text, /needs both cards at once as one pooled lane/,
+    `the PC's own heavy-mode sentence is missing: ${menu.costs[0].text}`);
+  assert.match(menu.costs[0].text, /paused/,
+    `the heavy cost does not say the other models pause: ${menu.costs[0].text}`);
+  assert.doesNotMatch(menu.costs[0].text, /refuses|cannot be used/,
+    `the heavy cost still refuses the preset: ${menu.costs[0].text}`);
   assert.deepEqual(menu.model.filter((r) => r.chosen).map((r) => r.preset), ["general"],
     "the chosen mark is not the PC's chosen_preset");
   // The chosen item is a rectangle (class + border), and the word "(chosen)"
@@ -1126,7 +1135,7 @@ await check("the Cloud row is only drawn when the PC sends one - never invented"
   const menu = await menuReport(page);
   await page.close();
   assert.equal(menu.cloudRow, null, "a Cloud row appeared without the PC's own cloud answer");
-  const applicable = FIXTURE.presets.filter((p) => p.heavy_mode !== true).length;
+  const applicable = FIXTURE.presets.length;
   assert.equal(menu.model.length, applicable,
     `the menu's preset rows changed when the cloud answer went missing (got ${menu.model.length}, expected ${applicable})`);
   assert.deepEqual(problems, []);

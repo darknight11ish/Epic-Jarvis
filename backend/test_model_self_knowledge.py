@@ -130,9 +130,16 @@ def main():
     check("presets: the real contract has the expected rows",
           len(P.PRESETS) >= 5 and P.by_id("general") is not None)
     r = ask("what does the coding preset change?")
+    # The honest cost is the pooled lane's own plain words, not the raw
+    # "HEAVY MODE" label: `_preset_answer` renders `heavy_words` IN PLACE OF
+    # `cost` when the build carries it (PR #1106), so the label is not in this
+    # answer any more. The window is asserted too - this check is named after
+    # it and used to leave it unchecked.
     check("preset detail: its model, window and honest cost",
           r is not None and "Coding" in r.reply and "qwen3-coder" in r.reply.lower()
-          and "HEAVY MODE" in r.reply, getattr(r, "reply", None))
+          and "16,384 tokens" in r.reply
+          and "both cards at once" in r.reply and "paused" in r.reply,
+          getattr(r, "reply", None))
     r = ask("which model would the general preset load?")
     check("preset detail: the model question shape",
           r is not None and "qwen3.5:9b" in r.reply, getattr(r, "reply", None))
