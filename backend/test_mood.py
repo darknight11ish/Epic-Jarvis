@@ -317,7 +317,13 @@ def t_the_routes_answer_the_shapes_both_apps_read():
     Handler = _handler_class()
     M.install(Handler, origin_ok=lambda h: True, token_ok=lambda h: True,
               read_body=lambda h: h.body)
-    h = Handler(path="/api/mood", body=json.dumps({"value": 4, "words": "ok"}).encode())
+    # The SAVE and the CLEAR below must name the SAME day: a body with no `day`
+    # is stored for TODAY, so a clear pinned to one literal date removed nothing
+    # on any other day (CI: `removed: False`, "No mood entry for that day.").
+    # Naming today in both is what the round trip actually proves.
+    day = _dt.date.today().isoformat()
+    h = Handler(path="/api/mood", body=json.dumps({"value": 4, "words": "ok",
+                                                   "day": day}).encode())
     code, out = h.do_POST()
     check("POST /api/mood saves the day", code == 200 and out["ok"] is True,
           str(out)[:200])
@@ -338,7 +344,7 @@ def t_the_routes_answer_the_shapes_both_apps_read():
           and out["error"] == M.WORDS["scale"], f"{code} {out}")
 
     h = Handler(path="/api/mood", body=json.dumps({"clear": True,
-                                                   "day": "2026-11-02"}).encode())
+                                                   "day": day}).encode())
     code, out = h.do_POST()
     check("clear removes the day", code == 200 and out["removed"] is True, str(out)[:200])
 
