@@ -93,9 +93,18 @@ const UNREADABLE: &str = "Jarvis answered, but not in a way this app can read. \
 /// The last three are Phase 2 (2026-10-22): ONE edit, ONE move between the
 /// to-do lists, ONE reorder - the PC's own `jarvis_schedule._act_phase2` is the
 /// authority; these names only say what one job may be asked.
+///
+/// `answer` (2026-11-02) is the one that is not a change at all: ONE button of
+/// ONE reminder that asked a question, pressed. It goes through
+/// [`answer_body`] rather than [`act_body`], because it carries the button's
+/// INDEX and nothing else.
 pub(crate) const ACTIONS: &[&str] = &[
-    "pause", "resume", "delete", "done", "add_time", "snooze", "edit", "move", "reorder",
+    "pause", "resume", "delete", "done", "add_time", "snooze", "edit", "move", "reorder", "answer",
 ];
+
+/// The most buttons one question may have. Android draws three notification
+/// actions, and the PC's row mirrors it (`jarvis_schedule.MAX_ASK_BUTTONS`).
+pub(crate) const MAX_ASK_BUTTONS: u32 = 3;
 
 /// Snooze: how long the buttons set (jarvis_schedule.SNOOZE_DEFAULT), and
 /// the shortest and longest the PC takes.
@@ -463,6 +472,16 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                             action.clear();
                             action.insert("kind".into(), serde_json::json!(kind));
                         }
+                        // A question's ANSWERS (2026-11-02) are the owner's own
+                        // words a fourth time: the label he pressed ("Taken") and
+                        // the places the answer was written. The list is emptied
+                        // here rather than left to the page, because a page is
+                        // only as private as what it is handed: the row draws
+                        // none of it while `hidden` is set, and this makes sure
+                        // there is nothing to draw.
+                        if o.contains_key("answers") {
+                            o.insert("answers".into(), serde_json::json!([]));
+                        }
                         o.insert("hidden".into(), serde_json::json!(true));
                         let named = o
                             .get("list")
@@ -568,6 +587,29 @@ pub(crate) fn act_body(
         return Ok(serde_json::json!({ "id": id, "do": action, "seconds": s }));
     }
     Ok(serde_json::json!({ "id": id, "do": action }))
+}
+
+/// The body of ONE button of ONE question, pressed (2026-11-02).
+///
+/// The page passes the job's id and the button's INDEX - never its label, so a
+/// re-worded button cannot be answered by accident, and never a target of any
+/// kind: the PC reads the question, its buttons and where an answer is written
+/// back from its own stored row (`jarvis_schedule.Scheduler.answer`). That is
+/// the same rule `open_reminder_target` keeps, and for the same reason: a page
+/// that could name what is written would be a write primitive.
+///
+/// It is cardless and decides nothing - an answer is a log line, like ticking a
+/// to-do item - so the only checks here are the ones that make the body mean
+/// something at all: a real id, and an index inside the ceiling the PC enforces.
+pub(crate) fn answer_body(id: &str, button: Option<u32>) -> Result<serde_json::Value, String> {
+    if !valid_id(id) {
+        return Err("That is not one job.".to_string());
+    }
+    let button = button.ok_or_else(|| "Which button did you press?".to_string())?;
+    if button >= MAX_ASK_BUTTONS {
+        return Err("A question has up to three buttons.".to_string());
+    }
+    Ok(serde_json::json!({ "id": id, "do": "answer", "button": button }))
 }
 
 /// A named list's name as the PC keeps it ("shopping"): lower case, one to
@@ -696,6 +738,9 @@ fn action_body(action: &serde_json::Value) -> Result<serde_json::Value, String> 
         .as_object()
         .ok_or_else(|| "That is not one reminder action.".to_string())?;
     let kind = obj.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+    if kind == "ask" {
+        return ask_body(obj);
+    }
     let key = match kind {
         "show-note" => "note",
         "open-webpage" => "url",
@@ -716,6 +761,107 @@ fn action_body(action: &serde_json::Value) -> Result<serde_json::Value, String> 
         return Err("Pick the thing to open first, or choose Nothing.".to_string());
     }
     Ok(serde_json::json!({ "kind": kind, key: value }))
+}
+
+/// The one kind that is a QUESTION rather than a target (2026-11-02), checked as
+/// a SHAPE only - exactly as the four above are.
+///
+/// The backend owns the rules: the question's length, each label's length, the
+/// three-button ceiling, two labels never saying the same thing, the three
+/// things a button may do, and a `record` button always having somewhere to
+/// write. It refuses anything it does not accept with one plain sentence and
+/// the page shows it as it is. What is checked here is what this app could not
+/// MEAN, so a body it cannot have built never leaves it in the first place:
+/// a question with no words, no buttons, more than three, or a button whose
+/// verb is not one of the three.
+fn ask_body(obj: &serde_json::Map<String, serde_json::Value>) -> Result<serde_json::Value, String> {
+    let question = obj
+        .get("question")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if question.is_empty() {
+        return Err(
+            "Write the question first - it is what you will read when it goes \
+                    off."
+                .to_string(),
+        );
+    }
+    let buttons = obj
+        .get("buttons")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "A question needs at least one button.".to_string())?;
+    if buttons.is_empty() {
+        return Err(
+            "A question needs at least one button - that is what you press when \
+                    it goes off."
+                .to_string(),
+        );
+    }
+    if buttons.len() > MAX_ASK_BUTTONS as usize {
+        return Err("A question has up to three buttons.".to_string());
+    }
+    let mut clean = Vec::with_capacity(buttons.len());
+    for b in buttons {
+        let one = b
+            .as_object()
+            .ok_or_else(|| "That is not one button.".to_string())?;
+        let label = one
+            .get("label")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if label.is_empty() {
+            return Err("Every button needs its words.".to_string());
+        }
+        let does = one.get("does").and_then(|v| v.as_str()).unwrap_or("");
+        if !matches!(does, "record" | "done" | "snooze") {
+            return Err(
+                "A button can record the answer, mark the reminder done, or \
+                        snooze it."
+                    .to_string(),
+            );
+        }
+        let mut built = serde_json::json!({ "label": label, "does": does });
+        if does == "snooze" {
+            let minutes = one.get("minutes").and_then(|v| v.as_u64()).unwrap_or(0);
+            if !(1..=1440).contains(&minutes) {
+                return Err("A snooze button is 1 to 1440 minutes.".to_string());
+            }
+            built["minutes"] = serde_json::json!(minutes);
+        }
+        clean.push(built);
+    }
+    let mut body = serde_json::json!({
+        "kind": "ask",
+        "question": question,
+        "buttons": clean,
+    });
+    if let Some(record) = obj.get("record").and_then(|v| v.as_object()) {
+        let mut kept = serde_json::Map::new();
+        for key in ["history", "obsidian_daily"] {
+            if record.get(key).and_then(|v| v.as_bool()) == Some(true) {
+                kept.insert(key.to_string(), serde_json::json!(true));
+            }
+        }
+        for key in ["goal", "habit"] {
+            let id = record
+                .get(key)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if !id.is_empty() {
+                kept.insert(key.to_string(), serde_json::json!(id));
+            }
+        }
+        if !kept.is_empty() {
+            body["record"] = serde_json::Value::Object(kept);
+        }
+    }
+    Ok(body)
 }
 
 /// The HUD Reminders tab's form -> the body of `POST /api/schedule/add`.
@@ -2204,6 +2350,39 @@ mod tests {
     }
 
     #[test]
+    fn hidden_lists_hide_a_question_and_its_answers_too() {
+        // 2026-11-02: the question, its buttons and every answer already given
+        // are the owner's own words about his own life, so a hidden list hands
+        // the page none of them - not even to draw and then not show.
+        let list = serde_json::json!({
+            "jobs": [],
+            "todo": [{
+                "id": "s0123456786", "kind": "reminder", "text": "medication",
+                "state": "fired", "fired_at": 1, "asks": true,
+                "action": {"kind": "ask", "question": "Did you take your medication?",
+                           "buttons": [{"label": "Taken", "does": "record"}],
+                           "record": {"history": true}},
+                "answers": [{"at": 1, "clock": "10:00", "button": "Taken",
+                             "does": "record", "wrote": ["its own history"]}]
+            }]
+        });
+        let hidden = redact_list(list);
+        let s = hidden.to_string();
+        assert!(!s.contains("medication") && !s.contains("Taken"), "{s}");
+        assert!(!s.contains("its own history"), "{s}");
+        // The KIND stays - a fixed word from a closed list, which says nothing
+        // about him - and so does everything that is a time or a count.
+        assert_eq!(hidden["todo"][0]["action"]["kind"], "ask");
+        assert_eq!(
+            hidden["todo"][0]["action"]["question"],
+            serde_json::Value::Null
+        );
+        assert_eq!(hidden["todo"][0]["answers"], serde_json::json!([]));
+        assert_eq!(hidden["todo"][0]["hidden"], true);
+        assert_eq!(hidden["todo"][0]["fired_at"], 1);
+    }
+
+    #[test]
     fn a_refused_change_says_why_and_a_missing_route_is_never_a_success() {
         assert_eq!(
             change_answer(404, r#"{"ok": false, "reason": "no_such_job"}"#).unwrap_err(),
@@ -2680,5 +2859,68 @@ mod tests {
             )),
             format!("That is longer than {MAX_TEXT} characters - say it more briefly.")
         );
+    }
+
+    /// 2026-11-02: the HUD's form can build a QUESTION. The shape is checked
+    /// here - one question with words, one to three buttons, each doing one of
+    /// the three things - and the backend still owns every real rule (the
+    /// lengths, the destinations, the labels never saying the same thing).
+    #[test]
+    fn a_question_is_one_of_the_actions_the_form_can_build() {
+        let asked = serde_json::json!({
+            "kind": "ask",
+            "question": "Did you take your medication?",
+            "buttons": [
+                {"label": "Taken", "does": "record"},
+                {"label": "Later", "does": "snooze", "minutes": 30},
+            ],
+            "record": {"history": true, "obsidian_daily": true, "goal": "g-1"},
+        });
+        assert_eq!(action_body(&asked).unwrap(), asked);
+        // A body this app cannot mean never leaves it.
+        for (bad, why) in [
+            (
+                serde_json::json!({"kind": "ask", "question": "  ", "buttons":
+                [{"label": "Yes", "does": "done"}]}),
+                "no words",
+            ),
+            (
+                serde_json::json!({"kind": "ask", "question": "q?", "buttons": []}),
+                "no buttons",
+            ),
+            (
+                serde_json::json!({"kind": "ask", "question": "q?", "buttons":
+                [{"label": "a", "does": "done"}, {"label": "b", "does": "done"},
+                 {"label": "c", "does": "done"}, {"label": "d", "does": "done"}]}),
+                "four buttons",
+            ),
+            (
+                serde_json::json!({"kind": "ask", "question": "q?", "buttons":
+                [{"label": "Go", "does": "shell"}]}),
+                "a shell button",
+            ),
+            (
+                serde_json::json!({"kind": "ask", "question": "q?", "buttons":
+                [{"label": "Later", "does": "snooze", "minutes": 0}]}),
+                "zero minutes",
+            ),
+            (
+                serde_json::json!({"kind": "ask", "question": "q?", "buttons":
+                [{"label": "", "does": "done"}]}),
+                "a button with no words",
+            ),
+        ] {
+            assert!(action_body(&bad).is_err(), "not refused: {why}");
+        }
+        // Three buttons and no recording at all is a real shape (every button
+        // just marks it done or snoozes it), and it carries no `record` key.
+        let three = serde_json::json!({
+            "kind": "ask", "question": "q?",
+            "buttons": [{"label": "a", "does": "done"}, {"label": "b", "does": "done"},
+                        {"label": "c", "does": "snooze", "minutes": 10}],
+        });
+        assert!(action_body(&three).unwrap().get("record").is_none());
+        // And it really is the one kind that is not "a kind plus one key".
+        assert_eq!(MAX_ASK_BUTTONS, 3);
     }
 }

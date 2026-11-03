@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 168 rows from features/features.json.
+The owner's feature list, as data: 169 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 ff2ff66b0ea7286b62fc79fa048856c5e6203f819b5c147121f80f52d5afeb3d); the apps' Features pages read their own
+`features/features.json` (sha256 608816f7e4ad0c15e1323a98be1af7cc32130ffce1b9694168197e8993401e6c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "ff2ff66b0ea7286b62fc79fa048856c5e6203f819b5c147121f80f52d5afeb3d"
+SOURCE_SHA256 = "608816f7e4ad0c15e1323a98be1af7cc32130ffce1b9694168197e8993401e6c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -273,6 +273,18 @@ FEATURES = (
         "limit": "The PC is the clock. When one goes off, while Jarvis is running on the PC it shows a Windows notification: an alarm keeps ringing, a reminder or timer shows once. With the Jarvis app fully closed no notification appears then, but the job is kept and shows when it opens; a late alarm rings only if at most 10 minutes late, after that it is a quiet missed note. While the phone is connected to the PC the same job also shows an Android notification; the phone sets no alarm of its own. The morning briefing and \"tell me when\" raise one approval card.",
         "surface": "both",
         "covers": ["brain.work.coming-up", "timers-reminders"],
+    },
+    {
+        "id": "reminder-asks",
+        "group": "Talking",
+        "title": "A reminder that asks you a question",
+        "what": "A reminder can ask you a question in your own words, with up to three buttons you wrote yourself - each one records the answer, marks the reminder done, or snoozes it - and the answer is written where you chose: the reminder's own history, today's Obsidian note, a goal's progress or a habit tick.",
+        "where": "HUD, Reminders (or Brain, Work, Coming up), the Add form's \"Then: Ask me a question\"; the question and its buttons are answered on the HUD's \"Just went off\" row and on the phone's notification.",
+        "asks": "No card, either way: answering is a log line, like ticking a to-do item, and it decides nothing about anything else.",
+        "limit": "The PC is the clock and it draws the question; your phone shows it with the same buttons only while it is connected, so a question that goes off while the phone is away appears when it links again and is not pushed later. Answering from the phone needs it unlocked, because the answer writes a personal record; a locked screen shows a generic phrase. A button cannot open a file or a page yet. The Obsidian note is written only when a vault is set up, and goal progress and habit ticks wait for those two records to exist on this PC - each says so in one sentence and the answer is still kept.",
+        "surface": "both",
+        "aliases": ["reminder buttons", "ask me a question", "reminder answer"],
+        "covers": ["timers-reminders"],
     },
     {
         "id": "today",
