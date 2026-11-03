@@ -2606,11 +2606,24 @@ def cannot_change_setting_words(words: str = "") -> str:
 #   phone `HeardSound`), the PC never makes it, serves it or hears it, so there
 #   is still nothing here for a backend sentence to change.
 #
-#   NOT INCLUDED, deliberately, and this is the trap: "Show the sun and moon
-#   behind the face" (`sky-show`) and "Auto adjust" (`face-auto`) ALSO have no
-#   BoolSetting, but both ARE reachable by asking through the animal and sky
-#   grammars (jarvis_quick._animal) - listing them here would take a working
-#   phrase away. `spd-accept` is not a preference at all.
+#   "SHOW THE SUN AND MOON" STAYS OUT, deliberately, and this is the trap:
+#   "Show the sun and moon behind the face" (`sky-show`) ALSO has no
+#   BoolSetting, but it IS reachable by asking through the animal and sky
+#   grammar (`jarvis_quick._animal`) - listing it here would take a working
+#   phrase away, and its refusal would be false. It explains itself through
+#   `find_explain_setting`'s own `sky` kind instead (2026-11-03). `spd-accept`
+#   is not a preference at all.
+#
+#   "AUTO ADJUST" (`face-auto`) STAYS OUT TOO, for exactly the reason above, and
+#   this one was caught while it was being built: it has no BoolSetting, but
+#   "turn on auto adjust" and "set the sharpness back to auto" are REAL
+#   sentences that change the per-device automatic quality
+#   (`jarvis_quick._animal`'s per-device grammar,
+#   `jarvis_animal.DEVICE_SAID["auto"]`). Listing it here would make its
+#   refusal false - "I cannot change it by asking yet" is not true about that
+#   sentence. It explains itself through `find_explain_setting`'s own `device`
+#   kind instead (2026-11-03), which gives it a place, an honest "cannot read
+#   the value back" line and the phrase that really works.
 # --------------------------------------------------------------------------
 
 #: `SETTINGS_ROWS` id -> the words the owner might use for it. Keyed by id so
@@ -2633,6 +2646,8 @@ NOT_BY_ASKING: dict = {
                   "supervision"),
     "autostart": ("autostart", "auto start", "start jarvis when windows starts",
                   "start with windows", "run at startup", "start at login"),
+    # NOT "face-auto": it is reachable by the per-device sentence, so its
+    # refusal would be false. It has its own `device` kind - see the block above.
 }
 
 
@@ -2880,6 +2895,23 @@ class ChoiceSetting:
 
     def option_words(self) -> str:
         return ", ".join(sorted(set(self.options().keys())))
+
+    def now(self) -> Optional[str]:
+        """The value stored right now, in words from this row's own list.
+
+        THE ONE READER PER ROW (2026-11-03, M6). Every branch of
+        `_choice_now` is the public reader of the module that OWNS the value -
+        never a copy of the value kept here, and never a default standing in
+        for a value nothing could read.
+
+        `None` means "I could not read it": the module is missing, the read
+        raised, or the reader answered nothing. The caller then says the fixed
+        honest sentence (`UNREADABLE_VALUE_WORDS`) rather than dressing a
+        default up as the value. A row that WAS read and holds no choice (the
+        face has none chosen, no focus preset is recorded) is a different,
+        definite answer and says so in words.
+        """
+        return _choice_now(self)
 
 
 def _voice_speed_choices() -> dict:
@@ -3446,6 +3478,20 @@ class NumberSetting:
             return ""
         return f"from {row.words(row.low)} to {row.words(row.high)}"
 
+    def now(self) -> Optional[str]:
+        """How long Live waits right now, in the row's own words ("3 minutes").
+
+        THE ENGINE'S OWN READER (2026-11-03, M6): `jarvis_live.quiet_seconds`
+        is what the session itself acts on, so the number the answer shows is
+        the number the microphone obeys. The words come from `jarvis_limits`'
+        row (`words()`), never from a copy kept here.
+
+        `None` means "I could not read it" - `jarvis_live` is missing or would
+        not answer - and the caller says the fixed honest sentence instead of
+        the row's default dressed up as the value.
+        """
+        return _number_now(self)
+
 
 NUMBER_SETTINGS: tuple = (
     # "How long Jarvis Live waits before it turns off" (2026-11-01).
@@ -3900,38 +3946,21 @@ def resolve_control_sentence(control_words: str, value_words: str = None) -> dic
 
 def control_current_words(setting: ChoiceSetting) -> str:
     """The current value in plain words, or "I could not read it" - never a
-    guess. Used by the clarifying question the ruling asks for."""
-    key = setting.key
+    guess. Used by the clarifying question the ruling asks for.
+
+    ALL TEN CHOICES, ONE READER (2026-11-03, M5). This used to know six of the
+    ten by hand and answer "unknown" for `personality`, `antislop_mode`,
+    `small_approvals` and `todo_carryover`, so the clarifying question said
+    "(currently unknown)" for four settings that all have a readable source. It
+    now asks the row itself (`ChoiceSetting.now`), so a choice added to
+    `CHOICE_SETTINGS` is readable with no edit here - and the words it answers
+    with are always the row's own option words, the ones the owner may say
+    back."""
     try:
-        if key == "handoff_mode":
-            import jarvis_handoff_mode as HM
-            mode = str((HM.view() or {}).get("mode") or "")
-            return {"stop_early": "stop early",
-                    "keep_offering": "keep offering it"}.get(mode, mode) or "unknown"
-        if key == "handoff_front":
-            import jarvis_handoff_front as HF
-            mode = str((HF.view() or {}).get("mode") or "")
-            return {"leave_in_place": "leave it where it is",
-                    "bring_to_front": "bring it to the front"}.get(mode, mode) or "unknown"
-        if key == "voice_speed":
-            import jarvis_voices as JV
-            return str((JV.speed_view() or {}).get("choice") or "normal")
-        if key == "voice_speaker":
-            import jarvis_voices as JV
-            view = JV.speaker_view() or {}
-            return str(view.get("label") or view.get("choice") or "unknown")
-        if key == "face":
-            return _face_now() or "I could not read it"
-        if key == "focus_preset":
-            import jarvis_presets as JP
-            chosen = JP.choice()
-            if not chosen:
-                return "no preset chosen"
-            row = JP.by_id(chosen)
-            return str(getattr(row, "title", "") or chosen)
+        here = setting.now()
     except Exception:                       # noqa: BLE001 - said as unknown
-        return "unknown"
-    return "unknown"
+        here = None
+    return str(here) if here else "I could not read it"
 
 
 def _no_choices_words(setting: ChoiceSetting) -> str:
@@ -4056,6 +4085,254 @@ def choice_not_made_words(setting: ChoiceSetting, words: str) -> str:
 
 
 # --------------------------------------------------------------------------
+#   "What is its value RIGHT NOW?" - the fourth fact (2026-11-03, M3/M5/M6)
+# --------------------------------------------------------------------------
+#
+# THE GAP THIS CLOSES. `explain_setting_words` gave the owner the real Settings
+# place and one real phrase, and stopped there: the "where do I change it?"
+# answer never said what the setting IS at the moment, which is one of the four
+# facts he asked for ("what it is, where it lives, its current value, and the
+# exact phrase"). Bools got a value elsewhere (`jarvis_feature_guide.state`),
+# but the generic answer did not, and no choice or number row had a reader at
+# all - `control_current_words` knew six of the ten choices by hand.
+#
+# THE SHAPE. ONE reader per row: `ChoiceSetting.now` / `NumberSetting.now`
+# above, and `jarvis_feature_guide.STATE_READERS` for the 35 bools (the table
+# that already answers "is it on?" and that `test_feature_guide.py` keeps in
+# step with BOOL_SETTINGS). `current_value` is the one entry point the answer
+# builders use, so there is no second read path.
+#
+# NEVER A DEFAULT DRESSED UP AS THE VALUE. `None` is the answer whenever the
+# module that owns the setting is missing or will not answer, and the sentence
+# then says `UNREADABLE_VALUE_WORDS` - fixed words, no guess. A reader's own
+# normalisation (a damaged hand-edited file read through the module's own
+# "this is the default I would use" rule) is NOT this case: that is the value
+# the product itself acts on, and saying otherwise would be the second lie.
+
+#: The exact sentence when a setting's value cannot be read on this PC. ONE
+#: constant, used by every kind, so the promise cannot be worded three ways.
+#: The plan's §4 wording, word for word.
+UNREADABLE_VALUE_WORDS = ("I could not read its current value on this PC, so I "
+                          "will not guess.")
+
+
+def _option_words(setting: "ChoiceSetting", value) -> Optional[str]:
+    """The row's OWN word for `value` - the first key of its own list that maps
+    to it - or None when the list has no such value.
+
+    Never a new label: the words an answer prints are the words the owner may
+    say back (`choice_from_words` accepts them), so the value he hears and the
+    value he says can never be two different vocabularies."""
+    try:
+        for words, val in setting.options().items():
+            if val == value:
+                return str(words)
+    except Exception:                       # noqa: BLE001 - None is the answer
+        return None
+    return None
+
+
+def _choice_now(setting: "ChoiceSetting") -> Optional[str]:
+    """One ChoiceSetting's value, from the module that owns it, or None.
+
+    Each branch is that module's own public reader. Nothing is stored here and
+    nothing is defaulted here: a module that is missing, a read that raises, or
+    a reader that answers nothing all give None, which the caller turns into
+    the fixed honest sentence."""
+    key = str(getattr(setting, "key", "") or "")
+    try:
+        if key == "handoff_mode":
+            import jarvis_handoff_mode as HM
+            mode = str((HM.view() or {}).get("mode") or "")
+            return _option_words(setting, mode) if mode else None
+        if key == "handoff_front":
+            import jarvis_handoff_front as HF
+            mode = str((HF.view() or {}).get("mode") or "")
+            return _option_words(setting, mode) if mode else None
+        if key == "voice_speed":
+            # The voices pack's own view: "choice" is the id it acts on.
+            import jarvis_voices as JV
+            speed = str((JV.speed_view() or {}).get("choice") or "")
+            return _option_words(setting, speed) if speed else None
+        if key == "voice_speaker":
+            # The pack's own LABEL ("American (female) - Heart"), which is what
+            # both apps draw, found in the pack's own choice rows; the voice's
+            # name is the fallback when the pack offers no label for it.
+            import jarvis_voices as JV
+            view = JV.speaker_view() or {}
+            choice = str(view.get("choice") or "")
+            label = next((str(row.get("label") or "")
+                          for row in view.get("choices") or ()
+                          if isinstance(row, dict)
+                          and str(row.get("id") or "") == choice), "")
+            return label or choice or None
+        if key == "face":
+            # `_face_now` already distinguishes "cannot read" (None) from
+            # "read, and no face is chosen" ("no face chosen").
+            return _face_now()
+        if key == "focus_preset":
+            # `jarvis_presets.choice()` answers None for "no preset recorded",
+            # which is a definite answer about this PC (nothing was applied),
+            # so it is said - not dressed up as a chosen preset.
+            import jarvis_presets as JP
+            chosen = str(JP.choice() or "")
+            if not chosen:
+                return "no preset chosen"
+            row = JP.by_id(chosen)
+            return str(getattr(row, "title", "") or chosen)
+        if key == "personality":
+            # The preset the manner module is really using, in its own title
+            # (the id when a title is missing). It never returns nothing: the
+            # saved choice, else the contract default - which IS the preset
+            # Jarvis speaks in, not a guess made here.
+            import jarvis_manner as MN
+            pid = str(MN.current_personality() or "")
+            if not pid:
+                return None
+            row = MN.preset(pid)
+            title = str((row or {}).get("title") or "") if isinstance(row, dict) else ""
+            return title or pid
+        if key == "antislop_mode":
+            import jarvis_antislop as AS
+            mode = str((AS.get_state() or {}).get("mode") or "")
+            return _option_words(setting, mode) if mode else None
+        if key == "small_approvals":
+            # The SAME function the approval itself reads. The mode is turned
+            # into the row's own two words: asking for the small cards too
+            # (MODE_RISKY / MODE_EVERY), or leaving them to the card alone
+            # (MODE_SMALL, the shipped default).
+            import jarvis_owner_check as OC
+            mode = OC.approvals_mode()
+            return _option_words(setting, mode != OC.MODE_SMALL)
+        if key == "todo_carryover":
+            # The schedule's own stored mode, in the label both apps draw.
+            import jarvis_schedule as JS
+            mode = str(JS.get().todo_mode() or "")
+            if not mode:
+                return None
+            label = next((str(row.get("label") or "")
+                          for row in getattr(JS, "TODO_MODE_WORDS", ())
+                          if row.get("value") == mode), "")
+            return label or _option_words(setting, mode)
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+    return None
+
+
+def _number_now(setting: "NumberSetting") -> Optional[str]:
+    """One NumberSetting's value, in the row's own words, or None.
+
+    `jarvis_live.quiet_seconds()` is the reader the ENGINE uses, so the answer
+    shows the number the session obeys; `jarvis_limits`' own `words()` turns it
+    into "3 minutes". A module that is missing or a read that raises is None."""
+    try:
+        import jarvis_live as LV
+        value = int(LV.quiet_seconds())
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+    try:
+        return str(setting.words(value))
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+
+
+def _animal_now(key: str) -> Optional[bool]:
+    """One animal switch's value from `jarvis_animal`'s own table, or None."""
+    try:
+        import jarvis_animal as AN
+        values = AN.values() or {}
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+    value = values.get(str(key or ""))
+    return value if isinstance(value, bool) else None
+
+
+def _sky_show_now() -> Optional[bool]:
+    """Whether the sun and moon are drawn, from `jarvis_sky`'s own view."""
+    try:
+        import jarvis_sky as SK
+        return (SK.view() or {}).get("show") is True
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+
+
+def _weather_source_now() -> Optional[str]:
+    """The weather source, in the sky module's own choice label, or None."""
+    try:
+        import jarvis_sky as SK
+        source = str(((SK.view() or {}).get("weather") or {}).get("source") or "")
+        if not source:
+            return None
+        for row in getattr(SK, "CHOICES", ()):
+            if str(row.get("id") or "") == source:
+                return str(row.get("label") or source)
+        return source
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+
+
+def current_value(setting) -> Optional[str]:
+    """What `setting` is set to RIGHT NOW, in words, or None when unreadable.
+
+    ONE entry point for every kind, used by `explain_setting_words` and by
+    `jarvis_feature_guide`'s choice branches, so a value is read the same way
+    wherever it is shown:
+
+      * `BoolSetting`    -> its own on/off word, through the guide's readers;
+      * `ChoiceSetting`  -> `ChoiceSetting.now()` (the module that owns it);
+      * `NumberSetting`  -> `NumberSetting.now()` (the engine's own reader).
+
+    `None` is the honest "I could not read it" and never a default. An object
+    that is none of the three is not a setting this file knows -> None."""
+    if setting is None:
+        return None
+    try:
+        if isinstance(setting, BoolSetting):
+            value = _bool_now(setting)
+            if value is None:
+                return None
+            return str(setting.on_word if value else setting.off_word)
+        if isinstance(setting, ChoiceSetting):
+            value = setting.now()
+            return str(value) if value else None
+        if isinstance(setting, NumberSetting):
+            value = setting.now()
+            return str(value) if value else None
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+    return None
+
+
+def _bool_now(setting: "BoolSetting") -> Optional[bool]:
+    """One BoolSetting's value through `jarvis_feature_guide.STATE_READERS`.
+
+    The guide owns the 35 readers (one per switch, and its suite fails if the
+    table and `BOOL_SETTINGS` ever drift), so there is no second copy of "how do
+    I read this switch" here. None - the guide missing, the reader missing, a
+    reader that raises, or a reader answering something that is not a bool - is
+    "could not read it"."""
+    try:
+        import jarvis_feature_guide as G
+        value = G.read_state(setting.key)
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+    return value if isinstance(value, bool) else None
+
+
+def _now_phrase(value: Optional[str]) -> str:
+    """"Right now: ..." - the real value, or the ONE fixed honest sentence.
+
+    `value` is what `current_value` returned. An empty or missing value is the
+    unreadable case, and the sentence then ends with its own full stop rather
+    than being given one - so the exact words the promise names are always
+    there, byte for byte."""
+    text = str(value or "").strip()
+    if not text:
+        return "Right now: " + UNREADABLE_VALUE_WORDS
+    return f"Right now: {text.rstrip('.')}."
+
+
+# --------------------------------------------------------------------------
 #   "How/where do I change <a setting>?" - the settings-NAME fallback
 #   (Gemini principal-architect ruling Q6 Step A, 2026-10-26)
 # --------------------------------------------------------------------------
@@ -4096,6 +4373,91 @@ DESKTOP_ONLY_AREAS = (
      "hud-window", "the HUD layout"),
 )
 
+#: The sun-and-moon switch's own names (2026-11-03, M2). It is a real Settings
+#: row with a real route (`set_sky_show`) but no BoolSetting, so before this it
+#: was the ONE reachable animal option the explain door could not name.
+#:
+#: These are the Settings label's words plus the words `jarvis_quick._animal`
+#: already accepts for it (`_SKY_NAMES`); that grammar cannot be imported from
+#: here without a circular import, so the two lists are kept equal by
+#: `backend/test_setting_explain.py`, which runs the phrase this file prints
+#: through the real `jarvis_quick` matcher and requires the sky intent back.
+SKY_SHOW_NAMES = (
+    "show the sun and moon behind the face",
+    "the sun and moon behind the face",
+    "the sun and moon",
+    "the sun and the moon",
+    "sun and moon",
+    "sun and the moon",
+    "sun and moon scene",
+    "the sun and moon scene",
+    "the sky",
+    "sky",
+)
+
+#: The per-device automatic quality's own names (2026-11-03, M2's neighbour).
+#: It is NOT a shared animal switch (`jarvis_animal.find_switch` returns None
+#: for these words) and has no BoolSetting: it is one DEVICE option, answered
+#: per device by `jarvis_quick._animal`'s `_DEV_AUTO` grammar and written by
+#: `jarvis_animal.step_device({"change": "auto"})`. The Settings label is
+#: "Auto adjust"; the words below are that label plus the ones the real
+#: grammar accepts, so the phrase this file prints is a phrase that works.
+DEVICE_AUTO_NAMES = (
+    "auto adjust",
+    "the auto adjust",
+    "automatic adjustment",
+    "automatic adjustment for the face",
+    "auto adjust for the face",
+    "auto quality",
+    "automatic quality",
+)
+
+#: The weather source's own names (2026-11-03, M2). Same shape and same
+#: reason as SKY_SHOW_NAMES: it has a real setter (`set_weather_source`) and no
+#: BoolSetting/ChoiceSetting row, and the words are the ones
+#: `jarvis_quick._animal` answers (`_WEATHER_NAMES`) plus the phrase the engine
+#: itself uses for the setting ("the weather source").
+WEATHER_SOURCE_NAMES = (
+    "the weather source",
+    "weather source",
+    "which weather source jarvis uses",
+    "the weather behind the face",
+    "weather behind the face",
+    "the weather",
+    "weather",
+    "the weather scene",
+    "weather scene",
+    "weather in the scene",
+    "rain and snow",
+)
+
+
+def _named(words: str, names) -> bool:
+    """True when `words` ARE one of `names`, exactly but for case and a leading
+    article - the same gate `find_bool_setting` keeps, so a half-heard sentence
+    falls through rather than explaining a setting nobody named.
+
+    The folding here is the shape `_setting_words` uses (lower case, punctuation
+    and a leading article gone) but WITHOUT the filler stripping: an explain
+    subject is the name the sentence named, and the two name tables above are
+    matched exactly the way the spoken grammar matches them."""
+    bare = _bare(re.sub(r"[^a-z0-9 ]+", " ", str(words or "").lower()))
+    if not bare:
+        return False
+    return any(bare == _bare(re.sub(r"[^a-z0-9 ]+", " ", str(name).lower()))
+               for name in names)
+
+
+def _row_label(dom_id: str, fallback: str) -> str:
+    """A Settings row's own label, or `fallback` when this file has no such row.
+
+    The label the owner reads on the page is the one the answer uses, exactly as
+    `not_by_asking_sentence` does, so a rename on the page reaches both."""
+    row = setting_row(dom_id)
+    if row is not None and row.label:
+        return str(row.label)
+    return fallback
+
 
 def find_explain_setting(words: str) -> Optional[dict]:
     """The ONE setting a how/where/explain question names, or None.
@@ -4104,7 +4466,20 @@ def find_explain_setting(words: str) -> Optional[dict]:
       {"kind": "page", "dom_id": ..., "mixed": bool}  a switch with no route
       {"kind": "bool", "key": ...}                    a plain on/off switch
       {"kind": "choice", "key": ...}                  a named-choice setting
+      {"kind": "number", "key": ...}                  a whole-number setting
+      {"kind": "animal", "key": ...}                  a shared animal switch
+      {"kind": "device", "key": "auto"}               the per-device auto quality
+      {"kind": "sky"}                                 show the sun and moon
+      {"kind": "weather", "key": ...}                 the weather source
       {"kind": "area", "section": ..., "control": ...} a desktop-only control
+
+    THE ORDER IS THE FOUR EXISTING KINDS' OWN ORDER, with the new ones slotted
+    in after the named choices and before the desktop-only areas (2026-11-03):
+    a page-only row still wins first (its refusal must beat a switch whose words
+    the sentence contains), then a plain switch, then a named choice, then the
+    three animal-option families, then the number, then the two desktop-only
+    areas. Nothing here guesses: the animal switch goes through the animal
+    module's own alias list, and the sky/weather names are matched exactly.
 
     `None` means no single registry name is the subject, and the caller keeps
     its old behaviour (unknown feature answer, or the model)."""
@@ -4117,6 +4492,18 @@ def find_explain_setting(words: str) -> Optional[dict]:
     choice = find_choice_setting(words)
     if choice is not None:
         return {"kind": "choice", "key": choice.key}
+    animal = find_animal_switch(words)
+    if animal is not None:
+        return {"kind": "animal", "key": animal}
+    if _named(words, DEVICE_AUTO_NAMES):
+        return {"kind": "device", "key": "auto"}
+    if _named(words, SKY_SHOW_NAMES):
+        return {"kind": "sky"}
+    if _named(words, WEATHER_SOURCE_NAMES):
+        return {"kind": "weather", "key": "weather_source"}
+    number = find_number_setting(words)
+    if number is not None:
+        return {"kind": "number", "key": number.key}
     bare = _bare(words)
     for names, section_id, control in DESKTOP_ONLY_AREAS:
         if any(bare == _bare(name) for name in names):
@@ -4139,14 +4526,41 @@ def _start_sentence(words: str) -> str:
     return text[:1].upper() + text[1:] if text else text
 
 
+def _number_label(setting: "NumberSetting") -> str:
+    """The row's own NOUN-PHRASE name - one that starts with "the", never a
+    question ("how long jarvis live waits ...") - so the change sentence reads
+    "set the jarvis live timeout to 3 minutes" rather than "set how long ... to 3".
+
+    Read from the row's own `names`, so a rename there reaches the phrase: the
+    test runs the printed sentence through the real grammar and the registry's
+    own `find_number_setting_words`, and requires the same row back."""
+    for name in getattr(setting, "names", ()) or ():
+        if str(name).startswith("the "):
+            return str(name)
+    return setting.title() or setting.key
+
+
+def _weather_label() -> str:
+    """The weather choice's label from `jarvis_sky`'s own table."""
+    try:
+        import jarvis_sky as SK
+        label = str(getattr(SK, "WEATHER_LABEL", "") or "")
+        return label or "the weather source"
+    except Exception:                       # noqa: BLE001 - a plain fallback
+        return "the weather source"
+
+
 def explain_setting_words(found: dict) -> str:
-    """The ruled answer: the real Settings place and one real example phrase.
+    """The ruled answer: the real Settings place, its value, and one real
+    example phrase.
 
     Built from the same tables the setters use, so the phrase it offers is a
     phrase jarvis_quick already routes and the place is the card the real
     control is drawn in. It says only what it can prove: a setting with no
-    route is the page-only refusal, and a desktop-only control is named with
-    the sentence that says it cannot be changed by asking."""
+    route is the page-only refusal, a desktop-only control is named with the
+    sentence that says it cannot be changed by asking, and a value nothing
+    could read is the ONE fixed "I could not read its current value on this PC,
+    so I will not guess." - never a default dressed up as the value (M3)."""
     kind = str((found or {}).get("kind") or "")
     if kind == "page":
         return not_by_asking_sentence(str(found.get("dom_id") or ""))
@@ -4155,7 +4569,9 @@ def explain_setting_words(found: dict) -> str:
         if setting is None:
             return ""
         label = setting.names[0] if setting.names else setting.key
-        return (f'"{label}" is an on/off setting in {_section_place(setting.section)}. '
+        place = _section_place(setting.section)
+        value = current_value(setting)
+        return (f'"{label}" is an on/off setting in {place}. {_now_phrase(value)} '
                 f'Say "turn on {label}" or "turn off {label}" and I will do it; a '
                 f'change that loosens a rule still asks on a card first.')
     if kind == "choice":
@@ -4165,14 +4581,88 @@ def explain_setting_words(found: dict) -> str:
         label = setting.names[0] if setting.names else setting.key
         options = sorted(set(setting.options().keys()))
         where = _section_place(setting.where)
+        value = current_value(setting)
         if not options:
-            return (f"{_start_sentence(label)} is a choice in {where}. There is no "
-                    f'choice to name on this PC yet, so ask "what are the choices '
-                    f'for {label}?" to check.')
-        return (f"{_start_sentence(label)} is a choice in {where}. Say \"set {label} "
+            return (f"{_start_sentence(label)} is a choice in {where}. "
+                    f"{_now_phrase(value)} There is no choice to name on this PC "
+                    f'yet, so ask "what are the choices for {label}?" to check.')
+        return (f"{_start_sentence(label)} is a choice in {where}. "
+                f"{_now_phrase(value)} Say \"set {label} "
                 f'to {options[0]}\" and I will do it; a change that needs approval '
                 f'still asks on a card first. To hear every value, ask "what are '
                 f'the choices for {label}?".')
+    if kind == "number":
+        setting = next((n for n in NUMBER_SETTINGS if n.key == found.get("key")), None)
+        if setting is None:
+            return ""
+        label = _number_label(setting)
+        where = _section_place("limits")
+        value = current_value(setting)
+        span = setting.range_words()
+        tail = f" It can be anything {span}." if span else ""
+        return (f'"{setting.title()}" is a number in {where}. {_now_phrase(value)} '
+                f'Say "set {label} to 3 minutes" to change it.{tail}')
+    if kind == "animal":
+        key = str(found.get("key") or "")
+        try:
+            import jarvis_animal as AN
+            switch = AN.switch(key)
+        except Exception:                   # noqa: BLE001 - explained without it
+            switch = None
+        names = tuple(getattr(switch, "names", ()) or ())
+        label = str(getattr(switch, "label", "") or key.replace("_", " "))
+        phrase = names[0] if names else key.replace("_", " ")
+        value = _animal_now(key)
+        now = None if value is None else ("on" if value else "off")
+        return (f'"{label}" is an on/off option in {_section_place("animal-options")}. '
+                f'{_now_phrase(now)} Say "turn on {phrase}" or "turn off {phrase}" '
+                f'and I will do it at once - it is cosmetic, so no card is needed.')
+    if kind == "device":
+        label = _row_label("face-auto", "Auto adjust")
+        where = _section_place("animal-options")
+        try:
+            import jarvis_animal as AN
+            about = str((AN.view().get("device") or {}).get("title") or "")
+        except Exception:                   # noqa: BLE001 - explained without it
+            about = ""
+        covers = f" It covers {about.lower()}." if about else ""
+        # The value is kept by the app that draws the face, per device, and this
+        # module has no reader for it - so it is the ONE fixed honest sentence,
+        # never a default dressed up as the value (M3).
+        return (f'"{label}" is the automatic sharpness and frame rate for one '
+                f'device, in {where}.{covers} {_now_phrase(None)} Say "turn on '
+                f'auto adjust" (or "set the sharpness back to auto") and it '
+                f'changes at once, on that device only - it is cosmetic, so no '
+                f'card is needed.')
+    if kind == "sky":
+        label = _row_label("sky-show", "the sun and moon")
+        phrase = next((n for n in SKY_SHOW_NAMES if "behind" not in n),
+                      SKY_SHOW_NAMES[0])
+        value = _sky_show_now()
+        now = None if value is None else ("on" if value else "off")
+        return (f'"{label}" is an on/off option in {_section_place("animal-options")}. '
+                f'{_now_phrase(now)} Say "turn on {phrase}" or "turn off {phrase}" '
+                f'and I will do it at once - it is cosmetic, so no card is needed.')
+    if kind == "weather":
+        label = _weather_label()
+        value = _weather_source_now()
+        try:
+            import jarvis_sky as SK
+            sources = [str(s) for s in getattr(SK, "SOURCES", ()) or ()]
+        except Exception:                   # noqa: BLE001 - explained without it
+            sources = []
+        if sources:
+            phrases = "; ".join(f'"set the weather source to {s.replace("_", " ")}"'
+                                for s in sources)
+            change = (f"Say one of: {phrases} - and turning Open-Meteo on asks on "
+                      f"a card first, because it sends your rough position to the "
+                      f"internet.")
+        else:
+            change = ('Say "set the weather source to open meteo" to use the free '
+                      'online one - it asks on a card first, because it sends your '
+                      'rough position to the internet.')
+        return (f'"{label}" is a choice in {_section_place("animal-options")}. '
+                f'{_now_phrase(value)} {change}')
     if kind == "area":
         control = str(found.get("control") or "that control")
         where = _section_place(str(found.get("section") or ""))

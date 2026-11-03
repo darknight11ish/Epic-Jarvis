@@ -89,6 +89,12 @@ _TMP = Path(tempfile.mkdtemp(prefix="jarvis-settings-tool-"))
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "config")
 (_TMP / "config").mkdir(parents=True, exist_ok=True)
 os.environ["JARVIS_FRAMEWORK_TOML"] = str(_TMP / "jarvis-framework.toml")
+# THE RECEIPTS STORE NEEDS ITS OWN VARIABLE. jarvis_receipts._config_dir()
+# prefers the framework module's CONFIG_DIR over both config-dir variables
+# above, so without this line a run at the owner's own desk writes real
+# change_setting rows into his real receipts.db - measured 2026-11-03, 20 rows
+# in four minutes. JARVIS_RECEIPTS_DB is read first and wins.
+os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
 
 sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
@@ -1128,6 +1134,294 @@ def t_the_one_moment_switch_is_reachable_and_cardless():
     check("set_one_moment raises no card of its own", signs == [], repr(signs))
 
 
+# --------------------------------------------------------------------------
+#   8. The undo receipt the registry already promised (2026-11-03, M8)
+# --------------------------------------------------------------------------
+
+class _Switch:
+    """A stand-in switch whose answer depends on the direction, so a reversal
+    can be told from the change it reverses."""
+
+    def __init__(self, waiting: bool = False, ok: bool = True):
+        self.calls = []
+        self.waiting = waiting
+        self.ok = ok
+
+    def set_(self, on, *, peer=None, local=None):
+        self.calls.append(bool(on))
+        return R.Outcome(self.ok, "It is on now." if on else "It is off now.",
+                         waiting=self.waiting)
+
+    def setting(self, key="a test setting"):
+        return R.BoolSetting(key, (key,), None, self.set_)
+
+
+class _SchedStub:
+    """`answer()`'s three scheduler calls: nothing is written anywhere."""
+
+    def __init__(self):
+        self.commands, self.forgotten = [], []
+
+    def mark_command(self, text):
+        self.commands.append(text)
+
+    def forget_set(self, cid):
+        self.forgotten.append(cid)
+
+    def last_set(self, cid, now):
+        return None
+
+
+def t_a_cardless_change_leaves_one_receipt_and_undo_takes_it_back_once():
+    """`changeable_words()` has told the owner 'say "undo" in the same chat if
+    you change your mind' since the registry was written. Until 2026-11-03 no
+    settings change wrote a receipt at all, so that promise was false for
+    almost every setting.
+
+    Now: a CARDLESS change writes exactly one receipt, in the receipts database
+    the apps already read; "undo" in that chat puts the previous value back
+    through the SETTING'S OWN setter and says the setter's own sentence; a
+    second "undo" refuses and changes nothing; another chat cannot take it.
+    """
+    import time
+
+    import jarvis_receipts as RC
+
+    switch = _Switch()
+    other = _Switch()
+    table = (switch.setting(key="a test setting"),
+             other.setting(key="another test setting"))
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(real) + table
+    conv, elsewhere = "settings-undo-0001", "settings-undo-0002"
+    try:
+        rows = len(RC.recent(200))
+        first = Q._run_settings_bool({"key": "a test setting", "on": True}, None, None,
+                                     conversation=conv)
+        check("a cardless change still answers with the setter's own sentence",
+              first is not None and first.reply == "It is on now.",
+              None if first is None else first.reply)
+        check("...the change really happened", switch.calls == [True], switch.calls)
+        now_rows = RC.recent(200)
+        check("...and it left exactly ONE receipt",
+              len(now_rows) == rows + 1, (rows, len(now_rows)))
+        newest = now_rows[0] if now_rows else {}
+        check("...under the settings tool's own name",
+              newest.get("tool_name") == Q.SETTINGS_RECEIPT_TOOL == AG.SETTINGS_TOOL,
+              newest.get("tool_name"))
+        check("...with a before that can be put back",
+              newest.get("has_before") is True
+              and (newest.get("before") or {}).get("value") is False,
+              newest.get("before"))
+        check("...and it is offered as undoable right now",
+              RC.is_undoable(newest) is True, newest)
+
+        wrong = Q._run_undo({"noun": None, "soft": False}, _SchedStub(), time.time(),
+                            elsewhere)
+        check("another chat cannot take it back",
+              wrong is not None and wrong.reply == Q.UNDO_NOTHING_SAID
+              and switch.calls == [True],
+              (None if wrong is None else wrong.reply, switch.calls))
+
+        undo = Q._run_undo({"noun": None, "soft": False}, _SchedStub(), time.time(), conv)
+        check("'undo' puts the previous value back through the setting's OWN setter",
+              switch.calls == [True, False], switch.calls)
+        check("...and answers with the setter's own sentence for the reversal",
+              undo is not None and undo.reply == "It is off now.",
+              None if undo is None else undo.reply)
+        again = Q._run_undo({"noun": None, "soft": False}, _SchedStub(), time.time(),
+                            conv)
+        check("a SECOND undo refuses and applies nothing",
+              switch.calls == [True, False]
+              and again is not None and again.reply != "It is off now."
+              and "already" in again.reply.lower(),
+              (None if again is None else again.reply, switch.calls))
+        check("...and the receipt is marked undone, so no app offers it again",
+              RC.get(newest.get("receipt_id", "")).get("undone") is True,
+              RC.get(newest.get("receipt_id", "")))
+        check("a refused reversal never says the setting changed",
+              again is not None and "back" in again.reply.lower()
+              and "changed nothing" not in again.reply,
+              None if again is None else again.reply)
+    finally:
+        R.BOOL_SETTINGS = real
+
+
+def t_a_carded_change_leaves_no_receipt_because_nothing_happened():
+    """A carded change has not happened, so there is nothing to take back.
+
+    Writing a receipt for it would be a receipt for a change that may never
+    happen - and "undo" would then claim to put back something that never moved.
+    """
+    import jarvis_receipts as RC
+
+    switch = _Switch(waiting=True)
+    table = (switch.setting(key="a carded test setting"),)
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(real) + table
+    conv = "settings-undo-0003"
+    try:
+        rows = len(RC.recent(200))
+        res = Q._run_settings_bool({"key": "a carded test setting", "on": True},
+                                   None, None, conversation=conv)
+        check("the carded change reports waiting, in the setter's own words",
+              switch.calls == [True] and res is not None
+              and res.reply == "It is on now.",
+              (switch.calls, None if res is None else res.reply))
+        check("...and it wrote NO receipt", len(RC.recent(200)) == rows,
+              (rows, len(RC.recent(200))))
+        undo = Q._run_undo({"noun": None, "soft": False}, _SchedStub(),
+                           __import__("time").time(), conv)
+        check("...so 'undo' has nothing of its own to take back, and does not guess",
+              undo is not None and undo.reply == Q.UNDO_NOTHING_SAID
+              and switch.calls == [True],
+              (None if undo is None else undo.reply, switch.calls))
+    finally:
+        R.BOOL_SETTINGS = real
+
+
+def t_a_setter_that_writes_its_own_receipt_does_not_get_a_second():
+    """ONE change, ONE receipt - even when the setting's own module records it.
+
+    The Anti-Slop mode is the real case: `jarvis_antislop._change` writes a
+    receipt after every write, so a spoken "set the anti-slop mode to after"
+    already had one before this slice. The added receipt must therefore not
+    pile a second row on top - and it must not promise a second undo either.
+    """
+    import time
+
+    import jarvis_receipts as RC
+
+    calls = []
+
+    def set_(on, *, peer=None, local=None):
+        calls.append(bool(on))
+        RC.record("antislop", "the module's own receipt",
+                  before={"mode": "before"}, after={"mode": "after"})
+        return R.Outcome(True, "Done.")
+
+    fake = R.BoolSetting("a self-receipted setting",
+                         ("a self-receipted setting",), None, set_)
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(real) + (fake,)
+    conv = "settings-undo-0004"
+    try:
+        rows = len(RC.recent(200))
+        res = Q._run_settings_bool({"key": "a self-receipted setting", "on": True},
+                                   None, None, conversation=conv)
+        check("the change happened and answered with the setter's words",
+              calls == [True] and res is not None and res.reply == "Done.",
+              (calls, None if res is None else res.reply))
+        newest = RC.recent(200)
+        check("...it left exactly ONE receipt, not two", len(newest) == rows + 1,
+              (rows, len(newest)))
+        check("...and it is the module's own, under the module's own name",
+              (newest[0] or {}).get("tool_name") == "antislop",
+              (newest[0] or {}).get("tool_name"))
+        undo = Q._run_undo({"noun": None, "soft": False}, _SchedStub(),
+                           time.time(), conv)
+        check("...so 'undo' claims nothing of its own here (the module's own "
+              "restorer and its card do that)",
+              undo is not None and undo.reply == Q.UNDO_NOTHING_SAID,
+              None if undo is None else undo.reply)
+    finally:
+        R.BOOL_SETTINGS = real
+
+
+def t_undo_carries_the_device_that_asked_so_a_phone_cannot_use_it():
+    """The undo re-applies a value through the setting's OWN setter, so it must
+    carry the address of the device that asked - otherwise "undo" would be a
+    way for the phone to make a change the PC only may make (the small-approvals
+    fingerprint is the real one)."""
+    import time
+
+    calls = []
+
+    def set_(on, *, peer=None, local=None):
+        calls.append((bool(on), peer))
+        if peer != "127.0.0.1":
+            return R.Outcome(False, "That can only be changed on your PC. Nothing "
+                                    "was changed.", refused_pc_only=True)
+        return R.Outcome(True, "It is on now." if on else "It is off now.")
+
+    fake = R.BoolSetting("a PC-only test setting", ("a PC-only test setting",),
+                         None, set_)
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(real) + (fake,)
+    conv = "settings-undo-0005"
+    try:
+        Q._run_settings_bool({"key": "a PC-only test setting", "on": True}, "127.0.0.1",
+                             "127.0.0.1", conversation=conv)
+        check("the change itself was made from the PC",
+              calls == [(True, "127.0.0.1")], calls)
+        phone = Q._run_undo({"noun": None, "soft": False}, _SchedStub(), time.time(),
+                            conv, peer="10.0.0.5", local="127.0.0.1")
+        check("...and the phone's undo reaches the setter WITH the phone's address",
+              calls == [(True, "127.0.0.1"), (False, "10.0.0.5")], calls)
+        check("...is refused in the setter's own words",
+              phone is not None and "only be changed on your PC" in phone.reply,
+              None if phone is None else phone.reply)
+        check("...and nothing was put back for it", len(calls) == 2, calls)
+    finally:
+        R.BOOL_SETTINGS = real
+
+
+def t_the_receipt_is_persisted_and_a_restart_can_still_put_it_back():
+    """The receipt is a ROW, not a promise: after a restart the in-memory
+    callable is gone, so the reversal must come from the before snapshot
+    through the restorer registered under the tool's own name."""
+    import jarvis_receipts as RC
+
+    switch = _Switch()
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(real) + (switch.setting(key="a test setting"),)
+    conv = "settings-undo-0006"
+    try:
+        Q._run_settings_bool({"key": "a test setting", "on": True}, None, None,
+                             conversation=conv)
+        rows = RC.recent(1)
+        rid = str((rows[0] or {}).get("receipt_id") or "") if rows else ""
+        check("the change wrote a receipt row with an id", bool(rid), rid)
+        check("...naming an importable restorer, so a new process can find it",
+              str((rows[0] or {}).get("undo_callable") or "")
+              == "jarvis_quick._restore_settings_change",
+              (rows[0] or {}).get("undo_callable"))
+        saved = dict(RC._CALLABLES)
+        RC._CALLABLES.clear()          # a new process: the closure is gone
+        try:
+            out = RC.undo(rid)
+        finally:
+            RC._CALLABLES.update(saved)
+        check("...so a restart still puts the value back, from the snapshot",
+              out.get("ok") is True and out.get("path") == "snapshot", out)
+        check("...through the setting's own setter",
+              switch.calls == [True, False], switch.calls)
+    finally:
+        R.BOOL_SETTINGS = real
+
+
+def t_undo_nothing_says_nothing_is_mine_to_take_back():
+    """The sentence itself, because its OLD wording became untrue.
+
+    "Nothing of mine to cancel." reads as "you changed nothing", which is
+    exactly wrong after a carded setting was approved: that change is real, and
+    has no receipt on purpose. The new sentence claims only what is true.
+    """
+    check("the refusal no longer says nothing was changed",
+          Q.UNDO_NOTHING_SAID != "Nothing of mine to cancel."
+          and "take back" in Q.UNDO_NOTHING_SAID, Q.UNDO_NOTHING_SAID)
+    real = R.BOOL_SETTINGS
+    try:
+        R.BOOL_SETTINGS = tuple(real)
+        got = Q._run_undo({"noun": None, "soft": False}, _SchedStub(), 0.0, None)
+        check("...and with nothing recorded it is still ONE plain sentence",
+              got is not None and got.reply == Q.UNDO_NOTHING_SAID
+              and got.reply.count(".") == 1,
+              None if got is None else got.reply)
+    finally:
+        R.BOOL_SETTINGS = real
+
+
 if __name__ == "__main__":
     for fn in (t_the_tool_exists_and_is_offered_only_when_enabled,
                t_asking_and_speaking_run_the_same_function,
@@ -1154,6 +1448,12 @@ if __name__ == "__main__":
                t_a_pending_change_cannot_back_an_i_did_it_claim,
                t_every_one_of_the_22_switches_resolves_from_its_own_names,
                t_the_one_moment_switch_is_reachable_and_cardless,
+               t_a_cardless_change_leaves_one_receipt_and_undo_takes_it_back_once,
+               t_a_carded_change_leaves_no_receipt_because_nothing_happened,
+               t_a_setter_that_writes_its_own_receipt_does_not_get_a_second,
+               t_undo_carries_the_device_that_asked_so_a_phone_cannot_use_it,
+               t_the_receipt_is_persisted_and_a_restart_can_still_put_it_back,
+               t_undo_nothing_says_nothing_is_mine_to_take_back,
                t_it_ships_on_so_a_turn_really_offers_it,
                t_its_description_tells_the_model_to_call_it,
                t_the_tier_rule_is_untouched_by_the_wording):

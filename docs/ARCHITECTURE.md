@@ -3571,6 +3571,21 @@ phone". `tools/check_parity.py` carries both routes in `BACKEND_ONLY`
 (2026-10-28), with that follow-up written in the reason, so the gap is named
 rather than read as a clean pass it did not earn.
 
+- **The settings undo receipt has no screen in either app, and "say undo in the
+  same chat" is the only way back - one-sided on purpose, not an omission**
+  (2026-11-03; JARVIS-API §183; the store and its two routes are §132). A setting
+  that loosens nothing is immediate and leaves ONE receipt (`jarvis_receipts`,
+  tool name `change_setting`), and both apps' chats can say "undo" in that same
+  conversation, so the ABILITY is on both. What neither app has is a receipts
+  screen: `GET /api/receipts` is called by no app - `tools/check_parity.py` keeps
+  it and its Undo sibling in `BACKEND_ONLY` with exactly that reason - so "say
+  undo in the same chat" is the only way back to a setting the owner changed by
+  asking. No screen is added in this slice on purpose: the owner asked for a chat
+  sentence, a screen on one app only would be a second door, and this slice adds
+  no route to poll. The promise already made above stands unchanged - when the
+  receipts screen is built it goes on BOTH apps, on this same store and the same
+  `undo_action` card.
+
 **Cost advice is built, and it is in no app yet - and this one is a decision
 about the permission model rather than a screen somebody forgot**
 (2026-10-14): **the complexity/latency auto-router**

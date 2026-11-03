@@ -55,6 +55,7 @@ session, or the audio path. Those are owner-tested and stay NOT-TESTABLE here.
 """
 import json
 import os
+import re
 import sys
 import tempfile
 import traceback
@@ -349,6 +350,68 @@ def t_a_pc_state_question_gets_the_same_answer_in_live():
               and typed.reply == live.reply and bool(typed.reply.strip()),
               (None if typed is None else typed.reply[:80],
                None if live is None else live.reply[:80]))
+
+
+# --------------------------------------------- 3b. a card waiting is the ONE
+#                                                 difference (2026-11-03, M7)
+
+def t_a_card_waiting_makes_live_the_calm_line_and_nothing_else():
+    """The rule the READ-ONLY checks above must never lose.
+
+    `typed.reply == live.reply` for every answer that changes nothing. A turn
+    whose setting change is now WAITING on a card is the one deliberate
+    exception: Live SPEAKS the answer, so it gets ONE calm sentence - no card
+    id, no list, no question back, nothing that could be heard as asking for a
+    spoken yes. The typed answer is the setter's own sentence, unchanged.
+    """
+    import dataclasses
+
+    import jarvis_settings_registry as R
+
+    said = "Waiting for your yes on the approval card. Nothing has changed yet."
+
+    def waiting_set(on, *, peer=None, local=None):
+        return R.Outcome(True, said, waiting=True)
+
+    real = next(b for b in R.BOOL_SETTINGS if b.key == "lights_without_card")
+    stub = dataclasses.replace(real, set=waiting_set)
+    saved = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(stub if b.key == real.key else b for b in saved)
+
+    def body(live):
+        msg = {"role": "user", "content": "turn on lights without asking",
+               "provenance": "voice"}
+        if live:
+            msg["live"] = True
+        return {"messages": [msg], "model": "m", "stream": False}
+
+    try:
+        typed = Q.answer_turn(body(False))
+        live = Q.answer_turn(body(True))
+    finally:
+        R.BOOL_SETTINGS = saved
+    check("a carded change answers in both doors",
+          typed is not None and live is not None)
+    check("...the typed answer is the setter's own sentence, unchanged",
+          typed is not None and typed.reply == said,
+          None if typed is None else typed.reply)
+    check("...and while a card is waiting, Live's answer is NOT the same",
+          typed is not None and live is not None and live.reply != typed.reply,
+          (None if typed is None else typed.reply,
+           None if live is None else live.reply))
+    one = None if live is None else live.reply
+    check("...Live's answer is ONE sentence",
+          one is not None and one.count(".") == 1 and one.endswith("."), one)
+    check("...it names no card and asks no question",
+          one is not None and "?" not in one
+          and not re.search(r"\b[0-9a-f]{8,}\b", one), one)
+    check("...neither answer offers a spoken yes: 'approve or deny' is nowhere",
+          all("approve or deny" not in x.reply for x in (typed, live) if x is not None),
+          (None if typed is None else typed.reply,
+           None if live is None else live.reply))
+    check("...and the pause wording is still the app's banner, not a spoken line",
+          live is not None and L.PAUSE_WORDS["card"] not in live.reply,
+          L.PAUSE_WORDS["card"])
 
 
 # -------------------------------------------------------- 4. what stays put -

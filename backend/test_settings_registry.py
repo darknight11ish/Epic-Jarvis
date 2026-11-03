@@ -90,6 +90,11 @@ shutil.copyfile(REPO / "backend" / "rebuilt" / "jarvis-framework.toml", _TOML_CO
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(TMP)
 os.environ["JARVIS_CONFIG_DIR"] = str(TMP)
 os.environ["JARVIS_FRAMEWORK_TOML"] = str(_TOML_COPY)
+# The receipts store needs its OWN variable: jarvis_receipts prefers the
+# framework module's CONFIG_DIR over the two config-dir variables above, so a
+# run at the owner's desk would otherwise write real change_setting rows into
+# his real receipts.db (measured 2026-11-03).
+os.environ["JARVIS_RECEIPTS_DB"] = str(TMP / "receipts.db")
 for _mod in (AF, AL, WN, BR, WS, MN):
     _mod._config_dir = lambda _tmp=TMP: _tmp
 
@@ -1719,6 +1724,143 @@ def t_the_small_rule_is_the_shipped_list():
                    "docker_service_stop", "change_own_config", "run_shell_on_host",
                    "pair_device"):
         check(f"{action} is not a small approval", action not in OC.SMALL_ACTIONS)
+
+
+# --------------------------------------------------------------------------
+#   What every setting is set to RIGHT NOW (2026-11-03; F5 M3/M5/M6)
+# --------------------------------------------------------------------------
+def _private_config_dirs():
+    """Point every module this check reads at THIS suite's temp folder.
+
+    The same rule the top of this file states for the modules it already
+    redirects: a check must not read (or, worse, write) the owner's real
+    settings from a test run. These modules each keep `_config_dir()` and every
+    reader below goes through it, so patching it is enough - and it is put back
+    in the caller's `finally`."""
+    import importlib
+    patched = []
+    for name in ("jarvis_handoff_mode", "jarvis_handoff_front", "jarvis_voices",
+                 "jarvis_presets", "jarvis_manner", "jarvis_antislop",
+                 "jarvis_animal", "jarvis_sky", "jarvis_schedule"):
+        try:
+            mod = importlib.import_module(name)
+        except Exception:                   # noqa: BLE001 - a module not here
+            continue
+        if hasattr(mod, "_config_dir"):
+            patched.append((mod, mod._config_dir))
+            mod._config_dir = lambda *a, **k: TMP
+    return patched
+
+
+def t_every_setting_reads_back_and_never_guesses():
+    """The value readers this slice added, on every row that has one.
+
+    2026-11-03 (M3/M5/M6): `explain_setting_words` gained a "Right now: ..."
+    line, `control_current_words` stopped answering "unknown" for four of the
+    ten choices, and `choice`/`number`/`bool` rows each got ONE reader behind
+    `jarvis_settings_registry.current_value`. What is proved here:
+
+      * every `ChoiceSetting.now` answers one of its OWN option words, or None -
+        never a value from outside that row's list, and never the string
+        "unknown" that the old hand-written reader returned;
+      * the number row reads back in the row's own words and refuses to guess
+        when the engine's module is not there;
+      * `current_value` is the ONE entry point, and a bool answers on/off from
+        the guide's own reader table rather than a second copy of the truth.
+    """
+    import jarvis_feature_guide as FG
+    import jarvis_live as LV
+
+    patched = _private_config_dirs()
+    try:
+        check("ten named-choice settings", len(R.CHOICE_SETTINGS) == 10,
+              len(R.CHOICE_SETTINGS))
+        check("one number setting", len(R.NUMBER_SETTINGS) == 1,
+              len(R.NUMBER_SETTINGS))
+        unreadable = []
+        for choice in R.CHOICE_SETTINGS:
+            here = choice.now()
+            check(f"{choice.key}: now() never answers the old 'unknown'",
+                  here != "unknown", here)
+            if here is None:
+                unreadable.append(choice.key)
+                check(f"{choice.key}: unreadable is said, not guessed",
+                      R.control_current_words(choice) == "I could not read it",
+                      R.control_current_words(choice))
+                continue
+            options = choice.options()
+            # TWO DEFINITE ANSWERS ARE NOT VALUES FROM THE LIST, and both are
+            # reads rather than guesses: the face document was read and names no
+            # face, and the preset file was read and records no applied preset.
+            # Both are true statements about this PC, in the words the old
+            # hand-written reader used, so they stay - named here rather than
+            # quietly widening the rule.
+            nothing_chosen = {"no face chosen", "no preset chosen"}
+            check(f"{choice.key}: now() is one of the row's OWN option words "
+                  f"(or the definite 'nothing chosen' answer)",
+                  R._choice_key(here) in options or here in nothing_chosen,
+                  (here, sorted(options)[:4]))
+            check(f"{choice.key}: the clarifying question prints that value",
+                  R.control_current_words(choice) == here,
+                  (R.control_current_words(choice), here))
+            # A choice that reads back must also be explainable, with the value.
+            found = R.find_explain_setting(choice.names[0])
+            check(f"{choice.key}: the explain answer is that row",
+                  found is not None and found.get("kind") == "choice"
+                  and found.get("key") == choice.key, found)
+            words = R.explain_setting_words(found or {})
+            check(f"{choice.key}: ...and carries the value it just read",
+                  str(here) in words, words)
+        print(f"        (choices whose reader could not answer here: "
+              f"{', '.join(unreadable) if unreadable else 'none'})")
+
+        # --- the one number row.
+        number = R.NUMBER_SETTINGS[0]
+        row = number.limit()
+        check("the number row's limit row is on this PC", row is not None)
+        here = number.now()
+        check("the number reads back in the row's own words",
+              here is not None and here == row.words(int(LV.quiet_seconds())), here)
+        check("...and the range it prints comes from the row",
+              number.range_words() != "" and
+              number.range_words().startswith("from "), number.range_words())
+        saved = sys.modules.get("jarvis_live", "absent")
+        sys.modules["jarvis_live"] = None
+        try:
+            check("a missing engine module makes the number unreadable, not defaulted",
+                  number.now() is None, number.now())
+            check("...and the explain answer says the fixed sentence",
+                  R.UNREADABLE_VALUE_WORDS in R.explain_setting_words(
+                      R.find_explain_setting("the jarvis live timeout") or {}))
+        finally:
+            if saved == "absent":
+                sys.modules.pop("jarvis_live", None)
+            else:
+                sys.modules["jarvis_live"] = saved
+        check("the engine module is back for every other check",
+              number.now() is not None, number.now())
+
+        # --- one bool, through the guide's own readers.
+        coach = next(b for b in R.BOOL_SETTINGS if b.key == "prompt_coach")
+        backup = dict(FG.STATE_READERS)
+        try:
+            FG.STATE_READERS["prompt_coach"] = lambda: True
+            check("a switch set to on reads back as its own on word",
+                  R.current_value(coach) == coach.on_word, R.current_value(coach))
+            FG.STATE_READERS["prompt_coach"] = lambda: False
+            check("...and off reads back as its own off word",
+                  R.current_value(coach) == coach.off_word, R.current_value(coach))
+            FG.STATE_READERS["prompt_coach"] = lambda: None
+            check("a switch that cannot be read is None, never a default",
+                  R.current_value(coach) is None, R.current_value(coach))
+        finally:
+            FG.STATE_READERS.clear()
+            FG.STATE_READERS.update(backup)
+        check("LV is the reader the number goes through",
+              hasattr(LV, "quiet_seconds"))
+    finally:
+        for mod, original in patched:
+            mod._config_dir = original
 
 
 if __name__ == "__main__":
