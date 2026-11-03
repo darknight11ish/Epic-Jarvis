@@ -1950,12 +1950,18 @@ dom.updateInstall.addEventListener("click", async () => {
           "desktop half installs.",
         ""
       );
-      const outcome = await invoke("update_both", { mode: "responsive" });
+      // Through the SAME runner the "Update both halves" control uses - the
+      // one place that starts an update - so the press cannot take a second
+      // path with its own order. This card has no pace picker, so it takes the
+      // default pace; the run reports in the both-halves card above and is
+      // mirrored here in one sentence.
+      const outcome = await runBoth("responsive");
       const steps = (outcome && outcome.steps) || [];
       const updated = Boolean(outcome && outcome.updatedBoth);
       report(
         dom.updateStatus,
         steps.map((s) => s.detail).filter(Boolean).join(" ") ||
+          (dom.ubState && dom.ubState.textContent) ||
           (updated ? "Both halves are updated." : "Not everything updated."),
         updated ? "ok" : "bad"
       );
@@ -2621,8 +2627,16 @@ async function runBoth(modeId) {
   // afterwards, so it never becomes something the eye skips.
   showFallback(true);
   report(dom.ubState, "Working. Do not close this window.", "");
+  let outcome = null;
   try {
-    paintBothOutcome(await invoke("update_both", { mode: modeId }));
+    // THE one place that starts an update. Both the "Update both halves"
+    // control and the Updates card's Install press come through here, so
+    // there is a single call site and no second way to start one
+    // (tests/update-both.mjs's CONTROL pins exactly that). The outcome is
+    // returned so a caller with its OWN card (the Updates card) can report the
+    // same ending without a second run.
+    outcome = await invoke("update_both", { mode: modeId });
+    paintBothOutcome(outcome);
   } catch (error) {
     // The command itself refused — a build with no update key, a pace this
     // build does not have, or a bridge that would not answer. Say so, and
@@ -2638,6 +2652,7 @@ async function runBoth(modeId) {
     // The Start-backend button was disabled for the duration; repaint it now.
     paintBackend();
   }
+  return outcome;
 }
 
 if (dom.ubGo) {
@@ -4594,3 +4609,4 @@ loadCapabilities();
 
 loadUpdate();
 loadBoth();
+

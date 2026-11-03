@@ -65,13 +65,38 @@ await check("nothing installs without a press, even with one available", async (
   assert.ok(!seen.includes("__installed"), "an update installed itself");
 });
 
-await check("CONTROL: the button does install, so the negatives mean something", async () => {
+await check("CONTROL: the button runs BOTH halves, so the negatives mean something", async () => {
+  // The owner's requirement (2026-11-03): one Update press moves the desktop
+  // AND the backend together. The default scenario has both backend folders, so
+  // the press must go through update_both - through the ONE runner the
+  // "Update both halves" control also uses - and never the desktop-only install.
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  await page.locator("#update-install").click();
+  await page.waitForTimeout(500);
+  const seen = await calls(page);
+  const status = await page.locator("#update-status").innerText();
+  await page.close();
+  assert.ok(seen.includes("__updatedBoth"), "the Install button did not update both halves");
+  assert.ok(!seen.includes("__installed"),
+    "the desktop-only install ran while the backend half was available");
+  assert.match(status, /backend/i, `the ending did not name the backend half: "${status}"`);
+});
+
+await check("CONTROL: on a PC whose backend half cannot run, the desktop installs alone and says so", async () => {
+  // The one honest exception: the desktop half still installs where the
+  // backend half cannot run at all, and the card must say the backend was NOT
+  // updated instead of painting a half-updated machine as done.
   const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.locator("#update-install").click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
   const seen = await calls(page);
+  const status = await page.locator("#update-status").innerText();
+  const tone = await page.locator("#update-status").getAttribute("data-tone");
   await page.close();
   assert.ok(seen.includes("__installed"), "the Install button does not install");
+  assert.ok(!seen.includes("__updatedBoth"), "update_both ran with the backend half blocked");
+  assert.match(status, /BACKEND was NOT updated/i, `the fallback read as a clean update: "${status}"`);
+  assert.equal(tone, "bad", "a half-updated PC was painted as a good state");
 });
 
 await check("CONTROL: Rust keeps checking and installing as separate commands", async () => {

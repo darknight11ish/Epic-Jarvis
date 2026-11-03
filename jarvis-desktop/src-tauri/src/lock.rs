@@ -244,10 +244,24 @@ impl LockState {
 /// True when the Jarvis bar, the Brain, Settings, the HUD or an extra chat
 /// window has the keyboard focus. Asked of Windows through Tauri each time,
 /// not remembered.
+///
+/// Two halves on purpose. The first asks [`Covered::ALL`] - the four windows
+/// this lock knows by name - exactly as it always has, so "the owner is here"
+/// is still answered for the windows the security audit named. The second asks
+/// about the extra chat windows (2026-11-03), which are the same page showing
+/// the same conversation: `Covered::from_label` maps them to `Covered::Hud`,
+/// and a focused one must hold the lock open exactly as a focused HUD does, or
+/// reading a chat window while App lock is on would start the away-clock and
+/// hide it.
 fn covered_focused(app: &AppHandle) -> bool {
-    app.webview_windows()
-        .values()
-        .any(|w| Covered::from_label(w.label()).is_some() && w.is_focused().unwrap_or(false))
+    let named = Covered::ALL
+        .iter()
+        .filter_map(|c| app.get_webview_window(c.label()))
+        .any(|w| w.is_focused().unwrap_or(false));
+    named
+        || app.webview_windows().values().any(|w| {
+            crate::chat_windows::is_chat_window(w.label()) && w.is_focused().unwrap_or(false)
+        })
 }
 
 // ---------------------------------------------------------------------------

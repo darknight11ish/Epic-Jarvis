@@ -208,8 +208,15 @@ check("the Update press runs BOTH halves, and never claims it when it cannot", (
     SETTINGS_JS.indexOf('dom.updateRestart.addEventListener')
   );
   assert.notEqual(handler.length, 0, "the Install handler is gone");
-  assert.match(handler, /invoke\("update_both",\s*\{\s*mode:\s*"responsive"\s*\}\)/,
-    "Install does not run update_both (both halves)");
+  // ONE place starts an update: settings.js's runBoth, which the
+  // "Update both halves" control and this press both go through
+  // (tests/update-both.mjs's CONTROL pins the single invoke call site). What
+  // this file holds is that the press reaches THAT runner rather than the
+  // desktop-only command.
+  assert.match(handler, /await runBoth\("responsive"\)/,
+    "Install does not run the one both-halves runner");
+  assert.doesNotMatch(handler, /invoke\("update_both"/,
+    "the Updates card starts update_both outside the one runner");
   assert.match(handler, /where\.blocked/, "Install does not check whether the backend half can run");
   assert.match(handler, /The BACKEND was NOT updated/,
     "the desktop-only fallback does not admit the backend was not updated");
