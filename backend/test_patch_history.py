@@ -10,12 +10,18 @@ old one off, so the script used to stop with "will not apply" and the owner
 was stuck. Now it tries every earlier text in backend/patch-history, newest
 first. That only helps if the folder is complete, so:
 
-  1. up to date: regenerating it from `git log` gives exactly what is
-     committed. Fails the moment someone edits a patch and does not run
-     `python3 tools/build_patch_history.py`. Needs the full git history: in
-     CI (the CI variable is set) a shallow clone is a FAILURE, because
-     skipping there would switch the check off unnoticed; anywhere else,
-     including the owner's PC with a downloaded copy, it is skipped.
+  1. up to date: regenerating it from MAIN's history - every commit reachable
+     from `origin/main`, or from the base side of HEAD where that ref is absent
+     (a pull request is checked out as its merge commit, whose first parent is
+     the base branch) - gives exactly what is committed. Fails the moment
+     someone edits a patch and does not run
+     `python3 tools/build_patch_history.py`. Commits that exist only on an
+     unmerged branch are never stored: a squash merge drops them, and a version
+     stored for one would be an entry main does not have - main's required
+     `backend` check went red that way twice on 2026-11-02. Needs the full git
+     history: in CI (the CI variable is set) a shallow clone is a FAILURE,
+     because skipping there would switch the check off unnoticed; anywhere
+     else, including the owner's PC with a downloaded copy, it is skipped.
   2. the index and the folder agree, newest first per patch, nothing equal
      to the current text, nothing twice, every entry names a real patch.
   3. every earlier text is a well-formed patch that `git apply --reverse`
@@ -187,6 +193,37 @@ def t_history_is_up_to_date():
         print("note  same texts, but the names or index differ from a fresh build (a rebase or"
               " squash merge does that); regenerating would tidy it:"
               " python3 tools/build_patch_history.py")
+
+
+def t_every_version_is_main_history():
+    """The rule that stops a squash merge poisoning main (2026-11-02).
+
+    A version is stored only when its commit is in MAIN's history. A commit
+    that exists only on an unmerged branch disappears when the pull request is
+    squash-merged, so a version stored for it would be an entry main does not
+    have - main's required `backend` check went red that way twice today
+    (web-search-grant/a78133f.patch, then auto-learn/81a6503.patch). The
+    up-to-date check above compares two fresh builds and would pass if the rule
+    were ever reverted in BOTH the tool and this test; this one asks git
+    directly, so the rule itself is pinned.
+    """
+    if not GIT:
+        print("skip  git is not installed")
+        return
+    if not HIST.is_dir():
+        print("skip  backend/patch-history is not in this tree")
+        return
+    anchor = bph.main_revision()
+    rows = read_index()
+    bad = []
+    for r in rows:
+        res = git(["merge-base", "--is-ancestor", r[2], anchor], ROOT)
+        if res.returncode != 0:
+            bad.append(f"{r[1]} names {r[2][:7]}, which is not in main's history ({anchor})")
+    check(f"every one of the {len(rows)} stored versions is a commit in main's history",
+          not bad,
+          "\n        ".join(bad)
+          + "\n        Fix: python3 tools/build_patch_history.py, then commit backend/patch-history.")
 
 
 # --- 2 ----------------------------------------------------------------------
@@ -533,6 +570,7 @@ def t_the_script_reads_the_history():
 
 if __name__ == "__main__":
     for fn in (t_history_is_up_to_date,
+               t_every_version_is_main_history,
                t_index_and_folder_agree,
                t_every_earlier_version_comes_off,
                t_a_failure_part_way_through_leaves_the_history_untouched,

@@ -653,34 +653,8 @@ confirmed check. The only cards with no Approve at all are the PC's own
 ceremonies (`jarvis_owner_check.PC_ONLY_ACTIONS`, refused `pc_only` - a decision
 about WHERE a thing can happen, not about how much checking) and a proposal that
 needs a named plan (`needsChoice`, which the decide route cannot carry yet).
-
-**The small read-only cards (the owner's request of 2026-11-01).** The owner
-asked to approve a small card - a web search, a page, the news, a calendar or
-notes read - with the card's own yes and no fingerprint on top:
-
-> "for small approvals like asking jarvis to search the web (for things like
-> weather or the news or anything small) i would like to only have to approve
-> the card, not necessarily use my fingerprint on top of approving the card.
-> make this setting adjustable in settings or through chatting to jarvis."
-
-So the approval check has a third value, **`small`** (`small` / `risky` /
-`every` on the phone's `ApprovalCheck`, and `jarvis_owner_check.approvals_mode`
-on the PC), and it is the default. A card is `small` when BOTH hold: its action
-is on the explicit read-only list (`jarvis_owner_check.SMALL_ACTIONS`, mirrored
-in `SecurityRules.SMALL_ACTIONS`), and the gate's own risk row for it says it
-changes nothing (`reversible` "yes"), has classified it, and nothing rushed it.
-Anything unclassified, irreversible, rushed, or on no list is not small and
-keeps the check. The backend answers it once, in `is_small`, and applies the
-same answer to both prompts: no Windows Hello for it on this PC, and a phone's
-approval of it needs no device signature (a signature can only be made after a
-fingerprint). `risky` is today's rule - every risky card asks, small ones
-included - and `every` asks on every card. The phone's Security screen draws all
-three; on the PC, say "check the small approvals too" (the
-`small_approvals` setting in `jarvis_settings_registry.py`) to put the check
-back on the small cards as well, and "leave the small approvals alone" for the
-default. The rule and the shared rows are held by
-`tools/gen_risky_approval_cases.py`, `backend/test_owner_check.py`,
-`SmallApprovalContractTest` (phone) and `RiskyApprovalContractTest`.
+The phone's Security screen can only make the rule stricter ("Every approval");
+its loosest choice is the rule above.
 
 **What the person sees.** The buttons keep the shared words on both apps
 (`CardWords.BUTTONS`: "Deny", "Approve"), and under them one line says what the
@@ -1318,7 +1292,7 @@ here does **not** set it - it is recorded on the turn (`outside_flags` in
 | Endpoint | Method | Body / params | Desktop | Android | Notes |
 |---|---|---|---|---|---|
 | `/api/voice/status` | GET | — | **no** | `JarvisApi.kt:553` | Phone calls it before showing a mic button; failure returns refusing defaults. |
-| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop`; since 2026-09-24 also `source=barge_in` and `&waited_ms=` (section 17; both apps since 2026-09-25) | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. `source=barge_in` answers "stop or not" and is never transcribed (`voice-flow.patch`). |
+| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop`; since 2026-09-24 also `source=barge_in` and `&waited_ms=` (section 17; both apps since 2026-09-25) | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. `source=barge_in` answers "stop or not" and is never transcribed (`voice-flow.patch`). Since 2026-11-02 `source=push_to_talk&mic=phone` - the phone's talk button - is the one clip that skips the owner check; every other combination still runs it (section 5, "The phone's mic press is not voice-checked"). |
 | `/api/voice/moment` | GET | - → WAV bytes | `voice_flow.rs` `get_voice_moment` | `JarvisApi.voiceMoment` | The "One moment." clip in the voice in use now (section 17, `voice-flow.patch`). 503 with `why` when there is none. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
@@ -1673,7 +1647,11 @@ repository holds only as its published base
 
 **A client must not do speech-to-text.** That is a standing rule in
 `CLAUDE.md`, and it is why `utterance` posts a complete recorded clip rather
-than streaming: the phone's voice-print gate needs the whole clip to check it.
+than streaming: the voice-print gate needs the whole clip to check it - and
+still does on every surface that checks (Jarvis Live, "hey Jarvis", and the
+desktop's talk button). The phone's mic press no longer runs that gate
+(2026-11-02, above), but it keeps the complete-clip shape like every other
+caller: one WAV in, one verdict out.
 
 **The owner check and the words: made beside each other, used by permission
 (2026-10-20, the voice-latency work order's Opt 3.1).** `jarvis_speech.hear()`
@@ -1736,6 +1714,43 @@ the borderline fallback, the switch-off, a worker that raises, the refusal's
 kept cost, the sinks for an unverified clip, and the streaming path's
 end-of-speech wait with slow stand-ins - test-mode numbers only),
 `backend/test_live.py` and `backend/test_turn.py`.
+
+**The phone's mic press is not voice-checked (2026-11-02).** The owner asked
+that "when i do the mic press to make a short verbal message to jarvis" it
+not "confirm my voice through the voice id". A clip with `?source=push_to_talk`
+**and** `&mic=phone` - the phone's own talk button, and only that - skips the
+owner check entirely, and the "a command needs enough speech" refusal goes
+with it (that minimum exists only to give the speaker model enough audio), so
+a short "remind me at five" is transcribed and answered. The reply is honest
+about what did not happen: `strictness: ""`, `mode: "quick_message"`,
+`voice_print: ""`, `threshold: 0`, `score: 0` - and the phone's
+`Heard.Outcome` reads `threshold: 0` as "no check ran" (only a refusal that
+really ran the check answers above 0). **What an unchecked clip may not do is
+unchanged:** no answer that uses email, the calendar, notes or memory, and no
+answer that uses a saved fact, is READ ALOUD on its say-so (`private_aloud`,
+`memory_aloud` and `sensitive_aloud` are all false; the answer is on the
+phone's screen), and automatic learning refuses it (§19.2 item 5 - the voice
+was not checked at `very_strict` in mode `owner`), so a fact it mentions
+waits for a card instead of being learned silently. `screen_aloud` is
+unchanged: a screen answer never rested on the voice check (§16). **Every
+other surface still checks every clip:** Jarvis Live's `source=live` clips
+(§63.3), the phone's `source=wake_word` clips, the desktop's talk button
+(`mic=desktop`), and any clip that names no microphone (fail closed). The
+button's own readiness gate (`listening.push_to_talk`: a trained voice print,
+the voice-ID model and speech-to-text) is unchanged as well - this removes
+the per-clip confirmation, not the enrolment. **It does not open Jarvis Live
+either.** A "let's talk" said with the phone's press is an ordinary message:
+the ways into a Live session stay a passed check (the desktop's talk button,
+"Hey Jarvis, let's talk") or the app's own Start control, so the owner's
+2026-09-28 rule "NO LIVE WITHOUT A REAL VOICE CHECK" is not loosened by the
+one surface that skips the check. The honest cost, said plainly:
+a voice the check would refuse is answered on this one surface, because the
+press on the owner's own paired phone is now the act, the way typing a
+message is. Decided by the owner on 2026-11-02
+(`decisions.d/2026-11-02-quick-mic-no-voice-print.md`); tested in
+`backend/test_quick_mic.py` (and the unchanged halves in
+`backend/test_voice_mic.py`, `backend/test_live.py` and
+`backend/test_voice_strict.py`).
 
 **Jarvis's own voice is not the owner's (F3, landed 2026-10-20).** On open
 speakers - especially with a cloned custom voice - Jarvis's own answer can
@@ -2170,6 +2185,7 @@ neither app says it would.
 | `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Brain, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
 | `/api/memory/learning/auto` | POST | `{"enabled": bool}` | `brain_memory_learning_auto` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Learn automatically" (on by default). The shape of `/api/memory/learning`: **OFF** 200 at once, never a card, withdraws a waiting ON; **ON** 202 `{"waiting": true, ...}` and ONE approval card, action `learning_auto_enable`; on only when it is approved. Already on: 200, no card. A second ON while one waits: 202, no second card. Tier other than `ask`: **503**. Bad body: `400`. Every reply carries the `GET /api/memory/learning` fields (not `enabled`). |
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
+| `/api/memory/learning/paraphrase` | POST | `{"enabled": bool}` | `brain_memory_learning_paraphrase` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Save facts even when Jarvis had to reword them" (off by default, 2026-11-02). The same shape, action `learning_paraphrase_enable`. It relaxes ONE check - the words not being the owner's own - and nothing else; a fact it saves is marked `meta.reworded` and listed in "Saved automatically" with the "Jarvis's own words" mark. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted (the deletion runs before the window is saved, and a failure there answers 500 with what really happened - see §18.3). Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
@@ -2411,6 +2427,30 @@ A note Jarvis writes from chat (the `append_*` / `create_joplin_note`
 tools) is a different path: after outside text in that turn it always
 waits for a yes, as `write_notes_after_outside_text` (§4, "Tool calls and
 outside text"). This route is not affected.
+
+**A note asked for in chat, left waiting (2026-11-02).** "Make a note: X",
+"note that X", "jot down X" and the rest of the fast path's note grammar
+answer WITHOUT the model, through this route's own `capture()`
+(`backend/jarvis_quick.py`, `_run_note_make`). While the card is up, that
+answer is the job's 202 words and nothing else - in practice the literal
+sentence **"Waiting for your approval."** - and it is the whole reply the
+chat gets, not a status line. The note is then filed the moment the card is
+approved, and nothing in that reply ever said so: the chat line went on
+claiming to wait beside a note that already existed (the owner's report,
+2026-11-02).
+
+The answer therefore carries the job's id in `X-Jarvis-Route` as
+**`"note_job": "note_<hex>"`** (the same `id` `GET /api/notes/capture?id=`
+answers), so a client can ask how the note really ended and replace its
+waiting line with the job's own `message` - "Filed in Obsidian,
+2026-11-02.md.", "You said no, so nothing was written.", "Nobody answered
+the approval card in time, so nothing was written.". The key is absent on
+every other answer, including a note filed at once; a client that does not
+know it shows the waiting line exactly as before. Ids are
+`"note_"` + 16 lowercase hex, and a client should refuse to use one of any
+other shape. The phone follows it (`NoteCapture.jobFromRoute`,
+`JarvisRuntime.followNoteAnswer`, `ChatSession.settleAnswer`); the desktop
+shows the waiting line and does not follow the id yet (ARCHITECTURE §8).
 
 ### Power — `backend/power-mode.patch`
 
@@ -3516,6 +3556,11 @@ mode only when `gate.training` says the PC understands it:
   `wake_word` clip that is only "hey Jarvis" may be short: it still opens
   the listening window (`awake: true`). A short `wake_word` clip that has a
   command in it answers `too_short: true`, `wake_heard: true`, `text: ""`.
+  **The phone's mic press is the one exception** (2026-11-02, §5): a
+  `source=push_to_talk` clip from `mic=phone` has no check and no minimum, so
+  a short "remind me at five" is transcribed, and its reply carries
+  `too_short: false`, `strictness: ""`, `mode: "quick_message"` and
+  `threshold: 0`.
   Only once a voice is trained - with none, the reply is "no enrolled voice
   profile", as before.
 - **The one-shot training still works** (`{"clips": [...]}`, as today): it
@@ -4142,19 +4187,13 @@ Token and `X-Jarvis-Client: hud` as always; 401 / 403 as for any route.
   before anyone asks. Making it never starts the better voice's program on
   the second card.
 - **For the apps:** fetch it when `flow.moment.key` differs from the one you
-  have, and keep it only for that key. A refused, empty or 503 answer drops
-  the clip you held: silence is right, the OLD voice is not. Read `flow`
-  again when a spoken turn starts - Jarvis Live's included (the phone did not
-  until 2026-11-02, so it played a clip fetched before the owner changed the
-  voice: a male "One moment." over female answers); `ready: false` is not a
-  reason to skip that turn-start fetch, because GET makes the clip. Then play
-  it when the owner has finished speaking and **no reply sound has started**
-  about `after_ms` later (the apps decide the exact time) - **once per turn at
-  most, and never over the reply**: if the reply's first sound arrives while
-  it plays, stop it (or let it end, it is under a second) before the reply
-  starts. Not after a refused clip, a barge-in, or a "stop". It is Jarvis's
-  own voice, so the barge-in check above already counts it as Jarvis, not the
-  owner.
+  have, and keep it. When the owner has finished speaking and **no reply
+  sound has started** about `after_ms` later (the apps decide the exact
+  time), play it - **once per turn at most, and never over the reply**: if
+  the reply's first sound arrives while it plays, stop it (or let it end,
+  it is under a second) before the reply starts. Not after a refused clip,
+  a barge-in, or a "stop". It is Jarvis's own voice, so the barge-in check
+  above already counts it as Jarvis, not the owner.
 - **At today's speeds, `after_ms: 1000` would fire on most spoken turns.**
   From the owner finishing to Jarvis's first sound is estimated at roughly
   2.5-4 s with the voice on the PC's processor (making the first
@@ -4299,13 +4338,12 @@ Jarvis while it talks" is on - the switch both apps already had; no new one.
    before, so "hey Jarvis, ..." said over a reply is still a new question.
 
 **"One moment."** Each app fetches the clip when `flow.moment.key` changes
-(the phone on every status read and when every spoken turn starts, Live's
-included; the desktop when listening starts, when the talk button is pressed
-and with every spoken question), never plays one fetched for another key, and
-plays it when a `step` event says `tool_started` during a spoken question -
-**once per question**, only **before the answer has made a sound** (the
-answer's first sound waits for it to end; it is under a second), never after
-"stop" or an interruption, and only with the app's own switch on and
+(the phone on every status read, the desktop when listening starts, when the
+talk button is pressed and with every spoken question), and plays it when a
+`step` event says `tool_started` during a spoken question - **once per
+question**, only **before the answer has made a sound** (the answer's first
+sound waits for it to end; it is under a second), never after "stop" or an
+interruption, and only with the app's own switch on and
 `flow.moment.enabled`. Not on a timer. The new switch, in both apps, is the
 one this section suggested: **"Say "One moment" if I'm kept waiting"**, on
 by default, per device (desktop Settings -> Voice, "While you wait"; phone
@@ -4369,8 +4407,8 @@ Apache-2.0); nothing of it is copied.
   the TV heard through the microphone cannot take it. The first clip that
   passes does. It is a hands-free clip in every other way: under "Only
   trust the talk button" it is trusted like any "hey Jarvis" clip.
-  Push-to-talk is unchanged. "Hey Jarvis, ..." said anyway is answered with
-  the words after the phrase.
+  Push-to-talk opens no such window. "Hey Jarvis, ..." said anyway is
+  answered with the words after the phrase.
 - **The desktop** needs nothing more: its listener sends every utterance
   anyway. **The phone** (hands-free only, and only when the status says
   `flow.after_question: true`): when the answer it just spoke
@@ -5428,10 +5466,14 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    been measured with a real model yet (`backend/README.md`, "The
    sensitive-topic check", has the command).
 
-**"Remember: ..."** is saved without a card only with a **colon**, on **one
+**"Remember: ..."** is saved without a card only when the message opens with
+that request - `remember:` (a colon, comma or dash), `remember this:`,
+`remember that ...` or `please remember:` (2026-11-02, C2a; the bare colon was
+the only form the research measured working) - on **one
 line**, at most 600 characters, from a typed or verified-voice live turn,
 with background learning and "Learn automatically" both on, and nothing
-sensitive or instruction-like in it (GUARDS L3). No model writes it, so check
+sensitive or instruction-like in it (GUARDS L3). A question is not a request
+("remember that film?" asks one, and stores nothing). No model writes it, so check
 2 does not apply - though the sensitive-topic check (9) does ask the local
 model about it. Otherwise it stays the card it already is - and that card
 says "Your own words" (`verbatim`) only when the words were typed or said to
@@ -5506,8 +5548,8 @@ while an approved card is being applied waits for it, then turns the switch
 off - it can no longer be answered "off" and then overwritten by the card
 (red team R5). The same holds for background learning and chat history.
 
-`POST /api/memory/learning/auto` and `POST /api/memory/learning/sensitive`,
-`{"enabled": true | false}`:
+`POST /api/memory/learning/auto`, `POST /api/memory/learning/sensitive` and
+`POST /api/memory/learning/paraphrase`, `{"enabled": true | false}`:
 
 - `false` - 200 at once. It also withdraws a waiting ON card.
 - `true` - **202** `{"ok": true, "waiting": true, "message", ...}` and ONE
@@ -5518,15 +5560,44 @@ off - it can no longer be answered "off" and then overwritten by the card
 Every reply carries the `GET /api/memory/learning` fields except `enabled`,
 `floor`, `auto_active` and `note`.
 
+**The third switch (2026-11-02, option C1 of the memory-card research).**
+"Save facts even when Jarvis had to reword them" - off by default - is the
+same shape again: `paraphrase`, `paraphrase_waiting` and `paraphrase_last` on
+`GET /api/memory/learning`, and `POST /api/memory/learning/paraphrase` with
+the same `{"enabled": bool}` body, the same 202/503/400 answers, and one
+approval card under `learning_paraphrase_enable`.
+
+It relaxes exactly ONE check: a fact whose words are not the owner's own
+(`jarvis_auto_learn.check_grounded`, which also runs `check_meaning` and
+`check_tense`). **Every other card trigger is unchanged**: health, money and
+other people's private details still wait unless "Also remember sensitive
+topics automatically" is on; passwords, PINs, account and ID numbers, birthdays,
+phone numbers and email addresses always wait; pasted text, a tool's reading,
+a shared / pasted / clipboard / incognito / unverified-voice provenance, a
+fact that would change a stored one, a forgotten fact, an instruction in the
+fact, the topic controls and the switches themselves all still make their card.
+The order of the checks in `after_pass` is the enforcement, and
+`backend/test_auto_learn.py` names every one of them with the switch ON.
+
+A fact it saves has `source="auto"` and `meta.reworded`; it is listed in
+`GET /api/memory/auto` with `"reworded": true`, marked "Jarvis's own words" in
+both apps, and forgotten with one tap like any other. At most five facts are
+saved this way in one learning pass (`REWORDED_MAX_PER_PASS`); the rest stay
+cards whose reason says it is a ceiling. A wrong paraphrase can then be stored
+and recalled - the card says so in those words before it is turned on.
+
 `GET /api/memory/auto?limit=30&before=<saved_at>`
 
 ```json
 {"facts": [{"id": 41, "text": "The owner is learning Kotlin",
             "saved_at": 1790000300, "provenance": "typed", "device": "phone"},
+           {"id": 42, "text": "The owner works at Google",
+            "saved_at": 1790000250, "provenance": "typed", "device": "desktop",
+            "reworded": true},
            {"id": 40, "text": "Owner moved to Leeds in 2021",
             "saved_at": 1790000200, "provenance": "voice", "device": "desktop",
             "true_from": "2021-01-01"}],
- "auto": true, "auto_sensitive": false}
+ "auto": true, "auto_sensitive": false, "paraphrase": false}
 ```
 
 Facts saved automatically that are still current (Forget retires them),
@@ -5535,6 +5606,12 @@ the last row's `saved_at`. It may carry a fraction; it is floored, and means
 "strictly older seconds". **A page never splits a second** - rows sharing
 the last row's second come with it - so nothing is skipped or repeated.
 `provenance` is `"typed"` or `"voice"` (show a small "said aloud" mark).
+A fact saved under "Save facts even when Jarvis had to reword them"
+(2026-11-02, §19) carries `"reworded": true` - its words are Jarvis's, not
+the owner's - and both apps show it as "Jarvis's own words" with a one-tap
+Forget like any other. `paraphrase` is that switch's state, carried here so
+the two apps can draw it from a PC whose `GET /api/memory/learning` is
+missing.
 A fact the owner has said again since it was saved also carries
 `"said_again": {"count": 3, "last": 1790000900}` (memory idea 3, §34);
 both apps add "said again 3 times" to the row's small line. No field when
@@ -13784,7 +13861,10 @@ Only while Live is on for the clip's `mic`. The order is the same as every
 clip: speech found, too short?, **the owner check**, with speech-to-text
 running beside it since 2026-10-20 and its words used only where the check
 passed (section 5, "The owner check and the words"; a paused-Live re-check
-keeps the older serial order). Extra reply fields: `live` (the session after the clip, or
+keeps the older serial order). Live's own clips always run it - the phone's
+mic press is the only surface that does not, and it cannot be used as a Live
+clip or to start a session (a "let's talk" from it is an ordinary message;
+section 5, "The phone's mic press is not voice-checked"). Extra reply fields: `live` (the session after the clip, or
 `started`/`refused` for "let's talk"), `live_pause`, `live_hint`, `live_say`
 (a FIXED line to say now), `live_ended`, `live_short` (`owner` or `other`:
 a too-short clip is checked, never turned into words, to tell "say a bit
@@ -30056,10 +30136,35 @@ placements that were tried inside it broke a real suite (the numbers and the
 two failures are in `backend/_stack.py`'s RATCHET note). `_RISK.update` runs at
 import, before any `check()` call.
 
-`more_tools` group `web_search_grant`; both tools are switched on from
-Settings -> Tools -> "Safety and sharing" (`jarvis_asks_first.TIER_A`), never
-by default - `[tools].enabled` does not name them, so a fresh install's offered
-list and `test_tool_defaults.py`'s pinned defaults are unchanged.
+`more_tools` group `web_search_grant`. **Both tools are offered on an ordinary
+turn whenever `web_search` itself is offered** (2026-11-02, after the live field
+test): they are not rows in Settings -> Tools and `[tools].enabled` does not name
+them, so the offered set is `jarvis_agent.GRANT_ASK_TOOLS` riding along with the
+web-search tool, and switching web search off in Settings takes both with it.
+Offering the ASK grants nothing - the store is written only after a person
+answers the card, and the tool refuses with no card when the request carries no
+conversation id - and the stop only takes permission away. The earlier design
+made them a "Safety and sharing" switch instead, and on the owner's own PC that
+switch was never on: the model was offered no tool, no card could be raised, and
+a natural request answered "Search is approved for this conversation" with
+nothing behind it. `test_tool_defaults.py` and `test_tool_contract.py` pin the
+new offered list; `jarvis_asks_first.TOOLS_SWITCHABLE` is 21 rows again.
+
+**An approval cannot be claimed from words.** Two more things were added for the
+same field test, so the model never has to guess whether a grant is in force:
+
+- the rules block (`jarvis_agent.LANE_SYSTEM`, and the Modelfile's SYSTEM block)
+  says plainly that an approval is not the model's to give or assume, and that a
+  web-search approval is real only after a person answers its card - it must not
+  say one is in place unless a tool result in that conversation told it so;
+- while a grant IS in force, the prompt carries one line read from the store
+  itself (`jarvis_agent._grant_prompt_line`, `WEB_SEARCH_GRANT_IN_FORCE`), so
+  the "it is on" signal comes from the same function the search consults; with
+  no grant the line is absent and costs no tokens. As a backstop, an answer that
+  claims a web-search approval the store does not hold gets the same plain
+  `(Correction - ...)` postscript as a claimed-but-unrun search
+  (`_grant_claim_line`, through `postscript_lines`); an honest "no approval is
+  in force" or a conditional is never corrected.
 
 ### 175.3 What the card says
 
@@ -30141,10 +30246,150 @@ a thing to keep in sync for no gain.
 - the existing suites: `test_web_search.py` (the search path it sits in),
   `test_card_words.py` and `test_card_short_words.py` (both actions have plain
   words), `test_tool_contract.py`, `test_tool_text.py`, `test_short_tool_list.py`,
-  `test_tool_defaults.py` (no fresh-install default changed),
-  `test_reach.py`, `test_smarter_answers.py`, `test_asks_first.py` (the two tools
-  are listed in "Safety and sharing"), `test_gate_risk_words.py`,
+  `test_tool_defaults.py` (the offered list now includes the ask and its stop,
+  riding with web search; `[tools].enabled` is unchanged),
+  `test_reach.py`, `test_smarter_answers.py`, `test_asks_first.py` (21 rows;
+  the two tools are no longer "Safety and sharing" switches),
+  `test_warm_prefix.py` (the warm-up sends the same ride-alongs a real turn
+  does), `test_character.py` and `test_agent.py` (the rules paragraph),
+  `test_gate_risk_words.py`,
   `test_gate_names.py`, `test_gate_unknown_risk.py`.
+
+## 176. The phone's app list, managed: add or remove one app, card first (added 2026-11-02)
+
+The owner asked for this in their own words: *"any apps that i ask if to open or
+do something with. i would need to approve a card with the apps i would like it
+to manipulate first and i can remove or add any android app to that list any
+time with an approval card... or by going to the settings and changing it there
+too."* Section 174's `[phone_apps]` table is the whole permission, and it ships
+empty - so before this the only way to use the feature was to hand-edit
+`jarvis-framework.toml`. Now the table is managed, by chat and by the settings
+routes below, and every change is ONE approval card that names the app.
+
+### 176.1 The model's tool: `phone_apps`
+
+One tool, three actions, in chat and in Live on both apps (it is in the shipped
+`[tools].enabled` - see 175.5):
+
+| action | what it does | a card? |
+| --- | --- | --- |
+| `list` | the allowed apps, by the owner's own names, from the settings file | **no** - nothing to approve, nothing is written |
+| `add` | one app: `name` (the words the owner says) and `package` (the Android package) | **yes**, ONE `change_own_config` card |
+| `remove` | one app, by `name` | **yes**, ONE `change_own_config` card |
+
+The card is built by `jarvis_phone_apps.card_text`, never by the model, and it
+names **both** the friendly name and the exact package id - for a removal
+exactly as for an add:
+
+```
+Let Jarvis open "YouTube Music" (com.google.android.apps.youtube.music) on your phone?
+
+This adds ONE line to the [phone_apps] list in your settings file on this PC:
+"YouTube Music" = "com.google.android.apps.youtube.music". Nothing else changes,
+and nothing is written until you approve.
+```
+
+Nothing is written until that card is approved. A denied card, a timed-out card
+and a call refused before a card exists (a bad name, a package that is not a
+package, `com.jarvis.`, an app already listed, an app not listed) all leave the
+settings file byte-for-byte unchanged - `backend/test_phone_app_allowlist.py`
+proves each one, including that no audit line is written.
+
+**No bulk.** One call carries one app. The schema has no array for apps, the
+route takes one name and one package, and a list where a string belongs is
+refused in the owner's words ("One app at a time, please") before any card - so
+there is no "add all of these" path to get wrong.
+
+**The gate mapping.** The tool is put to the gate under the existing
+`change_setting` key, which the published gate base already maps to
+`change_own_config` - the same action the other settings changes use, with the
+`ask` tier it already has. No new gate action, tier, risk row or card wording is
+invented, and no `backend/*.patch` hunk in `jarvis_gate.py` is needed. The
+mapping is load-bearing: `phone_apps` itself is not a `_TOOL_ACTIONS` key, so
+without it `action_for_tool()` would answer `unclassified_tool`.
+
+**Audit.** Every applied add and remove writes one local audit line -
+`phone_apps.added` / `phone_apps.removed` - naming the app and the package,
+after the write succeeded. A refused or failed write leaves no line claiming it
+happened.
+
+### 176.2 `GET /api/phone/apps` - the list (read-only)
+
+Behind `X-Jarvis-Token` like every settings route, from either app. It reads
+`[phone_apps]` and nothing else; it never lists the phone's installed apps and
+never runs an adb command.
+
+```json
+{"ok": true, "available": true, "count": 1, "empty": false, "note": "",
+ "apps": [{"name": "YouTube Music",
+           "package": "com.google.android.apps.youtube.music",
+           "can_play": true}]}
+```
+
+`can_play` says whether Jarvis also knows that app's own search address
+(`SEARCH_LINKS` in `jarvis_android_control.py`), so a screen can say "open" from
+"open and search" without guessing. A line that is not a plain name and a plain
+package is left out of `apps` (the reader's rule, the same one the phone tool
+uses) and counted in `note` - it is not silently hidden.
+
+### 176.3 `POST /api/phone/apps` - ONE change, and its card
+
+`{"action": "add", "name": "YouTube Music", "package": "com.google.android.apps.youtube.music"}`
+or `{"action": "remove", "name": "YouTube Music"}`. The module
+(`jarvis_phone_apps.change`) validates, raises **ONE** `change_own_config` card
+through `jarvis_gate.check` and writes the one line only after a person's yes.
+The answers:
+
+| status | when |
+| --- | --- |
+| `200` | approved and written (`changed` says whether the file moved; `apps` is the new list) |
+| `400` | refused before a card: a bad name, a package that is not a package, `com.jarvis.`, an app already listed (or the package already under another name), an app not listed, a list where a string belongs |
+| `409` | a card was answered "no", timed out, or the write itself failed - `error` is the owner's sentence |
+| `503` | this PC cannot ask (-`jarvis_gate` not there, or the tier is not `ask`), or the settings file cannot be found; nothing changed |
+
+A lower-level `409` is possible in one honest case: the list changed while the
+card waited (the app was added or removed meanwhile), so the write re-validates
+against the list as it is NOW and says so rather than writing twice or removing
+something the card did not show.
+
+### 176.4 The file: one line, the same way the other settings are written
+
+`jarvis_phone_apps.write` follows `jarvis_limits.py` and `jarvis_notify_prefs.py`
+exactly: read the owner's bytes, change ONE line of their own text (comments,
+ordering and line endings untouched), re-parse the whole file and prove the ONLY
+difference is the line it meant to change, then write through a temporary file
+and `os.replace` with the file's own permissions, and
+`jarvis_framework.reload_framework()` so the next message sees it. There is no
+`open(path, "w")` anywhere in this feature. A line the owner wrote by hand, in
+either TOML quoting style, can be found and removed.
+
+### 176.5 The surfaces, and the phone decision
+
+- **Chat and Live, both apps**: the `phone_apps` tool (175.1). It ships ON in
+  `[tools].enabled`, because a tool that is itself the only way to fill a list
+  that ships empty cannot be gated behind a hand edit of the same file. What it
+  can reach is that ONE table; the phone tool that OPENS apps (`control_phone`)
+  is still opt-in.
+- **Desktop Settings**: the apps, with an honest empty state, an add (typed
+  package id) and a remove - each through `POST /api/phone/apps`, so each raises
+  the normal card. *(This surface is the remaining half of this slice - see the
+  PR body; the routes it needs are above.)*
+- **Phone Settings**: a READ-ONLY list and "Ask Jarvis to add an app", not an
+  editor. This is the standing "no deep config editing on the phone" rule: an
+  add needs a friendly name AND a package id, and the phone is the one device
+  that cannot look a package up. The owner's own sentence - *"or by going to the
+  settings and changing it there too"* - is answered by the PC's Settings and by
+  the same card from the phone's chat; the record is in `docs/DECISIONS.md`
+  (2026-11-02) and `docs/ARCHITECTURE.md` §8. *(This screen is the remaining
+  half of this slice too - the route it reads is `GET /api/phone/apps`.)*
+
+### 176.6 What has NOT changed
+
+`control_phone` and its own one-card plan (§174) are untouched: opening an app
+still goes to `jarvis_android_control_run` → `control_phone`, still one card
+printing every literal command, still opt-in. This section adds the management
+of the list; it does not add a way to open an app without a card, a second
+permission model, or a bulk approval.
 
 ## 177. Approving a card from an Android notification, with Deny, Approve and Review (phone, added 2026-11-02)
 
@@ -30243,6 +30488,7 @@ shade, that the lock screen shows the redacted sentence and refuses Approve unti
 system prompt appears after the in-app Approve on a real device, and that a tap on a direct Approve
 reaches the PC over Tailscale after the process was killed. The desk check proves the compile and
 the JVM rules only.
+
 ## 179. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
 
 The owner's question of 2026-11-02 ~00:20 PT, and his answer the same night
@@ -30333,6 +30579,10 @@ carry-over"), `src-tauri/src/todo_carryover.rs` (one command: the read, and
 `{mode}` to change it). Phone: `net/Schedule.kt` (`carry`, `createdDate`,
 `todoMode`, `todoModes`, `todoDays`, `todoModeBody`, `carryOf`),
 `ui/screens/ComingUpPlate.kt` (the tag, and the day headings),
+`ui/screens/RemindersScreen.kt` + `net/Reminders.kt` (the phone's own Reminders
+screen's "Daily to-do list" choice, since 2026-11-02: the same items, both
+modes, the same `todo_mode` write, and the mode control offered only when the
+PC sent `todo_modes`),
 `ui/screens/TodoCarryoverPlate.kt` + `ui/screens/LimitsPlate.kt`'s card (the
 same two modes, drawn from the PC's own words), `JarvisRuntime.setTodoMode`.
 Nothing is decided by a client's clock: the PC wrote the item and the PC says

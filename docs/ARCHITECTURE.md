@@ -2756,6 +2756,29 @@ backend routes, in both directions; the rest are listed here only.
   the five-point envelope (Deny locked, Approve unlock-gated, biometric for
   everything not small, Review over 240 characters, redacted lock screen)
   exists to avoid.
+- **The phone's mic press does not check the voice print, and the desktop's
+  talk button still does - one-sided on purpose** (2026-11-02; the owner's
+  words: *"when i do the mic press to make a short verbal message to jarvis,
+  dont have it confirm my voice through the voice id"*). The check lives in
+  the backend (`jarvis_speech.hear()`), so both apps already call the same
+  route; what differs is the `?source=` and `?mic=` each sends. A
+  `push_to_talk` clip from `mic=phone` is transcribed without
+  `jarvis_voice.verify()` - and without the "a command needs enough speech"
+  refusal that exists only to feed that check - so a short message is
+  answered. A `push_to_talk` clip from `mic=desktop`, every `wake_word` clip,
+  every `live` clip, and any clip that names no microphone still run the
+  check. Nothing that needs a REAL check is granted to the exception: an
+  answer that uses email, the calendar, notes or memory stays on the phone's
+  screen, automatic learning waits for a card, and the words cannot open
+  Jarvis Live ("let's talk" from that press is an ordinary message), because
+  the reply says `strictness: ""` / `mode: "quick_message"` and Live's own
+  rule is no Live without a real voice check (JARVIS-API §5 and §19.2 item
+  5). The desktop's own talk button was deliberately NOT changed: the
+  owner's request names the phone's press, and the PC's button is on the
+  machine that already decides its own approvals. No route, no setting and
+  no permission was added; `tools/check_parity.py` is unchanged and clean.
+  The decision is `decisions.d/2026-11-02-quick-mic-no-voice-print.md`, and
+  `backend/test_quick_mic.py` holds both halves.
 
 - **The desktop Settings window has no "Small cards" radio, and that is
   one-sided on purpose** (2026-11-01; the rule is §3's "2026-11-01 exception",
@@ -2788,13 +2811,32 @@ backend routes, in both directions; the rest are listed here only.
   one approval card is drawn by both. What is **PC-only** is the permission
   itself - `[phone_apps]` (the app allow-list) and `"control_phone"` in
   `[tools].enabled` are two lines in `jarvis-framework.toml`, which is deep
-  config editing and stays off the phone (`CLAUDE.md`). Neither app lists or
-  edits the allowed apps; `list_apps` reads the same file for the model, so the
+  config editing and stays off the phone (`CLAUDE.md`). The list itself is now
+  managed by card (2026-11-02, JARVIS-API §176, and the bullet below), and the
+  phone reads it read-only; `list_apps` reads the same file for the model, so the
   phone never becomes a second authority on what may be opened. **One honest
   cost, said plainly:** opening a media app brings it to the front, so a Live
   session running on that phone is backgrounded by the very thing it asked for
   - the sound carries on, the conversation is behind the app. Nothing here
   merges, adds a route, or touches `tools/check_parity.py` (no route changed).
+
+- **The phone's app allow-list is MANAGED by card: add/remove is PC Settings and
+  chat, and the phone shows the list read-only** (2026-11-02; the owner's words:
+  *"i would need to approve a card with the apps i would like it to manipulate
+  first and i can remove or add any android app to that list any time with an
+  approval card... or by going to the settings and changing it there too"*;
+  JARVIS-API §176, `docs/DECISIONS.md` 2026-11-02). The two write paths - the
+  model's `phone_apps` tool in either app's chat/Live, and the PC's Settings
+  through `POST /api/phone/apps` - are ONE permission model: each add and each
+  removal raises ONE `change_own_config` card naming the friendly name and the
+  exact package id, nothing is written until a person approves it, and there is
+  no bulk path. The phone gets a **read-only** list from
+  `GET /api/phone/apps` and the line "ask Jarvis to add an app": typing a
+  friendly name AND a package id is deep config editing, which the standing rule
+  keeps off the phone, and the phone is the one device that cannot look a
+  package up. That is not a second authority - the same card approves the same
+  line whichever surface asked. `control_phone` itself is untouched and stays
+  opt-in (§174).
 
 - **The Notes editor's formatting toolbar, shortcuts and template menu are the
   desktop's alone** (2026-10-31; the owner asked to "really enhance this
@@ -3339,23 +3381,40 @@ not missing a control: its own app already reads and acts on the same
 schedule. `tools/check_parity.py` has nothing new to classify, because no
 backend route is added and the phone's read of `/api/schedule` is unchanged.
 
-**The phone's Home row gained a Reminders button on 2026-11-02, and it is one
-more way in to the same Coming up read surface, not a second reminders screen**
-(the owner: *"move appearance to only in settings for the android app and
-replace the appearance button with a reminders button instead"*). The button
-opens Brain -> Coming up (`brain.work.coming-up`, the plate the phone already
-had and can never hide), exactly as "open coming up" and Find anything's own
-row do; it reads nothing new and adds no route, so `tools/check_parity.py` has
-nothing to classify. **The HUD's Reminders tab above is unchanged and stays the
-desktop HUD's**, and no desktop surface changed at all - the phone's row is the
-only thing that moved, which is why this is a note here rather than a parity
-gap. Appearance is reached only from its Settings row on the phone now (still
-`settings.appearance-card`, still hideable there), and the old home-row menu id
-`entry.appearance` is KEPT - ids are never reused or renamed - with
-`hide=False` and a written reason in `backend/jarvis_menus.py`: a switch over a
-button that no longer exists would turn nothing off. The phone's Home row
-therefore reads no `menus.shows(...)` at all; its six buttons are always drawn,
-like Settings and Help.
+**The phone's Home row gained a Reminders button on 2026-11-02, and since that
+afternoon it opens the phone's OWN Reminders screen - the Brain's Coming up
+plate is unchanged and still reachable** (the owner, twice the same day: *"move
+appearance to only in settings for the android app and replace the appearance
+button with a reminders button instead"*, then *"I want a custom reminders
+screen on the jarvis Android app. right now when I open it it just takes me to
+a subsection of the brain that has reminders. I also want another option within
+the reminders that includes a daily to-do list"*). The second ask is what the
+button does now: it opens `Screen.REMINDERS`
+(`jarvis-client/.../ui/screens/RemindersScreen.kt`, the pure half in
+`net/Reminders.kt`), a screen of its own with TWO choices - **Reminders** (the
+timers, alarms, reminders and repeating jobs, "Just went off" first) and
+**Daily to-do list** (the scheduler's to-do list, JARVIS-API section 179). Both
+choices come from the ONE `GET /api/schedule` read the Brain plate already made,
+the rows are the SAME composables the plate draws (`ScheduleRow`, `WentOffRow`),
+and every change goes through the existing `JarvisRuntime.scheduleAct`,
+`addTodo` and `setTodoMode` - one job per tap, no delete-all, no bulk anything,
+no card added or removed - so `tools/check_parity.py` has nothing to classify
+and no backend file changed. **The one bulk action stays where it was**: the
+named lists ("shopping") with their Add box and their single "Clear list" are
+still drawn only by Brain -> Coming up, and the new screen's to-do tab says
+where they are instead of growing a second copy. The Brain plate itself is
+untouched and still the way in to those lists, the standby schedule and "a file
+from your PC"; it can never be hidden (`brain.work.coming-up`), so nothing that
+used to be one tap away became unreachable. **The HUD's Reminders tab above is
+unchanged and stays the desktop HUD's**, and no desktop surface changed at all -
+the phone's own screen is the only thing that moved, which is why this is a note
+here rather than a parity gap. Appearance is reached only from its Settings row
+on the phone now (still `settings.appearance-card`, still hideable there), and
+the old home-row menu id `entry.appearance` is KEPT - ids are never reused or
+renamed - with `hide=False` and a written reason in `backend/jarvis_menus.py`: a
+switch over a button that no longer exists would turn nothing off. The phone's
+Home row therefore reads no `menus.shows(...)` at all; its six buttons are always
+drawn, like Settings and Help.
 
 **Wave D-1's proactive surfaces are desktop-first in one place, and that is
 written down rather than implied** (2026-10-22; PR #722; JARVIS-API sections 22
@@ -4219,6 +4278,9 @@ what is missing is only the Settings screen agreeing about who turned it off.
 - **the desktop HUD's reminder board does not show the age tag.** `jarvis-desktop/src/jarvis_hud.html` draws its own to-do rows and has no `carry` line; the Brain's card and the phone's plate do. A named follow-up, not a hidden difference - and the HUD is a third surface on the PC, not the phone's half.
 - **the phone's switch is drawn inside the existing "Limits and how often Jarvis does things" card**, not as a Settings row of its own: a new Settings row needs a catalogue menu id (generated into `MenuCatalog.kt` from `backend/jarvis_menus.py`) or it is a row nothing may hide, and that menu id is a backend lane. The desktop's is its own card in Settings (`#todo-carryover`). Both read and write the same PC value, so this is placement, not coverage.
 - **nothing on either app works the age out itself.** The PC computes the words (`jarvis_schedule.carry_words`) and the apps print them; a phone whose clock is a day out therefore cannot mislabel an item. While "Hide memory lists and chat history" or App lock is on, the tag is dropped with the words - an age is a fact about them.
+
+
+**The stale note waiting line is fixed on the phone; the desktop's chat still says it** (2026-11-02, the owner's report: a short voice note, the card approved, the note created, and the phone's chat still reading "Waiting for your approval."; JARVIS-API §11; `backend/jarvis_quick.py`'s `_run_note_make` and its `note_job` key). "Make a note: X" is answered by the fast path without the model, so while its card is up the WHOLE reply is the capture route's 202 sentence - in practice "Waiting for your approval." - and the note is filed the moment the card is approved. The answer now names the capture job (`note_job` in `X-Jarvis-Route`, the same id `GET /api/notes/capture?id=` answers), and the PHONE follows it and replaces that one line with the PC's own last sentence ("Filed in Obsidian, 2026-11-02.md.", "You said no, so nothing was written."), matched on the question too so two notes asked one after another cannot swap their endings. **What is one-sided, said plainly:** the desktop HUD shows the same fast-path answer in its chat and does not follow `note_job` yet, so its line goes on saying "Waiting for your approval." after the note is filed. No route is missing for it - the id is already on the answer - and the bar already settles its OWN card lines when a card leaves the queue (`brain.js`'s `onQueue`, `modelAsk`/`learningAsk`), so the missing half is that same settle pointed at a chat line. Written down rather than quietly left, and the phone is where the owner saw it.
 
 
 ## 9. Where the backend lives

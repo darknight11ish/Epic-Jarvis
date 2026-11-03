@@ -138,12 +138,15 @@ object AsksFirst {
 
     // --- The switchable in-app tools (2026-10-31, the tiered-tools slice) -----
     //
-    // The PC now offers 23 one-tool switches in four groups, plus the vault
+    // The PC now offers 21 one-tool switches in four groups, plus the vault
     // organizer's own switch and the list of tools it deliberately does not
-    // offer in-app. (21 when this surface landed; the conversation-scoped
-    // web-search grant added `approve_web_search_for_conversation` and
-    // `stop_web_search_approval` on 2026-11-01, and the phone draws them
-    // read-only like every other one.) The PHONE IS READ-ONLY here
+    // offer in-app. (21 when this surface landed; 23 for a while after the
+    // conversation-scoped web-search grant added
+    // `approve_web_search_for_conversation` and `stop_web_search_approval` on
+    // 2026-11-01 - both were removed on 2026-11-02, because the field test
+    // found that switch was never on, so the model was never offered the tool
+    // and no grant card could be raised; the grant ask rides with web search
+    // now.) The PHONE IS READ-ONLY here
     // (`can_enable` is false for a
     // request that did not come from the PC): it shows every switch and its
     // state in the PC's own labels and says, plainly, that the PC is where they

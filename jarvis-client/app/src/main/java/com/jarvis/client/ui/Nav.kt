@@ -148,6 +148,22 @@ enum class Screen {
      * phone.
      */
     EDIT_HUD,
+
+    /**
+     * "Reminders" (ui/screens/RemindersScreen.kt) - the phone's own screen for
+     * the owner's reminders, and the "Daily to-do list" inside it (the owner's
+     * ask of 2026-11-02: *"I want a custom reminders screen on the jarvis
+     * Android app ... I also want another option within the reminders that
+     * includes a daily to-do list"*). Opened from Home's Reminders button, which
+     * used to open Brain -> Coming up; that plate is unchanged and still there.
+     * Last, for the same reason as every entry above it: the back stack is
+     * saved as names, so a new screen must never be inserted in the middle.
+     *
+     * It reads the ONE scheduler route the Brain plate reads and writes through
+     * the scheduler's own two write doors, so it adds no route, no permission
+     * and no approval card (`tools/check_parity.py` has nothing to classify).
+     */
+    REMINDERS,
 }
 
 /**

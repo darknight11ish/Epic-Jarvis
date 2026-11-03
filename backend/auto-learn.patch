@@ -154,16 +154,18 @@
              except Exception as exc:
                  return self._send(500, {"error": type(exc).__name__})
              return self._send(code, out)
-@@ -2532,6 +2617,35 @@
+@@ -2532,6 +2617,37 @@
                  return self._send(500, {"error": type(exc).__name__})
              return self._send(code, out)
  
-+        if route in ("/api/memory/learning/auto", "/api/memory/learning/sensitive"):
++        if route in ("/api/memory/learning/auto", "/api/memory/learning/sensitive",
++                     "/api/memory/learning/paraphrase"):
 +            # auto-learn.patch (jarvis_auto_learn.py).
 +            #   {"enabled": false}: off at once, never a card, and a waiting
 +            #   card is withdrawn. {"enabled": true}: ONE approval card
-+            #   (learning_auto_enable / learning_sensitive_enable, tier
-+            #   "ask"), 202 "waiting", on only if it is approved.
++            #   (learning_auto_enable / learning_sensitive_enable /
++            #   learning_paraphrase_enable, tier "ask"), 202 "waiting", on
++            #   only if it is approved.
 +            if not _origin_ok(self):
 +                return self._send(403, {"error": "cross-origin request refused"})
 +            if not _token_ok(self):
@@ -302,10 +304,18 @@
  
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -347,6 +347,11 @@
+@@ -347,6 +347,19 @@
      # Without this line the action would be read as "unknown", and the
      # notice would say it might leave the machine.
      "history_enable": ("yes", "local", "keeps your chats with Jarvis, including what you say by voice, encrypted on this PC; nothing is sent anywhere, turning it off is immediate, and each kept conversation can be deleted"),
++    # 2026-11-02: "Save facts even when Jarvis had to reword them". Relaxes
++    # ONE check - "not in your own words" - and nothing else. Placed ABOVE the
++    # two auto-learn rows below, not after them: hardware.patch (later in this
++    # stack) anchors its own row on "learning_sensitive_enable" being the
++    # table's LAST, so a row added after it would stop that patch applying on
++    # the owner's PC (test_backup.py's restore_backup placement check catches
++    # exactly this). The table is a dict; order here means nothing to the code.
++    "learning_paraphrase_enable": ("yes", "local", "lets Jarvis save a fact whose words are its own rather than yours, instead of waiting for your yes; it relaxes nothing else - health, money and other people still wait unless you allow those, passwords, PINs and ID numbers always wait, and pasted text, a tool's reading, a correction or a forgotten fact still waits; nothing is sent anywhere, every fact it saves this way is marked and listed with Forget, and turning it off is immediate"),
 +    # auto-learn.patch (jarvis_auto_learn.py). Automatic learning saves facts
 +    # about you from what you type or say, on THIS PC, without a card per
 +    # fact; every one can be forgotten, and turning it off never asks.

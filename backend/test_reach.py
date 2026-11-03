@@ -468,8 +468,11 @@ def t_the_tool_list_reads_the_same_fallback_the_turn_does():
         got = [t["id"] for t in R.view(ctx(None))["tools"]]
         check("the settings file names nothing: the inherited list is read, as the turn reads it",
               got == want, (got, want))
-        check("...and the answer is not empty, which is what the page used to say",
-              got == ["calculator", "web_search"], got)
+        check("...and the answer is not empty, which is what the page used to say "
+              "(the grant ask and its stop ride with web search since 2026-11-02)",
+              got == ["calculator", "web_search",
+                      "approve_web_search_for_conversation",
+                      "stop_web_search_approval"], got)
 
         # (c) A settings file that names tools still wins, and names nothing
         # else: the fallback is a fallback.

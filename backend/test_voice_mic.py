@@ -17,6 +17,12 @@ voice check and the "hey Jarvis" verifier. What it proves:
   4. The clients send it: the phone's JarvisApi.utterance and the desktop's
      voice.rs post_utterance.
 
+**The phone's own mic press is the exception, since 2026-11-02**: a clip
+with `source=push_to_talk` AND `mic=phone` does not reach the voice check at
+all (the owner's request - "dont have it confirm my voice through the voice
+id"), so it is not in the loop below. `backend/test_quick_mic.py` is its
+suite; the others here still pass their microphone to verify.
+
 It pins the two inputs that are facts about the MACHINE rather than about the
 code: whether a voice print exists for the mic, and the minimum command
 length. Left unpinned, a 1.0 s clip on a PC that has a print is refused as
@@ -100,23 +106,30 @@ def t_hear_passes_the_microphone():
             mock.patch.object(S, "_min_command_seconds", return_value=0.5):
         with mock.patch.object(S, "_speech_span", return_value="skip"), \
                 mock.patch.object(V, "verify", verify):
-            for sent, want in (("phone", "phone"), ("desktop", "desktop"), ("tablet", ""),
-                               ("", ""), ("PHONE", "phone")):
+            # The phone's own mic press is not in this list: since 2026-11-02
+            # it is not put to the check (test_quick_mic.py holds that half).
+            for sent, want in (("desktop", "desktop"), ("DESKTOP", "desktop"),
+                               ("tablet", ""), ("", "")):
                 seen.clear()
                 h = S.hear(tone(), mic=sent)
                 check(f"mic={sent!r} reaches the voice check as {want!r}",
                       seen.get("verify") == want and h.voice_print == (want or "general"),
                       (seen, h.voice_print))
+            seen.clear()
+            S.hear(tone(), source="push_to_talk", mic="phone")
+            check("...but the phone's mic press does NOT reach it (2026-11-02, "
+                  "backend/test_quick_mic.py)", "verify" not in seen, seen)
 
         # ...and the branch those pins step around is still there, decided by
         # the pinned minimum: a clip shorter than it, with a print, is refused
         # before the owner check. A fix that reached the checks above by
-        # deleting this gate would fail here instead.
+        # deleting this gate would fail here instead. (The desktop's button:
+        # the phone's press has no minimum to step around any more.)
         seen.clear()
         with mock.patch.object(S, "_min_command_seconds", return_value=2.0), \
                 mock.patch.object(S, "_speech_span", return_value="skip"), \
                 mock.patch.object(V, "verify", verify):
-            h = S.hear(tone(), mic="phone")
+            h = S.hear(tone(), mic="desktop")
         check("a 1.0 s clip with a print, under a 2.0 s minimum, is still "
               "refused before the owner check",
               "verify" not in seen and h.too_short is True,
@@ -127,7 +140,7 @@ def t_hear_passes_the_microphone():
         with mock.patch.object(S, "_speech_span", return_value="skip"), \
                 mock.patch.object(V, "verify", old_verify):
             try:
-                h = S.hear(tone(), mic="phone")
+                h = S.hear(tone(), mic="desktop")
                 ok = h.is_owner is False and h.voice_print == ""
             except TypeError as exc:
                 ok, h = False, exc

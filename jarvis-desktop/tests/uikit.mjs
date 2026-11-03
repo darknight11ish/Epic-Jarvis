@@ -3038,6 +3038,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const all = [...a.facts].sort((x, y) => y.saved_at - x.saved_at);
             const older = args.before == null ? all : all.filter((f) => f.saved_at < args.before);
             const out = JSON.parse(JSON.stringify({ auto: a.status.auto, auto_sensitive: a.status.auto_sensitive,
+                                                    paraphrase: a.status.paraphrase === true,
                                                     facts: older.slice(0, args.limit || 30) }));
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
@@ -3048,10 +3049,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return out;
           }
           case "brain_memory_learning_auto":
-          case "brain_memory_learning_sensitive": {
+          case "brain_memory_learning_sensitive":
+          case "brain_memory_learning_paraphrase": {
             const a = window.__auto;
-            const which = cmd === "brain_memory_learning_auto" ? "auto" : "sensitive";
-            const field = which === "auto" ? "auto" : "auto_sensitive";
+            const which = cmd === "brain_memory_learning_auto" ? "auto"
+              : cmd === "brain_memory_learning_sensitive" ? "sensitive" : "paraphrase";
+            const field = which === "auto" ? "auto"
+              : which === "sensitive" ? "auto_sensitive" : "paraphrase";
             a.switches.push({ which, enabled: args.enabled });
             if (a.switchFails) throw new Error(a.switchFails);
             if (args.enabled === true && a.waits.includes(which)) {
@@ -3066,7 +3070,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (args.enabled !== true && !a.offSilent) {
               return { ok: true, waiting: false, [field]: false, message: a.offMessage || (which === "auto"
                 ? "\"Learn automatically\" is off. Every fact waits for your yes."
-                : "Sensitive topics wait for your yes.") };
+                : which === "sensitive" ? "Sensitive topics wait for your yes."
+                  : "A fact in Jarvis's own words waits for your yes again.") };
             }
             return { ok: true, [field]: args.enabled === true };
           }

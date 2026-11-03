@@ -92,4 +92,21 @@ object MicWords {
         !voiceOffered -> NOT_OFFERED
         else -> null
     }
+
+    /**
+     * The line shown while the clip is with the PC - `VoiceSession.Phase.VERIFYING`
+     * - after it was sent and before an answer starts.
+     *
+     * It used to read "Checking it's you…", and that is now a lie on the one
+     * surface the owner asked about (2026-11-02): *"when i do the mic press to
+     * make a short verbal message to jarvis, dont have it confirm my voice
+     * through the voice id"*. A mic press from the phone is not put to the
+     * voice print any more, while "hey Jarvis" clips and Jarvis Live still
+     * are, and this one line is shared by all of them. So it says what the PC
+     * is doing on every path - hearing the clip and making the words - and
+     * claims nothing about a check. See `backend/jarvis_speech.py`'s
+     * `_QuickMessage` for the rule; `MicWordsTest` and `AuditPlumbingTest`
+     * hold this sentence and its use.
+     */
+    const val WAITING = "Hearing you…"
 }

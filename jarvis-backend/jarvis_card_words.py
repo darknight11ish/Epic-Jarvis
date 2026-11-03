@@ -203,6 +203,9 @@ TITLES = {
     "learning_enable": "turn on learning",
     "learning_auto_enable": "turn on automatic learning",
     "learning_sensitive_enable": "also learn sensitive topics automatically",
+    # 2026-11-02: "Save facts even when Jarvis had to reword them" - the ONE
+    # check it relaxes is "not in your own words", and the card says so.
+    "learning_paraphrase_enable": "save facts in Jarvis's own words",
     "history_enable": "keep your chat history",
     "memory_manage": "change what it remembers",
     # jarvis_topics.py (2026-09-30): turning a private topic back on, and the
@@ -418,6 +421,7 @@ SUMMARY = {
     "learning_enable": "turn on learning",
     "learning_auto_enable": "turn on automatic learning",
     "learning_sensitive_enable": "learn sensitive topics automatically",
+    "learning_paraphrase_enable": "save facts even in Jarvis's own words",
     "history_enable": "keep your chat history",
     "memory_manage": "change what it remembers",
     "topic_loosen": "turn a private topic back on",

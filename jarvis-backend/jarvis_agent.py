@@ -1832,6 +1832,12 @@ _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "pr
                                   # so a plan cannot name it, and the owner is told to ask
                                   # for it directly.
                                   "change_setting",
+                                  # "phone_apps" (2026-11-02): the management of the phone's
+                                  # [phone_apps] allow-list. Its own gate is the card this tool
+                                  # raises (one change_own_config per app), and its list half
+                                  # is answered from the settings file with no card - neither
+                                  # is a step a plan should wrap in a second mechanism.
+                                  "phone_apps",
                                   # The conversation-scoped web-search approval and its
                                   # stop (WEB_SEARCH_GRANT, 2026-11-01): both need the
                                   # TURN's own conversation id, which only `_one_call`
@@ -2409,6 +2415,156 @@ def _run_connect_tool(args: dict) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   "Add YouTube Music to my phone apps" - the allow-list, managed by voice
+#   (2026-11-02)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK, verbatim: "any apps that i ask if to open or do something
+# with. i would need to approve a card with the apps i would like it to
+# manipulate first and i can remove or add any android app to that list any
+# time with an approval card... or by going to the settings and changing it
+# there too."
+#
+# THE GAP. `control_phone` could open an app only if that app was already a line
+# in `[phone_apps]` - and the table ships EMPTY, so the only way to fill it was
+# to hand-edit `jarvis-framework.toml`. This tool is that management in chat and
+# in Live. It is NOT a new permission: every add and remove is one
+# `change_own_config` card (the existing action, tier and card words), and
+# NOTHING is written until a person approves it. `list` is read-only, answered
+# from the settings file, and raises no card - there is nothing to approve.
+#
+# WHY IT IS ONE TOOL AND NOT THREE. The model picks `phone_apps` with an action,
+# so "add", "remove" and "what apps can you open" are one door with one schema;
+# a name it invents is refused by the schema before anything is asked.
+#
+# WHAT IT MAY NOT DO. ONE app per call: `_prepare_phone_apps` refuses any field
+# other than action/name/package, and `jarvis_phone_apps` refuses a list where a
+# string belongs - so there is no bulk path, by construction. The card is built
+# in `jarvis_phone_apps.card_text` (never by the model) and names BOTH the
+# friendly name and the exact package id, for a removal exactly as for an add.
+# The write itself is `jarvis_phone_apps.write`, the one place that edits the
+# owner's table: the same atomic, comment-preserving, whole-file-verified writer
+# the other settings use, followed by `reload_framework()` so the next message
+# sees it, and one audit line naming the app and the package.
+PHONE_APPS_TOOL = "phone_apps"
+
+#: The gate key `phone_apps` is put to the gate under. `change_setting` is
+#: ALREADY a key of `jarvis_gate._TOOL_ACTIONS` (it maps to `change_own_config`,
+#: the same action `connect_account` maps to), so this adds no line to the
+#: owner's gate file and no backend patch: the tool resolves through a mapping
+#: that ships. A new key would need a gate patch and its own risk row; a change
+#: to one of Jarvis's own settings does not invent one. `test_phone_app_allowlist.
+#: py` proves the mapping is load-bearing by checking the tool's own name (what
+#: the gate would get without it) is NOT a key.
+PHONE_APPS_GATE_NAME = "change_setting"
+
+
+def _phone_apps_tool_text() -> str:
+    """The phone_apps description, under the 300-token per-tool budget.
+
+    An instruction, not a note about the feature: the owner says "add TikTok to
+    my phone apps". It says plainly that list is free and that add/remove are
+    one card each - and that Jarvis cannot invent a package id, because Android
+    package names are not guessable and a wrong one would name someone else's
+    app."""
+    return ("Manage which apps Jarvis may open on the owner's phone. \"list\" names "
+            "them (no card). \"add\" takes the app's name and Android package "
+            "(com.company.app), and \"remove\" takes the name; each raises ONE "
+            "approval card naming it. ONE app per call. Never guess a package id - "
+            "if the owner does not know it, ask them to find it on the PC "
+            "(adb shell pm list packages). Nothing changes until the card is approved.")
+
+
+class _PhoneAppsListed:
+    """A phone_apps call that asked only for the list.
+
+    READ-ONLY and answered from the settings file, so it is recognised BEFORE
+    the gate and no card is raised - there is nothing to approve, exactly like
+    control_phone's own list_apps (2026-11-01)."""
+
+    def __init__(self, listed: dict) -> None:
+        self.listed = listed
+
+
+class _PhoneAppsRefused:
+    """A phone_apps call that could not become ONE change.
+
+    A bad name, a package that is not a package, `com.jarvis.`, an app already
+    listed, an app not listed, more than one app in one call. A card showing
+    none of these would ask the owner to approve nothing, so the reason goes
+    back to the model instead, in the owner's words, before any card."""
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
+
+
+def _prepare_phone_apps(args: dict):
+    """(state, the card's own words) for one phone_apps call.
+
+    A list, or a refusal, comes back as a sentinel `_one_call` answers without
+    a card. An add/remove that passed every rule comes back as the plain dict
+    `execute` writes - the SAME name and package the card shows, never
+    recomputed from the model's arguments a second time."""
+    try:
+        import jarvis_phone_apps as PA
+    except Exception as exc:                     # noqa: BLE001 - module absent
+        return (_PhoneAppsRefused(
+            "Jarvis cannot manage the phone's app list on this PC: "
+            f"jarvis_phone_apps.py is not in the backend folder ({type(exc).__name__})"),
+            "Manage the phone's allowed apps")
+    extra = sorted(str(k) for k in (args or {})
+                   if str(k) not in ("action", "name", "package"))
+    if extra:
+        return (_PhoneAppsRefused(
+            "one app at a time, please - this tool takes an action, a name and a "
+            f"package only ({', '.join(extra)} was sent), so nothing was changed"),
+            "Add an app to the phone's allowed apps")
+    action = str((args or {}).get("action") or "").strip().lower()
+    if action == "list":
+        return _PhoneAppsListed(PA.view()), "List the apps Jarvis may open on the phone"
+    if action not in ("add", "remove"):
+        return (_PhoneAppsRefused(
+            'say "list" to see the apps, or "add" or "remove" with one app\'s name, '
+            "so nothing was changed"),
+            "Manage the phone's allowed apps")
+    try:
+        if action == "add":
+            name, package = PA.check_add((args or {}).get("name"),
+                                         (args or {}).get("package"))
+        else:
+            name, package = PA.check_remove((args or {}).get("name"))
+    except PA.PhoneAppsError as exc:
+        return _PhoneAppsRefused(str(exc)), "Manage the phone's allowed apps"
+    return ({"action": action, "name": name, "package": package},
+            PA.card_text(action, name, package))
+
+
+def _execute_phone_apps(args: dict, state) -> dict:
+    """Write the ONE line the card showed, after its approval.
+
+    Re-validated by `jarvis_phone_apps.write` against the list as it is NOW: an
+    approval of "add YouTube Music" cannot become a different app because the
+    file changed while the card waited, and a line that is already there says so
+    rather than being written twice."""
+    if not isinstance(state, dict):
+        return {"ok": False, "changed": False,
+                "error": "refused: that call named no one app, so nothing was changed."}
+    try:
+        import jarvis_phone_apps as PA
+    except Exception as exc:                     # noqa: BLE001 - module absent
+        return {"ok": False, "changed": False,
+                "error": f"the app list could not be changed "
+                         f"(jarvis_phone_apps.py is not here: {type(exc).__name__})"}
+    try:
+        return PA.write(state.get("action"), state.get("name"), state.get("package"))
+    except PA.PhoneAppsError as exc:
+        return {"ok": False, "changed": False, "error": str(exc)}
+    except Exception as exc:                     # noqa: BLE001 - the file
+        return {"ok": False, "changed": False,
+                "error": f"the app list could not be changed ({type(exc).__name__})"}
+
+
+# --------------------------------------------------------------------------
 #   "What is this feature?" - explaining Jarvis's own features (2026-10-20)
 # --------------------------------------------------------------------------
 #
@@ -2578,6 +2734,21 @@ GRANT_ACTION = "grant_web_search_conversation"
 REVOKE_TOOL = "stop_web_search_approval"
 REVOKE_ACTION = "revoke_web_search_grant"
 
+#: The two tools above ARE offered on an ordinary turn, and that is not a
+#: setting (changed 2026-11-02, after the live field test). Offering the ASK
+#: grants nothing: the store is written only after a person answers a card, and
+#: the tool refuses with no card when the chat has no id. Leaving them out of
+#: the offered list is what made the feature dead on the owner's own PC - the
+#: live `[tools].enabled` never named them (they are not fresh-install
+#: defaults), so the model had no tool to call, no way to raise the card, and
+#: answered "Search is approved for this conversation" from the owner's words
+#: alone. So they ride with web search: offered whenever `web_search` itself is
+#: offered, gone when the owner switches web search off (the one switch that
+#: decides whether any of this can happen). They are no longer rows in
+#: Settings -> Tools ("Safety and sharing"), because a switch whose state the
+#: turn ignored would be a lie - see jarvis_asks_first.py's own note.
+GRANT_ASK_TOOLS = (GRANT_TOOL, REVOKE_TOOL)
+
 #: How long ONE grant may last, and why a cap at all: the owner said "for the
 #: entire conversation until I say it doesn't have authorization", and a
 #: conversation can outlive the reason it was given - an app left open all
@@ -2619,6 +2790,16 @@ WEB_SEARCH_GRANT_ON = (
     "its own card - and each search is written in the approval log with this "
     "grant's id.")
 
+#: What the PROMPT says on a turn where a grant really is in force, read from
+#: the store (`_grant_prompt_line`). Only ever sent with a live grant, so an
+#: ordinary turn pays nothing for it. It repeats the four limits because the
+#: model may be asked about them in the same breath.
+WEB_SEARCH_GRANT_IN_FORCE = (
+    "A web-search approval IS in force for this conversation: a web search "
+    "runs without asking the owner. It came from a person answering the "
+    "approval card, it covers web searches ONLY, and it ends when the owner "
+    "says stop, this chat ends, 8 hours pass, or Jarvis restarts.")
+
 #: The same, for the instant stop. No card was raised for either of these, so
 #: the model is told what is true and nothing more.
 WEB_SEARCH_GRANT_OFF = (
@@ -2653,8 +2834,9 @@ def _grant_tool_text() -> str:
         "for that: they want to stop being asked about searches for the rest "
         "of this conversation (\"you have full approval to search the web\", "
         "\"search anything you need, don't ask me\", \"stop asking me about "
-        "searches in this chat\"). Never call it on your own initiative, and "
-        "never say it is on before the card is approved. It covers web "
+        "searches in this chat\"). Never call it on your own initiative. Never "
+        "say it is on before a person answers the card: no card, no approval. "
+        "It covers web "
         "searches ONLY: sending email or files, booking, buying, spending, "
         "deleting, running commands, changing settings, the browser and your "
         "accounts each still need their own card. The owner can say stop at "
@@ -2883,6 +3065,24 @@ TOOLS: dict = {
                                                 checkpoint=kw.get("checkpoint")),
         needs_announce=True,
         gate_lookup_name=lambda args: "jarvis_android_control_run"),
+    # "add YouTube Music to my phone apps" (2026-11-02) - the management the
+    # owner asked for, so the allow-list is not a file edit. It ships ON, like
+    # change_setting: a tool that is itself the only way to fill the list
+    # cannot be gated behind a hand edit of [tools].enabled. Every add and
+    # remove is ONE change_own_config card; list is free.
+    "phone_apps": Tool(
+        "phone_apps",
+        _phone_apps_tool_text(),
+        {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["list", "add", "remove"]},
+            "name": {"type": "string", "description":
+                "the app's name, e.g. Maps"},
+            "package": {"type": "string", "description":
+                "add: the Android package, e.g. com.example.maps"}},
+         "required": ["action"]},
+        _prepare_phone_apps,
+        _execute_phone_apps,
+        gate_lookup_name=lambda args: PHONE_APPS_GATE_NAME),
     "browser_control": Tool(
         "browser_control",
         "Drive one browser tab by naming page elements (role and accessible "
@@ -7390,6 +7590,15 @@ def offered_tools(enabled_tools) -> list:
         # read from its file every turn, so off means the AI model is not even
         # offered the tool - not merely refused when it tries.
         wanted.discard("web_search")
+    if "web_search" in wanted:
+        # The conversation web-search approval and its instant stop are part of
+        # the same ability, not a capability of their own (2026-11-02): the ask
+        # grants nothing by itself (one card, then a person's yes), and the stop
+        # only takes permission away. They are offered whenever web search is,
+        # so a natural request in chat can really raise the one card - and they
+        # are NOT a Settings switch any more, because a switch the turn ignores
+        # would be a lie (see GRANT_ASK_TOOLS).
+        wanted.update(GRANT_ASK_TOOLS)
     if ("browser_control" in wanted and _second_card_lane("browser_control") is None
             and not _headless_offered()):
         # Browser control needs BOTH: its name in `[tools].enabled`, and the
@@ -7544,8 +7753,12 @@ TOOL_GROUPS = (
     # rather than adding a group name to more_tools' own enum: changing and
     # explaining a setting are the same "Jarvis's own switches" subject, and a
     # group's members cost nothing extra in that enum.
+    # phone_apps (2026-11-02) shares this group for the reason below: it
+    # changes ONE of Jarvis's own settings - the [phone_apps] allow-list - and
+    # a group's members cost nothing extra in more_tools' own enum, so the
+    # short list's 1,550-token pin does not move.
     ("settings", "change one of Jarvis's own settings",
-     (SETTINGS_TOOL, FEATURE_GUIDE_TOOL)),
+     (SETTINGS_TOOL, FEATURE_GUIDE_TOOL, PHONE_APPS_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -7553,8 +7766,8 @@ TOOL_GROUPS = (
     # (WEB_SEARCH_GRANT, 2026-11-01). A group rather than the core, for the
     # reason CORE_TOOLS' own comment measures: the two texts are 481 tokens,
     # and a group's name and one line are about 20 - paid only with
-    # `[tools] short_list = true`, which ships OFF. Enabled from Settings ->
-    # Tools ("Safety and sharing", jarvis_asks_first.TIER_A), never by default.
+    # `[tools] short_list = true`, which ships OFF. They are offered whenever
+    # web search is (GRANT_ASK_TOOLS, 2026-11-02) and are not a Settings switch.
     ("web_search_grant", "let web searches in this chat stop asking",
      (GRANT_TOOL, REVOKE_TOOL)),
 )
@@ -7742,6 +7955,14 @@ TOOL_HINTS = {
     "connect_account": (r"\bconnect\b.*\b(?:calendar|caldav|github|account)\b",
                         r"\b(?:set ?up|link|sign in|log ?in)\b.*\b(?:calendar|caldav|"
                         r"github|account)\b"),
+    # PHONE_APPS (2026-11-02): the [phone_apps] allow-list itself - "add YouTube
+    # Music to my phone apps", "which apps can you open", "remove it from that
+    # list", "what is on the allow-list". Deliberately narrow: "open YouTube on
+    # my phone" is control_phone's job, so each pattern here names the LIST, or
+    # the adding/removing of an app rather than the opening of one.
+    "phone_apps": (r"\bphone apps?\b", r"\ballow[- ]?list\b", r"\bwhich apps\b",
+                   r"\bapps?\b.*\b(?:add|remove|allow|approve|list)\b",
+                   r"\b(?:add|remove|allow|approve)\b.*\bapps?\b"),
     # The conversation-scoped web-search approval (GRANT_TOOL, 2026-11-01). Its
     # own words, narrow on purpose: a plain "search the web" must NOT pull the
     # grant in (that would offer the model a card the owner never asked for),
@@ -8022,6 +8243,29 @@ def _reset_web_search_grants() -> None:
     """Forget every grant (tests, and the one thing a restart does by itself)."""
     with _GRANTS_LOCK:
         _GRANTS.clear()
+
+
+def _grant_prompt_line(conversation_id) -> str:
+    """The one line the prompt carries when a grant really IS in force, or "".
+
+    WHY THE PROMPT IS TOLD AT ALL (2026-11-02, the field-test fix). The only
+    thing that used to tell the model a grant existed was the grant tool's own
+    result, so a turn that did not call the tool had NO signal either way - and
+    the model filled the gap from the owner's words ("Understood. Search is
+    approved...") with no card behind it. This line is a READ of the store, not
+    a guess: `web_search_grant` is the same function the search itself consults,
+    so the prompt and the permission cannot disagree. Empty when there is no
+    grant, which is the ordinary case and costs no tokens; the rules paragraph
+    says what empty means.
+    """
+    try:
+        if not _usable_conversation_id(conversation_id):
+            return ""
+        if web_search_grant(conversation_id) is None:
+            return ""
+    except Exception:                                        # noqa: BLE001
+        return ""
+    return WEB_SEARCH_GRANT_IN_FORCE
 
 
 # --------------------------------------------------------------------------
@@ -9178,6 +9422,8 @@ Say what is a guess and what is verified. If you are not sure, say you are not s
 Never claim an action was taken that was not. You do not send email, edit files, or run commands yourself; you propose them and a person approves each one. If you have proposed something, say that you have proposed it, not that it is done.
 
 A search, a lookup or a sum is only real if a tool did it in this answer. Without a tool, do not say you searched, checked, looked up or calculated anything - say you are answering from what you already know.
+
+An approval is not yours to give or to assume: a web-search approval is real only after a person answers its card. Never say a search, a permission or an approval is in place unless a tool result in this conversation told you so - the owner asking for it is not the approval. If you are unsure whether one is in force, say you are unsure and offer to raise the card.
 
 Anything recalled about the owner is private and stays on this machine. Do not repeat it back unless it is relevant to what was asked.
 
@@ -11111,12 +11357,36 @@ def with_runtime_identity_note(msgs: list, *, probes: Optional[dict] = None) -> 
     return list(msgs[:at]) + [msg] + list(msgs[at:])
 
 
+def with_grant_note(msgs: list, note: str) -> list:
+    """A copy with the web-search-grant state line before the question.
+
+    `note` comes from `_grant_prompt_line` - a real read of the store, never a
+    guess - and is "" on every ordinary turn, which returns the bytes as they
+    were. It exists because the grant tool's own result was the ONLY thing that
+    told the model an approval existed; a turn that did not call the tool had no
+    signal (the field test of 2026-11-02 answered "Search is approved" with no
+    card behind it). This is the other half of that fix; the correction below is
+    the backstop for a model that ignores it.
+    """
+    if not note:
+        return list(msgs)
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users:
+        return list(msgs)
+    at = users[-1]
+    msg = {"role": "system", "content": note}
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    next_time: str = "", spoken: bool = False, live: bool = False,
                    cut_off: str = "", crisis: bool = False,
-                   antislop: str = "") -> list:
+                   antislop: str = "", grant_note: str = "") -> list:
     """The notes a local turn adds to its (already trimmed) messages, in
-    their order - manner, focus, next-time, spoken, live, cut-off, crisis, each just before
+    their order - grant, manner, focus, next-time, spoken, live, cut-off,
+    crisis, each just before
     the newest user message - and then keep_rules_first, last, so the rules
     stay first. A new list; `msgs` is not changed. run_local_turn and the
     warm-up both call this."""
@@ -11130,6 +11400,9 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # The PC-facts line is only for a question about this PC (2026-10-31): the
     # model otherwise denied it could read disk/RAM/CPU facts.
     out = with_pc_facts_note(out)
+    # A web-search approval that really IS in force, from the store (2026-11-02;
+    # empty on every ordinary turn, so no tokens and the same bytes as before).
+    out = with_grant_note(out, grant_note)
     # The owner's manner (warm or plain): wording only, never first, and
     # before the spoken note so that one is nearer the question.
     out = with_manner_note(out, manner, crisis=crisis)
@@ -12003,6 +12276,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         msgs = with_rules_first(convo)
         focus_brief = _focus_active_now()
         room = budget() - (estimate_tokens(_SPOKEN_MSG) if watch.spoken else 0)
+        # A web-search approval that really is in force, read from the store on
+        # every round (it can start or end inside one turn), and held out of the
+        # room like every other note so it can never overflow the window.
+        grant_line = _grant_prompt_line(conv_id)
+        if grant_line:
+            room -= estimate_tokens({"role": "system", "content": grant_line})
         manner_msg = manner_message(manner)
         if manner_msg is not None:
             room -= estimate_tokens(manner_msg)
@@ -12057,7 +12336,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             manner=manner, focus=focus_brief, next_time=next_time["note"],
             antislop=_antislop_prompt(question_text, watch.spoken, dash_exempt),
             spoken=watch.spoken, live=watch.live,
-            cut_off=watch.cut_off, crisis=watch.crisis)
+            cut_off=watch.cut_off, crisis=watch.crisis,
+            grant_note=grant_line)
         body = chat_body(cur["model"], sent_messages, opts,
                          offer["schemas"] if offer_tools else None,
                          spoken=watch.spoken, question=question_text, role="everyday",
@@ -13005,6 +13285,45 @@ CALC_CLAIM_CORRECTION = (
     "(Correction - that figure was not worked out by the calculator: no calculation "
     "tool ran in this answer. Ask me to calculate it and I will use the calculator.)")
 
+#: An answer that says a web-search approval is in force. THE FIELD TEST OF
+#: 2026-11-02 is the reason this exists: asked in two natural ways, the model
+#: answered "Understood. Search is approved for this conversation" with NO card
+#: behind it, because the grant tool was not offered and nothing else told it
+#: the truth. The store is the only truth (`_grant_claim_line` reads it), so an
+#: answer that claims an approval the store does not hold is corrected in plain
+#: words - the same shape as the three claim corrections above, and for the same
+#: reason: the model's own words are not evidence.
+_GRANT_CLAIM = re.compile(
+    r"\b(?:web\s+|internet\s+)?search(?:es|ing)?\b[^.!?\n]{0,30}?"
+    r"\b(?:is|are|has|have|was|were)\b(?:\s+\w+){0,2}?\s+"
+    r"(?:approved|authori[sz]ed|granted|permitted)\b"
+    r"|\bsearch(?:es|ing)?\b[^.!?\n]{0,25}?\b(?:no\s+longer|never|not)\s+"
+    r"(?:ask|asks|prompt|prompts)\b"
+    r"|\b(?:i|we|you)\s+(?:now\s+)?(?:have|has|got|'ve\s+got|'ve\s+been\s+given)\s+"
+    r"(?:full\s+|your\s+|the\s+)?(?:approval|authori[sz]ation|permission)\b"
+    r"[^.!?\n]{0,40}?\b(?:search|web|internet)\b"
+    r"|\b(?:approval|authori[sz]ation)\s+(?:is\s+)?(?:now\s+)?"
+    r"(?:in\s+force|granted|active|in\s+place|live)\b", re.I)
+#: What stops a match being a CLAIM: a negation inside a sentence that would
+#: otherwise say a grant exists ("search is NOT approved"), or the conditional /
+#: reported-speech words just before it ("If you approve it, search is
+#: approved"). Read only over the match and a short lead, never the whole answer
+#: - a wrong correction after a true sentence is worse than a missed one
+#: (jarvis_claims' own rule). "searches no longer ask" is a CLAIM of this
+#: feature, so plain "no"/"not" is not a guard on its own: see the two halves.
+_GRANT_DENIAL = re.compile(r"\b(?:not|never)\b", re.I)
+_GRANT_GRANTED_WORD = re.compile(
+    r"\b(?:approved|authori[sz]ed|granted|permitted|in\s+force|active|in\s+place|"
+    r"live)\b", re.I)
+_GRANT_NOT_A_CLAIM_LEAD = re.compile(
+    r"\b(?:no|not|never|without|if|whether|unless|once|when|until|asked|ask|asks|"
+    r"say|says|said|told|claim|would|could|might|should|may|can)\b[^.!?\n]{0,30}$", re.I)
+GRANT_CLAIM_CORRECTION = (
+    "(Correction - no web-search approval is in force in this chat: no approval card "
+    "was answered, so every web search still asks you first. Say \"give me full "
+    "approval to search the web for this conversation\" and it goes through that "
+    "card.)")
+
 #: An answer that tells the owner a setting is not available when it is one the
 #: settings registry really has. Only ever consulted together with the owner's
 #: OWN newest words, because that is what names the setting: the model's answer
@@ -13062,6 +13381,40 @@ def _calc_claim_line(text: str, steps: list) -> str:
     this answer, or "". D7."""
     if _CALC_CLAIM.search(text or "") and not _ran_any(steps, _CALC_BACKING):
         return CALC_CLAIM_CORRECTION
+    return ""
+
+
+def _grant_claim_line(text: str, watch) -> str:
+    """The correction for an answer that claims a web-search approval the store
+    does not hold, or "".
+
+    THE FIELD-TEST FIX (2026-11-02). The claim is checked against a REAL read of
+    `web_search_grant` - the same store the search consults - never against the
+    owner's words and never against what the model says a tool did. A live grant
+    means the claim is true and nothing is added. No usable conversation id (a
+    cloud relay with no _TurnWatch) means the state is unknown, so nothing is
+    corrected rather than risking a wrong correction.
+
+    The guard matters more than the pattern: an honest "no approval is in force"
+    or "if you approve it, search is approved" must never be corrected, so a
+    negation inside a grant-word sentence and a conditional or reported-speech
+    lead both skip the line. A missed claim is cheaper than a wrong correction.
+    """
+    try:
+        cid = getattr(watch, "conversation_id", "") if watch is not None else ""
+        if not _usable_conversation_id(cid):
+            return ""
+        if web_search_grant(cid) is not None:
+            return ""
+    except Exception:                                        # noqa: BLE001
+        return ""
+    for m in _GRANT_CLAIM.finditer(text or ""):
+        hit = m.group(0)
+        lead = (text or "")[max(0, m.start() - 45):m.start()]
+        if (_GRANT_NOT_A_CLAIM_LEAD.search(lead)
+                or (_GRANT_DENIAL.search(hit) and _GRANT_GRANTED_WORD.search(hit))):
+            continue
+        return GRANT_CLAIM_CORRECTION
     return ""
 
 
@@ -13129,6 +13482,14 @@ def _claim_corrections(text: str, steps: list, watch) -> list:
             line = ""
         if line:
             out.append(line)
+    # The approval claim needs the conversation (it reads the grant store), so
+    # it is not in the loop above; it is off its own try for the same reason.
+    try:
+        line = _grant_claim_line(text, watch)
+    except Exception:
+        line = ""
+    if line:
+        out.append(line)
     try:
         line = _setting_denial_line(text, getattr(watch, "newest_own_words", "") or "")
     except Exception:
@@ -13196,7 +13557,12 @@ def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
         kinds.append(("schedule", line))
     words = str(owner_words or getattr(watch, "newest_own_words", "") or "")
     try:
-        holder = types.SimpleNamespace(newest_own_words=words)
+        # The conversation id rides along so the approval-claim check can read
+        # the grant store; a caller with no watch leaves it empty and that check
+        # then says nothing (the state is unknown, never guessed).
+        holder = types.SimpleNamespace(
+            newest_own_words=words,
+            conversation_id=getattr(watch, "conversation_id", "") if watch is not None else "")
         for line in _claim_corrections(text, list(steps or ()), holder):
             kinds.append(("claim", line))
     except Exception:
@@ -13805,6 +14171,31 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
         say_step("tool_finished", name, ok=False)
         return
+    if name == PHONE_APPS_TOOL and isinstance(state, (_PhoneAppsListed, _PhoneAppsRefused)):
+        # NOTHING TO APPROVE, so no card (2026-11-02). One of two things came
+        # back from _prepare_phone_apps instead of one app to add or remove: the
+        # owner's own list (read from [phone_apps], no write at all), or a
+        # plain reason nothing could become one change (a bad name, a package
+        # that is not a package, an app already listed, two apps in one call).
+        # A card showing either would ask the owner to approve nothing; the
+        # model is told instead, in the owner's words, before any card exists.
+        if isinstance(state, _PhoneAppsListed):
+            result = dict(state.listed)
+            say_step("tool_started", name)
+            say_step("tool_finished", name, ok=True)
+            ran = True
+        else:
+            result = {"ok": False,
+                      "error": f"refused: {state.problem} Nothing was changed and "
+                               f"nobody was asked."}
+            say_step("tool_refused", name)
+            ran = False
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
+                      "outcome": "no card needed" if ran else "refused"})
+        return
+
     if name in (GRANT_TOOL, REVOKE_TOOL):
         # Nothing to ask about: no conversation id to scope a grant to, or a
         # grant already on for this chat. Refused BEFORE any card is raised - a

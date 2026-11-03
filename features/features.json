@@ -35,8 +35,8 @@
     "title": "The talk button",
     "what": "You hold a button, speak, and let go.",
     "where": "On the PC, hold the talk button in the Jarvis bar. On the phone, the talk button on Home - hold it, or tap it to talk and stop at a pause.",
-    "asks": "No card. What you said is checked as your voice on the PC first.",
-    "limit": "The phone needs your voice trained, and the PC able to turn speech into words.",
+    "asks": "No card. On the PC, what you said is checked as your voice first. On the phone's talk button the voice is not checked - a press is your act, like typing (2026-11-02).",
+    "limit": "The phone needs your voice trained before it offers the button, and the PC able to turn speech into words.",
     "surface": "both",
     "covers": [
       "phone-talking"

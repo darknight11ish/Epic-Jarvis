@@ -16,8 +16,15 @@
  *   email addresses wait for a yes even with the
  *   second one on (the owner's decision after the safety research; the PC
  *   enforces it, this window only says so).
+ * - "Save facts even when Jarvis had to reword them" (2026-11-02, option C1 of
+ *   the memory-card research; off by default). The same shape again: ON is one
+ *   approval card (`learning_paraphrase_enable`), OFF is immediate. It relaxes
+ *   ONE check - "not in your own words" - and nothing else, and a fact it saves
+ *   carries REWORDED_MARK in the list below. The card says, in the owner's own
+ *   plain words, that a wrong paraphrase can then be stored and recalled.
  * - "Saved automatically": newest first, the fact, when, a small "said
- *   aloud" mark for voice, Forget on each, and "Load older".
+ *   aloud" mark for voice, REWORDED_MARK for a fact in Jarvis's own words,
+ *   Forget on each, and "Load older".
  * - On a `memory_saved` event (`{"ids": [...]}`, never the text) a quiet
  *   line, "Jarvis remembered 2 things", that opens the list. Never a
  *   pop-up, never the fact's words in a notification.
@@ -42,11 +49,25 @@ export const SENSITIVE_DETAIL =
   "Health, money, and private details about other people. When this is off, Jarvis " +
   "asks you first. Passwords, PINs, account and ID numbers, birthdays, phone " +
   "numbers and email addresses always wait for your yes.";
+/** 2026-11-02, option C1 of the memory-card research: ONE named switch, off by
+ *  default, that relaxes ONE check - "not in your own words". The phone says
+ *  the same words (net/AutoLearn.kt). */
+export const PARAPHRASE_LABEL = "Save facts even when Jarvis had to reword them";
+export const PARAPHRASE_DETAIL =
+  "When a fact's words are Jarvis's own rather than yours, it saves it and marks it " +
+  "\"Jarvis's own words\" instead of asking. It may write down something you did " +
+  "not say, so every one is listed here with Forget. Nothing else is relaxed.";
+/** The mark a fact saved that way carries, in both apps. */
+export const REWORDED_MARK = "Jarvis's own words";
+export const REWORDED_TITLE =
+  "Jarvis reworded this in its own words, and you turned on \"Save facts even when " +
+  "Jarvis had to reword them\". It may not say what you said - forget it if it does not.";
 export const LIST_TITLE = "Saved automatically";
 
 /** The approval-card actions each switch's ON raises (jarvis-framework.toml). */
 export const AUTO_ACTION = "learning_auto_enable";
 export const SENSITIVE_ACTION = "learning_sensitive_enable";
+export const PARAPHRASE_ACTION = "learning_paraphrase_enable";
 
 /** One page of the list (the PC's default). */
 export const PAGE = 30;
@@ -79,6 +100,19 @@ export const SWITCHES = Object.freeze({
       `Waiting for your approval to remember sensitive topics automatically. Approve it ${where}.`,
     on: "Jarvis now saves sensitive topics automatically too.",
     off: "Sensitive topics wait for your yes again.",
+  },
+  paraphrase: {
+    label: PARAPHRASE_LABEL,
+    detail: PARAPHRASE_DETAIL,
+    action: PARAPHRASE_ACTION,
+    command: "brain_memory_learning_paraphrase",
+    field: "paraphrase",
+    waitingField: "paraphraseWaiting",
+    lastField: "paraphraseLast",
+    waiting: (where) =>
+      `Waiting for your approval to save facts in Jarvis's own words. Approve it ${where}.`,
+    on: "Jarvis now saves a fact in its own words, marked \"Jarvis's own words\" here.",
+    off: "A fact in Jarvis's own words waits for your yes again.",
   },
 });
 
@@ -409,13 +443,17 @@ export function readAuto(answer, status = null) {
     why: from || listed ? "" : AUTO_MISSING,
     auto: Boolean(from) && from.auto === true,
     sensitive: Boolean(from) && from.auto_sensitive === true,
+    // 2026-11-02: the third switch, off unless the PC says exactly true.
+    paraphrase: Boolean(from) && from.paraphrase === true,
     // Only the learning route says these; the queue says it too (brain.js).
     autoWaiting: Boolean(s) && s.auto_waiting === true,
     sensitiveWaiting: Boolean(s) && s.sensitive_waiting === true,
+    paraphraseWaiting: Boolean(s) && s.paraphrase_waiting === true,
     learning: s && typeof s.enabled === "boolean" ? s.enabled : null,
     // How the newest ON card of each switch ended, or null.
     autoLast: s ? readLast(s.auto_last) : null,
     sensitiveLast: s ? readLast(s.sensitive_last) : null,
+    paraphraseLast: s ? readLast(s.paraphrase_last) : null,
     // The settings file was damaged: the PC's sentence (it then treats
     // "Learn automatically" as off), shown under that switch (FIXLIST 1).
     fileWhy: s ? text(s.why).trim() : "",
@@ -428,6 +466,9 @@ export function readAuto(answer, status = null) {
         text: text(f.text),
         savedAt: num(f.saved_at),
         provenance: text(f.provenance),
+        // 2026-11-02: saved under "Save facts even when Jarvis had to reword
+        // them" - the words are Jarvis's, not the owner's. A flag only.
+        reworded: f.reworded === true,
         // Topic controls: the id of the topic this fact is filed under (0 for
         // none, then absent); brain.js looks it up to tag a topic that is not used.
         ...(Number.isInteger(f.topic) && f.topic > 0 ? { topic: f.topic } : {}),

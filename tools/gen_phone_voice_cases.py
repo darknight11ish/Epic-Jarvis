@@ -482,15 +482,20 @@ def strict_cases():
     with World("both") as w:
         # POST /api/voice/utterance's answer (jarvis_speech.hear().as_dict())
         # for the owner's voice, with speech-to-text standing in: the fields
-        # the phone's "private answers stay on screen" rule reads.
+        # the phone's "private answers stay on screen" rule reads. The
+        # CHECKED surface is the desktop's talk button (`mic="desktop"`):
+        # since 2026-11-02 the phone's own mic press is NOT voice-checked, so
+        # its reply can never say a private answer may be read aloud - it has
+        # its own case below (`quick_message`), and the checked cases must
+        # keep showing the settings' real answers.
         train({1: owner_round(1)})
         heard = {}
 
-        def hear(words, seconds=2.6):
+        def hear(words, seconds=2.6, mic="desktop"):
             with mock.patch.object(S, "_speech_span", return_value="skip"), \
                     mock.patch.object(S, "_stt_engine", return_value=object()), \
                     mock.patch.object(S, "_transcribe", return_value=words):
-                return scrub(S.hear(tone_wav(170.0, seconds), mic="phone").as_dict(), w)
+                return scrub(S.hear(tone_wav(170.0, seconds), mic=mic).as_dict(), w)
 
         heard["private_question"] = hear("What is on my calendar today?")
         heard["plain_question"] = hear("What time is it?")
@@ -579,6 +584,14 @@ def strict_cases():
         answers["hands_free_back_approved"] = scrub(answer(post(
             {"mode": "hands_free", "value": "same_as_button"})), w)
         status["hands_free_back_approved"] = scrub(S.status(), w)
+        # The phone's mic press (2026-11-02): the same words as
+        # `plain_question`, on the one surface with no voice check, with the
+        # read-aloud settings at their loosest by now ("voice check is
+        # enough", memory aloud). NOTHING that needs a real check is granted -
+        # no private, memory or sensitive answer is read aloud; the answer is
+        # on the phone's screen. Built LAST so the extra turn changes no
+        # earlier status's timing table.
+        heard["quick_message"] = hear("What time is it?", mic="phone")
         answers["heard"] = heard
 
     # The router's decision for a chat turn (jarvis_router.choose), which

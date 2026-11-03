@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as K from "./uikit.mjs";
 import { pythonFor } from "./lib/python.mjs";
-import { FORGOTTEN, forgetQuestion } from "../src/auto-learn.js";
+import { FORGOTTEN, forgetQuestion, SWITCHES } from "../src/auto-learn.js";
 
 // Real backend output, produced by the real Python modules in backend/ at
 // test time, so what the pane is tested against is what the backend sends -
@@ -106,10 +106,15 @@ await check("NOTHING on this pane acts on more than one fact", async () => {
   // world to add for convenience.
   const page = await memoryTab();
   const labels = await page.locator("#view-memory button").allInnerTexts();
-  // The two automatic-learning switches (JARVIS-API.md section 19) are
-  // settings, by id, and nothing else here may be a checkbox.
+  // The automatic-learning switches (JARVIS-API.md section 19) are settings,
+  // by id, and nothing else here may be a checkbox. There are three of them
+  // since 2026-11-02's "Save facts even when Jarvis had to reword them", so the
+  // ids come from the module's own SWITCHES: a fourth switch is a setting and
+  // must not fail this pin, while a real bulk control still does.
+  const settingsSwitches = Object.keys(SWITCHES)
+    .map((which) => `:not(#memory-${which}-on)`).join("");
   const boxes = await page.locator(
-    "#view-memory input[type=checkbox]:not(#memory-auto-on):not(#memory-sensitive-on)").count();
+    `#view-memory input[type=checkbox]${settingsSwitches}`).count();
   await page.close();
   assert.equal(boxes, 0, "a checkbox column is how bulk actions start");
   const bulk = labels.filter((t) =>
