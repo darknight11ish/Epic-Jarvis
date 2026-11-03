@@ -2799,7 +2799,7 @@ $SHIPPED = @(
     # block finding. Nothing here re-implements the scanner, the card, the
     # quarantine or the skill index. The same entry is at the end of
     # backend/_where.py's SHIPPED list.
-    'jarvis_skill_menu.py',
+    'jarvis_skill_menu.py'
     # Habit check-ins (jarvis_habits.py, 2026-11-02; JARVIS-API section 180,
     # the owner's life-coach decision D1-D4): habits.db beside goals.db, one
     # row per habit per DAY, the plain_repeat path on the one scheduler so a
@@ -2808,7 +2808,7 @@ $SHIPPED = @(
     # by the drop-in folder plugins\ready\habits: NO patch, which is what the
     # loader is for. The same entry, in the same position, is in
     # backend/_where.py's SHIPPED list.
-    'jarvis_habits.py',
+    'jarvis_habits.py'
     # The owner's own mood log (jarvis_mood.py, the same 2026-11-02 decision
     # D1): one 1-5 tap a day with optional words in mood.db, an upsert per day,
     # no card for logging, and EXCLUDED FROM LEARNING ENTIRELY by construction
@@ -2817,7 +2817,7 @@ $SHIPPED = @(
     # /api/mood come from its own install(), called by plugins\ready\mood: NO
     # patch. The same entry, in the same position, is in backend/_where.py's
     # SHIPPED list.
-    'jarvis_mood.py',
+    'jarvis_mood.py'
 'jarvis_phone_apps.py'
 )
 
