@@ -82,7 +82,7 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
     "calculator", "change_setting", "feature_guide", "memory_search",
-    "my_files", "web_search",
+    "my_files", "phone_apps", "web_search",
 ]
 
 #: (b) Tools a cloud lane may be offered. NONE: the tool loop is local-only
@@ -94,17 +94,20 @@ CLOUD_ALLOWED = []
 #: so the decision is recorded here rather than assumed.
 PRIVATE_CHAT_ALLOWED = []
 
-#: What those enabled six become when a turn is built: `my_files` is dropped
+#: What those enabled seven become when a turn is built: `my_files` is dropped
 #: while no folder is listed (the model is never offered a tool that could
-#: read nothing), so a fresh PC offers five - plus the conversation web-search
-#: approval and its instant stop, which ride with `web_search` (2026-11-02,
-#: `jarvis_agent.GRANT_ASK_TOOLS`): offering the ASK grants nothing, because
-#: the store is written only after a person answers the card. Sorted.
-#: `send_file_to_phone` is NOT a default (it leaves the PC for the phone, like
-#: the other outbound tools); the owner enables it in their own settings list.
+#: read nothing), so a fresh PC offers five base tools - plus the conversation
+#: web-search approval and its instant stop, which ride with `web_search`
+#: (2026-11-02, `jarvis_agent.GRANT_ASK_TOOLS`): offering the ASK grants
+#: nothing, because the store is written only after a person answers the
+#: card. `phone_apps` joined the fresh offer on 2026-11-02 (#1097): it
+#: manages the phone's app allow-list, is card-first, and is the only way to
+#: fill a list that ships empty. `send_file_to_phone` is NOT a default (it
+#: leaves the PC for the phone); the owner enables it in their own settings.
 OFFERED_FRESH = [
     "approve_web_search_for_conversation", "calculator", "change_setting",
-    "feature_guide", "memory_search", "stop_web_search_approval", "web_search",
+    "feature_guide", "memory_search", "phone_apps",
+    "stop_web_search_approval", "web_search",
 ]
 
 #: (d) Every tool that exists, pinned in full. A future tool must be added
@@ -124,7 +127,7 @@ CATALOGUE = [
     "draft_email",
     "email_check", "feature_guide", "file_read", "github_search",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
-    "notes_search", "propose_plan", "protect_from_jarvis", "rea_investigate",
+    "notes_search", "phone_apps", "propose_plan", "protect_from_jarvis", "rea_investigate",
     "read_web_page",
     "retirement_whatif", "run_data_script", "send_email", "send_file_to_phone",
     "set_reminder",

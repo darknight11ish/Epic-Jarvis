@@ -653,34 +653,8 @@ confirmed check. The only cards with no Approve at all are the PC's own
 ceremonies (`jarvis_owner_check.PC_ONLY_ACTIONS`, refused `pc_only` - a decision
 about WHERE a thing can happen, not about how much checking) and a proposal that
 needs a named plan (`needsChoice`, which the decide route cannot carry yet).
-
-**The small read-only cards (the owner's request of 2026-11-01).** The owner
-asked to approve a small card - a web search, a page, the news, a calendar or
-notes read - with the card's own yes and no fingerprint on top:
-
-> "for small approvals like asking jarvis to search the web (for things like
-> weather or the news or anything small) i would like to only have to approve
-> the card, not necessarily use my fingerprint on top of approving the card.
-> make this setting adjustable in settings or through chatting to jarvis."
-
-So the approval check has a third value, **`small`** (`small` / `risky` /
-`every` on the phone's `ApprovalCheck`, and `jarvis_owner_check.approvals_mode`
-on the PC), and it is the default. A card is `small` when BOTH hold: its action
-is on the explicit read-only list (`jarvis_owner_check.SMALL_ACTIONS`, mirrored
-in `SecurityRules.SMALL_ACTIONS`), and the gate's own risk row for it says it
-changes nothing (`reversible` "yes"), has classified it, and nothing rushed it.
-Anything unclassified, irreversible, rushed, or on no list is not small and
-keeps the check. The backend answers it once, in `is_small`, and applies the
-same answer to both prompts: no Windows Hello for it on this PC, and a phone's
-approval of it needs no device signature (a signature can only be made after a
-fingerprint). `risky` is today's rule - every risky card asks, small ones
-included - and `every` asks on every card. The phone's Security screen draws all
-three; on the PC, say "check the small approvals too" (the
-`small_approvals` setting in `jarvis_settings_registry.py`) to put the check
-back on the small cards as well, and "leave the small approvals alone" for the
-default. The rule and the shared rows are held by
-`tools/gen_risky_approval_cases.py`, `backend/test_owner_check.py`,
-`SmallApprovalContractTest` (phone) and `RiskyApprovalContractTest`.
+The phone's Security screen can only make the rule stricter ("Every approval");
+its loosest choice is the rule above.
 
 **What the person sees.** The buttons keep the shared words on both apps
 (`CardWords.BUTTONS`: "Deny", "Approve"), and under them one line says what the
@@ -4142,19 +4116,13 @@ Token and `X-Jarvis-Client: hud` as always; 401 / 403 as for any route.
   before anyone asks. Making it never starts the better voice's program on
   the second card.
 - **For the apps:** fetch it when `flow.moment.key` differs from the one you
-  have, and keep it only for that key. A refused, empty or 503 answer drops
-  the clip you held: silence is right, the OLD voice is not. Read `flow`
-  again when a spoken turn starts - Jarvis Live's included (the phone did not
-  until 2026-11-02, so it played a clip fetched before the owner changed the
-  voice: a male "One moment." over female answers); `ready: false` is not a
-  reason to skip that turn-start fetch, because GET makes the clip. Then play
-  it when the owner has finished speaking and **no reply sound has started**
-  about `after_ms` later (the apps decide the exact time) - **once per turn at
-  most, and never over the reply**: if the reply's first sound arrives while
-  it plays, stop it (or let it end, it is under a second) before the reply
-  starts. Not after a refused clip, a barge-in, or a "stop". It is Jarvis's
-  own voice, so the barge-in check above already counts it as Jarvis, not the
-  owner.
+  have, and keep it. When the owner has finished speaking and **no reply
+  sound has started** about `after_ms` later (the apps decide the exact
+  time), play it - **once per turn at most, and never over the reply**: if
+  the reply's first sound arrives while it plays, stop it (or let it end,
+  it is under a second) before the reply starts. Not after a refused clip,
+  a barge-in, or a "stop". It is Jarvis's own voice, so the barge-in check
+  above already counts it as Jarvis, not the owner.
 - **At today's speeds, `after_ms: 1000` would fire on most spoken turns.**
   From the owner finishing to Jarvis's first sound is estimated at roughly
   2.5-4 s with the voice on the PC's processor (making the first
@@ -4299,13 +4267,12 @@ Jarvis while it talks" is on - the switch both apps already had; no new one.
    before, so "hey Jarvis, ..." said over a reply is still a new question.
 
 **"One moment."** Each app fetches the clip when `flow.moment.key` changes
-(the phone on every status read and when every spoken turn starts, Live's
-included; the desktop when listening starts, when the talk button is pressed
-and with every spoken question), never plays one fetched for another key, and
-plays it when a `step` event says `tool_started` during a spoken question -
-**once per question**, only **before the answer has made a sound** (the
-answer's first sound waits for it to end; it is under a second), never after
-"stop" or an interruption, and only with the app's own switch on and
+(the phone on every status read, the desktop when listening starts, when the
+talk button is pressed and with every spoken question), and plays it when a
+`step` event says `tool_started` during a spoken question - **once per
+question**, only **before the answer has made a sound** (the answer's first
+sound waits for it to end; it is under a second), never after "stop" or an
+interruption, and only with the app's own switch on and
 `flow.moment.enabled`. Not on a timer. The new switch, in both apps, is the
 one this section suggested: **"Say "One moment" if I'm kept waiting"**, on
 by default, per device (desktop Settings -> Voice, "While you wait"; phone
@@ -28706,8 +28673,9 @@ may do; nothing is applied until the owner taps Add. The PC's own sentence says 
 - While App lock, "Hide memory lists and chat history" or a phone with no secure lock screen is in
   force, the phone does not use the custom layout at all: `NotificationStyle.plan(...)` returns null
   and the notification is built exactly as it was before this feature existed.
-- An approval card still offers **Deny only**, still opens the Inbox, and is still never approvable
-  from a notification: styling changes how the words are drawn and nothing else.
+- A style changes how the words are drawn and nothing else. On 2026-11-02 the owner asked for an
+  Approve button on the approval notification itself; that button (and its five-point security
+  envelope) is §177's, and a style may not alter it. Deny and the tap-through are unchanged.
 
 ### What it does not style
 
@@ -30171,6 +30139,240 @@ a thing to keep in sync for no gain.
   does), `test_character.py` and `test_agent.py` (the rules paragraph),
   `test_gate_risk_words.py`,
   `test_gate_names.py`, `test_gate_unknown_risk.py`.
+
+## 176. The phone's app list, managed: add or remove one app, card first (added 2026-11-02)
+
+The owner asked for this in their own words: *"any apps that i ask if to open or
+do something with. i would need to approve a card with the apps i would like it
+to manipulate first and i can remove or add any android app to that list any
+time with an approval card... or by going to the settings and changing it there
+too."* Section 174's `[phone_apps]` table is the whole permission, and it ships
+empty - so before this the only way to use the feature was to hand-edit
+`jarvis-framework.toml`. Now the table is managed, by chat and by the settings
+routes below, and every change is ONE approval card that names the app.
+
+### 176.1 The model's tool: `phone_apps`
+
+One tool, three actions, in chat and in Live on both apps (it is in the shipped
+`[tools].enabled` - see 175.5):
+
+| action | what it does | a card? |
+| --- | --- | --- |
+| `list` | the allowed apps, by the owner's own names, from the settings file | **no** - nothing to approve, nothing is written |
+| `add` | one app: `name` (the words the owner says) and `package` (the Android package) | **yes**, ONE `change_own_config` card |
+| `remove` | one app, by `name` | **yes**, ONE `change_own_config` card |
+
+The card is built by `jarvis_phone_apps.card_text`, never by the model, and it
+names **both** the friendly name and the exact package id - for a removal
+exactly as for an add:
+
+```
+Let Jarvis open "YouTube Music" (com.google.android.apps.youtube.music) on your phone?
+
+This adds ONE line to the [phone_apps] list in your settings file on this PC:
+"YouTube Music" = "com.google.android.apps.youtube.music". Nothing else changes,
+and nothing is written until you approve.
+```
+
+Nothing is written until that card is approved. A denied card, a timed-out card
+and a call refused before a card exists (a bad name, a package that is not a
+package, `com.jarvis.`, an app already listed, an app not listed) all leave the
+settings file byte-for-byte unchanged - `backend/test_phone_app_allowlist.py`
+proves each one, including that no audit line is written.
+
+**No bulk.** One call carries one app. The schema has no array for apps, the
+route takes one name and one package, and a list where a string belongs is
+refused in the owner's words ("One app at a time, please") before any card - so
+there is no "add all of these" path to get wrong.
+
+**The gate mapping.** The tool is put to the gate under the existing
+`change_setting` key, which the published gate base already maps to
+`change_own_config` - the same action the other settings changes use, with the
+`ask` tier it already has. No new gate action, tier, risk row or card wording is
+invented, and no `backend/*.patch` hunk in `jarvis_gate.py` is needed. The
+mapping is load-bearing: `phone_apps` itself is not a `_TOOL_ACTIONS` key, so
+without it `action_for_tool()` would answer `unclassified_tool`.
+
+**Audit.** Every applied add and remove writes one local audit line -
+`phone_apps.added` / `phone_apps.removed` - naming the app and the package,
+after the write succeeded. A refused or failed write leaves no line claiming it
+happened.
+
+### 176.2 `GET /api/phone/apps` - the list (read-only)
+
+Behind `X-Jarvis-Token` like every settings route, from either app. It reads
+`[phone_apps]` and nothing else; it never lists the phone's installed apps and
+never runs an adb command.
+
+```json
+{"ok": true, "available": true, "count": 1, "empty": false, "note": "",
+ "apps": [{"name": "YouTube Music",
+           "package": "com.google.android.apps.youtube.music",
+           "can_play": true}]}
+```
+
+`can_play` says whether Jarvis also knows that app's own search address
+(`SEARCH_LINKS` in `jarvis_android_control.py`), so a screen can say "open" from
+"open and search" without guessing. A line that is not a plain name and a plain
+package is left out of `apps` (the reader's rule, the same one the phone tool
+uses) and counted in `note` - it is not silently hidden.
+
+### 176.3 `POST /api/phone/apps` - ONE change, and its card
+
+`{"action": "add", "name": "YouTube Music", "package": "com.google.android.apps.youtube.music"}`
+or `{"action": "remove", "name": "YouTube Music"}`. The module
+(`jarvis_phone_apps.change`) validates, raises **ONE** `change_own_config` card
+through `jarvis_gate.check` and writes the one line only after a person's yes.
+The answers:
+
+| status | when |
+| --- | --- |
+| `200` | approved and written (`changed` says whether the file moved; `apps` is the new list) |
+| `400` | refused before a card: a bad name, a package that is not a package, `com.jarvis.`, an app already listed (or the package already under another name), an app not listed, a list where a string belongs |
+| `409` | a card was answered "no", timed out, or the write itself failed - `error` is the owner's sentence |
+| `503` | this PC cannot ask (-`jarvis_gate` not there, or the tier is not `ask`), or the settings file cannot be found; nothing changed |
+
+A lower-level `409` is possible in one honest case: the list changed while the
+card waited (the app was added or removed meanwhile), so the write re-validates
+against the list as it is NOW and says so rather than writing twice or removing
+something the card did not show.
+
+### 176.4 The file: one line, the same way the other settings are written
+
+`jarvis_phone_apps.write` follows `jarvis_limits.py` and `jarvis_notify_prefs.py`
+exactly: read the owner's bytes, change ONE line of their own text (comments,
+ordering and line endings untouched), re-parse the whole file and prove the ONLY
+difference is the line it meant to change, then write through a temporary file
+and `os.replace` with the file's own permissions, and
+`jarvis_framework.reload_framework()` so the next message sees it. There is no
+`open(path, "w")` anywhere in this feature. A line the owner wrote by hand, in
+either TOML quoting style, can be found and removed.
+
+### 176.5 The surfaces, and the phone decision
+
+- **Chat and Live, both apps**: the `phone_apps` tool (175.1). It ships ON in
+  `[tools].enabled`, because a tool that is itself the only way to fill a list
+  that ships empty cannot be gated behind a hand edit of the same file. What it
+  can reach is that ONE table; the phone tool that OPENS apps (`control_phone`)
+  is still opt-in.
+- **Desktop Settings**: the apps, with an honest empty state, an add (typed
+  package id) and a remove - each through `POST /api/phone/apps`, so each raises
+  the normal card. *(This surface is the remaining half of this slice - see the
+  PR body; the routes it needs are above.)*
+- **Phone Settings**: a READ-ONLY list and "Ask Jarvis to add an app", not an
+  editor. This is the standing "no deep config editing on the phone" rule: an
+  add needs a friendly name AND a package id, and the phone is the one device
+  that cannot look a package up. The owner's own sentence - *"or by going to the
+  settings and changing it there too"* - is answered by the PC's Settings and by
+  the same card from the phone's chat; the record is in `docs/DECISIONS.md`
+  (2026-11-02) and `docs/ARCHITECTURE.md` §8. *(This screen is the remaining
+  half of this slice too - the route it reads is `GET /api/phone/apps`.)*
+
+### 176.6 What has NOT changed
+
+`control_phone` and its own one-card plan (§174) are untouched: opening an app
+still goes to `jarvis_android_control_run` → `control_phone`, still one card
+printing every literal command, still opt-in. This section adds the management
+of the list; it does not add a way to open an app without a card, a second
+permission model, or a bulk approval.
+
+## 177. Approving a card from an Android notification, with Deny, Approve and Review (phone, added 2026-11-02)
+
+The owner asked, 2026-11-02: *"make sure i can approve jarvis cards through an android
+notification with a deny or approve button or tap too see more button if the summary that's short
+enough to fit into an android notification isn't long enough."*
+
+**What already existed, checked before building anything.** Approval notifications were not
+missing: `service/ApprovalNotifier.kt` has posted one per pending card since the foreground service
+was built, with the card's safe `notice` words, a group summary, Deny, a tap that opens the card,
+`VISIBILITY_PRIVATE` plus a redacted `publicVersion`, restart-safe id bookkeeping, and a `sync()`
+that cancels a notification when `/api/pending` stops carrying its id. What was missing was
+**Approve**: that file said, in code and in a source-pin test, "Deny only, never Approve", every
+approve action on that surface was refused, and the lock screen's public words were a generic
+sentence rather than the one the owner asked for.
+
+### 177.1 The five-point envelope (Gemini's ruling, binding)
+
+1. **Deny may run from the lock screen.** Refusing without reading is the safe direction, and it
+   was already allowed there.
+2. **Approve requires the device unlocked.** Every approve action is built with
+   `setAuthenticationRequired(true)`, so Android itself withholds the `PendingIntent` until the
+   phone is unlocked. No Kotlin check is the lock-screen wall.
+3. **Tier-aware biometric.** Only a card that `SecurityRules.isSmall` exempts (the owner's
+   2026-11-01 request, the same small read-only actions) and that the owner's setting does not
+   ask about may submit its decision from the notification. Every write, config, send-file,
+   phone-app or otherwise non-small card's Approve opens Jarvis on that card and runs the same
+   `BiometricPrompt` the card's own Approve runs - forced even where the card alone would not have
+   asked (`ApprovalNotificationPolicy.notificationApproveNeedsCheck`). The mapping to this app's
+   UI: Jarvis has no separate approval sheet, so "the approval sheet" is Home focused on that
+   card, with the system prompt over it.
+4. **No blind approval of a clipped card.** When the text the notification shows (title and body
+   together) is longer than **240 characters**, Approve is replaced by **Review in Jarvis** and
+   Deny stays. The same replacement applies to a PC-only card and to a proposal that needs one of
+   several plans chosen, neither of which the phone can approve.
+5. **Privacy and lifecycle.** The notification is `VISIBILITY_PRIVATE`; the lock screen's
+   `publicVersion` says exactly **"Jarvis: 1 approval waiting"** and carries no title, summary or
+   action name; a card that leaves `/api/pending` - answered here, on the PC, or expired - has its
+   notification cancelled in the same `sync()` pass. Nothing secret (token, card detail, a
+   stranger's words) is added; the text is still the desktop's `notice` and nothing composed on
+   the phone.
+
+**One consequence, said plainly.** A redacted notification - App lock on, "Hide memory lists and
+chat history" on, or a phone whose own screen lock is not secure - offers **Review in Jarvis and
+Deny, and no Approve**. Approving words the notification did not show is the blind approval rule 4
+forbids, and the redaction itself is the owner's existing privacy rule (`SecurityRules
+.notificationsLocked`, 2026-09-30), not something this feature weakens. **App lock defaults ON at
+setup**, so the owner will see Review rather than Approve until he turns App lock off; the app's
+Settings, Security row is where that choice lives.
+
+### 177.2 The two Approve routes
+
+- **Direct (`ACTION_APPROVE`, small read-only cards).** The action targets the app's own
+  non-exported `EventService`. It waits briefly for a live link, re-reads the card from the live
+  queue (with one direct `refreshPending()` if missing), re-checks `isSmall`, the owner's setting
+  and the phone's current privacy state, and only then calls the existing
+  `JarvisRuntime.decide(item, approve = true)` - the same POST the app makes, with the same stale
+  and expiry rules. If any re-check fails it refuses and says "open Jarvis"; the notification is
+  never the authority.
+- **In-app (`InternalLaunch.APPROVE_ACTION`, everything else).** It opens `MainActivity` on the
+  card and calls the same `approveItem` the card's Approve calls, with
+  `fromNotification = true`, which forces `confirmed(force = true)` for non-small cards. The
+  signed-approval path is unchanged, so a risky card with signed approvals on still signs with the
+  key, and one with them off still shows the offer notice instead of approving.
+
+Both routes carry `InternalLaunch`'s secret in the `PendingIntent`, and the in-app one is honoured
+only on a fresh launch (not a rotation or a Recents replay). `notice.approve_ok` is still ignored:
+the phone's own envelope decides, not the desktop's hint. **No backend change and no new route** -
+both routes end at the existing `/api/approve`.
+
+### 177.3 Where it lives
+
+| File | What it holds |
+|---|---|
+| `jarvis-client/app/src/main/java/com/jarvis/client/service/ApprovalNotificationPolicy.kt` | the pure policy: which buttons, the 240-character line, the unlock flags, the public words, the clear rule |
+| `.../service/ApprovalNotifier.kt` | turns the policy into two actions, the redacted public version, and the cancel pass |
+| `.../service/EventService.kt` | the direct small-card approve, re-checked against the live queue |
+| `.../MainActivity.kt` | the proof-gated in-app approve: opens the card, forces the check, then the existing `decide` |
+| `.../InternalLaunch.kt` | `APPROVE_ACTION` and the proof/freshness decision (`approvesApproval`) |
+
+### 177.4 Tests, and what is not proved here
+
+`ApprovalNotificationPolicyTest` (19 checks) holds the envelope on the JVM: Deny unlocked, every
+Approve unlock-gated, small direct vs non-small in-app, the forced check for a write card that the
+setting alone would skip, 240 vs 241 characters, locked means no Approve, PC-only and
+plan-choice cards are Review, the exact public words, the cancel-on-clear rule, the proof rule, and
+source pins that the notifier is private/redacted and the two approve routes re-check before
+sending. `AppProjectsTest`, `NotificationStyleTest`, `MainActivityLaunchTest` and
+`ApprovalDecisionTest` were updated to the new envelope; the other existing suites still pass. The
+whole command is **3,223 tests, 0 failed, `BUILD SUCCESSFUL`**; the one pre-existing `main` failure
+this branch inherited (`SettingsSearchTest`, after #1079 added the `edit-hud` row) was fixed by
+#1089 and merged in, and is nothing this feature changed.
+
+**NOT-TESTABLE without the owner's phone:** that Android really draws two actions in the collapsed
+shade, that the lock screen shows the redacted sentence and refuses Approve until unlock, that the
+system prompt appears after the in-app Approve on a real device, and that a tap on a direct Approve
+reaches the PC over Tailscale after the process was killed. The desk check proves the compile and
+the JVM rules only.
 
 ## 179. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
 

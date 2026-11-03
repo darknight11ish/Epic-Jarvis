@@ -78,22 +78,22 @@ except ModuleNotFoundError:                       # Python < 3.11
 #: so appending is the change that keeps those comments true; the SET is what
 #: a fresh install is offered.
 DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
-                   "calculator", "memory_search", "my_files"]
+                   "phone_apps", "calculator", "memory_search", "my_files"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
-#: order - `offered_tools` returns TOOLS order, never the file's order. The last
-#: two ride with web search and are NOT in `[tools].enabled` (2026-11-02,
-#: `jarvis_agent.GRANT_ASK_TOOLS`): the conversation web-search approval is an
-#: ASK, not a capability - its card is the permission - and the field test of
-#: 2026-11-02 found that leaving it behind a Settings switch meant it was never
-#: offered at all, so a natural request could never raise its card.
-OFFERED_NO_FOLDER = ["calculator", "memory_search", "web_search",
+#: order - `offered_tools` returns TOOLS order, never the file's order.
+#: `phone_apps` is a shipped default (#1097, 2026-11-02). The last two ride
+#: with web search and are NOT in `[tools].enabled` (#1100, 2026-11-02,
+#: `jarvis_agent.GRANT_ASK_TOOLS`): the conversation web-search approval is
+#: an ASK, not a capability - its card is the permission - and the field
+#: test of 2026-11-02 found a Settings switch left it never offered at all.
+OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "web_search",
                      "change_setting", "feature_guide",
                      "approve_web_search_for_conversation",
                      "stop_web_search_approval"]
 
 #: What a PC with at least one folder listed is offered: my_files joins it.
-OFFERED_WITH_FOLDER = ["calculator", "memory_search", "web_search",
+OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "web_search",
                        "my_files", "change_setting", "feature_guide",
                        "approve_web_search_for_conversation",
                        "stop_web_search_approval"]

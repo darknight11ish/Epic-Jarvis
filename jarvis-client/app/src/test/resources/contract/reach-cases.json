@@ -1248,6 +1248,10 @@
      "name": "Phone control"
     },
     {
+     "id": "phone_apps",
+     "name": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+    },
+    {
      "id": "github_search",
      "name": "GitHub research"
     },
