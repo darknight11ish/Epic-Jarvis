@@ -1358,7 +1358,7 @@ def plan_cleanup(categories=None, roots=None, *, now=None, store: bool = True) -
     }
     with _LOCK:
         if store:
-            _PENDING["plan"] = {"plan": plan, "at": now,
+            _PENDING["plan"] = {"plan": plan, "at": now, "created_at": now,
                                 "expires_at": now + PLAN_TTL_SECONDS,
                                 "roots": {rid: os.fspath(p) for rid, p in rmap.items()},
                                 "token": token, "categories": list(cats),
@@ -1471,12 +1471,19 @@ def apply_cleanup(categories, confirm_token, *, now=None) -> dict:
                     "error": "The categories changed after the card was made, so nothing is cleared.",
                     "freed_bytes": 0, "moved_bytes": 0, "deleted": [],
                     "quarantined": [], "message": "Nothing was touched."}
-        if now > float(pending.get("expires_at") or 0):
+        # The plan's CREATION time is what expires; `now` here is the clock at
+        # the moment the approved cleanup runs, never the request-time clock
+        # the plan was made with (a card can wait fifteen minutes, and a
+        # request-time comparison would compare a plan with itself and could
+        # never expire).
+        created = float(pending.get("created_at")
+                        or (float(pending.get("expires_at") or 0) - PLAN_TTL_SECONDS))
+        if float(now) > created + PLAN_TTL_SECONDS:
             _PENDING["plan"] = None
             return {"schema": SCHEMA, "ok": False,
-                    "error": ("That plan is more than {0} minutes old. The card and the "
-                              "paths may be stale, so nothing is cleared - plan it "
-                              "again.").format(PLAN_TTL_SECONDS // 60),
+                    "error": ("That plan expired - it is more than {0} minutes old. "
+                              "The card and the paths may be stale, so nothing is "
+                              "cleared - plan it again.").format(PLAN_TTL_SECONDS // 60),
                     "freed_bytes": 0, "moved_bytes": 0, "deleted": [],
                     "quarantined": [], "message": "Nothing was touched."}
         # Consume the plan BEFORE touching anything: one approval, one run.
@@ -1720,6 +1727,14 @@ def _decide(job: dict, gate: Callable, tier_of: Callable) -> None:
         "bytes": int(job["bytes"]),
         "quarantine_dir": job.get("quarantine_dir") or "",
         "leaves_this_pc": False,
+        # A cleanup DELETES files that are on this PC now, so the card marks
+        # itself as a replacing card: both apps draw the "REPLACES CURRENT
+        # DATA" heading and ask the second, explicit press before the approval
+        # is sent - the guard delete_file and memory_forget_range already get.
+        # The marker is data, never prose; the action is deliberately NOT added
+        # to jarvis_gate._REPLACES_ACTIONS, because that patch stack's hunk
+        # walk is fragile and the marker is the gate's documented mechanism.
+        "replaces": True,
     }
     try:
         verdict = gate(CLEANUP_ACTION, detail, text)
@@ -1736,7 +1751,10 @@ def _decide(job: dict, gate: Callable, tier_of: Callable) -> None:
         return _finish(job["count"], "refused",
                        str(getattr(verdict, "reason", "refused"))[:200])
     try:
-        result = apply_cleanup(job["categories"], job["token"], now=job.get("now"))
+        # The RUNNING clock, not the request-time one the plan was made with:
+        # a card may wait up to its own timeout, and the plan's 15 minutes must
+        # be able to expire while it does.
+        result = apply_cleanup(job["categories"], job["token"], now=_now())
     except Exception as exc:                    # noqa: BLE001 - a card must not crash
         return _finish(job["count"], "failed", type(exc).__name__,
                        message="Something went wrong. Only the items named on the card "

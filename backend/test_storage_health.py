@@ -36,6 +36,7 @@ the quarantine date are deterministic.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import sys
@@ -581,12 +582,114 @@ def t_plan_expiry_and_changed_categories_refuse():
                                      now=NOW + 1)
         after = tree_hash(world["tmp"])
     check("a plan older than its window refuses to run",
-          stale["ok"] is False and "minutes old" in (stale["error"] or ""),
-          stale.get("error"))
+          stale["ok"] is False and "expired" in (stale["error"] or "").lower()
+          and "minutes old" in (stale["error"] or ""), stale.get("error"))
     check("the categories must match the plan exactly",
           wrong_cats["ok"] is False and "categories changed" in (wrong_cats["error"] or ""),
           wrong_cats.get("error"))
     check("neither refusal touched the disk", before == after)
+    # The other direction: a FRESH plan is accepted and carried out, so the
+    # expiry test above cannot pass by refusing everything.
+    with tempfile.TemporaryDirectory() as raw:
+        world = build_world(Path(raw))
+        plan = H.plan_cleanup(["pycache"], world["roots"], now=NOW)
+        fresh = H.apply_cleanup(["pycache"], plan["token"], now=NOW + 1)
+    check("a fresh plan is accepted and carried out",
+          fresh["ok"] is True and fresh["freed_bytes"] == plan["bytes"],
+          (fresh.get("ok"), fresh.get("freed_bytes"), plan.get("bytes")))
+
+
+def t_the_card_path_enforces_the_plan_expiry():
+    """The audit's second finding: `_decide` handed `apply_cleanup` the
+    REQUEST-time clock, so the plan's 15 minutes could never expire while a
+    card waited (it compared a plan with itself). The approved cleanup now
+    compares the plan's creation time with the clock at the moment it runs."""
+    with tempfile.TemporaryDirectory() as raw:
+        world = build_world(Path(raw))
+        before = tree_hash(world["tmp"])
+        gate = Gate("approved", "ask")
+        real_now = H._now
+        H._now = lambda: NOW + H.PLAN_TTL_SECONDS + 1
+        try:
+            code, out = H.request_apply(
+                {"categories": ["pycache"]}, gate=gate,
+                tier_of=lambda action: "ask", spawn=sync_spawn,
+                roots=world["roots"], now=NOW)
+        finally:
+            H._now = real_now
+        last = H.status(now=NOW + H.PLAN_TTL_SECONDS + 2)["last"]
+        after = tree_hash(world["tmp"])
+    check("the card is raised (the plan was fresh when the request was made)",
+          code == 202 and len(gate.calls) == 1, (code, out, gate.calls))
+    check("a yes on an EXPIRED plan runs NOTHING", last and last["ok"] is False,
+          last)
+    check("... the disk is byte-identical", before == after)
+    check("... and the refusal says the plan expired",
+          "expired" in ((last or {}).get("why") or "").lower(), last)
+
+
+def _published_gate_and_words():
+    """The gate and card words the owner's PC actually runs (the published base
+    copies), imported the way backend/test_approval_guards.py imports them.
+
+    `sys.dont_write_bytecode` is saved and restored around the import: the base
+    folder (`jarvis-backend/`) must never gain a `__pycache__`, or
+    `test_base_matches_repo.py` rightly reports a generated file inside the
+    published base.
+    """
+    saved = list(sys.path)
+    saved_bytecode = sys.dont_write_bytecode
+    sys.path.insert(0, str(HERE.parent / "jarvis-backend"))
+    sys.path.insert(0, str(HERE / "rebuilt"))
+    sys.dont_write_bytecode = True
+    try:
+        for name in ("jarvis_gate", "jarvis_card_words"):
+            sys.modules.pop(name, None)
+        return (importlib.import_module("jarvis_gate"),
+                importlib.import_module("jarvis_card_words"))
+    finally:
+        sys.path[:] = saved
+        sys.dont_write_bytecode = saved_bytecode
+
+
+def t_the_cleanup_card_is_a_replacing_card():
+    """A card that deletes files must get the two-press guard, not one press.
+
+    `jarvis_gate.replaces_for()` is the one function both apps' `replaces`
+    field comes from; a card is marked by the action set OR by its own
+    `detail["replaces"]`. The cleanup action is deliberately not in the set
+    (the patch stack's hunk walk is fragile), so its detail carries the marker.
+    This proves the BEHAVIOUR the marker produces - the deleting heading and
+    the kind the second press is driven by - not that a dict key exists.
+    """
+    G, W = _published_gate_and_words()
+    with tempfile.TemporaryDirectory() as raw:
+        world = build_world(Path(raw))
+        gate = Gate("approved", "ask")
+        H.request_apply({"categories": ["pycache"]}, gate=gate,
+                        tier_of=lambda action: "ask", spawn=sync_spawn,
+                        roots=world["roots"], now=NOW)
+        detail = dict(gate.calls[0]["detail"]) if gate.calls else {}
+    check("the card's own detail marks it as a replacing card",
+          detail.get("replaces") is True, detail)
+    check("... the gate reads it as one, from the marker alone",
+          G.replaces_for(H.CLEANUP_ACTION, detail) is True, detail)
+    check("... and the action is NOT silently added to the gate's set",
+          H.CLEANUP_ACTION not in G._REPLACES_ACTIONS, sorted(G._REPLACES_ACTIONS))
+    check("... the warning category is 'deletes_data' (a deletion cannot be undone)",
+          G.replaces_kind_for(H.CLEANUP_ACTION, detail) == "deletes_data",
+          G.replaces_kind_for(H.CLEANUP_ACTION, detail))
+    words = G.replaces_words_for(H.CLEANUP_ACTION, detail)
+    check("... the heading the apps draw is the real deleting heading",
+          words.get("heading")
+          and words["heading"] == W.replace_heading("deletes_data"),
+          (words, getattr(W, "replace_heading", None)))
+    check("... an unmarked card of the same action is NOT a replacing card",
+          G.replaces_for(H.CLEANUP_ACTION, {"text": "x"}) is False)
+    check("... and the card's title reads the agreed sentence",
+          W.title_for("storage_cleanup")
+          == "Jarvis wants to clear Jarvis's temporary files",
+          W.title_for("storage_cleanup"))
 
 
 def t_a_dry_run_plan_does_not_block_the_cleanup():
@@ -795,6 +898,8 @@ def main():
                t_apply_stops_when_a_planned_file_changed,
                t_logs_and_snapshots_are_quarantined_not_deleted,
                t_plan_expiry_and_changed_categories_refuse,
+               t_the_card_path_enforces_the_plan_expiry,
+               t_the_cleanup_card_is_a_replacing_card,
                t_a_dry_run_plan_does_not_block_the_cleanup,
                t_the_one_approval_card,
                t_a_no_and_a_non_ask_tier_do_nothing,
