@@ -2,8 +2,20 @@
 
 NEW MODULE, shipped whole. auto-learn.patch (last in the patch order) calls
 it from the learner in jarvis_hud.py, and adds GET /api/memory/learning,
-GET /api/memory/auto and POST /api/memory/learning/auto|sensitive.
+GET /api/memory/auto and POST /api/memory/learning/auto|sensitive|paraphrase.
 docs/JARVIS-API.md section 19.
+
+THE THIRD SWITCH (2026-11-02, option C1 of the memory-card research): "Save
+facts even when Jarvis had to reword them", off by default. Its ON is ONE
+approval card (`learning_paraphrase_enable`, tier `ask`) and its OFF is
+immediate, exactly like the other two. It relaxes ONE check and nothing else:
+the "not in your own words" family (`check_grounded`, which includes
+`check_meaning` and `check_tense`). Every other card trigger below stays
+exactly as it is, and the tests name them one by one. A fact saved under it
+is marked `meta.reworded`, listed under "Saved automatically" in both apps
+with a visible mark, and forgettable with one tap like any other - a wrong
+paraphrase can then be stored and recalled, and the card text says so before
+the owner turns it on.
 
 THE OWNER'S DECISION (CLAUDE.md, 2026-09-24)
 "Jarvis learns automatically by default. Facts about the owner and their
@@ -53,11 +65,17 @@ THE CHECKS (each a small function below, returning a reason in words or "")
               - and, when the owner chose "only trust the talk button" for
               hands-free voice, only when it was started with the talk button.
   Outside     no sign of pasted text in any turn: a link or web-page code,
-              hidden characters, a long encoded block, email headers, more
-              than TURN_MAX_CHARS, or an injection_flags() hit - on the turns
-              AND on the proposal (L4).
+              hidden characters, a long encoded block, email headers, or an
+              injection_flags() hit - on the turns AND on the proposal (L4).
+              A very long turn counts as a sign only BESIDE another one when
+              this PC saw the owner type or say it (2026-11-02, C2b): length
+              alone no longer makes a typed message "pasted text".
   Grounded    every content word and number in the fact is in the owner's
-              own turns (L5).
+              own turns (L5) - UNLESS "Save facts even when Jarvis had to
+              reword them" is on. Then this ONE check is skipped and the fact
+              is saved with `meta.reworded`; every other check below still
+              runs, and a wrong paraphrase can then be stored and recalled
+              (the card says so).
   Correction  a proposal that would replace a stored fact is always a card
               (L6) - with ONE exception, the owner's choice of 2026-09-28
               ("Where did I put ...?", jarvis_places.py): a place for a
@@ -75,7 +93,10 @@ THE CHECKS (each a small function below, returning a reason in words or "")
               With it on, passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are still a
               card (jarvis_sensitive.always_asks - the patterns only, no
               model; the owner's decision of 2026-09-24, after the safety
-              research).
+              research). A check that could not RUN (no local model, a
+              timeout, an unreadable answer) is a card too, and is now
+              counted in stats() and said as the fault it is rather than
+              read as the owner's facts being suspicious (C2c, 2026-11-02).
 
 NOTHING LEAVES THIS PC. There is no network code here; the sensitive-topic
 check asks the learner's own model, on this PC only. The event it raises,
@@ -99,13 +120,41 @@ from typing import Callable, Optional
 
 AUTO_ACTION = "learning_auto_enable"
 SENSITIVE_ACTION = "learning_sensitive_enable"
+#: The third switch (2026-11-02): "Save facts even when Jarvis had to reword
+#: them". Its own gate action, tier `ask`, exactly like the other two.
+PARAPHRASE_ACTION = "learning_paraphrase_enable"
 
 #: A typed message longer than this reads as pasted, so it is never learned
-#: from automatically (it still makes cards).
+#: from automatically (it still makes cards) - but ONLY when nothing else says
+#: who typed it (2026-11-02, C2b): a turn this PC saw the owner type or say,
+#: with no link, email header, hidden character or encoded block in it, is the
+#: owner's own words however long it is. Measured by the research of
+#: 2026-11-02: 601 characters carded an ordinary typed fact.
 TURN_MAX_CHARS = 600
 
-#: The one "Remember" shape learned automatically: a colon, one line.
-_REMEMBER_AUTO = re.compile(r"^\s*remember\s*:\s*\S[^\n\r]*$", re.IGNORECASE)
+#: How many facts Jarvis's OWN words may save in ONE learning pass when "Save
+#: facts even when Jarvis had to reword them" is on. The rest stay cards with
+#: the reason, so one bad pass cannot rewrite a whole conversation into memory;
+#: the same shape as the overnight tidy's five cards a night. The owner's
+#: ordinary facts are unaffected: it is a ceiling on the new, looser path only.
+REWORDED_MAX_PER_PASS = 5
+
+#: The card's reason when more facts in Jarvis's own words arrived in one pass
+#: than that ceiling allows. Says the number and that it is a ceiling, never
+#: that the fact is sensitive.
+REWORDED_TOO_MANY = (f"more than {REWORDED_MAX_PER_PASS} facts in Jarvis's own words in "
+                     f"one pass - this one waits for your yes")
+
+#: Every "Remember" shape learned automatically, one line, in the same words
+#: jarvis_intake's own command reads (2026-11-02, C2a): the literal
+#: "Remember: ...", and - added then, because the owner writes them and they
+#: meant a card for no reason - "remember that ...", "remember this: ...",
+#: "please remember: ..." and "remember, ...". Still NOT "remember when we went
+#: to Porto" (no separator from that list), which is conversation, not a
+#: request. `after_remember` says this list in its card reason.
+_REMEMBER_AUTO = re.compile(
+    r"^\s*(?:please\s+)?remember\s*(?:[:,–—-]\s*|\bthis\s*:\s*|\bthat\b\s+)\S[^\n\r]*$",
+    re.IGNORECASE)
 
 #: How the approval gate names the stronger speaker model (jarvis_voice.
 #: MODEL_BARS), and its file's short hash.
@@ -145,6 +194,33 @@ SENSITIVE_CARD = "\n".join([
     "If you say no: Jarvis keeps asking you first about these.",
 ])
 
+PARAPHRASE_CARD = "\n".join([
+    "Save facts even when Jarvis had to reword them.",
+    "",
+    "Today, a fact whose words are not all yours waits for your yes. With this "
+    "on, Jarvis saves it anyway, in its own words, from what you type or say "
+    "to it - never from web pages, emails, documents or notes - without "
+    "asking about each one.",
+    "",
+    "The catch, plainly: Jarvis may write down something you did not say - it "
+    "can leave out a \"not\", or say \"works at\" for \"got a job at\". A wrong "
+    "fact can then be recalled in answers. Every one is listed under \"Saved "
+    "automatically\" in both apps, marked \"Jarvis's own words\", where you can "
+    "forget it with one tap.",
+    "",
+    "Nothing else is relaxed. Health, money and private details about other "
+    "people still wait for your yes unless you turn that on too; passwords, "
+    "PINs, account and ID numbers, birthdays, phone numbers and email addresses "
+    "always wait; and a fact that would change one you already have, or that "
+    "came from pasted text, a tool's reading, a shared or unverified message, "
+    "still waits. At most five facts are saved this way in one pass.",
+    "",
+    "Nothing leaves this PC. You can turn it off at any time from either app, "
+    "and that is instant.",
+    "",
+    "If you say no: a fact in Jarvis's own words keeps waiting for your yes.",
+])
+
 AUTO_TEXT = ("Jarvis saves facts about you and your projects from what you type "
              "or say to it - never from web pages, emails, documents or notes. "
              "You can forget any of them here.")
@@ -152,6 +228,10 @@ SENSITIVE_TEXT = ("Health, money, and private details about other people. When t
                   "is off, Jarvis asks you first. Passwords, PINs, account and ID "
                   "numbers, birthdays, phone numbers and email addresses always wait "
                   "for your yes.")
+PARAPHRASE_TEXT = ("Jarvis saves a fact whose words are its own, not yours, instead of "
+                   "asking. It may write down something you did not say, so every one "
+                   "is marked \"Jarvis's own words\" and can be forgotten here. Nothing "
+                   "else is relaxed.")
 #: The note under "Learn automatically" while background learning is off -
 #: the desktop's sentence, which both apps now show (fit audit item 10).
 NEEDS_LEARNING = ("Background learning is off, so nothing is saved automatically. "
@@ -200,19 +280,22 @@ _DAMAGED = ("the automatic learning settings file is damaged, so nothing is save
 
 
 def settings() -> dict:
-    """{"auto", "auto_sensitive", "why"}.
+    """{"auto", "auto_sensitive", "auto_paraphrase", "why"}.
 
     No file at all, or a file that never had "auto": Learn automatically is
     ON - the owner's default. A file that cannot be read, is not JSON, or
     holds anything but true/false: OFF, and `why` says so (fail closed).
     "Also remember sensitive topics automatically": off unless the file says
-    exactly true."""
+    exactly true. "Save facts even when Jarvis had to reword them" (2026-11-02):
+    off unless the file says exactly true - its own off-by-default switch, so
+    a settings file written before it existed leaves it off."""
     try:
         raw = settings_path().read_text(encoding="utf-8")
     except FileNotFoundError:
-        return {"auto": True, "auto_sensitive": False, "why": ""}
+        return {"auto": True, "auto_sensitive": False, "auto_paraphrase": False,
+                "why": ""}
     except OSError as exc:
-        return {"auto": False, "auto_sensitive": False,
+        return {"auto": False, "auto_sensitive": False, "auto_paraphrase": False,
                 "why": f"the automatic learning settings file could not be read "
                        f"({type(exc).__name__}), so nothing is saved automatically"}
     try:
@@ -220,22 +303,31 @@ def settings() -> dict:
         if not isinstance(doc, dict):
             raise ValueError
     except Exception:
-        return {"auto": False, "auto_sensitive": False,
+        return {"auto": False, "auto_sensitive": False, "auto_paraphrase": False,
                 "why": _DAMAGED}
     auto = doc.get("auto", True)
     sens = doc.get("auto_sensitive", False)
+    reworded = doc.get("auto_paraphrase", False)
     why = ""
     if not isinstance(auto, bool):
         auto, why = False, _DAMAGED
     if not isinstance(sens, bool):
         sens = False
-    return {"auto": auto, "auto_sensitive": sens, "why": why}
+    if not isinstance(reworded, bool):
+        reworded = False
+    return {"auto": auto, "auto_sensitive": sens, "auto_paraphrase": reworded,
+            "why": why}
 
 
 def _save(**changes) -> dict:
     with _SETTINGS_LOCK:
         cur = settings()
-        new = {"auto": cur["auto"], "auto_sensitive": cur["auto_sensitive"]}
+        # .get with the same defaults settings() uses: a caller that hands in
+        # only the two older keys (an older PC's reply, or a test's own stub)
+        # must not turn a save into a KeyError - the third switch is off then.
+        new = {"auto": cur.get("auto", True),
+               "auto_sensitive": cur.get("auto_sensitive", False),
+               "auto_paraphrase": cur.get("auto_paraphrase", False)}
         new.update(changes)
         new["changed"] = time.time()
         p = settings_path()
@@ -254,6 +346,11 @@ def set_sensitive(on: bool) -> dict:
     return dict(_save(auto_sensitive=bool(on)), ok=True)
 
 
+def set_paraphrase(on: bool) -> dict:
+    """The 2026-11-02 switch: "Save facts even when Jarvis had to reword them"."""
+    return dict(_save(auto_paraphrase=bool(on)), ok=True)
+
+
 # --------------------------------------------------------------------------
 #   The approval cards (the shape of jarvis_learning_switch.py)
 # --------------------------------------------------------------------------
@@ -265,12 +362,14 @@ def set_sensitive(on: bool) -> dict:
 # (an older withdrawn card answering later must not be shown as the newer
 # one's outcome) - the lessons of commit 260ddc5.
 
-KINDS = ("auto", "sensitive")
+KINDS = ("auto", "sensitive", "paraphrase")
 
 
 def action_for(kind: str) -> str:
-    """The approval action for one of the two switches."""
-    return AUTO_ACTION if kind == "auto" else SENSITIVE_ACTION
+    """The approval action for one of the three switches."""
+    if kind == "auto":
+        return AUTO_ACTION
+    return SENSITIVE_ACTION if kind == "sensitive" else PARAPHRASE_ACTION
 
 
 _LOCK = threading.Lock()
@@ -297,21 +396,30 @@ GATE_FAILED_WORDS = "The approval card could not be raised, so it stayed off."
 
 
 def _card_text(kind: str) -> str:
-    return AUTO_CARD if kind == "auto" else SENSITIVE_CARD
+    if kind == "auto":
+        return AUTO_CARD
+    return SENSITIVE_CARD if kind == "sensitive" else PARAPHRASE_CARD
 
 
 def _what(kind: str) -> str:
-    return ("turn on automatic learning" if kind == "auto"
-            else "also remember sensitive topics automatically")
+    if kind == "auto":
+        return "turn on automatic learning"
+    if kind == "sensitive":
+        return "also remember sensitive topics automatically"
+    return "save facts even when Jarvis had to reword them"
 
 
 def _setting_on(kind: str) -> bool:
     st = settings()
-    return st["auto"] if kind == "auto" else st["auto_sensitive"]
+    if kind == "auto":
+        return st["auto"]
+    return st["auto_sensitive"] if kind == "sensitive" else st["auto_paraphrase"]
 
 
 def _apply_for(kind: str) -> Callable[[bool], dict]:
-    return set_auto if kind == "auto" else set_sensitive
+    if kind == "auto":
+        return set_auto
+    return set_sensitive if kind == "sensitive" else set_paraphrase
 
 
 def _gate(action: str, detail: dict, prompt: str):
@@ -424,9 +532,11 @@ def request(kind: str, enabled, *, gate: Optional[Callable] = None,
                              "error": f"could not save the setting ({type(exc).__name__})"}
         _audit(f"learning.{kind}.off", {})
         out = learning_status()
-        out.update(ok=True, waiting=False, message=(
-            "Learn automatically is off. Every fact waits for your yes." if kind == "auto"
-            else "Sensitive topics wait for your yes."))
+        out.update(ok=True, waiting=False, message={
+            "auto": "Learn automatically is off. Every fact waits for your yes.",
+            "sensitive": "Sensitive topics wait for your yes.",
+            "paraphrase": "A fact in Jarvis's own words waits for your yes again.",
+        }[kind])
         return 200, out
     with _LOCK:
         waiting = bool(s["pending"])
@@ -506,7 +616,12 @@ def _stats_read() -> dict:
            # thing from a pass that raised, and it used to be counted nowhere -
            # the learner printed "reached no model" and `failed` never moved.
            "model_failures": 0, "last_model_error": None,
-           "last_model_error_at": None}
+           "last_model_error_at": None,
+           # 2026-11-02 (C2c): facts that waited on a card only because the
+           # sensitive-topic check could not RUN. A dead learning lane read as
+           # "your facts look sensitive" until this counter existed.
+           "sensitive_unchecked": 0, "last_sensitive_error": None,
+           "last_sensitive_error_at": None}
 
     try:
         raw = json.loads(stats_path().read_text(encoding="utf-8"))
@@ -621,6 +736,57 @@ def note_saved(n: int, *, at: Optional[float] = None) -> dict:
     return d
 
 
+#: The reasons from jarvis_sensitive that mean THE CHECK could not run, rather
+#: than an answer about the fact - read from that module's own table, so the
+#: two can never drift. `_FAILURE_REASON` is where the words on the card come
+#: from (jarvis_sensitive.py:3164); the other three are this side's own
+#: fallbacks for a missing/broken check.
+_UNCHECKED_FALLBACKS = (
+    "the check for sensitive topics is not installed",
+    "the check for sensitive topics failed (",
+)
+
+
+def sensitive_could_not_run(reason) -> bool:
+    """Is this card's reason that the sensitive-topic CHECK could not run?
+
+    (2026-11-02, C2c.) "no local model was found", "took too long", "did not
+    answer", "could not be read" - each is a fault on the learning lane, not a
+    verdict on the owner's fact. It still waits for a yes (fail closed), but it
+    must read as the fault it is, and be counted, so a dead lane can never look
+    like the owner's ordinary facts being suspicious."""
+    r = str(reason or "")
+    if not r:
+        return False
+    if r.startswith(_UNCHECKED_FALLBACKS):
+        return True
+    try:
+        import jarvis_sensitive as S
+        table = getattr(S, "_FAILURE_REASON", None)
+        words = tuple(str(v) for v in table.values()) if isinstance(table, dict) else ()
+    except Exception:
+        words = ()
+    return any(w and r.startswith(w) for w in words)
+
+
+def note_sensitive_unchecked(reason, *, at: Optional[float] = None) -> dict:
+    """The sensitive-topic check FAILED TO RUN for one fact. Counted apart from
+    every other card, with the PC's own closed-world sentence: the reason is
+    one of a fixed set of sentences, never the fact's words, so nothing a
+    person typed can reach this file or a screen through it."""
+    d = _stats_read()
+    d["sensitive_unchecked"] = int(d.get("sensitive_unchecked") or 0) + 1
+    now = time.time() if at is None else at
+    d["last_sensitive_error"] = str(reason or "")[:200]
+    d["last_sensitive_error_at"] = now
+    _stats_write(d)
+    try:
+        _audit("learning.sensitive_unchecked", {"why": d["last_sensitive_error"]})
+    except Exception:
+        pass
+    return d
+
+
 def stats() -> dict:
     """The counters, plus the one plain sentence a screen should show. Numbers
     only - ids, kinds and times, never a fact's words."""
@@ -639,6 +805,15 @@ def stats() -> dict:
     if d.get("last_model_error"):
         out["note"] += (f" The local model did not answer on the last try "
                         f"({d['last_model_error']}).")
+    if d.get("sensitive_unchecked"):
+        # 2026-11-02 (C2c): a fault on the learning lane, said as one. Without
+        # this line the card load read as "your facts look sensitive".
+        out["note"] += (f" The check for sensitive topics could not run "
+                        f"{int(d['sensitive_unchecked'])} time(s)"
+                        + (f", last: {d['last_sensitive_error']}" if d.get("last_sensitive_error")
+                           else "")
+                        + " - those facts wait for your yes, and that is the check "
+                          "failing, not your facts.")
     return out
 
 
@@ -646,10 +821,16 @@ def learning_status(learning_on: Optional[bool] = None, floor: Optional[bool] = 
     """GET /api/memory/learning's body. `learning_on` is the backend's own
     learning_enabled(); None when the caller does not know it."""
     st = settings()
-    a, s = state("auto"), state("sensitive")
+    a, s, p = state("auto"), state("sensitive"), state("paraphrase")
     out = {"auto": st["auto"], "auto_sensitive": st["auto_sensitive"],
+           # The third switch (2026-11-02): its own keys, so the two that have
+           # been read by both apps for months are untouched - `paraphrase`,
+           # `paraphrase_waiting`, `paraphrase_last`, the same shape.
+           "paraphrase": st["auto_paraphrase"],
            "auto_waiting": a["waiting"], "sensitive_waiting": s["waiting"],
+           "paraphrase_waiting": p["waiting"],
            "auto_last": a["last"], "sensitive_last": s["last"],
+           "paraphrase_last": p["last"],
            "why": st["why"]}
     # What the learner has actually done (2026-10-06). `facts_total` is the
     # number of facts in use right now: the one number that makes "0 facts"
@@ -917,12 +1098,23 @@ _EMAIL_HEAD = re.compile(r"(?im)^\s*(?:from|to|subject|cc|bcc|date|sent|reply-to
                          r"|^\s*on\b.{3,120}\bwrote:\s*$|^\s*>")
 
 
-def outside_signs(text: str) -> str:
+def outside_signs(text: str, *, seen_typed: bool = False) -> str:
     """Signs that a message holds text the owner did not type: "" or the
-    first sign found, in words."""
+    first sign found, in words.
+
+    `seen_typed` - this PC's live-turn record already says the owner typed it
+    or said it in a verified voice turn - changes ONE thing (2026-11-02, C2b,
+    the memory-card research): length alone no longer counts. The research
+    measured a 601-character ordinary typed fact carding as "pasted text"; a
+    thoughtful long answer the owner typed is still the owner's own words. A
+    long message BESIDE another sign (a link, an email header, hidden
+    characters, an encoded block) is still pasted-looking, and that sign names
+    it. Where this PC did not see who wrote it - and on a fact's own words,
+    `check_instruction` - length alone still counts, as it always did."""
     if not isinstance(text, str):
         return "not text"
-    if len(text) > TURN_MAX_CHARS:
+    too_long = len(text) > TURN_MAX_CHARS
+    if too_long and not seen_typed:
         return f"longer than {TURN_MAX_CHARS} characters, which reads as pasted text"
     if _LINK.search(text) or _DOMAIN.search(text):
         return "it has a link or web-page code in it"
@@ -935,8 +1127,8 @@ def outside_signs(text: str) -> str:
     return ""
 
 
-def check_outside(text: str) -> str:
-    sign = outside_signs(text)
+def check_outside(text: str, *, seen_typed: bool = False) -> str:
+    sign = outside_signs(text, seen_typed=seen_typed)
     if sign:
         return "looks like pasted text: " + sign
     if _injection(text):
@@ -1429,7 +1621,13 @@ def _bare(w: str) -> bool:
 def check_grounded(fact: str, turns: list) -> str:
     """GUARDS L5: every content word and every number of the fact is in
     what the owner said - and the fact leaves out nothing that changed what
-    it meant (check_meaning, red team R2)."""
+    it meant (check_meaning, red team R2).
+
+    2026-11-02 (C1): this function - with check_meaning and check_tense, which
+    it runs - is the whole of the "not in your own words" family, and it is the
+    ONLY check "Save facts even when Jarvis had to reword them" may relax. The
+    switch is read in after_pass, not here, so this check stays one honest
+    question with one honest answer."""
     if not _fact_words(fact):
         return "not in your own words"
     if ungrounded(fact, turns):
@@ -1781,6 +1979,32 @@ def check_sensitive(fact: str, turns: list, allowed: bool) -> str:
     return ""
 
 
+#: Said after a sensitive-topic reason that is the CHECK failing, not an
+#: answer about the fact (2026-11-02, C2c). The card keeps the real reason
+#: first (`jarvis_sensitive`'s own sentence) and then says plainly that this is
+#: the lane being unwell, so a week of "no local model" cards cannot read like
+#: the owner's facts being suspicious. The card stays: fail-closed is right.
+UNCHECKED_SUFFIX = (" - the check itself could not run, not a fact about you, "
+                    "so it waits for your yes")
+
+
+def sensitive_why(fact: str, turns: list, allowed: bool) -> str:
+    """check_sensitive(), plus the two things a check that could NOT run needs
+    (2026-11-02, C2c): its real reason named on the card as the fault it is,
+    and one counter in stats() so a dead learning lane reads as a fault.
+
+    Nothing here can relax anything: a reason that is not one of the check's
+    own failure sentences comes back exactly as check_sensitive() gave it."""
+    why = check_sensitive(fact, turns, allowed)
+    if why and sensitive_could_not_run(why):
+        try:
+            note_sensitive_unchecked(why)
+        except Exception:
+            pass
+        return why + UNCHECKED_SUFFIX
+    return why
+
+
 # --------------------------------------------------------------------------
 #   The turns, looked up in the live-turn registry
 # --------------------------------------------------------------------------
@@ -1803,8 +2027,12 @@ def check_turns(turns: list, conversation_id) -> tuple:
         return "no words of yours to learn from", []
     for text in turns:
         entry = _live(conversation_id, text)
+        # check_provenance/check_voice/check_taint pass first, so this PC has
+        # already recorded that the owner typed (or said) every word of it -
+        # which is why a LONG turn is not "pasted text" on length alone here
+        # (2026-11-02, C2b). Any other outside-text sign still cards it.
         why = (check_provenance(entry) or check_voice(entry) or check_taint(entry)
-               or check_outside(text))
+               or check_outside(text, seen_typed=True))
         if why:
             return why, entries
         entries.append(entry)
@@ -2063,12 +2291,18 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
         if not batch:
             batch, entries = check_turns(texts, conversation_id)
         allowed = settings()["auto_sensitive"]
+        # The third switch (2026-11-02): the ONE check it relaxes is read once,
+        # here, and it can relax nothing else - every other check below runs in
+        # the same order whether it is on or off.
+        paraphrase_on = settings().get("auto_paraphrase") is True
+        reworded_left = REWORDED_MAX_PER_PASS
         st = _store()
         with closing(st._connect()) as c:
             rows = _rows(c, pids)
             decisions = {}
             topics = {}
             moves = {}
+            rewords = {}
             for pid in pids:
                 row = rows.get(pid)
                 if row is None or row.get("state") != "pending":
@@ -2125,13 +2359,40 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                     or check_instruction(fact)
                 sens = ""
                 if not why:
-                    why = check_sensitive(fact, src, allowed)
+                    why = sensitive_why(fact, src, allowed)
                     if why or allowed:
                         # B13: the topic goes with the card (accepting it
                         # saves the fact with it) or, under "Also remember
                         # sensitive topics automatically", with the fact.
                         sens = sensitive_key(fact, src)
-                why = why or check_grounded(fact, texts)
+                # ---- R1, "not in your own words", and the ONE switch that may
+                # relax it (2026-11-02, C1). check_grounded also runs
+                # check_meaning and check_tense - the same family: a fact that
+                # drops a "not", a "used to", a "sister", or says something is
+                # true now that was said in the past. Those three are ALL that
+                # "Save facts even when Jarvis had to reword them" relaxes.
+                #
+                # IT RELAXES NOTHING ELSE, and that is by ORDER rather than by
+                # trust: every check above (settings, model, source, provenance,
+                # voice, taint, outside/pasted text, topic, a forgotten fact,
+                # correction, injection, sensitive + always-asks) has already
+                # run and has already made its card, and every check below
+                # (forgotten-before, a fact that would change a stored one,
+                # the write itself) still runs. A fact this saves is marked
+                # `meta.reworded`, listed with a visible mark in both apps, and
+                # forgettable with one tap; at most REWORDED_MAX_PER_PASS of
+                # them per pass, so one bad pass cannot rewrite the lot.
+                reworded = False
+                if not why:
+                    grounded = check_grounded(fact, texts)
+                    if grounded:
+                        if not paraphrase_on:
+                            why = grounded
+                        elif reworded_left > 0:
+                            reworded = True
+                            reworded_left -= 1
+                        else:
+                            why = REWORDED_TOO_MANY
                 if not why and like_forgotten(fact, st):
                     why = FORGOTTEN_BEFORE          # layer 2: a card, never automatic
                 if not why and pid not in moves:
@@ -2152,6 +2413,7 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                     _card_names(c, pid, moves.pop(pid))
                 decisions[pid] = why
                 topics[pid] = sens
+                rewords[pid] = reworded
                 if why:
                     # No reason is noted while automatic learning is off:
                     # then every proposal is a card, as it always was - but
@@ -2166,6 +2428,10 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             meta = _meta("conversation", entries, conversation_id)
             if topics.get(pid):
                 meta["sensitive"] = topics[pid]
+            if rewords.get(pid):
+                # The mark both apps show: this fact's words are Jarvis's, not
+                # the owner's. One boolean, never the words (2026-11-02).
+                meta["reworded"] = True
             try:
                 fid = _save_fact(pid, meta, extract)
             except Exception:
@@ -2295,9 +2561,17 @@ def after_remember(res, messages, *, conversation_id=None, learning_on: bool = T
             else:
                 why = (check_provenance(entry) or check_voice(entry) or check_taint(entry))
         if not why and not (isinstance(content, str) and _REMEMBER_AUTO.match(content.strip())):
-            why = "\"Remember\" with a colon, on one line, is saved automatically - this was not"
+            # 2026-11-02 (C2a): four more shapes count than the literal
+            # "Remember:", and the reason names them, so a card here says what
+            # WOULD have been saved rather than naming only the colon.
+            why = ("a \"Remember\" sentence on one line - \"Remember: ...\", "
+                   "\"remember that ...\", \"remember this: ...\", \"please remember: ...\" "
+                   "or \"remember, ...\" - is saved automatically; this was not")
         if not why:
-            why = check_outside(content)
+            # The newest turn's provenance was checked just above, so this PC
+            # saw the owner type it: length alone does not make it "pasted"
+            # (2026-11-02, C2b).
+            why = check_outside(content, seen_typed=True)
         st = _store()
         with closing(st._connect()) as c:
             row = _rows(c, [pid]).get(pid)
@@ -2308,7 +2582,7 @@ def after_remember(res, messages, *, conversation_id=None, learning_on: bool = T
                 why = (check_source(row.get("source"))
                        or ("" if row.get("source") == "remember" else "not from something you said")
                        or check_not_correction(row) or check_instruction(fact)
-                       or check_sensitive(fact, [content], settings()["auto_sensitive"])
+                       or sensitive_why(fact, [content], settings().get("auto_sensitive") is True)
                        or _topic_remember(fact, st))
             # The provenance goes with the card either way: annotate() shows
             # "in your own words" only for words typed or said to this PC
@@ -2358,7 +2632,10 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None,
     read out must be one the owner allows Jarvis to USE - and its count is
     the count of what it lists (jarvis_briefing._auto_facts_section)."""
     st = settings()
-    out = {"facts": [], "auto": st["auto"], "auto_sensitive": st["auto_sensitive"]}
+    out = {"facts": [], "auto": st["auto"], "auto_sensitive": st["auto_sensitive"],
+           # The third switch rides along too, so both apps can draw it from a
+           # PC whose GET /api/memory/learning is missing (2026-11-02).
+           "paraphrase": st["auto_paraphrase"]}
     try:
         limit = max(1, min(LIST_MAX, int(limit)))
     except (TypeError, ValueError):
@@ -2406,6 +2683,10 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None,
         prov = m.get("provenance") if m.get("provenance") in ("typed", "voice") else "typed"
         row = {"id": int(fid), "text": text, "saved_at": int(created or 0),
                "provenance": prov, "device": str(m.get("device") or "unknown")}
+        # The 2026-11-02 mark: this fact's words are Jarvis's, not the owner's.
+        # A flag, never the words - both apps show it as "Jarvis's own words".
+        if m.get("reworded"):
+            row["reworded"] = True
         if again.get(int(fid)):
             row["said_again"] = {"count": again[int(fid)]["count"],
                                  "last": int(again[int(fid)]["last"])}
@@ -2510,9 +2791,10 @@ def handle_get(path: str, query: str = "", *, learning_on: Optional[bool] = None
 
 
 def handle_post(route: str, body) -> tuple:
-    """POST /api/memory/learning/auto and /api/memory/learning/sensitive."""
+    """POST /api/memory/learning/auto, /sensitive and /paraphrase."""
     kind = {"/api/memory/learning/auto": "auto",
-            "/api/memory/learning/sensitive": "sensitive"}.get(route)
+            "/api/memory/learning/sensitive": "sensitive",
+            "/api/memory/learning/paraphrase": "paraphrase"}.get(route)
     if kind is None:
         return 404, {"error": "no such route"}
     if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):

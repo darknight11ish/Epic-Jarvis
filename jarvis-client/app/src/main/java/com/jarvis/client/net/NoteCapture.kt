@@ -129,6 +129,80 @@ object NoteCapture {
     const val GAVE_UP =
         "Still waiting for your approval. " + Approvals.WHERE + " Nothing is filed until you do."
 
+    /**
+     * Said when the desktop stopped answering for a run of polls - the note's
+     * ending is not known any more, and neither "Filed" nor "Not filed" may be
+     * claimed. The quick-note plate and a settled chat line both say it.
+     */
+    fun lostTrack(why: String): String =
+        "Lost track of the note ($why). Check the approval card on the desktop and your notes app."
+
+    /**
+     * Said when the follow ran out of [GIVE_UP_MS] before the PC said how the
+     * note ended.
+     *
+     * Not [GAVE_UP]: that sentence says a card is STILL waiting, which is the
+     * plate's wording for a card it saw waiting a moment ago. A chat line that
+     * gave up after three minutes may have been cut off from the PC the whole
+     * time, so the only thing it can honestly say is that it could not find
+     * out - never "still waiting", and never "filed".
+     */
+    const val UNCONFIRMED =
+        "Could not find out how the note ended. Check the approval card on the desktop and your notes app."
+
+    // ------------------------------------------- a chat's waiting answer ----
+
+    /**
+     * Where `X-Jarvis-Route` names the capture job a "make a note: ..." answer
+     * left waiting (`jarvis_quick._run_note_make`, 2026-11-02).
+     *
+     * The fast path answers "Waiting for your approval." while the card is up,
+     * and that is the WHOLE answer the chat gets: no id, nothing to ask. The
+     * note is filed a moment after the card is approved, and the chat line
+     * went on claiming to wait for ever - next to a note that already existed.
+     * This key is the one thing that links the line to the job, so
+     * [jobFromRoute] can hand it to the follow that settles the line with the
+     * PC's own sentence (docs/JARVIS-API.md §11).
+     */
+    const val JOB_ROUTE_KEY = "note_job"
+
+    /** The shape the PC makes a job id in (`"note_" + 16 lowercase hex`). */
+    private val JOB_ID = Regex("^note_[0-9a-f]{8,64}$")
+
+    /**
+     * The capture job an answer's `X-Jarvis-Route` names, or null.
+     *
+     * Only an id of the PC's own shape is accepted: this one is put into a
+     * query string, and a value the PC did not make is not something to go and
+     * ask about. Null means "no job to follow", which is every answer but a
+     * note left waiting - and an app that never reads the key (the desktop)
+     * shows the waiting line exactly as before.
+     */
+    fun jobFromRoute(header: String?): String? {
+        val raw = (MemoryUsed.route(header)?.get(JOB_ROUTE_KEY) as? JsonPrimitive)
+            ?.takeIf { it.isString }?.contentOrNull?.trim()
+        return raw?.takeIf { JOB_ID.matches(it) }
+    }
+
+    /**
+     * How that job ended, in the PC's own words, or null while it is still
+     * waiting.
+     *
+     * The sentence is [describe]'s - the same words the quick-note plate shows
+     * for the same job, so the chat line and the plate cannot disagree
+     * ("Filed in Obsidian, 2026-11-02.md.", "You said no, so nothing was
+     * written.", "Nobody answered the approval card in time, so nothing was
+     * written.", "Not filed: ..."). Null means nothing is known yet and the
+     * waiting line must stay as it is.
+     */
+    fun settledText(job: JsonObject): String? {
+        // The job carries its own target. "obsidian" only for a job that does
+        // not name one, which is a PC older than this key - and such a PC
+        // never sends `note_job` for anything to follow.
+        val said = describe(job, job.str("target") ?: "obsidian")
+        return said.text.takeIf { said.final }
+    }
+
     /** A failed request, in words. `null` means use the generic sentence. */
     fun failure(e: ApiError): String? = when (e) {
         ApiError.NotFound ->

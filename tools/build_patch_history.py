@@ -29,10 +29,21 @@ RUN IT after editing any patch, BEFORE committing the edit:
 
     python3 tools/build_patch_history.py
 
-It reads `git log` from the commit you are on and the patch files as they are
-on disk, so the version you are replacing is already in the log and lands
-here. backend/test_patch_history.py fails when this folder is out of date, and
-CI runs that test.
+It reads MAIN's history - every commit reachable from `origin/main`; or, when
+that ref is not in the checkout, every commit reachable from the base side of
+the commit you are on (GitHub checks a pull request out as its merge commit,
+whose first parent is the base branch tip) - and the patch files as they are
+on disk, so the version you are replacing is already in main's log and lands
+here.
+
+Commits that exist only on an unmerged branch are deliberately NOT recorded. A
+squash merge drops them from main, so a version stored for one becomes an entry
+main does not have - which is exactly how main's required `backend` check went
+red twice on 2026-11-02 (web-search-grant/a78133f.patch, then
+auto-learn/81a6503.patch). Gemini's midday ruling 2 asked for this: history is
+what main carries, never a branch's work in progress.
+backend/test_patch_history.py fails when this folder is out of date, and CI
+runs that test.
 
     python3 tools/build_patch_history.py --check    # compare only, write nothing
     python3 tools/build_patch_history.py --out DIR  # write somewhere else
@@ -109,6 +120,29 @@ def require_full_history() -> None:
     if git("rev-parse", "--is-shallow-repository").strip() == b"true":
         raise NoHistory("this is a shallow clone (only recent commits are here); "
                         "run `git fetch --unshallow` first")
+
+
+def main_revision() -> str:
+    """The revision whose REACHABLE history is "what main carries".
+
+    Prefer `origin/main`. A checkout with no such ref is normally GitHub's
+    pull-request merge commit, where the first parent IS the base branch tip and
+    the pull request's own commits hang off the second parent - so the base
+    side (HEAD^1) is main's history there. With neither (a plain branch cloned
+    without a main ref) it degrades to the branch's own history, which is the
+    old behaviour - which is why the local clone must have `origin/main`
+    fetched for this to be exact.
+    """
+    try:
+        git("rev-parse", "--verify", "--quiet", "origin/main^{commit}")
+        return "origin/main"
+    except RuntimeError:
+        pass
+    try:
+        git("rev-parse", "--verify", "--quiet", "HEAD^2")
+    except RuntimeError:
+        return "HEAD"
+    return "HEAD^1"
 
 
 def lf(data: bytes) -> bytes:
@@ -197,7 +231,8 @@ def log_versions(rel: str) -> list:
     on purpose - see apply-patches.ps1.) If a patch is ever renamed, keep the
     old name's history by hand, or the script cannot recognise it.
     """
-    raw = git("log", "--format=%x00%H%x09%cI%x09%s", "--", rel)
+    raw = git("log", "--format=%x00%H%x09%cI%x09%s",
+              main_revision(), "--", rel)
     out = []
     for block in raw.split(b"\x00")[1:]:
         line = block.decode("utf-8", errors="replace").strip()

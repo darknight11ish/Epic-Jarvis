@@ -556,7 +556,10 @@ class AutoLearnTest {
         val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
         assertTrue(plate.contains("AutoLearn.Switch.ON, AutoLearn.Switch.WAITING -> true"))
         assertTrue(plate.contains("if (AutoLearn.mayPress(switch, want)) {"))
-        assertTrue(plate.contains("AutoLearn.cardWaiting(cards, AutoLearn.Which.AUTO, withdrawn)"))
+        // 2026-11-02: one waiting-card set over ALL the switches (the third
+        // joined them), found by each switch's own action.
+        assertTrue(plate.contains("AutoLearn.cardWaiting(cards, it, withdrawn)"))
+        assertTrue(plate.contains("val cardInQueue = which in waitingNow"))
         val rt = repoFile("$main/JarvisRuntime.kt").readText()
         val set = body(rt, "suspend fun setAutoLearn(")
         assertTrue(set, set.contains("_autoWithdrawn.update"))
@@ -639,5 +642,58 @@ class AutoLearnTest {
         // Forget and switching ON are greyed on a stale link as well as refused.
         assertTrue(plate.contains("enabled = canAct && busyId == null"))
         assertTrue(plate.contains("AutoLearn.Switch.OFF -> canAct"))
+    }
+
+    // ------------------------------------------------- 2026-11-02 (C1) ---
+
+    @Test
+    fun theThirdSwitchIsTheSpecsOwnOffByDefaultOne() {
+        assertEquals("Save facts even when Jarvis had to reword them", Which.PARAPHRASE.title)
+        assertEquals("/api/memory/learning/paraphrase", Which.PARAPHRASE.path)
+        assertEquals("learning_paraphrase_enable", Which.PARAPHRASE.action)
+        assertEquals("paraphrase", Which.PARAPHRASE.key)
+        assertEquals("paraphrase_waiting", Which.PARAPHRASE.waitingKey)
+        assertEquals("paraphrase_last", Which.PARAPHRASE.lastKey)
+        assertEquals("Jarvis's own words", AutoLearn.REWORDED_MARK)
+        // A PC that has never had this switch says nothing about it, and the
+        // switch then reads unknown, never on (the same rule as the other two).
+        val old = AutoLearn.status(obj("""{"auto": true, "auto_sensitive": false}"""))
+        assertNull(old.paraphrase)
+        assertEquals(Switch.UNKNOWN, AutoLearn.switchState(old, Which.PARAPHRASE, false))
+        val on = AutoLearn.status(obj("""{"auto": true, "paraphrase": true}"""))
+        assertEquals(Switch.ON, AutoLearn.switchState(on, Which.PARAPHRASE, false))
+        val waiting = AutoLearn.status(
+            obj("""{"paraphrase": false, "paraphrase_waiting": true}"""),
+        )
+        assertEquals(Switch.WAITING, AutoLearn.switchState(waiting, Which.PARAPHRASE, false))
+        // Never a second ON while one waits; OFF always goes (it is the only
+        // way to take the request back).
+        assertFalse(AutoLearn.mayPress(Switch.WAITING, true))
+        assertTrue(AutoLearn.mayPress(Switch.WAITING, false))
+        // "Learn automatically" off: this switch changes nothing, and says so
+        // in the same words the other one uses (the note rides on the ON line,
+        // like the sensitive switch's).
+        val onLine = AutoLearn.stateLine(Which.PARAPHRASE, Switch.ON, true, false)
+        assertTrue(onLine, onLine.contains(AutoLearn.SENSITIVE_NEEDS_AUTO))
+        val withLearning = AutoLearn.stateLine(Which.PARAPHRASE, Switch.ON, true, true)
+        assertFalse(withLearning.contains(AutoLearn.SENSITIVE_NEEDS_AUTO))
+    }
+
+    @Test
+    fun aFactInJarvissOwnWordsIsMarkedAndStillForgettable() {
+        val page = AutoLearn.page(
+            obj(
+                """{"facts": [{"id": 1, "text": "Owner works at Google", """ +
+                    """"reworded": true}]}""",
+            ),
+        )
+        assertTrue(page.facts.first().reworded)
+        // A fact with no mark (an older PC, or an ordinary save) is false.
+        val plain = AutoLearn.page(obj("""{"facts": [{"id": 2, "text": "Owner likes tea"}]}"""))
+        assertFalse(plain.facts.first().reworded)
+        val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
+        // The mark is drawn on the row, and Forget is still there beside it.
+        assertTrue(plate.contains("if (fact.reworded)"))
+        assertTrue(plate.contains("Pill(AutoLearn.REWORDED_MARK"))
     }
 }

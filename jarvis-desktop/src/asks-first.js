@@ -78,12 +78,13 @@ export const SWITCHABLE = Object.freeze([
  */
 export const TOOLS_SWITCHABLE = Object.freeze([
   // Tier A + Tier B (jarvis_asks_first.TOOLS_SWITCHABLE, 2026-10-31 tiered ruling)
+  // 21 since 2026-11-02: the conversation web-search grant's two tools were
+  // taken off this list - the field test of 2026-11-02 found the switch was
+  // never on, so the model was never offered the tool and no grant card could
+  // be raised. They ride with web_search now (jarvis_agent.GRANT_ASK_TOOLS).
   "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
   "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
   "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
-  // The conversation-scoped web-search approval and its stop (2026-11-01,
-  // JARVIS-API section 175): chat abilities in "Safety and sharing".
-  "approve_web_search_for_conversation", "stop_web_search_approval",
   "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
   "home_control", "my_spending", "retirement_whatif",
 ]);

@@ -177,6 +177,12 @@ ACTING_TOOLS = frozenset({
     # done" after one of them is the same false claim a to-do tick would be.
     # `goals_list` is absent on purpose - it reads.
     "goal_add", "goal_progress", "goal_done",
+    # "phone_apps" (2026-11-02): the mixed shape browser_control already has.
+    # Its `list` action reads the settings file and changes nothing, while
+    # `add` and `remove` write one line of it - and only after a card. It stays
+    # an ACTION tool, the direction that cannot wrongly correct a true
+    # "I've added it to your phone apps".
+    "phone_apps",
 })
 
 #: The line added to a typed answer that claimed an action nobody took.

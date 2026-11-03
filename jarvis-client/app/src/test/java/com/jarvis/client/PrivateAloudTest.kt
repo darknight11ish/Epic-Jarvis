@@ -71,6 +71,26 @@ class PrivateAloudTest {
     }
 
     @Test
+    fun `the phone's mic press reads nothing aloud privately`() {
+        // The owner, 2026-11-02: the phone's mic press - a short verbal message
+        // - is not put to the voice print. The reply says so (`mode:
+        // quick_message`, `strictness: ""`), and nothing a real check used to
+        // buy is granted: no private, memory or sensitive answer is read
+        // aloud. The screen rule never rested on the check, so it stays as it
+        // was (the fixture case, tools/gen_phone_voice_cases.py).
+        val h = heard("quick_message")
+        assertEquals("quick_message", h.mode)
+        assertFalse(h.privateAloud)
+        assertFalse(h.memoryAloud)
+        assertFalse(h.sensitiveAloud)
+        assertTrue(h.screenAloud)
+        // A plain answer is still spoken; one that uses what Jarvis remembers
+        // is not, because the voice was never checked.
+        assertTrue(may(h, header("plain")))
+        assertFalse(may(h, header("plain", injected = 3, sensitive = 0)))
+    }
+
+    @Test
     fun `a plain question with nothing private about it is read aloud`() {
         assertTrue(may(heard("plain_question"), header("plain")))
         assertTrue(may(heard("plain_question"), header("plain", injected = 0)))

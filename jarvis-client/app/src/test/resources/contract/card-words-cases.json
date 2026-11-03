@@ -223,6 +223,10 @@
       "title": "Jarvis wants to turn on learning"
     },
     {
+      "action": "learning_paraphrase_enable",
+      "title": "Jarvis wants to save facts in Jarvis's own words"
+    },
+    {
       "action": "learning_sensitive_enable",
       "title": "Jarvis wants to also learn sensitive topics automatically"
     },
@@ -1116,6 +1120,18 @@
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "learning_paraphrase_enable",
+      "notice": {
+        "title": "Jarvis wants to save facts in Jarvis's own words",
+        "summary": "Jarvis wants to save facts even in Jarvis's own words.",
+        "full": "lets Jarvis save a fact whose words are its own rather than yours, instead of waiting for your yes; it relaxes nothing else - health, money and other people still wait unless you allow those, passwords, PINs and ID numbers always wait, and pasted text, a tool's reading, a correction or a forgotten fact still waits; nothing is sent anywhere, every fact it saves this way is marked and listed with Forget, and turning it off is immediate. nothing has happened yet.",
+        "body": "lets Jarvis save a fact whose words are its own rather than yours, instead of waiting for your yes; it relaxes nothing else - health, money and other people still wait unless you allow those, passwords, PINs and ID numbers always wait, and pasted text, a tool's reading, a correction or a forgotten fact still waits; nothing is sent anywhere, every fact it saves this way is marked and listed with Forget, and turning it off is immediate. nothing has happened yet.",
+        "weight": "normal",
         "deny_ok": true,
         "approve_ok": false
       }

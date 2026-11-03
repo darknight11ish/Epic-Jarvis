@@ -293,6 +293,14 @@
     {
      "id": "email_check",
      "name": "Reading your email"
+    },
+    {
+     "id": "approve_web_search_for_conversation",
+     "name": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)"
+    },
+    {
+     "id": "stop_web_search_approval",
+     "name": "Putting the card back in front of every web search in this chat (instant, no card)"
     }
    ],
    "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
@@ -588,6 +596,14 @@
     {
      "id": "web_search",
      "name": "Web search"
+    },
+    {
+     "id": "approve_web_search_for_conversation",
+     "name": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)"
+    },
+    {
+     "id": "stop_web_search_approval",
+     "name": "Putting the card back in front of every web search in this chat (instant, no card)"
     }
    ],
    "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
@@ -907,6 +923,14 @@
     {
      "id": "append_obsidian_daily",
      "name": "Adding to your Obsidian daily note"
+    },
+    {
+     "id": "approve_web_search_for_conversation",
+     "name": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)"
+    },
+    {
+     "id": "stop_web_search_approval",
+     "name": "Putting the card back in front of every web search in this chat (instant, no card)"
     }
    ],
    "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
@@ -1222,6 +1246,10 @@
     {
      "id": "control_phone",
      "name": "Phone control"
+    },
+    {
+     "id": "phone_apps",
+     "name": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
     },
     {
      "id": "github_search",

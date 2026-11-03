@@ -359,4 +359,22 @@ class AuditPlumbingTest {
             home.contains("com.jarvis.client.ui.FindWords.BUTTON"),
         )
     }
+
+    @Test
+    fun `the waiting line is shared and no longer claims a voice check`() {
+        // The owner, 2026-11-02: the phone's mic press - a short verbal message
+        // - must not be "confirmed" through the voice print. The line shown
+        // while the clip is with the PC is shared by every spoken turn, and
+        // "hey Jarvis" and Live ARE still checked, so it moved to one constant
+        // that claims no check, and the old sentence must not come back here.
+        val home = source("ui/screens/HomeScreen.kt")
+        assertTrue(
+            "Home draws its own waiting words instead of MicWords.WAITING",
+            home.contains("com.jarvis.client.MicWords.WAITING"),
+        )
+        assertFalse(
+            "Home still says the PC is checking your voice on a mic press",
+            home.contains("Checking it's you"),
+        )
+    }
 }

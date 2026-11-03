@@ -59,6 +59,21 @@ class ChatSession(
      * "never" choice is [ChatHistory.IDLE_NEW_NEVER_MS], which never expires.
      */
     private val idleWaitMs: () -> Long = { ChatHistory.IDLE_NEW_MS },
+    /**
+     * A finished answer that left a NOTE waiting on its approval card
+     * (`note_job` in `X-Jarvis-Route`, [NoteCapture.jobFromRoute]).
+     *
+     * Called once per such answer, with the capture job's id, the question it
+     * answered and the exact words it showed, AFTER that pair has joined
+     * [history] and [thread]. The answer was only ever the words "Waiting for
+     * your approval.": the note is filed (or refused, or the card times out)
+     * when the card is answered, and nothing told this chat.
+     * [com.jarvis.client.JarvisRuntime] follows the job and calls
+     * [settleAnswer] with the PC's own sentence, so the line stops claiming to
+     * wait. Null - the default - means nothing is followed, which is every
+     * test and any caller without a scope.
+     */
+    private val onNoteWaiting: ((jobId: String, question: String, waiting: String) -> Unit)? = null,
 ) {
 
     /**
@@ -713,6 +728,12 @@ class ChatSession(
         // later turn. The HUD page draws the same line. A plain-text upstream
         // has no end marker, so for it the end of the body is the end.
         var cutShort = false
+        // This answer's `X-Jarvis-Route`, so the end of `send` can read what
+        // the answer left waiting (`note_job`) after the header is out of
+        // scope. Set once, guarded by the same identity rule as every other
+        // shared write: a cancelled call unwinding late must not hand its
+        // header to this answer.
+        var routeSeen: String? = null
         // This turn is a crisis turn (the PC's own flag in X-Jarvis-Route): its
         // question and help answer stay on screen as the current answer, but
         // never join the thread or what the model is re-sent - the next question
@@ -801,6 +822,7 @@ class ChatSession(
                     // write to the shared flows: a cancelled call unwinding
                     // late must not put its id beside the new answer.
                     val routeHeader = resp.header(Feedback.ROUTE_HEADER)
+                    if (call === c) routeSeen = routeHeader
                     val tid = Feedback.turnIdFromRouteHeader(routeHeader)
                     if (call === c) _turnId.value = tid
                     // The whole header, to THIS call's own caller - the voice
@@ -1106,8 +1128,50 @@ class ChatSession(
             // menu was opened.
             _answerAt.value = finishedAt
             lastTurnAt = finishedAt
+            // An answer that was only ever "Waiting for your approval."
+            // because a NOTE's card was still up (`note_job` in the header,
+            // 2026-11-02): the note is filed the moment that card is
+            // approved, and this chat has no other way to learn it. Handed
+            // on only after the pair is in [history] and [thread], so the
+            // settle has a line to replace. Nothing is followed for an answer
+            // the owner stopped, cut short, or asked in another conversation.
+            val job = NoteCapture.jobFromRoute(routeSeen)
+            if (job != null) {
+                onNoteWaiting?.invoke(job, asking.lastOrNull()?.text.orEmpty(), answer)
+            }
         }
         return mine
+    }
+
+    /**
+     * One finished answer replaced with what really happened, or nothing at
+     * all - the one way a chat line changes after it has been shown
+     * (2026-11-02).
+     *
+     * Called by [com.jarvis.client.JarvisRuntime] when the note job an answer
+     * left waiting (`note_job` in `X-Jarvis-Route`) has ended, so a line that
+     * said "Waiting for your approval." says what the PC says now ("Filed in
+     * Obsidian, 2026-11-02.md.", "You said no, so nothing was written.").
+     * Nothing else in this app rewrites an answer, and this only ever replaces
+     * ONE, matched on its question AND the exact words it showed - a pair that
+     * is no longer there (a new conversation cleared the chat, or the answer
+     * was already settled) is left alone, with no redraw.
+     *
+     * [history] is settled too, not just the screen: the next question sends
+     * the conversation so far, and it must not replay "Waiting for your
+     * approval." as if it were the whole answer.
+     *
+     * Never spoken: a settled line is a screen change only. Reading an answer
+     * aloud goes through the privacy gate in `ReadAloud`/`PrivateAloud`, and a
+     * line that arrived later than the answer would skip it.
+     */
+    fun settleAnswer(question: String, from: String, to: String) {
+        if (question.isBlank() || from.isBlank() || to.isBlank() || from == to) return
+        _thread.update { ChatHistory.settle(it, question, from, to) }
+        _history.update { ChatHistory.settle(it, question, from, to) }
+        // The answer on screen, and only if it is still THIS one: a newer
+        // question has already replaced it.
+        if (_reply.value == from) _reply.value = to
     }
 
     /** Interrupts generation. Safe to call when nothing is in flight. */

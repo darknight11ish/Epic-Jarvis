@@ -38,6 +38,9 @@ What it proves:
   9. The repeat counters: a refusal and an acceptance within 10 s.
  10. The guided repeat test and the "someone else" check.
  11. The minimum command length, and "hey Jarvis" alone as the wake path.
+     The phone's own mic press is the one surface without a check or a
+     minimum since 2026-11-02 (backend/test_quick_mic.py); the desktop's
+     button and the wake path keep both.
  12. No audio is written to disk: every file a whole session wrote is
      scanned for the clips' bytes.
  13. With the real model files (JARVIS_TEST_SPEAKER_MODEL and
@@ -1398,20 +1401,31 @@ def t_minimum_command_length():
                 mock.patch.object(S, "_speech_span", return_value="skip"):
             with mock.patch.object(V, "verify", boom), \
                     mock.patch.object(S, "_transcribe", boom):
-                h = S.hear(_clip("owner", 1.2), mic="phone")
+                h = S.hear(_clip("owner", 1.2), mic="desktop")
             check("a 1.2 s command: refused before the voice check, never transcribed",
                   not h.is_owner and h.too_short and h.min_seconds == 2.0
                   and "say a little more" in h.reason and h.threshold == 0, h)
             check("...and counted as a repeat", V.repeat_counts()["very_strict"]["too_short"] == 1)
             with mock.patch.object(S, "_stt_engine", return_value=object()), \
                     mock.patch.object(S, "_transcribe", return_value="what is the time"):
-                h = S.hear(_clip("owner", 2.5), mic="phone")
+                h = S.hear(_clip("owner", 2.5), mic="desktop")
             check("2.5 s: checked, and the owner is heard", h.is_owner and h.text
                   and h.strictness == "very_strict" and not h.too_short, h)
+            # The phone's own mic press, since 2026-11-02: no check at all, and
+            # the minimum length goes with the check it exists to feed. The
+            # verify patched to raise above is the proof it is not reached.
+            with mock.patch.object(S, "_stt_engine", return_value=object()), \
+                    mock.patch.object(V, "verify", boom), \
+                    mock.patch.object(S, "_transcribe", return_value="lights off"):
+                h = S.hear(_clip("owner", 1.2), mic="phone")
+            check("the phone's mic press: a 1.2 s message is taken, with no voice "
+                  "check and no minimum length (backend/test_quick_mic.py)",
+                  h.is_owner and h.text == "lights off" and h.strictness == ""
+                  and h.mode == "quick_message" and not h.too_short, h)
             V.set_setting("strictness", "balanced", approved=True)
             with mock.patch.object(S, "_stt_engine", return_value=object()), \
                     mock.patch.object(S, "_transcribe", return_value="what is the time"):
-                h = S.hear(_clip("owner", 1.7), mic="phone")
+                h = S.hear(_clip("owner", 1.7), mic="desktop")
             check("balanced takes a shorter command (1.7 s)", h.is_owner and h.text, h)
             V.set_setting("strictness", "very_strict")
 

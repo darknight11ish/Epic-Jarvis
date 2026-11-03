@@ -558,6 +558,8 @@ def _read_second_card_suggest(signal: str):
 STATE_READERS = {
     "background_learning": lambda: _read_auto_learn("auto"),
     "learn_sensitive_topics": lambda: _read_auto_learn("auto_sensitive"),
+    # 2026-11-02: "Save facts even when Jarvis had to reword them".
+    "learn_paraphrase": lambda: _read_auto_learn("auto_paraphrase"),
     "lights_without_card": _read_lights_without_card,
     "prompt_coach": _read_prompt_coach,
     "antislop": _read_antislop,
@@ -2994,6 +2996,9 @@ BOTH_PHONE_WRITES = {
 CARD_ON_LOOSENING = frozenset({
     # "either setting on raises an approval card; turning it off is immediate"
     "background_learning",   # jarvis_auto_learn.py:16, :260-264
+    # 2026-11-02: ON is one card (learning_paraphrase_enable), OFF is
+    # immediate - the same shape exactly.
+    "learn_paraphrase",      # jarvis_auto_learn.py PARAPHRASE_ACTION
     "briefing_senders",      # "ON through ONE approval card" jarvis_briefing.py:2116
     "chat_history",          # "OFF at once, ON is its own card" registry:967
     "media_index",           # "ON is ONE normal approval card" registry:721-725

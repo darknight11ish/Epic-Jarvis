@@ -151,11 +151,11 @@ await check("the catalogue is the fixture, row for row and in order", async () =
   }
 });
 
-await check("the fixture says how many rows there are, and it is 31 desktop toggles", async () => {
-  assert.equal(FIX.counts.desktop, 31);
-  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 31);
+await check("the fixture says how many rows there are, and it is 32 desktop toggles", async () => {
+  assert.equal(FIX.counts.desktop, 32);
+  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 32);
   assert.equal(FIX.counts.phone, 3);
-  assert.equal(FIX.counts.all, 34);
+  assert.equal(FIX.counts.all, 35);
   // The number this whole feature was briefed with was wrong once already
   // ("all 19"): the 19 is the count of rows with a BARE `<label class="toggle">`,
   // and the seven rows that also carry a label id were left out of it.
@@ -167,8 +167,10 @@ await check("the fixture says how many rows there are, and it is 31 desktop togg
   // 22, 28 to 29 (and two phone rows to three).
   // The two Learning rows (2026-10-28, the settings audit's G1) are bare too:
   // 22 to 24, 29 to 31 (and three phone rows stay three).
+  // "Save facts even when Jarvis had to reword them" (2026-11-02) is bare as
+  // well: 24 to 25, 31 to 32.
   const bare = (HTML.match(/^[ \t]*<label class="toggle">[ \t]*$/gm) || []).length;
-  assert.equal(bare, 24, "the bare-label count moved - re-read the 31 claim");
+  assert.equal(bare, 25, "the bare-label count moved - re-read the 32 claim");
   assert.equal(FIX.counts.desktop, bare + 7);
 });
 
