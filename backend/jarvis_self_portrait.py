@@ -749,15 +749,24 @@ def build(*, client: str = "", app_locked=None,
     list of things this must never contain. `client` is X-Jarvis-Client echoed
     back so a caller can confirm the server saw it (it is NOT used to decide
     anything, the same rule /api/version states).
+
+    ONLY THE UNLOCKED PORTRAIT IS CACHED, and that is a privacy rule rather than
+    a performance one. The cache is keyed by nothing, so a locked request that
+    hit an unlocked entry would be handed the private counts (memory facts,
+    conversations) that the unlocked read was allowed to show - the exact leak
+    App lock exists to stop. A locked build therefore bypasses the cache in both
+    directions: it never reads it and it never stores into it.
     """
-    now = time.time()
-    with _CACHE_LOCK:
-        if (not refresh and _CACHE["portrait"] is not None
-                and now - _CACHE["at"] < TTL):
-            out = dict(_CACHE["portrait"])
-            out["client"] = str(client or "")
-            return out
     lock = _private(app_locked=app_locked, hide_memory_lists=hide_memory_lists)
+    locked = bool(lock.get("locked"))
+    now = time.time()
+    if not locked:
+        with _CACHE_LOCK:
+            if (not refresh and _CACHE["portrait"] is not None
+                    and now - _CACHE["at"] < TTL):
+                out = dict(_CACHE["portrait"])
+                out["client"] = str(client or "")
+                return out
     portrait = {
         "schema": SCHEMA,
         "client": str(client or ""),
@@ -768,12 +777,13 @@ def build(*, client: str = "", app_locked=None,
         "abilities": abilities(),
         "plugins": plugins(),
         "stores": stores(lock=lock),
-        "private": {"locked": bool(lock.get("locked")),
+        "private": {"locked": locked,
                     "why": str(lock.get("why") or "")},
     }
-    with _CACHE_LOCK:
-        _CACHE["portrait"] = portrait
-        _CACHE["at"] = now
+    if not locked:
+        with _CACHE_LOCK:
+            _CACHE["portrait"] = portrait
+            _CACHE["at"] = now
     return dict(portrait)
 
 
@@ -824,7 +834,8 @@ def _clear_caches() -> None:
         _STATE_CACHE.update({"at": 0.0, "block": None})
 
 
-def refresh(*, client: str = "") -> dict:
+def refresh(*, client: str = "", app_locked=None,
+            hide_memory_lists=None) -> dict:
     """POST /api/self/refresh - re-read the inventory and live state NOW.
 
     The owner asked (2026-11-03) that Jarvis can "refresh its function and
@@ -834,16 +845,24 @@ def refresh(*, client: str = "") -> dict:
     nothing from outside the PC, writes nothing, changes no setting, and
     restarts nothing - `started_at` is carried straight through, so a caller
     can see the server is the same process.
+
+    THE PRIVATE VIEW APPLIES HERE TOO. A refresh reports the stores' counts, so
+    while App lock or "Hide memory lists and chat history" is on it must
+    WITHHOLD them exactly as GET /api/self does - the same request flags are
+    threaded through both builds, and nothing in this route can unlock.
     """
     with _REFRESH_LOCK:
-        before = counts(build())
+        before = counts(build(app_locked=app_locked,
+                              hide_memory_lists=hide_memory_lists))
         _clear_caches()
-        after_p = build(refresh=True)
+        after_p = build(refresh=True, app_locked=app_locked,
+                        hide_memory_lists=hide_memory_lists)
         after = counts(after_p)
     changed = {k: {"before": before.get(k), "after": after.get(k)}
                for k in after if before.get(k) != after.get(k)}
     return {"ok": True, "schema": SCHEMA, "client": str(client or ""),
             "changed": changed, "counts": after,
+            "private": dict(after_p.get("private") or {"locked": False, "why": ""}),
             "said": refresh_sentence(changed, after)}
 
 
@@ -1150,11 +1169,13 @@ def handle_get(path: str, query: str = "", *, client: str = "",
     return 404, {"error": "no such route"}
 
 
-def handle_post(route: str, body, *, client: str = "") -> tuple:
+def handle_post(route: str, body, *, client: str = "",
+                app_locked=None, hide_memory_lists=None) -> tuple:
     """One POST, answered. (code, body)."""
     route = str(route or "").rstrip("/")
     if route == REFRESH_PATH:
-        return 200, refresh(client=client)
+        return 200, refresh(client=client, app_locked=app_locked,
+                            hide_memory_lists=hide_memory_lists)
     if route == CLEAR_PATH:
         return clear_request(body)
     if route in storage_routes():
@@ -1211,7 +1232,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         return self._send(code, out)
 
     def do_POST(self):
-        route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
+        parts = urlsplit(str(getattr(self, "path", "") or ""))
+        route = parts.path.rstrip("/")
         storage = storage_routes()
         if route not in ROUTES and route not in storage:
             return post0(self)
@@ -1223,7 +1245,13 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             body = None
         try:
             client = str(getattr(self, "headers", {}).get("X-Jarvis-Client", "") or "")
-            code, out = handle_post(route, body, client=client)
+            # The same two flags GET has: a refresh reports counts, so a locked
+            # request must withhold them. They can only add withholding.
+            q = parse_qs(parts.query or "")
+            code, out = handle_post(
+                route, body, client=client,
+                app_locked=(q.get("app_locked") or [""])[0],
+                hide_memory_lists=(q.get("hide_memory_lists") or [""])[0])
         except Exception as exc:            # noqa: BLE001 - a route that must not crash
             code, out = 503, {"error": type(exc).__name__}
         return self._send(code, out)

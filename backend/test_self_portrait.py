@@ -291,6 +291,11 @@ def api_self_is_safe_and_complete():
 
 def app_lock_can_only_withhold():
     SP._reset_for_tests()
+    # The cache must never hand an unlocked portrait's private counts to a
+    # locked request: build unlocked (which caches), then lock and read again.
+    code, warm = SP.handle_get(SP.SELF_PATH)
+    check("an unlocked portrait is readable and cached", code == 200)
+    unlocked_mem = next(s for s in warm["stores"] if s["id"] == "memory")
     code, out = SP.handle_get(SP.SELF_PATH, "", app_locked="1")
     check("a locked portrait still answers 200", code == 200)
     check("a locked portrait says why it is private",
@@ -299,10 +304,22 @@ def app_lock_can_only_withhold():
     conv = next(s for s in out["stores"] if s["id"] == "conversations")
     check("a locked portrait withholds the memory count", mem["count"] is None)
     check("a locked portrait withholds the conversation count", conv["count"] is None)
-    # A request flag cannot unlock.
-    code, out = SP.handle_get(SP.SELF_PATH, "", app_locked="0")
-    check("a request flag cannot unlock the private view",
-          out["private"]["locked"] is True)
+    check("a locked read does not come from the unlocked cache",
+          out["stores"] != warm["stores"] or unlocked_mem["count"] is None,
+          f"unlocked={unlocked_mem['count']} locked={mem['count']}")
+    # A request flag cannot unlock: with the TRUSTED state locked, a request
+    # asking app_locked=0 is still withheld.
+    import jarvis_private_view as PV
+    PV.note_state(app_locked=True)
+    try:
+        code, out = SP.handle_get(SP.SELF_PATH, "", app_locked="0")
+        check("a request flag cannot unlock the private view",
+              out["private"]["locked"] is True, str(out["private"]))
+        check("a locked trusted state withholds the counts even asking unlocked",
+              next(s for s in out["stores"] if s["id"] == "memory")["count"] is None)
+    finally:
+        PV.note_state(app_locked=False)
+    SP._reset_for_tests()
 
 
 # ---------------------------------------------------------------------------
@@ -681,6 +698,13 @@ def refresh_rereads_and_restarts_nothing():
               now["value"] is flipped, f"{now['value']} != {flipped}")
         check("a refresh is a POST only - a GET says use POST",
               SP.handle_get(SP.REFRESH_PATH)[0] == 405)
+        # A refresh reports store counts, so App lock must withhold them here
+        # exactly as it does on GET /api/self.
+        code, locked = SP.handle_post(SP.REFRESH_PATH, {}, app_locked="1")
+        check("a locked refresh withholds the private counts",
+              code == 200 and locked["counts"]["stored_memory"] is None
+              and locked["counts"]["stored_conversations"] is None
+              and locked["private"]["locked"] is True, str(locked.get("private")))
     finally:
         FG.read_state = saved
         SP._reset_for_tests()
@@ -770,6 +794,152 @@ def refresh_abilities_tool_exists_and_reads():
 
 
 # ---------------------------------------------------------------------------
+#   12. The conversation / self chat tools (the owner's ask by chat)
+# ---------------------------------------------------------------------------
+
+
+class _FakeWatch:
+    def __init__(self):
+        self.cards = 0
+
+
+def conversation_tools_by_chat():
+    import jarvis_agent as A
+    for name in ("self_portrait", "conversation_find", "conversation_open",
+                 "conversation_clear"):
+        check(f"the {name} tool is in the model's tool table", name in A.TOOLS)
+    check("the three read-only tools raise no card (skill_list)",
+          all(A.TOOLS[n].gate_lookup_name is not None for n in
+              ("self_portrait", "conversation_find", "conversation_open")))
+    check("self_portrait's text says it is read-only and no card",
+          "read-only" in A._self_portrait_tool_text().lower()
+          and "no card" in A._self_portrait_tool_text().lower())
+    check("conversation_find's text says titles only, never the words",
+          "never its message text" in A._conversation_find_tool_text())
+    check("conversation_open's text says read-only and never invent an id",
+          "read-only" in A._conversation_open_tool_text().lower()
+          and "never invent" in A._conversation_open_tool_text().lower())
+    check("conversation_clear's text says ONE card is the permission",
+          "one approval card" in A._conversation_clear_tool_text().lower()
+          and "never clear anything yourself" in
+          A._conversation_clear_tool_text().lower())
+    # The self portrait tool answers a compact inventory, not the full one.
+    got = A._run_self_portrait({})
+    check("self_portrait reads the portrait and answers counts",
+          got.get("ok") is True and int(got["counts"]["places"]) > 100
+          and got.get("ability_groups"))
+    # A conversation clear must be a step a plan can never name.
+    check("a plan step may not name conversation_clear",
+          "conversation_clear" in A._PLAN_EXCLUDED_STEPS)
+    # --conversation_find / open, against a stubbed store (no chat db touched).
+    import jarvis_chat_log as CL
+    had_search, had_get = CL.search, CL.handle_get
+
+    def fake_search(query, limit=20, kind=None):
+        return {"query_ok": True, "more": True, "conversations": [
+            {"id": "conv-aaaa", "title": "The boiler", "updated": 1790000000,
+             "turns": 4, "snippet": "boiler pressure", "hits": 2},
+            {"id": "conv-bbbb", "title": "Holiday", "updated": 1789000000,
+             "turns": 9}]}
+
+    def fake_handle_get(path, query=""):
+        if path == "/api/history":
+            return 200, {"enabled": True, "recording": True,
+                         "conversations": [
+                             {"id": "conv-aaaa", "title": "The boiler",
+                              "updated": 1790000000, "turns": 4},
+                             {"id": "conv-bbbb", "title": "Holiday",
+                              "updated": 1789000000, "turns": 9}]}
+        return 200, {"id": "conv-aaaa", "title": "The boiler",
+                     "kind": "chat", "updated": 1790000000,
+                     "turns": [{"role": "user", "text": "hi"},
+                               {"role": "assistant", "text": "hello"}]}
+
+    CL.search, CL.handle_get = fake_search, fake_handle_get
+    try:
+        got = A._run_conversation_find({"query": "boiler"})
+        check("conversation_find searches and returns ids and titles",
+              got.get("ok") is True and got["conversations"][0]["id"] == "conv-aaaa"
+              and got["conversations"][0]["title"] == "The boiler")
+        check("conversation_find never returns a snippet or message text",
+              "snippet" not in got["conversations"][0]
+              and "boiler pressure" not in json.dumps(got))
+        got = A._run_conversation_find({"limit": 2})
+        check("conversation_find lists the newest when no words are given",
+              got.get("ok") is True and got["count"] == 2)
+        CL.search = lambda query, limit=20, kind=None: {
+            "query_ok": False, "why": "Those search words are too short.",
+            "conversations": []}
+        got = A._run_conversation_find({"query": "x"})
+        check("conversation_find refuses bad search words in plain words",
+              got.get("ok") is False and "too short" in got.get("error", ""))
+        CL.search = fake_search
+        got = A._run_conversation_open({"id": "conv-aaaa"})
+        check("conversation_open returns the kept turns",
+              got.get("ok") is True and got["title"] == "The boiler"
+              and [t["role"] for t in got["turns"]] == ["user", "assistant"])
+        got = A._run_conversation_open({"id": "bad"})
+        check("conversation_open refuses a malformed id without guessing",
+              got.get("ok") is False)
+    finally:
+        CL.search, CL.handle_get = had_search, had_get
+    # --conversation_clear: ONE card, exact id, never a second card.
+    import jarvis_self_portrait as SP2
+    had_get2, had_clear = SP2.conversation_get, SP2.clear_request
+    calls = {"clear": [], "said": 0}
+
+    def fake_get(cid):
+        if len(str(cid)) < 8:
+            return 400, {"error": "need a conversation id"}
+        return 200, {"id": cid, "title": "The boiler",
+                     "turns": [{"role": "user", "text": "hi"}]}
+
+    def fake_clear(body):
+        calls["clear"].append(body)
+        return 202, {"ok": True, "waiting": True, "id": body["id"],
+                     "title": "The boiler", "messages": 1}
+
+    SP2.conversation_get, SP2.clear_request = fake_get, fake_clear
+    try:
+        convo, steps = [], []
+        watch = _FakeWatch()
+        A._conversation_clear_call({"id": "conv-aaaa"}, {"id": "tool-1"}, convo,
+                                   steps, lambda *a, **k: calls.__setitem__(
+                                       "said", calls["said"] + 1), watch=watch)
+        check("conversation_clear hands the exact id to the one card door",
+              calls["clear"] == [{"id": "conv-aaaa"}], str(calls["clear"]))
+        check("conversation_clear answers WAITING, never done",
+              json.loads(convo[-1]["content"]).get("waiting") is True
+              and json.loads(convo[-1]["content"])["said"].startswith("Waiting"))
+        check("conversation_clear counts the card against the turn",
+              watch.cards == 1)
+        check("conversation_clear emits no 'done' step",
+              steps[-1]["ran"] is False and steps[-1]["outcome"] == "unknown")
+        # A wrong id is refused in words, and no card is raised.
+        calls["clear"].clear()
+        convo, steps = [], []
+        A._conversation_clear_call({"id": "bad"}, {"id": "tool-2"}, convo, steps,
+                                   lambda *a, **k: None, watch=_FakeWatch())
+        check("an unknown conversation id raises no card",
+              calls["clear"] == [] and
+              json.loads(convo[-1]["content"]).get("ok") is False)
+        # A double call in one turn still raises only ONE card: the second is
+        # refused by the turn's card budget.
+        calls["clear"].clear()
+        convo, steps = [], []
+        watch = _FakeWatch()
+        A._conversation_clear_call({"id": "conv-aaaa"}, {"id": "a"}, convo, steps,
+                                   lambda *a, **k: None, watch=watch)
+        watch.cards = A.CARDS_PER_TURN
+        A._conversation_clear_call({"id": "conv-bbbb"}, {"id": "b"}, convo, steps,
+                                   lambda *a, **k: None, watch=watch)
+        check("a second clear in one answer is refused by the card budget",
+              len(calls["clear"]) == 1)
+    finally:
+        SP2.conversation_get, SP2.clear_request = had_get2, had_clear
+
+
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -788,6 +958,7 @@ def main() -> int:
         refresh_rereads_and_restarts_nothing()
         storage_wiring_is_optional_and_defensive()
         refresh_abilities_tool_exists_and_reads()
+        conversation_tools_by_chat()
     except Exception:
         traceback.print_exc()
         FAILED.append("the suite itself raised")

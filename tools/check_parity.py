@@ -1060,6 +1060,14 @@ BACKEND_ONLY = {
     "/api/conversations": "The chat history list, answered by the SAME function GET /api/history is (2026-11-03; jarvis_self_portrait.py aliases jarvis_chat_log.handle_get, so there is one list and one reader). No app calls the alias yet - both apps already have History on /api/history - so this is built for the conversation tools and the follow-up multi-window work; a screen for it would go on BOTH apps (ARCHITECTURE section 8).",
     "/api/conversations/{id}": "One conversation's turns, answered by the SAME function /api/history/conversation is (2026-11-03; jarvis_self_portrait.py alias). No app calls the alias yet; the conversation tools use it inside the backend, and an app screen that opens one chat would go on BOTH apps (ARCHITECTURE section 8).",
     "/api/conversations/clear": "Deleting ONE conversation from this PC (2026-11-03; jarvis_self_portrait.py): exactly {\"id\"}, ONE approval card (conversation_clear, tier ask) naming that chat's title and message count, that it cannot be undone, that the learned facts are KEPT and that copies in older backups remain. No bulk form, no cardless form. The existing two-phase History delete remains the apps' own path; this route is the backend card door, and a screen for it would go on BOTH apps (ARCHITECTURE section 8).",
+    # The storage self-scan's own three routes (jarvis_storage_health.py, a
+    # separate 2026-11-03 worker's drop-in). That module exports them and
+    # jarvis_self_portrait's installer serves them beside the self routes when
+    # it is present; while it is absent nothing is served, so neither app calls
+    # one. Its ONE `storage_cleanup` card is that module's own.
+    "/api/storage/scan": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
+    "/api/storage/cleanup/plan": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
+    "/api/storage/cleanup": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

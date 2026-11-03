@@ -123,7 +123,14 @@ CATALOGUE = [
     "append_logseq_journal", "append_obsidian_daily",
     "approve_web_search_for_conversation", "browser_control",
     "calculator", "calendar_read", "change_setting", "coming_up",
-    "connect_account", "control_computer", "control_phone", "create_joplin_note",
+    "connect_account", "control_computer", "control_phone",
+    # Clearing / reading one of the owner's own kept conversations (2026-11-03:
+    # "pull up any old conversation", "clear any conversation on request").
+    # find/open are read-only under `skill_list`; clear raises
+    # jarvis_self_portrait's ONE `conversation_clear` card and never runs
+    # through the generic gate. Not in a cloud or private-turn allow-list.
+    "conversation_clear", "conversation_find", "conversation_open",
+    "create_joplin_note",
     "draft_email",
     "email_check", "feature_guide", "file_read", "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",
@@ -136,7 +143,11 @@ CATALOGUE = [
     # under the gate's own `skill_list` action like feature_guide. Not in a
     # cloud or private-turn allow-list (both are empty by design).
     "refresh_abilities",
-    "retirement_whatif", "run_data_script", "send_email", "send_file_to_phone",
+    # What Jarvis is made of (2026-11-03: "be aware of every setting, function
+    # and ability it has"): read-only under `skill_list`, no card.
+    "retirement_whatif", "run_data_script",
+    "self_portrait",
+    "send_email", "send_file_to_phone",
     "set_reminder",
     "set_timer", "shell_exec", "stop_web_search_approval", "tidy_inbox",
     "todo_add", "todo_done",
