@@ -302,11 +302,14 @@ class NotificationStyleTest {
             approval.contains("NotificationStyle.Kind.APPROVAL, title, body, locked"))
         assertTrue("the reminder passes its lock flag",
             schedule.contains("NotificationStyle.Kind.REMINDER, title, text, locked"))
-        // The two rules that must survive any restyling.
-        assertFalse("an approval is never approvable from a notification",
-            approval.contains("approval_approve_action"))
-        assertTrue("Deny is still the only action offered",
-            approval.contains("approval_deny_action"))
+        // The rules that must survive any restyling. The buttons themselves
+        // are ApprovalNotificationPolicy's (its JVM test holds the 2026-11-02
+        // envelope); a style may only change how the words are drawn.
+        assertTrue("Deny is still offered", approval.contains("approval_deny_action"))
+        assertTrue("the envelope's own policy decides the buttons",
+            approval.contains("ApprovalNotificationPolicy.plan("))
+        assertTrue("a styled approval still locks its approve action",
+            approval.contains("setAuthenticationRequired(true)"))
         assertTrue("the quiet/late notice is never styled",
             schedule.contains("if (!quiet && !openBriefing && scheduleKind.isNotEmpty())"))
     }

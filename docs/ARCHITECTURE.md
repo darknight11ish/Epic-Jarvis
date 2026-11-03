@@ -2744,6 +2744,18 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Approving a card from a notification is the phone's surface, and that is
+  one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
+  desktop does not post approval cards to Windows notifications, so there is
+  no desktop action to mirror: its approval cards are already on screen, and
+  Windows Hello is its check. Nothing here adds a route, a backend change or
+  a second permission path - the phone's two approve routes both end at the
+  existing `/api/approve` that the app's own card uses. No Windows
+  notification is added either: the desktop's cards are already on screen,
+  its check is Windows Hello, and a second approve surface is exactly what
+  the five-point envelope (Deny locked, Approve unlock-gated, biometric for
+  everything not small, Review over 240 characters, redacted lock screen)
+  exists to avoid.
 - **The skills menu installs, turns on and edits on the PC alone, and that is
   one-sided on purpose** (2026-11-02; the owner's decision, the Hermes-skills
   research document's scope B; JARVIS-API §178). The phone keeps exactly what

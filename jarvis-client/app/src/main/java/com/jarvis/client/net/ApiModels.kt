@@ -397,9 +397,11 @@ data class Notice(
     val weight: String = "normal",
     @SerialName("deny_ok") val denyOk: Boolean = true,
     /**
-     * Always false, and this client would ignore it if it were not: approving
-     * from a notification is refused here on its own terms, not on the
-     * server's say-so. See ApprovalNotifier.
+     * The desktop's one-tap-approve hint, and deliberately NOT the rule the
+     * phone follows. The server has always sent false; since 2026-11-02 the
+     * phone offers its own Approve under Gemini's envelope
+     * (`ApprovalNotificationPolicy`), and the decision stays on this side so
+     * a changed or older desktop cannot loosen it.
      */
     @SerialName("approve_ok") val approveOk: Boolean = false,
 )
