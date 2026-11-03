@@ -199,6 +199,10 @@ TITLES = {
     # off. It says what it is - the reminder the owner set asked, and only a yes
     # does it.
     "schedule_action": "do what a reminder asked for",
+    # `todo_add` is the cardless action the four goals tools resolve under
+    # (jarvis_agent.GOAL_GATE_ACTION, 2026-11-02), the same row SUMMARY carries
+    # - this table and that one cover exactly the same actions.
+    "todo_add": "add to your to-do list",
     # --- memory, learning and chat history
     "learning_enable": "turn on learning",
     "learning_auto_enable": "turn on automatic learning",
@@ -417,6 +421,12 @@ SUMMARY = {
     # The same card, cut to a breath (see TITLES above): the yes is one tap and
     # the sentence has to fit beside it.
     "schedule_action": "do what a reminder asked for",
+    # `todo_add` is the cardless action the four goals tools resolve under
+    # (jarvis_agent.GOAL_GATE_ACTION, 2026-11-02). They never raise a card -
+    # _one_call intercepts them before the gate - but test_card_short_words.py
+    # rightly asks what a card would say if one ever did, for every action a
+    # tool can reach, so the row exists rather than an action with no words.
+    "todo_add": "add to your to-do list",
     # --- memory, learning and chat history
     "learning_enable": "turn on learning",
     "learning_auto_enable": "turn on automatic learning",

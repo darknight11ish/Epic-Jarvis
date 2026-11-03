@@ -300,6 +300,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -308,9 +315,9 @@
       {
        "fixed": true,
        "id": "fixed:goals",
-       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "note": "Your own words only. A progress line is added to the log and never replaces an earlier one; logging progress, ticking a step and stopping are immediate. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing. A step that does something (a search, an email) still asks on its own card in ordinary chat. Nothing Jarvis does from chat deletes a goal or a progress line.",
        "says": "Does it without asking",
-       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+       "title": "Make a goal, log progress on it, mark it done or paused, or stop tracking it"
       },
       {
        "action": "referee_tick",
@@ -1908,6 +1915,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -1916,9 +1930,9 @@
       {
        "fixed": true,
        "id": "fixed:goals",
-       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "note": "Your own words only. A progress line is added to the log and never replaces an earlier one; logging progress, ticking a step and stopping are immediate. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing. A step that does something (a search, an email) still asks on its own card in ordinary chat. Nothing Jarvis does from chat deletes a goal or a progress line.",
        "says": "Does it without asking",
-       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+       "title": "Make a goal, log progress on it, mark it done or paused, or stop tracking it"
       },
       {
        "action": "referee_tick",
@@ -3513,6 +3527,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -3521,9 +3542,9 @@
       {
        "fixed": true,
        "id": "fixed:goals",
-       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "note": "Your own words only. A progress line is added to the log and never replaces an earlier one; logging progress, ticking a step and stopping are immediate. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing. A step that does something (a search, an email) still asks on its own card in ordinary chat. Nothing Jarvis does from chat deletes a goal or a progress line.",
        "says": "Does it without asking",
-       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+       "title": "Make a goal, log progress on it, mark it done or paused, or stop tracking it"
       },
       {
        "action": "referee_tick",
@@ -5111,6 +5132,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -5119,9 +5147,9 @@
       {
        "fixed": true,
        "id": "fixed:goals",
-       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "note": "Your own words only. A progress line is added to the log and never replaces an earlier one; logging progress, ticking a step and stopping are immediate. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing. A step that does something (a search, an email) still asks on its own card in ordinary chat. Nothing Jarvis does from chat deletes a goal or a progress line.",
        "says": "Does it without asking",
-       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+       "title": "Make a goal, log progress on it, mark it done or paused, or stop tracking it"
       },
       {
        "action": "referee_tick",
@@ -6709,6 +6737,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -6717,9 +6752,9 @@
       {
        "fixed": true,
        "id": "fixed:goals",
-       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "note": "Your own words only. A progress line is added to the log and never replaces an earlier one; logging progress, ticking a step and stopping are immediate. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing. A step that does something (a search, an email) still asks on its own card in ordinary chat. Nothing Jarvis does from chat deletes a goal or a progress line.",
        "says": "Does it without asking",
-       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+       "title": "Make a goal, log progress on it, mark it done or paused, or stop tracking it"
       },
       {
        "action": "referee_tick",
@@ -8319,6 +8354,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -8327,9 +8369,9 @@
       {
        "fixed": true,
        "id": "fixed:goals",
-       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "note": "Your own words only. A progress line is added to the log and never replaces an earlier one; logging progress, ticking a step and stopping are immediate. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing. A step that does something (a search, an email) still asks on its own card in ordinary chat. Nothing Jarvis does from chat deletes a goal or a progress line.",
        "says": "Does it without asking",
-       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+       "title": "Make a goal, log progress on it, mark it done or paused, or stop tracking it"
       },
       {
        "action": "referee_tick",
@@ -9924,6 +9966,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -9932,9 +9981,9 @@
       {
        "fixed": true,
        "id": "fixed:goals",
-       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "note": "Your own words only. A progress line is added to the log and never replaces an earlier one; logging progress, ticking a step and stopping are immediate. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing. A step that does something (a search, an email) still asks on its own card in ordinary chat. Nothing Jarvis does from chat deletes a goal or a progress line.",
        "says": "Does it without asking",
-       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+       "title": "Make a goal, log progress on it, mark it done or paused, or stop tracking it"
       },
       {
        "action": "referee_tick",

@@ -1352,6 +1352,22 @@
      "name": "Coming up (timers, alarms, reminders)"
     },
     {
+     "id": "goals_list",
+     "name": "Reading your goals and what you have recorded on them"
+    },
+    {
+     "id": "goal_add",
+     "name": "Adding a goal, in your words"
+    },
+    {
+     "id": "goal_progress",
+     "name": "Recording one progress line on one of your goals"
+    },
+    {
+     "id": "goal_done",
+     "name": "Marking one of your goals done (kept, with its progress)"
+    },
+    {
      "id": "change_setting",
      "name": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
     },

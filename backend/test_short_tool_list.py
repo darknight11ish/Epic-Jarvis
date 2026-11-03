@@ -280,8 +280,21 @@ def t_what_it_saves():
     print(f"      (info) every tool but browser_control: {full} tokens; short list: {short} "
           f"(saves {full - short}, {round(100 * (full - short) / full)}%)")
     check("the short list is well under half of the full one", short * 2 < full)
-    check("the short list stays small (pinned: at most 1,560 tokens)", short <= 1560,
+    check("the short list stays small (pinned: at most 1,600 tokens)", short <= 1600,
           str(short))
+    # Pinned 1,560 -> 1,600 on 2026-11-02, by the same rule: the goals tools
+    # (goals_list, goal_add, goal_progress, goal_done; jarvis_goals.py,
+    # JARVIS-API section 182) get their own group rather than joining "timers"
+    # ("a timer, the to-do list, what is coming up"), because that line would
+    # tell the model something untrue about what the group opens. A group
+    # costs its name and one short line in more_tools' description. Measured
+    # with this module's own estimate_tokens rule on this tree: the short list
+    # reads 1,555 -> 1,579, and 1,600 leaves 21 tokens spare. The cost is paid
+    # only with `[tools] short_list = true`, which ships OFF, and the goal
+    # tools are not offered at all until the owner enables them in Settings ->
+    # Tools: a fresh install's list is unchanged (test_tool_defaults.py pins
+    # that). The four tools' own schemas are only sent when the group is
+    # opened, never on every turn.
     # Pinned 1,550 -> 1,560 on 2026-11-01, by the same rule and for the same
     # reason, and the numbers are measured on that tree with this module's own
     # estimate_tokens: `approve_web_search_for_conversation` (277 tokens) and
@@ -346,9 +359,15 @@ def t_what_it_saves():
     # spare and the group needs 27. 395 leaves 8. The alternative was a wider
     # group whose own one line would tell the model something untrue about what
     # it opens, which this note has already turned down twice.
-    check("more_tools itself stays small (at most 395 tokens)",
+    # Pinned 395 -> 425 on 2026-11-02, for the goals group the note above
+    # describes (jarvis_goals.py, JARVIS-API section 182). Measured with this
+    # module's own estimate_tokens rule on this tree: without the group 387,
+    # with it 411 - so the old 395 had 8 tokens spare and the group needs 24.
+    # 425 leaves 14. The same alternative was turned down for the same reason:
+    # a wider group's own line would be untrue.
+    check("more_tools itself stays small (at most 425 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 395)
+          <= 425)
 
 
 if __name__ == "__main__":

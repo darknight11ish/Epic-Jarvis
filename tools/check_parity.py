@@ -986,6 +986,19 @@ BACKEND_ONLY = {
     "/api/feedback/counts": "The feedback counts (JARVIS-API section 6's route table): helpful/harmful counts per fact and per answer, read-only. The table's own Desktop and Android columns both say no ('not built'), and no app calls it.",
     "/api/focus/diag": "The focus diagnosis (JARVIS-API section 31.6): booleans and counts for 'it didn't notice' / 'it locked the wrong thing', never what was in front. Neither app shows it; the section says to read it on the PC.",
     "/api/goals/{id}": "Reading ONE goal (JARVIS-API section 59's route table). Both apps read the goal list (/api/goals) and the per-goal subroutes (accept, step, stop); neither reads a single goal by id.",
+    # The reminder area's own goal writes (2026-11-02; JARVIS-API section 182;
+    # backend/jarvis_goals.py). BACKEND-ONLY TODAY, and each reason says why:
+    # the caller is the phone's Reminders screen - its third choice, Goals -
+    # in the follow-up PR on top of #1102, and no app calls any of them until
+    # that lands. They are cardless, like ticking off a to-do item. When the
+    # screen is built these move out of this list and into PHONE_ONLY (the
+    # PC's Brain -> Goals plate keeps reading the list and its plan,
+    # unchanged, so the progress log's screen is the reminder area's).
+    "/api/goals/{id}/progress": "A goal's progress log (JARVIS-API section 182): GET reads the whole log newest first, POST appends ONE line with an optional number and date. Append-only - nothing here edits or deletes a line. Cardless. The phone's Reminders screen is the named caller, in the follow-up PR on top of #1102.",
+    "/api/goals/{id}/done": "Marks one goal done (JARVIS-API section 182) and deletes its weekly check-in if it has one. Cardless, immediate; the goal and its progress log are kept. The phone's Reminders screen is the named caller, in the follow-up PR.",
+    "/api/goals/{id}/pause": "Pauses one goal (JARVIS-API section 182) and its weekly check-in if it has one. Cardless, immediate. The phone's Reminders screen is the named caller, in the follow-up PR.",
+    "/api/goals/{id}/resume": "Opens one goal again after a pause or a done (JARVIS-API section 182). Cardless, immediate. The phone's Reminders screen is the named caller, in the follow-up PR.",
+    "/api/goals/{id}/remove": "Takes one goal AND its progress log off the PC (JARVIS-API section 182). The only delete in the feature, and no model tool offers it. The phone's Reminders screen is the named caller, in the follow-up PR - the owner's own tap, never something chat can do.",
     "/api/news": "The news-feed list (JARVIS-API section 46.1). It exists so a settings screen can be added later: there is no add/remove settings screen in either app, because feeds are added and removed through the chat fast path. No app calls the three news routes.",
     "/api/news/add": "Adding a news feed (JARVIS-API section 46.1): ONE change_own_config card. The owner adds one by saying it through jarvis_quick.py's fast path, not from a settings screen; section 46.1 says the route exists so one can be added later.",
     "/api/news/remove": "Removing a news feed (JARVIS-API section 46.1): at once, no card. Same as /api/news/add - the chat fast path performs it, and no app screen calls the route yet.",

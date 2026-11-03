@@ -2747,7 +2747,7 @@ backend routes, in both directions; the rest are listed here only.
 - **Plugins are listed and switched by chat, and neither app has a screen for
   it - one-sided on purpose** (2026-11-02; the owner's decision: *"Jarvis may
   list plugins and turn them on/off by chat, one card per change"*; JARVIS-API
-  §180). The ABILITY is on both apps' chats, because the model tools
+  §181). The ABILITY is on both apps' chats, because the model tools
   (`plugin_list`, `plugin_switch`) run on this PC and either app's chat is the
   same turn. What is deliberately one-sided is a screen: neither app draws a
   plugin list or a switch. A plugin is a folder beside `jarvis_hud.py` on this

@@ -31300,3 +31300,90 @@ also not proved for a plugin whose `install()` starts a background thread that
 outlives a restart - the marker stops the NEXT start, not a thread already
 running. And a plugin folder that appears while Jarvis is running is reported as
 "added after Jarvis started" rather than loaded; nothing hot-loads.
+
+## 182. Goals in the reminder area: a progress log, and talking to Jarvis about it (added 2026-11-02)
+
+The owner's ask of 2026-11-02 (*"add a goals section in the reminder area and
+a way for me to record progress there along with talking to jarvis"*), on top
+of the phone's own Reminders screen (#1102). It is **not** a second goals
+feature: `jarvis_goals.py` (§59) already keeps the owner's goals, so the
+progress log, the reminder area's states and the four model tools were added
+to that module and its `/api/goals` routes. One store and one set of routes,
+so the two places a goal is seen - Brain -> Goals (the plan and its steps) and
+the reminder area (what has been recorded so far) - cannot disagree.
+
+**CARDLESS, LIKE THE TO-DO LIST.** A goal, a progress line and a done/paused
+tap are the owner's own words going into the owner's own store: the same
+shape as adding or ticking off a to-do item (§21) and as accepting a goal
+(§59). No route below raises a card, no model tool below goes through the
+gate, and no new gate action or tier is invented - the four tools resolve
+under `_TOOL_ACTIONS`' existing `"todo_add": "auto"` line, the same way
+`feature_guide` resolves under `skill_list`. `jarvis_asks_first`'s
+`fixed:goals` row - the page that promises every action - was extended to say
+so. Nothing is written before an approval, because there is no approval.
+
+**A GOAL'S FIELDS, NOW.** §59's goal, plus `target` (optional free text,
+"100 km"), `notes` (optional longer note), `progress` (its newest 3 lines,
+newest first) and `progress_count` (how many there are in all). `status` gains
+`paused`, so it reads `draft`|`active`|`paused`|`done`|`stopped`; the reminder
+area treats draft and active as open. `create(start=true)` makes a goal
+`active` at once, with NO weekly check-in and no accept step - the reminder
+area's Add and the `goal_add` tool use it. The draft/accept path of §59 is
+unchanged.
+
+**THE PROGRESS LOG IS APPEND-ONLY.** Each line has its own id, its words, an
+optional number, an optional day and when it was written. Nothing in
+`jarvis_goals.py` updates or deletes ONE line. The only delete is removing a
+whole goal (route below), which takes its log with it - and no model tool
+offers that, so talking to Jarvis cannot throw away what was written by hand.
+
+| Route | Method | Body | Answer |
+|---|---|---|---|
+| `/api/goals` | GET | - | `{"ok", "goals": [<goal>, ...], "limits", "words"}`; every goal now carries `target`, `notes`, `progress` (newest 3) and `progress_count` |
+| `/api/goals` | POST | `{"text", "target"?, "notes"?, "start"?, "plan"?}` | `{"ok", "goal"}` - `start: true` makes it open at once; without it, §59's draft |
+| `/api/goals/<id>/progress` | GET | - | `{"ok", "id", "progress": [<line>, ...], "count"}` - the whole log, newest first |
+| `/api/goals/<id>/progress` | POST | `{"text", "value"?, "date"?}` | `{"ok", "entry", "goal"}` - appends ONE line. `value` is a number (a numeric string is accepted); `date` is `YYYY-MM-DD`, and no date means now |
+| `/api/goals/<id>/done` | POST | - | `{"ok", "goal"}` - `done`; its weekly check-in, if it has one, is deleted |
+| `/api/goals/<id>/pause` | POST | - | `{"ok", "goal"}` - `paused`; its weekly check-in, if it has one, is paused |
+| `/api/goals/<id>/resume` | POST | - | `{"ok", "goal"}` - `active` again |
+| `/api/goals/<id>/remove` | POST | - | `{"ok", "removed": <id>, "text"}` - the goal and its log, gone. The ONLY delete |
+
+A progress line is `{"id", "text", "value", "at", "created"}`: `value` is null
+when none was given, `at` is when it happened (an epoch second; a `date` is
+kept as that local day) and `created` is when it was recorded. Every refusal
+is a plain sentence - 400 for words or a number that cannot be used, 404 for a
+goal that is not there, 409 when the 20-goal limit is reached - never a stack
+trace. `remove` is a POST, not a DELETE: this backend wraps `do_GET` and
+`do_POST` for every optional feature, and a `do_DELETE` invented here would be
+a second mechanism.
+
+**TALKING TO JARVIS: FOUR TOOLS.** `goals_list` (read-only: the open goals and
+each one's newest lines; `include_done: true` adds the done and stopped ones),
+`goal_add`, `goal_progress` (`goal` is the goal's words or enough of them, and
+the store's `find_one` refuses to guess when two match) and `goal_done`. They
+are not gated and raise no card, exactly like `todo_add`/`todo_done`; the three
+writes are refused in a turn shaped by outside text (so a page or an email
+cannot invent a goal or put words in the log), while `goals_list` is allowed
+there and its result is marked as outside text like `coming_up`'s. No tool
+deletes anything.
+
+**STORAGE, AND THE OLD DATABASE.** `goals.db` in the Jarvis settings folder,
+beside `schedule.db` and `memory.db` - a second table, `goal_progress`, in the
+same file, not a second file. The two new columns are added to an existing
+`goals` table by a guarded `ALTER TABLE` on open, so a `goals.db` made before
+2026-11-02 keeps working; the progress table is created by the same
+`CREATE TABLE IF NOT EXISTS` script.
+
+**BOTH APPS, SAID PLAINLY.** The PC's Brain -> Work -> Goals plate is
+unchanged: it reads the same route, shows its plan and steps as before, and
+ignores the new fields. The phone's Reminders screen gets the third choice,
+**Goals**, in the follow-up PR on top of #1102's screen; until that lands the
+four tools above are how the owner records progress by talking. `GET
+/api/goals` is the one read both places make, so neither app invents a second
+source of truth.
+
+**WHAT IT DOES NOT DO.** No card, no gate, no new tier, no network call, no
+model call, no scheduler job of its own, no delete from chat, and no change to
+the plan/check-in half of §59. `backend/test_goals_progress.py` proves the
+routes (with the origin and token refusals), the append-only log, the states
+and the four tools; `backend/test_goals.py` still proves §59 unchanged.

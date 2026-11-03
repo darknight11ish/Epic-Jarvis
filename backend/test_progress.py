@@ -889,18 +889,26 @@ def t_not_reachable():
     agent = HERE / "jarvis_agent.py"
     if agent.is_file():
         text = agent.read_text(encoding="utf-8")
+        # A tool entry is `"<name>": Tool(`. The goals feature's payload also
+        # carries a plain `"progress":` field, which is data, not a tool.
         check("jarvis_agent.py neither imports it nor lists a progress tool",
               "jarvis_progress" not in text and not re.search(
                   r"Tool\(\s*['\"](?:my_)?(?:progress|activity|balance)", text)
-              and not re.search(r"['\"](?:my_)?(?:progress|heatmap|balance_chart)['\"]\s*:", text))
-        # The tool table's names, read for real.
+              and not re.search(
+                  r"['\"](?:my_)?(?:progress|heatmap|balance_chart)['\"]\s*:\s*Tool\(",
+                  text))
+        # The tool table's names, read for real. The goals feature owns
+        # goal_progress - a line recorded on one of the owner's goals - and
+        # that is not this module's chart tool, so goal_* is left out.
         import importlib
         try:
             A = importlib.import_module("jarvis_agent")
             names = [str(getattr(t, "name", t)) for t in
                      (A.TOOLS.values() if isinstance(A.TOOLS, dict) else A.TOOLS)]
             check("the real tool table has no progress, heatmap or balance tool",
-                  not [n for n in names if re.search(r"progress|heatmap|balance|activity", n)],
+                  not [n for n in names
+                       if re.search(r"progress|heatmap|balance|activity", n)
+                       and not n.startswith("goal_")],
                   names)
         except Exception as exc:
             print(f"note  jarvis_agent could not be imported here ({type(exc).__name__}); "

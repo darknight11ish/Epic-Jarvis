@@ -126,6 +126,7 @@ CATALOGUE = [
     "connect_account", "control_computer", "control_phone", "create_joplin_note",
     "draft_email",
     "email_check", "feature_guide", "file_read", "github_search",
+    "goal_add", "goal_done", "goal_progress", "goals_list",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
     "notes_search", "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
     "protect_from_jarvis", "rea_investigate",
