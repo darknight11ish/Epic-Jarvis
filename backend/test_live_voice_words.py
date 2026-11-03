@@ -44,6 +44,8 @@ PLACES = {
     "docs/LIVE-DESIGN.md": "That one check verifies the whole session, so later short replies are trusted without a check, and ending Live ends that trust.",
     "docs/JARVIS-API.md": "The owner's voice is verified once per session",
     "backend/README.md": "Your voice is checked once on the PC",
+    "features/features.json": "Your voice is checked once per Live session, not on every sentence",
+    "backend/jarvis_feature_catalogue.py": "Your voice is checked once per Live session, not on every sentence",
 }
 
 #: The false promise DEF-028 found, in every shape it was written.
@@ -55,6 +57,7 @@ OLD = (
     "before any words, every clip",
     "whole clip, **checked for the owner's voice before any words exist**, and",
     "the voice check runs on every clip",
+    "still runs on every clip",
 )
 #: A new sentence promising a check on every sentence, however worded. It
 #: must be the claim "every sentence is checked", not just those words near
@@ -149,11 +152,22 @@ def t_the_fixtures_carry_the_note():
 
 
 def t_the_twins_are_identical():
-    """The two-file rule, for the two shipped modules this change touched."""
-    for name in ("jarvis_asks_first.py", "jarvis_voice_enroll.py"):
+    """The two-file rule, for the shipped modules this change touched.
+
+    The feature catalogue is generated from features/features.json, and the
+    "Features" page both apps draw is the same file three times over
+    (tools/check_feature_list.py holds that half); this pins the backend twin
+    and the three copies, so a hand edit to one of them fails here too.
+    """
+    for name in ("jarvis_asks_first.py", "jarvis_voice_enroll.py",
+                 "jarvis_feature_catalogue.py"):
         a = (ROOT / "backend" / name).read_bytes()
         b = (ROOT / "jarvis-backend" / name).read_bytes()
         check(f"backend/{name} and jarvis-backend/{name} are one file", a == b)
+    copies = ("features/features.json", "jarvis-desktop/src/features.json",
+              "jarvis-client/app/src/main/assets/features.json")
+    texts = [read(rel) for rel in copies]
+    check("the three features.json copies are one file", len(set(texts)) == 1)
 
 
 def t_the_words_match_the_code():

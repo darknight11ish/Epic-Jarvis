@@ -244,7 +244,7 @@
     "what": "A back-and-forth voice conversation you start and stop, with no wake word between turns.",
     "where": "Press Start Live in the Jarvis bar, or say \"Hey Jarvis, let's talk\". On the phone, Live on Home or the Quick Settings tile. A PC hotkey can start and end it (asked for once, off until you pick one).",
     "asks": "Cards are still decided by tapping, never by voice. Ending Live never asks.",
-    "limit": "Not full-duplex, so a turn takes a couple of seconds. The voice check still runs on every clip, and side remarks meant for someone else are ignored and not kept.",
+    "limit": "Not full-duplex, so a turn takes a couple of seconds. Your voice is checked once per Live session, not on every sentence, and side remarks meant for someone else are ignored and not kept.",
     "surface": "both",
     "covers": [
       "safety.live-stop",
