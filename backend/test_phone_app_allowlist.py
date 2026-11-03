@@ -536,6 +536,56 @@ def t_listing_costs_no_card_and_a_refusal_costs_none_either():
 
 
 # --------------------------------------------------------------------------
+#   8b. The owner's own question, asked in chat (Q7, 2026-11-03)
+#
+# THE GAP, MEASURED. The catalogue's own phone-apps row says "Ask in chat on
+# the PC or the phone - "which apps can you open on my phone?" lists them", and
+# it did not: "which apps on my phone may you open" matched nothing and reached
+# the local model (which has no phone-apps tool), and "what can you open on my
+# phone" was answered with the generic feature-capability sentence, which names
+# no app. The answer must come from the SAME table this suite's writer edits,
+# raise no card, and write nothing.
+# --------------------------------------------------------------------------
+def t_the_question_in_chat_lists_the_same_table():
+    import jarvis_quick as Q
+    fresh()
+    before = TOML.read_bytes()
+    for words in ("which apps on my phone may you open",
+                  "which apps can you open on my phone",
+                  "what can you open on my phone",
+                  "what apps do you allow on my phone"):
+        got = Q.match(words)
+        check(f"'{words}' is answered by the fast path (Q7)",
+              got is not None and got.name == "phone_apps_list",
+              None if got is None else got.name)
+        res = Q.run(got, None, 1793505565.0) if got is not None else None
+        check(f"...and it reads the real empty table, honestly: {words!r}",
+              res is not None and "No apps are allowed yet" in res.reply,
+              res.reply if res is not None else None)
+        check(f"...and it raises no card and writes nothing: {words!r}",
+              TOML.read_bytes() == before
+              and (res is None or getattr(res, "read", []) == []), words)
+    # One app in the owner's own table: the answer names it, and still no card.
+    fresh(MINIMAL.replace("[phone_apps]\n", f'[phone_apps]\n"{NAME}" = "{PKG}"\n'))
+    got = Q.match("which apps on my phone may you open")
+    res = Q.run(got, None, 1793505565.0) if got is not None else None
+    check("with one allowed app the answer names it",
+          res is not None and NAME in res.reply, res.reply if res is not None else None)
+    check("...and never prints the package id",
+          res is not None and PKG not in res.reply,
+          res.reply if res is not None else None)
+    check("...and names where the list really lives",
+          res is not None and "[phone_apps]" in res.reply
+          and "jarvis-framework.toml" in res.reply,
+          res.reply if res is not None else None)
+    # A near miss keeps its own path: this is a question about an app, not the
+    # list, and nothing here may answer it.
+    check("near miss: 'open youtube on my phone' is not the list",
+          (Q.match("open youtube on my phone") or type("X", (), {"name": None})()).name
+          != "phone_apps_list")
+
+
+# --------------------------------------------------------------------------
 #   9. The owner's own file, and the line it already has
 # --------------------------------------------------------------------------
 def t_the_owners_own_shape_is_left_alone():
@@ -623,6 +673,7 @@ if __name__ == "__main__":
                t_the_new_tool_maps_to_the_real_gate_action,
                t_the_chat_tool_asks_one_card_and_writes_only_after_a_yes,
                t_listing_costs_no_card_and_a_refusal_costs_none_either,
+               t_the_question_in_chat_lists_the_same_table,
                t_the_owners_own_shape_is_left_alone,
                t_a_line_written_by_hand_in_either_quote_style_can_be_removed,
                t_it_ships_on_and_that_is_the_decision,

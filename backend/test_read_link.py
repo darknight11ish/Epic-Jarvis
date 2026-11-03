@@ -455,14 +455,151 @@ def t_tellme_page_still_wins():
               None if got is None else got.name)
 
 
-def t_a_link_with_no_read_verb_is_not_ours():
+def t_a_link_with_no_read_verb_is_only_ours_when_it_is_the_message():
+    """A pasted link is a read; a link inside a statement or a command is not.
+
+    Q2 (Gemini's ruling, 2026-11-03): a bare pasted URL - or a URL plus a
+    question about it - reaches the reader with the SAME one card per URL. The
+    statements and the browser command keep their own paths: a link he pasted
+    to talk about must not raise a card.
+    """
     for words in ("here is a link https://example.com/kettle",
-                  "https://example.com/kettle",
-                  "open https://example.com/kettle in my browser"):
+                  "open https://example.com/kettle in my browser",
+                  "i saved https://example.com/kettle for later"):
         got = Q.match(words)
-        check(f"a link with no read verb is left alone: {words!r}",
+        check(f"a link inside a statement or command is left alone: {words!r}",
               got is None or got.name != "read_link",
               None if got is None else got.name)
+    for words in ("https://example.com/kettle",
+                  "https://example.com/kettle what is this about?",
+                  "https://example.com/kettle is this any good?",
+                  "what is this: https://example.com/kettle"):
+        got = Q.match(words)
+        check(f"a pasted link is a read_link: {words!r}",
+              got is not None and got.name == "read_link"
+              and got.f.get("url") == "https://example.com/kettle",
+              None if got is None else (got.name, got.f))
+
+
+# --------------------------------------------------------------------------
+#   5b. Q2: ONE card per URL, the canonical address on the FIRST line, and the
+#       page kept for 15 minutes so a follow-up needs no second card
+# --------------------------------------------------------------------------
+
+KEEP_PAGE = ("The kettle holds one and a half litres and pours without dripping. "
+             "Its limescale filter lifts out with one hand. It is made of stainless "
+             "steel, and the handle stays cool even when the water is boiling.")
+
+
+def t_a_pasted_link_reads_once_and_names_the_card_address_first():
+    gate = FakeGate()
+    Q._READ_LINK_KEPT.clear()
+    try:
+        with _NoNetwork(a_page(KEEP_PAGE)) as net:
+            res, intent = read_link("https://example.com/kettle", gate)
+        check("a bare pasted link is a read_link",
+              intent is not None and intent.f.get("url") == "https://example.com/kettle",
+              None if intent is None else intent.f)
+        check("...it raised EXACTLY ONE card", len(gate.calls) == 1, gate.calls)
+        check("...under the page reader's own action",
+              gate.calls and gate.calls[0]["action"] == "read_web_page", gate.answers())
+        check("...and fetched that one address once",
+              net.fetches == ["https://example.com/kettle"], net.fetches)
+        first = (res.reply.split("\n")[0] if res is not None else "")
+        check("...and the FIRST line carries the canonical address",
+              first.startswith("Read from https://example.com/kettle"),
+              res.reply if res is not None else None)
+        check("...the page's own words are still quoted",
+              res is not None and "one and a half litres" in res.reply,
+              res.reply if res is not None else None)
+        check("...and the turn is recorded as having read a page",
+              res is not None and res.read == ["read_web_page"],
+              res.read if res is not None else None)
+    finally:
+        Q._READ_LINK_KEPT.clear()
+
+
+def t_the_address_in_the_answer_is_the_cards_never_one_from_the_page():
+    gate = FakeGate()
+    Q._READ_LINK_KEPT.clear()
+    body = a_page(KEEP_PAGE + " More at https://other.example/not-the-card ")
+    try:
+        with _NoNetwork(body):
+            res, _ = read_link("https://example.com/kettle", gate)
+        check("the answer opens with the CARD's address",
+              res is not None and res.reply.startswith(
+                  "Read from https://example.com/kettle"),
+              res.reply if res is not None else None)
+        head = res.reply.split("It says:")[0] if res is not None else ""
+        check("...and never an address taken from the page's own words",
+              "other.example" not in head, head)
+    finally:
+        Q._READ_LINK_KEPT.clear()
+
+
+def t_a_follow_up_answers_from_the_kept_page_with_no_card_and_no_fetch():
+    gate = FakeGate()
+    Q._READ_LINK_KEPT.clear()
+    try:
+        with _NoNetwork(a_page(KEEP_PAGE)) as net:
+            first, _ = read_link("https://example.com/kettle", gate)
+            check("the page was read once", first is not None and len(gate.calls) == 1,
+                  gate.calls)
+            # The SAME turn's conversation, one sentence later.
+            Q._read_link_remember("conv-kettle", "https://example.com/kettle",
+                                  "The Kettle", KEEP_PAGE)
+            got = Q.match("what does it say about the limescale filter",
+                          conversation="conv-kettle")
+            check("a follow-up about the page is its own intent",
+                  got is not None and got.name == "read_link_q",
+                  None if got is None else got.name)
+            res = Q._run_read_link_q(got.f, "conv-kettle") if got is not None else None
+            check("...it raises NO second card", len(gate.calls) == 1, gate.answers())
+            check("...it fetches NOTHING new",
+                  net.fetches == ["https://example.com/kettle"], net.fetches)
+            check("...it answers from the kept words",
+                  res is not None and "limescale filter" in res.reply,
+                  res.reply if res is not None else None)
+            check("...it names the address it is quoting from",
+                  res is not None and "https://example.com/kettle" in res.reply,
+                  res.reply if res is not None else None)
+            check("...and it does not claim a fresh read",
+                  res is not None and res.read == [], res.read if res is not None else None)
+            # A word the page does not have: said plainly, naming the limit.
+            got = Q.match("what does it say about the warranty",
+                          conversation="conv-kettle")
+            res = Q._run_read_link_q(got.f, "conv-kettle") if got is not None else None
+            check("a word the kept page does not have is said plainly",
+                  res is not None and "do not mention" in res.reply
+                  and "characters" in res.reply, res.reply if res is not None else None)
+    finally:
+        Q._READ_LINK_KEPT.clear()
+
+
+def t_a_kept_page_lasts_fifteen_minutes_and_one_conversation():
+    Q._READ_LINK_KEPT.clear()
+    try:
+        Q._read_link_remember("conv-a", "https://example.com/kettle", "The Kettle",
+                              KEEP_PAGE, now=1000.0)
+        check("the page is kept for 15 minutes",
+              Q.READ_LINK_KEEP_SECONDS == 900, Q.READ_LINK_KEEP_SECONDS)
+        check("...it is there 14 minutes later",
+              Q._read_link_kept("conv-a", now=1000.0 + 840) is not None)
+        check("...and gone one second past 15 minutes",
+              Q._read_link_kept("conv-a", now=1000.0 + 901) is None)
+        check("...another conversation never sees it",
+              Q._read_link_kept("conv-b", now=1000.0 + 60) is None)
+        check("...and with nothing kept a follow-up is not ours",
+              Q.match("what does it say about the kettle", conversation="conv-none")
+              is None)
+        # A new page in the same chat replaces the old one.
+        Q._read_link_remember("conv-a", "https://example.com/teapot", "The Teapot",
+                              "A teapot holds less.", now=1000.0 + 60)
+        kept = Q._read_link_kept("conv-a", now=1000.0 + 120)
+        check("a new page in the same chat replaces the old one",
+              kept is not None and kept["url"] == "https://example.com/teapot", kept)
+    finally:
+        Q._READ_LINK_KEPT.clear()
 
 
 # --------------------------------------------------------------------------
