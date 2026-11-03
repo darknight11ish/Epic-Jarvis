@@ -5944,12 +5944,25 @@ A `job`:
                                   Open control is then not drawn
  "action_unreadable": true,       the stored block could not be read at all, so the
                                   reminder fires as an ordinary one and opens nothing
+ "asks": true,                    this reminder ASKS a question and the PC can take an
+                                  answer (21.14). ABSENT on every other job.
+ "answers": [{...}],              the answers already given, oldest first (21.14).
+                                  ABSENT until the first one.
  "created", "source": "quick"|"tool"|"app"}
 ```
 
 `rule` is one of `{"every": "day", "at": "HH:MM"}`, `{"every": "weekday",
 "at"}`, `{"every": "week", "at", "days": [0-6, 0 = Monday]}`, `{"every":
-"hours", "hours": N, "start": epoch}` (N at least 1). Limits: 300
+"hours", "hours": N, "start": epoch}` (N at least 1), and since 2026-11-02
+(section 21.14): `{"every": "days", "days": N, "at", "start": epoch}`,
+`{"every": "weeks", "weeks": N, "at", "days": [0-6], "start": epoch}`,
+`{"every": "month", "at", "day": 1-31}` (a day past the month's end is that
+month's last day), `"times": ["HH:MM", ...]` (up to eight, several in one day,
+on every rule with a time of day) and `"ends": epoch` (an optional last day,
+honoured by the same tick that already stops a "tell me when"). `at` is
+ALWAYS the earliest time, so a reader that knows only `at` still reads the
+first time it goes off, and `times` appears only when there is more than one -
+an ordinary rule's block is byte for byte what it was. Limits: 300
 characters of words, 100 timers and reminders, 300 open to-do items, a
 timer up to 24 hours, a time up to a year ahead - each said in a sentence
 when reached.
@@ -6744,6 +6757,9 @@ PC's folders, and a client must not edit deep configuration). It shows a fired
 `show-note`'s note and the one card, and approves that card through the existing
 `POST /api/approve`. **No route was added**, so `tools/check_parity.py` has
 nothing new to classify; the one-sided reason is in `docs/ARCHITECTURE.md` §8.
+*(Since 2026-11-02 the phone also shows a fired `ask` reminder's question and
+takes its answers — section 21.14. That changes nothing here: an `ask` block is
+a different kind, and the phone still creates none of it.)*
 
 **Not in this slice, said plainly:** editing an action on an existing reminder
 (the form adds one; the editor does not change it yet), `open-app`, a phone
@@ -6895,8 +6911,173 @@ Google answer's read and event sentences driven with a stubbed read, and a
 mutation check that the setup sentence reaches the model when the new matcher
 is disabled.
 
-## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
+### 21.14 A reminder that ASKS - the owner's question, up to three of his own buttons, and where an answer is written (added 2026-11-02)
 
+The owner asked for it twice in one evening. First: *"I would like to tell Jarvis
+exactly how I want the reminder to appear and what interactive elements there are
+- e.g. 'hey Jarvis remind me to take a medication at 10:00 a.m.' -> at 10:00 a.m.
+a notification on my Android phone saying 'Did you take your medication?' with a
+Yes or No button."* Then, asked how much flexibility he wanted: *"as much
+flexibility or options as I want."* `DESIGN.md`
+(`.dsh-scratch/REMINDER-ACTIONS-2026-11-02/DESIGN.md`) carries his clickable
+answers; this is what was built from them.
+
+**Fifth action kind, same one action per reminder, NO new permission model and NO
+new route.** A reminder's `action` block may now be:
+
+```
+{"kind": "ask",
+ "question": "Did you take your medication?",        the notification's body
+ "buttons": [                                        one to THREE, his words
+   {"label": "Taken",   "does": "record"},
+   {"label": "Skipped", "does": "record"},
+   {"label": "Later",   "does": "snooze", "minutes": 30}
+ ],
+ "record": {"history": true, "obsidian_daily": true,   where a `record` writes
+            "goal": "g-1", "habit": "h-7"}}
+```
+
+**A button does exactly ONE of three things** (`ASK_DOES`): `record` (write the
+chosen destinations), `done` (this occurrence is dealt with — a one-off leaves
+the list; a repeating reminder STOPS repeating, which is what deleting it would
+do and only ever makes Jarvis quieter), or `snooze` (the same one-off copy every
+other Snooze makes, N minutes later, 1 to 1440). **Three is the ceiling because
+Android draws three notification actions**; the PC's row mirrors it, so a fourth
+button is refused rather than silently undrawn. Two buttons may not say the same
+thing (there would be no way to tell which one was pressed).
+
+**`open-file` / `open-webpage` buttons are REFUSED in this build, by name, with
+their reason** (`ASK_NO_ACT`): the design asked for them, and the desktop's one
+opener (`open_reminder_target`, `reminder_open.rs`) opens a reminder's own SINGLE
+action and takes the job id only, so a per-button target needs a SECOND opener in
+Rust — a security surface (a page that can name a path is an exec primitive), and
+one that belongs to whoever owns that command. The sentence the owner reads says
+so in plain words and points at "Then: Open a file", which still works.
+
+**The hard rails do not flex.** There is no shell, command, script, webhook or
+"run this program" button, and `ask` is refused if one is asked for by name. No
+answer raises an approval card, approves in bulk or clears a rush latch: **an
+answer is a log line, cardless like ticking a to-do**. Any button that only
+quietens something needs no card for the same reason `act("done")` does not.
+
+**Checked when it is SAVED, and again when it is READ** — the two-check pattern
+§21.11 already keeps. The question is at most 200 characters and 3 lines; a label
+is one line of at most 24 characters (Android cuts a notification action's label
+at about twenty, and a label the owner cannot read is worse than a refused one);
+`record` names at least one destination whenever a button records, and an unknown
+key anywhere in the block is refused. The READ door is the SAME function
+(`_decode_ask` calls `_clean_ask`), so the rules cannot drift: a row edited on the
+owner's own disk reads as `action_unreadable`, fires as an ordinary reminder and
+offers no buttons at all.
+
+**Where an answer is written.** Any of four, in any combination, per reminder:
+`history` (the reminder's own log — the only new stored thing: a new nullable
+`jobs.answers`, JSON, appended with the PC's clock, the label, what the button did
+and what was written, keeping the newest 40); `obsidian_daily` (one plain line
+appended to that day's Obsidian note through `jarvis_note_capture`, the module
+that already owns it — `10:00 — medication: Taken`); `goal` (the goal's own
+progress log, through `jarvis_goals.progress(goal_id, text, at=...)` when this PC
+has that module); `habit` (a tick, through `jarvis_habits.tick(habit_id, at=...,
+text=...)`, wired by the life-coach lane). **The last two degrade rather than
+fail**: this tree's `jarvis_goals.py` has no progress log yet and there is no
+`jarvis_habits.py`, so a reminder that names either says one truthful sentence
+("Goal progress is not set up on this PC yet, so that part was not written. The
+answer itself was kept.") and keeps the answer. Nothing is silently pretended.
+
+**Answering.** `POST /api/schedule/act {"do": "answer", "id", "button": <index>,
+"source"?}` — the same route and the same write door as every other schedule
+change, so **no route was added** and `tools/check_parity.py` has nothing new to
+classify. `button` is the button's INDEX, never its label: the PC reads the
+question, the buttons and the destinations back from its own stored row, so an
+app can never name what is written. It answers 200 `{"ok", "id", "button",
+"does", "wrote", "problems", "said", "answers"}`, 404 for a job that is gone, 409
+for a reminder that has not gone off yet (or a job that is not a question, or one
+whose `FIRED_KEEP` day has passed), and 400 for an index that is not there.
+Answering the same question twice is two answers, because a question is not a
+card and does not close.
+
+**The PC is the clock, and it draws the question.** The HUD's "Just went off" row
+shows the question in the owner's words with one button per stored button; each
+press sends one answer through `hud_schedule_act` (`action: "answer"` with the
+index — `answer_body` in `brain/schedule.rs` is the only way that body is built,
+and the page never holds the token). Adding one is on the same form, "Then: Ask
+me a question", offered only when `status()["asks"]` says the PC can take an
+answer; the option is hidden on an older backend rather than shown and refused.
+
+**The phone.** A fired `ask` reminder's notification carries the QUESTION as its
+body and the owner's buttons as its actions (at most three, which is Android's
+own ceiling — so a question's buttons REPLACE the ordinary Snooze/Stop pair, and
+nothing is lost, because an ask is a reminder and a reminder never rings). Each
+button is a `PendingIntent` to `EventService` with `ACTION_ANSWER`, the job id and
+the index; it waits for the link like Snooze does and then sends ONE answer
+(`JarvisRuntime.scheduleAnswer`), which is refused while the phone is LOCKED
+("Unlock your phone to answer — the answer writes a personal record."): the same
+rule the approval envelope keeps for Approve, without pretending an answer is an
+approval. While App lock or "Hide memory lists" is on, the notification says only
+`ASK_ON_LOCK_SCREEN` — the question is the owner's own words about his own life.
+
+**Honest limits, said in the UI and here.** The phone shows the notification only
+while it is CONNECTED to the PC: a reminder that goes off while the phone is away
+appears when it links again, and is not retro-pushed. A late (quiet) notice
+carries no buttons at all, by the owner's own 2026-09-26 rule for a missed one.
+The Windows toast still says its generic line and carries no answer buttons in
+this build — the HUD's row and the phone's notification are where the question is
+answered. A daily note is not written when no Obsidian vault is set up, and the
+goal/habit destinations are not set up in this tree; each says so in one sentence
+and the answer is kept.
+
+**Privacy.** The audit gets ids, kinds, the button's INDEX and the destination
+NAMES only: `schedule.answered {"id", "button", "does", "wrote", "problems",
+"source"}` — never the question, never a label, never a line that was written.
+The answer log lives in the same `schedule.db` as the reminder's own words, and
+the row (and its log) is deleted `FIRED_KEEP` after it last went off.
+
+**Back-compat and rollback.** A job without an `ask` block carries no new key at
+all, in the payload or in the event. An older build ignores the `answers` column
+and the `ask` kind (it refuses the block at save rather than storing something it
+cannot draw), so a code rollback leaves every job readable.
+
+**Not in this slice, said plainly:** a button that opens a file or a page (see
+above), editing an existing reminder's question or buttons (the form adds one;
+the editor does not change it yet), a builder on the phone (it answers; it does
+not create — the reason is in `docs/ARCHITECTURE.md` §8), and answer buttons on
+the Windows toast.
+
+**The repeat grammar the same request asked for** (this section's other half).
+On top of `every day`, `every weekday`, `every week on chosen days` and `every N
+hours`, a rule may now be:
+
+* `{"every": "days", "days": N, "at": "HH:MM", "start": <epoch>}` — every N days,
+  counted from the owner's own first occurrence (`start`, a date or an epoch; the
+  PC reads it on its own clock and stores the day's midnight);
+* `{"every": "weeks", "weeks": N, "at", "days": [0-6], "start"}` — every N weeks
+  on the chosen weekdays, counted from the week `start` falls in;
+* `{"every": "month", "at", "day": 1-31}` — monthly on a day of the month; a day
+  past that month's end is that month's last day (the 31st is 28 February);
+* `"times": ["08:00", "13:00", "20:00"]` on any rule with a time of day — several
+  times in one day, up to eight, earliest first (and `at` stays the earliest
+  one);
+* `"ends": <epoch>` on any rule — an optional last day, honoured by the tick that
+  already stops a "tell me when", so there is one code path and not two.
+
+Every one of those is said in ONE readable sentence, and an end date is said last:
+`rule_words` gives "every 2 weeks on Monday and Thursday at 09:00, starting Monday
+9 November, until Thursday 31 December" and "every day at 08:00, 13:00 and
+20:00". **There was no monthly rule before this** — the brief said there was, and
+it was not there (`jarvis_schedule.check_rule` knew four kinds, none of them
+monthly); it is here now, and `RULES`' own refusal sentence names every kind so a
+mistake is answerable.
+
+Tests: `backend/test_schedule_ask.py` — 152 checks over the block at save and at
+read, the three button verbs, the rails, firing with no card, every answer path,
+a snoozed question coming back as a question, the four destinations (with the
+journal faked, so nothing on the owner's PC is touched), the 40-answer bound, the
+route, the audit never carrying a word, and the whole grammar with its plain
+words and its end date really stopping a repeat.
+The PC's own half is pinned in `hud_schedule.rs` and `brain/schedule.rs`; the
+phone's in `ScheduleTest`.
+
+## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for
 briefings; anything that repeats asks once with a card listing the next run
 times, a one-off needs none; simple commands are answered without the AI

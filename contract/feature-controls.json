@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 168,
+  "feature_count": 169,
   "features": [
     {
       "id": "typing",
@@ -1215,6 +1215,57 @@
         "location": "Just ask (\"remind me at six\"), or see them in Brain, Work, Coming up.",
         "search": [
           "timers, alarms, reminders and lists"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "what is coming up",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "reminder-asks",
+      "name": "A reminder that asks you a question",
+      "group": "Talking",
+      "surface": "both",
+      "where": "HUD, Reminders (or Brain, Work, Coming up), the Add form's \"Then: Ask me a question\"; the question and its buttons are answered on the HUD's \"Just went off\" row and on the phone's notification.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on A reminder that asks you a question",
+        "turn_off": "turn off A reminder that asks you a question",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "HUD, Reminders (Add -> Then); answered on the \"Just went off\" row and on the PC notice.",
+        "search": [
+          "A reminder that asks you a question"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Reminders, and the notification a question goes off with (it answers; it does not create one).",
+        "search": [
+          "a reminder that asks you a question"
         ],
         "found": false
       },
@@ -13364,81 +13415,81 @@
       "status": "enforced",
       "proof": "backend/test_antislop.py: 'set anti-slop mode to after' resolves through jarvis_quick.match() to the settings_choice intent with the antislop_mode value and the filter's own state really reads mode 'after' afterwards (t_every_named_sentence_resolves_with_zero_cards); the POST body is driven through jarvis_antislop.handle_post in t_the_routes_answer_through_the_core_handler"
     },
-      {
-        "key": "small_approvals",
-        "names": [
-          "the fingerprint for small approvals",
-          "the fingerprint on small approvals",
-          "the fingerprint for small things",
-          "the fingerprint for small cards",
-          "the fingerprint for small cards and approvals",
-          "small approvals"
-        ],
-        "section": "security",
-        "options": {
-          "ask": true,
-          "ask me": true,
-          "ask for them": true,
-          "ask on them": true,
-          "ask for small approvals": true,
-          "fingerprint": true,
-          "on": true,
-          "yes": true,
-          "skip": false,
-          "skip them": false,
-          "skip small cards": false,
-          "skip the small ones": false,
-          "leave them": false,
-          "leave them alone": false,
-          "do not ask": false,
-          "off": false,
-          "no": false
-        },
-        "desktop_found": false,
-        "phone_found": true,
-        "handler": "jarvis_settings_registry.set_small_approvals",
-        "status": "enforced",
-        "proof": "backend/test_settings_registry.py: 'set the fingerprint for small approvals to ask' resolves through the registry to set_small_approvals, the value the approval itself reads really moves (jarvis_owner_check.approvals_mode), and a phone peer is refused (t_the_small_approvals_setting_is_one_rule); backend/test_owner_check.py drives approve_check itself: in the default 'small' mode the Windows Hello prompt is not shown for a small card and the phone's signature is not needed, and in 'risky' both are back (t_the_small_card_exemption_is_the_rule_that_asks)"
+    {
+      "key": "small_approvals",
+      "names": [
+        "the fingerprint for small approvals",
+        "the fingerprint on small approvals",
+        "the fingerprint for small things",
+        "the fingerprint for small cards",
+        "the fingerprint for small cards and approvals",
+        "small approvals"
+      ],
+      "section": "security",
+      "options": {
+        "ask": true,
+        "ask me": true,
+        "ask for them": true,
+        "ask on them": true,
+        "ask for small approvals": true,
+        "fingerprint": true,
+        "on": true,
+        "yes": true,
+        "skip": false,
+        "skip them": false,
+        "skip small cards": false,
+        "skip the small ones": false,
+        "leave them": false,
+        "leave them alone": false,
+        "do not ask": false,
+        "off": false,
+        "no": false
       },
-      {
-        "key": "todo_carryover",
-        "names": [
-          "the to-do carry-over",
-          "the todo carry-over",
-          "the to-do list carry-over",
-          "the to-do list carryover",
-          "how the to-do list carries over",
-          "the to-do list mode",
-          "the to-do mode",
-          "the todo list mode"
-        ],
-        "section": "todo-carryover",
-        "options": {
-          "rollover": "rollover",
-          "daily rollover": "rollover",
-          "full daily rollover": "rollover",
-          "a full daily rollover": "rollover",
-          "roll everything over": "rollover",
-          "carry everything over": "rollover",
-          "carry them over": "rollover",
-          "carry over": "rollover",
-          "carry yesterday over": "rollover",
-          "roll over": "rollover",
-          "day": "day",
-          "day by day": "day",
-          "each day": "day",
-          "each day separately": "day",
-          "day labelled": "day",
-          "day labeled": "day",
-          "one day at a time": "day",
-          "separate days": "day"
-        },
-        "desktop_found": true,
-        "phone_found": true,
-        "handler": "jarvis_settings_registry.set_todo_carryover",
-        "status": "enforced",
-        "proof": "backend/test_todo_carryover.py: the sentences \"set the to-do list mode to day by day\", \"set the to-do carry-over to full daily rollover\" and \"set the to-do list mode to each day separately\" each resolve through jarvis_quick.match() to the settings_choice intent naming todo_carryover with its own value, the registry setter really moves the ONE value the scheduler reads (jarvis_schedule.set_todo_mode_here -> Scheduler.todo_mode), and the same method is what POST /api/schedule/act {\"do\": \"todo_mode\"} calls - so a phrase, the route and either app Settings switch cannot disagree."
-      }
+      "desktop_found": false,
+      "phone_found": true,
+      "handler": "jarvis_settings_registry.set_small_approvals",
+      "status": "enforced",
+      "proof": "backend/test_settings_registry.py: 'set the fingerprint for small approvals to ask' resolves through the registry to set_small_approvals, the value the approval itself reads really moves (jarvis_owner_check.approvals_mode), and a phone peer is refused (t_the_small_approvals_setting_is_one_rule); backend/test_owner_check.py drives approve_check itself: in the default 'small' mode the Windows Hello prompt is not shown for a small card and the phone's signature is not needed, and in 'risky' both are back (t_the_small_card_exemption_is_the_rule_that_asks)"
+    },
+    {
+      "key": "todo_carryover",
+      "names": [
+        "the to-do carry-over",
+        "the todo carry-over",
+        "the to-do list carry-over",
+        "the to-do list carryover",
+        "how the to-do list carries over",
+        "the to-do list mode",
+        "the to-do mode",
+        "the todo list mode"
+      ],
+      "section": "todo-carryover",
+      "options": {
+        "rollover": "rollover",
+        "daily rollover": "rollover",
+        "full daily rollover": "rollover",
+        "a full daily rollover": "rollover",
+        "roll everything over": "rollover",
+        "carry everything over": "rollover",
+        "carry them over": "rollover",
+        "carry over": "rollover",
+        "carry yesterday over": "rollover",
+        "roll over": "rollover",
+        "day": "day",
+        "day by day": "day",
+        "each day": "day",
+        "each day separately": "day",
+        "day labelled": "day",
+        "day labeled": "day",
+        "one day at a time": "day",
+        "separate days": "day"
+      },
+      "desktop_found": true,
+      "phone_found": true,
+      "handler": "jarvis_settings_registry.set_todo_carryover",
+      "status": "enforced",
+      "proof": "backend/test_todo_carryover.py: the sentences \"set the to-do list mode to day by day\", \"set the to-do carry-over to full daily rollover\" and \"set the to-do list mode to each day separately\" each resolve through jarvis_quick.match() to the settings_choice intent naming todo_carryover with its own value, the registry setter really moves the ONE value the scheduler reads (jarvis_schedule.set_todo_mode_here -> Scheduler.todo_mode), and the same method is what POST /api/schedule/act {\"do\": \"todo_mode\"} calls - so a phrase, the route and either app Settings switch cannot disagree."
+    }
   ],
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
@@ -13460,7 +13511,7 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 95,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 96,
     "Switchable / Adjustable (Typed & Settings)": 43,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,

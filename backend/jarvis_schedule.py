@@ -147,6 +147,7 @@ from __future__ import annotations
 import atexit
 import datetime
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -244,16 +245,26 @@ ACTION_SCHEDULE = "schedule_action"
 # the target is a URL, a file on the allow-list, a note, or a name from the
 # closed list below.
 
-#: The four kinds this slice knows, exactly. Lower-case hyphenated words, never
+#: The kinds this slice knows, exactly. Lower-case hyphenated words, never
 #: free text, so a client can switch on them.
-ACTION_KINDS = ("show-note", "open-webpage", "open-file", "run-task")
+#:
+#: `ask` (2026-11-02, the owner's "maximum flexibility" round) is the fifth and
+#: the only one that is a QUESTION rather than a target: see the ASK block
+#: below. It is additive like every other kind - a reminder written before it
+#: has `action` NULL and grows no key at all.
+ACTION_KINDS = ("show-note", "open-webpage", "open-file", "run-task", "ask")
 
 #: The ONE payload key each kind carries, and no other. `app` (open-app) is
 #: reserved by the design and deliberately NOT shipped: the only resolver for a
 #: program is the desktop's Start-menu index (`open_app.rs`), so shipping it
 #: would mean duplicating that index in Python or adding a general exec path.
+#:
+#: `ask` carries THREE keys (`question`, `buttons`, `record`), so it is the one
+#: kind whose block is not "a kind plus one key"; `ACTION_ASK_KEYS` below is its
+#: own shape and `_clean_ask` is its own check. `question` is named here because
+#: it is the one word both apps show first.
 ACTION_PAYLOAD = {"show-note": "note", "open-webpage": "url", "open-file": "path",
-                  "run-task": "task"}
+                  "run-task": "task", "ask": "question"}
 
 #: The kinds that ACT, and therefore raise the one card at fire time.
 ACTING_ACTION_KINDS = ("run-task",)
@@ -299,7 +310,106 @@ NOT_HTTPS = ("A web address starts with https:// - copy it from your browser's "
 #: The one sentence a file that has gone gets, at save time and at the tap.
 FILE_GONE = "That file is not there any more."
 _NO_ACTION_KIND = ("An action is one of: show a note, open a web page, open a file, "
-                   "or do a task.")
+                   "do a task, or ask a question with buttons.")
+
+# ---- a reminder that ASKS, and the owner's own buttons (2026-11-02) ----------
+#
+# The owner's second request of 2026-11-02, verbatim in substance: *"I would like
+# to tell Jarvis exactly how I want the reminder to appear and what interactive
+# elements there are - e.g. 'hey Jarvis remind me to take a medication at 10:00
+# a.m.' -> at 10:00 a.m. a notification on my Android phone saying 'Did you take
+# your medication?' with a Yes or No button"*, and then *"as much flexibility or
+# options as I want"*.
+#
+# So ONE reminder may now carry a QUESTION and up to three buttons the owner
+# wrote himself, instead of one target. The line the whole block is built on is
+# the same one the other kinds use:
+#
+#   Showing the owner something is not acting. Doing something is.
+#   Answering a question is neither: it is a log line, like ticking a to-do.
+#
+# Nothing here can run a program, a command, a script or a webhook, and no answer
+# raises an approval card - an answer is cardless, exactly as `act("done")` is.
+# The design is `DESIGN.md` ("Reminder actions v2"), and the tests are
+# `backend/test_schedule_ask.py`.
+#
+# WHAT A BUTTON MAY DO. Exactly one of these three verbs, per button:
+#
+#   record   write the answer to the destinations below (the log line itself,
+#            the journal, a goal's progress, a habit tick)
+#   done     mark the reminder done (a one-off leaves "Just went off"; a
+#            repeating one stops repeating - it only ever makes Jarvis quieter)
+#   snooze   the same one-off copy every other Snooze makes, N minutes later
+#
+# `open-file` / `open-webpage` are deliberately NOT here in this build, and the
+# refusal says why in one sentence: the desktop's ONE opener
+# (`open_reminder_target`, reminder_open.rs) opens a reminder's own single
+# action and takes the job id only, so a per-button target would need a SECOND
+# opener in Rust. That is a security surface (a page that can name a path is an
+# exec primitive) and belongs to whoever owns that command, not to this lane.
+# The sentence the owner gets says "for now" and names the two kinds that do
+# open things, so the limit is visible instead of looking like a bug.
+ACTION_ASK = "ask"
+
+#: The three keys an `ask` block has, and no others - the shape `_clean_ask`
+#: checks and `_decode_ask` checks again.
+ACTION_ASK_KEYS = frozenset({"kind", "question", "buttons", "record"})
+
+#: What ONE button may do. Never a program, a command, a script or a webhook:
+#: this tuple IS that rail, and `_ASK_FORBIDDEN` names the words that get their
+#: own sentence so the owner is told why rather than "not a kind".
+ASK_DOES = ("record", "done", "snooze")
+
+#: The words someone may reach for that this build refuses BY NAME, so the
+#: refusal is about what they asked for instead of a generic one. Their message
+#: is `ASK_NO_ACT`.
+_ASK_FORBIDDEN = ("open-file", "open-webpage", "open", "run", "run-task", "shell",
+                  "command", "script", "webhook", "program", "exec")
+
+#: Limits, each said in one sentence when it is reached. A button label is
+#: bounded because Android cuts a notification action's label at about 20
+#: characters and a label the owner cannot read is worse than a refused one.
+MAX_ASK_QUESTION = 200
+MAX_ASK_QUESTION_LINES = 3
+MAX_ASK_BUTTONS = 3
+MAX_ASK_LABEL = 24
+ASK_SNOOZE_MIN = 1
+ASK_SNOOZE_MAX = 1440            # a day - the same ceiling a timer has
+#: How many answers a reminder keeps. A log, not a history of everything: the
+#: newest 40 taps is enough to see "I said Taken at 10:00 every day this month",
+#: and the row itself is deleted FIRED_KEEP after it last went off.
+MAX_ANSWERS = 40
+
+#: The four recording DESTINATIONS an `ask` block may switch on, in the order
+#: the answer writes them. `history` is the reminder's own log; `obsidian_daily`
+#: appends one plain line to that day's Obsidian note; `goal` and `habit` write
+#: progress / a tick through the other module, when this PC has it.
+ASK_DESTINATIONS = ("history", "obsidian_daily", "goal", "habit")
+
+#: What the owner reads when a destination is chosen but this PC cannot do it
+#: yet. One plain sentence each, never a code, and never a promise: the goal
+#: progress log and the habit record are other lanes' modules, and a tree
+#: without them says so instead of failing quietly.
+GOAL_NOT_SET_UP = ("Goal progress is not set up on this PC yet, so that part was not "
+                   "written. The answer itself was kept.")
+HABIT_NOT_SET_UP = ("Habit ticks are not set up on this PC yet, so that part was not "
+                    "written. The answer itself was kept.")
+JOURNAL_NOT_SET_UP = ("Today's Obsidian note was not written: your Obsidian vault is not "
+                      "set up on this PC, so only the answer was kept.")
+#: A destination that exists but refused or raised. The exception's own words are
+#: never shown (they could quote a path), so these are the fixed sentences.
+_GOAL_FAILED = "Goal progress could not be written this time."
+_HABIT_FAILED = "The habit tick could not be written this time."
+_JOURNAL_FAILED = "Today's Obsidian note could not be written this time."
+
+#: Refusals, each ONE sentence shown as it is.
+ASK_NO_ACT = ("A button can record the answer, mark the reminder done, or snooze it. "
+              "This build has no button that opens a file or a page: the desktop's one "
+              "opener opens a reminder's single own action, and a second one has to be "
+              "built on the PC first.")
+ASK_NOT_FIRED = "That reminder has not gone off yet, so there is nothing to answer."
+ASK_WRONG_KIND = "That reminder does not ask a question."
+ASK_GONE = "That reminder has gone - the answer was not kept."
 
 #: How many future times the card and the list show for a repeating job.
 NEXT_SHOWN = 3
@@ -592,7 +702,17 @@ _ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "
                   # legacy row with no usable stamp) the first time this code
                   # opens the file; see `_backfill_created_dates`. Old code
                   # ignores the column, so a code rollback stays safe.
-                  ("created_date", "TEXT"))
+                  ("created_date", "TEXT"),
+                  # A reminder's answer log (2026-11-02): the newest MAX_ANSWERS
+                  # taps on an `ask` reminder's own buttons, as JSON - when, the
+                  # label, what that button did, and what was written. NULL for
+                  # every row that has never been answered, which is every row
+                  # written before this and every job that is not an `ask`
+                  # reminder. It is the ONLY new stored thing the feature adds,
+                  # and the row itself is deleted FIRED_KEEP after it last went
+                  # off, so the log goes with it. Old code ignores the column, so
+                  # a code rollback stays safe - the contract `action` came in on.
+                  ("answers", "TEXT"))
 
 #: The one value `jobs.source_taint` holds. It is a value, not a boolean, so
 #: a later reason (a pasted-text job, say) can be added without a rewrite.
@@ -753,6 +873,121 @@ def _hhmm(s) -> tuple:
     return hh, mm
 
 
+#: How many different times of day ONE rule may go off at ("several times in
+#: one day", 2026-11-02). Eight is a day's worth of prompts; more is a nag.
+MAX_TIMES_A_DAY = 8
+#: "Every N days" and "every N weeks": the shortest and the longest. One day is
+#: "every day" and belongs to that rule; a year is where a repeat should be a
+#: date instead.
+MAX_REPEAT_DAYS = 365
+MAX_REPEAT_WEEKS = 52
+#: How far ahead a rule's optional end date may be.
+MAX_RULE_YEARS = 10
+
+#: The sentence every reader gets when a rule names a kind this build does not
+#: know. Said as a list of what DOES work, so it is a refusal the owner can act
+#: on rather than a code.
+_RULE_KINDS = ("a repeat is every day, every weekday, every week on some days, every "
+               "N days, every N weeks, every month, or every N hours")
+
+
+def _rule_times(rule: dict) -> list:
+    """The times of day a rule goes off, as (hh, mm), earliest first.
+
+    `at` is ALWAYS the earliest one, so every reader that knows only `at` (an
+    older app, the phone's own rule parser) still reads the first time it goes
+    off. `times` carries them all and is present only when there is more than
+    one, so an ordinary rule's block is byte for byte what it always was."""
+    many = rule.get("times")
+    if isinstance(many, list) and many:
+        return sorted({_hhmm(t) for t in many})
+    return [_hhmm(rule.get("at"))]
+
+
+def _times_checked(rule: dict) -> tuple:
+    """(at, times) - the earliest time as "HH:MM", and every time in order.
+    ValueError, in one sentence, for no time, a bad one, or too many."""
+    times = _rule_times(rule)
+    if len(times) > MAX_TIMES_A_DAY:
+        raise ValueError(f"a rule goes off at up to {MAX_TIMES_A_DAY} times in one day")
+    at = f"{times[0][0]:02d}:{times[0][1]:02d}"
+    return at, [f"{hh:02d}:{mm:02d}" for hh, mm in times]
+
+
+def _whole(value, why: str) -> int:
+    """A whole number from a body, or ValueError with `why`."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(why)
+    return value
+
+
+def _rule_anchor(rule: dict, now: float) -> float:
+    """The first day a "every N days/weeks/month" rule counts from, as this
+    PC's own midnight - the owner's "first occurrence". Accepts a date
+    ("2026-11-09") or an epoch, and defaults to today."""
+    raw = rule.get("start")
+    if raw is None or raw == "":
+        lt = time.localtime(now)
+        return wall_to_epoch(lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0)
+    if isinstance(raw, str):
+        m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", raw.strip())
+        if not m:
+            raise ValueError("the first one looks like a date, 2026-11-09")
+        y, mo, d = (int(g) for g in m.groups())
+        try:
+            datetime.date(y, mo, d)
+        except ValueError:
+            raise ValueError("that first date is not on the calendar")
+        return wall_to_epoch(y, mo, d, 0, 0)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise ValueError("the first one looks like a date, 2026-11-09")
+    t = float(raw)
+    lt = time.localtime(t)
+    return wall_to_epoch(lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0)
+
+
+def _rule_ends(rule: dict, now: float) -> Optional[float]:
+    """The last day a rule may go off, as this PC's own 23:59 - or None.
+
+    An optional end date ("stop this at the end of the month", 2026-11-02).
+    Accepts a date ("2026-12-31") or an epoch, and is stored as an epoch float
+    under `ends` - the key `jarvis_tellme.py` already writes and `tick` already
+    honours, so one code path stops every rule, not a second one for these.
+    """
+    raw = rule.get("ends")
+    if raw is None or raw == "":
+        return None
+    t: Optional[float] = None
+    if isinstance(raw, str):
+        m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", raw.strip())
+        if not m:
+            raise ValueError("an end date looks like 2026-12-31")
+        y, mo, d = (int(g) for g in m.groups())
+        try:
+            datetime.date(y, mo, d)
+        except ValueError:
+            raise ValueError("that end date is not on the calendar")
+        t = wall_to_epoch(y, mo, d, 23, 59)
+    elif isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        t = float(raw)
+    if t is None:
+        raise ValueError("an end date looks like 2026-12-31")
+    if t <= now:
+        raise ValueError("that end date has already passed")
+    if t > now + MAX_RULE_YEARS * 366 * 86400:
+        raise ValueError(f"an end date is up to {MAX_RULE_YEARS} years away")
+    return t
+
+
+def _with_ends(rule: dict, ends: Optional[float]) -> dict:
+    """The rule with its optional end date added - and unchanged when it has
+    none, so a rule written before this feature is byte for byte what it was."""
+    if ends is not None:
+        rule = dict(rule)
+        rule["ends"] = float(ends)
+    return rule
+
+
 def check_rule(rule, now: Optional[float] = None, *, window: bool = False) -> dict:
     """The rule, tidied, or ValueError with a sentence. `window`: the rule
     is for a window kind, and must be every day from one time to another."""
@@ -771,17 +1006,25 @@ def check_rule(rule, now: Optional[float] = None, *, window: bool = False) -> di
         return {"every": "day", "at": f"{hh:02d}:{mm:02d}", "until": f"{uh:02d}:{um:02d}"}
     if rule.get("until") is not None:
         raise ValueError("only a standby schedule has an end time")
+    clock_now = float(now if now is not None else time.time())
+    ends = _rule_ends(rule, clock_now)
     if every in ("day", "weekday"):
-        hh, mm = _hhmm(rule.get("at"))
-        return {"every": every, "at": f"{hh:02d}:{mm:02d}"}
+        at, times = _times_checked(rule)
+        out = {"every": every, "at": at}
+        if len(times) > 1:
+            out["times"] = times
+        return _with_ends(out, ends)
     if every == "week":
-        hh, mm = _hhmm(rule.get("at"))
+        at, times = _times_checked(rule)
         days = rule.get("days")
         if (not isinstance(days, list) or not days
                 or not all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 6
                            for x in days)):
             raise ValueError("a weekly repeat needs its days, 0 (Monday) to 6 (Sunday)")
-        return {"every": "week", "at": f"{hh:02d}:{mm:02d}", "days": sorted(set(days))}
+        out = {"every": "week", "at": at, "days": sorted(set(days))}
+        if len(times) > 1:
+            out["times"] = times
+        return _with_ends(out, ends)
     if every == "hours":
         n = rule.get("hours")
         if not isinstance(n, int) or isinstance(n, bool):
@@ -790,12 +1033,144 @@ def check_rule(rule, now: Optional[float] = None, *, window: bool = False) -> di
             raise ValueError(f"the shortest repeat is every {MIN_EVERY_HOURS} hour")
         if n > MAX_EVERY_HOURS:
             raise ValueError("the longest \"every N hours\" is a week; use a weekly repeat")
+        if rule.get("times") is not None:
+            raise ValueError("an hourly repeat has no times of day - it counts from its start")
         start = rule.get("start")
         if not isinstance(start, (int, float)) or isinstance(start, bool):
-            start = float(now if now is not None else time.time())
-        return {"every": "hours", "hours": n, "start": float(start)}
-    raise ValueError("a repeat is every day, every weekday, every week on some days, "
-                     "or every N hours")
+            start = float(clock_now)
+        return _with_ends({"every": "hours", "hours": n, "start": float(start)}, ends)
+    if every == "days":
+        n = _whole(rule.get("days"), "\"every N days\" needs a whole number of days")
+        if n < 1:
+            raise ValueError("every N days starts at every day")
+        if n > MAX_REPEAT_DAYS:
+            raise ValueError(f"the longest \"every N days\" is {MAX_REPEAT_DAYS}; "
+                             f"pick a date instead")
+        at, times = _times_checked(rule)
+        out = {"every": "days", "days": n, "at": at, "start": _rule_anchor(rule, clock_now)}
+        if len(times) > 1:
+            out["times"] = times
+        return _with_ends(out, ends)
+    if every == "weeks":
+        n = _whole(rule.get("weeks"), "\"every N weeks\" needs a whole number of weeks")
+        if n < 1:
+            raise ValueError("every N weeks starts at every week")
+        if n > MAX_REPEAT_WEEKS:
+            raise ValueError(f"the longest \"every N weeks\" is {MAX_REPEAT_WEEKS}")
+        at, times = _times_checked(rule)
+        days = rule.get("days")
+        if (not isinstance(days, list) or not days
+                or not all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 6
+                           for x in days)):
+            raise ValueError("a repeat every N weeks needs its days, 0 (Monday) to 6 (Sunday)")
+        out = {"every": "weeks", "weeks": n, "at": at, "days": sorted(set(days)),
+               "start": _rule_anchor(rule, clock_now)}
+        if len(times) > 1:
+            out["times"] = times
+        return _with_ends(out, ends)
+    if every == "month":
+        d = _whole(rule.get("day"), "\"every month\" needs its day of the month")
+        if d < 1 or d > 31:
+            raise ValueError("a monthly repeat is on a day 1 to 31")
+        at, times = _times_checked(rule)
+        out = {"every": "month", "at": at, "day": d}
+        if len(times) > 1:
+            out["times"] = times
+        return _with_ends(out, ends)
+    raise ValueError(_RULE_KINDS)
+
+
+def _day_ord(y: int, mo: int, d: int) -> int:
+    """A date as a plain day count. Calendar arithmetic only - no clock, no
+    daylight saving, nothing a time zone can move."""
+    return datetime.date(y, mo, d).toordinal()
+
+
+def _ord_date(n: int) -> tuple:
+    """The (year, month, day) a day count means."""
+    got = datetime.date.fromordinal(int(n))
+    return got.year, got.month, got.day
+
+
+def _days_in_month(y: int, mo: int) -> int:
+    first = datetime.date(y, mo, 1)
+    nxt = datetime.date(y + 1, 1, 1) if mo == 12 else datetime.date(y, mo + 1, 1)
+    return (nxt - first).days
+
+
+def _today_ord(at: float) -> int:
+    lt = time.localtime(at)
+    return _day_ord(lt.tm_year, lt.tm_mon, lt.tm_mday)
+
+
+def _at_times(y: int, mo: int, d: int, times: list, after: float) -> Optional[float]:
+    """The first of `times` on this date that is strictly after `after`."""
+    for hh, mm in times:
+        t = wall_to_epoch(y, mo, d, hh, mm)
+        if t > after:
+            return t
+    return None
+
+
+def _next_daily(times: list, after: float, days: Optional[set] = None) -> float:
+    """The first of `times` after `after`, on one of `days` (0 = Monday;
+    None: any day). Two days is always far enough back for a time still to
+    come today."""
+    lt = time.localtime(after)
+    y, mo, d = lt.tm_year, lt.tm_mon, lt.tm_mday
+    for n in range(0, 9):
+        yy, mmo, dd = _add_days(y, mo, d, n) if n else (y, mo, d)
+        if days is not None and _weekday(yy, mmo, dd) not in days:
+            continue
+        t = _at_times(yy, mmo, dd, times, after)
+        if t is not None:
+            return t
+    raise ValueError("no such time in the next week")
+
+
+def _next_n_days(times: list, after: float, start_ord: int, step: int) -> float:
+    """Every `step` days from the anchor day, the first one after `after`."""
+    today = _today_ord(after)
+    k = 0 if today <= start_ord else (today - start_ord) // step
+    for _ in range(0, 400):
+        y, mo, d = _ord_date(start_ord + k * step)
+        t = _at_times(y, mo, d, times, after)
+        if t is not None:
+            return t
+        k += 1
+    raise ValueError("no such day")
+
+
+def _next_n_weeks(times: list, after: float, monday_ord: int, step: int,
+                  weekdays: set) -> float:
+    """Every `step` weeks from the anchor week (which starts on `monday_ord`),
+    on one of `weekdays` (0 = Monday), the first one after `after`."""
+    today = _today_ord(after)
+    span = 7 * step
+    k = 0 if today <= monday_ord else (today - monday_ord) // span
+    for _ in range(0, 400):
+        week = monday_ord + k * span
+        for wd in sorted(weekdays):
+            y, mo, d = _ord_date(week + wd)
+            t = _at_times(y, mo, d, times, after)
+            if t is not None:
+                return t
+        k += 1
+    raise ValueError("no such day")
+
+
+def _next_monthly(times: list, after: float, day_of_month: int) -> float:
+    """Every month on `day_of_month` (clamped to the month's last day, so the
+    31st is the 28th in February), the first one after `after`."""
+    lt = time.localtime(after)
+    y, mo = lt.tm_year, lt.tm_mon
+    for _ in range(0, 12 * MAX_RULE_YEARS):
+        d = min(day_of_month, _days_in_month(y, mo))
+        t = _at_times(y, mo, d, times, after)
+        if t is not None:
+            return t
+        y, mo = (y + 1, 1) if mo == 12 else (y, mo + 1)
+    raise ValueError("no such day")
 
 
 def next_run(rule: dict, after: float) -> float:
@@ -823,13 +1198,24 @@ def next_run(rule: dict, after: float) -> float:
             return start
         k = int((after - start) // step) + 1
         return start + k * step
-    hh, mm = _hhmm(rule["at"])
+    times = _rule_times(rule)
+    if every == "days":
+        return _next_n_days(times, after, _today_ord(float(rule["start"])),
+                            int(rule["days"]))
+    if every == "weeks":
+        start = float(rule["start"])
+        lt = time.localtime(start)
+        monday = _day_ord(lt.tm_year, lt.tm_mon, lt.tm_mday) - _weekday(
+            lt.tm_year, lt.tm_mon, lt.tm_mday)
+        return _next_n_weeks(times, after, monday, int(rule["weeks"]), set(rule["days"]))
+    if every == "month":
+        return _next_monthly(times, after, int(rule["day"]))
     days = None
     if every == "weekday":
         days = {0, 1, 2, 3, 4}
     elif every == "week":
         days = set(rule["days"])
-    return next_at(hh, mm, after, days)
+    return _next_daily(times, after, days)
 
 
 def next_runs(rule: dict, after: float, n: int = NEXT_SHOWN) -> list:
@@ -949,24 +1335,67 @@ def length_words(seconds: float) -> str:
     return " ".join(parts) if parts else "0 seconds"
 
 
+def _times_words(rule: Optional[dict]) -> str:
+    """"at 08:00" or "at 08:00, 13:00 and 20:00" - the times a rule goes off."""
+    times = _rule_times(rule or {})
+    said = [f"{hh:02d}:{mm:02d}" for hh, mm in times]
+    if len(said) <= 1:
+        return f"at {said[0]}" if said else ""
+    return "at " + ", ".join(said[:-1]) + " and " + said[-1]
+
+
+def _day_month(t: float) -> str:
+    """"Monday 2 November" - a date without the year, for a rule's anchor."""
+    lt = time.localtime(t)
+    return f"{WEEKDAYS[lt.tm_wday]} {lt.tm_mday} {MONTHS[lt.tm_mon - 1]}"
+
+
+_ORDINAL_TAILS = {1: "st", 2: "nd", 3: "rd"}
+
+
+def _ordinal_words(n: int) -> str:
+    """1st, 2nd, 3rd, 4th ... 21st, 22nd, 31st."""
+    if 10 <= n % 100 <= 20:
+        return f"{n}th"
+    return f"{n}{_ORDINAL_TAILS.get(n % 10, 'th')}"
+
+
 def rule_words(rule: Optional[dict]) -> str:
+    """The rule as ONE readable sentence's worth of words, never a code. An
+    optional end date is said last, so the whole stays sayable in one breath
+    ("every 2 weeks on Monday and Thursday at 09:00, until Sunday 27 December")."""
     if not rule:
         return ""
     every = rule.get("every")
+    ends = rule.get("ends")
     if rule.get("until"):
-        return f"every day from {rule['at']} to {rule['until']}"
-    if every == "day":
-        return f"every day at {rule['at']}"
-    if every == "weekday":
-        return f"every weekday (Monday to Friday) at {rule['at']}"
-    if every == "week":
+        said = f"every day from {rule['at']} to {rule['until']}"
+    elif every == "day":
+        said = f"every day {_times_words(rule)}"
+    elif every == "weekday":
+        said = f"every weekday (Monday to Friday) {_times_words(rule)}"
+    elif every == "week":
         names = [WEEKDAYS[i] for i in rule.get("days", [])]
         joined = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
-        return f"every {joined} at {rule['at']}"
-    if every == "hours":
+        said = f"every {joined} {_times_words(rule)}"
+    elif every == "days":
+        n = rule.get("days")
+        said = (f"every day {_times_words(rule)}" if n == 1
+                else f"every {n} days {_times_words(rule)}")
+    elif every == "weeks":
+        n = rule.get("weeks")
+        names = [WEEKDAYS[i] for i in rule.get("days", [])]
+        joined = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+        said = (f"every week on {joined} {_times_words(rule)}" if n == 1
+                else f"every {n} weeks on {joined} {_times_words(rule)}")
+    elif every == "month":
+        d = rule.get("day")
+        said = (f"every month on the {_ordinal_words(int(d))} {_times_words(rule)}"
+                if isinstance(d, int) else f"every month {_times_words(rule)}")
+    elif every == "hours":
         n = rule.get("hours")
-        return "every hour" if n == 1 else f"every {n} hours"
-    if every == "minutes":
+        said = "every hour" if n == 1 else f"every {n} hours"
+    elif every == "minutes":
         n = rule.get("minutes")
         # Whole days and hours said as such (2026-09-28: a "tell me when" on
         # a search looks once a day - "every 1440 minutes" is no way to say it).
@@ -976,7 +1405,16 @@ def rule_words(rule: Optional[dict]) -> str:
             if n % 60 == 0:
                 return "every hour" if n == 60 else f"every {n // 60} hours"
         return "every minute" if n == 1 else f"every {n} minutes"
-    return ""
+    else:
+        return ""
+    if every in ("days", "weeks") and isinstance(rule.get("start"), (int, float)):
+        # The owner's "first occurrence": without it "every 3 days" has no
+        # visible anchor, and two rules that read the same would start on
+        # different days.
+        said += f", starting {_day_month(float(rule['start']))}"
+    if ends is not None:
+        said += f", until {_day_month(float(ends))}"
+    return said
 
 
 def next_words(rule: Optional[dict], after: float, n: int = NEXT_SHOWN) -> str:
@@ -2033,6 +2471,158 @@ class Scheduler:
             return
         raise ValueError("unknown task")
 
+    # ---- answering an `ask` reminder (2026-11-02) ---------------------------
+    #
+    # ONE button of ONE question, pressed. An answer is a LOG LINE, not an
+    # approval: it opens no card, decides nothing about anything else on this
+    # PC, and is as reversible as a line in a notebook (which is what it is).
+    # That is the design's own sentence - "answering is a log, cardless like
+    # ticking a to-do" - and it is why nothing here touches the gate.
+    #
+    # Answering the same question twice is two answers ("Taken" and then
+    # "Taken again"), because a question is not a card and does not close.
+
+    def answers(self, jid: str) -> list:
+        """ONE reminder's answers, oldest first; [] for none."""
+        with self._lock, self._db() as c:
+            row = c.execute("SELECT answers FROM jobs WHERE id = ?", (str(jid),)).fetchone()
+        return _decode_answers(row["answers"] if row is not None else None)
+
+    def answer(self, jid: str, index, *, source: str = "app") -> tuple:
+        """Press ONE button of an `ask` reminder: (code, answer).
+
+        `index` is the button's position in the stored block, 0-based - never
+        its label, so a re-worded button cannot be answered by accident.
+        Nothing is written unless the whole thing is valid and the reminder has
+        actually gone off: the same order `_fire_action` refuses in.
+
+        What is written, in order:
+          1. the reminder's own history, when `record.history` is on - EVERY
+             button logs there, because that is the log of the question;
+          2. today's Obsidian note, a goal's progress and a habit tick - only
+             from a `record` button, and each one that cannot be written is
+             reported in ONE sentence while the rest still happens;
+          3. what the button itself does: `done` (it stops), or `snooze`.
+        """
+        now = self.now()
+        with self._lock, self._db() as c:
+            row = self._row(c, jid)
+        if row is None:
+            return 404, {"ok": False, "reason": "no_such_job", "error": ASK_GONE}
+        action = _decode_action(_row_action(row))
+        if not action or action.get("kind") != ACTION_ASK:
+            return 409, {"ok": False, "error": ASK_WRONG_KIND}
+        fired = row["fired_at"]
+        if (fired is None or row["state"] not in ("fired", "active", "paused")
+                or now - float(fired) > FIRED_KEEP):
+            # Not due yet, or so long ago that the row is about to be deleted
+            # (FIRED_KEEP) - an answer written now would go with it unseen.
+            return 409, {"ok": False, "error": ASK_NOT_FIRED}
+        buttons = action.get("buttons") or []
+        if isinstance(index, bool) or not isinstance(index, int) \
+                or not 0 <= index < len(buttons):
+            return 400, {"ok": False,
+                         "error": f"Which button? Say its number, from 0 to {len(buttons) - 1}."}
+        button = buttons[index]
+        does = str(button.get("does") or "")
+        record = action.get("record") if isinstance(action.get("record"), dict) else {}
+        wrote: list = []
+        problems: list = []
+        if record.get("history"):
+            wrote.append("its own history")
+        # A `record` button writes the chosen destinations. A `done` or
+        # `snooze` button does its own one thing and writes no note: that is
+        # what "each button does ONE thing" means, and it keeps the journal
+        # free of "Snoozed 30 minutes" lines the owner never asked for.
+        if does == "record":
+            line = _answer_line(row["text"], button["label"], now)
+            if record.get("obsidian_daily"):
+                why = _write_daily_note(line, now)
+                (problems if why else wrote).append(
+                    why if why else "today's Obsidian note")
+            if record.get("goal"):
+                why = _write_goal(str(record["goal"]), line, now)
+                (problems if why else wrote).append(why if why else "goal progress")
+            if record.get("habit"):
+                why = _write_habit(str(record["habit"]), line, now)
+                (problems if why else wrote).append(why if why else "a habit tick")
+        said = _wrote_words(wrote, problems)
+        if does == "done":
+            said = self._answer_done(jid, row, now)
+        elif does == "snooze":
+            code, out = self.snooze(jid, float(button["minutes"]) * 60.0)
+            if code != 200:
+                return code, out
+            said = str(out.get("said") or "") or said
+            # A snoozed QUESTION asks again when it comes back: its own copy
+            # carries the same block. Without this the copy would come back as
+            # a plain reminder with the words and no buttons - the owner would
+            # have snoozed a question into a statement.
+            copy_id = (out.get("job") or {}).get("id")
+            if copy_id:
+                self._copy_question(jid, str(copy_id))
+        entry = {"at": float(now), "clock": clock(now), "button": button["label"],
+                 "does": does, "wrote": wrote}
+        if problems:
+            entry["problems"] = problems
+        self._append_answer(jid, entry)
+        _audit("schedule.answered", {"id": jid, "button": index, "does": does,
+                                     "wrote": list(wrote), "problems": len(problems),
+                                     "source": str(source)[:20]})
+        if does != "done":
+            # Every app hears that this job changed, so the other one takes its
+            # notification away and the row redraws with the new answer on it.
+            # `done` already did this inside `end`/the UPDATE.
+            self._changed(jid, row["kind"])
+        return 200, {"ok": True, "id": jid, "button": button["label"], "does": does,
+                     "wrote": wrote, "problems": problems, "said": said,
+                     "answers": self.answers(jid)}
+
+    def _copy_question(self, from_jid: str, to_jid: str) -> None:
+        """Give a snoozed copy the question it came from.
+
+        Only `snooze` makes a copy, so this is the one place a second row can
+        hold an `ask` block. Nothing else about the copy changes, and a job that
+        is not a question is left exactly as `snooze` made it."""
+        with self._lock, self._db() as c:
+            row = self._row(c, from_jid)
+            if row is None:
+                return
+            raw = _row_action(row)
+            if not _decode_action(raw):
+                return
+            c.execute("UPDATE jobs SET action = ? WHERE id = ?", (raw, str(to_jid)))
+
+    def _answer_done(self, jid: str, row, now: float) -> str:
+        """The "Done" button: this occurrence is dealt with.
+
+        A repeating reminder STOPS repeating (`end`), which is exactly what
+        deleting it would do and only ever makes Jarvis quieter. A one-off
+        leaves "Just went off" and is kept DONE_KEEP, like a to-do item ticked
+        off. Neither asks a card: an answer that quiets something needs none."""
+        if row["rule"]:
+            self.end(jid)
+            return "Marked done - it will not repeat again."
+        with self._lock, self._db() as c:
+            c.execute("UPDATE jobs SET state = 'done', due = NULL, changed = ?, "
+                      "fired_at = COALESCE(fired_at, ?) WHERE id = ?", (now, now, jid))
+        self._changed(jid, row["kind"])
+        return "Marked done."
+
+    def _append_answer(self, jid: str, entry: dict) -> None:
+        """ONE answer onto the end of the reminder's own log, keeping the newest
+        MAX_ANSWERS. A log that grows without a bound is a leak on a PC that is
+        never rebooted, and 40 taps is more than a month of a daily question."""
+        with self._lock, self._db() as c:
+            row = c.execute("SELECT answers FROM jobs WHERE id = ?", (str(jid),)).fetchone()
+            if row is None:
+                return
+            kept = _decode_answers(row["answers"])
+            kept.append(entry)
+            kept = kept[-MAX_ANSWERS:]
+            c.execute("UPDATE jobs SET answers = ? WHERE id = ?",
+                      (json.dumps(kept), str(jid)))
+
     # ---- changing one job ---------------------------------------------------------
 
     #: Waves of work finish; the owner decides when a TASK finished.
@@ -3050,6 +3640,25 @@ class Scheduler:
                         v["action_problem"] = problem
             else:
                 v["action_unreadable"] = True
+        # An `ask` reminder's own answer log (2026-11-02), oldest first. Handed
+        # out only when there is one, so every other row - and every row written
+        # before this - grows NO key at all: the same additive contract `action`
+        # keeps. Each entry is one tap: when (by the PC's clock), the owner's
+        # label, what that button did and what was written.
+        try:
+            raw_answers = row["answers"]
+        except (IndexError, KeyError):
+            raw_answers = None
+        kept_answers = _decode_answers(raw_answers)
+        if kept_answers:
+            v["answers"] = kept_answers
+        if v.get("action", {}).get("kind") == ACTION_ASK:
+            # A question is worth being asked and answered: both apps draw its
+            # buttons, and `answers` may be absent (nothing pressed yet) - so
+            # the marker says the PC can take an answer, which is the one thing
+            # an older backend cannot do. The same reason `actions`/`phase2`
+            # exist: an older PC would silently drop the route's verb.
+            v["asks"] = True
         # GTD-1 (2026-10-18): additive, and only when there is something to
         # say - an old row (or a plain timer/alarm) grows no keys, so every
         # payload and every old test is byte-for-byte what it was. The bundle's
@@ -3190,7 +3799,14 @@ class Scheduler:
                 # direction. A newer UI therefore hides the whole "Then" block
                 # when this is absent and says why, and every old client ignores
                 # the key. The same contract `phase2` has.
-                "actions": True, "now": now, "tz": _tz_name(now),
+                "actions": True,
+                # A reminder that ASKS (2026-11-02): the same kind of marker, for
+                # the same reason. An older backend refuses an `ask` block at save
+                # time (so the owner is told, rather than getting a reminder with
+                # a question nothing can draw), but an older backend ALSO has no
+                # `answer` verb - so a newer UI hides the buttons unless the PC
+                # says `asks: true`, and every old client ignores the key.
+                "asks": True, "now": now, "tz": _tz_name(now),
                 "jobs": self.listed(), "todo": todo,
                 # The to-do list's own day (2026-11-02): which mode is in
                 # force, the two modes in the owner's words for the Settings
@@ -3584,7 +4200,12 @@ def handle_act(body: dict) -> tuple:
     {"do": "clear_list", "list", "count"} - one NAMED list, cleared after the
     app's "are you sure?" - and, since 2026-11-02,
     {"do": "todo_mode", "mode": "rollover"|"day"} - which way the to-do list is
-    shown (see `handle_mode`)."""
+    shown (see `handle_mode`). A third is not a change at all: since 2026-11-02
+    {"do": "answer", "id", "button": <index>, "source"?} presses ONE button of
+    ONE `ask` reminder and logs the answer (see `Scheduler.answer`). It needs no
+    card and decides nothing - an answer is a log line, like ticking a to-do -
+    so the token and origin checks this route already makes are the whole gate.
+    """
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "need a JSON object"}
     verb = str(body.get("do") or "").strip().lower()
@@ -3600,6 +4221,20 @@ def handle_act(body: dict) -> tuple:
         # after the app's "are you sure?", and only when `count` matches what
         # the app showed (Scheduler.clear_list). Never the to-do list.
         return get().clear_list(body.get("list"), body.get("count"))
+    if verb == "answer":
+        # The third form that is not one job, and the only one that is not a
+        # CHANGE: one button of one `ask` reminder, pressed (2026-11-02).
+        #
+        # It rides this route for the same reason `clear_list` and `todo_mode`
+        # do - one scheduler, ONE write door - and because a route of its own
+        # in jarvis_hud.py would re-anchor two later patches' invented
+        # pre-images in the patch-stack audit for no gain. Nothing here acts:
+        # an answer is a log line, cardless like ticking a to-do, so the token
+        # and origin checks this route already makes are the whole gate.
+        jid = body.get("id")
+        if not isinstance(jid, str) or not re.fullmatch(r"s[0-9a-f]{10}", jid):
+            return 400, {"ok": False, "error": "need one job id"}
+        return get().answer(jid, body.get("button"), source=str(body.get("source") or "app"))
     jid = body.get("id")
     if not isinstance(jid, str) or not re.fullmatch(r"s[0-9a-f]{10}", jid):
         return 400, {"ok": False, "error": "need one job id"}
@@ -3767,11 +4402,186 @@ _ACTION_CHECKS = {"show-note": ("note", _note_problem),
                   "run-task": ("task", _task_problem)}
 
 
+# ---- the `ask` block: checked when it is saved, and again when it is read -----
+#
+# The second door is the SAME function, on purpose: `_decode_ask` calls
+# `_clean_ask` inside a try/except, so the rules the PC saves a question under
+# and the rules it reads one back under can never drift apart - the two-check
+# pattern section 21.11 already keeps for the other kinds.
+
+#: The sentences, each ONE whole sentence, shown to the owner as it is.
+ASK_NEEDS_BUTTONS = ("A question needs at least one button - that is what you press "
+                     "when it goes off.")
+ASK_NEEDS_DESTINATION = ("That button records the answer, so pick where: the reminder's "
+                         "own history, today's Obsidian note, a goal or a habit.")
+ASK_NO_LABEL = "Every button needs its words - write what it should say."
+ASK_SAME_LABELS = ("Two buttons say the same thing, so there would be no way to tell which "
+                   "one you pressed.")
+_ASK_BAD_ID = ("A goal or a habit is named by its own id, like the one the Goals screen "
+               "shows.")
+
+
+def _ask_id(value, which: str) -> str:
+    """A goal's or a habit's own id, checked as a NAME and nothing else.
+
+    The id is handed to the module that owns the record (`jarvis_goals`,
+    `jarvis_habits`); it is never a path and never a command. Its shape is
+    checked here so a row edited by hand cannot smuggle free text into that
+    call. Existence is deliberately NOT checked: a goal may be created after the
+    reminder, and the write degrades with one sentence instead of refusing."""
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise ValueError(_ASK_BAD_ID)
+    text = str(value).strip()
+    if not text or len(text) > 64 or not re.fullmatch(r"[A-Za-z0-9._:-]+", text):
+        raise ValueError(_ASK_BAD_ID)
+    return text
+
+
+def _question_problem(q) -> str:
+    """'' when this is a question a reminder may ask, else one sentence. Plain
+    text, never parsed as HTML: the notice and the row set it with `textContent`
+    and the phone puts it in a notification body."""
+    if not isinstance(q, str) or not q.strip():
+        return "Write the question first - it is what you will read when it goes off."
+    if len(q) > MAX_ASK_QUESTION:
+        return f"A question is up to {MAX_ASK_QUESTION} characters."
+    if q.count("\n") + 1 > MAX_ASK_QUESTION_LINES:
+        return f"A question is up to {MAX_ASK_QUESTION_LINES} lines."
+    if any(ord(c) < 32 and c not in "\n\t" for c in q):
+        return "A question is plain words - that one has a character it cannot hold."
+    return ""
+
+
+def _ask_label_problem(label) -> str:
+    """'' when this is a button's label, else one sentence. A label is ONE line
+    of the owner's own words: Android cuts a notification action's label at
+    about twenty characters, so a longer one is refused rather than shown
+    half-finished."""
+    if not isinstance(label, str) or not label.strip():
+        return ASK_NO_LABEL
+    text = label.strip()
+    if len(text) > MAX_ASK_LABEL:
+        return f"A button's words are up to {MAX_ASK_LABEL} characters."
+    if any(c in text for c in "\n\r\t"):
+        return "A button's words are one line."
+    if any(ord(c) < 32 or ord(c) == 127 for c in text):
+        return "A button's words are plain words - that one has a character it cannot hold."
+    return ""
+
+
+def _clean_button(raw) -> dict:
+    """ONE button: its label and the one thing it does. ValueError, in one
+    sentence, for anything else - never a program, a command or a webhook."""
+    if not isinstance(raw, dict):
+        raise ValueError(ASK_NO_ACT)
+    problem = _ask_label_problem(raw.get("label"))
+    if problem:
+        raise ValueError(problem)
+    does = raw.get("does")
+    if not isinstance(does, str) or not does.strip():
+        raise ValueError(ASK_NO_ACT)
+    does = does.strip().lower()
+    if does not in ASK_DOES:
+        # Every refused verb gets the same sentence, and it names the three that
+        # work. `open-file` / `open-webpage` are what the design asked for and
+        # this build does not ship (see the ASK block above): the sentence says
+        # so in plain words rather than pretending the request was understood.
+        raise ValueError(ASK_NO_ACT)
+    out = {"label": " ".join(str(raw["label"]).split()), "does": does}
+    if does == "snooze":
+        minutes = raw.get("minutes")
+        if isinstance(minutes, bool) or not isinstance(minutes, int):
+            raise ValueError("\"snooze\" needs how many minutes, as a whole number.")
+        if minutes < ASK_SNOOZE_MIN or minutes > ASK_SNOOZE_MAX:
+            raise ValueError(f"A snooze button is {ASK_SNOOZE_MIN} to {ASK_SNOOZE_MAX} "
+                             f"minutes.")
+        out["minutes"] = int(minutes)
+    elif "minutes" in raw:
+        # A button that does not snooze carries no time: a block that said both
+        # would be one the app could not draw honestly.
+        raise ValueError("Only a snooze button has minutes on it.")
+    if set(raw) - {"label", "does", "minutes"}:
+        raise ValueError(ASK_NO_ACT)
+    return out
+
+
+def _clean_record(raw, needed: bool) -> dict:
+    """Where a `record` button writes: any combination of the four destinations,
+    and never an id this build cannot pass to the module that owns the record."""
+    if raw is None or raw == {}:
+        if needed:
+            raise ValueError(ASK_NEEDS_DESTINATION)
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(ASK_NEEDS_DESTINATION)
+    if set(raw) - set(ASK_DESTINATIONS):
+        raise ValueError(ASK_NEEDS_DESTINATION)
+    out: dict = {}
+    for key in ("history", "obsidian_daily"):
+        if key in raw:
+            if not isinstance(raw[key], bool):
+                raise ValueError(ASK_NEEDS_DESTINATION)
+            if raw[key]:
+                out[key] = True
+    # `goal` and `habit` carry an id; false, "" and None all mean "not this one".
+    for key in ("goal", "habit"):
+        if key in raw and raw[key] not in (None, "", False):
+            out[key] = _ask_id(raw[key], key)
+    if needed and not out:
+        raise ValueError(ASK_NEEDS_DESTINATION)
+    return out
+
+
+def _clean_ask(raw) -> dict:
+    """A reminder's `ask` block, checked and normalised. ValueError in one plain
+    sentence for anything else. Called when the reminder is SAVED (`add_at` /
+    `add_repeat`) and again when it is READ (`_decode_ask`)."""
+    if set(raw) - ACTION_ASK_KEYS:
+        raise ValueError(_NO_ACTION_KIND)
+    problem = _question_problem(raw.get("question"))
+    if problem:
+        raise ValueError(problem)
+    buttons = raw.get("buttons")
+    if not isinstance(buttons, list) or not buttons:
+        raise ValueError(ASK_NEEDS_BUTTONS)
+    if len(buttons) > MAX_ASK_BUTTONS:
+        raise ValueError(f"A question has up to {MAX_ASK_BUTTONS} buttons - Android shows "
+                         f"three, and your PC draws the same three.")
+    clean = [_clean_button(b) for b in buttons]
+    labels = [b["label"].lower() for b in clean]
+    if len(set(labels)) != len(labels):
+        raise ValueError(ASK_SAME_LABELS)
+    record = _clean_record(raw.get("record"), any(b["does"] == "record" for b in clean))
+    action = {"kind": ACTION_ASK,
+              # The owner's own words, with Windows line endings folded, and no
+              # outer blank lines: the same tidy a `show-note` gets.
+              "question": raw["question"].replace("\r\n", "\n").replace("\r", "\n").strip(),
+              "buttons": clean}
+    if record:
+        action["record"] = record
+    if len(json.dumps(action)) > MAX_ACTION_BYTES:
+        raise ValueError("That is too much to keep with one reminder.")
+    return action
+
+
+def _decode_ask(got: dict) -> dict:
+    """The stored `ask` block, or {} when anything about it is wrong.
+
+    Never raises, and it is the SAME check the save door uses - so a row edited
+    on the owner's own disk reads as "that reminder's action could not be read",
+    fires as an ordinary reminder and offers no buttons, rather than handing an
+    app a half-valid block."""
+    try:
+        return _clean_ask(got)
+    except (ValueError, TypeError, KeyError):
+        return {}
+
+
 def _clean_action(raw) -> Optional[dict]:
     """A reminder's action, checked and normalised - None when there is none.
 
     ValueError, in one plain sentence, for anything that is not exactly one
-    kind and its one payload key: no extra keys, no free text, no unknown kind.
+    kind and its own keys: no extra keys, no free text, no unknown kind.
     Called from `add_at` and `add_repeat` (the two ways a reminder is made), so
     a bad target is refused before a row exists."""
     if raw is None or raw == "" or raw == {}:
@@ -3781,6 +4591,8 @@ def _clean_action(raw) -> Optional[dict]:
     kind = raw.get("kind")
     if not isinstance(kind, str) or kind not in ACTION_KINDS:
         raise ValueError(_NO_ACTION_KIND)
+    if kind == ACTION_ASK:
+        return _clean_ask(raw)
     key, check = _ACTION_CHECKS[kind]
     extra = set(raw) - {"kind", key}
     if extra:
@@ -3805,7 +4617,7 @@ def _clean_action(raw) -> Optional[dict]:
 
 def _decode_action(raw) -> dict:
     """The stored action, or {} for anything that is not a JSON object with a
-    known kind and exactly its one payload key.
+    known kind and exactly its own keys.
 
     Never raises: a row is plain SQLite on the owner's own disk and anything on
     that PC can edit it, so a damaged action must fire as an ordinary reminder
@@ -3822,6 +4634,8 @@ def _decode_action(raw) -> dict:
     kind = got.get("kind")
     if not isinstance(kind, str) or kind not in ACTION_KINDS:
         return {}
+    if kind == ACTION_ASK:
+        return _decode_ask(got)
     key = ACTION_PAYLOAD[kind]
     if set(got) != {"kind", key}:
         return {}
@@ -3846,7 +4660,15 @@ def _action_problem(action: dict) -> str:
     been replaced by a shortcut, or the folder may have been removed from
     Settings since the reminder was saved. Reported on fired rows as
     `action_problem`, and the Open button is then not drawn - the owner is
-    never invited to press something that cannot work."""
+    never invited to press something that cannot work.
+
+    An `ask` block is deliberately always "" here. Its question and its buttons
+    are its own words, and there is nothing outside the row for them to lose;
+    the one thing that CAN go away is a destination another module owns (a goal
+    deleted, a habit list that was never set up), and refusing the whole answer
+    over that would throw away the log line the owner did press. So a
+    destination that cannot be written is reported in the ANSWER's own sentence
+    instead, after the tap - never by hiding the question."""
     if not action:
         return ""
     kind = action.get("kind")
@@ -3858,7 +4680,179 @@ def _action_problem(action: dict) -> str:
         return _note_problem(action.get("note"))
     if kind == "run-task":
         return _task_problem(action.get("task"))
+    if kind == ACTION_ASK:
+        return ""
     return _NO_ACTION_KIND
+
+
+# ---- what answering WRITES (2026-11-02) -------------------------------------
+#
+# Four destinations and one log line, and every way one of them can fail is ONE
+# plain sentence rather than an exception. The two that belong to another module
+# (`jarvis_goals`' progress log, `jarvis_habits`' tick) are called through a
+# small, explicit interface and said to be "not set up" when this PC does not
+# have them - a tree without those modules must never crash an answer, and must
+# never quietly pretend it wrote something.
+
+
+def _decode_answers(raw) -> list:
+    """The stored answer log, oldest first, or [] for anything that is not a
+    list of plain records. Never raises: a row edited by hand reads as no
+    answers, which is the same direction every other read of that row takes."""
+    if not raw:
+        return []
+    try:
+        got = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return []
+    if not isinstance(got, list):
+        return []
+    out = []
+    for entry in got:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            at = float(entry.get("at") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if at <= 0:
+            continue
+        wrote = [str(x)[:40] for x in (entry.get("wrote") or [])
+                 if isinstance(x, (str, int, float)) and not isinstance(x, bool)][:6]
+        problems = [str(x)[:160] for x in (entry.get("problems") or [])
+                    if isinstance(x, str)][:4]
+        kept = {"at": at, "clock": str(entry.get("clock") or clock(at))[:8],
+                "button": str(entry.get("button") or "")[:MAX_ASK_LABEL],
+                "does": str(entry.get("does") or "")[:20], "wrote": wrote}
+        if problems:
+            kept["problems"] = problems
+        out.append(kept)
+    return out[-MAX_ANSWERS:]
+
+
+def _join_words(items: list) -> str:
+    """'a', 'a and b', 'a, b and c' - the same joining the rules use."""
+    words = [str(x) for x in items if str(x)]
+    if not words:
+        return ""
+    if len(words) == 1:
+        return words[0]
+    return ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def _answer_line(text: str, label: str, at: float) -> str:
+    """The one plain line an answer writes: "10:00 — medication: Taken".
+
+    The reminder's own words, a colon, and the owner's own button label - never
+    an id, a code or the module's private state. Bounded so one long reminder
+    cannot write a paragraph into a journal that Jarvis then has to read back."""
+    subject = " ".join(str(text or "").split())[:80] or "reminder"
+    return f"{clock(at)} — {subject}: {' '.join(str(label or '').split())[:MAX_ASK_LABEL]}"
+
+
+def _wrote_words(wrote: list, problems: list) -> str:
+    """What the owner reads after an answer: what was written, then every
+    destination that could not be, each in its own sentence."""
+    said = (f"Saved to {_join_words(wrote)}." if wrote else "Answered.")
+    if problems:
+        said = (said + " " + " ".join(problems)).strip()
+    return said
+
+
+def _write_daily_note(line: str, at: float) -> str:
+    """'' when the line was appended to TODAY's Obsidian note, else one sentence.
+
+    `jarvis_note_capture` is the module that already owns "add this to today's
+    daily note": its own plan is worked out first (the vault, the daily-note
+    path, the folder the note lives in, the protection list), and only then is
+    it written with `approved=True` - because the tap IS the person. No card:
+    an answer is a log line, and this is the same reasoning that lets an Open
+    button open something with no card. Nothing leaves this PC."""
+    try:
+        import jarvis_note_capture as note_capture
+    except Exception:
+        return JOURNAL_NOT_SET_UP
+    try:
+        plan = note_capture.plan("obsidian", line,
+                                 now=datetime.datetime.fromtimestamp(at))
+        why = str(getattr(plan, "reason_empty", "") or "")
+        if why:
+            return why
+        got = note_capture.run(plan, approved=True)
+    except Exception:
+        return _JOURNAL_FAILED
+    if isinstance(got, dict) and got.get("ok") is True:
+        return ""
+    said = str(got.get("reason") or "") if isinstance(got, dict) else ""
+    return said or _JOURNAL_FAILED
+
+
+def _optional_module(name: str):
+    """Another module of this PC's backend, or None when it is not there.
+
+    `jarvis_habits` ships with the life-coach lane and is not in this tree yet,
+    and `backend/test_base_matches_repo.py` holds the published base to importing
+    ONLY what it ships ("the base's own imports close") - a plain `import
+    jarvis_habits` there, even inside a try, would claim the base carries a file
+    it does not. So the lookup is by name, at the moment an answer is written,
+    which is the same thing `jarvis_notes_edit._protection()` and several other
+    modules here do for the same reason. Nothing is guessed at: an absent module
+    is None, and every caller turns that into one plain sentence."""
+    try:
+        return importlib.import_module(name)
+    except Exception:
+        return None
+
+
+def _write_goal(goal_id: str, line: str, at: float) -> str:
+    """'' when the line went on that goal's progress log, else one sentence.
+
+    THE INTERFACE a later lane implements (PR #1105, "a goal keeps a progress
+    log"): ``jarvis_goals.progress(goal_id, text, *, at)``, returning a mapping
+    whose ``{"ok": False, "error": "..."}`` is shown as it is, or nothing. This
+    tree's `jarvis_goals.py` has no progress log yet, so a reminder that names a
+    goal says GOAL_NOT_SET_UP and keeps the answer: it never crashes and never
+    pretends to have written what it did not."""
+    goals = _optional_module("jarvis_goals")
+    if goals is None:
+        return GOAL_NOT_SET_UP
+    fn = getattr(goals, "progress", None) or getattr(goals, "add_progress", None)
+    if not callable(fn):
+        return GOAL_NOT_SET_UP
+    try:
+        got = fn(goal_id, line, at=at)
+    except KeyError:
+        return "That goal is not on this PC any more."
+    except Exception:
+        return _GOAL_FAILED
+    if isinstance(got, dict) and got.get("ok") is False:
+        return str(got.get("error") or "") or _GOAL_FAILED
+    return ""
+
+
+def _write_habit(habit_id: str, line: str, at: float) -> str:
+    """'' when a tick was recorded, else one sentence.
+
+    Wired by the life-coach lane, and deliberately left as a clean seam rather
+    than half-built here: it calls ``jarvis_habits.tick(habit_id, *, at, text)``
+    when that module is beside this file. It is not in this tree, so the honest
+    answer is HABIT_NOT_SET_UP - the same shape `_write_goal` takes, so one lane
+    cannot accidentally look more finished than the other."""
+    habits = _optional_module("jarvis_habits")
+    if habits is None:
+        return HABIT_NOT_SET_UP
+    fn = getattr(habits, "tick", None)
+    if not callable(fn):
+        return HABIT_NOT_SET_UP
+    try:
+        got = fn(habit_id, at=float(at), text=line)
+    except KeyError:
+        return "That habit is not on this PC any more."
+    except Exception:
+        return _HABIT_FAILED
+    if isinstance(got, dict) and got.get("ok") is False:
+        return str(got.get("error") or "") or _HABIT_FAILED
+    return ""
 
 
 # --------------------------------------------------------------------------
