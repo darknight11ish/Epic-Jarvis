@@ -364,10 +364,12 @@ def _job_shell_like(words: str) -> bool:
 #: was read against `jarvis_quick.run()`'s dispatch, runner by runner - a name
 #: here means "running this job would ask the owner a second time". Two more
 #: groups sit beside it: `_JOB_CARDLESS` (runs with no card of its own) and
-#: `_JOB_REPEAT_CARDED` (a card only for the repeating form). Every intent
-#: `jarvis_quick.match()` can return is in exactly one of the three, and
-#: `backend/test_schedule_any_job.py` pins the whole set against that file, so a
-#: new intent is classified here before it can be scheduled.
+#: `_JOB_REPEAT_CARDED` (a card only for the repeating form). Anything not named
+#: in these sets (a NEW intent) is refused conservatively rather than assumed
+#: cardless, so a future intent cannot slip a second card through without being
+#: classified here first; `backend/test_schedule_any_job.py` holds the
+#: classifier's own checks (the project forbids tests that pin a production
+#: module's source text).
 #:
 #: The entries that are carded only SOMETIMES say so in `_JOB_CAN_NEED`: a
 #: settings change asks for a loosening (a cosmetic change is at once), a note

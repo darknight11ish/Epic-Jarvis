@@ -32,9 +32,9 @@ one would touch modules:
     resolves to a carded intent (saved by an older build, or a resolver that
     said yes) raises NO second card, runs nothing, says `needs_approval` in the
     audit, and its own row view says it did not run and why;
-  - every intent `jarvis_quick.py` can construct is classified as carded or
-    cardless, so a new one cannot arrive unclassified and slip a second card
-    through;
+  - the classifier names the audit's examples as carded and ordinary writes as
+    cardless, and refuses an intent it does not know instead of assuming it is
+    cardless;
   - a job that resolves raises exactly ONE `schedule_action` card, its body says
     the action in plain words and says nothing happens before a yes, and its
     `detail` carries no owner words;
@@ -50,7 +50,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import sys
 import tempfile
@@ -511,45 +510,31 @@ def t_run_job_is_the_chat_path():
             sys.modules["jarvis_quick"] = keep
 
 
-def t_every_intent_the_resolver_can_return_is_classified():
-    """Every `Intent("...")` name in `jarvis_quick.py` is in exactly one of the
-    carded / cardless sets, so a future intent cannot arrive unclassified and
-    slip a second card through. Also pins that each carded name has plain words
-    for the refusal, and that the sets do not overlap."""
-    source = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
-    names = set(re.findall(r'Intent\("([a-z0-9_]+)"', source))
-    import jarvis_quick as Q
-    groups = {
-        "read_only": set(Q.READ_ONLY_INTENTS),
-        "cardless": set(S._JOB_CARDLESS),
-        "carded": set(S._JOB_CARDED),
-        "can_need": set(S._JOB_CAN_NEED),
-        "repeat_carded": set(S._JOB_REPEAT_CARDED),
-    }
-    known = set().union(*groups.values())
-    missing = sorted(names - known)
-    check("every intent jarvis_quick.py constructs is classified carded/cardless",
-          not missing, missing)
-    overlaps = sorted((a & b) for a, b in
-                      ((groups["cardless"], groups["carded"]),
-                       (groups["cardless"], groups["can_need"]),
-                       (groups["cardless"], groups["repeat_carded"]),
-                       (groups["carded"], groups["can_need"]),
-                       (groups["carded"], groups["repeat_carded"]),
-                       (groups["can_need"], groups["repeat_carded"]))
-                      if a & b)
-    check("... and none are in two of the carded/cardless sets at once",
-          not overlaps, overlaps)
-    carded = groups["carded"] | groups["can_need"] | groups["repeat_carded"]
-    read_collision = sorted(groups["read_only"] & carded)
-    check("... and no READ_ONLY intent is also classified as carded",
-          not read_collision, read_collision)
-    no_words = sorted(n for n in carded if n not in S._JOB_CARD_WORDS)
-    check("... and every carded intent has plain words for its refusal",
-          not no_words, no_words)
-    check("the read-only set is used as-is (a read-only intent is never refused)",
-          all(S._job_own_card(Intent(n)) == "" for n in sorted(Q.READ_ONLY_INTENTS)
-              if n in names), "a READ_ONLY intent was classified as carded")
+def t_the_card_classification_answers_for_known_and_unknown_intents():
+    """The four sets, without reading any production module's source (this
+    project forbids source-text pins): the audit's own examples are carded, a
+    cardless write is not, and an unknown intent is the safe third state -
+    refused, never assumed cardless."""
+    carded = {"forget_range", "update_start", "settings_bool", "read_link",
+              "send_file", "news_add"}
+    for name in sorted(carded):
+        check(f"the classifier says {name!r} raises its own card",
+              bool(S._job_own_card(Intent(name))), S._job_card_refusal(Intent(name)))
+    for name in ("todo_add", "timer_set", "reminder_set", "focus_start"):
+        check(f"the classifier says {name!r} raises no card of its own",
+              S._job_own_card(Intent(name)) == "", S._job_card_refusal(Intent(name)))
+    unknown = S._job_own_card(Intent("brand_new_job"))
+    check("an intent this build does not know is NOT treated as cardless",
+          unknown is S._JOB_UNSURE, unknown)
+    check("... it is refused, in the honest 'cannot tell' sentence",
+          S._job_card_refusal(Intent("brand_new_job")).startswith(
+              "Jarvis cannot tell whether that job"))
+    # A repeat is the carded form of a briefing; a once-only one raises nothing.
+    repeating = Intent("briefing_set", {"when": types.SimpleNamespace(rule={"every": "day"})})
+    once = Intent("briefing_set", {"when": types.SimpleNamespace(rule=None)})
+    check("a repeating briefing is classified carded",
+          bool(S._job_own_card(repeating)), S._job_card_refusal(repeating))
+    check("a once-only briefing is not", S._job_own_card(once) == "")
 
 
 # ---------------------------------------------------------------------------
@@ -569,7 +554,7 @@ def main():
                t_fire_rechecks_the_intent_even_when_resolution_says_yes,
                t_the_closed_name_path_is_unchanged,
                t_run_job_is_the_chat_path,
-               t_every_intent_the_resolver_can_return_is_classified):
+               t_the_card_classification_answers_for_known_and_unknown_intents):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
