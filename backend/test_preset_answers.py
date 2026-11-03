@@ -194,6 +194,17 @@ def main():
         {"messages": [{"role": "user", "content": text, "provenance": "typed"}],
          "conversation_id": "abcdefgh-preset"}, sched=sched)
 
+    # THIS SUITE MUST NOT PIN TODAY'S TREE. PR #1106 adds the pooled lane; when
+    # it lands, the same code answers "it runs" instead of "not live yet". The
+    # live/not-live switch is forced here so BOTH sentences are proven on any
+    # tree - a test that went red when the fix landed would be worse than none.
+    real_live = Q._pooled_lane_in_build
+
+    def force_live(value):
+        Q._pooled_lane_in_build = lambda row=None: value
+
+    force_live(False)   # today's main: the pooled both-card lane is not here
+
     # ------------------------------------------------------------------
     #  1. The owner's exact wrong answer
     # ------------------------------------------------------------------
@@ -309,7 +320,10 @@ def main():
         check(f"both cards shape: {text!r}",
               got is not None and got.intent == "both_cards", got)
 
-    # A real pooled lane that IS running says yes; a stopped one says no.
+    # A real pooled lane that IS running says yes; a stopped one says no. The
+    # live branch is forced here because today's main has no pooled lane - the
+    # same assertions hold unchanged once PR #1106 makes it real.
+    force_live(True)
     sys.modules["jarvis_model_lanes"] = _fake_lanes(pooled_key=True, running=True)
     got = ask("are you using both cards?")
     said = getattr(got, "reply", "") or ""
@@ -323,6 +337,12 @@ def main():
     said = getattr(got, "reply", "") or ""
     check("both cards: a stopped pooled lane says NOT right now",
           "Not right now: no pooled both-card lane is loaded" in said, said)
+    # The Coding answer itself stops saying "not live" once the lane is in.
+    got = ask("what model does the coding preset use?")
+    said = getattr(got, "reply", "") or ""
+    check("both cards: with the pooled lane in the build, Coding is described as live",
+          "It runs only while it is the applied preset" in said
+          and "not live until" not in said, said)
     sys.modules["jarvis_model_lanes"] = _fake_lanes(pooled_key=True, raises=True)
     got = ask("are you using both cards?")
     said = getattr(got, "reply", "") or ""
@@ -330,6 +350,7 @@ def main():
           "I cannot read the model lanes on this PC" in said
           and "cannot tell" in said, said)
     # The separate "One bigger model on both cards" mode is its own fact.
+    force_live(False)
     sys.modules["jarvis_model_lanes"] = _fake_lanes(pooled_key=False, running=False)
     second_card.STATE["state"] = "running"
     got = ask("are you using both cards?")
@@ -365,6 +386,7 @@ def main():
     heavy["heavy_words"] = "HEAVY-WORDS-SENTINEL: both cards, the other models pause."
     heavy["lane"] = {"key": "pooled", "card": "both cards", "port": 11450,
                      "words": "one model across both cards"}
+    force_live(True)
     words = Q._preset_answer(heavy)
     check("heavy_words: used when this build has the field",
           "HEAVY-WORDS-SENTINEL" in words, words)
@@ -374,6 +396,7 @@ def main():
           "one pooled lane" in words and "not live until" not in words, words)
     plain = dict(P.by_id("coding").view())
     plain.pop("heavy_words", None)
+    force_live(False)
     words = Q._preset_answer(plain)
     check("heavy_words: absent means the row's own cost is the fallback",
           str(P.by_id("coding").cost) in words, words)
@@ -431,6 +454,7 @@ def main():
     b = (REPO / "jarvis-backend" / "jarvis_quick.py").read_bytes()
     check("twin: jarvis_quick.py is identical in both copies", a == b)
 
+    Q._pooled_lane_in_build = real_live
     P.apply_from_body = real_apply
 
 
