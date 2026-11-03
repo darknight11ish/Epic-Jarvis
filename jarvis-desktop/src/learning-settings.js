@@ -11,11 +11,13 @@
  * THE ONE PATH, THREE TIMES. Each control calls the SAME Rust command the
  * Brain's own switch calls - `brain_memory_learning` (POST
  * /api/memory/learning), `brain_memory_learning_sensitive` (POST
- * /api/memory/learning/sensitive), and `brain_memory_learning_status` (GET
- * /api/memory/learning) for the state - so this card, "turn on background
- * learning" and the phone's switch are one write path, one card, one rule.
- * Nothing here approves anything: ON raises the PC's ONE `learning_enable` /
- * `learning_sensitive_enable` card and changes nothing until a person answers
+ * /api/memory/learning/sensitive), `brain_memory_learning_paraphrase` (POST
+ * /api/memory/learning/paraphrase, 2026-11-02) - and
+ * `brain_memory_learning_status` (GET /api/memory/learning) for the state - so
+ * this card, "turn on background learning" and the phone's switch are one write
+ * path, one card, one rule. Nothing here approves anything: ON raises the PC's
+ * ONE `learning_enable` / `learning_sensitive_enable` /
+ * `learning_paraphrase_enable` card and changes nothing until a person answers
  * it; OFF is immediate and never held (rule 4 holds only what loosens).
  *
  * WHAT EACH ROW SHOWS. The switch position, and under it the row's own words -
@@ -60,6 +62,9 @@ const el = {
   sensitive: $("learning-sensitive"),
   sensitiveLine: $("learning-sensitive-line"),
   sensitiveWaiting: $("learning-sensitive-waiting"),
+  paraphrase: $("learning-paraphrase"),
+  paraphraseLine: $("learning-paraphrase-line"),
+  paraphraseWaiting: $("learning-paraphrase-waiting"),
   said: $("learning-status"),
 };
 
@@ -87,14 +92,24 @@ const SENSITIVE_OFF =
 const SENSITIVE_NEEDS_BACKGROUND =
   "Background learning is off, so nothing is saved automatically. Turn " +
   "background learning on above to use this.";
+// 2026-11-02: "Save facts even when Jarvis had to reword them". The words the
+// Brain uses (auto-learn.js PARAPHRASE_DETAIL/REWORDED_MARK), so the two
+// surfaces cannot say different things about one switch.
+const PARAPHRASE_ON =
+  "On. A fact whose words are Jarvis's own is saved and marked \"Jarvis's own " +
+  "words\" in the Brain. Nothing else is relaxed: sensitive topics, passwords, " +
+  "pasted text, a tool's reading and corrections all still wait.";
+const PARAPHRASE_OFF =
+  "Off. A fact in Jarvis's own words waits for your yes.";
 
 /** The card the background switch's ON raises (jarvis_learning_switch.py). */
 const BACKGROUND_ACTION = "learning_enable";
 
 let view = null;
 let busy = false;
-let asked = false;          // false | "background" | "sensitive"
+let asked = false;          // false | "background" | "sensitive" | "paraphrase"
 let sawSensitive = false;      // our own ON is waiting on a card
+let sawParaphrase = false;      // the same for the third switch
 let sawCard = false;    // ...and the queue has shown that card since we asked
 let poll = null;
 
@@ -122,6 +137,7 @@ function paint() {
   if (!view) {
     if (el.background) el.background.disabled = true;
     if (el.sensitive) el.sensitive.disabled = true;
+    if (el.paraphrase) el.paraphrase.disabled = true;
     return;
   }
   const queued = backgroundCardWaiting();
@@ -131,10 +147,13 @@ function paint() {
   const backgroundWaiting = asked === "background" || queued;
   if (view.sensitive_waiting === true) sawSensitive = true;
   const sensitiveWaiting = view.sensitive_waiting === true || asked === "sensitive";
+  if (view.paraphrase_waiting === true) sawParaphrase = true;
+  const paraphraseWaiting = view.paraphrase_waiting === true || asked === "paraphrase";
   // A waiting card is drawn ON so it can be taken back; the line under it says
   // it is only waiting, never that the switch is on.
   const backgroundOn = view.enabled === true || backgroundWaiting;
   const sensitiveOn = view.sensitive === true || sensitiveWaiting;
+  const paraphraseOn = view.paraphrase === true || paraphraseWaiting;
   // Turning either ON raises a card, so it needs a live link; OFF never waits.
   const held = !live();
   if (el.background) {
@@ -145,6 +164,11 @@ function paint() {
     el.sensitive.disabled = busy || (held && !sensitiveOn) ||
       (view.enabled === false && !sensitiveOn);
     el.sensitive.checked = sensitiveOn;
+  }
+  if (el.paraphrase) {
+    el.paraphrase.disabled = busy || (held && !paraphraseOn) ||
+      (view.enabled === false && !paraphraseOn);
+    el.paraphrase.checked = paraphraseOn;
   }
   if (el.backgroundLine) {
     el.backgroundLine.textContent = view.enabled === true
@@ -165,6 +189,15 @@ function paint() {
     el.sensitiveWaiting.textContent = sensitiveWaiting ? WAITING_CARD : "";
     el.sensitiveWaiting.hidden = !sensitiveWaiting;
   }
+  if (el.paraphraseLine) {
+    el.paraphraseLine.textContent = view.enabled === false
+      ? SENSITIVE_NEEDS_BACKGROUND
+      : (view.paraphrase === true ? PARAPHRASE_ON : PARAPHRASE_OFF);
+  }
+  if (el.paraphraseWaiting) {
+    el.paraphraseWaiting.textContent = paraphraseWaiting ? WAITING_CARD : "";
+    el.paraphraseWaiting.hidden = !paraphraseWaiting;
+  }
 }
 
 /** Read the PC's answer and paint it. True when the card can be drawn. */
@@ -182,6 +215,9 @@ async function read() {
       enabled: raw.enabled === true,
       sensitive: raw.auto_sensitive === true,
       sensitive_waiting: raw.sensitive_waiting === true,
+      // 2026-11-02: "Save facts even when Jarvis had to reword them".
+      paraphrase: raw.paraphrase === true,
+      paraphrase_waiting: raw.paraphrase_waiting === true,
       why: typeof raw.why === "string" ? raw.why.trim() : "",
     };
     // Our own ON: stop saying "waiting" once the switch is on, or once the
@@ -196,6 +232,11 @@ async function read() {
         (view.sensitive === true || (sawSensitive && !view.sensitive_waiting))) {
       asked = false;
       sawSensitive = false;
+    }
+    if (asked === "paraphrase" &&
+        (view.paraphrase === true || (sawParaphrase && !view.paraphrase_waiting))) {
+      asked = false;
+      sawParaphrase = false;
     }
     paint();
     // A damaged settings file is the PC's own sentence, shown as a warning.
@@ -221,8 +262,8 @@ async function load() {
 }
 
 function watchWhileWaiting() {
-  const waiting = asked || (view && view.sensitive_waiting) ||
-    backgroundCardWaiting();
+  const waiting = asked || (view && (view.sensitive_waiting ||
+    view.paraphrase_waiting)) || backgroundCardWaiting();
   if (!waiting) {
     if (poll) {
       clearInterval(poll);
@@ -235,8 +276,8 @@ function watchWhileWaiting() {
   poll = setInterval(async () => {
     tries += 1;
     await read();
-    const still = asked || (view && view.sensitive_waiting) ||
-      backgroundCardWaiting();
+    const still = asked || (view && (view.sensitive_waiting ||
+      view.paraphrase_waiting)) || backgroundCardWaiting();
     if (tries >= 20 || !still) {
       clearInterval(poll);
       poll = null;
@@ -251,9 +292,12 @@ async function setSwitch(which, on) {
   asked = on ? which : false;
   paint();
   try {
-    const command = which === "background"
-      ? "brain_memory_learning"
-      : "brain_memory_learning_sensitive";
+    const command = {
+      background: "brain_memory_learning",
+      sensitive: "brain_memory_learning_sensitive",
+      // 2026-11-02: its own route and its own card, the same shape.
+      paraphrase: "brain_memory_learning_paraphrase",
+    }[which];
     const out = await call(command, { enabled: on }, "action");
     if (out && out.waiting) {
       say((out && out.message) || WAITING_CARD, "warn");
@@ -277,6 +321,8 @@ if (el.body) {
     setSwitch("background", event.target.checked));
   el.sensitive.addEventListener("change", (event) =>
     setSwitch("sensitive", event.target.checked));
+  el.paraphrase?.addEventListener("change", (event) =>
+    setSwitch("paraphrase", event.target.checked));
   onLink(() => paint());
   onQueue(() => paint());
   load();

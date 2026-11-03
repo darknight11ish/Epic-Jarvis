@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -530,6 +530,115 @@
+@@ -530,6 +530,116 @@
  #   The decision
  # --------------------------------------------------------------------------
  
@@ -42,6 +42,7 @@
 +    "history_enable",         # jarvis_chat_log.py: the same (chat-history.patch)
 +    "learning_auto_enable",   # jarvis_auto_learn.py: the same (auto-learn.patch)
 +    "learning_sensitive_enable",  # jarvis_auto_learn.py: the same
++    "learning_paraphrase_enable",  # jarvis_auto_learn.py: the same (2026-11-02)
 +    "custom_voice",           # jarvis_voices.py: the same (add a voice, switch to one)
 +    "better_voice_enable",    # jarvis_voices.py: the same (the better voice)
 +    "change_own_config",      # jarvis_voice_enroll.py, jarvis_speech.py: the same
