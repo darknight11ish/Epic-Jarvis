@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 174,
+  "feature_count": 175,
   "features": [
     {
       "id": "typing",
@@ -9458,6 +9458,57 @@
       "own_intents": [],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "plugin-switch",
+      "name": "Turn a drop-in module on or off by asking",
+      "group": "Safety",
+      "surface": "both",
+      "where": "Chat on either app, through the plugin_list and plugin_switch tools. There is no screen and no route on purpose: a plugin is a folder on this PC, and the chat tool is the door.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Turn a drop-in module on or off by asking",
+        "turn_off": "turn off Turn a drop-in module on or off by asking",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Chat on either app, through the plugin_list and plugin_switch tools. There is no screen and no route on purpose: a plugin is a folder on this PC, and the chat tool is the door.",
+        "search": [
+          "Turn a drop-in module on or off by asking"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Chat on either app, through the plugin_list and plugin_switch tools. There is no screen and no route on purpose: a plugin is a folder on this PC, and the chat tool is the door.",
+        "search": [
+          "turn a drop-in module on or off by asking"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Turn a drop-in module on or off by asking",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -13765,7 +13816,7 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 101
+      "not-a-setting": 102
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 29,
@@ -13782,11 +13833,11 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 101,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 102,
     "Switchable / Adjustable (Typed & Settings)": 43,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2
   },
-  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (self-explain coverage): the phone-apps manage/open row, the model-knowledge row and the price-radar row joined as Command-Only (95 -> 98 Command-Only, 168 -> 171 features), measured from the contract, not chosen. 2026-11-02 (merged with main's #1109 reminder builder): the reminder-asks row joined as Command-Only (98 -> 99 Command-Only, 171 -> 172 features), measured from the contract, not chosen. 2026-11-02 (stacked #1108 into #1110 for the merge train): the life-coach rows habit-checkins and mood-log joined as Command-Only, so 43/2/16/101/12 (174 total). Measured from the contract, not chosen."
+  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (plugins by chat): the \"Turn a drop-in module on or off by asking\" row joined as Command-Only (95 -> 96 Command-Only, 168 -> 169 features), because the two chat tools and the modify_own_code card are the feature and there is no stored setting for it. 2026-11-02 (stacked #1111 onto #1110's stacked head for the merge train): the plugin-switch row joined as Command-Only, so 43/2/16/102/12 (175 total). Measured from the contract, not chosen."
 }

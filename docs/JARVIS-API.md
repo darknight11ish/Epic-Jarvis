@@ -26307,7 +26307,12 @@ and its own docstring is the contract.
   `my_files` by default (2026-10-20: the post-install field test found a fresh
   install was offered only the first three, so the calculator and memory
   search the docs describe were missing too; the full default list is in the
-  template and pinned by `backend/test_tool_defaults.py`). With no folders,
+  template and pinned by `backend/test_tool_defaults.py`). Since 2026-11-02 the
+  same list also names `plugin_list` and `plugin_switch`, the two tools that
+  list Jarvis's drop-in plugins and turn one on or off by chat (section 181);
+  both stay on this PC - `plugin_list` only reads the plugin folder, and
+  `plugin_switch` raises ONE `modify_own_code` card to turn one on and needs no
+  card to turn one off. With no folders,
   `jarvis_agent.offered_tools` omits `my_files` entirely - chat search cannot
   run even while this switch is ON, and that omission is on purpose: with no
   folder listed the tool costs no tokens and reads nothing. The Settings card
@@ -31170,3 +31175,126 @@ therapy record.
   module opens a socket.
 - **No new permission model, no new gate tier, no shell/script kind, no
   batching**: nothing here acts, so there is nothing to approve.
+
+## 181. The drop-in plugins, by chat: list them, and switch ONE on or off (backend, both apps' chat, added 2026-11-02)
+
+*Numbering note, 2026-11-02: this section was written as 180; the life-coach section (also 2026-11-02) took 180 first in the merge train, so this one is 181. The words below are unchanged.*
+
+**What it is.** `jarvis_plugins.py` loads optional features from folders: a
+folder in `jarvis_plugins\` beside `jarvis_hud.py` is discovered at start-up,
+its own `install()` is called, and the feature is on. A `disabled` marker file
+in that folder keeps it off, and so does `"enabled": false` in the folder's own
+`plugin.json`. Both of those already existed; nothing in this section invents a
+third way. Until now the only way to see the list or switch one was to open the
+folder by hand. Now the owner's own words are the door:
+
+> "Jarvis may list plugins and turn them on/off by chat, one card per change."
+> - the owner, 2026-11-02 (the decision is
+> `decisions.d/2026-11-02-plugin-switch-by-chat.md`)
+
+**The two tools** (`backend/jarvis_agent.py`). They are ordinary model tools, so
+they work from either app's chat: the model runs on this PC, and the phone's
+chat is the same turn reaching the same backend.
+
+| tool | arguments | what it answers | card |
+|---|---|---|---|
+| `plugin_list` | none | every plugin folder, whether it is on, and why it is off | none - it only reads |
+| `plugin_switch` | `plugin` (a name `plugin_list` showed) and `action` (`on` or `off`) | that one plugin, and what happens next | **on**: ONE `modify_own_code` card. **off**: no card |
+
+**ON is carded, OFF is not** - the project's own on/off rule, and here is why it
+fits. A plugin is program code that runs inside the backend process at start-up,
+with the same trust as `jarvis_hud.py` itself (`jarvis_plugins.py`'s own
+docstring says so). Turning one ON is therefore a change to Jarvis's own running
+code, so it is decided under the **existing** `modify_own_code` action - the one
+`jarvis_skills.write_skill` and the skill hub already raise for the same kind of
+act - which ships at tier `ask`. It goes through `jarvis_gate.check` exactly
+like every other card; nothing here approves, auto-approves or decides anything
+itself. Turning one OFF only narrows what runs, so it is immediate and cardless,
+the same rule the settings apply ("turning it on raises an approval card;
+turning it off is immediate"). The tool is also in `NEEDS_A_PERSON`, which is
+the belt: if `modify_own_code` is ever loosened in a settings file, an "allowed"
+verdict with nobody asked is refused and nothing is written.
+
+**What a toggle means at runtime - said honestly, never pretended.** The loader
+runs ONCE, at HUD start-up, so **neither direction is live in the process that
+is already running**. Every answer says that in plain words: the change lands
+the next time Jarvis starts, the copy running now keeps going until then, and
+Jarvis cannot restart itself. Nothing in this feature restarts the backend, and
+the model is told not to offer to.
+
+**The exact file it writes, and the only one.** OFF creates the loader's own
+`disabled` marker in that one plugin folder (`O_CREAT|O_EXCL`, so nothing
+already there is overwritten). ON removes that same marker - and only after
+checking the folder and its `plugin.json` are still where the card said they
+were. `plugin.json` is **never** rewritten: a plugin switched off by
+`"enabled": false` inside its own manifest is **reported and refused**, because
+that is a hand edit on the PC, not something chat changes. No folder is
+created, moved, renamed or deleted, and `backend/test_plugin_switch.py` proves
+it by comparing the folder byte for byte across a full off/on/off cycle and by
+parsing the module for any folder-delete call.
+
+**What the list reports, because they are different problems.** `plugin_list`
+names a plugin as:
+
+- **on** - it loaded when Jarvis started;
+- **switched off** - a `disabled` marker is in its folder (chat can remove it);
+- **switched off in its own plugin.json** - `"enabled": false`; a hand edit;
+- **did not load** - `install()` raised or the module was missing, with the
+  loader's own reason in the answer;
+- **no working plugin.json** - the folder's manifest is missing or will not
+  parse, with the loader's own reason;
+- **added after Jarvis started** - a working folder that appeared since, so it
+  has not loaded in this process;
+- **its folder is gone** - it loaded when Jarvis started and the folder has
+  since been removed; it keeps running until Jarvis restarts. Saying nothing
+  here would be the lie this list exists to prevent.
+
+A missing plugin folder is reported too: "There is no plugin folder at ...", not
+an empty list that reads like "no plugins". The answer never raises, and its
+"why" text is the loader's own words where the loader has them.
+
+**No new route, and no new card wording.** `tools/check_parity.py` is unchanged
+and clean: there is no `GET`/`POST` for any of this, no Rust command, no
+Settings section, and no app screen. The card the ON half raises is the existing
+`modify_own_code` action, which `jarvis_asks_first.py` already lists in the
+"What asks first" page's "Jarvis's own code" group - so no new action, no tier
+line, no risk row and no card wording is invented. The `gate_lookup_name` is
+`skill_manage`, the one published `_TOOL_ACTIONS` key that already maps to
+`modify_own_code`, so no `jarvis_gate.py` patch is needed either.
+
+**Nothing goes bulk, and nothing leaves the PC.** The schema has one `plugin`
+string and one `action` enum; there is no array, and a call naming two plugins
+is refused by `check_call` before anything is prepared. Both tools are in
+`[tools].enabled` in both shipped settings copies, because a feature reachable
+only by hand-editing that same list would not be reachable by chat - the same
+reason `phone_apps` is. Both are listed in `jarvis_reach.TOOL_NAMES` (the "What
+can Jarvis reach" page), in one short-list group (`settings`), and with their
+own tool-diet hints. Nothing is downloaded, nothing is sent anywhere, and the
+answer carries no file's contents.
+
+**Tests.** `backend/test_plugin_switch.py` (110 checks) drives the REAL
+`_one_call` with a fake gate and a throwaway plugin folder - no model, no
+network, no real card, and the owner's own plugin folder is never read or
+written. It proves: the list names every state and why; a listing writes,
+touches and deletes nothing (a full folder snapshot before and after); a
+missing folder reports itself; a plugin whose folder has gone is still listed;
+OFF is immediate, one marker file and no card; ON is exactly one card under
+`modify_own_code`, the card names the plugin and the exact file, a denied card
+and a timed-out card change nothing, and a loosened tier cannot let ON through
+with nobody asked; an unknown name, a path, a blank and a broken manifest are
+refused in plain words with no card; there is no bulk path; nothing is ever
+deleted; and a plugin switched off in its own `plugin.json` is reported and not
+rewritten. `backend/test_tool_defaults.py`, `test_tool_contract.py`,
+`test_tool_text.py`, `test_tool_eval.py`, `test_short_tool_list.py`,
+`test_reach.py`, `test_smarter_answers.py` and `test_private_aloud.py` all pass
+with the two tools added, and the generated fixtures they read
+(`tools/tool_eval/jarvis_tools.json`, `reach-cases.json`,
+`private-aloud-cases.json`) were regenerated by their own generators.
+
+**What is not proved here.** The switch has not been driven against a real
+`jarvis_hud.py` on the owner's PC (this repository has no HUD): what is proved
+is the loader's own `discover()`/`status()` and the real `_one_call` path. It is
+also not proved for a plugin whose `install()` starts a background thread that
+outlives a restart - the marker stops the NEXT start, not a thread already
+running. And a plugin folder that appears while Jarvis is running is reported as
+"added after Jarvis started" rather than loaded; nothing hot-loads.

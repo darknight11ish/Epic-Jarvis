@@ -267,6 +267,62 @@
       "read": false
     },
     {
+      "name": "the tool plugin_list ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "plugin_list"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "plugin_list"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool plugin_switch ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "plugin_switch"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "plugin_switch"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool browser_control ran",
       "heard": {
         "private_aloud": false,

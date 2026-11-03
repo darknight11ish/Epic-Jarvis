@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 174 rows from features/features.json.
+The owner's feature list, as data: 175 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 a219240213df07a1da75741877b6d8c2d12caf35c30282791d82a079244353ca); the apps' Features pages read their own
+`features/features.json` (sha256 f8a26e2c03251ce214f9944733fa4369aa869764183d061bd2bb5e668c10a753); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "a219240213df07a1da75741877b6d8c2d12caf35c30282791d82a079244353ca"
+SOURCE_SHA256 = "f8a26e2c03251ce214f9944733fa4369aa869764183d061bd2bb5e668c10a753"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -2026,5 +2026,17 @@ FEATURES = (
         "surface": "both",
         "aliases": ["receipts", "action receipts"],
         "covers": ["receipts"],
+    },
+    {
+        "id": "plugin-switch",
+        "group": "Safety",
+        "title": "Turn a drop-in module on or off by asking",
+        "what": "Jarvis lists its drop-in plugins (the small program folders, or modules, that live beside jarvis_hud.py) and switches ONE of them on or off when you ask in chat.",
+        "where": "Chat on either app, through the plugin_list and plugin_switch tools. There is no screen and no route on purpose: a plugin is a folder on this PC, and the chat tool is the door.",
+        "asks": "Listing raises no card. Turning one on raises ONE card (modify_own_code), because a plugin is program code that runs inside Jarvis at start-up; turning one off is immediate and needs no card.",
+        "limit": "One plugin per call, by a name Jarvis lists. A change lands the next time Jarvis starts - Jarvis cannot restart itself - so the copy running now keeps going until then. No plugin folder is ever deleted, moved or edited, and a plugin switched off inside its own plugin.json is a hand edit, not a chat toggle.",
+        "surface": "both",
+        "aliases": ["plugins", "drop-in plugins", "plugin list"],
+        "covers": [],
     },
 )

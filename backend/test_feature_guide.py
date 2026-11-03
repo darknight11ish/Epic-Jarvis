@@ -2332,7 +2332,7 @@ _WHERE_OPENERS = frozenset({
     "press", "hold", "click", "type", "open", "share", "put", "set", "turn",
     "scroll", "either", "on", "in", "off", "nothing", "no", "it", "notion",
     "incognito", "history", "routes", "tray", "hud", "pc:", "phone:",
-    "desktop:", "backend",
+    "desktop:", "backend", "chat",
 })
 # `hud` joined on 2026-11-02, when this branch merged main's #1109: the list
 # above already named the HUD as a real surface, but no row STARTED a `where`
@@ -2345,6 +2345,10 @@ _WHERE_OPENERS = frozenset({
 # honest surface (the feature really is backend-only today) naming a real
 # route, which the catalogue's route check proves. The words are the row's,
 # not this list's.
+# `chat` joined in the same stacked merge, for #1111's plugin-switch row:
+# "Chat on either app, through the plugin_list and plugin_switch tools" - the
+# chat is a real surface (it is where those tools are reached), so the
+# vocabulary was missing it, not the row.
 
 
 

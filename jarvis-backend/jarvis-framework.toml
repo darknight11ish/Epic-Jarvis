@@ -1933,11 +1933,22 @@ star_floor = 25        # ...but never fewer than this many
 # and `list` is read-only with no card at all. It cannot open an app itself -
 # that is still `control_phone`, still opt-in below.
 #
+# `plugin_list` and `plugin_switch` ALSO ship ON (2026-11-02, the owner's
+# decision: "Jarvis may list plugins and turn them on/off by chat, one card per
+# change"). Same reason as `phone_apps`: what they manage is the
+# `jarvis_plugins\` folder beside `jarvis_hud.py`, and a feature reachable only
+# by hand-editing THIS list would not be reachable by chat at all. `plugin_list`
+# reads the folder and raises no card; `plugin_switch` turns ONE named plugin on
+# behind ONE `modify_own_code` card (a plugin is program code that runs inside
+# Jarvis at start-up) and off at once with no card, exactly like every other
+# switch here. Neither deletes, moves or edits a plugin folder, and neither can
+# restart Jarvis: a change lands the next time Jarvis starts.
+#
 # Everything else here stays opt-in - send_email, browser_control,
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)

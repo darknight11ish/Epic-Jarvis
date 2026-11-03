@@ -446,6 +446,13 @@ def main(argv=None):
     # 2026-10-31 (feature-depth coverage): twenty built capabilities joined
     # as Command-Only rows, so 74 -> 94 and 147 -> 167 features, measured
     # from the contract, not chosen.
+    # 2026-11-02: the "Turn a plugin on or off by asking" row joined as
+    # Command-Only (the two chat tools and the modify_own_code card ARE the
+    # feature; there is no stored setting), so 95 -> 96 and 168 -> 169
+    # features, measured from the contract, not chosen.
+    # 2026-11-02 (the reminder builder): "A reminder that asks you a question"
+    # joined as one Command-Only row (a reminder's question and its buttons are
+    # data on that reminder, not a stored setting), so 96 -> 97 and 169 -> 170
     # 2026-11-02 (self-explain coverage): the phone-apps manage/open row and
     # the model-knowledge row joined as Command-Only, so 95 -> 97 and
     # 168 -> 170 features; the price-radar row joined the same day, so
@@ -466,15 +473,19 @@ def main(argv=None):
     # branches' rows are kept again; the life-coach pair joined the merged
     # matrix, so 99 + 2 -> 101 Command-Only, 172 + 2 -> 174 features.
     # Measured from the contract, not chosen.
+    # 2026-11-02 (this stack merge, #1111 with #1110's stacked head): the
+    # plugin-switch row joined the merged matrix, so 101 + 1 -> 102
+    # Command-Only, 174 + 1 -> 175 features. Measured from the contract, not
+    # chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
-        LAB_COMMAND: 101, LAB_ALWAYS: 12,
+        LAB_COMMAND: 102, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/101/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/16/102/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/16/101/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 43/2/16/102/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.

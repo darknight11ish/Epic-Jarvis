@@ -82,7 +82,7 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
     "calculator", "change_setting", "feature_guide", "memory_search",
-    "my_files", "phone_apps", "web_search",
+    "my_files", "phone_apps", "plugin_list", "plugin_switch", "web_search",
 ]
 
 #: (b) Tools a cloud lane may be offered. NONE: the tool loop is local-only
@@ -106,8 +106,8 @@ PRIVATE_CHAT_ALLOWED = []
 #: leaves the PC for the phone); the owner enables it in their own settings.
 OFFERED_FRESH = [
     "approve_web_search_for_conversation", "calculator", "change_setting",
-    "feature_guide", "memory_search", "phone_apps",
-    "stop_web_search_approval", "web_search",
+    "feature_guide", "memory_search", "phone_apps", "plugin_list",
+    "plugin_switch", "stop_web_search_approval", "web_search",
 ]
 
 #: (d) Every tool that exists, pinned in full. A future tool must be added
@@ -127,7 +127,8 @@ CATALOGUE = [
     "draft_email",
     "email_check", "feature_guide", "file_read", "github_search",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
-    "notes_search", "phone_apps", "propose_plan", "protect_from_jarvis", "rea_investigate",
+    "notes_search", "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
+    "protect_from_jarvis", "rea_investigate",
     "read_web_page",
     "retirement_whatif", "run_data_script", "send_email", "send_file_to_phone",
     "set_reminder",

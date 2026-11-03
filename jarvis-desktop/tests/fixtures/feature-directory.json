@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "de12193d8da97a38efff80cdcecf0b6762ec81cbd1e303683d6866b7355f34d1",
-  "feature_count": 174,
+  "source_sha256": "97a8385e1d43614b717230d58af0ea791fd0e985df1cc326300ef4609970010f",
+  "feature_count": 175,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
     "Settings-Only (By Design — Security Boundary)",
@@ -2795,6 +2795,22 @@
       "status": "not-a-setting",
       "label_note": "",
       "example": "turn on A receipt for every change",
+      "example_ok": true,
+      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
+      "where_desktop": "All features and abilities",
+      "where_phone": "All features and abilities",
+      "note": "",
+      "not_a_control": true
+    },
+    {
+      "id": "plugin-switch",
+      "title": "Turn a drop-in module on or off by asking",
+      "group": "Safety",
+      "surface": "both",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "status": "not-a-setting",
+      "label_note": "",
+      "example": "turn on Turn a drop-in module on or off by asking",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
