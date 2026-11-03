@@ -300,13 +300,21 @@ def resolve_place(words) -> Optional[dict]:
             if row is not None:
                 area = str(getattr(row, "area", "") or "")
                 if area == "settings":
+                    # The menu id after "settings." names the row; a SUB-row
+                    # ("settings.second-card.study-helper") shares its parent's
+                    # card, so the longest PREFIX that is a real section is the
+                    # place to open. Never answer a menu id as a section id: a
+                    # client would jump nowhere (the apps' goToPlace knows only
+                    # SECTIONS ids).
                     bare = menu_id[len("settings."):] if menu_id.startswith(
                         "settings.") else ""
-                    if bare and R is not None and R.section_by_id(bare) is not None:
-                        return {"route": "settings", "id": bare}
-                    # No section of the same name: the menu id is still the
-                    # place the apps' own Show-or-hide list names.
-                    return {"route": "settings", "id": menu_id}
+                    parts = bare.split(".") if bare else []
+                    while parts:
+                        candidate = ".".join(parts)
+                        if R is not None and R.section_by_id(candidate) is not None:
+                            return {"route": "settings", "id": candidate}
+                        parts.pop()
+                    return None
                 view = str(getattr(row, "view", "") or "")
                 if area == "brain" and view:
                     return {"route": "brain", "id": view}

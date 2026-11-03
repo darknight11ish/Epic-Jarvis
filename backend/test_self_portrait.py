@@ -212,6 +212,30 @@ def resolving_words_never_guesses():
             bad.append((m.id, answer))
     check("a resolved brain menu points at its own Brain view",
           not bad, str(bad[:5]))
+    # A settings-area menu must resolve to a REAL section id (a sub-row opens
+    # its parent card) or to None - never to a menu id the apps cannot jump to.
+    bad = []
+    for m in MENUS.MENUS:
+        if m.area != "settings":
+            continue
+        names = getattr(m, "names", ())
+        answer = SP.resolve_place(names[0] if names else m.title)
+        if answer is None:
+            continue
+        if (answer["route"] == "settings"
+                and REG.section_by_id(answer["id"]) is not None):
+            continue
+        bad.append((m.id, answer))
+    check("every resolved settings menu opens a REAL section (or nothing)",
+          not bad, str(bad[:5]))
+    # The four second-card sub-rows share the "second-card" card.
+    import jarvis_menus as M2
+    for sub in ("settings.second-card.study-helper", "settings.second-card.referee",
+                "settings.second-card.third-card", "settings.second-card.chat-card"):
+        row = M2.menu(sub)
+        answer = SP.resolve_place((row.names[0] if row.names else row.title))
+        check(f"the sub-row {sub} opens its parent card",
+              answer == {"route": "settings", "id": "second-card"}, str(answer))
 
 
 # ---------------------------------------------------------------------------
