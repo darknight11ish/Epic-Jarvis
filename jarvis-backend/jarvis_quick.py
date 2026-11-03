@@ -3584,12 +3584,12 @@ _READ_LINK_KEPT_Q = re.compile(
     r"|\b(?:summari[sz]e|quote)\s+(?:it|that|the\s+page|the\s+article)\b")
 
 
-def _read_link_pasted(low: str, raw: str, url: str) -> bool:
+def _read_link_pasted(raw: str, url: str) -> bool:
     """Is this sentence JUST the link, or the link plus a question about it?
 
-    The one gate `_read_link_intent` uses for a paste with no read verb. `low`
-    is the tidied sentence, `raw` the message as it arrived (the "?" and the
-    capital letters are only there), `url` the address as matched.
+    The one gate `_read_link_intent` uses for a paste with no read verb. `raw`
+    is the message as it arrived (the "?" and the capital letters are only
+    there), `url` the address as matched.
     """
     rest = str(raw or "")
     at = rest.find(url)
@@ -3674,7 +3674,7 @@ def _read_link_intent(text, s: str,
         url = url[:-1].rstrip(".,;:!?]}")
     if not url or len(url) > 500:
         return None
-    if not _READ_LINK_VERB.search(low) and not _read_link_pasted(low, raw, url):
+    if not _READ_LINK_VERB.search(low) and not _read_link_pasted(raw, url):
         return None              # pasted to talk about, not to read
     return Intent("read_link", {"url": url, "words": low})
 

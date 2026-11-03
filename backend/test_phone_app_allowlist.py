@@ -580,9 +580,9 @@ def t_the_question_in_chat_lists_the_same_table():
           res.reply if res is not None else None)
     # A near miss keeps its own path: this is a question about an app, not the
     # list, and nothing here may answer it.
+    got = Q.match("open youtube on my phone")
     check("near miss: 'open youtube on my phone' is not the list",
-          (Q.match("open youtube on my phone") or type("X", (), {"name": None})()).name
-          != "phone_apps_list")
+          got is None or got.name != "phone_apps_list", got)
 
 
 # --------------------------------------------------------------------------

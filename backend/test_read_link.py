@@ -9,14 +9,23 @@ behind their own doors - the Quiz page's route for a YouTube link, and the
 ordinary words reached the local model, which could read neither.
 
 WHAT THIS SLICE IS. A fast-path intent in jarvis_quick (`read_link`) that
-notices an http(s) link plus a read verb in the owner's own sentence and then
-hands the link to whichever reader already owns it:
+notices an http(s) link in the owner's own sentence and then hands the link to
+whichever reader already owns it:
 
   * a YouTube link  -> jarvis_youtube.parse_link / card / fetch_captions /
                        clean_text, under that module's own action
                        `youtube_captions_read`;
   * any other link  -> jarvis_readpage.prepare / describe / run, under
                        `read_web_page`.
+
+Since Q2 (Gemini's ruling, 2026-11-03) the sentence does not need a read verb at
+all when the link IS the message ("https://...") or the link plus a question
+about it ("https://... what is this about?"). A link inside a STATEMENT ("here
+is a link ...") or a browser command ("open <url> in my browser") is still not a
+read, and a watch still belongs to the watcher. The answer's first line carries
+the canonical address the card showed, and the page is kept in memory for that
+conversation for 900 seconds, so a follow-up is answered with NO second card and
+NO second fetch (`read_link_q`).
 
 It adds NO route, NO model tool, NO gate action, NO tier and NO permission of
 its own, and it never edits the gate. The card is each reader's own, word for
