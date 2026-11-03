@@ -3624,7 +3624,13 @@ setting is implied or loosened: a sensitive saved fact still needs
 `privacy: voice_is_enough`, and `screen_aloud` is unchanged. A >= 2.0 s clip
 still gets the silent strict check itself (what refuses another voice, and what
 a read-aloud answer needs), and a failed check or a re-enrolled print voids the
-session's verification.
+session's verification. A session started by voice is verified by the clip that
+started it: the phrase is only answered after that clip passed the owner check,
+so it is the session's one check and the first `source=live` clip is not asked
+for a second full sentence (2026-11-02). A session started by a button, the
+tray or a key has no such clip, so its first full sentence (>= 2.0 s) is the
+check; a start whose check was not a real one (broad mode lets every voice in)
+records nothing.
 Under the default, `same_as_button`, nothing changes. The utterance route itself still reads a
 request with no `?source=` as `push_to_talk` (that line is in the owner's
 `jarvis_hud.py`), so **send `source` on every clip**: `push_to_talk` for
