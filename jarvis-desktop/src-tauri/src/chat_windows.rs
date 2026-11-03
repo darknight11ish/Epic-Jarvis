@@ -186,18 +186,13 @@ fn label_exists(app: &AppHandle, label: &str) -> bool {
 /// `conversation` must already be [`clean_conversation`]'d; `None` always
 /// builds a new window, because "new chat" really means a new one.
 pub fn open_for(app: &AppHandle, conversation: Option<String>) -> Result<String, String> {
-    // The app lock, on the same rule as every other way into a HUD surface
-    // (`windows::show_hud`): an extra chat window is the HUD's own page, with
-    // its approvals and its History list, so it is not put on a locked PC.
-    // Without this the tray row, or a chat answer's own `open_area` route
-    // arriving while the HUD is hidden, could put a HUD page over a locked
-    // desktop - and a FOCUSED one holds the lock open (`lock.rs`
-    // `covered_focused`), so it would not even be swept away again.
-    // When Windows Hello confirms, lock.rs shows the main HUD; the press is
-    // then repeated and this opens. An empty label means "nothing was opened".
-    if !crate::lock::may_open(app, crate::lock::Covered::Hud) {
-        return Ok(String::new());
-    }
+    // A conversation that is already on screen comes back as ITSELF. The app
+    // lock covers the HUD and every chat window as one family (`Covered::Hud`),
+    // so the decision here has to name the window: `may_open_window` carries
+    // this label into the unlock, and a successful Windows Hello brings back
+    // the clicked chat window instead of the main HUD (audit finding,
+    // 2026-11-03; the main HUD stealing the unlock left the asked-for window
+    // hidden).
     if let Some(conv) = conversation.as_deref() {
         let existing = {
             let state = app.state::<ChatWindows>();
@@ -209,6 +204,9 @@ pub fn open_for(app: &AppHandle, conversation: Option<String>) -> Result<String,
         };
         if let Some(label) = existing {
             if let Some(window) = app.get_webview_window(&label) {
+                if !crate::lock::may_open_window(app, &label) {
+                    return Ok(String::new());
+                }
                 focus(&window)?;
                 return Ok(label);
             }
@@ -218,6 +216,20 @@ pub fn open_for(app: &AppHandle, conversation: Option<String>) -> Result<String,
                 open.remove(conv);
             }
         }
+    }
+
+    // Creating a NEW window: the app lock, on the same rule as every other way
+    // into a HUD surface (`windows::show_hud`): an extra chat window is the
+    // HUD's own page, with its approvals and its History list, so it is not put
+    // on a locked PC. Without this the tray row, or a chat answer's own
+    // `open_area` route arriving while the HUD is hidden, could put a HUD page
+    // over a locked desktop - and a FOCUSED one holds the lock open (`lock.rs`
+    // `covered_focused`), so it would not even be swept away again.
+    // When Windows Hello confirms, lock.rs shows the main HUD (there is no new
+    // window yet to show); the press is then repeated and this opens. An empty
+    // label means "nothing was opened".
+    if !crate::lock::may_open(app, crate::lock::Covered::Hud) {
+        return Ok(String::new());
     }
 
     let Some(label) = free_label(|label| label_exists(app, label)) else {
@@ -351,17 +363,34 @@ mod tests {
             .find("/// Opens a fresh chat window")
             .expect("the open_for body lost its end marker");
         let body = &rest[..end];
-        let lock = body
+        // Two gated paths, because a chat window can be brought up two ways and
+        // a future edit could gate one and not the other:
+        //  * an EXISTING conversation's window is shown again - gated by
+        //    `may_open_window`, which carries that window's label so Windows
+        //    Hello brings back the window the owner asked for (not the main
+        //    HUD);
+        //  * a NEW window - gated by `may_open(Covered::Hud)` before anything
+        //    is built.
+        let existing_gate = body
+            .find("crate::lock::may_open_window(app, &label)")
+            .expect("open_for no longer asks the app lock for an existing window");
+        let existing_focus = body
+            .find("focus(&window)?;")
+            .expect("the existing-window focus path is gone");
+        assert!(
+            existing_gate < existing_focus,
+            "a hidden chat window is shown before the app lock is asked"
+        );
+        let new_gate = body
             .find("crate::lock::may_open(app, crate::lock::Covered::Hud)")
-            .expect("open_for no longer asks the app lock");
-        for later in ["WebviewWindowBuilder::new", "focus(&window)"] {
-            if let Some(at) = body.find(later) {
-                assert!(
-                    lock < at,
-                    "{later} comes before the app lock, so a locked PC could get a HUD page"
-                );
-            }
-        }
+            .expect("open_for no longer asks the app lock for a new window");
+        let builder = body
+            .find("WebviewWindowBuilder::new")
+            .expect("the window builder is gone");
+        assert!(
+            new_gate < builder,
+            "a window is built before the app lock is asked, so a locked PC could get a HUD page"
+        );
         // The refusal is a quiet "nothing was opened", not an error toast: the
         // Windows Hello prompt `lock.rs` starts is the answer the owner sees.
         assert!(
