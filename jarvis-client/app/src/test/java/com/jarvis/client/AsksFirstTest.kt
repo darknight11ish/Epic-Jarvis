@@ -159,14 +159,14 @@ class AsksFirstTest {
         assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
-        // 21 Tier A + Tier B switches when this surface landed, PLUS the two the
-        // conversation-scoped web-search grant added on 2026-11-01
-        // (`approve_web_search_for_conversation`, `stop_web_search_approval`).
-        // Both are ordinary read-only rows here: the phone shows them in the
-        // PC's own words and cannot switch them, like every other one.
-        assertEquals("23 one-tool switches", 23, rawIds.size)
+        // 21 Tier A + Tier B switches. It was 23 while the conversation
+        // web-search grant's two tools were rows here; they were removed on
+        // 2026-11-02, because the field test found the switch was never on, so
+        // the model was never offered the tool and no grant card could be
+        // raised. The grant ask rides with web search now, so it has no row.
+        assertEquals("21 one-tool switches", 21, rawIds.size)
         for (id in listOf("approve_web_search_for_conversation", "stop_web_search_approval")) {
-            assertTrue("the web-search grant's tool $id is missing from the phone's view",
+            assertFalse("the web-search grant's $id must NOT be a switch row any more",
                 rawIds.contains(id))
         }
         assertEquals("every tool, in the PC's own order",
