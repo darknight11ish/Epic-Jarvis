@@ -260,7 +260,7 @@ ACTION_KINDS = ("show-note", "open-webpage", "open-file", "run-task", "ask")
 #: would mean duplicating that index in Python or adding a general exec path.
 #:
 #: `ask` carries THREE keys (`question`, `buttons`, `record`), so it is the one
-#: kind whose block is not "a kind plus one key"; `ACTION_ASK_KEYS` below is its
+#: kind whose block is not "a kind plus one key"; `ASK_BLOCK_KEYS` below is its
 #: own shape and `_clean_ask` is its own check. `question` is named here because
 #: it is the one word both apps show first.
 ACTION_PAYLOAD = {"show-note": "note", "open-webpage": "url", "open-file": "path",
@@ -349,11 +349,17 @@ _NO_ACTION_KIND = ("An action is one of: show a note, open a web page, open a fi
 # exec primitive) and belongs to whoever owns that command, not to this lane.
 # The sentence the owner gets says "for now" and names the two kinds that do
 # open things, so the limit is visible instead of looking like a bug.
-ACTION_ASK = "ask"
+#
+# Deliberately NOT named `ACTION_*`: `backend/test_card_words.py` scans this
+# folder for module-level `ACTION...` constants, because each of those is a GATE
+# ACTION and needs a plain-title row in `jarvis_card_words` (`ACTION` is
+# `schedule_repeat`, `ACTION_SCHEDULE` is `schedule_action`). `ask` is a KIND of
+# reminder action and raises no card at all, so it must not look like one.
+ASK_KIND = "ask"
 
 #: The three keys an `ask` block has, and no others - the shape `_clean_ask`
 #: checks and `_decode_ask` checks again.
-ACTION_ASK_KEYS = frozenset({"kind", "question", "buttons", "record"})
+ASK_BLOCK_KEYS = frozenset({"kind", "question", "buttons", "record"})
 
 #: What ONE button may do. Never a program, a command, a script or a webhook:
 #: this tuple IS that rail, and `_ASK_FORBIDDEN` names the words that get their
@@ -2510,7 +2516,7 @@ class Scheduler:
         if row is None:
             return 404, {"ok": False, "reason": "no_such_job", "error": ASK_GONE}
         action = _decode_action(_row_action(row))
-        if not action or action.get("kind") != ACTION_ASK:
+        if not action or action.get("kind") != ASK_KIND:
             return 409, {"ok": False, "error": ASK_WRONG_KIND}
         fired = row["fired_at"]
         if (fired is None or row["state"] not in ("fired", "active", "paused")
@@ -3652,7 +3658,7 @@ class Scheduler:
         kept_answers = _decode_answers(raw_answers)
         if kept_answers:
             v["answers"] = kept_answers
-        if v.get("action", {}).get("kind") == ACTION_ASK:
+        if v.get("action", {}).get("kind") == ASK_KIND:
             # A question is worth being asked and answered: both apps draw its
             # buttons, and `answers` may be absent (nothing pressed yet) - so
             # the marker says the PC can take an answer, which is the one thing
@@ -4536,7 +4542,7 @@ def _clean_ask(raw) -> dict:
     """A reminder's `ask` block, checked and normalised. ValueError in one plain
     sentence for anything else. Called when the reminder is SAVED (`add_at` /
     `add_repeat`) and again when it is READ (`_decode_ask`)."""
-    if set(raw) - ACTION_ASK_KEYS:
+    if set(raw) - ASK_BLOCK_KEYS:
         raise ValueError(_NO_ACTION_KIND)
     problem = _question_problem(raw.get("question"))
     if problem:
@@ -4552,7 +4558,7 @@ def _clean_ask(raw) -> dict:
     if len(set(labels)) != len(labels):
         raise ValueError(ASK_SAME_LABELS)
     record = _clean_record(raw.get("record"), any(b["does"] == "record" for b in clean))
-    action = {"kind": ACTION_ASK,
+    action = {"kind": ASK_KIND,
               # The owner's own words, with Windows line endings folded, and no
               # outer blank lines: the same tidy a `show-note` gets.
               "question": raw["question"].replace("\r\n", "\n").replace("\r", "\n").strip(),
@@ -4591,7 +4597,7 @@ def _clean_action(raw) -> Optional[dict]:
     kind = raw.get("kind")
     if not isinstance(kind, str) or kind not in ACTION_KINDS:
         raise ValueError(_NO_ACTION_KIND)
-    if kind == ACTION_ASK:
+    if kind == ASK_KIND:
         return _clean_ask(raw)
     key, check = _ACTION_CHECKS[kind]
     extra = set(raw) - {"kind", key}
@@ -4634,7 +4640,7 @@ def _decode_action(raw) -> dict:
     kind = got.get("kind")
     if not isinstance(kind, str) or kind not in ACTION_KINDS:
         return {}
-    if kind == ACTION_ASK:
+    if kind == ASK_KIND:
         return _decode_ask(got)
     key = ACTION_PAYLOAD[kind]
     if set(got) != {"kind", key}:
@@ -4680,7 +4686,7 @@ def _action_problem(action: dict) -> str:
         return _note_problem(action.get("note"))
     if kind == "run-task":
         return _task_problem(action.get("task"))
-    if kind == ACTION_ASK:
+    if kind == ASK_KIND:
         return ""
     return _NO_ACTION_KIND
 
