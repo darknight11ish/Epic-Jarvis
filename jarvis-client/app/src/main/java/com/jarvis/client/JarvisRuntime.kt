@@ -848,6 +848,11 @@ object JarvisRuntime {
             // with the next question - and a missing or unreadable choice reads
             // as 30 minutes, never as "never" (ChatHistory.idleNewMsFor).
             idleWaitMs = { com.jarvis.client.net.ChatHistory.idleNewMsFor(clientSettings.idleNewChoice.value) },
+            // An answer that left a NOTE waiting on its card (2026-11-02): the
+            // chat says "Waiting for your approval." and, until this existed,
+            // went on saying it after the note was filed. Followed on the
+            // runtime's own scope below, so leaving Home does not lose it.
+            onNoteWaiting = { job, question, waiting -> followNoteAnswer(job, question, waiting) },
         )
         // The link check is a lambda, not a value: it is read at the moment
         // "hey Jarvis" ON is asked for, and `actionBlocker` reads the flows.
@@ -5055,8 +5060,10 @@ object JarvisRuntime {
                     val next = api.noteStatus(id)
                     if (next is ApiResult.Failed) {
                         if (!follow.failed()) continue
-                        _notice.value = "Lost track of the note (${describe(next.error)}). " +
-                            "Check the approval card on the desktop and your notes app."
+                        // One sentence, in [NoteCapture], because a settled
+                        // chat line says the same thing when it loses track
+                        // of the same job (2026-11-02).
+                        _notice.value = com.jarvis.client.net.NoteCapture.lostTrack(describe(next.error))
                         break
                     }
                     follow.answered()
@@ -5071,6 +5078,61 @@ object JarvisRuntime {
             }
         }
         return ApiResult.Ok(Unit)
+    }
+
+    /**
+     * A chat answer that was only "Waiting for your approval." because a
+     * NOTE's approval card was still up (`note_job` in `X-Jarvis-Route`,
+     * 2026-11-02).
+     *
+     * The fast path files the note the moment the card is approved - the
+     * answer above was a 202's own words, not the note's fate - and the chat
+     * had no way to learn that, so it went on claiming to wait beside a note
+     * that already existed (the owner's report, 2026-11-02). The PC names the
+     * capture job; this asks it every [com.jarvis.client.net.NoteCapture.POLL_MS]
+     * on the runtime's own scope (so leaving Home does not lose it) and
+     * replaces that one line with the PC's own last sentence:
+     * "Filed in Obsidian, 2026-11-02.md.", "You said no, so nothing was
+     * written.", "Nobody answered the approval card in time, so nothing was
+     * written.", or the module's own refusal.
+     *
+     * A dropped link is not a verdict ([com.jarvis.client.net.JobFollow]): the
+     * follow survives a run of failed polls, and only says
+     * [com.jarvis.client.net.NoteCapture.lostTrack] after three in a row - or
+     * [com.jarvis.client.net.NoteCapture.UNCONFIRMED] when the job outlasts
+     * [com.jarvis.client.net.NoteCapture.GIVE_UP_MS]. Both are still settled:
+     * a line that cannot be confirmed must not keep claiming to wait either.
+     *
+     * Never spoken, and never a card: this changes words on screen only.
+     */
+    private fun followNoteAnswer(jobId: String, question: String, waiting: String) {
+        scope.launch {
+            val started = SystemClock.elapsedRealtime()
+            val follow = com.jarvis.client.net.JobFollow()
+            while (true) {
+                delay(com.jarvis.client.net.NoteCapture.POLL_MS)
+                if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.NoteCapture.GIVE_UP_MS) {
+                    chat.settleAnswer(question, waiting, com.jarvis.client.net.NoteCapture.UNCONFIRMED)
+                    break
+                }
+                if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
+                val next = api.noteStatus(jobId)
+                if (next is ApiResult.Failed) {
+                    if (!follow.failed()) continue
+                    chat.settleAnswer(
+                        question, waiting,
+                        com.jarvis.client.net.NoteCapture.lostTrack(describe(next.error)),
+                    )
+                    break
+                }
+                follow.answered()
+                val settled = com.jarvis.client.net.NoteCapture.settledText(
+                    (next as ApiResult.Ok).value,
+                ) ?: continue
+                chat.settleAnswer(question, waiting, settled)
+                break
+            }
+        }
     }
 
     /**
