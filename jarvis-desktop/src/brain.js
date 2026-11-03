@@ -542,6 +542,9 @@ import {
   readAuto,
   refreshRows as refreshAutoRows,
   rememberedLine,
+  // 2026-11-02: the mark a fact in Jarvis's own words carries.
+  REWORDED_MARK,
+  REWORDED_TITLE,
   savedIds,
   SENSITIVE_NEEDS_AUTO,
   stillOffLine,
@@ -7104,12 +7107,16 @@ function renderHistory() {
    While a card waits the switch is greyed too (a second ON would only ask
    for the same card), and "Cancel the request" in the waiting line sends
    OFF, which withdraws the card on the PC (FIXLIST 8, R6). Under each
-   switch: how its newest card ended (`auto_last` / `sensitive_last`, in
-   the PC's plain words when it refused), and for "Learn automatically" the
-   PC's sentence when its settings file was damaged (`why`).
+   switch: how its newest card ended (`auto_last` / `sensitive_last` /
+   `paraphrase_last`, in the PC's plain words when it refused), and for
+   "Learn automatically" the PC's sentence when its settings file was
+   damaged (`why`). The third switch (2026-11-02, "Save facts even when
+   Jarvis had to reword them") is the same shape again and is drawn here
+   beside the other two, on both apps.
    "Saved automatically" lists what was saved without a card, newest first,
    with Forget on each (brain_memory_forget, one fact, after a confirm) and
-   "Load older". A `memory_saved` event is a quiet line that opens the list.
+   "Load older"; a fact saved under the third switch carries REWORDED_MARK.
+   A `memory_saved` event is a quiet line that opens the list.
    ========================================================================== */
 
 const autoL = {
@@ -7127,14 +7134,14 @@ const autoL = {
   again: false,
   older: false,
   /** `{ cardId, gone }` while an ON card waits, per switch. */
-  ask: { auto: null, sensitive: null },
+  ask: { auto: null, sensitive: null, paraphrase: null },
   /** Whether each switch's card was in the queue at the last look. */
-  seen: { auto: false, sensitive: false },
+  seen: { auto: false, sensitive: false, paraphrase: false },
   /** Ids of ON cards withdrawn by turning the switch OFF while they waited
    *  (R6). The PC has let go of them - approving one changes nothing - but
    *  the card stays in the queue until it is answered or runs out, so the
    *  switch must not keep saying "waiting" for it. */
-  withdrawn: { auto: new Set(), sensitive: new Set() },
+  withdrawn: { auto: new Set(), sensitive: new Set(), paraphrase: new Set() },
   /** Ids from `memory_saved` events the owner has not looked at yet. */
   unseen: new Set(),
 };
@@ -7167,6 +7174,7 @@ async function loadAuto() {
     autoL.error = "";
     if (v.auto) autoL.ask.auto = null;           // the card was approved
     if (v.sensitive) autoL.ask.sensitive = null;
+    if (v.paraphrase) autoL.ask.paraphrase = null;
   } catch (error) {
     autoL.error = errorText(error);
   } finally {
@@ -7521,8 +7529,10 @@ function autoSwitchNode(which, v) {
   if (which === "auto" && v.fileWhy) {
     box.append(el("p", "history-why-not auto-file-why", v.fileWhy));
   }
-  // The sensitive switch does nothing without the first (FIXLIST 3).
-  if (which === "sensitive" && !v.auto) {
+  // The sensitive switch does nothing without the first (FIXLIST 3), and
+  // neither does the third (2026-11-02): with "Learn automatically" off every
+  // fact waits anyway.
+  if (which !== "auto" && !v.auto) {
     box.append(el("p", "hint auto-needs-auto", SENSITIVE_NEEDS_AUTO));
   }
   if (waiting) {
@@ -7562,7 +7572,8 @@ function paintAutoSettings() {
     box.append(el("p", "empty", v.why));
     return;
   }
-  box.append(autoSwitchNode("auto", v), autoSwitchNode("sensitive", v));
+  box.append(autoSwitchNode("auto", v), autoSwitchNode("sensitive", v),
+    autoSwitchNode("paraphrase", v));
   // "Learn automatically" means something only while learning is on. The
   // learning route says; an older PC's answer is the facts list's flag.
   const facts = state.data.memory_facts || {};
@@ -7638,11 +7649,21 @@ function paintAutoList() {
     });
     item.dataset.id = String(f.id);
     if (!past) withLinks(item, f);
-    if (f.provenance === "voice") {
+    if (f.provenance === "voice" || f.reworded) {
       const marks = el("span", "history-marks");
-      const mic = el("span", "history-mark history-mark-voice", VOICE_MARK);
-      mic.title = VOICE_TITLE;
-      marks.append(mic);
+      if (f.provenance === "voice") {
+        const mic = el("span", "history-mark history-mark-voice", VOICE_MARK);
+        mic.title = VOICE_TITLE;
+        marks.append(mic);
+      }
+      // 2026-11-02: saved under "Save facts even when Jarvis had to reword
+      // them" - the words are Jarvis's, not the owner's, and the mark says so
+      // before the fact is read.
+      if (f.reworded) {
+        const own = el("span", "history-mark history-mark-reworded", REWORDED_MARK);
+        own.title = REWORDED_TITLE;
+        marks.append(own);
+      }
       const main = item.querySelector(".row-main");
       (main || item).append(marks);
     }

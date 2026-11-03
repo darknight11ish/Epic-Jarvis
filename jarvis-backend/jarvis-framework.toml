@@ -585,6 +585,15 @@ history_enable            = "ask"
 # line here become your yes.
 learning_auto_enable      = "ask"
 learning_sensitive_enable = "ask"
+# "Save facts even when Jarvis had to reword them" (2026-11-02, option C1 of
+# the memory-card research). Off by default. It relaxes ONE check - "not in
+# your own words" - so a fact whose words are Jarvis's own is saved and marked
+# instead of waiting; it relaxes none of the others (sensitive, always-asks,
+# pasted text, a tool's reading, provenance, a correction, a forgotten fact),
+# and backend/test_auto_learn.py names each one. Turning it ON is one card;
+# turning it off never asks. Must stay "ask": jarvis_auto_learn.py refuses any
+# other tier rather than let a line here become your yes.
+learning_paraphrase_enable = "ask"
 # "Forget a time frame" (docs/JARVIS-API.md section 64, the owner's decision
 # of 2026-09-28): forgetting what Jarvis learned, and deleting your chats,
 # from the days you chose - ONE card listing every fact and chat, with 10

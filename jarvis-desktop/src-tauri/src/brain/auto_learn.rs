@@ -1,24 +1,27 @@
-//! Automatic learning - the Brain's two switches and its "Saved
+//! Automatic learning - the Brain's three switches and its "Saved
 //! automatically" list (JARVIS-API.md section 19, "Automatic learning").
 //!
 //! The owner decided on 2026-09-24 that Jarvis learns automatically by
 //! default: facts about the owner, from the owner's own words only, are
 //! saved without a per-fact yes, and every one is listed with a one-tap
-//! Forget. Four commands, each its own power, like the rest of brain.rs:
+//! Forget. Five commands, each its own power, like the rest of brain.rs:
 //!
 //! * [`brain_memory_learning_status`] - `GET /api/memory/learning`: the
-//!   learning switch, the two automatic-learning switches, and whether a
-//!   card to turn either on is waiting. What the switches are drawn from.
+//!   learning switch, the three automatic-learning switches, and whether a
+//!   card to turn any on is waiting. What the switches are drawn from.
 //! * [`brain_memory_auto_list`] - `GET /api/memory/auto`, a page at a time,
-//!   newest first. It carries the two switches' states too, which the page
+//!   newest first. It carries the switches' states too, which the page
 //!   falls back to on a PC whose `GET /api/memory/learning` is missing.
 //! * [`brain_memory_learning_auto`] - `POST /api/memory/learning/auto`,
 //!   "Learn automatically".
 //! * [`brain_memory_learning_sensitive`] - `POST
 //!   /api/memory/learning/sensitive`, "Also remember sensitive topics
 //!   automatically".
+//! * [`brain_memory_learning_paraphrase`] - `POST
+//!   /api/memory/learning/paraphrase`, "Save facts even when Jarvis had to
+//!   reword them" (2026-11-02, off by default).
 //!
-//! Turning either switch ON only raises an approval card (tier `ask`) and is
+//! Turning any switch ON only raises an approval card (tier `ask`) and is
 //! held while the event stream is stale (rule 4), exactly like the learning
 //! switch ([`super::brain_memory_learning`]). OFF is never held: it only
 //! narrows what Jarvis does, and an off that refuses when the link is unwell
@@ -35,7 +38,7 @@
 //!
 //! "Windows Hello for memory lists and chat history" (lock.rs) covers this
 //! list too: while the Brain's private lists are hidden it comes back with
-//! its facts taken out (how many there were is kept). The two switches stay:
+//! its facts taken out (how many there were is kept). The switches stay:
 //! they say nothing about the owner. Here, in Rust, so a page script cannot
 //! read round it.
 //!
@@ -79,6 +82,7 @@ pub(crate) fn switch_path(which: Switch) -> &'static str {
     match which {
         Switch::Auto => "/api/memory/learning/auto",
         Switch::Sensitive => "/api/memory/learning/sensitive",
+        Switch::Paraphrase => "/api/memory/learning/paraphrase",
     }
 }
 
@@ -86,6 +90,8 @@ pub(crate) fn switch_path(which: Switch) -> &'static str {
 pub(crate) enum Switch {
     Auto,
     Sensitive,
+    /// "Save facts even when Jarvis had to reword them" (2026-11-02).
+    Paraphrase,
 }
 
 fn parsed(body: &str) -> Option<serde_json::Value> {
@@ -149,7 +155,7 @@ pub(crate) fn switch_answer(status: u16, body: &str) -> Result<serde_json::Value
 }
 
 /// The list with its facts taken out, for while the private lists are
-/// hidden (lock.rs). The two switches stay: they say nothing about the
+/// hidden (lock.rs). The switches stay: they say nothing about the
 /// owner.
 pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
     if let Some(obj) = list.as_object_mut() {
@@ -321,6 +327,18 @@ pub async fn brain_memory_learning_sensitive(
     set(&app, Switch::Sensitive, enabled).await
 }
 
+/// "Save facts even when Jarvis had to reword them" (2026-11-02). ON raises
+/// one approval card and is held on a stale link; OFF is immediate and never
+/// held. It relaxes ONE check on the PC - "not in your own words" - and the
+/// card says so; nothing here reads or writes a fact.
+#[tauri::command]
+pub async fn brain_memory_learning_paraphrase(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    set(&app, Switch::Paraphrase, enabled).await
+}
+
 /// The ids of facts saved automatically that the owner has not looked at
 /// yet, including any saved while the Brain was closed: `{"ids": [...]}`.
 /// `seen: true` - the owner opened the list - forgets them. Never a fact's
@@ -406,16 +424,24 @@ mod tests {
             switch_path(Switch::Sensitive),
             "/api/memory/learning/sensitive"
         );
+        // 2026-11-02: "Save facts even when Jarvis had to reword them" has its
+        // own route, never the other two.
+        assert_eq!(
+            switch_path(Switch::Paraphrase),
+            "/api/memory/learning/paraphrase"
+        );
     }
 
     #[test]
     fn the_switches_are_passed_on_and_a_missing_route_is_not_an_error() {
         let body = r#"{"enabled": true, "auto": true, "auto_sensitive": false,
             "auto_waiting": false, "sensitive_waiting": true,
-            "auto_last": null, "sensitive_last": null}"#;
+            "paraphrase": false, "paraphrase_waiting": false,
+            "auto_last": null, "sensitive_last": null, "paraphrase_last": null}"#;
         let got = status_answer(200, body).unwrap();
         assert_eq!(got["auto"], true);
         assert_eq!(got["sensitive_waiting"], true);
+        assert_eq!(got["paraphrase"], false);
         assert_eq!(status_answer(404, "").unwrap()["available"], false);
         // No `auto` switch in it: not this route's answer.
         assert!(status_answer(200, r#"{"enabled": true}"#).is_err());

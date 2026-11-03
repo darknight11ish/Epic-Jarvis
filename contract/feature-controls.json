@@ -9360,6 +9360,23 @@
       "reason": "switch present on the desktop Settings page"
     },
     {
+      "key": "learn_paraphrase",
+      "names": [
+        "saving facts in Jarvis's own words",
+        "saving facts even when Jarvis had to reword them",
+        "facts in Jarvis's own words",
+        "reworded facts"
+      ],
+      "section": "learning",
+      "desktop_row": "learning-paraphrase",
+      "turn_on": "turn on saving facts in Jarvis's own words",
+      "turn_off": "turn off saving facts in Jarvis's own words",
+      "resolved": true,
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "switch present on the desktop Settings page"
+    },
+    {
       "key": "lights_without_card",
       "names": [
         "lights without asking",
@@ -9940,6 +9957,16 @@
     {
       "id": "learning-sensitive",
       "label": "Also remember sensitive topics automatically",
+      "section": "learning",
+      "owner": "desktop",
+      "phone_key": null,
+      "in_settings_html": true,
+      "in_desktop_catalog": true,
+      "in_phone_catalog": false
+    },
+    {
+      "id": "learning-paraphrase",
+      "label": "Save facts even when Jarvis had to reword them",
       "section": "learning",
       "owner": "desktop",
       "phone_key": null,

@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiError
@@ -40,13 +42,15 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * The two automatic-learning switches ([AutoLearn], docs/JARVIS-API.md
+ * The automatic-learning switches ([AutoLearn], docs/JARVIS-API.md
  * section 19), drawn inside "What Jarvis remembers" under the learning
- * switch, where the desktop puts them too (Brain -> Memory).
+ * switch, where the desktop puts them too (Brain -> Memory). The third one
+ * (2026-11-02, "Save facts even when Jarvis had to reword them") is the same
+ * shape: off by default, ON is one approval card, OFF is immediate.
  *
- * Turning either ON raises one approval card on the PC and reads "Waiting
- * for your approval" while that card is in the queue - found by its action,
- * so a card raised on the desktop counts too. ON is greyed while the link is
+ * Turning any of them ON raises one approval card on the PC and reads
+ * "Waiting for your approval" while that card is in the queue - found by its
+ * action, so a card raised on the desktop counts too. ON is greyed while the link is
  * down or stale, and the runtime refuses it again ([JarvisRuntime.setAutoLearn]).
  * OFF always goes - including while an ON card waits, which withdraws that
  * card ([JarvisRuntime.autoWithdrawn]). Never a second ON while one waits,
@@ -70,14 +74,16 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
     val queue by JarvisRuntime.pending.collectAsState()
     val withdrawn by JarvisRuntime.autoWithdrawn.collectAsState()
     val cards = queue.map { it.id to it.action }
-    val autoCard = AutoLearn.cardWaiting(cards, AutoLearn.Which.AUTO, withdrawn)
-    val sensitiveCard = AutoLearn.cardWaiting(cards, AutoLearn.Which.SENSITIVE, withdrawn)
     // A card leaving the queue (approved, denied or expired) reads the
-    // switches again, so the lines say what really happened.
-    var seen by remember { mutableStateOf(false to false) }
-    LaunchedEffect(autoCard, sensitiveCard) {
-        val left = (seen.first && !autoCard) || (seen.second && !sensitiveCard)
-        seen = autoCard to sensitiveCard
+    // switches again, so the lines say what really happened. One entry per
+    // switch, so the third (2026-11-02) needed no second pair of flags.
+    val waitingNow = AutoLearn.Which.entries
+        .filter { AutoLearn.cardWaiting(cards, it, withdrawn) }
+        .toSet()
+    var seen by remember { mutableStateOf(emptySet<AutoLearn.Which>()) }
+    LaunchedEffect(waitingNow) {
+        val left = seen.any { it !in waitingNow }
+        seen = waitingNow
         if (left) reads += 1
     }
     LaunchedEffect(reads, refresh) {
@@ -115,7 +121,7 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
         return
     }
     for (which in AutoLearn.Which.entries) {
-        val cardInQueue = if (which == AutoLearn.Which.AUTO) autoCard else sensitiveCard
+        val cardInQueue = which in waitingNow
         val switch = AutoLearn.switchState(status, which, cardInQueue)
         Gap(8)
         SwitchRow(
@@ -355,6 +361,13 @@ internal fun SavedAutomaticallySection(
                         Text(AutoLearn.rowLine(fact, zone, today), style = MaterialTheme.typography.labelSmall,
                             color = chrome.textLo)
                         if (fact.aloud) Pill(AutoLearn.VOICE_MARK)
+                        // 2026-11-02: saved under "Save facts even when Jarvis
+                        // had to reword them" - the words are Jarvis's.
+                        if (fact.reworded) {
+                            Pill(AutoLearn.REWORDED_MARK, modifier = Modifier.semantics {
+                                contentDescription = AutoLearn.REWORDED_NOTE
+                            })
+                        }
                         // "not used in answers": its topic is "Learn, but don't use".
                         com.jarvis.client.net.Topics.notUsedTag(fact.topic, topicView)?.let { Pill(it) }
                     }

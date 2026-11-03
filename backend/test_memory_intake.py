@@ -155,12 +155,25 @@ def t_remember_command_only_fires_on_the_real_command():
           got("remember, Dana hates onions") == "Dana hates onions")
     check("whitespace is tidied, nothing else",
           got("Remember:   Dana's   birthday is 3 March ") == "Dana's birthday is 3 March")
-    check("the gate's own 'Remember this: ...' does NOT fire it",
-          got("Remember this: I do not want Jarvis to send email without asking me first.") is None)
+    # 2026-11-02 (C2a): the pattern widens to the ways the owner writes the
+    # request - "remember this: ...", "remember that ..." and "please remember:
+    # ..." were all measured being ignored while the bare colon was accepted.
+    # The old reason for excluding "remember this:" is gone: the gate's denial
+    # proposal has opened "Jarvis noticed a \"no\" ..." since 2026-10-10, and
+    # that wording is asserted NOT to be a command further down this file
+    # (t_the_gate_denial_rule_still_reaches_the_queue).
+    check("'Remember this: X' gives X, exactly",
+          got("Remember this: I do not want Jarvis to send email without asking "
+              "me first.") == "I do not want Jarvis to send email without asking me first.")
+    check("'Please remember: X' gives X too",
+          got("Please remember: tabs are on the left") == "tabs are on the left")
     check("'remember when we went to Porto' is conversation, not a command",
           got("remember when we went to Porto") is None)
-    check("'remember that' is not the command either", got("remember that film?") is None)
-    check("only at the very start", got("Please remember: tabs") is None)
+    check("'remember that film?' is a question, not a statement to store",
+          got("remember that film?") is None)
+    check("'remember that X' gives X", got("remember that my sister is Dana")
+          == "my sister is Dana")
+    check("only at the very start", got("I said please remember: tabs") is None)
     check("'Remember:' with nothing after it is nothing", got("Remember:   ") is None)
     check("a content list (a screenshot turn) is not text", got([{"type": "text"}]) is None)
 

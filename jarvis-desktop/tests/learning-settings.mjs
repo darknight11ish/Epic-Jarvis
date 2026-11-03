@@ -64,10 +64,13 @@ function containerIds(html, at) {
   return stack.map((s) => s.id).filter(Boolean);
 }
 
-await check("the Learning card exists, and both rows are drawn inside it", () => {
+await check("the Learning card exists, and its rows are drawn inside it", () => {
   assert.match(HTML, /<section class="card" id="learning">/,
     "settings.html has no #learning card");
-  for (const id of ["learning-background", "learning-sensitive"]) {
+  // 2026-11-02: "Save facts even when Jarvis had to reword them" is the
+  // third row in this card.
+  for (const id of ["learning-background", "learning-sensitive",
+    "learning-paraphrase"]) {
     const at = HTML.indexOf(`id="${id}"`);
     assert.ok(at > 0, `#${id} is not on the page`);
     assert.ok(containerIds(HTML, at).includes("learning"),
@@ -83,7 +86,7 @@ await check("the card is in the jump list as a real section", () => {
 
 await check("the module calls the Brain's own three commands and nothing else", () => {
   for (const cmd of ["brain_memory_learning_status", "brain_memory_learning",
-    "brain_memory_learning_sensitive"]) {
+    "brain_memory_learning_sensitive", "brain_memory_learning_paraphrase"]) {
     assert.ok(JS.includes(cmd), `${cmd} is not called`);
   }
   // The one grant is those three; the fact list, the saved ids, Forget and
@@ -95,13 +98,14 @@ await check("the module calls the Brain's own three commands and nothing else", 
   }
 });
 
-await check("the grant is exactly the three commands, and the settings window holds it", () => {
+await check("the grant is exactly the four commands, and the settings window holds it", () => {
   const sets = TOML.split("[[set]]").slice(1);
   const learning = sets.find((s) => /identifier = "learning-settings"/.test(s));
   assert.ok(learning, "no learning-settings set in surfaces.toml");
   const granted = [...learning.matchAll(/"allow-([a-z-]+)"/g)].map((m) => m[1]).sort();
-  assert.deepEqual(granted, ["brain-memory-learning", "brain-memory-learning-sensitive",
-    "brain-memory-learning-status"], `the set grants ${granted}`);
+  assert.deepEqual(granted, ["brain-memory-learning", "brain-memory-learning-paraphrase",
+    "brain-memory-learning-sensitive", "brain-memory-learning-status"],
+  `the set grants ${granted}`);
   assert.match(CAP, /"learning-settings"/, "settings.json does not hold the set");
   // The Brain keeps its own copy of the same commands: this is one path used
   // twice, not a second one.
@@ -115,6 +119,10 @@ await check("the wires say where each switch's value comes from", () => {
   assert.match(JS, /raw\.enabled === true/, "background learning is not read from `enabled`");
   assert.match(JS, /raw\.auto_sensitive === true/, "the sensitive switch is not read from `auto_sensitive`");
   assert.match(JS, /raw\.sensitive_waiting === true/, "the waiting card is not read from `sensitive_waiting`");
+  // 2026-11-02: the third switch's value and its waiting card, the same shape.
+  assert.match(JS, /raw\.paraphrase === true/, "the reworded switch is not read from `paraphrase`");
+  assert.match(JS, /raw\.paraphrase_waiting === true/,
+    "its waiting card is not read from `paraphrase_waiting`");
   // ON raises a card and the answer says `waiting`, never "on".
   assert.match(JS, /out && out\.waiting/, "a waiting card is not handled");
 });
