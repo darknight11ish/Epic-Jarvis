@@ -175,6 +175,11 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_limits.py": 2,
     "backend/test_limits_settings_route.py": 1,
     "backend/test_live.py": 3,
+    # 2026-11-02: the DEF-028 Live voice-words suite landed with six pins on the
+    # wording it checks (the session-scoped promise in the docs and the modules).
+    # Measured with `--measure` on the merged tree; recorded as debt, not
+    # approval - the ratchet only turns DOWN.
+    "backend/test_live_voice_words.py": 6,
     "backend/test_manner.py": 1,
     "backend/test_media.py": 3,
     "backend/test_memory_entities.py": 3,
