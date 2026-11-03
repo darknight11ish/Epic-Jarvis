@@ -2037,6 +2037,24 @@ $PATCHES = @(
     # context is untouched; backend/test_skill_menu.py rehearses it against
     # jarvis-backend/jarvis_skills.py, apply and reverse.
     'skill-install-note.patch'
+
+    # phone-apps.patch (2026-11-02) - the management of the owner's phone app
+    # allow-list, so filling `[phone_apps]` is not a hand edit of
+    # jarvis-framework.toml any more. THREE hunks in jarvis_hud.py and NO
+    # install block: the GET /api/phone/apps read, the _desktop_action branch
+    # beside /api/limits/settings, and the POST route TUPLE. The rules live in
+    # the shipped jarvis_phone_apps.py; the patch is the route that reaches it.
+    #
+    # It appends immediately before plugin-loader.patch (which must stay LAST
+    # of all) and adds no install block, so the loader's own anchor is
+    # untouched. Its three hunks anchor on text earlier patches write (the
+    # /api/reach block, the /api/limits/settings branch, and that patch's own
+    # line in the POST tuple), so the stack walk materialises no pre-image and
+    # backend/_stack.py's jarvis_hud.py RATCHET does not move. Every patch
+    # that enumerates "the patches written after me" has had its name added
+    # there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
+    # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'phone-apps.patch'
     'plugin-loader.patch'
 )
 
@@ -2777,6 +2795,13 @@ $SHIPPED = @(
     # quarantine or the skill index. The same entry is at the end of
     # backend/_where.py's SHIPPED list.
     'jarvis_skill_menu.py'
+    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
+    # JARVIS-API section 176): reads and writes ONE table of the owner's
+    # settings file, [phone_apps], one line at a time - card first, through
+    # the same atomic section writer the other settings use. Shipped whole,
+    # no patch of its own; phone-apps.patch is the two routes that reach it.
+    # The same entry is at the end of backend/_where.py's SHIPPED list.
+    'jarvis_phone_apps.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

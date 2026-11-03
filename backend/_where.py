@@ -1463,6 +1463,13 @@ SHIPPED = (
     # modify_own_code card, the quarantine and the index are all CALLED. The
     # same entry is at the end of the script's $SHIPPED.
     "jarvis_skill_menu.py",
+    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
+    # JARVIS-API section 176): reads and writes ONE table of the owner's
+    # settings file, [phone_apps], one line at a time - card first, through
+    # the same atomic section writer the other settings use. Shipped whole,
+    # no patch of its own; phone-apps.patch is the two routes that reach it.
+    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_phone_apps.py"
 )
 
 

@@ -178,7 +178,8 @@ def t_the_patch_and_the_base():
              # a tier check inside jarvis_skills.py's install(), for the skills
              # menu's card. It is a code patch and it sits before the loader; it
              # has no hunk in jarvis_hud.py at all.
-             "skill-install-note.patch"}
+             "skill-install-note.patch",
+             "phone-apps.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

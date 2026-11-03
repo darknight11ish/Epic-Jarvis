@@ -78,15 +78,15 @@ except ModuleNotFoundError:                       # Python < 3.11
 #: so appending is the change that keeps those comments true; the SET is what
 #: a fresh install is offered.
 DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
-                   "calculator", "memory_search", "my_files"]
+                   "phone_apps", "calculator", "memory_search", "my_files"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
 #: order - `offered_tools` returns TOOLS order, never the file's order.
-OFFERED_NO_FOLDER = ["calculator", "memory_search", "web_search",
+OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "web_search",
                      "change_setting", "feature_guide"]
 
 #: What a PC with at least one folder listed is offered: my_files joins it.
-OFFERED_WITH_FOLDER = ["calculator", "memory_search", "web_search",
+OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "web_search",
                        "my_files", "change_setting", "feature_guide"]
 
 #: Every tool that reaches off this PC, another program, an account or a file
