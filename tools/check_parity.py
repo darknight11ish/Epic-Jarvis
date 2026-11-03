@@ -1044,6 +1044,21 @@ BACKEND_ONLY = {
     # 2026-11-02). When the desktop section lands, this entry is removed and the
     # route becomes `ported`; when the phone's read-only screen lands it is
     # `todo`, never `ported`, on purpose.
+    # What Jarvis is made of on this PC, and its one-card conversation clear
+    # (2026-11-03, the owner's ask that it be aware of every setting and
+    # ability). Backend: jarvis_self_portrait.py, plugins/ready/self-portrait.
+    # NO app calls these yet: the desktop worker is pointing the HUD's Update
+    # button at /api/self/version, and the conversation routes are the backend
+    # half of "pull up any old conversation / clear one" - the Brain and phone
+    # History screens are the follow-up lane. Both apps should get the
+    # conversation list/open/clear from the same store, so this is a missing
+    # screen rather than a one-sided decision (ARCHITECTURE section 8); the
+    # clear itself is ONE card each, never bulk.
+    "/api/self": "What Jarvis is made of on this PC (2026-11-03; jarvis_self_portrait.py, plugins/ready/self-portrait): the places it can open (imported from jarvis_settings_registry.SECTIONS and jarvis_menus.MENUS), its settings with live values, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only. No app calls it yet: the desktop HUD's Update button reads /api/self/version (the desktop lane's half), and a full portrait screen would go on BOTH apps (ARCHITECTURE section 8).",
+    "/api/self/version": "The cheap identity block alone (2026-11-03; jarvis_self_portrait.py): app_version, started_at, and the identity the installer recorded for the live gate/hud/skills modules plus the resealed commit, read from _jarvis-state.json. The desktop HUD's Update button is being pointed at it by the desktop lane; when that lands this entry is removed and the route becomes `deliberate` (the HUD's own update surface, not a phone screen).",
+    "/api/conversations": "The chat history list, answered by the SAME function GET /api/history is (2026-11-03; jarvis_self_portrait.py aliases jarvis_chat_log.handle_get, so there is one list and one reader). No app calls the alias yet - both apps already have History on /api/history - so this is built for the conversation tools and the follow-up multi-window work; a screen for it would go on BOTH apps (ARCHITECTURE section 8).",
+    "/api/conversations/{id}": "One conversation's turns, answered by the SAME function /api/history/conversation is (2026-11-03; jarvis_self_portrait.py alias). No app calls the alias yet; the conversation tools use it inside the backend, and an app screen that opens one chat would go on BOTH apps (ARCHITECTURE section 8).",
+    "/api/conversations/clear": "Deleting ONE conversation from this PC (2026-11-03; jarvis_self_portrait.py): exactly {\"id\"}, ONE approval card (conversation_clear, tier ask) naming that chat's title and message count, that it cannot be undone, that the learned facts are KEPT and that copies in older backups remain. No bulk form, no cardless form. The existing two-phase History delete remains the apps' own path; this route is the backend card door, and a screen for it would go on BOTH apps (ARCHITECTURE section 8).",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

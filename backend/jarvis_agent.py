@@ -14394,6 +14394,61 @@ CONNECT_AFTER_OUTSIDE = (
     "message, in your own words.")
 
 
+#: The words a person or a model may use for a small number setting. The one
+#: shipped NumberSetting ("the live idle timeout") is 30-600 seconds, so ten
+#: words cover every value a person says in plain speech.
+_NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                 "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+_NUMBER_UNIT = re.compile(r"(seconds?|secs?|s|minutes?|mins?|m)?")
+
+
+def _number_setting_seconds(text) -> Optional[int]:
+    """The whole number of SECONDS a model's `change_setting` value names, or
+    None. Accepts "180", "3 minutes", "three minutes", "90s" - digits or the
+    ten small words, with an optional minutes unit. The RANGE is not checked
+    here: the setting's own setter owns it (jarvis_limits.change), so a value
+    out of range is refused by the same rule both apps and the spoken path
+    already obey."""
+    raw = str(text or "").strip().lower().replace(",", "")
+    if not raw:
+        return None
+    parts = raw.split()
+    if len(parts) == 1:
+        number, unit = parts[0], ""
+    elif len(parts) == 2:
+        number, unit = parts
+    elif len(parts) == 3 and parts[0] in ("a", "an"):
+        number, unit = parts[1], parts[2]
+    else:
+        return None
+    found = re.fullmatch(r"(\d+)(seconds?|secs?|s|minutes?|mins?|m)?", number)
+    if found:
+        value = int(found.group(1))
+        unit = found.group(2) or unit
+    else:
+        value = _NUMBER_WORDS.get(number)
+        if value is None:
+            return None
+    unit_found = _NUMBER_UNIT.fullmatch(unit)
+    if unit_found is None:
+        return None
+    if (unit_found.group(1) or "").startswith("m"):
+        value *= 60
+    return value
+
+
+def _number_setting_words(setting) -> str:
+    """The refusal for a number value that cannot be read, naming the row's own
+    range in the owner's words when this PC has it. Never invents a range."""
+    try:
+        rng = setting.range_words()
+    except Exception:                       # noqa: BLE001 - older PC
+        rng = ""
+    return ("refused: that has to be a whole number of seconds or minutes"
+            + (f", {rng}" if rng else "")
+            + ". Nothing was changed.")
+
+
 def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
                    *, watch: "_TurnWatch") -> None:
     """One change_setting call - the whole of the model-facing settings tool.
@@ -14478,6 +14533,16 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
     wake_word = bool(setting is None and choice is None and R.wake_word_from_words(asked))
     browser = bool(setting is None and choice is None and not wake_word
                    and R.browser_mode_named(asked))
+    # A NUMBER setting (the jarvis_settings_registry.NumberSetting table, 2026-11-01:
+    # "the live idle timeout" is the one shipped row). Resolved LAST, after every
+    # other kind, so a sentence that names a switch or a choice is never read as a
+    # number. Before 2026-11-03 nothing called find_number_setting_words from the
+    # model-facing path at all, so the ONE number the registry counts as changeable
+    # (capability_keys / changeable_settings) could not be changed by asking - the
+    # spoken path could, the tool could not. Its own setter is still the only thing
+    # that decides the range (jarvis_limits.change), exactly like every other kind.
+    number = (None if setting is not None or choice is not None or wake_word or browser
+              else R.find_number_setting_words(asked))
     apply = None
     if setting is not None:
         if value not in ("on", "off"):
@@ -14504,6 +14569,15 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
             return stop(R.browser_mode_bad_words(value))
         key = "browser_mode"
         apply = lambda: R.set_browser_mode(mode)
+    elif number is not None:
+        # The model sends the value as words ("three minutes", "180", "3 minutes").
+        # Seconds is the unit every number setting's setter takes; a value the
+        # range refuses is answered with the row's own range and changes nothing.
+        seconds = _number_setting_seconds(value)
+        if seconds is None:
+            return stop(_number_setting_words(number))
+        key = number.key
+        apply = lambda: number.set(seconds)
     else:
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
