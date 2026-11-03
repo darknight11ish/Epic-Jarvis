@@ -31576,8 +31576,10 @@ YouTube card also still says the video is read "then quiz you on it" - that line
 is the Quiz page's wording, reused unchanged here, although this chat path only
 reads the captions. Another link is another message and another card, never a
 standing permission;
-a declined, timed-out or unraisable card fetches nothing and answers in the
-reader's own words; and if the settings file gives that action a tier other than
+a declined, timed-out or unraisable card fetches nothing and answers in plain
+words - the YouTube reader's own three refusal sentences, used for both readers,
+because the page reader has none of its own; and if the settings file gives that
+action a tier other than
 `ask`, no card is raised and the answer is *"This needs your yes every time, but
 the settings file says otherwise, so it is switched off."*
 
