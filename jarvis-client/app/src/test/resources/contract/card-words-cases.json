@@ -435,6 +435,10 @@
       "title": "Jarvis wants to tidy your inbox (archive, star, mark read or trash)"
     },
     {
+      "action": "todo_add",
+      "title": "Jarvis wants to add to your to-do list"
+    },
+    {
       "action": "topic_loosen",
       "title": "Jarvis wants to turn a private topic back on, or let it learn or be used again"
     },
@@ -1747,6 +1751,18 @@
         "summary": "Jarvis wants to tidy your inbox.",
         "full": "archives, stars, marks as read or moves to Trash exactly the emails listed on the card, in your own mailbox on your mail provider's server; nothing is deleted for good, and for 10 minutes one tap on Undo puts every one back. nothing has happened yet.",
         "body": "archives, stars, marks as read or moves to Trash exactly the emails listed on the card, in your own mailbox on your mail provider's server; nothing is deleted for good, and for 10 minutes one tap on Undo puts every one back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "todo_add",
+      "notice": {
+        "title": "Jarvis wants to add to your to-do list",
+        "summary": "Jarvis wants to add to your to-do list.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
