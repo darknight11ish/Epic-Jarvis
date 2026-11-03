@@ -7006,12 +7006,12 @@ and what was written, keeping the newest 40); `obsidian_daily` (one plain line
 appended to that day's Obsidian note through `jarvis_note_capture`, the module
 that already owns it — `10:00 — medication: Taken`); `goal` (the goal's own
 progress log, through `jarvis_goals.progress(goal_id, text, at=...)` when this PC
-has that module); `habit` (a tick, through `jarvis_habits.tick(habit_id, at=...,
-text=...)`, wired by the life-coach lane). **The last two degrade rather than
-fail**: this tree's `jarvis_goals.py` has no progress log yet and there is no
-`jarvis_habits.py`, so a reminder that names either says one truthful sentence
-("Goal progress is not set up on this PC yet, so that part was not written. The
-answer itself was kept.") and keeps the answer. Nothing is silently pretended.
+has that module); `habit` (one tick, through `jarvis_habits.record_tick(habit_id,
+words=...)` - that module's own reminder-lane entry point, one row per habit per
+day). **The goal half degrades rather than fails**: this tree's `jarvis_goals.py`
+has no progress log yet, so a reminder that names a goal says one truthful
+sentence ("Goal progress is not set up on this PC yet, so that part was not
+written. The answer itself was kept.") and keeps the answer. Nothing is silently pretended.
 
 **Answering.** `POST /api/schedule/act {"do": "answer", "id", "button": <index>,
 "source"?}` — the same route and the same write door as every other schedule
