@@ -2753,10 +2753,17 @@ backend routes, in both directions; the rest are listed here only.
   webview with its own capability file, its own entry in `window_memory.rs`, its
   own App-lock answer and its own screen-capture exclusion - the phone has no
   such surface to copy, and "have eight windows" is not a phone shape. What is
-  NOT one-sided is the ability: both apps can read and open the same kept
-  conversations, and the server card for clearing one is answerable in either
-  app. Nothing here adds a route, so `tools/check_parity.py` classifies no new
-  path for the windows themselves.
+  NOT one-sided is the ability, said in three clauses: both apps read and open
+  the same kept conversations (each through its existing History routes, which
+  the new `/api/conversations` names alias); the clear card is raised by the
+  `conversation_clear` chat tool (`backend/jarvis_agent.py`'s
+  `_conversation_clear_call` -> `jarvis_self_portrait.clear_request`) and is
+  answerable on either app through the ordinary approval queue; and the phone's
+  own History Delete is **not** that card - it stays `POST /api/history/delete`,
+  which answers 200 immediately and raises no card (`jarvis_chat_log.py`'s
+  `handle_post`), so nothing here reads as if a phone's own delete asks first.
+  Nothing here adds a route, so `tools/check_parity.py` classifies no new path
+  for the windows themselves.
 
 - **The Update button and the two-halves version handshake are the desktop's, and
   that is one-sided on purpose** (2026-11-03; the owner's ask *"when i click
