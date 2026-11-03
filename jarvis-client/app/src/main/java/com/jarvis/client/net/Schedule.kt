@@ -431,6 +431,20 @@ object Schedule {
          * clock is a day out must never decide an item's age for itself.
          */
         val carry: String = "",
+        /**
+         * The question this reminder asks when it goes off (2026-11-02), or
+         * null for every reminder that does not. Drawn on the notification as
+         * the body and on the row as its buttons; the PC reads back the answer.
+         */
+        val ask: Ask? = null,
+        /** The answers already given, oldest first - the PC's own log. */
+        val answers: List<Answer> = emptyList(),
+        /**
+         * The PC said it can take an ANSWER for this job (`asks: true`). A
+         * backend from before 2026-11-02 never says it and has no `answer`
+         * verb, so no button is drawn rather than one that cannot work.
+         */
+        val asks: Boolean = false,
     )
 
     /** A named list: its name as the PC keeps it, its title, how many open items. */
@@ -457,6 +471,53 @@ object Schedule {
 
     /** One of the two ways to show the to-do list, in the PC's own words. */
     data class Mode(val value: String, val label: String, val detail: String = "")
+
+    /**
+     * A reminder that ASKS (2026-11-02, the owner's request: *"a notification on
+     * my Android phone saying 'Did you take your medication?' with a Yes or No
+     * button"*, and then *"as much flexibility or options as I want"*).
+     *
+     * The PC keeps it, this phone draws it: the question as the notification's
+     * body and each button as one notification action, in the owner's own words.
+     * Pressing one is a LOG, not an approval - no card anywhere, like ticking a
+     * to-do item - and the three-button ceiling is Android's own ([MAX_ASK]).
+     */
+    data class Ask(
+        val question: String,
+        val buttons: List<AskButton>,
+        val record: AskRecord = AskRecord(),
+    )
+
+    /**
+     * ONE of the owner's buttons: his words, and the one thing it does.
+     * [minutes] is set only for [ASK_SNOOZE], because only a snooze has a time.
+     */
+    data class AskButton(val label: String, val does: String, val minutes: Int = 0)
+
+    /**
+     * Where a `record` button writes, as the PC keeps it. Any combination; an
+     * empty one is impossible on an `ask` reminder whose buttons include a
+     * `record` button, because the PC refuses to save it.
+     */
+    data class AskRecord(
+        val history: Boolean = false,
+        val obsidianDaily: Boolean = false,
+        val goal: String = "",
+        val habit: String = "",
+    )
+
+    /**
+     * One answer already given, as the PC logged it: its own clock ("10:00"),
+     * the label that was pressed, what that button did, and what was written.
+     * Never computed here - a phone whose clock is a day out must not date the
+     * owner's own answer.
+     */
+    data class Answer(
+        val clock: String,
+        val button: String,
+        val does: String,
+        val wrote: List<String> = emptyList(),
+    )
 
     /**
      * One day of the day-labelled list: its "YYYY-MM-DD", the PC's heading for
@@ -506,7 +567,69 @@ object Schedule {
             ageSeconds = o.num("age_s"),
             createdDate = o.text("created_date") ?: "",
             carry = o.text("carry") ?: "",
+            ask = ask(o["action"] as? JsonObject),
+            answers = answers(o["answers"] as? JsonArray),
+            asks = o.flag("asks") == true,
         )
+    }
+
+    /**
+     * The `ask` block a reminder carries, or null for every other kind - and for
+     * an `ask` block this phone cannot draw honestly (no question, no usable
+     * button). That is the same direction the PC's own read takes: a shape it
+     * cannot use is dropped rather than half-drawn.
+     */
+    fun ask(o: JsonObject?): Ask? {
+        if (o?.text("kind") != "ask") return null
+        val question = o.text("question").orEmpty()
+        if (question.isEmpty()) return null
+        val buttons = (o["buttons"] as? JsonArray)?.mapNotNull { el ->
+            val b = el as? JsonObject ?: return@mapNotNull null
+            val label = b.text("label").orEmpty()
+            val does = b.text("does").orEmpty()
+            if (label.isEmpty() || does !in ASK_DOES) return@mapNotNull null
+            val minutes = b.num("minutes")?.toInt() ?: 0
+            if (does == ASK_SNOOZE && minutes !in 1..MAX_ASK_MINUTES) return@mapNotNull null
+            AskButton(label, does, if (does == ASK_SNOOZE) minutes else 0)
+        }?.take(MAX_ASK) ?: emptyList()
+        if (buttons.isEmpty()) return null
+        val record = o["record"] as? JsonObject
+        return Ask(
+            question = question,
+            buttons = buttons,
+            record = AskRecord(
+                history = record?.flag("history") == true,
+                obsidianDaily = record?.flag("obsidian_daily") == true,
+                goal = record?.text("goal").orEmpty(),
+                habit = record?.text("habit").orEmpty(),
+            ),
+        )
+    }
+
+    /** The answers the PC logged, oldest first - never a shape this phone invents. */
+    fun answers(list: JsonArray?): List<Answer> =
+        list?.mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val button = o.text("button") ?: return@mapNotNull null
+            Answer(
+                clock = o.text("clock").orEmpty(),
+                button = button,
+                does = o.text("does").orEmpty(),
+                wrote = (o["wrote"] as? JsonArray)?.mapNotNull { w ->
+                    (w as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+                } ?: emptyList(),
+            )
+        } ?: emptyList()
+
+    /**
+     * The body of ONE answer: one job id and the button's INDEX - never its
+     * label (so a re-worded button cannot be answered by accident) and never a
+     * target of any kind. The PC checks everything again. Null when it could not
+     * be one button of one job.
+     */
+    fun answerBody(id: String, index: Int): String? {
+        if (!validId(id) || index < 0 || index >= MAX_ASK) return null
+        return "{\"id\":\"$id\",\"do\":\"answer\",\"button\":$index}"
     }
 
     /** `GET /api/schedule`, read - or null when it is not the list. */
@@ -926,8 +1049,20 @@ object Schedule {
      */
     fun notification(kind: String, job: Job?, private: Boolean): Pair<String, String> {
         val title = title(kind)
-        val fallback = job?.lockScreen?.takeIf { it.isNotEmpty() } ?: lockScreen(kind)
+        // A question is what the notice SAYS when the reminder asks one
+        // (2026-11-02): the reminder's own text is what it is about, the
+        // question is what the owner reads. While the words are hidden the
+        // generic line is used, exactly as for every other kind.
+        val asking = job?.ask
+        // While the words are hidden (App lock or "Hide memory lists"), a
+        // question shows this generic line - it names the KIND of thing that is
+        // waiting and never a word of the question, which is the owner's own
+        // words about his own life. The PC's own lock-screen line would do; this
+        // one is truer for a question and leaks exactly as little.
+        val fallback = if (asking != null) ASK_ON_LOCK_SCREEN
+        else job?.lockScreen?.takeIf { it.isNotEmpty() } ?: lockScreen(kind)
         if (job == null || private) return title to fallback
+        if (asking != null) return title to asking.question
         // A "tell me when" says its alert - made on the PC from the owner's
         // words - never its text, which is what is watched.
         val words = (if (kind == TELLME) job.alert else job.text).trim()
@@ -1003,6 +1138,38 @@ object Schedule {
 
     /** The kinds a Snooze moves (jarvis_schedule.SNOOZABLE). */
     val SNOOZABLE = setOf("timer", "alarm", "reminder")
+
+    // ---- a reminder that ASKS (2026-11-02) ---------------------------------
+
+    /**
+     * The three things one of the owner's buttons may do
+     * (`jarvis_schedule.ASK_DOES`). Anything else is dropped from the answer's
+     * buttons, so no button that cannot be sent is ever drawn.
+     */
+    val ASK_DOES = setOf("record", "done", "snooze")
+
+    /** The one verb that carries minutes. */
+    const val ASK_SNOOZE = "snooze"
+
+    /**
+     * The most buttons one question may have. THREE is Android's own ceiling on
+     * a notification's actions, and the PC enforces the same number
+     * (`jarvis_schedule.MAX_ASK_BUTTONS`): four buttons would be one the phone
+     * silently cannot draw.
+     */
+    const val MAX_ASK = 3
+
+    /** The longest and shortest a snooze button may be, in minutes. */
+    const val MAX_ASK_MINUTES = 1440
+
+    /**
+     * The one line a locked phone may show for a question, when the notification
+     * privacy setting hides the words. The answer itself writes a personal
+     * record, so it is only taken with the phone unlocked - the same rule the
+     * approval envelope keeps for Approve, without pretending an answer is an
+     * approval.
+     */
+    const val ASK_ON_LOCK_SCREEN = "Jarvis: something you asked yourself about is due."
 
     /**
      * How late (seconds after it went off) the phone may still ring for a job

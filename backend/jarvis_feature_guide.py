@@ -2355,6 +2355,14 @@ NO_COMMAND_REASON = {
     # its own row and this reason is deleted (a stale entry FAILS the suite).
     "habit-checkins": ('not-a-setting', 'A habit tick is an action, not a stored setting: there is nothing to switch on or off, and the one job it sets up is stopped from its own Stop control rather than a preference. No app has a screen for it yet.', 'none-needed'),
     "mood-log": ('not-a-setting', 'A mood entry is a tap, not a stored setting: there is nothing to switch on or off, and no job of its own. No app has a screen for it yet.', 'none-needed'),
+    # Reminder builder (2026-11-02): a reminder that ASKS is the same shape - the
+    # question, its buttons and where an answer is written are data the owner
+    # sets on ONE reminder, not a stored setting, and answering raises no card at
+    # all. Its words reach the PC through the same form as the row above. One
+    # entry, appended at the end of the dict so a crossing pull request conflicts
+    # nowhere: this file is another lane's, and this is the smallest touch that
+    # lets a new feature row exist (the checker below fails a silent omission).
+    "reminder-asks": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,

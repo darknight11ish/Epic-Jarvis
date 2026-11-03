@@ -2744,6 +2744,18 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **A question on a reminder is ANSWERED on both apps and CREATED only on the
+  PC, and that is one-sided on purpose** (2026-11-02, the owner's ask;
+  JARVIS-API §21.14). A reminder may carry a question and up to three of the
+  owner's own buttons; the PC draws them on its "Just went off" row and the phone
+  on its notification, both through the same `POST /api/schedule/act
+  {"do": "answer"}`, so answering is not one-sided at all. What IS one-sided is
+  the builder: a question's destinations include a file on this PC's Obsidian
+  vault and a goal or habit id, and a phone cannot read this PC's folders - the
+  same reason "Then: Open a file" has never had a phone form (§21.11). The phone
+  therefore answers a question and never creates one, and it says so rather than
+  offering a control that would have to guess. No route was added, so
+  `tools/check_parity.py` has nothing new to classify.
 - **Approving a card from a notification is the phone's surface, and that is
   one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
   desktop does not post approval cards to Windows notifications, so there is

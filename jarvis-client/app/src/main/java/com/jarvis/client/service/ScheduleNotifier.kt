@@ -195,6 +195,22 @@ object ScheduleNotifier {
          * briefing's notice because its job is not in `GET /api/schedule`.
          */
         scheduleKind: String = "",
+        /**
+         * The question this reminder asks (2026-11-02), or null for every
+         * reminder that does not. Its buttons become the notification's
+         * actions, in the owner's own words: pressing one is a LOG, not an
+         * approval - no card, like ticking a to-do item - and the answer is
+         * only taken with the phone unlocked, because it writes a personal
+         * record.
+         *
+         * THREE is the ceiling. Android draws at most three actions, and the
+         * PC refuses a fourth (`jarvis_schedule.MAX_ASK_BUTTONS`), so a
+         * question's buttons REPLACE this notification's own Snooze and Stop:
+         * an ask reminder carries exactly the buttons the owner wrote. Nothing
+         * rings here - an ask is a reminder, and a reminder never rings - so no
+         * Stop is lost.
+         */
+        ask: com.jarvis.client.net.Schedule.Ask? = null,
     ): Boolean {
         if (!allowed(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a $kind that went off is not shown")
@@ -242,7 +258,19 @@ object ScheduleNotifier {
                 },
             )
             .apply {
-                if (kind in SNOOZABLE && !openBriefing && !quiet) {
+                if (ask != null && !quiet && ask.buttons.isNotEmpty()) {
+                    // The owner's own buttons, in his own words and his own
+                    // order. ONE action each; the index is what is sent, never
+                    // the label, so a re-worded button cannot be answered by
+                    // accident.
+                    ask.buttons.forEachIndexed { index, button ->
+                        addAction(
+                            R.drawable.ic_notification,
+                            button.label,
+                            answerIntent(context, jobId, key, index),
+                        )
+                    }
+                } else if (kind in SNOOZABLE && !openBriefing && !quiet) {
                     addAction(
                         R.drawable.ic_notification,
                         com.jarvis.client.net.Schedule.SNOOZE,
@@ -258,7 +286,12 @@ object ScheduleNotifier {
                 // button: it silences and removes exactly this notification
                 // and does nothing else. The quiet/late notice below keeps NO
                 // action - that is the owner's decision of 2026-09-26.
-                if (!quiet && !openBriefing) {
+                //
+                // A question keeps three actions at most, so Stop is not added
+                // beside them: Android draws three, and the owner's own three
+                // buttons are what he wrote. Swiping the notification away and
+                // the content tap still close it.
+                if (!quiet && !openBriefing && ask == null) {
                     addAction(0, STOP, stopIntent(context, key))
                 }
             }
@@ -389,6 +422,38 @@ object ScheduleNotifier {
         return PendingIntent.getService(
             context,
             0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /**
+     * The job id an Answer carries - the same extra Snooze uses.
+     *
+     * The button's INDEX is [EXTRA_BUTTON] and never its label: the PC reads the
+     * question and its buttons back from its own row, so a page - or a
+     * notification - can never name what is written.
+     */
+    const val EXTRA_BUTTON = "com.jarvis.client.extra.BUTTON_INDEX"
+
+    /**
+     * One of a question's buttons, pressed. To [EventService], which waits for
+     * the link like Snooze does and then sends ONE answer
+     * ([com.jarvis.client.JarvisRuntime.scheduleAnswer]). The notification's own
+     * data carries the job's key, so two questions' PendingIntents are never
+     * taken for the same one, and the same question's three buttons are told
+     * apart by the request code, which is the button's index.
+     */
+    private fun answerIntent(context: Context, jobId: String, key: String,
+                             index: Int): PendingIntent {
+        val intent = Intent(context, EventService::class.java)
+            .setAction(EventService.ACTION_ANSWER)
+            .setData(keyData(key))
+            .putExtra(EXTRA_JOB_ID, jobId)
+            .putExtra(EXTRA_BUTTON, index)
+        return PendingIntent.getService(
+            context,
+            index + 1,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

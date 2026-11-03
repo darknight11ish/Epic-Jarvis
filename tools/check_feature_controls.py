@@ -450,15 +450,19 @@ def main(argv=None):
     # Command-Only rows (each is an action - a tick, a 1-5 tap - with no
     # setting behind it), so 95 -> 97 and 168 -> 170 features. Measured from
     # the contract, not chosen.
+    # 2026-11-02 (the reminder builder): "A reminder that asks you a question"
+    # joined as one Command-Only row (a reminder's question and its buttons are
+    # data on that reminder, not a stored setting), so 97 -> 98 and 170 -> 171
+    # features. Measured from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
-        LAB_COMMAND: 97, LAB_ALWAYS: 12,
+        LAB_COMMAND: 98, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/97/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/16/98/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/16/97/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 43/2/16/98/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.

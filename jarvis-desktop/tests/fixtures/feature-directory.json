@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "b75a656f8c193b24d3ac7e71131f5d40664d73f478b8b455a73acd33f50d2309",
-  "feature_count": 170,
+  "source_sha256": "754e9fd8186d3170c841ad0a1aeca8b4b23fd0ba565b8427222ec7e60bf39262",
+  "feature_count": 171,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
     "Settings-Only (By Design — Security Boundary)",
@@ -368,6 +368,22 @@
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
       "note": "Settings control today; typed path still being wired.",
+      "not_a_control": true
+    },
+    {
+      "id": "reminder-asks",
+      "title": "A reminder that asks you a question",
+      "group": "Talking",
+      "surface": "both",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "status": "not-a-setting",
+      "label_note": "",
+      "example": "what is coming up",
+      "example_ok": true,
+      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
+      "where_desktop": "All features and abilities",
+      "where_phone": "All features and abilities",
+      "note": "",
       "not_a_control": true
     },
     {
