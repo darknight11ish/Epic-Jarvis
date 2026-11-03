@@ -37,11 +37,16 @@ const tray = read("src-tauri/src/tray.rs");
 /* Rows that REPORT and never act. Each must be built with `false` for enabled, or
  * it is a clickable row that does nothing - a bug rather than a status line.
  * Written out by name on purpose: adding a new inert row should be a deliberate
- * edit to this list, because this list is the claim. */
+ * edit to this list, because this list is the claim.
+ *
+ * `ID_UPDATE` was here until 2026-11-03. It is no longer inert: the owner asked
+ * for a row that appears only when an update exists and INSTALLS it when
+ * pressed, so it is absent (not disabled) when there is nothing to install. Its
+ * presence rule, and the press, are held by `tray.rs`'s and `update.rs`'s own
+ * Rust tests. */
 const INERT = [
   "ID_STATUS_ACTIVITY",
   "ID_STATUS_POWER",
-  "ID_UPDATE",
 ];
 
 /* Rows that carry state and are re-labelled in place, so they must be held in
