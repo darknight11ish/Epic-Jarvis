@@ -251,6 +251,7 @@ class FindAnythingTest {
             // phone's own Settings row (SettingsScreen.kt item "files") with a real
             // place in MenuPlaces.SETTINGS - it lists the one approved file and
             // offers View / Save to Downloads, so the finder must reach it too.
+            //
             // 129 -> 130 (2026-11-02, the todo-carry-over lane):
             // `settings.todo-carryover` is the desktop's own "To-do list
             // carry-over" card, and it is DESKTOP ONLY - the phone draws the same
@@ -260,8 +261,14 @@ class FindAnythingTest {
             // larger for the same reason `settings.media-index` was, and
             // `every phone menu with a place can be found` stays satisfied
             // because `phone` is false.
+            //
+            // 130 -> 131 (2026-11-02, the skills menu): `settings.skills-menu` is
+            // the PC's Settings card (JARVIS-API section 178). It is DESKTOP-only
+            // and the phone's OpenPlace.kt answers "only in Jarvis on your PC" for
+            // it, but it is still a name the catalogue carries, so the count moved
+            // and the finder must be able to say where it is.
             "the catalogue must still carry the names at all",
-            130,
+            131,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

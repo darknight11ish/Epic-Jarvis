@@ -773,6 +773,20 @@ unverified. The 1.5 s trade is unchanged from 2026-10-18: a short clip is
 quicker because no speaker model runs, so false-accept and false-reject rise
 slightly against a check-every-clip rule.
 
+**The clip that starts Live by voice IS that check (2026-11-02).** "Hey Jarvis,
+let's talk" is only answered after the utterance passed the owner check, so the
+session begins verified at that check's own strictness and print - the first
+`source=live` clip is not asked for a second full sentence. Before this, the
+check that started Live was thrown away and the owner was told "Say a full
+sentence so I can re-check your voice" seconds after starting it, which is the
+owner's question of 2026-11-02 ("only ... verify my voice once at the beginning
+of Jarvis Live"). A session started by the button, the tray or a key has no
+such clip, so its first full sentence is still the check, and a start whose
+check was not a real one (broad mode) records nothing, so that session earns
+its check on a sentence. Nothing else moves: the start still refuses without a
+trained voice, a re-enrolled print still voids the session, and a failed or
+erroring check still ends it.
+
 **Streaming ASR - honest state.** The server-side streaming reader is in
 `jarvis_speech.StreamingAsr` (1.5 s endpoint, partial transcription overlapped
 with incoming audio, whole-clip fallback if streaming fails), and its tests

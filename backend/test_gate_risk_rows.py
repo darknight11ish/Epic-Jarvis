@@ -97,6 +97,11 @@ def t_the_patch_is_registered_last():
              # before plugin-loader.patch - jarvis_gate.py not at all, so it
              # rewrites none of the stale rows this patch removes.
              "jobs-routes.patch",
+             # skill-install-note.patch (2026-11-02): ONE additive parameter and a
+             # tier check inside jarvis_skills.py's install() - the skills menu's
+             # card. It has no hunk in jarvis_hud.py, jarvis_gate.py or any
+             # table they write, so it rewrites nothing this patch wrote.
+             "skill-install-note.patch",
              # phone-apps.patch (2026-11-02): three route branches in jarvis_hud.py
              # and no hunk in jarvis_gate.py at all.
              "phone-apps.patch",
