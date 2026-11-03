@@ -30206,10 +30206,35 @@ placements that were tried inside it broke a real suite (the numbers and the
 two failures are in `backend/_stack.py`'s RATCHET note). `_RISK.update` runs at
 import, before any `check()` call.
 
-`more_tools` group `web_search_grant`; both tools are switched on from
-Settings -> Tools -> "Safety and sharing" (`jarvis_asks_first.TIER_A`), never
-by default - `[tools].enabled` does not name them, so a fresh install's offered
-list and `test_tool_defaults.py`'s pinned defaults are unchanged.
+`more_tools` group `web_search_grant`. **Both tools are offered on an ordinary
+turn whenever `web_search` itself is offered** (2026-11-02, after the live field
+test): they are not rows in Settings -> Tools and `[tools].enabled` does not name
+them, so the offered set is `jarvis_agent.GRANT_ASK_TOOLS` riding along with the
+web-search tool, and switching web search off in Settings takes both with it.
+Offering the ASK grants nothing - the store is written only after a person
+answers the card, and the tool refuses with no card when the request carries no
+conversation id - and the stop only takes permission away. The earlier design
+made them a "Safety and sharing" switch instead, and on the owner's own PC that
+switch was never on: the model was offered no tool, no card could be raised, and
+a natural request answered "Search is approved for this conversation" with
+nothing behind it. `test_tool_defaults.py` and `test_tool_contract.py` pin the
+new offered list; `jarvis_asks_first.TOOLS_SWITCHABLE` is 21 rows again.
+
+**An approval cannot be claimed from words.** Two more things were added for the
+same field test, so the model never has to guess whether a grant is in force:
+
+- the rules block (`jarvis_agent.LANE_SYSTEM`, and the Modelfile's SYSTEM block)
+  says plainly that an approval is not the model's to give or assume, and that a
+  web-search approval is real only after a person answers its card - it must not
+  say one is in place unless a tool result in that conversation told it so;
+- while a grant IS in force, the prompt carries one line read from the store
+  itself (`jarvis_agent._grant_prompt_line`, `WEB_SEARCH_GRANT_IN_FORCE`), so
+  the "it is on" signal comes from the same function the search consults; with
+  no grant the line is absent and costs no tokens. As a backstop, an answer that
+  claims a web-search approval the store does not hold gets the same plain
+  `(Correction - ...)` postscript as a claimed-but-unrun search
+  (`_grant_claim_line`, through `postscript_lines`); an honest "no approval is
+  in force" or a conditional is never corrected.
 
 ### 175.3 What the card says
 
@@ -30291,9 +30316,13 @@ a thing to keep in sync for no gain.
 - the existing suites: `test_web_search.py` (the search path it sits in),
   `test_card_words.py` and `test_card_short_words.py` (both actions have plain
   words), `test_tool_contract.py`, `test_tool_text.py`, `test_short_tool_list.py`,
-  `test_tool_defaults.py` (no fresh-install default changed),
-  `test_reach.py`, `test_smarter_answers.py`, `test_asks_first.py` (the two tools
-  are listed in "Safety and sharing"), `test_gate_risk_words.py`,
+  `test_tool_defaults.py` (the offered list now includes the ask and its stop,
+  riding with web search; `[tools].enabled` is unchanged),
+  `test_reach.py`, `test_smarter_answers.py`, `test_asks_first.py` (21 rows;
+  the two tools are no longer "Safety and sharing" switches),
+  `test_warm_prefix.py` (the warm-up sends the same ride-alongs a real turn
+  does), `test_character.py` and `test_agent.py` (the rules paragraph),
+  `test_gate_risk_words.py`,
   `test_gate_names.py`, `test_gate_unknown_risk.py`.
 
 ## 176. The phone's app list, managed: add or remove one app, card first (added 2026-11-02)
@@ -30620,6 +30649,10 @@ carry-over"), `src-tauri/src/todo_carryover.rs` (one command: the read, and
 `{mode}` to change it). Phone: `net/Schedule.kt` (`carry`, `createdDate`,
 `todoMode`, `todoModes`, `todoDays`, `todoModeBody`, `carryOf`),
 `ui/screens/ComingUpPlate.kt` (the tag, and the day headings),
+`ui/screens/RemindersScreen.kt` + `net/Reminders.kt` (the phone's own Reminders
+screen's "Daily to-do list" choice, since 2026-11-02: the same items, both
+modes, the same `todo_mode` write, and the mode control offered only when the
+PC sent `todo_modes`),
 `ui/screens/TodoCarryoverPlate.kt` + `ui/screens/LimitsPlate.kt`'s card (the
 same two modes, drawn from the PC's own words), `JarvisRuntime.setTodoMode`.
 Nothing is decided by a client's clock: the PC wrote the item and the PC says
