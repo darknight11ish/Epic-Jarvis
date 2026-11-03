@@ -13,6 +13,14 @@ and interrupting at any time, plus showing Jarvis the phone's camera. The
 voice check still runs on every clip, cards are still decided by tapping
 (never by voice), and everything stays on the owner's own devices. Not
 full-duplex." And the owner's answers (2026-09-28):
+  (Amended 2026-11-02: the PHONE'S MIC PRESS - a `push_to_talk` clip from
+  `mic=phone` - is not voice-checked any more, by the owner's request ("dont
+  have it confirm my voice through the voice id"). That clips only the
+  ordinary quick message: every `source=live` clip below still runs the
+  owner check, Start still needs a real one (`_default_voice_ready`), and
+  "let's talk" from that press is an ORDINARY MESSAGE rather than a way in -
+  so nothing skips the "NO LIVE WITHOUT A REAL VOICE CHECK" rule. See
+  `jarvis_speech.py`'s module docstring and `_QuickMessage`.)
   1. under "Only trust the talk button", a Live turn is trusted like the talk
      button by default HOWEVER Live was started; the voice setting
      `hands_free_live` (jarvis_voice.py) has two stricter choices - "Only

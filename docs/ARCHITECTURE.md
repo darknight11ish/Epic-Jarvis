@@ -2756,6 +2756,29 @@ backend routes, in both directions; the rest are listed here only.
   the five-point envelope (Deny locked, Approve unlock-gated, biometric for
   everything not small, Review over 240 characters, redacted lock screen)
   exists to avoid.
+- **The phone's mic press does not check the voice print, and the desktop's
+  talk button still does - one-sided on purpose** (2026-11-02; the owner's
+  words: *"when i do the mic press to make a short verbal message to jarvis,
+  dont have it confirm my voice through the voice id"*). The check lives in
+  the backend (`jarvis_speech.hear()`), so both apps already call the same
+  route; what differs is the `?source=` and `?mic=` each sends. A
+  `push_to_talk` clip from `mic=phone` is transcribed without
+  `jarvis_voice.verify()` - and without the "a command needs enough speech"
+  refusal that exists only to feed that check - so a short message is
+  answered. A `push_to_talk` clip from `mic=desktop`, every `wake_word` clip,
+  every `live` clip, and any clip that names no microphone still run the
+  check. Nothing that needs a REAL check is granted to the exception: an
+  answer that uses email, the calendar, notes or memory stays on the phone's
+  screen, automatic learning waits for a card, and the words cannot open
+  Jarvis Live ("let's talk" from that press is an ordinary message), because
+  the reply says `strictness: ""` / `mode: "quick_message"` and Live's own
+  rule is no Live without a real voice check (JARVIS-API §5 and §19.2 item
+  5). The desktop's own talk button was deliberately NOT changed: the
+  owner's request names the phone's press, and the PC's button is on the
+  machine that already decides its own approvals. No route, no setting and
+  no permission was added; `tools/check_parity.py` is unchanged and clean.
+  The decision is `decisions.d/2026-11-02-quick-mic-no-voice-print.md`, and
+  `backend/test_quick_mic.py` holds both halves.
 
 - **The desktop Settings window has no "Small cards" radio, and that is
   one-sided on purpose** (2026-11-01; the rule is §3's "2026-11-01 exception",
