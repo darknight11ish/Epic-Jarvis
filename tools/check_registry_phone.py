@@ -168,6 +168,18 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"media-index",',
     },
+
+    "settings.skills-menu": {
+        "name": "Skills",
+        "why": "Every door the Skills card has runs the PC's own scanner and raises ONE approval "
+               "card on the PC, and the sources are a folder, a .zip or the PC's own Hermes folder - "
+               "so there is no version of this screen that could work on the phone. The phone keeps "
+               "the list it always read and Remove with its 'are you sure?', and 'open skills' "
+               "answers the honest PC-only sentence (docs/ARCHITECTURE.md section 8, JARVIS-API "
+               "section 178).",
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
+        "must_contain": '"skills-menu",',
+    },
     "settings.start-jarvis": {
         "name": "Starting Jarvis for you",
         "why": ("The backend runs on the PC, next to the desktop app; a phone cannot start or "

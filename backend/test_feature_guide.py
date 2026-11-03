@@ -2331,8 +2331,16 @@ _WHERE_OPENERS = frozenset({
     "settings", "brain", "the", "a", "an", "ask", "just", "say", "tell",
     "press", "hold", "click", "type", "open", "share", "put", "set", "turn",
     "scroll", "either", "on", "in", "off", "nothing", "no", "it", "notion",
-    "incognito", "history", "routes", "tray", "pc:", "phone:", "desktop:",
+    "incognito", "history", "routes", "tray", "hud", "pc:", "phone:",
+    "desktop:",
 })
+# `hud` joined on 2026-11-02, when this branch merged main's #1109: the list
+# above already named the HUD as a real surface, but no row STARTED a `where`
+# with it until the reminder-builder row ("HUD, Reminders (or Brain, ...)").
+# The set is a vocabulary of real surfaces, so the omission was this list's,
+# not that row's - and the row's own "Brain, Work, Coming up" place is still
+# proved against the real menu catalogue by the check below.
+
 
 
 def _real_place_names() -> tuple:

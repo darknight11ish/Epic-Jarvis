@@ -1175,6 +1175,29 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.skills-menu",
+    "title": "Skills",
+    "about": "The skills Jarvis may follow: install one, import your Hermes skills, turn one off and back on, and edit one.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "skills",
+      "the skills menu",
+      "my skills",
+      "hermes skills",
+      "install a skill"
+    ]
+  },
+  {
     "id": "settings.sandbox",
     "title": "Data and maths sandbox",
     "about": "Let the AI model run small Python scripts for sums and averages.",
@@ -3034,6 +3057,7 @@ export const ALIASES = {
   "heatmap": "brain.projects.progress",
   "help": "entry.help",
   "help button": "entry.help",
+  "hermes skills": "settings.skills-menu",
   "history": "brain.tab.history",
   "history entry": "entry.history",
   "history entry in brain": "entry.history",
@@ -3047,6 +3071,7 @@ export const ALIASES = {
   "idle timeout": "settings.idle-new",
   "inbox": "safety.approvals",
   "inside jokes": "brain.memory.between-us",
+  "install a skill": "settings.skills-menu",
   "jarvis calendar": "settings.calendar",
   "jarvis's voice": "settings.voices",
   "jarvis's voices": "settings.voices",
@@ -3149,7 +3174,7 @@ export const ALIASES = {
   "shortcuts": "settings.shortcuts",
   "show or hide": "settings.menu-visibility",
   "show the prompt coach": "settings.prompt-coach",
-  "skills": "brain.model.skills",
+  "skills": "settings.skills-menu",
   "small window": "settings.pip-mode",
   "smartwatch notifications": "settings.watch-notify",
   "solve it here settings": "settings.handoff",

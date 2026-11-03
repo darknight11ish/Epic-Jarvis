@@ -1140,6 +1140,84 @@ def t_session_verification_keeps_the_read_aloud_flags():
               "caution setting says so", h["ok"] and h["screen_aloud"] is False, h)
 
 
+def t_a_voice_start_is_the_sessions_own_check():
+    """The owner's question of 2026-11-02: "is the fix coming along where I
+    only have to verify my voice once at the beginning of jarvis live...".
+
+    One check covers a Live session (#1069), but a session started BY VOICE
+    threw that check away: "Hey Jarvis, let's talk" is only answered after the
+    owner check passed, and `Live.start` began an UNVERIFIED session - so the
+    next 1.5-2.0 s clip was answered "Say a full sentence so I can re-check
+    your voice": the owner verifying twice at the beginning of one session.
+    The clip that starts Live IS the session's check (same check, same
+    strictness, same print, recorded through `note_verified`); a start with no
+    such clip - the button, the tray, a key - still checks its first full
+    sentence, and a start that was not a REAL check records nothing.
+    """
+    with T.Temp() as t:
+        sp = Speech(t)
+        h = sp.hear(source="wake", words="Hey Jarvis, let's talk", seconds=2.5)
+        st = sp.w.engine.trust_state()
+        check("'Hey Jarvis, let's talk' starts Live on the owner check it just "
+              "passed, and that check verifies the session",
+              h["ok"] and h["live"] == "started"
+              and sorted(sp.calls) == ["owner_check", "stt"]
+              and st["active"] and st["first_clip_done"] and st["checks"] == 1
+              and st["strictness"] in ("very_strict", "balanced"), (h, sp.calls, st))
+        sp.calls.clear()
+        h = sp.hear(seconds=1.6, words="what is the weather")
+        check("...so the next short clip is NOT asked to verify again, and no "
+              "speaker model runs",
+              h["ok"] and h["text"] == "what is the weather" and not h["too_short"]
+              and not h["live_say"] and sp.calls == ["stt"], (h, sp.calls))
+        check("...and what the start's real check earned still travels: a "
+              "remembered answer may be said, a private one keeps its setting",
+              h["memory_aloud"] is True and h["private_aloud"] is False, h)
+        sp.calls.clear()
+        # The DESKTOP's talk button (`mic=desktop`). The phone's
+        # `push_to_talk`+`phone` clip is #1099's quick message - no voice
+        # check at all, and deliberately no way into Live - so the checked
+        # talk button this feature is about is the desktop's.
+        h = sp.hear(source="push_to_talk", mic="desktop", words="let's talk",
+                    seconds=2.5)
+        check("said with the talk button, 'let's talk' is the same one check",
+              h["ok"] and h["live"] == "started"
+              and sorted(sp.calls) == ["owner_check", "stt"]
+              and sp.w.engine.trust_state()["active"], (h, sp.calls))
+        # A NEW start is a NEW check, and a start with no clip of its own
+        # (the button, the tray, a key) still checks its first full sentence.
+        sp.w.engine.stop("owner", device="phone")
+        sp.w.engine.start("phone")
+        check("a button start is verified by nothing: no session trust yet",
+              sp.w.engine.trust_state()["active"] is False
+              and sp.w.engine.trust_state()["first_clip_done"] is False)
+        sp.calls.clear()
+        h = sp.hear(seconds=1.6, words="NEVER TRANSCRIBED")
+        check("...so its first short clip still asks for a full sentence, and "
+              "nothing is checked or transcribed",
+              h["too_short"] and h["live_say"] == L.SAY_RECHECK
+              and sp.calls == [] and not h["text"], (h, sp.calls))
+        before = sp.w.engine.status()["session"]
+        h = sp.hear(source="wake", words="Hey Jarvis, let's talk", seconds=2.5)
+        st = sp.w.engine.trust_state()
+        check("a NEW session started by voice checks again, and keeps nothing "
+              "from the session before",
+              h["live"] == "started"
+              and sp.w.engine.status()["session"] == before + 1
+              and st["active"] and st["checks"] == 1, (h, st))
+        # A start that was not a real check (broad mode lets every voice in)
+        # records nothing: that session still earns its check on a sentence.
+        sp2 = Speech(t)
+        with mock.patch.object(S, "_really_checked", lambda v, very=False: False):
+            h = sp2.hear(source="wake", words="Hey Jarvis, let's talk", seconds=2.5)
+        check("a start whose check was not a real one (broad mode) does not "
+              "verify the session",
+              h["live"] == "started"
+              and sp2.w.engine.trust_state()["active"] is False
+              and sp2.w.engine.trust_state()["first_clip_done"] is False,
+              (h, sp2.w.engine.trust_state()))
+
+
 def t_live_model_fallback_and_limits_are_one_injected_value():
     """The `[live]` model/fallback and the one lane URL are settings, not a
     second model loader; context 16K is Live-only and the tool limit is a
