@@ -2744,6 +2744,23 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Plugins are listed and switched by chat, and neither app has a screen for
+  it - one-sided on purpose** (2026-11-02; the owner's decision: *"Jarvis may
+  list plugins and turn them on/off by chat, one card per change"*; JARVIS-API
+  §180). The ABILITY is on both apps' chats, because the model tools
+  (`plugin_list`, `plugin_switch`) run on this PC and either app's chat is the
+  same turn. What is deliberately one-sided is a screen: neither app draws a
+  plugin list or a switch. A plugin is a folder beside `jarvis_hud.py` on this
+  PC, so a list screen on the phone would be deep config editing (the standing
+  rule against it), and a desktop section would be a second door beside the one
+  the owner asked for. Nothing here adds a route, a Rust command, a Settings
+  section or a permission path - there is no `GET`/`POST` for it at all, and
+  `tools/check_parity.py` is unchanged and clean. What asks first is the
+  EXISTING `modify_own_code` card, already listed on the "What asks first" page
+  in its "Jarvis's own code" group, so no new page row was invented either; the
+  feature itself is on both apps' Features pages (`features/features.json`,
+  `plugin-switch`). `backend/test_plugin_switch.py` holds both halves.
+
 - **Approving a card from a notification is the phone's surface, and that is
   one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
   desktop does not post approval cards to Windows notifications, so there is

@@ -12,7 +12,7 @@ repository chose, not the owner: the template is what
 `scripts/apply-patches.ps1` copies to the PC when there is no settings file.
 
 WHAT THIS PINS
-  1. BOTH SHIPPED TEMPLATES name the six defaults. The repository's copy
+  1. BOTH SHIPPED TEMPLATES name the nine defaults. The repository's copy
      (`backend/rebuilt/jarvis-framework.toml`) and the published base's copy
      (`jarvis-backend/jarvis-framework.toml`) are byte-identical, and every
      name in the list is a real tool (`jarvis_agent.TOOLS`) - a name that is
@@ -20,8 +20,10 @@ WHAT THIS PINS
      default can look on and do nothing.
   2. A FRESH INSTALL OFFERS THEM. The template copied in as the settings file
      (exactly what apply-patches.ps1 installs) makes a turn's enabled set the
-     six, and the model is offered calculator, memory_search, web_search,
-     change_setting and feature_guide.
+     nine, and the model is offered the local ones - calculator, memory_search,
+     phone_apps, plugin_list, plugin_switch, web_search, change_setting and
+     feature_guide - plus the two web-search-grant tools that ride with web
+     search.
   3. my_files IS STILL HIDDEN WITH NO FOLDER. It is in the list, but with no
      folder in "Folders Jarvis may look in" `offered_tools` omits it, so a
      fresh PC pays no tokens for it and reads nothing; once a folder is listed
@@ -78,7 +80,14 @@ except ModuleNotFoundError:                       # Python < 3.11
 #: so appending is the change that keeps those comments true; the SET is what
 #: a fresh install is offered.
 DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
-                   "phone_apps", "calculator", "memory_search", "my_files"]
+                   "phone_apps", "calculator", "memory_search", "my_files",
+                   # The drop-in plugin tools (2026-11-02, section 180): the
+                   # feature they manage is a folder beside jarvis_hud.py, and a
+                   # chat door reachable only by hand-editing the same list
+                   # would not be a chat door. Both stay on this PC and neither
+                   # deletes a plugin; ON is one modify_own_code card, OFF is
+                   # instant and cardless.
+                   "plugin_list", "plugin_switch"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
 #: order - `offered_tools` returns TOOLS order, never the file's order.
@@ -87,13 +96,15 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
 #: `jarvis_agent.GRANT_ASK_TOOLS`): the conversation web-search approval is
 #: an ASK, not a capability - its card is the permission - and the field
 #: test of 2026-11-02 found a Settings switch left it never offered at all.
-OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "web_search",
+OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
+                     "plugin_switch", "web_search",
                      "change_setting", "feature_guide",
                      "approve_web_search_for_conversation",
                      "stop_web_search_approval"]
 
 #: What a PC with at least one folder listed is offered: my_files joins it.
-OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "web_search",
+OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
+                       "plugin_switch", "web_search",
                        "my_files", "change_setting", "feature_guide",
                        "approve_web_search_for_conversation",
                        "stop_web_search_approval"]
@@ -180,10 +191,10 @@ def t_a_fresh_install_offers_the_defaults():
     os.environ["JARVIS_FRAMEWORK_TOML"] = str(settings)
     try:
         enabled = AG.enabled_tools_for_turn()
-        check("a fresh install's turn reads the six-name enabled set",
+        check("a fresh install's turn reads the nine-name enabled set",
               enabled == set(DEFAULT_ENABLED), enabled)
         offered = AG.offered_tools(enabled)
-        check("...and the model is offered the five defaults, plus the grant ask "
+        check("...and the model is offered the local defaults, plus the grant ask "
               "and its stop riding with web search, in TOOLS order",
               offered == OFFERED_NO_FOLDER, offered)
         check("...with my_files NOT offered while no folder is listed",

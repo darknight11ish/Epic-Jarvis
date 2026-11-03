@@ -1252,6 +1252,14 @@
      "name": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
     },
     {
+     "id": "plugin_list",
+     "name": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+    },
+    {
+     "id": "plugin_switch",
+     "name": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+    },
+    {
      "id": "github_search",
      "name": "GitHub research"
     },

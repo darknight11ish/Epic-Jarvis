@@ -2565,6 +2565,503 @@ def _execute_phone_apps(args: dict, state) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   The drop-in plugins: what is in the folder, and ONE switch at a time
+#   (the owner's decision, 2026-11-02)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S WORDS: "Jarvis may list plugins and turn them on/off by chat, one
+# card per change."
+#
+# WHAT WAS ALREADY THERE, MEASURED BEFORE A LINE WAS WRITTEN. `jarvis_plugins.py`
+# already discovers every folder in `jarvis_plugins\` beside `jarvis_hud.py`,
+# already switches one off with a `disabled` marker file in that folder (or
+# `"enabled": false` in its own `plugin.json`), already names every load, skip
+# and failure in `status()`, and already lists the folders WITHOUT installing
+# anything in `available()`. These two tools are a chat door to that: nothing
+# here discovers, imports, installs or deletes a module, and no second switch is
+# invented beside the marker the loader already reads.
+#
+# ON IS CARDED, OFF IS NOT - the project's own on/off rule. A plugin is program
+# code that runs inside the backend process at start-up, so turning one ON goes
+# through the EXISTING gate under `modify_own_code` (the shipped action for
+# "changes the running program's own code", already at tier "ask") and nothing
+# is written until a person says yes. Turning one OFF only narrows what runs, so
+# it is immediate and raises no card - exactly what the owner's rule says for
+# every other switch.
+#
+# THE HONEST LIMIT. A drop-in module is loaded by `install()` at HUD start-up,
+# so neither direction is live in the process that is already running. Every
+# answer says so in plain words, says Jarvis cannot restart itself, and names
+# the next start as the moment the change lands. Nothing here restarts anything.
+#
+# WHAT MAY NOT HAPPEN. ONE plugin per call, by a name `plugin_list` showed; the
+# schema has no list, so there is no bulk path by construction. No folder is
+# deleted, moved or edited, and `plugin.json` is never rewritten - a plugin
+# switched off in its own manifest is reported and refused, because that is a
+# hand edit and not something chat changes.
+PLUGIN_LIST_TOOL = "plugin_list"
+PLUGIN_SWITCH_TOOL = "plugin_switch"
+
+#: The action turning a plugin ON is decided under. `modify_own_code` ships in
+#: [autonomy.tiers] at "ask" already, so this adds no action, tier line or card
+#: wording. `skill_manage` is the one published `_TOOL_ACTIONS` key that already
+#: maps to it, so no gate patch is needed either. `_one_call` sets the action
+#: name itself, so the card is raised under `modify_own_code` rather than under
+#: the lookup key - the same shape SEND_FILE_TOOL and PROTECT_TOOL already use.
+PLUGIN_TOGGLE_ACTION = "modify_own_code"
+
+#: The marker file's own name, as `jarvis_plugins.discover()` reads it. It is
+#: the ONE file these tools ever create or remove.
+PLUGIN_MARKER = "disabled"
+
+#: What every answer says about when a change lands. One sentence, because it is
+#: the honest half of this whole feature.
+PLUGIN_WHEN = ("A plugin is loaded when Jarvis starts, so this takes effect the "
+               "next time Jarvis starts - I cannot restart Jarvis for you.")
+
+
+def _plugin_loader():
+    """jarvis_plugins, or None. None is an answer, not an error: both tools say
+    so in words rather than raising into the turn."""
+    try:
+        import jarvis_plugins
+        return jarvis_plugins
+    except Exception:                            # noqa: BLE001 - module absent
+        return None
+
+
+#: Why a plugin folder is off, in the four different words that are four
+#: different problems for the owner (they are NOT one state with one fix).
+PLUGIN_WHY_OFF = {
+    "off": "switched off - the folder has a disabled marker",
+    "off-manifest": "switched off inside its own plugin.json (\"enabled\": false), "
+                    "which is a hand edit on this PC",
+    "failed": "it did not load when Jarvis started",
+    "broken": "its folder has no working plugin.json",
+    "new": "the folder appeared after Jarvis started, so it has not loaded yet",
+    "not-started": "Jarvis has not run its plugin loader in this process",
+    "gone": "it loaded when Jarvis started, but its folder is gone now - it "
+            "keeps running until Jarvis restarts",
+}
+
+
+def _plugin_rows(folder=None) -> dict:
+    """Every drop-in plugin, its state and why it is off. READ ONLY, always.
+
+    The state is read from the two things `jarvis_plugins` already answers:
+    `available()` for what is on disk and `status()` for what the last
+    `install()` did. Nothing here imports a module or writes a file.
+
+    Returns {"ok": True, "folder": ..., "started": ..., "plugins": [...],
+    "counts": {...}, "note": ...}. A broken plugin folder, a missing plugin
+    folder and a plugin whose folder has gone since start-up are each REPORTED
+    rather than skipped - a list that quietly leaves one out is the failure
+    this tool would otherwise hide.
+    """
+    loader = _plugin_loader()
+    if loader is None:
+        return {"ok": False,
+                "error": ("jarvis_plugins.py is not beside this file, so there is "
+                          "no plugin folder to read")}
+    if folder is None:
+        try:
+            folder = loader.plugins_dir()
+        except Exception as exc:                 # noqa: BLE001 - the folder
+            return {"ok": False,
+                    "error": f"the plugin folder could not be worked out "
+                             f"({type(exc).__name__})"}
+    try:
+        where = str(folder)
+        exists = bool(os.path.isdir(where))
+        rows = loader.discover(folder)
+    except Exception as exc:                     # noqa: BLE001 - the folder
+        return {"ok": False,
+                "error": f"the plugin folder could not be read ({type(exc).__name__})"}
+    try:
+        st = dict(loader.status() or {})
+    except Exception:                            # noqa: BLE001 - the state
+        st = {}
+    loaded = [str(n) for n in st.get("loaded") or []]
+    failed = {}
+    for row in st.get("failed") or []:
+        if isinstance(row, dict) and row.get("name"):
+            failed[str(row["name"])] = str(row.get("why") or "")
+    started = bool(st.get("armed"))
+
+    plugins, on_disk = [], set()
+    for row in rows:
+        name = str(row.get("name"))
+        on_disk.add(name)
+        item = {"name": name, "on": False, "module": str(row.get("module") or ""),
+                "summary": str(row.get("summary") or "")}
+        if row.get("error"):
+            item.update(state="broken",
+                        why=f"{PLUGIN_WHY_OFF['broken']} ({row['error']})")
+        elif row.get("disabled"):
+            # The loader accepts TWO ways to switch a folder off, and they are
+            # not the same thing for the owner: a `disabled` marker chat can
+            # add or remove, and `"enabled": false` in its own plugin.json, which
+            # is a hand edit. Say which one it is.
+            marker = os.path.join(str(row.get("dir")), PLUGIN_MARKER)
+            item.update(state="off",
+                        why=(PLUGIN_WHY_OFF["off"] if os.path.exists(marker)
+                             else PLUGIN_WHY_OFF["off-manifest"]))
+        elif name in failed:
+            item.update(state="failed",
+                        why=f"{PLUGIN_WHY_OFF['failed']} ({failed[name]})")
+        elif name in loaded:
+            item.update(on=True, state="on", why="")
+        elif started:
+            item.update(state="new", why=PLUGIN_WHY_OFF["new"])
+        else:
+            item.update(state="not-started", why=PLUGIN_WHY_OFF["not-started"])
+        plugins.append(item)
+    # A plugin that loaded at start-up and whose folder has since gone: it is
+    # still running in this process, and saying nothing would be the lie.
+    for name in loaded:
+        if name not in on_disk:
+            plugins.append({"name": name, "on": True, "state": "gone",
+                            "module": "", "summary": "",
+                            "why": PLUGIN_WHY_OFF["gone"]})
+    on = sum(1 for p in plugins if p["on"])
+    out = {"ok": True, "folder": where, "folder_exists": exists,
+           "started": started, "plugins": plugins,
+           "counts": {"on": on, "off": len(plugins) - on},
+           "note": PLUGIN_WHEN}
+    if not exists:
+        out["note"] = (f"There is no plugin folder at {where}, so no drop-in "
+                       f"plugin is installed. {PLUGIN_WHEN}")
+    return out
+
+
+def _plugin_check(name, folder=None) -> tuple:
+    """(one discovered entry, "") or (None, the plain reason) for ONE plugin.
+
+    Pure: it reads the folder and writes nothing. The name must be one an
+    actual folder has - never a guess, never a path, and one at a time.
+    """
+    loader = _plugin_loader()
+    if loader is None:
+        return None, ("jarvis_plugins.py is not beside this file, so there is no "
+                      "plugin folder to switch")
+    if not isinstance(name, str) or not name.strip():
+        return None, "which plugin? Name the one plugin you mean, exactly as plugin_list shows it"
+    name = name.strip()
+    if (len(name) > 64 or name in (".", "..") or any(c in name for c in ("/", "\\", "\x00"))
+            or any(ord(c) < 32 for c in name)):
+        return None, (f"{name!r} is not a plugin name - plugin_list shows the names "
+                      f"exactly, and nothing was changed")
+    if folder is None:
+        try:
+            folder = loader.plugins_dir()
+        except Exception as exc:                 # noqa: BLE001 - the folder
+            return None, (f"the plugin folder could not be worked out "
+                          f"({type(exc).__name__}), so nothing was changed")
+    try:
+        found = loader.discover(folder)
+    except Exception as exc:                     # noqa: BLE001 - the folder
+        return None, (f"the plugin folder could not be read ({type(exc).__name__}), "
+                      f"so nothing was changed")
+    hits = [e for e in found if str(e.get("name")) == name]
+    if not hits:
+        hits = [e for e in found if str(e.get("name")).lower() == name.lower()]
+        if len(hits) > 1:
+            return None, (f"more than one plugin folder is called {name!r} (they "
+                          f"differ only in capitals), so nothing was changed - rename "
+                          f"one of them on this PC first")
+    if not hits:
+        names = sorted(str(e.get("name")) for e in found) or ["none installed"]
+        return None, (f"there is no plugin called {name!r}. The plugins on this PC "
+                      f"are: {', '.join(names)}. Nothing was changed")
+    entry = hits[0]
+    if entry.get("error"):
+        return None, (f"the {name!r} plugin cannot be switched: its folder's "
+                      f"plugin.json is not usable ({entry['error']}), and a plugin "
+                      f"that cannot load cannot be switched on or off")
+    return entry, ""
+
+
+def _plugin_state_of(name, folder=None) -> dict:
+    """The one row `plugin_list` would show for `name`, or {} - so the switch
+    and the list can never disagree about why a plugin is off."""
+    try:
+        rows = _plugin_rows(folder).get("plugins") or []
+    except Exception:                            # noqa: BLE001 - the folder
+        return {}
+    for row in rows:
+        if isinstance(row, dict) and row.get("name") == name:
+            return row
+    return {}
+
+
+def _plugin_marker_of(entry) -> str:
+    """The marker file's full path in ONE plugin folder."""
+    return os.path.join(str(entry.get("dir")), PLUGIN_MARKER)
+
+
+def _plugin_inside(entry, folder) -> bool:
+    """Is this plugin folder really inside the plugin folder we read?
+
+    `discover()` only ever yields direct children, so this is a belt rather
+    than the rule: a write that lands outside the one folder is the failure a
+    path has to be checked for, and the check is cheap.
+    """
+    try:
+        base = os.path.realpath(str(folder))
+        dest = os.path.realpath(str(entry.get("dir")))
+        return dest != base and os.path.dirname(dest) == base
+    except Exception:                            # noqa: BLE001 - the paths
+        return False
+
+
+def _plugin_apply(state: dict) -> dict:
+    """Do the ONE write the answer promised: create or remove `disabled`.
+
+    For OFF the marker is created with O_EXCL, so nothing already in the folder
+    is ever overwritten; for ON only the marker is removed, and only after the
+    folder and its plugin.json are still there. No other file is touched, and
+    no folder is created, moved or deleted.
+    """
+    if not isinstance(state, dict):
+        return {"ok": False, "changed": False,
+                "error": "refused: no plugin was named, so nothing was changed"}
+    name = str(state.get("plugin") or "")
+    folder = state.get("folder")
+    entry = state.get("entry") or {}
+    if not entry or not _plugin_inside(entry, folder):
+        return {"ok": False, "changed": False,
+                "error": (f"refused: the {name!r} plugin folder is not where it was, "
+                          f"so nothing was changed")}
+    dest = str(entry.get("dir"))
+    marker = _plugin_marker_of(entry)
+    if not os.path.isdir(dest):
+        return {"ok": False, "changed": False,
+                "error": (f"refused: the {name!r} plugin folder is not there any "
+                          f"more, so nothing was changed")}
+    on = bool(state.get("on"))
+    if not on:
+        if os.path.exists(marker):
+            return {"ok": True, "changed": False, "plugin": name, "on": False,
+                    "takes_effect": "the next time Jarvis starts",
+                    "message": (f"The {name!r} plugin is already switched off - its "
+                                f"folder has the disabled marker. Nothing changed.")}
+        try:
+            fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            os.close(fd)
+        except FileExistsError:
+            return {"ok": True, "changed": False, "plugin": name, "on": False,
+                    "takes_effect": "the next time Jarvis starts",
+                    "message": (f"The {name!r} plugin is already switched off. "
+                                f"Nothing changed.")}
+        except OSError as exc:
+            return {"ok": False, "changed": False,
+                    "error": (f"the {name!r} plugin could not be switched off "
+                              f"({type(exc).__name__}), so nothing was changed")}
+        return {"ok": True, "changed": True, "plugin": name, "on": False,
+                "takes_effect": "the next time Jarvis starts",
+                "message": (f"The {name!r} plugin is switched off. Its folder is "
+                            f"untouched - a file called {PLUGIN_MARKER!r} is in it "
+                            f"now. It will not load the next time Jarvis starts; the "
+                            f"copy running now keeps going until then, and I cannot "
+                            f"restart Jarvis for you. Say \"turn the {name} plugin "
+                            f"on\" to undo this.")}
+    # ON, after the card was approved. The folder and its manifest must still be
+    # there: a card that waited minutes cannot switch on a folder that has gone.
+    if not os.path.isfile(os.path.join(dest, "plugin.json")):
+        return {"ok": False, "changed": False,
+                "error": (f"refused: the {name!r} plugin's own plugin.json is not "
+                          f"there any more, so nothing was changed")}
+    if not os.path.exists(marker):
+        return {"ok": True, "changed": False, "plugin": name, "on": True,
+                "takes_effect": "the next time Jarvis starts",
+                "message": (f"The {name!r} plugin is already switched on - its "
+                            f"folder has no disabled marker. Nothing changed.")}
+    try:
+        os.unlink(marker)
+    except OSError as exc:
+        return {"ok": False, "changed": False,
+                "error": (f"the {name!r} plugin could not be switched on "
+                          f"({type(exc).__name__}), so nothing was changed")}
+    return {"ok": True, "changed": True, "plugin": name, "on": True,
+            "takes_effect": "the next time Jarvis starts",
+            "message": (f"Approved. The {name!r} plugin is switched back on: the "
+                        f"{PLUGIN_MARKER!r} marker is gone from its folder. It will "
+                        f"load the next time Jarvis starts - I cannot restart Jarvis "
+                        f"for you, so it is not running yet.")}
+
+
+def _plugin_card_text(name: str, entry: dict) -> str:
+    """The ONE approval card's own words for switching a plugin ON.
+
+    Built here, never by the model: it names the plugin, the exact file that
+    would be removed, and the honest limit - a plugin is code that runs inside
+    Jarvis at start-up, so this lands the next time Jarvis starts.
+    """
+    module = str(entry.get("module") or "")
+    summary = str(entry.get("summary") or "").strip()
+    what = f"`{module}`" if module else "the module its plugin.json names"
+    if summary:
+        what += f" - {summary}"
+    return (
+        f"Switch the {name!r} plugin back on?\n\n"
+        f"A plugin is a small program folder that runs inside Jarvis when it "
+        f"starts. This plugin's folder is:\n\n`{entry.get('dir')}`\n\n"
+        f"What is in it: {what}\n\n"
+        f"If you say yes, Jarvis removes ONE file from that folder, and nothing "
+        f"else:\n\n`{_plugin_marker_of(entry)}`\n\n"
+        f"Its plugin.json is not edited, no other file in the folder is touched, "
+        f"and nothing is downloaded or sent anywhere.\n\n"
+        f"What happens next: the plugin loads the NEXT time Jarvis starts. I cannot "
+        f"restart Jarvis for you, so it is not running until then.\n\n"
+        f"This does not approve anything the plugin itself does: every action it "
+        f"offers keeps its own card and its own rule.\n\n"
+        f"If you say no: nothing changes - the folder stays exactly as it is, and "
+        f"the plugin stays off."
+    )
+
+
+class _PluginsListed:
+    """A plugin_list answer: the folder, read and changed nothing."""
+
+    def __init__(self, listed: dict) -> None:
+        self.listed = listed
+
+
+class _PluginNoChange:
+    """A plugin_switch answer that needs no card and no write: it is already in
+    the state that was asked for. A card showing this would approve nothing."""
+
+    def __init__(self, listed: dict) -> None:
+        self.listed = listed
+
+
+class _PluginOffNow:
+    """A plugin_switch OFF: written at once, never a card.
+
+    Turning a switch OFF only narrows what runs, which is the owner's own rule
+    for every other switch. The state carries the folder that was read, so the
+    write lands where the answer said it would."""
+
+    def __init__(self, state: dict) -> None:
+        self.state = state
+
+
+class _PluginRefused:
+    """A plugin_switch that could not become ONE change: a name no folder has,
+    a broken manifest, a plugin switched off in its own plugin.json, more than
+    one plugin in a call. A card showing any of these would ask the owner to
+    approve nothing, so the reason goes back to the model instead."""
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
+
+
+def _prepare_plugin_list(args: dict) -> tuple:
+    """(the list, the plan's own line). The list is recognised before the gate,
+    so it raises no card - there is nothing to approve."""
+    return _PluginsListed(_plugin_rows()), "List the drop-in plugins"
+
+
+def _prepare_plugin_switch(args: dict):
+    """(state, the card's own words) for ONE plugin on/off call.
+
+    A list-shaped answer - off (do it now), nothing to change, or a plain
+    refusal - comes back as a sentinel `_one_call` answers without a card. An
+    ON that passed every rule comes back as the plain dict `execute` writes:
+    the SAME plugin and folder the card named, never recomputed from the model's
+    arguments a second time.
+    """
+    args = args or {}
+    extra = sorted(str(k) for k in args if str(k) not in ("plugin", "action"))
+    if extra:
+        return (_PluginRefused(
+            "one plugin at a time, please - this tool takes a plugin name and "
+            f"'on' or 'off' only ({', '.join(extra)} was sent), so nothing was "
+            f"changed"),
+            "Switch one plugin on or off")
+    action = str(args.get("action") or "").strip().lower()
+    if action not in ("on", "off"):
+        return (_PluginRefused(
+            "say 'on' or 'off' for ONE named plugin, so nothing was changed"),
+            "Switch one plugin on or off")
+    loader = _plugin_loader()
+    if loader is None:
+        return (_PluginRefused(
+            "Jarvis cannot switch plugins on this PC: jarvis_plugins.py is not "
+            "beside this file"), "Switch one plugin on or off")
+    try:
+        folder = loader.plugins_dir()
+    except Exception as exc:                     # noqa: BLE001 - the folder
+        return (_PluginRefused(
+            f"the plugin folder could not be worked out ({type(exc).__name__}), so "
+            f"nothing was changed"), "Switch one plugin on or off")
+    entry, problem = _plugin_check(args.get("plugin"), folder)
+    if problem:
+        return _PluginRefused(problem), "Switch one plugin on or off"
+    name = str(entry.get("name"))
+    marker = _plugin_marker_of(entry)
+    row = _plugin_state_of(name, folder)
+    if entry.get("enabled") is False:
+        # The OTHER way the loader already switches a module off: a hand edit of
+        # its own plugin.json. Chat does not rewrite a manifest, so this is a
+        # plain answer rather than a card or a marker.
+        return (_PluginNoChange({
+            "ok": True, "changed": False, "plugin": name,
+            "on": False if action == "off" else bool(row.get("on")),
+            "takes_effect": "the next time Jarvis starts",
+            "message": (f"The {name!r} plugin is switched off inside its own "
+                        f"plugin.json (\"enabled\": false). That is a hand edit on "
+                        f"this PC, so nothing was changed and there is no marker to "
+                        f"add or remove.")}),
+            f"Switch the {name} plugin {action}")
+    if action == "off":
+        if os.path.exists(marker):
+            return (_PluginNoChange({
+                "ok": True, "changed": False, "plugin": name, "on": False,
+                "takes_effect": "the next time Jarvis starts",
+                "message": (f"The {name!r} plugin is already switched off. "
+                            f"Nothing changed.")}),
+                f"Switch off the {name} plugin")
+        if row.get("state") in ("broken", "failed"):
+            # Adding a marker would hide the real reason in the start-up banner
+            # and change nothing about what runs. Say the truth instead.
+            return (_PluginNoChange({
+                "ok": True, "changed": False, "plugin": name, "on": False,
+                "takes_effect": "the next time Jarvis starts",
+                "message": (f"The {name!r} plugin is not running - {row.get('why')}. "
+                            f"Nothing was changed: switching it off would not fix "
+                            f"that.")}),
+                f"Switch off the {name} plugin")
+        return (_PluginOffNow({"plugin": name, "on": False, "folder": str(folder),
+                               "entry": entry}),
+                f"Switch off the {name} plugin")
+    if not os.path.exists(marker):
+        if row.get("on"):
+            message = (f"The {name!r} plugin is already switched on. Nothing "
+                       f"changed.")
+        else:
+            message = (f"The {name!r} plugin is not switched off, so there is no "
+                       f"disabled marker to remove - it is not loaded because "
+                       f"{row.get('why') or 'it is not loaded in this process'}. "
+                       f"Nothing was changed.")
+        return (_PluginNoChange({
+            "ok": True, "changed": False, "plugin": name,
+            "on": bool(row.get("on")),
+            "takes_effect": "the next time Jarvis starts",
+            "message": message}), f"Switch on the {name} plugin")
+    state = {"plugin": name, "on": True, "folder": str(folder), "entry": entry}
+    return state, _plugin_card_text(name, entry)
+
+
+def _execute_plugin_switch(args: dict, state) -> dict:
+    """Do the ONE change the card showed, after its approval."""
+    if not isinstance(state, dict):
+        return {"ok": False, "changed": False,
+                "error": "refused: that call named no one plugin, so nothing was changed."}
+    return _plugin_apply(state)
+
+
+# --------------------------------------------------------------------------
 #   "What is this feature?" - explaining Jarvis's own features (2026-10-20)
 # --------------------------------------------------------------------------
 #
@@ -3083,6 +3580,39 @@ TOOLS: dict = {
         _prepare_phone_apps,
         _execute_phone_apps,
         gate_lookup_name=lambda args: PHONE_APPS_GATE_NAME),
+    # The drop-in plugins (2026-11-02, the owner's decision: "Jarvis may list
+    # plugins and turn them on/off by chat, one card per change"). Two tools,
+    # because the two halves are different acts: `plugin_list` reads the folder
+    # and raises no card; `plugin_switch` turns ONE named plugin on (one
+    # modify_own_code card, through the existing gate) or off (immediate, no
+    # card). Both ship ON in [tools].enabled: a feature reachable only by hand
+    # editing the same settings file would not be reachable at all.
+    PLUGIN_LIST_TOOL: Tool(
+        PLUGIN_LIST_TOOL,
+        "List Jarvis's drop-in plugins: every plugin folder, whether it is on, and "
+        "why it is off (switched off, failed to load, a broken plugin.json, or added "
+        "after Jarvis started). Use when the owner asks what plugins Jarvis has, "
+        "whether one is on, or why one is not working. Read-only: it lists the "
+        "folder and changes nothing, so no card.",
+        {"type": "object", "properties": {}},
+        _prepare_plugin_list,
+        lambda args, state, **_: {"ok": False},
+        gate_lookup_name=lambda args: "skill_list"),
+    PLUGIN_SWITCH_TOOL: Tool(
+        PLUGIN_SWITCH_TOOL,
+        "Turn ONE drop-in plugin on or off by name, exactly as plugin_list shows "
+        "it. \"off\" is instant and needs no card; \"on\" raises ONE approval card, "
+        "because a plugin is program code. Either way it takes effect the NEXT time "
+        "Jarvis starts - say that plainly; never offer to restart Jarvis. ONE "
+        "plugin per call; never delete, move or invent one.",
+        {"type": "object", "properties": {
+            "plugin": {"type": "string", "description":
+                       "the plugin's name, from plugin_list"},
+            "action": {"type": "string", "enum": ["on", "off"]}},
+         "required": ["plugin", "action"]},
+        _prepare_plugin_switch,
+        _execute_plugin_switch,
+        gate_lookup_name=lambda args: "skill_manage"),
     "browser_control": Tool(
         "browser_control",
         "Drive one browser tab by naming page elements (role and accessible "
@@ -3907,6 +4437,14 @@ NEEDS_A_PERSON = {
     # is the one thing the owner said must never happen. NOT the revoke tool:
     # stopping takes permission away, runs at "auto" by design, and must never
     # wait for a card.
+    # The drop-in plugin switch (2026-11-02). Turning one ON is a change to
+    # Jarvis's own running code, decided under `modify_own_code` at "ask" - and
+    # this entry is the belt for the day that action is loosened in a settings
+    # file: a plugin must never be switched on with nobody asked. The OFF half
+    # never reaches this check (it answers before the gate, with no card), so a
+    # loosened tier cannot make stopping wait either.
+    PLUGIN_SWITCH_TOOL: "switches on one of Jarvis's own plugin folders, whose code "
+                        "then runs inside Jarvis at start-up",
     GRANT_TOOL: "lets web searches in this chat run without asking you, which only "
                 "you may allow",
 }
@@ -6487,7 +7025,14 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # and make every later card in it say "what shaped this request"
                 # about a grant. It would also be untrue: nothing outside was
                 # read.
-                GRANT_TOOL, REVOKE_TOOL}
+                GRANT_TOOL, REVOKE_TOOL,
+                # The two plugin tools (2026-11-02): they read the plugin
+                # FOLDER on this PC - the names, states and paths of modules
+                # Jarvis is already running - and their answers are this file's
+                # own sentences. Nothing outside is read, and recording a
+                # listing as a read would make a later note write wait for a
+                # person for no reason.
+                PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -7758,7 +8303,15 @@ TOOL_GROUPS = (
     # a group's members cost nothing extra in more_tools' own enum, so the
     # short list's 1,550-token pin does not move.
     ("settings", "change one of Jarvis's own settings",
-     (SETTINGS_TOOL, FEATURE_GUIDE_TOOL, PHONE_APPS_TOOL)),
+     (SETTINGS_TOOL, FEATURE_GUIDE_TOOL, PHONE_APPS_TOOL,
+      # The drop-in plugins (2026-11-02) share this group for the same reason
+      # phone_apps does: they are switches over Jarvis's own program, and a
+      # group's members cost nothing extra in more_tools' own enum (which lists
+      # group NAMES only), so test_short_tool_list.py's 1,550-token pin does not
+      # move. `plugin_list` reads and `plugin_switch` turns one plugin on (one
+      # modify_own_code card) or off (instant) - the same "Jarvis's own
+      # switches" subject the group's own description names.
+      PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -7963,6 +8516,12 @@ TOOL_HINTS = {
     "phone_apps": (r"\bphone apps?\b", r"\ballow[- ]?list\b", r"\bwhich apps\b",
                    r"\bapps?\b.*\b(?:add|remove|allow|approve|list)\b",
                    r"\b(?:add|remove|allow|approve)\b.*\bapps?\b"),
+    "plugin_list": (r"\bplugins?\b", r"\bdrop[- ]?in\b", r"\bmodules?\b",
+                    r"\bplugins?\b.*\b(?:on|off|list|installed|working)\b",
+                    r"\b(?:on|off|loaded|installed)\b.*\bplugins?\b"),
+    "plugin_switch": (r"\bplugins?\b", r"\bdrop[- ]?in\b",
+                      r"\b(?:turn|switch|put)\b.*\bplugins?\b.*\b(?:on|off)\b",
+                      r"\bplugins?\b.*\b(?:turn|switch|enable|disable)\b"),
     # The conversation-scoped web-search approval (GRANT_TOOL, 2026-11-01). Its
     # own words, narrow on purpose: a plain "search the web" must NOT pull the
     # grant in (that would offer the model a card the owner never asked for),
@@ -14102,6 +14661,17 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # ("revoke that" must work instantly), and the gate keeps its own
         # auto-tier audit line for it.
         action_name = REVOKE_ACTION
+    if name == PLUGIN_SWITCH_TOOL:
+        # Its OWN action name (2026-11-02): turning a plugin on is a change to
+        # Jarvis's own running code, so it is decided under the existing
+        # `modify_own_code` action - the one jarvis_skills.write_skill and the
+        # skill hub already raise for the same kind of act. `skill_manage` is
+        # the published `_TOOL_ACTIONS` key that maps to it, so no gate patch
+        # or tier line is invented; passing the action name here is what makes
+        # the card's own words and tier come from `modify_own_code` rather than
+        # from a lookup key. The OFF half never reaches the gate at all (see the
+        # sentinel branch below), so stopping can never wait for a person.
+        action_name = PLUGIN_TOGGLE_ACTION
     if name == "send_email":
         action_name = SEND_EMAIL_ACTION
     if name == "draft_email":
@@ -14184,6 +14754,46 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             say_step("tool_started", name)
             say_step("tool_finished", name, ok=True)
             ran = True
+        else:
+            result = {"ok": False,
+                      "error": f"refused: {state.problem} Nothing was changed and "
+                               f"nobody was asked."}
+            say_step("tool_refused", name)
+            ran = False
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
+                      "outcome": "no card needed" if ran else "refused"})
+        return
+
+    if name in (PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL) and isinstance(
+            state, (_PluginsListed, _PluginNoChange, _PluginOffNow, _PluginRefused)):
+        # Nothing here is put to the gate (2026-11-02):
+        #   * the list reads the plugin folder and changes nothing - there is
+        #     nothing to approve;
+        #   * "off" only narrows what runs, and the owner's own rule is that
+        #     turning a switch off is immediate, never a card;
+        #   * "already on"/"already off", a name no folder has, a broken
+        #     plugin.json and a plugin switched off in its own manifest are
+        #     plain answers or refusals - a card showing one of them would ask
+        #     the owner to approve nothing;
+        #   * "on" is NOT here: it comes back as a plan, and the ONE card is
+        #     raised below under modify_own_code.
+        if isinstance(state, _PluginsListed):
+            result = dict(state.listed)
+            say_step("tool_started", name)
+            say_step("tool_finished", name, ok=bool(result.get("ok")))
+            ran = bool(result.get("ok"))
+        elif isinstance(state, _PluginNoChange):
+            result = dict(state.listed)
+            say_step("tool_started", name)
+            say_step("tool_finished", name, ok=True)
+            ran = True
+        elif isinstance(state, _PluginOffNow):
+            result = _plugin_apply(state.state)
+            say_step("tool_started", name)
+            say_step("tool_finished", name, ok=bool(result.get("ok")))
+            ran = bool(result.get("ok"))
         else:
             result = {"ok": False,
                       "error": f"refused: {state.problem} Nothing was changed and "

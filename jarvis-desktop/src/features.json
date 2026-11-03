@@ -3381,5 +3381,24 @@
       "undo"
     ],
     "lesson_id": "receipts"
+  },
+  {
+    "id": "plugin-switch",
+    "group": "Safety",
+    "title": "Turn a drop-in module on or off by asking",
+    "what": "Jarvis lists its drop-in plugins (the small program folders, or modules, that live beside jarvis_hud.py) and switches ONE of them on or off when you ask in chat.",
+    "where": "Chat on either app, through the plugin_list and plugin_switch tools. There is no screen and no route on purpose: a plugin is a folder on this PC, and the chat tool is the door.",
+    "asks": "Listing raises no card. Turning one on raises ONE card (modify_own_code), because a plugin is program code that runs inside Jarvis at start-up; turning one off is immediate and needs no card.",
+    "limit": "One plugin per call, by a name Jarvis lists. A change lands the next time Jarvis starts - Jarvis cannot restart itself - so the copy running now keeps going until then. No plugin folder is ever deleted, moved or edited, and a plugin switched off inside its own plugin.json is a hand edit, not a chat toggle.",
+    "surface": "both",
+    "covers": [],
+    "aliases": [
+      "plugins",
+      "drop-in plugins",
+      "plugin list"
+    ],
+    "gate": [
+      "modify_own_code"
+    ]
   }
 ]

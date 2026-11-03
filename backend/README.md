@@ -70,6 +70,22 @@ the plainest phrasings through the same setter their Settings switch already
 calls, the four others keep the guide's own explanation, and an applied change
 is answered with a read-back of the old and new value.
 
+**And the plugins by chat need NO patch either (2026-11-02, `jarvis_agent.py`).**
+The owner's decision - "Jarvis may list plugins and turn them on/off by chat, one
+card per change" - is two model tools in `backend/jarvis_agent.py`, which is a
+shipped module like `jarvis_quick.py` above (so a patch against it would be
+overwritten by step 3, exactly the same trap). `plugin_list` reads
+`jarvis_plugins.py`'s own `discover()`/`status()` and names every plugin with
+its state and why it is off; `plugin_switch` turns ONE named plugin on behind
+ONE `modify_own_code` card (the existing action - no gate hunk, no new tier
+line) or off at once with no card. The write is the loader's own `disabled`
+marker file and nothing else: no plugin folder is deleted, moved or edited, and
+`plugin.json` is never rewritten. Nothing restarts the backend, so every answer
+says the change lands the next time Jarvis starts. There is no route, no
+Settings screen and no app change, which is why `tools/check_parity.py` is
+untouched. Proved by `backend/test_plugin_switch.py`; documented in
+`docs/JARVIS-API.md` section 180 and `docs/ARCHITECTURE.md` section 8.
+
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
 

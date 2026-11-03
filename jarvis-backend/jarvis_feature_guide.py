@@ -2347,6 +2347,12 @@ NO_COMMAND_REASON = {
     # is data the owner types into that reminder, not a stored setting - there
     # is nothing to switch on, and the kind that acts raises its own card.
     "reminder-actions": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # plugin-switch (2026-11-02, JARVIS-API section 180): the two chat tools and
+    # the modify_own_code card ARE the feature. There is no stored setting for
+    # it, so there is nothing for a typed on/off phrase or a Settings row to
+    # change; the plugin's OWN on/off state is the `disabled` marker in its
+    # folder, which the tool writes, not a [settings] key.
+    "plugin-switch": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,

@@ -371,6 +371,7 @@ LESSON_EXEMPT = {
     "setup-questionnaire": "the card explains itself: fourteen questions in the owner's own words, a read-only plan naming each effect, and one Apply that asks twice; a lesson would repeat the card",
     "reminder-actions": "the Reminders lesson was written before a reminder could carry an action and does not teach it; this is a work item for the teaching side, and until then the HUD's own Then row says, in one sentence under the field, what will happen when the reminder goes off",
     "anti-slop": "one switch, one mode and one line saying what OFF costs, on the How Jarvis talks card that already has its own lesson; a lesson would repeat the card's own words, and the card is the lesson",
+    "plugin-switch": "the two chat tools and the modify_own_code card are the whole feature, and both answers already say what a toggle means: it lands the next time Jarvis starts; a lesson would repeat the card and the reply",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each
