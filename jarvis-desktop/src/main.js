@@ -6284,8 +6284,8 @@ onEvent((frame) => {
    --------------------------------------------------------------------------
    A back-and-forth voice conversation the owner starts and stops. The PC
    holds the session; the microphone is Rust's (every sentence goes as
-   `source=live` and is checked for the owner's voice before any words
-   exist). This bar:
+   `source=live`, and one verified session is trusted without checking each
+   sentence again). This bar:
    - starts and ends it (the Live button - "End Live" once on), and shows
      the sign, with End Live, Mic off, Carry on, Resume Live, 20 more
      minutes (in the last five), Show the card, and Move it here when Live
@@ -6319,7 +6319,7 @@ const LIVE_TRAIN_PLACE = "voice";
 const LIVE_EXPLAINED_KEY = "jarvis.live.explained";
 const LIVE_TYPE_HINT = "Type to Jarvis - typed answers stay on screen";
 const LIVE_EXPLAINER =
-  "Jarvis now listens after every answer - just talk, no \"Hey Jarvis\" needed. Every sentence is checked for your voice first.";
+  "Jarvis now listens after every answer - just talk, no \"Hey Jarvis\" needed. Your voice is checked once for this Live session, not on every sentence.";
 
 function liveOnHere() {
   return onHere(live.status, LIVE_ME);

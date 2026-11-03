@@ -1582,8 +1582,9 @@ _SETTING_WORDS = {
         "Keep Jarvis Live going on this PC until Windows itself locks, even after App "
         "lock would ask for Windows Hello again?\n\n"
         "Then someone else who sits down at this PC before Windows locks could talk to "
-        "Jarvis through the open microphone. Every sentence is still checked for your "
-        "voice, but that check cannot tell a recording of you from you.\n\n"
+        "Jarvis through the open microphone. Your voice is checked once per Live session, "
+        "not on each sentence, and that one check cannot tell a recording of you from "
+        "you.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - Live ends when App lock would ask again."),
     # The owner's decision, 2026-09-27: "Talk-to-type on the PC: one approval

@@ -24,12 +24,14 @@ press **Live** (or say "Hey Jarvis, let's talk"), and from then on you just
 talk: no "Hey Jarvis" before each sentence, and you can cut in while Jarvis
 is speaking. Under the hood it is the same voice path Jarvis already has,
 held open for the whole session: every sentence you say is still a complete
-recording, still checked to be your voice before any words are made from
-it, and still turned into words on the PC only. On the phone you can also
-turn on the **camera** and ask about what it sees; a picture is taken only
-when you finish a question, goes only to your PC, and is never saved. A
-"Live" sign is on screen the whole time on both devices. Approval cards
-still need a tap. Nothing leaves your own devices.
+recording, still turned into words on the PC only, and one full sentence
+(2.0 s or more) is checked to be your voice before any words are made from
+it. That one check verifies the whole session, so later short replies are
+trusted without a check, and ending Live ends that trust. On the phone you
+can also turn on the **camera** and ask about what it sees; a picture is
+taken only when you finish a question, goes only to your PC, and is never
+saved. A "Live" sign is on screen the whole time on both devices. Approval
+cards still need a tap. Nothing leaves your own devices.
 
 **Live speaks in the ONE PC-wide voice** (2026-10-28). It always did - a Live
 reply asks `/api/voice/say` for its sound exactly like any other reply, in the
@@ -53,8 +55,9 @@ the gate):
   minutes", resume, mute; 30 minutes by default, never more than 2 hours
   ahead; the warning two minutes before; the 90-second quiet end (with a
   "Live ends soon - it's quiet" sign 15 seconds before, and "Resume Live"
-  for 10 minutes after, continuing the same chat); `source=live` clips
-  checked for the owner's voice before any words, every clip; the phrases
+  for 10 minutes after, continuing the same chat); `source=live` clips, with
+  the session's first full clip checked for the owner's voice before any
+  words and the session then trusted (no per-sentence check); the phrases
   ("Hey Jarvis, let's talk", "Okay Jarvis, that's all for now", "thanks,
   that's all", "that'll be all" and more) answered in `jarvis_speech.hear`
   without the model; `GET`/`POST /api/voice/live` (`docs/JARVIS-API.md`
@@ -328,7 +331,7 @@ the listening window open** - wrapped around parts that already exist:
 | "Hey Jarvis" (`jarvis_wakeword.py`) | Starts a spoken question | Not needed between turns; can start Live ("Hey Jarvis, let's talk") |
 | The listening window after a bare "Hey Jarvis." (`jarvis_speech.py:725-779`, 8 s, used once, per microphone) | The next sentence needs no phrase | **Held open for the whole session**, for that one device only |
 | Keep listening after a question (`jarvis_speech.py:836-912`; phone `VoiceSession.kt:219`, `WakeWordService.kt:270`) | After an answer ending in "?", the reply needs no phrase | Every answer is followed by listening, question or not |
-| The owner voice check before any words (`jarvis_speech.py:32`, `:1755`, `:1788`, then speech-to-text at `:1800`) | Refuses other voices before transcribing | **Unchanged, on every clip** |
+| The owner voice check before any words (`jarvis_speech.py:32`, `:1755`, `:1788`, then speech-to-text at `:1800`) | Refuses other voices before transcribing | **Once per session** - the first full clip verifies it; a later 1.5-2.0 s clip is trusted without a check (2.0 s+ clips still get the silent spot check) |
 | Smart Turn, "finished or only paused?" (`jarvis_speech.py:1048-1049`: ask after 200 ms of quiet, wait up to 2 s) | Ends a hands-free sentence | Ends each Live turn |
 | Interrupting by talking (`jarvis_voice_flow.py:1-35`, `barge_in`, never transcribed; apps pause first, decide second, `VoiceFlow.kt` 0.5 s onset, 3 s grace, ~2 s clip) | Stops Jarvis for your voice or "stop" | The same, always on in Live where the device can do it |
 | Telling the model it was interrupted (`JARVIS-API.md` §17.7) | The next question says where you stopped it | The same |
@@ -467,8 +470,11 @@ or not at all (the owner's answer 8, above).
 
 ### 3.3 The TV, other people, and Jarvis's own voice
 
-- **Other voices** are refused by the voice check before any words exist, as
-  today. Nothing of them is kept.
+- **Other voices** are refused by the voice check before any words exist
+  until the session is verified; after that a 2.0 s or longer clip is still
+  spot-checked, and a failed one ends the session's trust, but a 1.5-2.0 s
+  clip is trusted unchecked - so a short remark from someone else in the room
+  can be taken for you. Nothing of a refused clip is kept.
 - **Jarvis's own voice** coming back through the speaker: during speech it
   only ever reaches the barge-in check, which compares it with Jarvis's
   voices and keeps talking (`jarvis_voice_flow.py:432-441`); after speech, the
@@ -1089,7 +1095,7 @@ branch `studio-captcha-live-extras`. No new route; the rules are
 | A Quick Settings tile | Phone | "Jarvis Live - 12 min left" while on here. Tapping it ends Live at once (never held); starting opens the app on the Live screen and starts there, after App lock - Android only lets a microphone service start from an app in front. |
 | The headset button | Phone, only while Live runs here | Press = stop Jarvis talking (not under "Don't interrupt"); hold = Mic off / Mic on. **It never approves, denies or starts anything** (the source check in `LiveExtrasTest`). Android gives the button to the app that played sound last, and on some phones a hold opens the phone's assistant - Mic off is on the screen and the notification; the screen no longer explains the button (the owner asked for the long paragraph to go, 2026-10-26). |
 | "Live ended - Resume" | Phone | After Live ended on the phone and the PC says it can be resumed (quiet, time up), a notification kept on the phone offers Resume Live for the rest of the PC's 10 minutes. Resume opens the app and continues the same chat (after App lock; held on a stale link). |
-| A Bluetooth (or car) microphone | Phone | Preferred while one is connected. No Bluetooth permission is needed: the device comes from Android's own audio device lists. **A car's Bluetooth is a hands-free device, and its microphone only exists while the phone is in a call**, so that route records on `VOICE_COMMUNICATION` with the phone in `MODE_IN_COMMUNICATION` and the car made the communication device, and the previous mode and device are put back when Live stops (or a card/mute closes the microphone) - a car is never left showing a call. That decision is pure and JVM-tested (`voice/LiveAudioRoute.kt`, `LiveAudioRouteTest`, 2026-11-02). If the car's microphone cannot be used the phone's own is, and when Bluetooth is connected for sound only (A2DP, or a BLE speaker) the route's words say Bluetooth here has no microphone. The Live screen drew which ("Microphone: your Bluetooth headset (Buds)", or the phone's) until 2026-11-02, when the owner removed that line. On the PC Windows chooses the microphone (ARCHITECTURE section 8). **Unproven on hardware:** whether a particular car (the owner's 2017 Chevrolet Bolt) actually hands its microphone over in that configuration - only that car can say. The voice check still runs on every clip - a headset or car microphone is a different microphone, so a voice trained on the phone's own may be recognised less well through it; retraining with it connected helps, and a lower score fails safe (a refusal, never a false pass). |
+| A Bluetooth (or car) microphone | Phone | Preferred while one is connected. No Bluetooth permission is needed: the device comes from Android's own audio device lists. **A car's Bluetooth is a hands-free device, and its microphone only exists while the phone is in a call**, so that route records on `VOICE_COMMUNICATION` with the phone in `MODE_IN_COMMUNICATION` and the car made the communication device, and the previous mode and device are put back when Live stops (or a card/mute closes the microphone) - a car is never left showing a call. That decision is pure and JVM-tested (`voice/LiveAudioRoute.kt`, `LiveAudioRouteTest`, 2026-11-02). If the car's microphone cannot be used the phone's own is, and when Bluetooth is connected for sound only (A2DP, or a BLE speaker) the route's words say Bluetooth here has no microphone. The Live screen drew which ("Microphone: your Bluetooth headset (Buds)", or the phone's) until 2026-11-02, when the owner removed that line. On the PC Windows chooses the microphone (ARCHITECTURE section 8). **Unproven on hardware:** whether a particular car (the owner's 2017 Chevrolet Bolt) actually hands its microphone over in that configuration - only that car can say. The voice check runs when the session is verified, and on every 2.0 s or longer clip after that - a headset or car microphone is a different microphone, so a voice trained on the phone's own may be recognised less well through it; retraining with it connected helps, and a lower score fails safe (a refusal, never a false pass). |
 | "Talk about this in Live" | Phone, Android's Share sheet (text) | The text waits on the Live screen as a "Shared text" chip and goes with the next Send as its own message tagged `shared` - outside text, like any share: the chat counts as having read it and nothing is learned from it. Live starts (after App lock) if it was off. |
 | "End Live when" | Phone, Security | The same setting as the PC's: with App lock on, "When App lock would ask again" (default) or "Only when the phone's screen locks" (looser: asks for the fingerprint or PIN; the phone then reports `why: "screen_lock"`). With App lock off neither ends Live. |
 

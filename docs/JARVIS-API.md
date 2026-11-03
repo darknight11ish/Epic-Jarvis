@@ -13922,11 +13922,13 @@ The owner's decision and answers of 2026-09-28 (`CLAUDE.md`, "Jarvis
 Live"), designed in `docs/LIVE-DESIGN.md` (which also lists what was built,
 what the owner answered and what changed). A conversation the owner starts
 and ends: no "Hey Jarvis" between sentences, and every sentence is still a
-whole clip, **checked for the owner's voice before any words exist**, and
-turned into words on the PC only. The session lives on the PC
-(`backend/jarvis_live.py`, shipped whole; `backend/live.patch` installs the
-route). Desktop: `live.rs`, `live-rules.js`, the Jarvis bar and the
-always-on-top badge. Phone: `voice/LiveRules.kt`, `service/LiveService.kt`,
+whole clip, turned into words on the PC only. The owner's voice is verified
+once per session - its first full clip is **checked for the owner's voice
+before any words exist** - and the same session is not re-checked sentence
+by sentence after that; ending Live ends the trust. The session lives on
+the PC (`backend/jarvis_live.py`, shipped whole; `backend/live.patch`
+installs the route). Desktop: `live.rs`, `live-rules.js`, the Jarvis bar and
+the always-on-top badge. Phone: `voice/LiveRules.kt`, `service/LiveService.kt`,
 `ui/screens/LiveScreen.kt`. Both apps are held to one table,
 `live-cases.json` (`tools/gen_live_cases.py`).
 

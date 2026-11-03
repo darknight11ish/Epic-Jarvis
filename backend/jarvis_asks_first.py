@@ -854,9 +854,10 @@ FIXED = {
     # The plug-in programs (jarvis_mcp.py): a program someone else wrote,
     # running as the owner - every use asks, in code, whatever the file says.
     "fixed:live": ("Start Jarvis Live (a back-and-forth voice conversation)", SAYS_NO_CARD,
-                   "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still "
-                   "checked for your voice, and a card that comes up during Live still waits "
-                   "for your tap. How far Live is trusted is a Voice setting."),
+                   "Your own tap or words (\"Hey Jarvis, let's talk\"). Your voice is checked "
+                   "once per Live session and not again on each sentence; ending Live ends "
+                   "that trust. A card that comes up during Live still waits for your tap. "
+                   "How far Live is trusted is a Voice setting."),
     # "Look at this" and "Watch with me" (the owner's decision of 2026-09-28;
     # jarvis_screen.py): the page promises every action. Decided in the code: no
     # card - only the owner's own act on this PC, with a sign on screen. Removing

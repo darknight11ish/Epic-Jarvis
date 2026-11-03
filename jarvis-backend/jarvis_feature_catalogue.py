@@ -3,7 +3,7 @@
 The owner's feature list, as data: 175 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 f8a26e2c03251ce214f9944733fa4369aa869764183d061bd2bb5e668c10a753); the apps' Features pages read their own
+`features/features.json` (sha256 badc35265862c45b6bfd31ef680c4cdc7aa4cefdfd73a8c3d60645b29b987c72); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "f8a26e2c03251ce214f9944733fa4369aa869764183d061bd2bb5e668c10a753"
+SOURCE_SHA256 = "badc35265862c45b6bfd31ef680c4cdc7aa4cefdfd73a8c3d60645b29b987c72"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -174,7 +174,7 @@ FEATURES = (
         "what": "A back-and-forth voice conversation you start and stop, with no wake word between turns.",
         "where": "Press Start Live in the Jarvis bar, or say \"Hey Jarvis, let's talk\". On the phone, Live on Home or the Quick Settings tile. A PC hotkey can start and end it (asked for once, off until you pick one).",
         "asks": "Cards are still decided by tapping, never by voice. Ending Live never asks.",
-        "limit": "Not full-duplex, so a turn takes a couple of seconds. The voice check still runs on every clip, and side remarks meant for someone else are ignored and not kept.",
+        "limit": "Not full-duplex, so a turn takes a couple of seconds. Your voice is checked once per Live session, not on every sentence, and side remarks meant for someone else are ignored and not kept.",
         "surface": "both",
         "covers": ["safety.live-stop", "talking", "phone-live"],
     },
