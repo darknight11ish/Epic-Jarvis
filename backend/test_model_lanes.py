@@ -1259,20 +1259,27 @@ def t_the_automatic_half_has_the_same_safety_properties():
           "_AUTO_START: Callable = start" in text)
     check("... and the probe it uses is the module's own, on loopback",
           "_AUTO_PROBE: Callable = probe" in text)
-    # The NAMED-lane path raises no card (its permission argument is in the
-    # module header: the owner's own logon task already runs this command). The
-    # POOLED lane does raise ONE `switch_model` card (2026-11-02), because it is
-    # about to unload the owner's two models - and this module answers no card
-    # and approves nothing, which is the half rule 4 governs.
-    check("the named-lane path raises no card, answers no card and approves "
-          "nothing - rule 4 is untouched",
-          "decide_approval" not in text and "approvals.db" not in text
-          and text.count("jarvis_gate.check(action") == 1, "jarvis_gate")
-    check("... and the ONE card the pooled lane raises is the EXISTING "
-          "switch_model action, never a new gate name",
-          '(gate or _pooled_gate)(' in text
-          and '"switch_model",' in text and "power_manage" not in text,
-          "jarvis_gate")
+    # The NAMED-lane path raises no card (module header: the owner's own logon
+    # task already runs this command). Proved by CALLING it with a gate that
+    # would explode, not by reading its source - the POOLED lane is the one
+    # path that does ask, and `backend/test_pooled_lane.py` proves that card's
+    # action, its detail and that it comes before the first unload.
+    def boom(*a, **k):
+        raise AssertionError("the named-lane start asked the approval gate")
+
+    real_gate = L._pooled_gate
+    L._pooled_gate = boom
+    try:
+        code, body = L.start(
+            lane=L.lane_by_key("coding"), probe_fn=lambda port: False,
+            run_fn=lambda task: (0, b""),
+            tasks_fn=lambda: ("Jarvis Ollama - Coding model (RTX 2080 Super)",),
+            running_fn=lambda task: False, watch=False)
+    finally:
+        L._pooled_gate = real_gate
+    check("the named-lane start never asks the approval gate - no card on that "
+          "path, and rule 4 is untouched",
+          code == 202 and body.get("changed") is True, (code, body))
     check("it still runs exactly one external program, as argv, and never a "
           "shell", "shell=True" not in text and text.count("schtasks") >= 3,
           text.count("schtasks"))

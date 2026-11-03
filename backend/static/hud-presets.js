@@ -414,8 +414,9 @@ export function modelPresetRows(payload) {
       // both-card lane, so the row is a real button and this sentence says what
       // pressing it does. The PC sends its own `heavy_words`.
       heavy: row.heavy_mode === true,
-      heavyWords: (typeof row.heavy_words === "string" && row.heavy_words)
-        || HEAVY_PRESET_WORDS,
+      heavyWords: row.heavy_mode === true
+        ? ((typeof row.heavy_words === "string" && row.heavy_words) || HEAVY_PRESET_WORDS)
+        : "",
       pending: row.pending === true,
     }));
 }
