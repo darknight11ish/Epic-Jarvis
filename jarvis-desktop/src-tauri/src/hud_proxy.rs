@@ -58,7 +58,7 @@ use crate::ChatState;
 /// writes are NOT here - `/api/calendar/add`, `/api/calendar/act` and
 /// `/api/calendar/settings` stay refused, and the first two go through
 /// `hud_calendar_add` / `hud_calendar_act`, which hold the stale-link rule.
-pub const HUD_GET_PATHS: [&str; 13] = [
+pub const HUD_GET_PATHS: [&str; 14] = [
     "/api/status",
     "/api/graph",
     "/api/pending",
@@ -73,6 +73,12 @@ pub const HUD_GET_PATHS: [&str; 13] = [
     // The HUD uses it for one thing here: the honest version line and the list
     // of screen ids a `ui.navigate` request may name.
     "/api/self",
+    // The Update button's cheap half (2026-11-03, JARVIS-API section 184.7):
+    // the version block ALONE, so the HUD's own version line does not have to
+    // pull the whole portrait (places, settings, abilities) through this page.
+    // Read-only, no query and no sub-path; the shell's own handshake keeps
+    // reading the portrait in Rust (`backend_self.rs`).
+    "/api/self/version",
     // The same conversation inventory `GET /api/self` points at, for the shell
     // and the page's own lists (2026-11-03). Read-only; the HUD's History
     // panel keeps using the richer `/api/history` reads below.
@@ -492,6 +498,21 @@ mod tests {
         // The Current Models panel's list read, added 2026-10-26: a plain GET
         // on the exact path, and nothing around it.
         assert_eq!(allowed_get("/api/models").as_deref(), Some("/api/models"));
+        // The Update button's cheap version read (2026-11-03, JARVIS-API
+        // section 184.7): the block alone, on the exact path. No query, no
+        // sub-path and no trailing slash - the page has one read here, and a
+        // script in it cannot turn that into a different route.
+        assert_eq!(
+            allowed_get("/api/self/version").as_deref(),
+            Some("/api/self/version")
+        );
+        for bad in [
+            "/api/self/version?x=1",
+            "/api/self/version/",
+            "/api/self/version/extra",
+        ] {
+            assert_eq!(allowed_get(bad), None, "{bad} is not a read the page makes");
+        }
         assert_eq!(allowed_get("/api/work/apply"), None);
         assert_eq!(
             allowed_get("/api/retrieve?q=what%20is%20on%20today").as_deref(),

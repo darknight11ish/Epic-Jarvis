@@ -879,7 +879,7 @@ await check("the shell holds exactly those two commands, and its own read", () =
 });
 
 await check("the read is on the proxy's fixed list, with one bounded query", () => {
-  assert.match(PROXY, /pub const HUD_GET_PATHS: \[&str; 13\]/);
+  assert.match(PROXY, /pub const HUD_GET_PATHS: \[&str; 14\]/);
   assert.match(PROXY, /"\/api\/calendar",/);
   assert.match(PROXY, /const CALENDAR_PATH: &str = "\/api\/calendar";/);
   assert.match(PROXY, /let value = query\?\.strip_prefix\("days="\)\?;/);
