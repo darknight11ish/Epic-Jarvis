@@ -1,0 +1,53 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2049,6 +2049,25 @@ def _auth_headers(extra: dict | None = None) -> dict:
+                 # The exception's NAME only: its message could quote a setting.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
++        if path == "/api/phone/apps":
++            # phone-apps.patch (2026-11-02): the apps Jarvis may open on the
++            # owner's phone - the [phone_apps] allow-list (see the settings file),
++            # by the names the owner wrote and the packages they chose.
++            # READ-ONLY: no app is added or removed here. Adding and removing
++            # is the POST half below, and every one of those raises ONE
++            # approval card before anything is written.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_phone_apps
++                code, out = jarvis_phone_apps.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path == "/api/manner":
+             # manner.patch - how Jarvis words things (jarvis_manner.py, the
+             # owner's decision of 2026-09-25): "warm" (the default) or
+@@ -5746,6 +5765,15 @@ def _auth_headers(extra: dict | None = None) -> dict:
+         import jarvis_limits
+         return jarvis_limits.handle_post(route, body)
+ 
++    if route == "/api/phone/apps":
++        # phone-apps.patch (2026-11-02): ONE app, added to or removed from the
++        # phone's app allow-list. Every write raises ONE change_own_config card
++        # naming the app and the exact package, and nothing is written until a
++        # person approves it - jarvis_phone_apps.change() owns that rule, and
++        # its answer is returned whole, in the owner's words.
++        import jarvis_phone_apps
++        return jarvis_phone_apps.handle_post(route, body)
++
+     if route == "/api/digest/seen":
+         # Marking the digest read is not approving anything in it. There is
+         # deliberately no route that decides an approval in bulk; each one
+@@ -5755,6 +5783,7 @@ def _auth_headers(extra: dict | None = None) -> dict:
+                      "/api/appearance",
+                      "/api/undo/revert", "/api/jobs/cancel", "/api/holds/cancel",
+                      "/api/attention/mute", "/api/attention/unmute",
++                     "/api/phone/apps",
+                      "/api/limits/settings",
+                      "/api/digest/seen", "/api/watch/add", "/api/watch/remove",
+                      "/api/attention/settings",

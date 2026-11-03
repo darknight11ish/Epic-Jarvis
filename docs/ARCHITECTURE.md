@@ -2788,13 +2788,32 @@ backend routes, in both directions; the rest are listed here only.
   one approval card is drawn by both. What is **PC-only** is the permission
   itself - `[phone_apps]` (the app allow-list) and `"control_phone"` in
   `[tools].enabled` are two lines in `jarvis-framework.toml`, which is deep
-  config editing and stays off the phone (`CLAUDE.md`). Neither app lists or
-  edits the allowed apps; `list_apps` reads the same file for the model, so the
+  config editing and stays off the phone (`CLAUDE.md`). The list itself is now
+  managed by card (2026-11-02, JARVIS-API §176, and the bullet below), and the
+  phone reads it read-only; `list_apps` reads the same file for the model, so the
   phone never becomes a second authority on what may be opened. **One honest
   cost, said plainly:** opening a media app brings it to the front, so a Live
   session running on that phone is backgrounded by the very thing it asked for
   - the sound carries on, the conversation is behind the app. Nothing here
   merges, adds a route, or touches `tools/check_parity.py` (no route changed).
+
+- **The phone's app allow-list is MANAGED by card: add/remove is PC Settings and
+  chat, and the phone shows the list read-only** (2026-11-02; the owner's words:
+  *"i would need to approve a card with the apps i would like it to manipulate
+  first and i can remove or add any android app to that list any time with an
+  approval card... or by going to the settings and changing it there too"*;
+  JARVIS-API §176, `docs/DECISIONS.md` 2026-11-02). The two write paths - the
+  model's `phone_apps` tool in either app's chat/Live, and the PC's Settings
+  through `POST /api/phone/apps` - are ONE permission model: each add and each
+  removal raises ONE `change_own_config` card naming the friendly name and the
+  exact package id, nothing is written until a person approves it, and there is
+  no bulk path. The phone gets a **read-only** list from
+  `GET /api/phone/apps` and the line "ask Jarvis to add an app": typing a
+  friendly name AND a package id is deep config editing, which the standing rule
+  keeps off the phone, and the phone is the one device that cannot look a
+  package up. That is not a second authority - the same card approves the same
+  line whichever surface asked. `control_phone` itself is untouched and stays
+  opt-in (§174).
 
 - **The Notes editor's formatting toolbar, shortcuts and template menu are the
   desktop's alone** (2026-10-31; the owner asked to "really enhance this
