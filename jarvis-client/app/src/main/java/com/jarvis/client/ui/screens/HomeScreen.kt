@@ -5154,10 +5154,13 @@ private fun VoiceStrips(state: HomeState, actions: HomeActions) {
         VoiceSession.Phase.CAPTURING ->
             VoiceStrip("Listening — tap or release to send, slide up to cancel")
         VoiceSession.Phase.VERIFYING ->
-            // Named for what it is. The desktop checks whose voice this is
-            // BEFORE transcribing, so that a voice that is not his is never
-            // turned into words at all.
-            VoiceStrip("Checking it's you…")
+            // The PC has the clip. Since 2026-11-02 this phase covers the
+            // phone's mic press too, which is NOT voice-checked (the owner's
+            // request: a short verbal message should not be "confirmed"); the
+            // line is shared with "hey Jarvis" and Live, which are checked, so
+            // it says only what the PC is doing. MicWords.WAITING has the whole
+            // reason.
+            VoiceStrip(com.jarvis.client.MicWords.WAITING)
         // "Waking up the model…" (or "Waiting for your approval…") when the PC
         // says so in the answer's stream - the chat's own wait words - rather
         // than a bare "Thinking…" through a 10-20 second model load.

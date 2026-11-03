@@ -1652,6 +1652,26 @@ or sent to any model — refusing after transcribing would leave a stranger's
 speech in memory on the way to saying no. That is the rule, and it has not
 moved.
 
+**One exception, one surface (2026-11-02, the owner's request).** The phone's
+own talk button — a clip with `?source=push_to_talk` **and** `?mic=phone`,
+and nothing else — is not put to the owner check, and the "too short to be
+sure it was you" refusal goes with it (that minimum exists only to give the
+speaker model enough audio), so a short message like "remind me at five" is
+transcribed. The owner's words: *"when i do the mic press to make a short
+verbal message to jarvis, dont have it confirm my voice through the voice
+id"*. The press on his own paired phone is the act, the way typing is. What
+a passed check also bought is still refused: a private, memory or sensitive
+answer is not read aloud, and a fact is not learned without a card, because
+the reply says `strictness: ""` and `mode: "quick_message"` (the chat log's
+`voice_check` facts) — `_really_checked()` and automatic learning's GUARDS L8
+both answer no to that. It cannot open Jarvis Live either: "let's talk" from
+that press is an ordinary message, so the ways into Live stay a passed check
+or the app's own Start control. Every other clip — Jarvis Live, "hey
+Jarvis", the desktop's button (`mic=desktop`), or one that names no
+microphone — is checked exactly as the rest of this section says.
+`backend/test_quick_mic.py`
+is the suite, and the `jarvis_speech.py` docstring has the whole rule.
+
 **Changed 2026-10-20 (the voice-latency work order's Opt 3.1, the owner's
 choice): "before it is used", not "before it is made".** With a
 speech-to-text engine installed, the two now run **beside each other** on the
