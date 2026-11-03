@@ -2509,9 +2509,38 @@ class _SessionTrusted:
         self.strictness = str(strictness or "")
 
 
-def _live_started(out: dict, engine: str, wake: bool, common: dict) -> Heard:
-    """The reply to "let's talk": started, or refused in words."""
+def _live_started(out: dict, engine: str, wake: bool, common: dict,
+                  mic: str = "", verdict=None) -> Heard:
+    """The reply to "let's talk": started, or refused in words.
+
+    A Live session started BY THE OWNER'S VOICE is already verified, and this
+    is where that is recorded (the owner's report of 2026-11-02: "I only have
+    to verify my voice once at the beginning of Jarvis Live"). `_live_start`
+    only runs for a clip that passed the owner check (the phrase is not looked
+    at before it, and a short clip never reaches it), so the check that
+    started Live IS the session's one check: asking the first `source=live`
+    clip for a full sentence as well would be the second verification of the
+    same session. `note_verified` is jarvis_live's own session verification -
+    the same call a full Live sentence uses - so the strictness and the print
+    that passed travel with it, and every later guard (a private or remembered
+    answer read aloud, a re-enrolled print, a failed check) answers exactly as
+    it did before.
+
+    A start whose check was not a REAL one records nothing, so that session
+    still earns its check on a full sentence: in broad mode every voice is let
+    in, and `_really_checked` is what says so. (jarvis_live's own
+    `_default_voice_ready` refuses to start Live in broad mode at all; this
+    keeps the rule true for a caller that supplies its own voice_ready.)
+    """
     if out.get("ok"):
+        if mic and verdict is not None and getattr(verdict, "is_owner", False) \
+                and _really_checked(verdict):
+            try:
+                jarvis_live.ENGINE.note_verified(
+                    mic, strictness=str(getattr(verdict, "strictness", "") or ""),
+                    label=str(getattr(verdict, "voice_print", "") or ""))
+            except Exception:
+                pass
         return Heard(True, text="", engine=engine, wake_heard=wake, live="started",
                      live_say=str(out.get("say") or jarvis_live.SAY_STARTED),
                      reason="Jarvis Live started", **common)
@@ -3470,8 +3499,10 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         if started is not None:
             # "Let's talk" - with the talk button, or in the window after a
             # bare "Hey Jarvis." - starts Live on this device. No card: the
-            # owner's own act, and the owner check just passed.
-            return _live_started(started, engine, wake, common)
+            # owner's own act, and the owner check just passed (which is what
+            # verifies the session - see _live_started).
+            return _live_started(started, engine, wake, common, mic=mic,
+                                 verdict=verdict)
         if wake and text.strip():
             offer = _offer_move(mic, engine, common)
             if offer is not None:
@@ -3512,8 +3543,10 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     started = _live_start(mic) if said is not None and said[0] == "start" else None
     if started is not None:
         # "Hey Jarvis, let's talk": Jarvis Live starts on the device that
-        # heard it (docs/LIVE-DESIGN.md section 2). No card.
-        return _live_started(started, engine, True, common)
+        # heard it (docs/LIVE-DESIGN.md section 2). No card - and this
+        # check is the session's verification (see _live_started).
+        return _live_started(started, engine, True, common, mic=mic,
+                             verdict=verdict)
     offer = _offer_move(mic, engine, common)
     if offer is not None:
         return offer
