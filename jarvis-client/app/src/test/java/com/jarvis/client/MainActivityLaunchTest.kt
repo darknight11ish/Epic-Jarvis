@@ -95,10 +95,23 @@ class MainActivityLaunchTest {
         val src = source("MainActivity.kt")
         val body = block(src, "private fun readApprovalIntent(", "private fun ")
         assertTrue(body.contains("focusApproval.value ="))
-        // No approval/decision call and no other action hangs off that extra.
-        for (forbidden in listOf("approve", "decide(", "startLiveRequested", "beginVoice", "liveStartSoon")) {
+        // The body tap only focuses. There is still no decision call and no
+        // other action hanging off that extra.
+        for (forbidden in listOf("decide(", "startLiveRequested", "beginVoice", "liveStartSoon")) {
             assertFalse("readApprovalIntent must not $forbidden", body.contains(forbidden))
         }
+        // The Approve action (2026-11-02) is the one exception, and it is
+        // gated by InternalLaunch's proof before it sets its state.
+        val guard = body.indexOf("InternalLaunch.approvesApproval(")
+        val set = body.indexOf("approveFromNotification.value = id")
+        assertTrue("the approve action must be proof-checked", guard >= 0)
+        assertTrue("the approve action must set its one-shot state", set >= 0)
+        assertTrue("the proof check must come before the state is set", guard < set)
+        assertTrue(
+            "approveFromNotification is consumed by App(), never by this reader",
+            block(src, "LaunchedEffect(approveFromNotification.value, locked)", "LaunchedEffect(")
+                .contains("approveFromNotification.value = null"),
+        )
     }
 
     @Test
