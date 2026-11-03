@@ -142,6 +142,13 @@ READ_ONLY_TOOLS = frozenset({
     # on/off state and the reason a plugin is off - and changes nothing. The
     # writing half is plugin_switch, in ACTING_TOOLS.
     "plugin_list",
+    # The self portrait and the conversation reads (2026-11-03): all four only
+    # READ and change nothing, so an answer "I cannot tell you..." is never
+    # corrected for them and a claim that one did something is still caught by
+    # the acting half below. `conversation_clear` is the ONE action of the set
+    # and is in ACTING_TOOLS.
+    "self_portrait", "refresh_abilities",
+    "conversation_find", "conversation_open",
 })
 
 #: The other half of the same classification (audit H4): every tool that can
@@ -194,6 +201,12 @@ ACTING_TOOLS = frozenset({
     # failed. `plugin_list` is the read-only half and is in READ_ONLY_TOOLS: it
     # only lists the folder.
     "plugin_switch",
+    # "conversation_clear" (2026-11-03): it can DELETE a kept conversation, so
+    # a model claiming "I deleted that chat" is checked like any other action -
+    # and the correction is the honest one: the card is the permission, and
+    # nothing is deleted until a person approves it. `conversation_find` and
+    # `conversation_open` are reads and sit in READ_ONLY_TOOLS.
+    "conversation_clear",
 })
 
 #: The line added to a typed answer that claimed an action nobody took.

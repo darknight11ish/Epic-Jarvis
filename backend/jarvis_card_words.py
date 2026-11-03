@@ -222,6 +222,13 @@ TITLES = {
     "chat_tag_suggest": "file one chat under a tag it suggests",
     # jarvis_forget_range.py (2026-09-28): ONE card for a whole time frame
     "memory_forget_range": "forget what it learned and delete chats from the days you chose",
+    # jarvis_self_portrait.py (2026-11-03): deliberately NOT a Forget-a-time-frame
+    # relative - ONE kept conversation from this PC, after ONE card that names it
+    # (title and message count) and says the facts it taught are kept.
+    "conversation_clear": "delete one conversation from this PC",
+    # jarvis_storage_health.py (2026-11-03, a separate drop-in): ONE card listing
+    # every path in full before anything is deleted or moved.
+    "storage_cleanup": "tidy up temporary files and old deploy backups",
     "user_profile_manage": "change your profile",
     # --- voices
     "custom_voice": "keep or use a custom voice",

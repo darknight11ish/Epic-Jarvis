@@ -1219,6 +1219,146 @@
       "read": true
     },
     {
+      "name": "the tool refresh_abilities ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "refresh_abilities"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "refresh_abilities"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool self_portrait ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "self_portrait"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "self_portrait"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool conversation_find ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "conversation_find"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "conversation_find"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool conversation_open ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "conversation_open"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "conversation_open"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool conversation_clear ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "conversation_clear"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "conversation_clear"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool connect_account ran",
       "heard": {
         "private_aloud": false,

@@ -1074,7 +1074,16 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Conversation clear"
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy up temporary files and old deploy backups"
       },
       {
        "action": "user_profile_manage",
@@ -2698,7 +2707,16 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Conversation clear"
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy up temporary files and old deploy backups"
       },
       {
        "action": "user_profile_manage",
@@ -4317,7 +4335,16 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Conversation clear"
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy up temporary files and old deploy backups"
       },
       {
        "action": "user_profile_manage",
@@ -5931,7 +5958,16 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Conversation clear"
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy up temporary files and old deploy backups"
       },
       {
        "action": "user_profile_manage",
@@ -7545,7 +7581,16 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Conversation clear"
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy up temporary files and old deploy backups"
       },
       {
        "action": "user_profile_manage",
@@ -9173,7 +9218,16 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Conversation clear"
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy up temporary files and old deploy backups"
       },
       {
        "action": "user_profile_manage",
@@ -10792,7 +10846,16 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Conversation clear"
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy up temporary files and old deploy backups"
       },
       {
        "action": "user_profile_manage",

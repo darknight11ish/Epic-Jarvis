@@ -99,6 +99,10 @@
       "title": "Jarvis wants to tap and type on your phone"
     },
     {
+      "action": "conversation_clear",
+      "title": "Jarvis wants to delete one conversation from this PC"
+    },
+    {
       "action": "create_joplin_note",
       "title": "Jarvis wants to add a note in Joplin"
     },
@@ -421,6 +425,10 @@
     {
       "action": "stop_asking_before_every_web_search",
       "title": "Jarvis wants to stop asking before every web search"
+    },
+    {
+      "action": "storage_cleanup",
+      "title": "Jarvis wants to tidy up temporary files and old deploy backups"
     },
     {
       "action": "support_chat",
@@ -747,6 +755,18 @@
         "summary": "Jarvis wants to tap and type on your phone.",
         "full": "tapping the phone can send a message or complete a purchase. nothing has happened yet.",
         "body": "tapping the phone can send a message or complete a purchase. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "conversation_clear",
+      "notice": {
+        "title": "Jarvis wants to delete one conversation from this PC",
+        "summary": "Jarvis wants to delete one conversation from this PC.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1720,6 +1740,18 @@
         "full": "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change. nothing has happened yet.",
         "body": "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change. nothing has happened yet.",
         "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "storage_cleanup",
+      "notice": {
+        "title": "Jarvis wants to tidy up temporary files and old deploy backups",
+        "summary": "Jarvis wants to tidy up temporary files and old deploy backups.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }

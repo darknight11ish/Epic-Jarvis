@@ -9109,6 +9109,33 @@ TOOL_HINTS = {
         r"no longer authori", r"\brevoke\b", r"\byou don'?t have approval\b",
         r"no approval to search", r"\bask me before (?:you )?search",
         r"without asking any ?more"),
+    # The self portrait, the ability refresh and the owner's own conversations
+    # (2026-11-03, jarvis_self_portrait.py). Written from those tools' own
+    # descriptions, so the diet list offers them exactly when the question is
+    # about Jarvis itself or an old chat - and never for an unrelated request.
+    "self_portrait": (
+        r"\bwhat (?:can|do) you (?:do|have)\b", r"\byour (?:abilities|capabilit)",
+        r"\bevery setting\b", r"\bwhat settings\b", r"\bwhat (?:is|are) (?:connected|set up)\b",
+        r"\bwhat do you know how to\b", r"\byour (?:plugins?|stores?)\b",
+        r"\blist (?:your|the) (?:features|abilities|settings)\b"),
+    "refresh_abilities": (
+        r"\brefresh\b.*\b(?:abilities|capabilit|awareness|skills|settings)\b",
+        r"\bre-?read\b.*\b(?:abilities|capabilit|settings)\b",
+        r"\bupdate your (?:abilities|capabilities|awareness)\b",
+        r"\bwhat (?:else )?can you do now\b"),
+    "conversation_find": (
+        r"\bold (?:chat|conversation)", r"\b(?:past|earlier|previous) (?:chat|conversation)",
+        r"\bconversations?\b", r"\bchat history\b", r"\bwhich chat\b",
+        r"\bfind (?:that|the|my) (?:chat|conversation)\b"),
+    "conversation_open": (
+        r"\bopen (?:that|the|my|one) (?:chat|conversation)\b",
+        r"\bread (?:that|the|my|one) (?:chat|conversation)\b",
+        r"\bpull up (?:that|the|my|one) (?:chat|conversation)\b",
+        r"\bwhat did (?:we|i) say (?:in|about)\b.*\bchat\b"),
+    "conversation_clear": (
+        r"\b(?:delete|clear|remove|erase) (?:that|the|one|my|this) (?:chat|conversation)\b",
+        r"\bdelete\b.*\bchat\b.*\b(?:from|on) (?:this|the) pc\b",
+        r"\bclear (?:an?|one|that|the) (?:old )?(?:chat|conversation)\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}

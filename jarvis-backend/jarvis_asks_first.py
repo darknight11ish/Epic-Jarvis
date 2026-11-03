@@ -755,6 +755,11 @@ GROUPS = (
         "learning_auto_enable", "learning_sensitive_enable",
         "learning_paraphrase_enable", "history_enable",
         "memory_manage", "memory_forget_range", "conversation_clear",
+        # The storage self-scan's ONE tidy (jarvis_storage_health.py, a separate
+        # 2026-11-03 drop-in): it deletes temporary files and moves old deploy
+        # backups, so its card is a page row the moment the tier line exists -
+        # even on a PC whose drop-in folder is not installed yet.
+        "storage_cleanup",
         "user_profile_manage", "custom_voice",
         # Action receipts (jarvis_receipts.py, 2026-10-14): putting ONE recorded
         # change back - what changed, from the receipt Jarvis wrote before it
