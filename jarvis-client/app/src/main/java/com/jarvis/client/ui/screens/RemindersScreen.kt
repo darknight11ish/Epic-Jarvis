@@ -258,13 +258,24 @@ internal fun RemindersScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid,
                         )
-                        Gap(8)
-                        ToDoModeChoices(
-                            view = shown,
-                            canAct = canAct,
-                            busy = modeBusy,
-                            onChoose = { chooseMode(it) },
-                        )
+                        // Only once there is a list to talk about: a PC with no
+                        // scheduler at all gets the honest "run apply-patches"
+                        // line below instead of a sentence about how a list that
+                        // does not exist is drawn.
+                        if (!missing && shown != null) {
+                            Gap(8)
+                            ToDoModeChoices(
+                                view = shown,
+                                canAct = canAct,
+                                busy = modeBusy,
+                                onChoose = { chooseMode(it) },
+                            )
+                        }
+                        // The same one Show as the reminders tab: the to-do items
+                        // are the owner's own words, so while the private lists
+                        // are hidden this tab must offer the way back too rather
+                        // than leaving him to find the other choice first.
+                        if (privateHidden) HiddenWordsRow(showPrivateBusy, onShowPrivate)
                     }
                 }
                 Gap(10)
@@ -282,6 +293,16 @@ internal fun RemindersScreen(
                     )
                 } else {
                     val list = shown
+                    // A refresh that failed keeps the list the owner last saw -
+                    // but says so, so a stale row is never mistaken for a live
+                    // one (the same line the reminders tab shows).
+                    readError?.let {
+                        Text(
+                            "Couldn't read it again: $it",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.warnInk,
+                        )
+                    }
                     val items = Reminders.todoItems(list)
                     if (items.isEmpty()) {
                         Text(
@@ -354,21 +375,7 @@ internal fun RemindersScreen(
                             color = chrome.textLo,
                         )
                         Gap(6)
-                        if (privateHidden) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    Reminders.HIDDEN_WORDS,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = chrome.textMid,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Quiet(
-                                    if (showPrivateBusy) "Checking…" else "Show",
-                                    enabled = !showPrivateBusy,
-                                    onClick = onShowPrivate,
-                                )
-                            }
-                        }
+                        if (privateHidden) HiddenWordsRow(showPrivateBusy, onShowPrivate)
                         if (missing) {
                             Text(
                                 Schedule.MISSING,
@@ -522,4 +529,30 @@ private fun ToDoModeChoices(
         style = MaterialTheme.typography.labelSmall,
         color = chrome.textLo,
     )
+}
+
+/**
+ * "Words hidden. Tap Show and confirm it is you." - drawn on BOTH choices, so
+ * neither is a dead end while App lock or "Hide memory lists and chat history"
+ * is on. The Show is the app's one owner check, handed in by MainActivity
+ * (`::showPrivateLists`): a fingerprint or PIN, and nothing is revealed until it
+ * passes. The same sentence and the same control the Brain's Coming up plate
+ * draws.
+ */
+@Composable
+private fun HiddenWordsRow(busy: Boolean, onShow: () -> Unit) {
+    val chrome = LocalChrome.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            Reminders.HIDDEN_WORDS,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+            modifier = Modifier.weight(1f),
+        )
+        Quiet(
+            if (busy) "Checking…" else "Show",
+            enabled = !busy,
+            onClick = onShow,
+        )
+    }
 }
