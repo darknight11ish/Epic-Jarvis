@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 171 rows from features/features.json.
+The owner's feature list, as data: 174 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 a4b949967836adbb0c307bb1f81b838df248bdef11b43bfbdab4bdbbaf7cacf8); the apps' Features pages read their own
+`features/features.json` (sha256 a219240213df07a1da75741877b6d8c2d12caf35c30282791d82a079244353ca); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "a4b949967836adbb0c307bb1f81b838df248bdef11b43bfbdab4bdbbaf7cacf8"
+SOURCE_SHA256 = "a219240213df07a1da75741877b6d8c2d12caf35c30282791d82a079244353ca"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -731,7 +731,7 @@ FEATURES = (
         "group": "Notes and files",
         "title": "Ask about a PDF, a Word file or a Notion page",
         "what": "Jarvis reads a document you point it at and answers questions about it.",
-        "where": "Put the file in a folder Jarvis may look in, then ask about it.",
+        "where": "Put the file in a folder Jarvis may look in, or attach it to the question in chat, then ask about it.",
         "asks": "Reading needs no card. Writing a note back after reading it raises one, as any note write after outside text does.",
         "limit": "Only files in a folder Jarvis may look in; text from a document is outside text and is never learned as a fact.",
         "surface": "both",
@@ -954,6 +954,18 @@ FEATURES = (
         "surface": "both",
         "aliases": ["parking costs", "free parking"],
         "covers": ["parking"],
+    },
+    {
+        "id": "price-radar",
+        "group": "Money and health",
+        "title": "Flight prices and a price history",
+        "what": "A read-only price and flight radar: ask it to check a route and dates and it reads Google Flights' public search page, and it keeps a local price history with target prices. Prices only - it never books, holds a seat, adds to a cart or checks out.",
+        "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
+        "asks": "A lookup asks nothing: the radar is read-only. Turning it on is a hand edit of the settings file today, with no card; turning it off is immediate.",
+        "limit": "Off by default, so nothing is searched until it is on. Google Flights' public page is unofficial and experimental, so it can change or break; a failed read says so and no price is invented. It never books, holds a seat, adds to a cart or checks out - there is no such code path.",
+        "surface": "both",
+        "aliases": ["airfare", "flight cost", "flight price", "price history for flights"],
+        "covers": ["money-and-health"],
     },
     {
         "id": "habit-checkins",
@@ -1231,6 +1243,18 @@ FEATURES = (
         "covers": ["phone-limits", "phone-stays-on-pc"],
     },
     {
+        "id": "phone-apps",
+        "group": "Phone",
+        "title": "Open an app on your phone",
+        "what": "Ask Jarvis to open an app on your phone, and say which apps it may open at all. The list ships empty, so nothing can be opened until you add an app.",
+        "where": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+        "asks": "Adding or removing one app raises one approval card naming its friendly name and its exact package id, and nothing is written until you approve it. Opening a listed app is one approved call; each step of the plan is shown on that card.",
+        "limit": "The list ships empty, so nothing can be opened until you add an app, and control_phone is off by default. The phone must be connected to the PC over the cable (adb). A com.jarvis package is refused, so Jarvis can never tap its own Approve button.",
+        "surface": "both",
+        "aliases": ["phone app allow-list", "phone apps", "apps on my phone", "which apps can you open on my phone", "add an app to my phone", "remove an app from my phone"],
+        "covers": ["phone-extras"],
+    },
+    {
         "id": "appearance",
         "group": "The PC itself",
         "title": "Appearance",
@@ -1280,7 +1304,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Set up Jarvis",
         "what": "The card a new install meets first: the five choices that matter before Jarvis is any use.",
-        "where": "Settings, the first card on the page.",
+        "where": "Settings, Set up Jarvis - the first card on the page.",
         "asks": "No card - it is the setup page itself.",
         "limit": "Desktop only. The phone's first screen is pairing instead.",
         "surface": "desktop",
@@ -1433,7 +1457,7 @@ FEATURES = (
         "what": "Nine presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
         "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
-        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset runs on ONE pooled both-card lane (port 11450) that the apply starts and the next apply that is not heavy stops: it pauses the other two lane models while it runs and puts them back, proved from /api/ps, and it is refused in plain words if the cards cannot be freed, the model spills, or a lane will not pause. The Cloud row beside these nine is a separate cloud service choice, described in its own row.",
+        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands. The Cloud row beside these nine is a separate cloud service choice, described in its own row.",
         "surface": "both",
         "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],
@@ -1819,6 +1843,18 @@ FEATURES = (
         "surface_reason": "Docker runs on this PC only; the phone has no Docker screen.",
         "aliases": ["docker", "containers"],
         "covers": ["docker-containers"],
+    },
+    {
+        "id": "model-knowledge",
+        "group": "The PC itself",
+        "title": "Ask which model is answering",
+        "what": "Ask which AI model is answering right now and which preset is in force, what else this PC has installed, how fast each one was measured here, and which model suits a job. A named preset or model can be switched to from the same question.",
+        "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+        "asks": "Answering asks nothing. Applying a preset or switching a model raises one approval card, the same one the model switch already uses; nothing is downloaded or swapped until you approve it.",
+        "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed is only stated when this PC measured it; the phone still has no list of models to browse.",
+        "surface": "both",
+        "aliases": ["model knowledge", "which model is answering", "what model is answering", "what ai model", "the model you are running"],
+        "covers": ["model-page"],
     },
     {
         "id": "approvals",

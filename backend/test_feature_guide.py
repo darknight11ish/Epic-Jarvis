@@ -163,6 +163,13 @@ OWNER_QUESTION_EXCEPTIONS = {
     # The other eight questions still explain the row, and the state answer is
     # still checked against the module in backend/test_antislop.py.
     ("anti-slop", "is {} on"): {"settings_antislop_state"},
+    # The price radar's own fixed grammar owns "how do I turn on ...": it
+    # answers with the settings-file line ("[price_radar] enabled = true") and
+    # the honest "no chat approval card for that switch exists yet" sentence,
+    # which is the complete answer to that one question. The row is still
+    # explained by the other eight, and the radar's real chat lookup is its own
+    # grammar (2026-10-31 ruling 3), not a fall-through.
+    ("price-radar", "how do I turn on {}"): {"price_radar_enable"},
 }
 
 
@@ -2155,6 +2162,263 @@ def t_the_matrix_keeps_every_typed_phrase():
               ok, (got.name if got else None, got.f if got else None))
 
 
+# ------------------- 8. coverage: every switch read, every place real (2026-11-02)
+#
+# The owner's request: "make sure Jarvis can explain every part of itself -
+# what's on, off, turned to a certain setting and so forth." The three checks
+# below are the audit turned into a gate, so the next feature cannot land
+# half-explainable:
+#   * a row that names a switch must READ that switch (a real True/False, not
+#     None) through the same switch table its typed phrase writes;
+#   * a switch that no row names must still be reachable by its own registered
+#     name, so no switch is invisible to the guide;
+#   * an unreadable module must answer "I could not read it", never "off";
+#   * a row's `where` must name a real Settings card, a real Brain pane, or a
+#     real surface/starting action - never an invented place.
+
+def t_every_row_with_a_switch_reads_it_and_writes_it():
+    """Every switch a row names is readable, and the write path names the same
+    switch.
+
+    This is the measured 2026-11-02 audit as a test. Two real failures stood
+    behind it: `second-card`'s readers parsed a `status()["features"]` dict that
+    no longer exists (so all three of its switches read as None, and "is the
+    second graphics card on?" said "I could not read it" for a switch the
+    module reports fine), and `anti-slop`'s row covers the Manner card, whose
+    only BoolSetting is HUMOUR - so "is the Anti-Slop filter on?" answered "on
+    right now (humour)" and "turn on the anti-slop filter" resolved to the
+    humour setter. Both are fixed in `jarvis_feature_guide.py` /
+    `jarvis_second_card.py`; this pins them.
+    """
+    rows = [r for r in SOURCE if FG.feature_switches(r)]
+    check("rows with a switch exist to check", len(rows) >= 20, len(rows))
+    no_reader, unreadable, mismatch, mislabelled = [], [], [], []
+    for row in rows:
+        read_keys = [s["key"] for s in FG.feature_switches(row)]
+        write_keys = [s.key for s in FG.switches_for(row)]
+        for key in read_keys:
+            if key not in FG.STATE_READERS:
+                no_reader.append((row["id"], key))
+            elif FG.read_state(key) is None:
+                unreadable.append((row["id"], key))
+        if read_keys != write_keys:
+            mismatch.append((row["id"], read_keys, write_keys))
+        if (FG.label_for(row) != FG.LABEL_SWITCH_ADJUST
+                and row["id"] not in FG.PC_ONLY_FEATURES):
+            mislabelled.append((row["id"], FG.label_for(row)))
+    check("every switch a row names has a state reader here", not no_reader, no_reader)
+    check("every one of those switches reads a real True/False on this run",
+          not unreadable, unreadable)
+    check("the read path and the write path name the same switches, in order",
+          not mismatch, mismatch)
+    # Two rows with a real switch are labelled PC-Only by the owner's 2026-10-23
+    # correction (PC_ONLY_FEATURES: calendar, phone-notifications, phone-watch),
+    # because their control exists on one app only. Every OTHER row with a
+    # switch must be labelled Switchable/Adjustable.
+    check("a row with a switch is Switchable/Adjustable, or recorded PC-Only by "
+          "the owner's correction", not mislabelled, mislabelled)
+    # The two rows the audit fixed, pinned by name so a shape change fails here
+    # rather than in a live answer.
+    anti = FG.row_by_id("anti-slop")
+    check("the Anti-Slop row reads its OWN filter switch, not the Manner card's humour",
+          [s["key"] for s in FG.feature_switches(anti)] == ["antislop"]
+          and [s.key for s in FG.switches_for(anti)] == ["antislop"],
+          FG.feature_switches(anti))
+    for fid in ("write-like-me", "lights", "picture-mode", "anti-slop"):
+        row = FG.row_by_id(fid)
+        setting, why = FG.switch_target(row["title"])
+        check(f"{fid} can be turned on by its own title (its one real switch)",
+              setting is not None, why)
+    # SECTION_MATES_NOT_THIS_FEATURE may only drop a switch the row's own
+    # covers really link, and may never leave the row with none - the entry is
+    # a correction, not a way to erase a feature's control.
+    bad_mates, stripped = [], []
+    for fid, dropped in FG.SECTION_MATES_NOT_THIS_FEATURE.items():
+        row = FG.row_by_id(fid)
+        covered = set(row.get("covers") or ())
+        section_keys = {b.key for b in R.BOOL_SETTINGS
+                        if getattr(b, "section", None)
+                        and f"settings.{b.section}" in covered}
+        if not set(dropped) <= section_keys:
+            bad_mates.append((fid, dropped, sorted(section_keys)))
+        if not FG.switches_for(row):
+            stripped.append(fid)
+    check("a dropped section-mate is really linked by that row's own covers",
+          not bad_mates, bad_mates)
+    check("...and no row is left with no switch by a drop", not stripped, stripped)
+
+
+def t_every_switch_is_explained_by_a_row_or_its_own_label():
+    """No switch is invisible to the guide.
+
+    A switch that has a feature row is answered by that row (checked above). A
+    switch with no row of its own - `one_moment` is the one on this tree - must
+    still be answerable by the name the Settings card prints, through
+    `_setting_target`, or "is it on?" could never answer for it at all.
+    """
+    covered = set()
+    for row in SOURCE:
+        covered.update(s["key"] for s in FG.feature_switches(row))
+    orphans = [b for b in R.BOOL_SETTINGS if b.key not in covered]
+    bad = []
+    for b in orphans:
+        got, _ = FG._setting_target(b.names[0])
+        if got is None or got.key != b.key:
+            bad.append((b.key, b.names[0], getattr(got, "key", None)))
+    check("every switch is named by a feature row or reachable by its own name",
+          not bad, bad)
+    check("...and the switch with no row really is readable",
+          all(FG.read_state(b.key) is not None for b in orphans
+              if b.key in FG.STATE_READERS), [b.key for b in orphans])
+    # The second card's three switches must go through the module's own public
+    # reader, which is the only way its defaults and its file are the same ones
+    # its setters use.
+    import jarvis_second_card as SC
+    check("the second card exposes the one-switch reader the guide calls",
+          callable(getattr(SC, "switch_enabled", None)))
+    check("...and it answers for all three of the row's switches",
+          all(FG.read_state(k) is not None for k in
+              ("second_card_combined", "second_card_suggest_struggle",
+               "second_card_suggest_correction")))
+
+
+def t_an_unreadable_module_says_could_not_read():
+    """A module that cannot answer is said as UNKNOWN, never as on or off.
+
+    The old second-card reader failed silently (a shape change), and the guide
+    said "I could not read it" - which was honest - but the row had three
+    switches it could not read while the module answered fine. Both halves
+    matter: a genuinely broken module must keep saying it could not read it,
+    and a module that answers must not be reported as unreadable.
+    """
+    import jarvis_second_card as SC
+    backup = SC.switch_enabled
+    try:
+        SC.switch_enabled = lambda name: (_ for _ in ()).throw(RuntimeError("boom"))
+        check("a switch whose module reader fails reads as UNKNOWN, never off",
+              FG.read_state("second_card_combined") is None)
+        out = FG.state("one bigger model on both cards")
+        check("...and the answer says it could not read it",
+              out.get("state") is None and "could not read" in out["words"]
+              and "guess" in out["words"], out)
+        check("...and makes no on/off claim",
+              not re.search(r"\b(?:is|are) (?:on|off) right now\b", out["words"]),
+              out["words"])
+        out = FG.explain("second card")
+        check("...and the row's own explanation admits the unread switch",
+              "could not read" in out["words"], out["words"][:300])
+    finally:
+        SC.switch_enabled = backup
+    with mock.patch.dict(sys.modules, {"jarvis_second_card": None}):
+        check("a module that cannot be imported reads as UNKNOWN too",
+              FG.read_state("second_card_suggest_struggle") is None)
+    check("...and the real reader is back afterwards",
+          FG.read_state("second_card_suggest_struggle") is not None)
+
+
+def _norm_place(text) -> str:
+    return re.sub(r"[^a-z0-9 ]+", " ", str(text or "").lower()).strip()
+
+
+#: Every surface or starting action a `where` may begin with. Each one is a
+#: real thing the owner can see or do: Settings, the Brain, the PC, the phone,
+#: the Jarvis bar, the tray, the HUD, a window, the Home screen, the Reminders
+#: screen, History, "just ask/say/tell", "press/hold/click", "off by default",
+#: "nothing to press", a route. The list exists so an INVENTED place ("the
+#: Magic panel") fails: it is not a vocabulary check, the two place checks
+#: below are what prove a named card or pane exists.
+_WHERE_OPENERS = frozenset({
+    "settings", "brain", "the", "a", "an", "ask", "just", "say", "tell",
+    "press", "hold", "click", "type", "open", "share", "put", "set", "turn",
+    "scroll", "either", "on", "in", "off", "nothing", "no", "it", "notion",
+    "incognito", "history", "routes", "tray", "hud", "pc:", "phone:",
+    "desktop:", "backend",
+})
+# `hud` joined on 2026-11-02, when this branch merged main's #1109: the list
+# above already named the HUD as a real surface, but no row STARTED a `where`
+# with it until the reminder-builder row ("HUD, Reminders (or Brain, ...)").
+# The set is a vocabulary of real surfaces, so the omission was this list's,
+# not that row's - and the row's own "Brain, Work, Coming up" place is still
+# proved against the real menu catalogue by the check below.
+# `backend` joined the same day, in the stacked merge with #1108's life-coach
+# pair: both rows say "Backend only today: GET/POST /api/habits ..." - an
+# honest surface (the feature really is backend-only today) naming a real
+# route, which the catalogue's route check proves. The words are the row's,
+# not this list's.
+
+
+
+def _real_place_names() -> tuple:
+    """(Settings card names, Brain pane names) read from the real files."""
+    html = (REPO / "jarvis-desktop" / "src" / "settings.html").read_text(
+        encoding="utf-8", errors="replace")
+    menu = (REPO / "jarvis-desktop" / "src" / "menu-catalog.js").read_text(
+        encoding="utf-8", errors="replace")
+    settings = set()
+    for _href, title in re.findall(r'<a href="#([a-z0-9-]+)">([^<]+)</a>', html):
+        settings.add(_norm_place(title))
+    for title in re.findall(r"<h[1-4][^>]*>([^<]+)</h[1-4]>", html):
+        settings.add(_norm_place(title))
+    for section in R.SECTIONS:
+        for name in section.names:
+            settings.add(_norm_place(name))
+    brains = {_norm_place(t) for t in re.findall(r'"title": "([^"]+)"', menu)}
+    return settings, brains
+
+
+def _place_matches(place: str, real: set) -> bool:
+    place = re.sub(r"^(?:the|your|my)\s+", "", _norm_place(place))
+    if not place:
+        return False
+    for name in real:
+        if not name:
+            continue
+        if (place == name or place.startswith(name + " ")
+                or name.startswith(place + " ")
+                or (" " + name + " ") in (" " + place + " ")):
+            return True
+    return False
+
+
+def t_every_rows_where_names_a_real_place():
+    """A row's `where` names a place that exists, or the action that starts it.
+
+    `where` is what the chat answer prints as "Where:" and what both apps'
+    Features pages draw, so an invented or half-remembered place is a false
+    fact in the owner's own list. Measured 2026-11-02 on the 170 rows: 70 name
+    a `Settings, <card>` place, 49 a `Brain, <pane>` place, and every one of
+    those resolved against the real settings.html jump list / card headings /
+    the registry's section names and the real menu catalogue; every row begins
+    with a real surface or starting action.
+    """
+    settings, brains = _real_place_names()
+    check("the real Settings and Brain names were read, not assumed",
+          len(settings) >= 60 and len(brains) >= 100, (len(settings), len(brains)))
+    bad_open, bad_settings, bad_brain = [], [], []
+    settings_places = brain_places = 0
+    for row in SOURCE:
+        where = str(row.get("where") or "")
+        first = re.split(r"[\s,]", where.strip(), 1)[0].lower() if where.strip() else ""
+        if first not in _WHERE_OPENERS:
+            bad_open.append((row["id"], first))
+        for place in re.findall(r"Settings,\s*([^,.;]+?)(?=\s*(?:,|\.|;|$))", where):
+            settings_places += 1
+            if not _place_matches(place, settings):
+                bad_settings.append((row["id"], place.strip()))
+        for place in re.findall(r"Brain,\s*([^,.;]+?)(?=\s*(?:,|\.|;|$))", where):
+            brain_places += 1
+            if not _place_matches(place, brains):
+                bad_brain.append((row["id"], place.strip()))
+    check("every row's `where` starts with a real surface or starting action",
+          not bad_open, bad_open[:8])
+    check(f"every Settings place a row names is a real card ({settings_places} checked)",
+          not bad_settings, bad_settings[:8])
+    check(f"every Brain place a row names is a real pane ({brain_places} checked)",
+          not bad_brain, bad_brain[:8])
+    check("...and the rows really do name both places",
+          settings_places >= 60 and brain_places >= 40, (settings_places, brain_places))
+
+
 if __name__ == "__main__":
     for fn in (t_every_row_is_looked_up_and_its_facts_equal_the_json,
                t_unknown_and_ambiguous_never_guess,
@@ -2197,7 +2461,11 @@ if __name__ == "__main__":
                t_the_card_sentence_is_only_where_a_card_really_is,
                t_the_settings_place_is_written_like_the_control,
                t_how_do_i_change_asks_the_same_question_as_where_do_i_change,
-               t_the_matrix_keeps_every_typed_phrase):
+               t_the_matrix_keeps_every_typed_phrase,
+               t_every_row_with_a_switch_reads_it_and_writes_it,
+               t_every_switch_is_explained_by_a_row_or_its_own_label,
+               t_an_unreadable_module_says_could_not_read,
+               t_every_rows_where_names_a_real_place):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
