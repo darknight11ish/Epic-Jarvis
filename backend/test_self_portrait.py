@@ -618,6 +618,134 @@ def audit_fixes_are_in():
 
 
 # ---------------------------------------------------------------------------
+#   9. Refresh: re-read now, restart nothing (the owner's "refresh its
+#      function and capabilities awareness")
+# ---------------------------------------------------------------------------
+
+
+def refresh_rereads_and_restarts_nothing():
+    SP._reset_for_tests()
+    code, before = SP.handle_get(SP.SELF_PATH)
+    check("the portrait is readable before a refresh", code == 200)
+    # A live value changes underneath the cache: a switch the reader now says
+    # is ON (whatever it was). A refresh must show it; a cached read must not.
+    target = next(r for r in before["settings"] if r["kind"] == "switch")
+    was = target["value"]
+    flipped = (not was) if isinstance(was, bool) else True
+    saved = FG.read_state
+    FG.read_state = lambda key: (flipped if key == target["id"] else saved(key))
+    try:
+        code, cached = SP.handle_get(SP.SELF_PATH)
+        still = next(r for r in cached["settings"] if r["id"] == target["id"])
+        check("a cached portrait does not see the change yet",
+              still["value"] == was)
+        code, out = SP.handle_post(SP.REFRESH_PATH, {})
+        check("POST /api/self/refresh answers 200", code == 200, str(code))
+        check("a refresh answers in ONE plain sentence",
+              isinstance(out.get("said"), str) and out["said"].count(".") <= 3
+              and "I re-read what I can do" in out["said"], str(out.get("said")))
+        check("a refresh names the real counts",
+              out["counts"]["places"] == len(before["places"])
+              and out["counts"]["settings"] == len(before["settings"])
+              and out["counts"]["abilities"] == len(before["abilities"]))
+        check("a refresh reports the started_at it carried through - nothing restarted",
+              out["counts"]["started_at"] == before["version"]["started_at"]
+              and "Nothing was restarted" in out["said"])
+        after = SP.handle_get(SP.SELF_PATH)[1]
+        now = next(r for r in after["settings"] if r["id"] == target["id"])
+        check("the changed live value is visible after the refresh",
+              now["value"] is flipped, f"{now['value']} != {flipped}")
+        check("a refresh is a POST only - a GET says use POST",
+              SP.handle_get(SP.REFRESH_PATH)[0] == 405)
+    finally:
+        FG.read_state = saved
+        SP._reset_for_tests()
+    # A refresh changes no setting: the restored reader is read back unchanged.
+    code, back = SP.handle_get(SP.SELF_PATH)
+    same = next(r for r in back["settings"] if r["id"] == target["id"])
+    check("a refresh left the real value exactly as it was",
+          same["value"] == was)
+
+
+# ---------------------------------------------------------------------------
+#   10. The storage self-scan wiring: optional, defensive, and never a crash
+# ---------------------------------------------------------------------------
+
+
+class _FakeStorage:
+    ROUTES = ("/api/self/storage", "/api/self/storage/plan",
+              "/api/self/storage/apply")
+
+    def __init__(self, fail=False):
+        self.fail = fail
+
+    def handle_get(self, route, query=""):
+        if self.fail:
+            raise RuntimeError("boom")
+        return 200, {"ok": True, "route": route}
+
+    def handle_post(self, route, body):
+        if self.fail:
+            raise RuntimeError("boom")
+        return 202, {"ok": True, "waiting": True, "route": route}
+
+
+def storage_wiring_is_optional_and_defensive():
+    real = SP._STORAGE
+    try:
+        SP._STORAGE = None
+        check("with no storage module, it advertises no storage routes",
+              SP.storage_routes() == () and
+              SP.handle_get("/api/self/storage")[0] == 404)
+        SP._STORAGE = _FakeStorage()
+        check("with the storage module present, its routes are served",
+              set(SP.storage_routes()) == set(_FakeStorage.ROUTES))
+        code, out = SP.handle_get("/api/self/storage")
+        check("its scan route answers through this module", code == 200
+              and out.get("route") == "/api/self/storage")
+        code, out = SP.handle_post("/api/self/storage/apply", {})
+        check("its apply route answers through this module",
+              code == 202 and out.get("waiting") is True)
+        SP._STORAGE = _FakeStorage(fail=True)
+        code, out = SP.handle_get("/api/self/storage")
+        check("a failing storage route is answered 503, never raised",
+              code == 503 and isinstance(out, dict))
+        code, out = SP.handle_post("/api/self/storage/apply", {})
+        check("a failing storage apply is answered 503, never raised",
+              code == 503 and isinstance(out, dict))
+    finally:
+        SP._STORAGE = real
+
+
+# ---------------------------------------------------------------------------
+#   11. The refresh_abilities chat tool
+# ---------------------------------------------------------------------------
+
+
+def refresh_abilities_tool_exists_and_reads():
+    import jarvis_agent as A
+    check("the refresh_abilities tool is in the model's tool table",
+          A.REFRESH_ABILITIES_TOOL == "refresh_abilities"
+          and A.REFRESH_ABILITIES_TOOL in A.TOOLS)
+    text = A._refresh_abilities_tool_text()
+    check("the tool text says it re-reads and restarts nothing",
+          "re-read" in text.lower() and "restarted" in text.lower()
+          and "approval is needed" in text.lower())
+    got = A._run_refresh_abilities({})
+    check("the tool re-reads the portrait and answers its sentence",
+          got.get("ok") is True and "I re-read what I can do" in got.get("said", ""),
+          str(got.get("error", "")))
+    check("the tool reports the counts it read",
+          int((got.get("counts") or {}).get("places") or 0) > 100)
+    check("the tool changes nothing and cannot fail the turn",
+          isinstance(got.get("changed"), dict))
+    # The storage group is appended to TOOL_GROUPS only when its module is here.
+    if getattr(ASK, "_storage_health", None) is None:
+        check("with no storage module, TOOL_GROUPS is exactly the four groups",
+              len(ASK.TOOL_GROUPS) == 4)
+
+
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -633,6 +761,9 @@ def main() -> int:
         clear_is_one_exact_item_one_card()
         install_is_one_wrapper_that_owns_only_its_routes()
         audit_fixes_are_in()
+        refresh_rereads_and_restarts_nothing()
+        storage_wiring_is_optional_and_defensive()
+        refresh_abilities_tool_exists_and_reads()
     except Exception:
         traceback.print_exc()
         FAILED.append("the suite itself raised")

@@ -3138,6 +3138,57 @@ def _run_feature_guide(args: dict) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   Refreshing Jarvis's own capabilities awareness (2026-11-03)
+# --------------------------------------------------------------------------
+# The owner's ask: *"refresh its function and capabilities awareness"*. The
+# self portrait (jarvis_self_portrait.py, installed by plugins/ready/
+# self-portrait) already knows every place, setting, ability and plugin it can
+# find; this tool asks it to RE-READ now and report, in one plain sentence,
+# what moved. It is a READ: no card, no setting changed, nothing restarted.
+# Decided under the gate's own `skill_list` action ("listing what Jarvis can
+# do", tier "auto"), exactly like FEATURE_GUIDE_TOOL - no new action, tier or
+# card wording is invented for it.
+REFRESH_ABILITIES_TOOL = "refresh_abilities"
+
+
+def _refresh_abilities_tool_text() -> str:
+    """The refresh_abilities description: when to call it, and what it is not.
+
+    Short like every tool text (`backend/test_tool_text.py` holds each to 300
+    tokens), and it says the two things the model gets wrong: this is not the
+    feature explainer (that is feature_guide), and it does not restart or
+    change anything - so it can be called without worrying the owner.
+    """
+    return ("Re-read what Jarvis can do and has right now, and say in one "
+            "plain sentence what changed. Use when: the owner asks you to "
+            "refresh your abilities or your awareness of your own functions, "
+            "or says something you can do is missing or newly available. Do "
+            "NOT use it to explain one feature (that is feature_guide). It "
+            "only re-reads: nothing is restarted, nothing is changed and no "
+            "approval is needed.")
+
+
+def _run_refresh_abilities(args: dict) -> dict:
+    """The tool's whole job: refresh the portrait and hand its sentence back."""
+    try:
+        import jarvis_self_portrait as SP
+    except Exception as exc:                # noqa: BLE001 - an older PC
+        return {"ok": False,
+                "error": f"the self portrait is not installed here "
+                         f"({type(exc).__name__})"}
+    try:
+        out = SP.refresh()
+    except Exception as exc:                # noqa: BLE001 - said, never raised
+        return {"ok": False,
+                "error": f"the abilities could not be re-read "
+                         f"({type(exc).__name__})"}
+    return {"ok": True,
+            "said": str(out.get("said") or ""),
+            "counts": dict(out.get("counts") or {}),
+            "changed": dict(out.get("changed") or {})}
+
+
+# --------------------------------------------------------------------------
 #   Reverse engineering with REA (jarvis_rea.py, 2026-10-20)
 # --------------------------------------------------------------------------
 # The owner asked to integrate "reverse engineer anything". REA is a real MCP server with 207
@@ -4143,6 +4194,16 @@ TOOLS: dict = {
                                        "to list the groups"}}},
         _plain_prepare("Explain feature"),
         lambda args, state, **_: _run_feature_guide(args),
+        gate_lookup_name=lambda args: "skill_list"),
+    # Re-read Jarvis's own abilities (REFRESH_ABILITIES_TOOL, 2026-11-03): the
+    # owner asked to "refresh its function and capabilities awareness". Read-only
+    # like FEATURE_GUIDE_TOOL above, and decided under the same gate action
+    # (`skill_list`, tier "auto"), so it needs no action, tier or card of its own.
+    REFRESH_ABILITIES_TOOL: Tool(
+        REFRESH_ABILITIES_TOOL, _refresh_abilities_tool_text(),
+        {"type": "object", "properties": {}},
+        _plain_prepare("Refresh abilities"),
+        lambda args, state, **_: _run_refresh_abilities(args),
         gate_lookup_name=lambda args: "skill_list"),
     # Raising the connect card - see CONNECT_TOOL above for why this is not put
     # to the gate. `_one_call` hands this tool to `_connect_call` before the
@@ -7193,7 +7254,13 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # own sentences. Nothing outside is read, and recording a
                 # listing as a read would make a later note write wait for a
                 # person for no reason.
-                PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL}
+                PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL,
+                # Re-reading Jarvis's own abilities (REFRESH_ABILITIES_TOOL,
+                # 2026-11-03): it re-reads THIS PC's own modules and switches
+                # and its answer is this file's sentence. Nothing outside is
+                # read, so it is not recorded as a read (which would make a
+                # later note write wait for a person for no reason).
+                REFRESH_ABILITIES_TOOL}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -8478,7 +8545,12 @@ TOOL_GROUPS = (
       # move. `plugin_list` reads and `plugin_switch` turns one plugin on (one
       # modify_own_code card) or off (instant) - the same "Jarvis's own
       # switches" subject the group's own description names.
-      PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL)),
+      PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL,
+      # Re-reading the self portrait (REFRESH_ABILITIES_TOOL, 2026-11-03)
+      # shares this group for the same reason: it is a read of Jarvis's own
+      # abilities and settings, and a group's members cost nothing extra in
+      # more_tools' own enum, so test_short_tool_list.py's pin does not move.
+      REFRESH_ABILITIES_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),

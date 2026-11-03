@@ -87,12 +87,51 @@ SCHEMA = "jarvis-self-portrait/1"
 
 SELF_PATH = "/api/self"
 VERSION_PATH = "/api/self/version"
+REFRESH_PATH = "/api/self/refresh"
 CONVERSATIONS_PATH = "/api/conversations"
 CLEAR_PATH = "/api/conversations/clear"
 
 #: Every route install() answers. A path not in here goes straight to the
 #: server's own handler, so this module cannot shadow anything.
-ROUTES = (SELF_PATH, VERSION_PATH, CONVERSATIONS_PATH, CLEAR_PATH)
+ROUTES = (SELF_PATH, VERSION_PATH, REFRESH_PATH, CONVERSATIONS_PATH, CLEAR_PATH)
+
+#: The storage self-scan's own routes, when `jarvis_storage_health.py` is on
+#: this PC (a separate worker's module, shipped as its own drop-in folder). It
+#: is NOT a dependency: with the module absent its routes are simply not
+#: served, and everything here works exactly as before. The wiring lives here
+#: only because this module already owns the self routes the storage page sits
+#: beside; the scan itself, its plan and its ONE-card apply are that module's.
+_STORAGE = None
+
+
+def _load_storage():
+    """`jarvis_storage_health` when its drop-in module is on this PC, else None.
+
+    Loaded through importlib on purpose: a plain `import` statement is what the
+    base's own import walk reads (backend/test_base_matches_repo.py), and that
+    module is a separate worker's drop-in that this repository's published base
+    does not carry - a static import would make the base look incomplete. This
+    is the same reason jarvis_plugins loads its drop-ins this way.
+    """
+    try:
+        import importlib
+        return importlib.import_module("jarvis_storage_health")
+    except Exception:                       # noqa: BLE001 - older PC, or not shipped
+        return None
+
+
+_STORAGE = _load_storage()
+
+
+def storage_routes() -> tuple:
+    """The storage module's own routes, or () when it is not on this PC."""
+    if _STORAGE is None:
+        return ()
+    try:
+        return tuple(str(r) for r in getattr(_STORAGE, "ROUTES", ()) or ())
+    except Exception:                       # noqa: BLE001 - a route list that cannot be read
+        return ()
+
 
 #: The gate action the clear card is raised under. It must be tier "ask" in
 #: jarvis-framework.toml; any other tier is refused rather than obeyed (the
@@ -731,6 +770,102 @@ def build(*, client: str = "", app_locked=None,
 
 
 # ---------------------------------------------------------------------------
+#   Refresh: re-read now, change nothing, say what moved
+# ---------------------------------------------------------------------------
+
+#: Held while one refresh clears and rebuilds, so two callers cannot interleave
+#: a cleared cache with the other's read. It guards nothing else: a refresh
+#: restarts no server, writes no file and changes no setting.
+_REFRESH_LOCK = threading.Lock()
+
+
+def counts(portrait: Optional[dict] = None) -> dict:
+    """The numbers one portrait holds - what a refresh reports and compares.
+
+    Counts only: no name, no title, no setting value. `stored_*` is the three
+    stores' own count where it can be read here and None otherwise.
+    """
+    p = portrait if isinstance(portrait, dict) else build()
+    ask = p.get("asks_first") or {}
+    places = p.get("places") or ()
+    stores = {s.get("id"): s.get("count") for s in p.get("stores") or ()
+              if isinstance(s, dict)}
+    version = p.get("version") or {}
+    return {
+        "places": len(places),
+        "settings": len(p.get("settings") or ()),
+        "tools": sum(len(g.get("rows") or ()) for g in (ask.get("groups") or ())),
+        "abilities": len(p.get("abilities") or ()),
+        "plugins": len(p.get("plugins") or ()),
+        "settings_places": sum(1 for r in places
+                               if r.get("kind") == "settings_section"),
+        "menu_places": sum(1 for r in places if r.get("kind") == "menu"),
+        "stored_memory": stores.get("memory"),
+        "stored_conversations": stores.get("conversations"),
+        "app_version": version.get("app_version"),
+        "started_at": version.get("started_at"),
+    }
+
+
+def _clear_caches() -> None:
+    """Forget the built portrait and the deploy block, nothing else. A refresh
+    re-reads; it never touches a pending card, a setting or a store."""
+    with _CACHE_LOCK:
+        _CACHE.update({"at": 0.0, "portrait": None})
+    with _STATE_LOCK:
+        _STATE_CACHE.update({"at": 0.0, "block": None})
+
+
+def refresh(*, client: str = "") -> dict:
+    """POST /api/self/refresh - re-read the inventory and live state NOW.
+
+    The owner asked (2026-11-03) that Jarvis can "refresh its function and
+    capabilities awareness". This clears the two caches, rebuilds the portrait
+    from the modules as they are at this moment, and answers ONE plain
+    sentence naming what moved (the counts and the version). No card: it reads
+    nothing from outside the PC, writes nothing, changes no setting, and
+    restarts nothing - `started_at` is carried straight through, so a caller
+    can see the server is the same process.
+    """
+    with _REFRESH_LOCK:
+        before = counts(build())
+        _clear_caches()
+        after_p = build(refresh=True)
+        after = counts(after_p)
+    changed = {k: {"before": before.get(k), "after": after.get(k)}
+               for k in after if before.get(k) != after.get(k)}
+    return {"ok": True, "schema": SCHEMA, "client": str(client or ""),
+            "changed": changed, "counts": after,
+            "said": refresh_sentence(changed, after)}
+
+
+def refresh_sentence(changed: dict, now: dict) -> str:
+    """One plain sentence: what a refresh found, in the owner's words.
+
+    Names the numbers it read and, when something moved, exactly which
+    number or the version; never claims a capability it cannot count.
+    """
+    base = (f"{now.get('places', 0)} places, {now.get('settings', 0)} settings, "
+            f"{now.get('tools', 0)} ask-first actions, {now.get('plugins', 0)} "
+            f"plugins and {now.get('abilities', 0)} abilities")
+    if not changed:
+        return (f"I re-read what I can do and have now: {base}. Everything "
+                f"matches what I had. Nothing was restarted.")
+    moved = []
+    for key, pair in changed.items():
+        if key in ("started_at", "app_version"):
+            moved.append(f"the version ({pair['before']} -> {pair['after']})")
+        elif key.startswith("stored_"):
+            moved.append(f"{key[len('stored_'):].replace('_', ' ')} "
+                         f"({pair['before']} -> {pair['after']})")
+        else:
+            moved.append(f"{key.replace('_', ' ')} ({pair['before']} -> "
+                         f"{pair['after']})")
+    return (f"I re-read what I can do and have now: {base}. Changed since I "
+            f"last looked: {', '.join(moved)}. Nothing was restarted.")
+
+
+# ---------------------------------------------------------------------------
 #   Conversations: thin adapters over jarvis_chat_log's own routes
 # ---------------------------------------------------------------------------
 
@@ -957,16 +1092,44 @@ def clear_status() -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _storage_get(route: str, query: str = "") -> tuple:
+    """One GET for the storage self-scan module, when it is on this PC.
+
+    That module owns everything about it: the scan, the plan, and the ONE-card
+    apply. This is only the door beside the self routes, and its own signature
+    is tried first, then the plain route-only call - a shape mismatch is
+    answered, never raised, so a missing or older module cannot take the self
+    portrait down with it.
+    """
+    try:
+        try:
+            return _STORAGE.handle_get(route, query)
+        except TypeError:
+            return _STORAGE.handle_get(route)
+    except Exception as exc:                # noqa: BLE001 - a route that must not crash
+        return 503, {"ok": False, "error": f"the storage scan failed ({type(exc).__name__})"}
+
+
+def _storage_post(route: str, body) -> tuple:
+    """One POST for the storage self-scan module. Never raises."""
+    try:
+        return _STORAGE.handle_post(route, body)
+    except Exception as exc:                # noqa: BLE001 - a route that must not crash
+        return 503, {"ok": False, "error": f"the storage change failed ({type(exc).__name__})"}
+
+
 def handle_get(path: str, query: str = "", *, client: str = "",
                app_locked=None, hide_memory_lists=None) -> tuple:
     """One GET, answered. (code, body). Unknown paths are 404 - install()
-    never routes a path here that is not in ROUTES."""
+    never routes a path here that is not in ROUTES (or the storage module's)."""
     route = str(path or "").rstrip("/") or "/"
     if route == SELF_PATH:
         return 200, build(client=client, app_locked=app_locked,
                           hide_memory_lists=hide_memory_lists)
     if route == VERSION_PATH:
         return 200, version_block()
+    if route == REFRESH_PATH:
+        return 405, {"ok": False, "error": "use POST to refresh the self portrait"}
     if route == CONVERSATIONS_PATH:
         return conversation_list(query)
     if route.startswith(CONVERSATIONS_PATH + "/"):
@@ -974,14 +1137,20 @@ def handle_get(path: str, query: str = "", *, client: str = "",
         if not cid or "/" in cid:
             return 404, {"error": "no such conversation"}
         return conversation_get(cid, query)
+    if route in storage_routes():
+        return _storage_get(route, query)
     return 404, {"error": "no such route"}
 
 
-def handle_post(route: str, body) -> tuple:
+def handle_post(route: str, body, *, client: str = "") -> tuple:
     """One POST, answered. (code, body)."""
     route = str(route or "").rstrip("/")
+    if route == REFRESH_PATH:
+        return 200, refresh(client=client)
     if route == CLEAR_PATH:
         return clear_request(body)
+    if route in storage_routes():
+        return _storage_post(route, body)
     return 404, {"error": "no such route"}
 
 
@@ -1017,7 +1186,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     def do_GET(self):
         parts = urlsplit(str(getattr(self, "path", "") or ""))
         route = parts.path.rstrip("/") or "/"
-        if not (route in ROUTES or route.startswith(CONVERSATIONS_PATH + "/")):
+        if not (route in ROUTES or route in storage_routes()
+                or route.startswith(CONVERSATIONS_PATH + "/")):
             return get0(self)
         if not _allowed(self):
             return None
@@ -1034,7 +1204,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_POST(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
-        if route not in ROUTES:
+        storage = storage_routes()
+        if route not in ROUTES and route not in storage:
             return post0(self)
         if not _allowed(self):
             return None
@@ -1043,7 +1214,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         except Exception:                   # noqa: BLE001 - refused in words
             body = None
         try:
-            code, out = handle_post(route, body)
+            client = str(getattr(self, "headers", {}).get("X-Jarvis-Client", "") or "")
+            code, out = handle_post(route, body, client=client)
         except Exception as exc:            # noqa: BLE001 - a route that must not crash
             code, out = 503, {"error": type(exc).__name__}
         return self._send(code, out)
@@ -1057,16 +1229,17 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         n_settings = len(settings())
     except Exception:                       # noqa: BLE001 - the banner must print
         n_places = n_settings = 0
+    extra = ""
+    if storage_routes():
+        extra = "; storage scan beside it"
     return (f"  self       Self portrait: {n_places} places, {n_settings} settings "
-            f"(GET /api/self, /api/conversations; clear needs one card)")
+            f"(GET /api/self, /api/self/version, POST /api/self/refresh, "
+            f"/api/conversations; clear needs one card{extra})")
 
 
 def _reset_for_tests() -> None:
     """Back to a cold cache and no pending card. Never called by a route."""
-    with _CACHE_LOCK:
-        _CACHE.update({"at": 0.0, "portrait": None})
-    with _STATE_LOCK:
-        _STATE_CACHE.update({"at": 0.0, "block": None})
+    _clear_caches()
     with _CLEAR_LOCK:
         _CLEAR_STATE.update({"pending": None, "last": None})
 

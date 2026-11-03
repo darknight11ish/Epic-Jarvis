@@ -131,6 +131,11 @@ CATALOGUE = [
     "notes_search", "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
     "protect_from_jarvis", "rea_investigate",
     "read_web_page",
+    # Re-read Jarvis's own abilities (2026-11-03, the owner's ask to "refresh
+    # its function and capabilities awareness"): read-only, no card, decided
+    # under the gate's own `skill_list` action like feature_guide. Not in a
+    # cloud or private-turn allow-list (both are empty by design).
+    "refresh_abilities",
     "retirement_whatif", "run_data_script", "send_email", "send_file_to_phone",
     "set_reminder",
     "set_timer", "shell_exec", "stop_web_search_approval", "tidy_inbox",

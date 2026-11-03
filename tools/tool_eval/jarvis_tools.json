@@ -1208,6 +1208,17 @@
  {
   "type": "function",
   "function": {
+   "name": "refresh_abilities",
+   "description": "Re-read what Jarvis can do and has right now, and say in one plain sentence what changed. Use when: the owner asks you to refresh your abilities or your awareness of your own functions, or says something you can do is missing or newly available. Do NOT use it to explain one feature (that is feature_guide). It only re-reads: nothing is restarted, nothing is changed and no approval is needed.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "connect_account",
    "description": "Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the owner asks to connect, set up or link one. The OWNER types the token, private link or username and password into that card on this PC; it is saved into Windows Credential Manager and tested for real. NEVER take a password, token or private link in the chat and never pass one here: this tool has no field for a value. For any other account say Settings-only.",
    "parameters": {

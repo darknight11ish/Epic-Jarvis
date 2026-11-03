@@ -467,6 +467,24 @@ TOOL_GROUPS = (
     ("Safety and sharing",
      ("protect_from_jarvis", "github_search", "send_file_to_phone")),
 )
+#: The storage self-scan's own tools, appended ONLY when its module is really
+#: on this PC (a separate 2026-11-03 worker ships jarvis_storage_health.py as
+#: its own drop-in folder). Defensive on purpose: this page must never name a
+#: tool the PC does not have, and a PC without that module is exactly as it was
+#: before. Its own module exports TOOL_ROWS in exactly this shape.
+#:
+#: Loaded through importlib, NOT a plain `import` statement: the base's own
+#: import walk (backend/test_base_matches_repo.py) reads static imports, and
+#: this drop-in is not part of this repository's published base - a static
+#: import would make the base look incomplete. Same reason jarvis_plugins
+#: loads its drop-ins this way.
+_storage_health = None
+try:                                        # noqa: SIM105 - absent is normal
+    import importlib as _importlib
+    _storage_health = _importlib.import_module("jarvis_storage_health")
+    TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
+except Exception:                           # noqa: BLE001 - not shipped on this PC
+    _storage_health = None
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
 
@@ -521,7 +539,8 @@ HARD_LIMITS = frozenset({
     "app_build_android", "app_install_android",
     "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
-    "chatbot_session", "memory_forget_range", "conversation_clear", "pair_device", "unretire_shared_key",
+    "chatbot_session", "memory_forget_range", "conversation_clear",
+    "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
@@ -553,7 +572,8 @@ MUST_ASK = frozenset({
     "restore_backup", "check_tool_updates", "desktop_update", "run_plan",
     "phone_notifications_read",
     "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
-    "chatbot_session", "memory_forget_range", "conversation_clear", "pair_device", "unretire_shared_key",
+    "chatbot_session", "memory_forget_range", "conversation_clear",
+    "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "app_build_android", "app_install_android",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
