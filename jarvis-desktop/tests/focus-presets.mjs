@@ -205,17 +205,24 @@ await check("an apply route plus app wiring enables the one action; the current 
   assert.equal(different.action.label, "Use this preset");
 });
 
-await check("heavy-mode Coding is refused with the PC's own explanation", async () => {
+await check("heavy-mode Coding is OFFERED, with the PC's own cost beside it", async () => {
   const other = withApplyRoute(FIXTURE);
   other.chosen = "general";
   const read = Focus.normaliseReading(other);
   const coding = read.presets.find((p) => p.id === "coding");
   assert.equal(coding.heavyMode, true);
+  assert.equal(coding.blockerWords, "", "a heavy preset is not blocked any more");
   const view = Focus.pickerView(read, "coding");
-  assert.equal(view.action.disabled, true);
-  assert.equal(view.action.why, coding.heavyWords);
-  assert.match(view.action.why, /both|heavy|cannot/i);
-  assert.equal(view.items.find((p) => p.id === "coding").blockerWords, coding.heavyWords);
+  assert.equal(view.action.disabled, false, "Coding cannot be applied");
+  const item = view.items.find((p) => p.id === "coding");
+  assert.equal(item.blockerWords, "");
+  const heavy = item.details.find((d) => d.label === "Heavy mode");
+  assert.ok(heavy, "the heavy cost is not among the row's details");
+  assert.equal(heavy.value, coding.heavyWords);
+  assert.match(heavy.value, /both cards/i, heavy.value);
+  assert.match(heavy.value, /paused/i, heavy.value);
+  assert.doesNotMatch(heavy.value, /refuses|cannot be used/i,
+    `Coding still says it cannot be used: ${heavy.value}`);
 });
 
 await check("a preset the PC is preparing says so and cannot be applied", async () => {

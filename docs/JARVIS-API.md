@@ -25106,11 +25106,15 @@ this is what the desktop and Android readers expect. `chosen`, `lane` and
 `active_lane` are live PC state and are deliberately not in the fixture.
 
 Each preset carries `id/title/focus/what/cost/worse/model/lane{key,card,port,
-words}/context/helper/policy/measured/pending/heavy_mode/apply{action,
+words}/context/helper/policy/measured/pending/heavy_mode/heavy_words/apply{action,
 switch_route,apply_route,lane_start,auto:false}`. A `pending` preset has no
-model tag or figure and says it is waiting; `heavy_mode` (Coding on the 30B
-coder) is not applicable until the pooled both-GPU lane exists. `chosen` is
-the id last applied; `active_lane` is the lane chat is pointed at now.
+model tag or figure and says it is waiting. `heavy_mode` (Coding on the 30B
+coder) means the preset's model needs BOTH cards as ONE pooled lane; since
+2026-11-02 that lane exists and the row is applicable like every other one,
+with `heavy_words` carrying the PC's own plain-words cost (both cards, and the
+other two models paused while it runs). Both fields are additive: a reader that
+ignores them behaves exactly as before. `chosen` is the id last applied;
+`active_lane` is the lane chat is pointed at now.
 
 **`POST /api/work/apply` - the ONE asked action.** `{"preset": "<id>"}`: one
 `switch_model` approval card (never automatic). The lane is started on demand
@@ -25124,19 +25128,87 @@ has switched, any later failure rolls it back with the auto-tier
 preset. **Every one of those three restores is CHECKED, and only what was seen
 is claimed** (silent-failure audit 2026-10-27, row 2): a refused apply answers
 `{"ok": false, "changed": false, "error": "...", "restored": [...],
-"not_restored": [...]}`, where the two lists name which of `"the model"`,
-`"the chat lane"` and `"the chosen preset"` were put back and which could not
-be, and `error` says the same in words - it contains "were rolled back" only
-when every attempted restore succeeded. `changed: false` means the preset is
-not the chosen one; it says nothing about the model, the lane or the choice
-file, and `not_restored` is the fact about those. Both keys are additive, so a
-reader that ignores them behaves exactly as before. **Said plainly:** a card
-the owner DENIES leaves the started lane
+"not_restored": [...]}`, where the two lists name which of `"the pooled lane"`,
+`"the model"`, `"the chat lane"` and `"the chosen preset"` were put back and
+which could not be, and `error` says the same in words - it contains "were
+rolled back" only when every attempted restore succeeded. `changed: false`
+means the preset is not the chosen one; it says nothing about the model, the
+lane or the choice file, and `not_restored` is the fact about those. Both keys
+are additive, so a reader that ignores them behaves exactly as before. **Said
+plainly:** a card the owner DENIES leaves the started lane
 running - it starts no model and switches nothing. A `pending` preset refuses
-before anything happens, heavy-mode Coding refuses with "heavy mode needs the
-both-card lane, arriving later". Both apps call this route now: the desktop's
+before anything happens. Both apps call this route now: the desktop's
 focus-presets bridge sends it, and the Android preset screen reads and sends
 the same `apply_path` the GET advertises.
+
+### 145.1 The Coding preset's pooled both-card lane (2026-11-02, added)
+
+Coding is the ONE preset whose model cannot run on either named lane: 14.8 GB
+against a 12 GB card and an 8 GB card. Its `lane` is therefore `pooled` - ONE
+Ollama on port 11450, started on demand by this apply with **no card pin**, so
+the engine sees both cards (`jarvis_model_lanes.start_pooled_lane`, reusing
+`jarvis_big_coder`'s server, pause, load and restore - `jarvis_model_lanes.py`
+and `jarvis_big_coder.py` ship whole).
+
+What an apply does, in order, and what it never does:
+
+1. **ONE `switch_model` card first**, raised by the pooled lane's start, with
+   the same `from`/`to`/`why` detail `jarvis_models.switch_to` sends and the
+   preset's own `heavy_words` as the card's text. It names both cards and the
+   two lane models about to be paused. **Nothing is unloaded before it is
+   answered**, so a denied card changes NOTHING on this path (that is stricter
+   than the named-lane path, where the lane start comes first and a denied card
+   leaves it running).
+2. The pause is ANNOUNCED (event bus + audit log) before the first unload, both
+   lane models are unloaded and proved gone from `/api/ps`, the model is loaded
+   **naming 16,384 tokens**, and `/api/ps` must show it present, at that
+   context and with **zero spill**. A load that spills or comes up elsewhere is
+   unloaded again, both lanes are restored and the answer says why (503) - the
+   refusal is the machine's own words, never a canned one.
+3. The model is then recorded as the one chat uses. It is NOT a second card and
+   NOT `switch_to`: `jarvis_models.switch_to` runs its tripwire smoke test at
+   `jarvis_models.OLLAMA`, which is a single-card lane, so asking it for a
+   14 GB model would load it on a 12 GB card (or evict the model the pooled
+   lane just loaded). The preset writes the same record `switch_to` writes,
+   through that module's own state read/write, only after the card was approved
+   and the model really loaded.
+4. Chat is pointed at `http://127.0.0.1:11450` and the preset id saved. Any
+   later failure stops the pooled lane FIRST (unload, stop the server, restore
+   both lane models), then rolls the model back with the auto-tier
+   `jarvis_models.rollback()`, then restores the lane pointer and the choice.
+5. **Leaving it:** applying any preset that is not heavy stops the pooled lane
+   before anything else, in the same apply - it unloads the 30B, restores both
+   lane models and proves it from `/api/ps`. If it cannot be stopped, the apply
+   refuses in plain words (503) and changes nothing else.
+
+`POST /api/big-coder {"action":"stop"}` stops the same server by the same code
+(§126). Both routes are loopback only and behind the server's own origin and
+token checks.
+
+**One interaction that is stated rather than hidden.** The background learner
+(`jarvis_extract`, which `jarvis_hud.py` feeds the chat's own current model)
+talks to the address in `OLLAMA_URL` - the everyday lane - not to the preset's
+lane pointer. While the Coding preset is applied, that lane holds no model and
+cannot hold the 30B, so a learning pass asks for a model the lane cannot load
+and the learner fails in its own words (it will not load 14 GB on a 12 GB
+card). Nothing is sent anywhere and nothing is corrupted; learning pauses while
+the heavy preset is on and resumes when another preset is applied. It is not
+claimed to work, and it was not driven live in this slice. The same is true of
+`GET /api/models`' resident list, which reads the everyday lane: while Coding
+runs, the Current Models panel does not show the pooled model.
+
+**Measured on this PC, 2026-11-02** (`docs/MEASURED-2026-11-02-POOLED-LANE.md`):
+cold load 32.5 s, **77.5 / 85.3 / 85.6 tokens a second** on a fixed
+three-prompt coding set (median 85.3), the model 14,886 MiB **entirely in video
+memory** (zero spill), 11,899 MiB used on the RTX 2060 and 7,674 MiB on the
+RTX 2080 SUPER while it ran, and both lane models proved back afterwards at
+`qwen3.5:9b ctx=196608` and `qwen3:8b ctx=16384` with zero spill. The whole
+start took 69.9 s and the stop 59.1 s, the pause and the restores included.
+**The 28,672-token rung the 2026-10-18 measurement used no longer fits this
+PC**: 28,672, 24,576 and 20,480 all spilled 204-212 MiB, and 16,384 was the
+largest rung that loaded with none, which is why the preset asks for 16,384.
+`jarvis_big_coder.NUM_CTX` (28,672) is that mode's own measured rung and was
+not changed.
 
 **The HUD's left rail renders this contract too** (the owner's request of
 2026-10-21: "i would like this part of the jarvis HUD to have the presets we

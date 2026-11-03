@@ -19,9 +19,17 @@ Every measured number below is from
 Lanes (this PC, 2026-10-10 measurements):
   main    RTX 2060 12 GB, port 11436 - the long-context card
   coding  RTX 2080 SUPER 8 GB, port 11435 - the fast card
+  pooled  both cards, port 11450 - the Coding preset's own lane (2026-11-02)
 The owner's choices: Fast runs qwen3.5:4b on the coding lane at the window that
 lane serves (16,384) while the 2060 keeps the general model warm; Coding starts
 the coding lane on demand.
+
+Coding is the ONE heavy row, and since 2026-11-02 it has a lane that can really
+hold it: a 14.8 GB model fits neither card alone, so its lane is ONE Ollama on
+its own port with both cards visible (`jarvis_model_lanes.start_pooled_lane`),
+started by the apply and stopped by the next apply that is not heavy. The cost
+is stated in the preset's own words and on the card: the two lane models are
+paused while it runs and come back when it is stopped.
 """
 from __future__ import annotations
 
@@ -41,6 +49,13 @@ LANES = {
              "words": "the long-context card"},
     "coding": {"key": "coding", "card": "RTX 2080 SUPER", "port": 11435,
                "words": "the fast card"},
+    # The Coding preset's own lane: ONE Ollama that sees BOTH cards, started on
+    # demand by the apply (never by a logon task, which would hold both cards
+    # against the two lanes the assistant runs on). `card` says "both cards"
+    # because there is no single card it lives on; its port and words are
+    # `jarvis_model_lanes`' own, pinned to agree by test.
+    "pooled": {"key": "pooled", "card": "both cards", "port": 11450,
+               "words": "one model across both cards"},
 }
 
 #: What the one owner-approved action is. It is a preset application, never a
@@ -71,6 +86,11 @@ class Preset:
     measured: Optional[dict] = None
     pending: bool = False
     heavy_mode: bool = False
+    #: The plain-words COST of a heavy preset (both cards, the other models
+    #: paused), which both apps show BESIDE an apply that is now allowed. It is
+    #: not a refusal: the refusal was "lane support is arriving", and the lane
+    #: is here (`jarvis_model_lanes.start_pooled_lane`).
+    heavy_words: str = ""
     words: tuple = ()       # trigger words for /api/work/recommend
     strong: tuple = ()
 
@@ -95,6 +115,7 @@ class Preset:
             "measured": self.measured,
             "pending": self.pending,
             "heavy_mode": self.heavy_mode,
+            "heavy_words": self.heavy_words,
             "apply": {"action": APPLY_ACTION, "switch_route": SWITCH_ROUTE,
                       "apply_route": "/api/work/apply",
                       "lane_start": self.lane != "main",
@@ -147,26 +168,33 @@ PRESETS = (
     Preset(
         id="coding", title="Coding", focus="code, files, debugging, multi-step work",
         what="For writing and fixing code, reading a project, and long tool-driven "
-             "coding jobs: the 30B coding model across both cards (heavy mode), with "
-             "the coding lane arriving as part of the lane patch.",
-        cost="HEAVY MODE: it holds BOTH GPUs (14 GB, 100% GPU across both cards) and "
-             "evicts the other lanes' models while it works; cold load is about 32.1 s. "
-             "Measured 76.2 tok/s median eval and 6/6 on the coding rubric. It is not a "
-             "single-card model.",
-        worse="Heavy mode means the Fast/Live and Agentic+Vision lanes lose their models "
-              "while it runs, and its apply path needs a pooled both-GPU lane - the "
-              "pinned 2060/2080S lanes cannot host it. Until that lane patch lands: "
-              "\"heavy mode: both cards; lane support arriving\". No single-card use "
-              "is claimed.",
-        model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="main", context=28672,
+             "coding jobs: the 30B coding model on ONE lane that sees both cards, "
+             "started on demand by this apply.",
+        cost="HEAVY MODE: it holds BOTH GPUs (14.9 GB of video memory) and pauses the "
+             "other lanes' models while it works, for about 32 s on a cold load. "
+             "Measured 2026-11-02 at 16,384 tokens: 85.3 tok/s median on three coding "
+             "prompts, zero spill. It is not a single-card model.",
+        worse="Applying it makes it the model chat uses, so the Fast/Live and "
+              "Agentic+Vision models are NOT resident while it runs - they come back "
+              "when you apply another preset, and that switch costs a reload. It is "
+              "not a quick helper: it takes both cards for as long as it is on, and "
+              "nothing else can be loaded beside it.",
+        model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="pooled", context=16384,
         prompt="coding", diet="coding", heavy_mode=True,
+        heavy_words="This preset needs both cards at once as one pooled lane. While "
+                    "it runs, the everyday and Fast models are paused - they come "
+                    "back, proved from the model list, when you apply another preset. "
+                    "Loading it takes about half a minute.",
         tools=("code", "files"),
         measured={"tok_s": 76.2, "rubric": "6/6 coding rubric", "size_gib": 14.0,
                   "gpu_use": "100% GPU across both cards", "cold_load_s": 32.1,
-                  "spill_gib": 0.0,
-                  "source": "measurement 2026-10-18: 76.2 tok/s median eval, 6/6 "
-                            "coding rubric, 14 GB, 100% GPU across both cards, cold "
-                            "load ~32.1 s, no CPU spill"},
+                  "spill_gib": 0.0, "context_zero_spill": 16384,
+                  "source": "measurement 2026-10-18 at 28,672 tokens: 76.2 tok/s "
+                            "median eval, 6/6 coding rubric, no CPU spill. The "
+                            "28,672-token rung was re-measured on 2026-11-02 and no "
+                            "longer loads with zero spill on this PC (212 MiB went "
+                            "to the CPU); 16,384 is the largest rung that loaded "
+                            "with none, and it is the one this preset asks for."},
         words=("code", "coding", "program", "android", "app", "debug", "bug",
                "kotlin", "python", "script", "compile", "repository", "git"),
         strong=("writing code", "fix a bug", "build an app", "app development",
@@ -328,8 +356,6 @@ FOCUS_WORDS = ("quick answers", "writing", "coding", "agentic", "pictures",
 
 CHOICE_FILE = "presets-choice.json"
 APPLY_PATH = "/api/work/apply"
-HEAVY_MODE_LINE = ("heavy mode needs the both-card lane, arriving later; nothing was "
-                   "changed")
 PENDING_LINE = "waiting for the model; nothing was changed"
 
 
@@ -729,6 +755,7 @@ def cloud_preset_view() -> dict:
         "measured": None,
         "pending": False,
         "heavy_mode": False,
+        "heavy_words": "",
         "apply": {"action": APPLY_ACTION, "switch_route": SWITCH_ROUTE,
                   "apply_route": APPLY_PATH, "lane_start": False, "auto": False,
                   "cloud": True, "needs_provider": True},
@@ -1022,7 +1049,8 @@ def live_status() -> dict:
 
 def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                  switch_model=None, active_url=None, set_active_url=None,
-                 read_choice=None, write_choice=None, rollback_model=None) -> tuple:
+                 read_choice=None, write_choice=None, rollback_model=None,
+                 stop_pooled=None) -> tuple:
     """Apply ONE preset after the owner's single card.
 
     `preset_id == "cloud"` is its own branch (`apply_cloud`): it raises ONE
@@ -1039,15 +1067,34 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     starts no model and switches nothing) - stated here and in JARVIS-API
     section 145 rather than claiming nothing happens before the card.
 
+    THE CODING PRESET IS THE ONE HEAVY ROW, and since 2026-11-02 its lane
+    exists. Its model is 14.8 GB against a 12 GB card and an 8 GB card, so it
+    cannot run on either named lane; its lane is "pooled"
+    (`jarvis_model_lanes.start_pooled_lane`), ONE Ollama on its own port with
+    both cards visible. That start raises the ONE `switch_model` card ITSELF,
+    before it unloads anything, because the pause has to be announced before
+    the first unload - which is why the heavy path's `switch_model` is
+    `_default_adopt` (record the model that is already loaded, no second card,
+    no smoke test on a single-card lane) rather than `_default_switch`. See
+    `_default_adopt` for the whole argument. A card the owner denies leaves
+    NOTHING changed on this path: nothing has been unloaded yet.
+
+    The other direction matters too: a preset that is NOT heavy needs the two
+    lanes back, so applying one ENDS the pooled lane first (it unloads the 30B
+    and puts both models back exactly as they were). If it cannot end it, the
+    apply refuses in plain words rather than trying to load a model on a card
+    the heavy one is still holding.
+
     The contract lane key is "main" (both apps' fixture says so); the model
     starter calls that same lane "everyday" - `_default_start_lane` translates
-    through LANE_START_KEYS. `pending` presets and heavy mode refuse before
-    anything happens. Once the model HAS switched, any later failure rolls the
-    model back with the auto-tier jarvis_models.rollback() as well as restoring
-    the chat lane and the remembered preset. **Each of those three restores is
-    checked** and the answer names only the ones that were seen to work; the
-    ones that were not are listed under `not_restored` and said in the error
-    (silent-failure audit 2026-10-27, row 2).
+    through LANE_START_KEYS. `pending` presets refuse before anything happens.
+    Once the model HAS switched, any later failure rolls the model back with
+    the auto-tier jarvis_models.rollback() as well as restoring the chat lane
+    and the remembered preset - and, on the heavy path, stopping the pooled
+    lane it started. **Each of those restores is checked** and the answer names
+    only the ones that were seen to work; the ones that were not are listed
+    under `not_restored` and said in the error (silent-failure audit
+    2026-10-27, row 2).
     """
     if str(preset_id or "") == CLOUD_PRESET_ID:
         return apply_cloud(provider=provider, gate_check=cloud_gate)
@@ -1058,18 +1105,35 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                               f"{', '.join(PRESET_IDS)}"}
     if p.pending:
         return 409, {"ok": False, "changed": False, "error": PENDING_LINE}
-    if p.heavy_mode:
-        return 409, {"ok": False, "changed": False, "error": HEAVY_MODE_LINE}
+    heavy = bool(p.heavy_mode)
     start_lane = start_lane or (lambda key: _default_start_lane(key))
-    switch_model = switch_model or (lambda ref: _default_switch(ref))
+    switch_model = switch_model or (
+        (lambda ref: _default_adopt(ref)) if heavy
+        else (lambda ref: _default_switch(ref)))
     active_url = active_url or _active_url
     set_active_url = set_active_url or _set_active_url
     read_choice = read_choice or choice
     write_choice = write_choice or _write_choice
     rollback_model = rollback_model or _default_rollback_model
+    stop_pooled = stop_pooled or _default_stop_pooled
     previous_preset = read_choice()
     previous_lane = active_url()
     target_lane = _lane_url(p.lane)
+    if not heavy:
+        # The cards must be free before another preset's model can be loaded or
+        # asked anything. Ending the pooled lane is the ONLY way back, and it
+        # restores both lane models itself. A failure here is said in words and
+        # nothing else is changed.
+        try:
+            ended = stop_pooled()
+        except Exception as exc:
+            ended = {"ok": False, "ran": True,
+                     "reason": f"{type(exc).__name__}: {exc}"}
+        if isinstance(ended, dict) and ended.get("ran") and not ended.get("ok"):
+            why = ended.get("reason") or "the pooled both-card lane did not stop"
+            return 503, {"ok": False, "changed": False,
+                         "error": ("the big coding model is still holding both "
+                                   f"cards, so this preset was not applied: {why}")}
     try:
         code, start_body = start_lane(p.lane)
     except Exception as exc:
@@ -1077,9 +1141,21 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                      "error": f"the {p.lane} lane could not be started "
                               f"({type(exc).__name__}); nothing was changed"}
     if code not in (200, 202) or not start_body.get("ok", True):
-        why = start_body.get("reason") or start_body.get("error") or "the lane did not start"
+        why = (start_body.get("reason") or start_body.get("error")
+               or start_body.get("message") or "the lane did not start")
+        if code in (200, 202):
+            # A card the owner DENIED (the pooled lane asks before it unloads
+            # anything). Nothing was touched, and this is a refusal, not a
+            # failure of the machine.
+            return 409, {"ok": False, "changed": False,
+                         "error": f"{why}; nothing was changed",
+                         "outcome": start_body.get("outcome", "refused")}
         return 503, {"ok": False, "changed": False,
                      "error": f"the {p.lane} lane did not start: {why}; nothing was changed"}
+    # True only when THIS apply started the pooled lane (not when it was
+    # already running before it): a rollback must not end a mode the owner had
+    # already turned on.
+    started_pooled = heavy and bool(start_body.get("changed"))
     try:
         switched = switch_model(p.model)
     except Exception as exc:
@@ -1107,6 +1183,15 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
         def outcome(name: str, done: bool) -> None:
             (restored if done else failed).append(name)
 
+        if started_pooled:
+            # FIRST, because nothing can be loaded on a card the 30B is still
+            # holding, and because the stop puts both lane models back itself.
+            try:
+                ended = stop_pooled()
+                outcome("the pooled lane",
+                        isinstance(ended, dict) and ended.get("ok") is True)
+            except Exception:
+                outcome("the pooled lane", False)
         if switched_ok:
             try:
                 rb = rollback_model()
@@ -1182,13 +1267,50 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
 
 
 def _default_start_lane(key: str):
+    """The preset's own lane, started on demand.
+
+    "pooled" is not one of the PC's logon tasks: it is the ONE Ollama that sees
+    both cards, started here and stopped by the next apply that is not heavy
+    (`_default_stop_pooled`). `jarvis_model_lanes.start_pooled_lane` raises the
+    ONE card for it, before it unloads anything.
+    """
     import jarvis_model_lanes
+    if str(key) == jarvis_model_lanes.POOLED_KEY:
+        return jarvis_model_lanes.start_pooled_lane()
     mapped = LANE_START_KEYS.get(str(key))
     if mapped is None or jarvis_model_lanes.lane_by_key(mapped) is None:
         return 409, {"ok": False, "changed": False,
                      "reason": f"the preset lane {key!r} has no model lane on this PC "
                                f"(known lanes: {', '.join(l.key for l in jarvis_model_lanes.LANES)})"}
     return jarvis_model_lanes.start_lane(mapped)
+
+
+def _default_stop_pooled() -> dict:
+    """End the pooled lane if it is running. Never raises.
+
+    `{"ok", "ran", "reason"}`: `ran` says whether it was running at all, so the
+    apply can tell "nothing to do" from "it would not stop". A read of
+    `/api/ps` decides that, never a remembered flag - the lane's own model is
+    the evidence, which is what survives a backend restart.
+    """
+    import jarvis_model_lanes
+    try:
+        running = jarvis_model_lanes.pooled_running()
+    except Exception:
+        running = False
+    if not running:
+        return {"ok": True, "ran": False, "reason": ""}
+    try:
+        code, body = jarvis_model_lanes.stop_pooled_lane()
+    except Exception as exc:
+        return {"ok": False, "ran": True, "reason": f"{type(exc).__name__}: {exc}"}
+    ok = code in (200, 202) and isinstance(body, dict) and bool(body.get("ok"))
+    reason = ""
+    if not ok:
+        reason = (body.get("error") or body.get("message")
+                  or "the pooled both-card lane did not stop") if isinstance(body, dict) \
+            else "the pooled both-card lane did not stop"
+    return {"ok": ok, "ran": True, "reason": reason, "body": body}
 
 
 def _default_rollback_model():
@@ -1199,6 +1321,65 @@ def _default_rollback_model():
 def _default_switch(ref: str):
     import jarvis_models
     return jarvis_models.switch_to(ref, why="preset")
+
+
+def _default_adopt(ref: str):
+    """Record the model the POOLED lane has already loaded. No second card.
+
+    WHY THIS EXISTS, and why it is not `_default_switch`. `jarvis_models.
+    switch_to` raises the `switch_model` card - which is right for every
+    single-card preset - and then runs the tripwire's smoke test AT
+    `jarvis_models.OLLAMA`: the address of the owner's own lane, pinned to ONE
+    card (12 GB). A 14 GB coding model cannot be loaded there. By the time this
+    is called the model is already loaded on the pooled lane, so `switch_to`
+    would either ask that card to hold a second copy or evict the model the
+    pooled lane just loaded, and its "did the new model work" answer would be
+    about the wrong lane. So the ONE card for this change is the pooled lane's
+    own (`jarvis_model_lanes.start_pooled_lane`, action `switch_model`, the
+    same `from`/`to`/`why` detail `switch_to` sends), and this writes the same
+    record `switch_to` writes - through the model steward's own read and write,
+    so the format lives in one place and cannot drift.
+
+    NOTHING ELSE CALLS IT, it raises no card, and it is only reached from the
+    heavy-mode branch of `apply_preset` - after that card was approved and
+    after the model really loaded (a load that spills is undone before this
+    runs). If the model steward on this PC cannot be read or written, this says
+    so and the apply rolls everything back rather than pretending.
+    """
+    try:
+        import time as _time
+        import jarvis_models as M
+    except Exception as exc:
+        return {"ok": False, "ref": ref,
+                "reason": f"the model steward is not available ({type(exc).__name__})"}
+    read = getattr(M, "_read_state", None)
+    write = getattr(M, "_write_state", None)
+    if not callable(read) or not callable(write):
+        return {"ok": False, "ref": ref,
+                "reason": ("this PC's model steward has no recordable model state, "
+                           "so the coding model could not be made the one chat uses")}
+    try:
+        st = read()
+        st = dict(st) if isinstance(st, dict) else {}
+        cur = st.get("current")
+        if cur == ref:
+            return {"ok": True, "ref": ref, "unchanged": True,
+                    "reason": "already the model in use"}
+        at = _time.time()
+        st["previous"] = cur
+        st["current"] = ref
+        st["switched_at"] = at
+        st["why"] = "the Coding preset's pooled both-card lane"[:300]
+        log = list(st.get("switches") or [])
+        log.append({"from": cur, "to": ref, "at": at})
+        st["switches"] = log[-int(getattr(M, "MAX_HISTORY", 20) or 20):]
+        if not write(st):
+            return {"ok": False, "ref": ref,
+                    "reason": "could not write the model state file; nothing was recorded"}
+    except Exception as exc:
+        return {"ok": False, "ref": ref, "reason": f"{type(exc).__name__}: {exc}"}
+    return {"ok": True, "ref": ref, "previous": cur, "adopted": True,
+            "reason": f"the pooled both-card lane now answers as {ref}"}
 
 
 def apply_from_body(body) -> tuple:
