@@ -285,6 +285,116 @@ ACTING_ACTION_KINDS = ("run-task",)
 #: job's own on_fire does.
 ACTION_TASKS = ("briefing", "backup")
 
+# ---- the owner's own words for a task (2026-11-02) --------------------------
+#
+# The owner's decision of 2026-11-02: "scheduled tasks may run any job in his own
+# words - at fire time Jarvis starts it and raises ONE card naming exactly what
+# it will do". So a `run-task` block may carry `job` (the owner's phrase) instead
+# of `task` (the closed two-name list, kept exactly as it was). The phrase is
+# resolved through `jarvis_quick.match()` - the SAME pure parse half chat's fast
+# path uses - once when the reminder is SAVED (refused there in one plain
+# sentence if it resolves to nothing, or asks for a shell/command/script, which
+# the owner's decision excludes) and AGAIN at fire time (a phrase that stopped
+# resolving refuses then, rather than running something else). The execution is
+# `jarvis_quick.run()`, the same chat path: this module adds no executor, no
+# shell, no command line and no second interpreter.
+MAX_JOB_WORDS = 240
+
+#: Words that ask for a program, a command or a script. The closed-list names
+#: never leave this module; the owner's own words never become a command line.
+_JOB_SHELL_WORDS = (
+    "shell", "powershell", "power shell", "cmd", "command prompt", "command-line",
+    "command line", "bash", "batch file", "script", "terminal", "run a program",
+    "run program", "execute a program", "subprocess", "system command",
+)
+_JOB_SHELL_EXT = (".exe", ".bat", ".cmd", ".ps1", ".sh", ".com")
+
+JOB_SHELL_REFUSAL = (
+    "A scheduled task cannot run a program, a command or a script - that is your "
+    "decision of 2026-11-02. Jarvis will only do something it can do itself.")
+JOB_UNKNOWN = (
+    "Jarvis does not know how to do that on its own, so it was not saved. Try the "
+    "wording you would use in chat, or set it up from chat when you want it now.")
+JOB_TOO_LONG = "A job is up to {0} characters of plain words.".format(MAX_JOB_WORDS)
+JOB_PLAIN_WORDS = "plain words only - that one has a character a job cannot hold."
+
+
+def _job_plain_name(name: str) -> str:
+    return str(name or "").replace("_", " ").strip() or "that job"
+
+
+#: Plain words for the jobs that already have an everyday name. Anything else is
+#: still named by its resolved intent, so the card says the action in words
+#: rather than only echoing the sentence.
+_JOB_PLAIN = {
+    "todo_add": "add it to your to-do list",
+    "note_append": "write it into your daily note",
+    "timer_add": "set that timer",
+    "reminder_add": "set that reminder",
+    "focus_start": "start a focus block",
+    "focus_stop": "end the focus block",
+    "focus_timer": "start the focus timer",
+}
+
+
+def _job_shell_like(words: str) -> bool:
+    """True when these words ask for a program, a command or a script."""
+    low = " " + str(words or "").lower().replace("-", " ") + " "
+    if any(ext in str(words or "").lower() for ext in _JOB_SHELL_EXT):
+        return True
+    if any((" " + w.replace("-", " ") + " ") in low for w in _JOB_SHELL_WORDS):
+        return True
+    return any(w in low for w in (" shell ", " powershell ", " bash ", " script "))
+
+
+def resolve_job(words: str):
+    """(Intent, "") for a job phrase, or (None, one plain sentence).
+
+    Never raises, and touches nothing: `jarvis_quick.match()` is the pure parse
+    half of the chat fast path. Called when a reminder is saved AND again when
+    it fires - the second call is why a phrase that no longer resolves refuses
+    instead of running whatever it now means.
+    """
+    if not isinstance(words, str) or not words.strip():
+        return None, "Write what Jarvis should do, or choose Nothing."
+    text = " ".join(words.split())
+    if len(text) > MAX_JOB_WORDS:
+        return None, JOB_TOO_LONG
+    if any(ord(c) < 32 or ord(c) == 127 for c in text):
+        return None, JOB_PLAIN_WORDS
+    if _job_shell_like(text):
+        return None, JOB_SHELL_REFUSAL
+    try:
+        import jarvis_quick
+    except Exception:                           # noqa: BLE001 - module absent
+        return None, ("The chat resolver is not on this PC, so Jarvis cannot check "
+                      "what that job would do.")
+    try:
+        intent = jarvis_quick.match(text)
+    except Exception:                           # noqa: BLE001 - never save unasked
+        return None, JOB_UNKNOWN
+    if intent is None or not getattr(intent, "name", ""):
+        return None, JOB_UNKNOWN
+    name = str(intent.name)
+    if _job_shell_like(name):
+        return None, JOB_SHELL_REFUSAL
+    return intent, ""
+
+
+def _job_problem(job) -> str:
+    """'' when a job phrase may be saved, else one plain sentence."""
+    _intent, why = resolve_job(job)
+    return why
+
+
+def _job_words(intent, words: str) -> str:
+    """What the card says the job will do: the action in plain words, and the
+    owner's own sentence beside it."""
+    name = str(getattr(intent, "name", ""))
+    action = _JOB_PLAIN.get(name) or "do the thing you asked for: \u201c{0}\u201d".format(words)
+    return "{0} ({1})".format(action, _job_plain_name(name))
+
+
 #: Limits, each said in a sentence when it is reached.
 MAX_ACTION_BYTES = 4096
 MAX_ACTION_URL = 1024
@@ -2352,7 +2462,8 @@ class Scheduler:
 
     # ---- a reminder's action, at the moment it goes off (2026-10-27) ------------
 
-    def _action_card_text(self, row, action: dict, now: float) -> str:
+    def _action_card_text(self, row, action: dict, now: float,
+                          what_words: Optional[str] = None) -> str:
         """The ONE card's words, in the shape of the repeat card: what the
         reminder is, when it went off, and exactly what will happen.
 
@@ -2363,12 +2474,13 @@ class Scheduler:
         words = str(row["text"] or "").strip()
         due = row["fired_due"] if row["fired_due"] is not None else row["due"]
         when = clock(float(due)) if due is not None else "now"
-        what = str(action.get("task") or "")
+        if what_words is None:
+            what_words = _task_words(str(action.get("task") or ""))
         lines = ["A reminder you set wants to do something.", ""]
         if words:
             lines.append(f"Reminder: {words}")
         lines.append(f"When: {when} today")
-        lines.append(f"What it will do: {_task_words(what)}")
+        lines.append(f"What it will do: {what_words}")
         lines.append("")
         if row["rule"]:
             lines.append("It repeats, so it will ask again next time.")
@@ -2402,6 +2514,25 @@ class Scheduler:
         if not action or action["kind"] not in ACTING_ACTION_KINDS:
             return
         task = str(action.get("task") or "")
+        job = str(action.get("job") or "")
+        if not task and not job:
+            return
+        # The owner's own words are resolved AGAIN here, through the same
+        # resolver chat uses. A phrase that no longer resolves refuses now
+        # instead of running whatever the sentence means today.
+        intent = None
+        what_words = None
+        if job:
+            intent, _why = resolve_job(job)
+            if intent is None:
+                _audit("schedule.action_refused", {"id": jid, "outcome": "unknown"})
+                return
+            what_words = _job_words(intent, job)
+        elif _task_problem(task):
+            # Nothing can run for it (a task this build refuses). Never a card
+            # for something that would do nothing.
+            _audit("schedule.action_refused", {"id": jid, "outcome": "unknown"})
+            return
         pair = (jid, float(due))
         if pair in self._acted:
             # A retry inside this process cannot run or ask twice. A restart
@@ -2412,15 +2543,18 @@ class Scheduler:
             # A config line is never the owner's yes.
             _audit("schedule.action_refused", {"id": jid, "outcome": "refused"})
             return
-        if _task_problem(task):
-            # Nothing can run for it (a task this build refuses). Never a card
-            # for something that would do nothing.
-            _audit("schedule.action_refused", {"id": jid, "outcome": "unknown"})
-            return
-        prompt = self._action_card_text(row, action, self.now())
-        detail = {"job": jid, "due": float(due), "what": "run-task", "task": task,
-                  "leaves_this_pc": False}
-        _audit("schedule.action_asked", {"id": jid, "kind": action["kind"], "what": task})
+        prompt = self._action_card_text(row, action, self.now(), what_words=what_words)
+        if job:
+            # The owner's own words are NEVER in `detail`; the resolved intent
+            # name is a closed token and the card's `prompt` carries the words.
+            detail = {"job": jid, "due": float(due), "what": "run-task",
+                      "intent": str(getattr(intent, "name", "")),
+                      "leaves_this_pc": False}
+        else:
+            detail = {"job": jid, "due": float(due), "what": "run-task", "task": task,
+                      "leaves_this_pc": False}
+        _audit("schedule.action_asked", {"id": jid, "kind": action["kind"],
+                                         "what": task or str(getattr(intent, "name", ""))})
         try:
             verdict = self._gate(ACTION_SCHEDULE, detail, prompt)
         except Exception:
@@ -2450,13 +2584,31 @@ class Scheduler:
                 _audit("schedule.action_refused", {"id": jid, "outcome": "withdrawn"})
                 return
         try:
-            self._run_task(task, jid)
+            if intent is not None:
+                self._run_job(intent, job, jid)
+            else:
+                self._run_task(task, jid)
         except Exception as exc:
             # The exception's NAME only: its message could quote a path.
             _audit("schedule.action_failed",
-                   {"id": jid, "what": task, "error": type(exc).__name__})
+                   {"id": jid, "what": task or str(getattr(intent, "name", "")),
+                    "error": type(exc).__name__})
             return
-        _audit("schedule.action_ran", {"id": jid, "what": task})
+        _audit("schedule.action_ran", {"id": jid,
+                                       "what": task or str(getattr(intent, "name", ""))})
+
+    def _run_job(self, intent, words: str, jid: str) -> None:
+        """Run the owner's own words through the SAME chat path: jarvis_quick.run.
+
+        That is the whole executor - no shell, no command, no new interpreter.
+        `run()` returns None when the sentence is no longer one it can carry out
+        (a module removed since it was saved), which is a failure said in the
+        audit, never a silent success."""
+        import jarvis_quick
+        result = jarvis_quick.run(intent, self, self.now())
+        if result is None:
+            raise ValueError("the job is no longer one Jarvis can do")
+        self._publish("schedule", {"id": jid, "kind": "job", "state": "ran"})
 
     def _run_task(self, task: str, jid: str) -> None:
         """Run ONE name from `ACTION_TASKS`, through the callable that already
@@ -4583,6 +4735,33 @@ def _decode_ask(got: dict) -> dict:
         return {}
 
 
+def _clean_run_task(raw: dict) -> dict:
+    """ONE run-task: the closed name (`task`) OR the owner's own words (`job`).
+
+    Exactly one of the two keys, never both: a block carrying both would be one
+    this code would have to guess which to run. `job` is checked by resolving it
+    through the chat resolver now, so a phrase that would do nothing is refused
+    when it is saved rather than at 07:00 with nobody to ask."""
+    keys = set(raw) - {"kind"}
+    if keys == {"task"}:
+        task = raw.get("task")
+        problem = _task_problem(task)
+        if problem:
+            raise ValueError(problem)
+        action = {"kind": "run-task", "task": task.strip()}
+    elif keys == {"job"}:
+        job = raw.get("job")
+        problem = _job_problem(job)
+        if problem:
+            raise ValueError(problem)
+        action = {"kind": "run-task", "job": " ".join(job.split())}
+    else:
+        raise ValueError(_NO_ACTION_KIND)
+    if len(json.dumps(action)) > MAX_ACTION_BYTES:
+        raise ValueError("That is too much to keep with one reminder.")
+    return action
+
+
 def _clean_action(raw) -> Optional[dict]:
     """A reminder's action, checked and normalised - None when there is none.
 
@@ -4599,6 +4778,8 @@ def _clean_action(raw) -> Optional[dict]:
         raise ValueError(_NO_ACTION_KIND)
     if kind == ASK_KIND:
         return _clean_ask(raw)
+    if kind == "run-task":
+        return _clean_run_task(raw)
     key, check = _ACTION_CHECKS[kind]
     extra = set(raw) - {"kind", key}
     if extra:
@@ -4642,6 +4823,17 @@ def _decode_action(raw) -> dict:
         return {}
     if kind == ASK_KIND:
         return _decode_ask(got)
+    if kind == "run-task":
+        keys = set(got) - {"kind"}
+        if len(keys) != 1:
+            return {}
+        key = keys.pop()
+        if key not in ("task", "job"):
+            return {}
+        value = got.get(key)
+        if not isinstance(value, str) or not value.strip():
+            return {}
+        return {"kind": "run-task", key: value}
     key = ACTION_PAYLOAD[kind]
     if set(got) != {"kind", key}:
         return {}
@@ -4685,6 +4877,13 @@ def _action_problem(action: dict) -> str:
     if kind == "show-note":
         return _note_problem(action.get("note"))
     if kind == "run-task":
+        if "job" in action:
+            # Resolve again for the row's own view: a phrase that no longer
+            # resolves is reported here, in one sentence.
+            job = action.get("job")
+            if not isinstance(job, str) or not job.strip():
+                return _NO_ACTION_KIND
+            return _job_problem(job)
         return _task_problem(action.get("task"))
     if kind == ASK_KIND:
         return ""
