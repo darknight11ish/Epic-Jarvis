@@ -4839,11 +4839,23 @@ def _write_goal(goal_id: str, line: str, at: float) -> str:
 def _write_habit(habit_id: str, line: str, at: float) -> str:
     """'' when a tick was recorded, else one sentence.
 
-    Wired by the life-coach lane, and deliberately left as a clean seam rather
-    than half-built here: it calls ``jarvis_habits.tick(habit_id, *, at, text)``
-    when that module is beside this file. It is not in this tree, so the honest
-    answer is HABIT_NOT_SET_UP - the same shape `_write_goal` takes, so one lane
-    cannot accidentally look more finished than the other."""
+    Wired by the life-coach lane (``backend/jarvis_habits.py``, #1108). The seam
+    calls that module's own reminder-lane entry point, ``record_tick(habit_id,
+    *, day=None, words="", source="app")`` spelled here as
+    ``jarvis_habits.tick(habit_id, words=line)``: one row per habit per DAY,
+    idempotent, no server and no card needed.
+
+    `at` is deliberately NOT passed through. The habit lane takes the day from
+    the owner's own wall clock (``_today()``: a tick at 23:30 belongs to that
+    evening, never to UTC's tomorrow), which is the whole of the per-day rule;
+    handing it this scheduler's clock would let a hand-moved clock in a test -
+    or a reminder answered after midnight - file the tick on the wrong day.
+
+    When the module is not beside this file the honest answer is
+    HABIT_NOT_SET_UP - the same shape `_write_goal` takes, so one lane cannot
+    accidentally look more finished than the other. A habit id that this PC no
+    longer has, a stopped habit, or a refused write is ONE plain sentence and
+    the answer itself is still kept, exactly as the test says."""
     habits = _optional_module("jarvis_habits")
     if habits is None:
         return HABIT_NOT_SET_UP
@@ -4851,7 +4863,7 @@ def _write_habit(habit_id: str, line: str, at: float) -> str:
     if not callable(fn):
         return HABIT_NOT_SET_UP
     try:
-        got = fn(habit_id, at=float(at), text=line)
+        got = fn(habit_id, words=line)
     except KeyError:
         return "That habit is not on this PC any more."
     except Exception:
