@@ -69,6 +69,12 @@ NO_PATCH = {
     # install(), called by the drop-in loader; the folder is the whole of its
     # wiring and no patch is added to `jarvis_hud.py`.
     "notes-edit",
+    # The owner's 2026-11-02 life-coach set: habit check-ins and the mood log
+    # are born as folders. Each module's own install() answers its routes
+    # (GET/POST /api/habits and /api/mood), called by the drop-in loader, so
+    # neither replaces a patch and no patch is added to jarvis_hud.py.
+    "habits",
+    "mood",
     "auto-router",
     "media-index",
     "notion-obsidian",

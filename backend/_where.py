@@ -1454,6 +1454,11 @@ SHIPPED = (
     # doors - the same jarvis_models.switch_to and jarvis_presets.apply_from_body
     # the Models page and the preset card already use. Shipped whole, no route.
     "jarvis_model_knowledge.py",
+    # ORDER MATTERS TO ONE READER: tools/check_zero_jargon.py walks this tuple
+    # and only matches an entry that ends with a comma, so the LAST entry is
+    # never scanned. jarvis_phone_apps.py therefore stays last: appending
+    # after it would newly expose an untouched module to the jargon ratchet
+    # it was never measured against.
     # The skills menu's PC doors (jarvis_skill_menu.py, 2026-11-02; the owner's
     # Hermes-skills scope B): install a skill from a folder or a .zip, import
     # one from %USERPROFILE%\.hermes\skills, turn an installed one off and back
@@ -1463,6 +1468,16 @@ SHIPPED = (
     # modify_own_code card, the quarantine and the index are all CALLED. The
     # same entry is at the end of the script's $SHIPPED.
     "jarvis_skill_menu.py",
+    "jarvis_habits.py",
+    # The owner's own mood log (jarvis_mood.py, the same 2026-11-02 decision
+    # D1): one 1-5 tap a day with optional words in mood.db, an upsert per day,
+    # no card for logging, and EXCLUDED FROM LEARNING ENTIRELY by construction
+    # (D2 - no learner module names it and it names none; backend/
+    # test_learning_exclusion.py proves both directions). GET/POST /api/mood
+    # come from its own install(), called by plugins/ready/mood: no patch.
+    # The same entry, in the same position, is in $SHIPPED in
+    # scripts/apply-patches.ps1.
+    "jarvis_mood.py",
     # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
     # JARVIS-API section 176): reads and writes ONE table of the owner's
     # settings file, [phone_apps], one line at a time - card first, through

@@ -319,6 +319,22 @@ def _spill(row: dict) -> Optional[int]:
         return None
 
 
+def loaded_row(rows, model):
+    """That model's row in a `/api/ps` list, or None. Never raises.
+
+    Public because the Coding preset's pooled lane
+    (`jarvis_model_lanes.start_pooled_lane`) reads the SAME row off the same
+    server before and after it loads - one matcher, so the two features cannot
+    disagree about what "loaded" means.
+    """
+    return _row_for(rows, model)
+
+
+def spill_bytes(row):
+    """Bytes of that row not in video memory, or None when it did not say."""
+    return _spill(row)
+
+
 def known_on(url: str) -> Optional[bool]:
     """Is `model` imported on this server at all? None when it did not answer.
     Read-only: POST /api/show reads the model's own metadata and loads
@@ -536,6 +552,16 @@ def _announce(words: str) -> None:
     _audit("big_coder.pausing", {"words": words})
 
 
+def announce_pause(words: str) -> None:
+    """Say the pause, before the first unload. Public for the one other caller.
+
+    The Coding preset's pooled lane (`jarvis_model_lanes.start_pooled_lane`)
+    runs exactly this pause under its own approval card, so the announcement
+    has one implementation and one wording - never a second copy.
+    """
+    _announce(words)
+
+
 # --------------------------------------------------------------------------
 #   The pause, the load, the restore - each proved from /api/ps
 # --------------------------------------------------------------------------
@@ -574,12 +600,23 @@ def pause_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
             "proof": proof}
 
 
-def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT) -> dict:
+def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
+               num_ctx: Optional[int] = None) -> dict:
     """Load the 30B on the both-cards server and prove from /api/ps that it
-    fits: present, at NUM_CTX, and with ZERO spill. On anything else it is
-    unloaded again and `ok` is False."""
+    fits: present, at the context asked for, and with ZERO spill. On anything
+    else it is unloaded again and `ok` is False.
+
+    `num_ctx` is the caller's own measured rung, and it defaults to this
+    mode's `NUM_CTX`. It exists because a context is a MEASUREMENT, not a
+    constant: on 2026-11-02 this PC's zero-spill ceiling had moved (28,672
+    spilled 212 MiB; 16,384 fitted with none), and the Coding preset's pooled
+    lane loads its own rung through this same function rather than a second
+    copy of it. The requested name is what the answer is checked against, so a
+    lane can never quietly come up at a different window than it asked for.
+    """
+    ctx_wanted = int(num_ctx or NUM_CTX)
     url = url_for(port)
-    if not load(url, MODEL, NUM_CTX):
+    if not load(url, MODEL, ctx_wanted):
         return {"ok": False, "why": f"the both-cards Ollama on port {port} did not load "
                                     f"{MODEL}", "proof": []}
     rows = _settle(url, MODEL, gone=False)
@@ -599,11 +636,11 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT) ->
                         f"was unloaded again"),
                 "proof": proof}
     try:
-        if ctx is not None and int(ctx) != NUM_CTX:
+        if ctx is not None and int(ctx) != ctx_wanted:
             unload(url, MODEL)
             return {"ok": False,
                     "why": (f"{MODEL} loaded at {ctx} tokens, not the measured "
-                            f"{NUM_CTX} - it was unloaded again"),
+                            f"{ctx_wanted} - it was unloaded again"),
                     "proof": proof}
     except (TypeError, ValueError):
         pass

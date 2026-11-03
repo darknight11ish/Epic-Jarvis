@@ -53,9 +53,15 @@ export const BAD_ANSWER_WORDS =
 export const NO_PRESETS_WORDS = "The PC listed no presets.";
 export const NO_CHOICE_WORDS = "No preset chosen yet";
 export const BEING_PREPARED = "Being prepared";
+/** The COST of a heavy preset, in plain words: both cards, and the other models
+ *  paused while it runs. It is NOT a refusal any more (2026-11-02): the PC's
+ *  pooled both-card lane exists, so such a row is a real choice and this
+ *  sentence is what the owner reads before choosing it. The PC sends its own
+ *  `heavy_words`; this is only the fallback for an older PC. */
 export const HEAVY_WORDS =
-  "This preset needs both cards at once as one pooled lane. Your PC refuses " +
-  "heavy mode until that lane support lands, so it cannot be used from here yet.";
+  "This preset needs both cards at once as one pooled lane. While it runs, " +
+  "the other two models are paused - they come back when you apply " +
+  "another preset. Loading it takes about half a minute.";
 export const APPLY_WAITING =
   "The apply/lane patch is not on the PC yet. Until it lands, no preset can " +
   "be applied; nothing changes here.";
@@ -169,6 +175,12 @@ function applySupport(row, applyWired = false) {
   };
 }
 
+function heavyWordsOf(row) {
+  return field(row, ["heavy_words", "heavy_mode_words", "refusal_words"]) ||
+    field(row, ["worse", "worse_at", "worse_words"]) ||
+    field(row, ["cost", "cost_words", "costs"]) || HEAVY_WORDS;
+}
+
 function detailsOf(row) {
   const out = [];
   const model = field(row, ["model", "model_name"]);
@@ -181,7 +193,12 @@ function detailsOf(row) {
   if (context) out.push({ label: "Context", value: context });
   if (cost) out.push({ label: "Cost", value: cost });
   if (worse) out.push({ label: "Worse at", value: worse });
-  if (row && row.heavy_mode === true) out.push({ label: "Mode", value: "Heavy: both cards" });
+  // Heavy mode is a COST, not a blocker (2026-11-02): the PC has a pooled
+  // both-card lane for it, so the row is offered and this is what choosing it
+  // means - the other two models are paused while it runs.
+  if (row && row.heavy_mode === true) {
+    out.push({ label: "Heavy mode", value: heavyWordsOf(row) });
+  }
   return out;
 }
 
@@ -201,16 +218,12 @@ function normalisePreset(row, applyWired = false) {
     ready: status.ready,
     statusWords: status.statusWords,
     heavyMode: row.heavy_mode === true,
-    heavyWords: field(row, ["heavy_words", "heavy_mode_words", "refusal_words"]) ||
-      field(row, ["worse", "worse_at", "worse_words"]) ||
-      field(row, ["cost", "cost_words", "costs"]) || HEAVY_WORDS,
-    blockerWords: status.ready
-      ? (row.heavy_mode === true
-        ? (field(row, ["heavy_words", "heavy_mode_words", "refusal_words"]) ||
-          field(row, ["worse", "worse_at", "worse_words"]) ||
-          field(row, ["cost", "cost_words", "costs"]) || HEAVY_WORDS)
-        : "")
-      : status.statusWords,
+    heavyWords: heavyWordsOf(row),
+    // A blocker is a reason the ONE action must not be offered: the PC is still
+    // preparing the preset. Heavy mode is NOT one any more (2026-11-02): the
+    // PC applies it through its pooled both-card lane, so what the owner reads
+    // about its cost is in `details` beside the row, not in the way of it.
+    blockerWords: status.ready ? "" : status.statusWords,
     applyReady: apply.ready,
     applyContractReady: apply.contractReady,
     applyRoute: apply.route,
@@ -432,7 +445,8 @@ function applyState(reading, selectedId, { stale = false, busy = false } = {}) {
   if (!preset) return { ok: false, why: PICK_FIRST };
   if (preset.id === reading.chosenId) return { ok: false, why: ALREADY_CHOSEN };
   if (!preset.ready) return { ok: false, why: preset.statusWords || BEING_PREPARED };
-  if (preset.heavyMode) return { ok: false, why: preset.heavyWords || HEAVY_WORDS };
+  // Heavy mode is offered like any other preset (2026-11-02). Its cost is in
+  // the details and on the PC's own card; it is not a local refusal.
   if (!preset.applyReady) return { ok: false, why: preset.applyWhy || APPLY_WAITING };
   return { ok: true, why: "", id: preset.id };
 }

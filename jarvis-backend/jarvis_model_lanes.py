@@ -138,6 +138,16 @@ So: no card, and no new tier line either. The owner's own instruction of
 2026-10-14 is the grant, the switch is how he takes it back, and the sentence in
 the apps is how he finds out it was used.
 
+THE POOLED LANE IS THE ONE EXCEPTION, and it is the opposite argument
+(2026-11-02). Starting the Coding preset's both-card lane UNLOADS the owner's
+two models and then makes the 30B the model chat uses, so it raises ONE
+`switch_model` card - the same action and the same `from`/`to`/`why` detail
+`jarvis_models.switch_to` sends - BEFORE it unloads anything, and a denied card
+changes nothing at all. No new gate action, no tier row, no second card: the
+"one change, one card" rule is exactly why the preset does NOT also call
+`switch_to` (which would raise a second one, and whose smoke test runs on a
+single-card lane). Nothing in this module answers a card or approves anything.
+
 WHERE IT RUNS. Windows only: `schtasks` and a Windows Task Scheduler. Off
 Windows every answer says so in words (`_host_reason`) rather than failing.
 
@@ -213,6 +223,351 @@ def start_lane(lane_key, **kwargs) -> tuple:
                      "reason": f"no lane called {lane_key!r}; lanes are "
                                f"{', '.join(l.key for l in LANES)}"}
     return start(lane=lane, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+#   The pooled both-card lane (the Coding preset's heavy mode)
+# ---------------------------------------------------------------------------
+#
+# WHAT IT IS. The two lanes above are the owner's own logon tasks: one Ollama
+# per card, each pinned to its card by the task itself. The Coding preset's
+# model is `qwen3-coder-30b-a3b-ud-q3-k-xl`, measured at 14,813 MiB of
+# GPU-resident memory against a 12,288 MiB card and an 8,192 MiB card - so it
+# fits NEITHER lane, at any context. There is no third logon task and there
+# must not be one: a pooled lane is only ever wanted for one model while the
+# owner is coding, and a task that starts with Windows would hold both cards
+# against the two lanes the assistant actually runs on.
+#
+# So the pooled lane is the ONE Ollama this PC starts on demand, on its own
+# port, with NO card pin at all - which is what lets the engine see both cards
+# - and it is started by the apply the owner approved, not by a task. This
+# module does not hand-roll the server, the pause, the load or the restore:
+# `jarvis_big_coder.py` already owns every one of those, measured and proved
+# from `/api/ps`, and it is reused here exactly as it is. What is new is the
+# LANE: a key, a port, a state, and a start and a stop in the same shape as
+# every other lane, so the preset apply can treat it like one.
+#
+# THE ORDER IS THE WHOLE FEATURE, and it is why the start raises its own card
+# rather than leaving it to the model switch:
+#
+#   1. the lane already holds the model -> nothing is started, nothing changes;
+#   2. a multi-step task is running -> refused in words (pausing the lanes
+#      under it would break it);
+#   3. ONE card, action `switch_model` - the SAME action and the SAME detail
+#      `jarvis_models.switch_to` raises, so the owner reads the same card he
+#      reads for any other model change. It names the model, both cards, and
+#      the two lane models it is about to pause;
+#   4. the pause is ANNOUNCED (event bus + audit log) BEFORE the first unload;
+#   5. the both-cards server is started, BOTH lane models are unloaded and
+#      proved gone from `/api/ps`, and only then is the model loaded - at
+#      28,672 tokens, the largest context measured to fit both cards with zero
+#      spill. A load that spills or comes up at another context is unloaded
+#      again and every lane is put back;
+#   6. any failure AFTER the card puts back what it took: the lanes, the model
+#      and the server. `changed: false` is only ever said beside the restores
+#      that were really seen.
+#
+# WHY THE CARD CANNOT BE THE MODEL SWITCH ITSELF. `jarvis_models.switch_to`
+# runs the tripwire's smoke test AT `jarvis_models.OLLAMA` - the address of the
+# OWNER'S LANE, which is pinned to one card. Calling it to switch to a 14 GB
+# model would ask a 12 GB card to load it (or, with the model already loaded on
+# the pooled server, would try to load a second copy and evict the first).
+# So the card is raised here, in the same words and the same action, and the
+# apply records the model afterwards through `jarvis_presets`
+# (`_default_adopt`) - see the argument there. One change, one card.
+#
+# STOPPING is immediate and takes no card: it is the reversal, and a reversal
+# that needs permission is a reversal that happens too late. It unloads the
+# model, stops the server THIS process started, and puts both lanes back
+# exactly as they were - model, context and zero spill - proved from
+# `/api/ps`. A lane that does not come back is said plainly, never glossed.
+#
+# WHAT IS NOT HIDDEN. While the pooled lane runs, the everyday and Fast models
+# are NOT resident: that is the cost the preset's own words state, and the
+# card says it before a single unload. A server left answering on the port by
+# an earlier process is used as it is and is NOT stopped by `stop_pooled_lane`
+# (the same rule `jarvis_big_coder.server_start` follows) - its model is
+# unloaded, which is what frees the cards, and the server itself holds no
+# model once that is done.
+
+#: The key this lane answers to, in the same vocabulary as "everyday"/"coding".
+POOLED_KEY = "pooled"
+
+#: Its own port, the same number `jarvis_big_coder.BIG_PORT` uses - one number
+#: for one server, pinned to agree by test rather than copied by hand.
+POOLED_PORT = 11450
+
+#: The model and the context. The model is `jarvis_big_coder`'s own, pinned by
+#: test. The CONTEXT is this lane's own MEASUREMENT and is deliberately not the
+#: big-coder mode's 28,672: measured on this PC on 2026-11-02 with every model
+#: unloaded, the zero-spill ceiling had moved - 20,480 / 24,576 / 28,672 all
+#: spilled 204-212 MiB, and 16,384 loaded with none (14,886 MiB, all of it in
+#: video memory). So this lane asks for the largest window measured to fit
+#: TODAY, and the preset's own `context` is pinned to it by test. The same
+#: number the owner's own `OLLAMA_CONTEXT_LENGTH` already uses.
+POOLED_MODEL = "qwen3-coder-30b-a3b-ud-q3-k-xl"
+POOLED_CTX = 16384
+
+#: What the contract calls it. `card` is "both cards" on purpose: there is no
+#: single card this lane lives on, and saying the 2060 would be a lie.
+POOLED = {"key": POOLED_KEY, "card": "both cards", "port": POOLED_PORT,
+          "words": "one model across both cards"}
+
+_POOLED_LOCK = threading.Lock()
+_POOLED: dict = {}
+
+
+def pooled_info() -> dict:
+    """The pooled lane's contract row - a copy, so no caller can edit it."""
+    return dict(POOLED)
+
+
+def _engine(engine=None):
+    """The module that owns the both-cards server, or the one passed in.
+
+    `jarvis_big_coder` is imported on use, never at import time: this module is
+    imported by the backend's start-up banner and by suites that run without it
+    beside them, and a missing big-coder module must not stop a lane from
+    starting.
+    """
+    if engine is not None:
+        return engine
+    import jarvis_big_coder
+    return jarvis_big_coder
+
+
+def pooled_url(port: Optional[int] = None) -> str:
+    return f"http://127.0.0.1:{int(port or POOLED_PORT)}"
+
+
+def pooled_state(*, engine=None) -> dict:
+    """What the pooled lane holds RIGHT NOW. Read-only, never raises.
+
+    `answering` is False when nothing answers on the port (which is not the
+    same as "nothing is loaded" - it means this process cannot tell), and
+    `row` is the model's own `/api/ps` row when it is loaded. The same
+    evidence-first rule as `jarvis_big_coder.running()`: only `/api/ps` decides
+    whether the lane is up.
+    """
+    eng = _engine(engine)
+    url = pooled_url()
+    rows = eng.ps(url)
+    if rows is None:
+        return {"url": url, "answering": False, "loaded": [], "row": None,
+                "spill": None, "context_length": None}
+    row = eng.loaded_row(rows, POOLED_MODEL)
+    return {
+        "url": url,
+        "answering": True,
+        "loaded": [str(r.get("name") or "") for r in rows],
+        "row": row,
+        "spill": eng.spill_bytes(row) if row is not None else None,
+        "context_length": (row or {}).get("context_length"),
+    }
+
+
+def pooled_running(*, engine=None) -> bool:
+    """Is the pooled lane holding its model? False when it cannot be read."""
+    return pooled_state(engine=engine)["row"] is not None
+
+
+def _current_model() -> str:
+    """The model chat uses now, for the card's own `from` field. Never raises."""
+    try:
+        import jarvis_models
+        return str(jarvis_models.current_model() or "")
+    except Exception:
+        return ""
+
+
+def _running_tasks() -> list:
+    try:
+        import jarvis_task_control
+        return jarvis_task_control.running()
+    except Exception:
+        return []
+
+
+class _Refused:
+    """A gate that could not be asked, refused in the shape a verdict has."""
+
+    allowed = False
+    outcome = "refused"
+
+    def __init__(self, reason: str):
+        self.reason = reason
+
+
+def _pooled_gate(action: str, detail: dict, prompt: str):
+    """`jarvis_gate.check()`, failing CLOSED - the same shape
+    `jarvis_big_coder._gate` and `jarvis_power_switch` use."""
+    try:
+        import jarvis_gate
+    except Exception as exc:
+        return _Refused(f"the approval gate is not available here ({exc})")
+    try:
+        return jarvis_gate.check(action, detail, prompt=prompt)
+    except Exception as exc:
+        return _Refused(f"the approval gate raised {type(exc).__name__}")
+
+
+def _publish_pooled(data: dict) -> None:
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish("pooled-lane", data)
+    except Exception:
+        pass
+
+
+def pooled_card_text(*, engine=None) -> str:
+    """The card the owner reads before anything is unloaded, in plain words.
+
+    The measured half is `jarvis_big_coder.card_text_start()`'s own sentence -
+    the same model, the same cards, the same two lane models and contexts -
+    because it is the same pause, and two descriptions of one action would
+    drift. The last line is this lane's own: what changes about chat.
+    """
+    eng = _engine(engine)
+    return (eng.card_text_start()
+            + "\n\nWhile it runs, chat uses it. Applying another preset, or "
+              "stopping it, unloads it and puts both models back exactly as "
+              "they were.")
+
+
+def start_pooled_lane(*, gate=None, engine=None, by: str = "",
+                      tasks=None) -> tuple:
+    """Start the ONE both-card lane for the Coding preset. `(status, body)`.
+
+    The card, the pause, the load and every restore are described in this
+    section's own comment. The seams exist so the whole order can be proved
+    without a graphics card: `gate` is the approval, `engine` is
+    `jarvis_big_coder` (a fake in the suites), and `tasks` says whether a
+    multi-step job is running.
+    """
+    eng = _engine(engine)
+    state = pooled_state(engine=eng)
+    if state["row"] is not None:
+        return 200, {
+            "ok": True, "changed": False, "running": True, "lane": POOLED_KEY,
+            "url": state["url"], "model": POOLED_MODEL,
+            "num_ctx": state["context_length"] or POOLED_CTX,
+            "message": ("The pooled both-card lane is already holding the coding "
+                        "model, so nothing was started and nothing was paused."),
+        }
+
+    live = (tasks or _running_tasks)()
+    if live:
+        return 409, {
+            "ok": False, "changed": False, "running": False, "lane": POOLED_KEY,
+            "error": ("a task is running - stop it first, or pausing the two "
+                      "models would break it; nothing was paused and nothing "
+                      "was loaded"),
+        }
+
+    words = pooled_card_text(engine=eng)
+    verdict = (gate or _pooled_gate)(
+        "switch_model",
+        {"from": _current_model(), "to": POOLED_MODEL, "why": "preset"},
+        prompt=words)
+    if not getattr(verdict, "allowed", False):
+        return 200, {
+            "ok": False, "changed": False, "running": False, "lane": POOLED_KEY,
+            "outcome": str(getattr(verdict, "outcome", "refused")),
+            "message": ("Not started - nothing was paused and nothing was "
+                        "loaded."),
+        }
+
+    # THE ANNOUNCEMENT, before anything on either card is touched.
+    eng.announce_pause(words)
+    srv = eng.server_start()
+    if not srv.get("ok"):
+        return 503, {
+            "ok": False, "changed": False, "running": False, "lane": POOLED_KEY,
+            "error": (srv.get("why") or
+                      "the both-cards Ollama could not be started"),
+        }
+    port = _port_of(srv.get("url"))
+
+    paused = eng.pause_lanes()
+    if not paused["ok"]:
+        back = eng.restore_lanes()
+        eng.server_stop()
+        out = {"ok": False, "changed": False, "running": False,
+               "lane": POOLED_KEY, "error": paused["why"],
+               "paused": paused["proof"], "restored": back["proof"]}
+        if not back["ok"]:
+            out["error"] = out["error"] + " " + back["why"]
+        return 409, out
+
+    loaded = eng.load_coder(port=port, num_ctx=POOLED_CTX)
+    if not loaded["ok"]:
+        eng.unload_coder(port=port)
+        back = eng.restore_lanes()
+        eng.server_stop()
+        error = loaded["why"]
+        if not back["ok"]:
+            error = error + " " + back["why"]
+        return 503, {"ok": False, "changed": False, "running": False,
+                     "lane": POOLED_KEY, "error": error,
+                     "proof": loaded["proof"], "restored": back["proof"]}
+
+    with _POOLED_LOCK:
+        _POOLED.clear()
+        _POOLED.update({"url": srv.get("url") or pooled_url(),
+                        "port": port, "since": time.time(),
+                        "by": by or "an app",
+                        "owned": bool(srv.get("owned")),
+                        "proof": list(paused["proof"]) + list(loaded["proof"])})
+    _publish_pooled({"state": "running", "model": POOLED_MODEL, "num_ctx": POOLED_CTX})
+    return 200, {
+        "ok": True, "changed": True, "running": True, "lane": POOLED_KEY,
+        "url": srv.get("url") or pooled_url(), "model": POOLED_MODEL,
+        "num_ctx": POOLED_CTX,
+        "message": (f"The coding model is running across both cards at "
+                    f"{POOLED_CTX:,} tokens. The two lane models are paused and "
+                    f"come back when you stop it or apply another preset."),
+        "paused": paused["proof"], "proof": loaded["proof"],
+    }
+
+
+def stop_pooled_lane(*, engine=None, by: str = "") -> tuple:
+    """End the pooled lane: unload it, stop the server it started, put both
+    lanes back exactly as they were. `(status, body)`; no card.
+
+    Safe to call when nothing is running (it still puts the lanes back, which
+    is the state the caller wants), and it never kills a process it did not
+    start: an Ollama already answering on the port is left alone, and only its
+    model is unloaded - which is what frees the cards.
+    """
+    eng = _engine(engine)
+    was_running = pooled_running(engine=eng)
+    gone = eng.unload_coder(port=POOLED_PORT)
+    eng.server_stop()
+    back = eng.restore_lanes()
+    with _POOLED_LOCK:
+        held = dict(_POOLED)
+        _POOLED.clear()
+    _publish_pooled({"state": "stopped"})
+    if not gone["ok"] or not back["ok"]:
+        error = "; ".join(x for x in (gone["why"], back["why"]) if x)
+        return 503, {"ok": False, "changed": was_running, "running": False,
+                     "lane": POOLED_KEY, "error": error,
+                     "unloaded": gone["proof"], "restored": back["proof"]}
+    return 200, {
+        "ok": True, "changed": was_running, "running": False, "lane": POOLED_KEY,
+        "message": ("The coding model is stopped, the both-cards server this "
+                    "app started is stopped, and both lane models are back: "
+                    + "; ".join(eng.lane_lines())),
+        "unloaded": gone["proof"], "restored": back["proof"],
+        "since": held.get("since"), "by": held.get("by"),
+    }
+
+
+def _port_of(url: Optional[str]) -> int:
+    try:
+        return int(str(url or "").rstrip("/").rsplit(":", 1)[-1])
+    except (TypeError, ValueError):
+        return POOLED_PORT
 
 
 #: The address Jarvis itself talks to when `jarvis_hud.OLLAMA_URL` cannot be

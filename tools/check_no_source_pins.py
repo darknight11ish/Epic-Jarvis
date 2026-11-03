@@ -162,6 +162,13 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_gate_risk_words.py": 1,
     "backend/test_gate_touches.py": 5,
     "backend/test_goals.py": 2,
+    # 2026-11-02 (the life-coach merge): the two suites this merge brought in -
+    # Habit check-ins / mood log and the GROW bridge - were written with two
+    # source-text pins each rather than behaviour checks, so the measured debt
+    # is recorded here, not approved: the tree went 475 -> 479, measured with
+    # `--measure` on the merged tree. The ratchet only turns DOWN; a later wave
+    # should convert these to behaviour checks and lower both numbers.
+    "backend/test_grow_bridge.py": 2,
     "backend/test_handoff.py": 5,
     "backend/test_handoff_front.py": 1,
     "backend/test_hardware.py": 1,
@@ -193,7 +200,14 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # present), which is one MORE honest source pin but no weaker test. The
     # total moves 415 -> 416; measured, not argued: test_no_source_pins reads
     # 416 on this tree.
-    "backend/test_model_lanes.py": 17,
+    # LOWERED 2026-11-02, 17 -> 15, for the Coding preset's pooled both-card
+    # lane: the one text pin this file had about the approval gate was replaced
+    # by a CALL to the named-lane start with a gate that would explode - a
+    # behavioural check that costs no pin - and the pooled lane's own card, its
+    # action and its order are proved in `backend/test_pooled_lane.py`. The
+    # ratchet only turns down, so the debt is recorded at what is measured.
+    "backend/test_model_lanes.py": 15,
+    "backend/test_mood.py": 2,  # 2026-11-02 (life-coach merge): measured debt, see test_grow_bridge.py
     "backend/test_news.py": 2,
     "backend/test_note_capture.py": 6,
     "backend/test_notion_obsidian.py": 4,

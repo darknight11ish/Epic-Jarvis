@@ -81,7 +81,7 @@ except ModuleNotFoundError:                       # Python < 3.11
 #: a fresh install is offered.
 DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
                    "phone_apps", "calculator", "memory_search", "my_files",
-                   # The drop-in plugin tools (2026-11-02, section 180): the
+                   # The drop-in plugin tools (2026-11-02, section 181): the
                    # feature they manage is a folder beside jarvis_hud.py, and a
                    # chat door reachable only by hand-editing the same list
                    # would not be a chat door. Both stay on this PC and neither

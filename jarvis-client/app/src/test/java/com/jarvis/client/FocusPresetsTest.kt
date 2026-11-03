@@ -264,16 +264,24 @@ class FocusPresetsTest {
 
         val coding = requireNotNull(view.preset("coding"))
         assertEquals("qwen3-coder-30b-a3b-ud-q3-k-xl", coding.model)
-        assertEquals("RTX 2060", coding.lane.card)
-        assertEquals(28672, coding.context)
+        assertEquals("both cards", coding.lane.card)
+        assertEquals("pooled", coding.lane.key)
+        assertEquals(16384, coding.context)
         assertTrue("Coding needs both cards while it runs", coding.heavyMode)
         assertNull("no second worker is planned in this contract", coding.helper)
-        // Heavy mode cannot be used until the PC's pooled lane support lands:
-        // the plate must show the refusal, not an enabled Use button.
-        assertEquals(
-            FocusPresets.HEAVY,
+        // Heavy mode IS offered (2026-11-02): the PC's pooled both-card lane
+        // applies it, so there is no blocker any more - and the cost it states
+        // is shown as its own line, never as a reason it cannot be used.
+        assertNull(
+            "a heavy preset is offered like every other one",
             FocusPresets.blocker(view, coding, stale = false, linkUp = true),
         )
+        assertTrue(
+            "the heavy cost is said in the PC's own words: ${FocusPresets.heavyCost(coding)}",
+            FocusPresets.heavyCost(coding).contains("both cards")
+                && FocusPresets.heavyCost(coding).contains("paused"),
+        )
+        assertEquals("", FocusPresets.heavyCost(requireNotNull(view.preset("fast"))))
         assertNull(FocusPresets.blocker(view, fast, stale = false, linkUp = true))
     }
 

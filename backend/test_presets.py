@@ -61,9 +61,11 @@ def main() -> int:
     check("the five old ids are named as replaced",
           fixture["old_ids_replaced"] == ["everyday", "coding", "admin", "long", "specialist"])
     for p in fixture["presets"]:
-        check(f"{p[chr(105)+chr(100)]}: lane is main or coding with its real port",
-              p["lane"]["key"] in ("main", "coding")
-              and p["lane"]["port"] == (11436 if p["lane"]["key"] == "main" else 11435), p["lane"])
+        check(f"{p[chr(105)+chr(100)]}: lane is main, coding or the pooled both-card "
+              f"lane, with its real port",
+              p["lane"]["key"] in ("main", "coding", "pooled")
+              and p["lane"]["port"] == {"main": 11436, "coding": 11435,
+                                        "pooled": 11450}[p["lane"]["key"]], p["lane"])
         check(f"{p['id']}: every rendered word is a non-empty string",
               all(isinstance(p[k], str) and p[k] for k in ("title", "focus", "what", "cost", "worse")))
         check(f"{p['id']}: apply is one asked action, never automatic",
@@ -74,14 +76,19 @@ def main() -> int:
     check("General is qwen3.5:9b on the 2060 at 196,608",
           gen.model == "qwen3.5:9b" and gen.context == 196608 and gen.lane == "main")
     cod = P.by_id("coding")
-    check("Coding now uses the 30B coder across both cards (heavy mode)",
+    check("Coding is the one heavy row, on the pooled both-card lane",
           cod.model == "qwen3-coder-30b-a3b-ud-q3-k-xl" and cod.heavy_mode is True
+          and cod.lane == "pooled"
           and cod.measured["tok_s"] == 76.2 and cod.measured["rubric"] == "6/6 coding rubric"
           and cod.measured["size_gib"] == 14.0 and cod.measured["cold_load_s"] == 32.1
           and "BOTH GPUs" in cod.cost, cod.model)
-    check("... its words say heavy mode evicts lanes and lane support is arriving",
-          "evicts" in cod.cost and "pooled both-GPU lane" in cod.worse
-          and "lane support arriving" in cod.worse and "No single-card" in cod.worse)
+    check("... its words say the other models are PAUSED and name the honest cost, "
+          "never that a lane is still arriving",
+          "pauses the other lanes' models" in cod.cost
+          and "NOT resident" in cod.worse and "come back" in cod.worse
+          and "arriving" not in (cod.what + cod.worse + cod.cost)
+          and "both cards" in cod.heavy_words
+          and "paused" in cod.heavy_words, (cod.cost, cod.worse, cod.heavy_words))
     check("Fast is qwen3.5:4b on the 2080 SUPER's coding lane at 16,384",
           P.by_id("fast").model == "qwen3.5:4b" and P.by_id("fast").lane == "coding"
           and P.by_id("fast").context == 16384

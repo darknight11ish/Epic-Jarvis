@@ -595,17 +595,19 @@ await check("modelPresetRows reads the PC's chosen_preset - and nothing else mar
   const payload = {
     presets: [
       { id: "general", title: "General", focus: "everyday chat" },
-      // The PC's own two facts about applicability (contract audit F1): heavy
-      // mode is always refused by this PC, pending is "being prepared".
+      // The PC's own two facts about a row: heavy mode (the pooled both-card
+      // lane must run it) and pending ("being prepared").
       { id: "coding", title: "Coding", focus: "big code", heavy_mode: true },
       { id: "fast", title: "Fast", focus: "short answers", pending: true },
     ],
     chosen_preset: "coding",
   };
   assert.deepEqual(P.modelPresetRows(payload), [
-    { id: "general", title: "General", focus: "everyday chat", chosen: false, heavy: false, pending: false },
-    { id: "coding", title: "Coding", focus: "big code", chosen: true, heavy: true, pending: false },
-    { id: "fast", title: "Fast", focus: "short answers", chosen: false, heavy: false, pending: true },
+    // heavyWords is the PC's own cost sentence, carried ONLY on a heavy row
+    // (2026-11-02: the row is offered now, so the cost is what it says).
+    { id: "general", title: "General", focus: "everyday chat", chosen: false, heavy: false, heavyWords: "", pending: false },
+    { id: "coding", title: "Coding", focus: "big code", chosen: true, heavy: true, heavyWords: P.HEAVY_PRESET_WORDS, pending: false },
+    { id: "fast", title: "Fast", focus: "short answers", chosen: false, heavy: false, heavyWords: "", pending: true },
   ]);
   assert.equal(P.modelPresetRows({ available: false, why: "old backend" }).length, 0,
     "a backend without the route invents presets");
