@@ -6079,6 +6079,7 @@ What it understands:
 | Morning briefing | "brief me now", "brief me every weekday at 7" (**a card**), "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
 | Features (§130) | "what is the prompt coach", "what does the prompt coach do", "is the prompt coach on", "is the prompt coach on right now", "how do I turn on the prompt coach", "how do I turn off the prompt coach", "what features do you have", "list the memory features", "turn on <a feature that names one switch>" - added 2026-10-20 |
+| Model and preset questions (2026-11-02) | "what AI model will you use in the coding preset", "what model does the coding preset use", "which model will you use in the fast preset", "what model does the fast preset use", "which model does <preset> load", "what is <preset>'s model", "are you using both cards", "does it layer across both cards", "what model are you using now" - answered from `jarvis_presets.py`'s own rows and this PC's model record: **no model call and no approval card** |
 
 **A reminder the grammar missed can no longer become a model's prose success
 (2026-10-27, the owner's HUD bug).** The owner typed "add a reminder ..." into
@@ -6115,6 +6116,28 @@ only an explicit "Jarvis, what is <thing> feature" gets "I do not have that
 one". The "turn on <feature>" wording goes through that setting's own setter
 and approval rule - the same `BoolSetting.set` the settings phrases and the
 `change_setting` tool use - and answers with its real outcome.
+
+**Model and preset questions come from the preset contract (2026-11-02).**
+The owner asked "what AI model will you use in the coding preset?" and the
+deployed chat answered `qwen3.5:9b` - the General preset's model - and denied
+that any preset spans both cards. Both were false: the row in
+`backend/jarvis_presets.py` is `qwen3-coder-30b-a3b-ud-q3-k-xl`, heavy mode
+across both cards. Those sentences now read that row itself - the model, the
+heavy flag, the window, the honest `cost` and `worse`, and `heavy_words` when
+the build has it (PR #1106's field; otherwise the row's own `cost` is the
+fallback). The Coding answer always says both cards, ONE approval card first,
+and that the preset is **not live until the pooled both-card lane's code is
+deployed** - which, on a tree without that lane, is today, and the PC's own
+refusal sentence is quoted beside it. An unknown preset name gets "There is no
+preset called ..." plus the real titles, never an invented model.
+"what model are you using now" reads `jarvis_models`' own record and says "I
+do not know yet" when no record exists rather than quoting the chosen
+preset's model as if it were running. "Are you using both cards" reads the
+pooled lane, the separate "One bigger model on both cards" mode and the
+preset choice, and says "yes", "not right now" or "I cannot read that"
+accordingly - never a guess. None of these raises a card or calls a model, and
+the two new intents are in `READ_ONLY_INTENTS`, so such an answer never takes
+away what "cancel that" would undo.
 
 **"How long is left" is only ours while something is left to measure.** With
 no timer running, the **bare** sentence ("how long is left", "how much time is

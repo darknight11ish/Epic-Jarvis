@@ -12113,12 +12113,12 @@ def _run_note_open(title: str) -> Result:
 # (jarvis_presets.apply_from_body and jarvis_models.switch_to) and never approve
 # anything themselves.
 
-MODEL_CURRENT_UNKNOWN = ("This PC does not record which model is running right now. "
-                         "Brain, Models lists every installed model.")
+MODEL_CURRENT_UNKNOWN = ("This PC does not record which model is running right now, so I "
+                         "do not know yet. Brain, Models lists every installed model.")
 MODELS_NOT_LISTED = ("This PC does not list its installed models right now. Brain, "
                      "Models on the PC is where the list is.")
-PRESETS_NOT_LISTED = ("This PC does not list its presets right now (the preset "
-                      "contract module is missing).")
+PRESETS_NOT_LISTED = ("This PC does not list its presets right now (the preset contract "
+                      "module is missing), so I cannot tell you which model a preset uses.")
 MODEL_CARD_WORDS = ("Nothing switches until you answer the ONE approval card on your PC"
                     " (Windows Hello for a risky one).")
 
@@ -12159,6 +12159,75 @@ _K_MODEL_SWITCH = re.compile(
     r"(?:switch|change)\s+to\s+(?:the\s+)?(?:model\s+)?(.+?)\s*\??$"
     r"|load\s+(?:the\s+)?(?:model\s+)?(.+?)\s*\??$"
     r"|use\s+(?:the\s+)?model\s+(.+?)\s*\??$")
+
+#: "what AI model will you use in the coding preset?" (owner-reported
+#: 2026-11-02). The deployed chat answered "qwen3.5:9b" - the GENERAL
+#: preset's model - and denied that the Coding preset spans both cards.
+#: Both were false: the preset row itself says
+#: qwen3-coder-30b-a3b-ud-q3-k-xl in heavy mode across both cards. A
+#: preset-model question names a preset AND asks for its model, in either
+#: order; these shapes answer it from `jarvis_presets.PRESETS` alone - no
+#: model call and no approval card.
+#:
+#: TIGHT ON PURPOSE. Both halves must be present, so "what model do you use"
+#: (the identity grammar's own phrase), "what model are you running" (the
+#: current-model lane) and "what model of car do you drive" keep their old
+#: path. A near miss is harmless; a hijack would break a real question.
+_PRESET_NAME = r"(?P<name>[a-z][a-z0-9 .&+_-]{0,40}?)"
+
+_K_PRESET_MODEL_YOU = re.compile(
+    r"(?:what|which)\s+(?:ai\s+)?model\s+(?:will|would|do|does|did|are)\s+"
+    r"(?:you|it|jarvis)\s+(?:be\s+)?(?:using|use|run|running|load|loading|have)\s+"
+    r"(?:in|for|with|on|under)\s+(?:the\s+)?" + _PRESET_NAME + r"\s+preset\s*\??$")
+_K_PRESET_MODEL_ITS = re.compile(
+    r"(?:what|which)\s+(?:ai\s+)?model\s+(?:does|do|will|would|is|was|did)\s+"
+    r"(?:the\s+)?" + _PRESET_NAME + r"\s+preset"
+    r"(?:\s+(?:use|uses|using|run|runs|running|load|loads|loading|have|has|get|gets|be))?"
+    r"\s*\??$")
+_K_PRESET_MODEL_OWN = re.compile(
+    r"(?:what|which)(?:'s|\s+is)\s+(?:the\s+)?" + _PRESET_NAME + r"\s+preset(?:'s)?\s+"
+    r"(?:ai\s+)?model\s*\??$")
+_K_PRESET_MODEL_USED = re.compile(
+    r"(?:what|which)\s+(?:ai\s+)?model\s+(?:is|gets)\s+(?:being\s+)?used\s+"
+    r"(?:in|for|by|with)\s+(?:the\s+)?" + _PRESET_NAME + r"\s+preset\s*\??$")
+
+#: "are you using both cards?" (owner-reported 2026-11-02): the deployed
+#: chat denied that the Coding preset layers across the two cards. It is the
+#: ONE preset that does; this lane answers from that row and this PC's own
+#: lane reads, and says plainly when a read cannot be made.
+#:
+#: The near miss this must NOT take is "which app can use the second card"
+#: (a feature question with its own answer) - every alternative below names
+#: BOTH cards or the act of layering, never "the second card".
+_BOTH_CARDS_SHAPES = (
+    r"(?:are|is|do|does|did|will|would|can|could)\s+"
+    r"(?:you|it|jarvis|the\s+(?:coding\s+|big\s+)?(?:model|preset))\s+(?:be\s+)?"
+    r"(?:using|use|run|running|need|layer|layering|spread|spreading|split|splitting)\s+"
+    r"(?:(?:the|its|one)\s+)?(?:model\s+)?(?:(?:on|across|over)\s+)?"
+    r"(?:both|the\s+two|two)\s+(?:graphics\s+|video\s+)?cards"
+    r"|(?:are|is)\s+(?:both|the\s+two)\s+(?:graphics\s+|video\s+)?cards\s+"
+    r"(?:in\s+use|used|being\s+used|busy|working|loaded)"
+    r"|(?:are|is|do|does)\s+(?:you|it|the\s+preset)\s+(?:using|use)\s+both\b"
+    r"|(?:are|is)\s+(?:you|it)\s+layering(?:\s+(?:the\s+)?models?)?"
+    r"|(?:is|are)\s+(?:the\s+)?models?\s+layer(?:ed|ing)?\s+"
+    r"(?:across|over|on)\s+(?:both|the\s+two)\s+(?:graphics\s+)?cards")
+_K_BOTH_CARDS = re.compile(
+    _BOTH_CARDS_SHAPES
+    + r"(?:\s+at\s+(?:the\s+)?(?:same\s+time|once))?\s*\??$")
+
+
+def _preset_model_ask(s: str) -> Optional[str]:
+    """The preset name in a model-of-a-preset question, or None."""
+    # `_K_PRESET_MODEL_USED` before `_K_PRESET_MODEL_ITS`: "what model is
+    # used in the coding preset" would otherwise make "used in the coding"
+    # the name (it fits ITS's name-then-preset shape), and that is not a
+    # preset name at all.
+    for rx in (_K_PRESET_MODEL_YOU, _K_PRESET_MODEL_USED,
+               _K_PRESET_MODEL_OWN, _K_PRESET_MODEL_ITS):
+        m = rx.fullmatch(s)
+        if m is not None:
+            return " ".join(str(m.group("name") or "").split())
+    return None
 
 
 def _model_known_refs() -> dict:
@@ -12202,10 +12271,20 @@ def _resolve_model(text) -> str:
 
 def _model_chat(s: str) -> Optional[Intent]:
     """The model/preset question shapes. Never a switch unless the words name one."""
-    for rx, name in ((_K_MODEL_CURRENT, "model_current"),
-                     (_K_MODEL_ANSWERED, "model_answerer")):
+    # FIRST, deliberately: "what model are you using in the coding preset"
+    # also fits _K_MODEL_CURRENT's "are you using" prefix, and the preset
+    # question must win - it is the one with a fact to quote. The owner's own
+    # 2026-11-02 question ("what AI model will you use in the coding preset?")
+    # was answered by the model, which guessed qwen3.5:9b.
+    name = _preset_model_ask(s)
+    if name is not None:
+        return Intent("preset_model", {"name": name})
+    if _K_BOTH_CARDS.fullmatch(s):
+        return Intent("both_cards")
+    for rx, intent_name in ((_K_MODEL_CURRENT, "model_current"),
+                            (_K_MODEL_ANSWERED, "model_answerer")):
         if rx.fullmatch(s):
-            return Intent(name)
+            return Intent(intent_name)
     m = _K_MODEL_RELEASE.fullmatch(s)
     if m:
         return Intent("model_release", {"model": m.group(1)})
@@ -12236,6 +12315,153 @@ def _model_chat(s: str) -> Optional[Intent]:
     return None
 
 
+def _preset_row(preset_id) -> dict:
+    """ONE preset's own row from the shared contract, or {} - never raises."""
+    try:
+        import jarvis_model_knowledge as K
+        for row in K.presets():
+            if str(row.get("id") or "") == str(preset_id or ""):
+                return row
+    except Exception:
+        pass
+    return {}
+
+
+def _two_cards_words() -> str:
+    """The two cards' own names, from `jarvis_presets.LANES`."""
+    try:
+        import jarvis_presets as P
+        cards = []
+        for key in ("main", "coding"):
+            card = str((P.LANES.get(key) or {}).get("card") or "").strip()
+            if card and card.lower() != "both cards" and card not in cards:
+                cards.append(card)
+        if len(cards) >= 2:
+            return f"the {cards[0]} and the {cards[1]}"
+    except Exception:
+        pass
+    return "both cards"
+
+
+def _pooled_lane_in_build(row=None) -> bool:
+    """Does THIS build have the Coding preset's one pooled both-card lane?
+
+    Two independent signals, both read, neither guessed: the preset row's own
+    lane (`"pooled"`, PR #1106's shape) and `jarvis_model_lanes.POOLED_KEY`,
+    which only exists once that lane's own code is installed. False means the
+    honest sentence is "not live until that code is deployed" - never a claim
+    that the preset runs.
+    """
+    lane = (row or {}).get("lane") or {}
+    if str(lane.get("key") or "") == "pooled":
+        return True
+    if "both cards" in str(lane.get("card") or "").lower():
+        return True
+    try:
+        import jarvis_model_lanes as L
+        return bool(getattr(L, "POOLED_KEY", ""))
+    except Exception:
+        return False
+
+
+def _preset_chosen_words(row) -> str:
+    """Whether THIS preset is the one the PC's choice file names.
+
+    It says "chosen", never "active" or "running": the file records the last
+    apply, and a preset can be chosen while its lane is down. Never raises.
+    """
+    pid = str((row or {}).get("id") or "")
+    try:
+        import jarvis_presets as P
+        chosen = str(P.choice() or "")
+    except Exception:
+        return "This PC cannot read which preset was last chosen, so I cannot say whether this is."
+    if not chosen:
+        return "No preset has been applied on this PC yet."
+    if chosen == pid:
+        return "It is the preset chosen on this PC right now."
+    other_title = chosen
+    try:
+        import jarvis_model_knowledge as K
+        other_title = str((K.preset_by_name(chosen) or {}).get("title") or chosen)
+    except Exception:
+        pass
+    return f'It is not the preset chosen on this PC right now - "{other_title}" is.'
+
+
+def _preset_answer(row: dict) -> str:
+    """What one preset runs and costs, in the preset contract's own words.
+
+    Leads with the MODEL, because that is the question. A heavy preset says
+    both cards and one pooled lane instead of naming a single card - the
+    Coding row's `lane` is a placeholder until the pooled lane exists, so
+    quoting it would repeat the 2026-11-02 wrong answer ("RTX 2060"). The
+    cost sentence is `heavy_words` when this build has it, else the row's own
+    `cost`; `worse` is the row's own weakness sentence.
+    """
+    title = str(row.get("title") or row.get("id") or "That preset")
+    model = str(row.get("model") or "")
+    try:
+        context = int(row.get("context") or 0)
+    except (TypeError, ValueError):
+        context = 0
+    heavy = bool(row.get("heavy_mode"))
+    live = _pooled_lane_in_build(row) if heavy else False
+    lane = row.get("lane") or {}
+    parts = []
+    if not model:
+        parts.append(f"{title} does not run one of the local models: it is the Cloud row, "
+                     "a service you connect and pick; no model on this PC changes.")
+    elif heavy:
+        text = (f"{title} {'runs' if live else 'is built to run'} {model} on both cards at "
+                f"once, as one pooled lane over {_two_cards_words()}")
+        if context:
+            text += f", at {context:,} tokens"
+        parts.append(text + ("." if live else " - that is the plan, and it is not live yet."))
+    else:
+        card = str(lane.get("card") or "").strip()
+        words = str(lane.get("words") or "").strip()
+        text = f"{title} runs {model}"
+        if card:
+            text += f" on the {card}"
+            if words:
+                text += f" ({words})"
+        if context:
+            text += f" at {context:,} tokens"
+        parts.append(text + ".")
+    cost = str(row.get("cost") or "")
+    heavy_words = str(row.get("heavy_words") or "")
+    if heavy and heavy_words:
+        cost = heavy_words
+    if cost:
+        parts.append(cost)
+    worse = str(row.get("worse") or "")
+    if worse:
+        parts.append("What it is worse at: " + worse)
+    parts.append("Applying it raises ONE approval card on your PC first; nothing switches "
+                 "until you answer it.")
+    if heavy:
+        if live:
+            parts.append("It runs only while it is the applied preset; applying any other "
+                         "preset stops the pooled lane and brings the everyday models back.")
+        else:
+            parts.append("The pooled both-card lane it needs is not in this build yet, so "
+                         "applying the Coding preset is refused today: it is not live until "
+                         "that code is deployed on your PC.")
+            try:
+                import jarvis_presets as P
+                line = str(getattr(P, "HEAVY_MODE_LINE", "") or "")
+            except Exception:
+                line = ""
+            if line:
+                parts.append(f'The PC\'s own words: "{line}".')
+    if row.get("pending"):
+        parts.append("It is still waiting for its model; applying it changes nothing until "
+                     "the model is installed.")
+    parts.append(_preset_chosen_words(row))
+    return " ".join(parts)
+
+
 def _preset_words_for(name) -> str:
     try:
         import jarvis_model_knowledge as K
@@ -12245,15 +12471,130 @@ def _preset_words_for(name) -> str:
     if not preset:
         names = ", ".join(str(p.get("title") or p.get("id")) for p in K.presets())
         return f'There is no preset called "{name}". The presets are: {names}.'
-    return K.preset_model_words(preset)
+    return _preset_answer(preset)
+
+
+def _run_both_cards() -> Result:
+    """Are both cards in use right now, and which preset is the both-card one.
+
+    Answers the owner's 2026-11-02 follow-up, which the model denied. Every
+    fact is read: the preset contract row for the PLAN, `jarvis_model_lanes`'s
+    pooled read for the Coding lane, `jarvis_second_card`'s own state for the
+    separate "One bigger model on both cards" mode, and `jarvis_presets.choice`
+    for which preset was applied. A read that cannot be made says so - it is
+    never turned into a "yes" or a "no". No card, no model, no write.
+    """
+    try:
+        import jarvis_presets as P
+    except Exception:
+        return Result("This PC does not list its presets right now (the preset contract "
+                      "module is missing), so I cannot tell you which preset uses both "
+                      "cards.", "both_cards")
+    coding = _preset_row("coding")
+    cards = _two_cards_words()
+    live = _pooled_lane_in_build(coding)
+    pooled = None
+    if live:
+        try:
+            import jarvis_model_lanes as L
+            reader = getattr(L, "pooled_running", None)
+            pooled = bool(reader()) if callable(reader) else None
+        except Exception:
+            pooled = None
+    combined = "unknown"
+    try:
+        import jarvis_second_card as SC
+        combined = str(SC.combined_lane_state())
+    except Exception:
+        combined = "unknown"
+    if combined == "running":
+        head = ('Yes - the separate "One bigger model on both cards" mode is running one '
+                "bigger model across both cards right now. It is a mode of its own, not a "
+                "preset.")
+    elif not live:
+        head = ("Not right now - and this build does not have the pooled both-card lane yet, "
+                "so the Coding preset cannot run on both cards at all today.")
+    elif pooled is True:
+        model = str(coding.get("model") or "")
+        try:
+            context = int(coding.get("context") or 0)
+        except (TypeError, ValueError):
+            context = 0
+        head = (f"Yes - the Coding preset is running one model across both cards right now: "
+                f"{model}, one pooled lane over {cards}"
+                + (f", at {context:,} tokens" if context else "") + ".")
+    elif pooled is False:
+        head = ("Not right now: no pooled both-card lane is loaded. Each of the everyday "
+                "presets runs on one card.")
+    else:
+        head = ("I cannot read the model lanes on this PC, so I cannot tell you whether both "
+                "cards are in use right now.")
+    parts = [head]
+    if coding:
+        model = str(coding.get("model") or "")
+        try:
+            context = int(coding.get("context") or 0)
+        except (TypeError, ValueError):
+            context = 0
+        text = (f"Of the presets, Coding is the one that uses both cards: "
+                f"{'it runs' if live else 'it is built to run'} {model} as one model across "
+                f"{cards}")
+        if context:
+            text += f", at {context:,} tokens"
+        parts.append(text + ".")
+        words = str(coding.get("heavy_words") or "") or str(coding.get("cost") or "")
+        if words:
+            parts.append(words)
+        parts.append("Applying it raises ONE approval card first; nothing changes until you "
+                     "answer it.")
+        if live:
+            parts.append("It runs only while it is the applied preset.")
+        else:
+            parts.append("That pooled both-card lane is not in this build yet, so applying "
+                         "the Coding preset is refused today: it is not live until that code "
+                         "is deployed on your PC.")
+            line = str(getattr(P, "HEAVY_MODE_LINE", "") or "")
+            if line:
+                parts.append(f'The PC\'s own words: "{line}".')
+        parts.append(_preset_chosen_words(coding))
+    parts.append("Every other preset runs on one card.")
+    return Result(" ".join(parts), "both_cards")
+
+
+def _model_record() -> str:
+    """The model this PC's own state records, never the chosen preset's model.
+
+    `jarvis_model_knowledge.current_model()` falls back to the chosen preset's
+    model when no record exists. That is a PLAN, not a running model, so a
+    question about what is running must not quote it as one (2026-11-02).
+    This reads the two REAL records - the model manager's own file, then the
+    hardware module's read - and returns "" when neither says anything.
+    Never raises.
+    """
+    try:
+        import jarvis_models as M
+        name = M.current_model()
+        if name:
+            return str(name)
+    except Exception:
+        pass
+    try:
+        import jarvis_hardware as H
+        name = H._current_model()
+        if name:
+            return str(name)
+    except Exception:
+        pass
+    return ""
 
 
 def _run_model_current() -> Result:
+    model = _model_record()
     try:
         import jarvis_model_knowledge as K
-        model, preset = K.current_model(), K.current_preset()
+        preset = K.current_preset()
     except Exception:
-        model, preset = "", None
+        preset = None
     if not model and not preset:
         return Result(MODEL_CURRENT_UNKNOWN, "model_current")
     if model and preset:
@@ -12262,6 +12603,10 @@ def _run_model_current() -> Result:
     elif model:
         said = (f"You are running {model} on this PC. Brain, Models lists every installed "
                 "model and its measured speed.")
+    elif preset.get("model"):
+        said = (f'The preset chosen on this PC is "{preset.get("title")}", which uses '
+                f'{preset.get("model")} - but this PC does not record which model is '
+                "actually running, so I do not know yet.")
     else:
         said = (f'The active preset is "{preset.get("title")}"; the exact model it runs '
                 "is not recorded here.")
@@ -12269,11 +12614,12 @@ def _run_model_current() -> Result:
 
 
 def _run_model_answerer() -> Result:
+    model = _model_record()
     try:
         import jarvis_model_knowledge as K
-        model, preset = K.current_model(), K.current_preset()
+        preset = K.current_preset()
     except Exception:
-        model, preset = "", None
+        preset = None
     if not model:
         return Result("The PC does not record which model answered that. " +
                       MODEL_CURRENT_UNKNOWN, "model_answerer")
@@ -12322,6 +12668,11 @@ def _run_presets_list() -> Result:
 
 def _run_preset_detail(name) -> Result:
     return Result(_preset_words_for(name), "preset_detail")
+
+
+def _run_preset_model(name) -> Result:
+    """The model-of-a-preset answer, under its own `quick` name."""
+    return Result(_preset_words_for(name), "preset_model")
 
 
 def _run_model_speed(ref) -> Result:
@@ -15078,6 +15429,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_presets_list()
     if n == "preset_detail":
         return _run_preset_detail(intent.f.get("name") or "")
+    if n == "preset_model":
+        # "what model does the coding preset use?" - the same row's own words,
+        # with the model first (2026-11-02, the owner's wrong answer). Its own
+        # intent name travels in X-Jarvis-Route's `quick` field, so a client
+        # can tell this question from "what does <preset> change".
+        return _run_preset_model(intent.f.get("name") or "")
+    if n == "both_cards":
+        return _run_both_cards()
     if n == "preset_switch":
         return _run_preset_switch(intent.f.get("name") or "")
     if n == "model_speed":
@@ -15577,6 +15936,12 @@ READ_ONLY_INTENTS = frozenset({
     # Which app is asking (2026-11-01): it only reads jarvis_surface's own
     # header fact, so it must not take away what "cancel that" would undo.
     "surface_origin",
+    # Model and preset questions (2026-11-02): "what model does the coding
+    # preset use?" and "are you using both cards?" only read the preset
+    # contract and this PC's own lane state, and change nothing, so neither
+    # may clear what "cancel that" would take back. (`preset_switch` is
+    # deliberately NOT here - it can raise the one model-change card.)
+    "preset_model", "both_cards",
     # The local calendar read and the honest off / app-only / unbuilt
     # sentences (2026-10-31, pass 11): they read the real state and say it,
     # change nothing, so they must not take away what "cancel that" would undo.
