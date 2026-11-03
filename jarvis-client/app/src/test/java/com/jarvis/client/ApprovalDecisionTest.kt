@@ -166,7 +166,10 @@ class ApprovalDecisionTest {
         )
         // The plain branch of the approve helper must await its own answer: a
         // POST the PC refused or never took has to come back as "not sent".
-        val plain = body(mainActivity(), "private suspend fun approveItem(item: PendingItem): Boolean")
+        val plain = body(
+            mainActivity(),
+            "private suspend fun approveItem(item: PendingItem, fromNotification: Boolean = false): Boolean",
+        )
             .substringAfter("SignedApproval.Path.PLAIN ->")
             .substringBefore("SignedApproval.Path.SIGNED ->")
         assertTrue(
