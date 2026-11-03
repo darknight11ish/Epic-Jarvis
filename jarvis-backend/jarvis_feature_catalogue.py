@@ -3,7 +3,7 @@
 The owner's feature list, as data: 171 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 b7a10230f77dc846d163e6b0c601bdd119081aeeeda0f5ec13c7275373c5f70f); the apps' Features pages read their own
+`features/features.json` (sha256 9ed16525c1bf04311e5fc12b1b57157420d621e4ad3d399945d0dbf694dd1955); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "b7a10230f77dc846d163e6b0c601bdd119081aeeeda0f5ec13c7275373c5f70f"
+SOURCE_SHA256 = "9ed16525c1bf04311e5fc12b1b57157420d621e4ad3d399945d0dbf694dd1955"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1813,7 +1813,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Ask which model is answering",
         "what": "Ask which AI model is answering right now and which preset is in force, what else this PC has installed, how fast each one was measured here, and which model suits a job. A named preset or model can be switched to from the same question.",
-        "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the everyday preset\".",
+        "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
         "asks": "Answering asks nothing. Applying a preset or switching a model raises one approval card, the same one the model switch already uses; nothing is downloaded or swapped until you approve it.",
         "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed is only stated when this PC measured it; the phone still has no list of models to browse.",
         "surface": "both",

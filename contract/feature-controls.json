@@ -9207,7 +9207,7 @@
       "name": "Ask which model is answering",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the everyday preset\".",
+      "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -9218,7 +9218,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the everyday preset\".",
+        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
         "search": [
           "Ask which model is answering"
         ],
@@ -9226,7 +9226,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the everyday preset\".",
+        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
         "search": [
           "ask which model is answering"
         ],
