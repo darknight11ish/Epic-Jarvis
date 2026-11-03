@@ -4271,6 +4271,68 @@ def _weather_source_now() -> Optional[str]:
         return None
 
 
+# --- the rows that are not a Bool/Choice/Number setting --------------------
+#
+# Their VALUES, for the undo receipt (2026-11-03, the audit's BUG 6). The
+# explain door reads them through `_animal_now`, `_sky_show_now` and
+# `_weather_source_now` above, but a receipt has to hand the VALUE back to the
+# setter - and the weather answer prints a LABEL ("My Home Assistant") while
+# its setter takes the id ("home_assistant"). These five wrappers are that
+# difference, read from the owning module's own table, never retyped here:
+#
+#   * `animal_switch_value` / `animal_switch_label` - `jarvis_animal`;
+#   * `sky_show_value` - `jarvis_sky.view()["show"]`;
+#   * `weather_source_id` / `weather_source_label` - `jarvis_sky`'s own source.
+#
+# None still means "I could not read it", and then no receipt is written.
+
+
+def animal_switch_value(key: str) -> Optional[bool]:
+    """One animal switch's value, from `jarvis_animal`'s own table."""
+    return _animal_now(key)
+
+
+def animal_switch_label(key: str) -> str:
+    """One animal switch's own label ("Listening nods"), or its key."""
+    try:
+        import jarvis_animal as AN
+        row = AN.switch(str(key or ""))
+        return str(getattr(row, "label", "") or key or "that animal option")
+    except Exception:                       # noqa: BLE001 - the key is the answer
+        return str(key or "that animal option")
+
+
+def sky_show_value() -> Optional[bool]:
+    """Whether the sun and moon are drawn, from `jarvis_sky`'s own view."""
+    return _sky_show_now()
+
+
+def weather_source_id() -> Optional[str]:
+    """The stored weather SOURCE ID ("off", "home_assistant", "open_meteo").
+
+    THE VALUE `set_weather_source` TAKES - never the label an answer prints.
+    Storing that label and handing it back is exactly the 2026-11-03 audit's
+    word-for-value bug, so the receipt stores this instead."""
+    try:
+        import jarvis_sky as SK
+        source = str(((SK.view() or {}).get("weather") or {}).get("source") or "")
+        return source or None
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+
+
+def weather_source_label(source: str) -> str:
+    """One weather source id in `jarvis_sky`'s own label, or the id itself."""
+    try:
+        import jarvis_sky as SK
+        for row in getattr(SK, "CHOICES", ()):
+            if str(row.get("id") or "") == str(source or ""):
+                return str(row.get("label") or source or "")
+    except Exception:                       # noqa: BLE001 - the id is the answer
+        pass
+    return str(source or "the weather source")
+
+
 def current_value(setting) -> Optional[str]:
     """What `setting` is set to RIGHT NOW, in words, or None when unreadable.
 

@@ -31503,14 +31503,33 @@ one of them, because "turn on auto adjust" really does change it: it has its own
 **A CARDLESS CHANGE LEAVES ONE UNDO RECEIPT.** A setting that loosens nothing is
 immediate, and that change now writes ONE row in `jarvis_receipts` (§132) under
 the tool name `change_setting`: the summary in the owner's own words ("Turned
-web search off"), a before snapshot of `{"key": ..., "value": ...}` and an after
-one. A
+web search off"), a before snapshot of `{"kind": ..., "key": ..., "value": ...}`
+and an after one. That is true for every cardless change this section names: a
+switch, a named choice, the one number setting (`live_idle_seconds`), every
+animal switch, the sun-and-moon switch and the weather source (its two cardless
+directions, off and Home Assistant - switching to Open-Meteo is the carded one
+and follows the card rule below). A
 change that is waiting on a card writes **none**, because nothing has happened
 yet - there is nothing to take back, and the answer says so. A restorer is
 registered just before the receipt is written, so a new process can put the
-change back through the store's snapshot path (§132.5) and not only this one. A
-switch's before value is exact, because it has two states; a named choice's is
-read through the registry's own reader.
+change back through the store's snapshot path (§132.5) and not only this one.
+
+**THE SNAPSHOT HOLDS THE VALUE, NEVER THE WORDS THE ANSWER PRINTS.** A switch's
+before value is exact, because it has two states. A named choice's is read
+through the registry's own reader (`ChoiceSetting.now`) and then resolved back
+to the value its setter takes through **that row's own `options()`**
+(`choice_from_words`) - the same step the write path makes. Handing the display
+word to the setter was a real bug the 2026-11-03 audit found: `small_approvals`
+stored the word "skip", a truthy string, so its undo re-entered the stricter
+branch and left the fingerprint required on every small card while answering as
+though it had worked. `small_approvals` is a bool row, and now stores the bool.
+The face (whose reader returns the display **name** while its setter wants the
+**id**) and both hand-off rows were refused outright by the same mistake; they
+work now. The weather source stores the **source id** (`home_assistant`), never
+the label the answer prints. A row whose current value has no corresponding
+value in its own list - the face with no face chosen, the focus preset with no
+preset applied - writes no receipt, because applying a preset or a face is
+one-way and "put it back to none" is not an operation its setter has.
 
 **WHAT "UNDO" DOES, AND WHAT IT REFUSES.** Saying "undo" (or "cancel that") in
 the same chat takes back the newest **cardless settings change made by talking in
@@ -31518,17 +31537,36 @@ that chat**, once. A scheduler record always wins, so "cancel that" after a
 reminder still cancels the reminder. The reversal goes through the setting's own
 setter - the same `BoolSetting.set` / `ChoiceSetting.set` every other change
 uses - so a reversal that loosens something raises that setting's own card, and
-if that card is not answered the change is NOT reported as undone; the setter's
-"a card is waiting" sentence is what the owner hears. A second "undo" in the same
+if that card is not answered the change is NOT reported as undone. A second
+"undo" in the same
 window says *"I already put <the setting> back in this chat, so there is nothing
 left to undo."*; a receipt the store has already undone says *"<the setting> was
-already back the way it was, so nothing was changed."*; and a reversal that could
-not run says *"I could not put <the setting> back, so nothing was changed. Undo
-raised its own card and it was not answered."* - never a claim that the setting
-went back. It takes back one change, not a list, and never another chat's. The
-receipt row itself is in the receipts database; the pointer "undo" follows is in
-memory, keyed by the conversation, so the spoken undo belongs to the chat that
-made the change in the process that made it.
+already back the way it was, so nothing was changed."*
+
+**A FAILED REVERSAL SAYS WHICH FAILURE IT WAS, AND KEEPS THE POINTER.** Three
+sentences, one per real case, and none of them ever claims the setting went
+back:
+
+* the setter's own card was raised and not answered -
+  *"I could not put <the setting> back, so nothing was changed. Undo raised its
+  own card and it was not answered."*;
+* the setter REFUSED and raised no card (`handoff_mode`'s "Choose …", the
+  fingerprint's PC-only sentence, the small-approvals refusal) - *"I could not
+  put <the setting> back, so nothing was changed."* followed by **the setter's
+  own words**, quoted;
+* nothing said anything at all - only *"I could not put <the setting> back, so
+  nothing was changed."*
+
+The 2026-11-03 audit found the single old sentence asserted a card for both of
+the last two cases, where no card exists. A failed reversal also **keeps** this
+chat's pointer: the receipt is still undoable in the store, so the next "undo"
+tries again (and the store gives the claim back), rather than answering "there
+is nothing here for me to take back". It takes back one change, not a list, and
+never another chat's. The receipt row itself is in the receipts database; the
+pointer "undo" follows is in memory, keyed by the conversation, so the spoken
+undo belongs to the chat that made the change in the process that made it. After
+a backend restart that pointer is gone (the row is not), and the same chat's
+"undo" answers "there is nothing here for me to take back".
 
 **ONE CALM LINE IN JARVIS LIVE.** A carded settings change in a Live turn answers
 with one sentence -
@@ -31553,7 +31591,26 @@ run by `_run_read_link`. It is placed after the "tell me when ..." watcher, and 
 watch-shaped sentence ("tell me when/if ...") is refused by the matcher as well,
 so "tell me when this page changes" stays a watch on a page (§30.3.1) and is
 never a read. A sentence with a link and no read verb is left alone, so a pasted
-address on its own is not fetched. Only the FIRST address in one message is
+address on its own is not fetched.
+
+**A STATEMENT IS NOT A REQUEST.** The matcher also refuses a sentence whose read
+verb is preceded by a negation or a completed-action word - "don't read
+https://x", "do not …", "didn't …", "never summarise …", "i already read https://x
+yesterday", "i read https://x yesterday" - because those are things the owner is
+telling Jarvis, not asking it, and each used to raise a real approval card
+(2026-11-03 audit). The order matters: "read https://x, not the other one" is
+still a request, because the "not" comes after the verb. This is a word guard,
+not a grammar: a statement with no such marker ("he read … yesterday") still
+matches, and nothing here claims otherwise.
+
+**"READ THIS LINK" WITH NO ADDRESS.** A read verb plus one of the nouns that
+cannot mean anything else ("link", "url", "address", "page", "web page",
+"article", "video") reaches the same runner with an empty address, and the
+runner answers *"Say the address to read, starting with http:// or https://."*
+Before 2026-11-03 that sentence existed but was unreachable, because the matcher
+required an address first; a bare "read this" is still the model's, because it
+may mean anything. Nothing is fetched and no card is raised for the no-address
+case. Only the FIRST address in one message is
 used: a message carrying two links reads the first, and the second is read when
 it is sent as its own message, under its own card.
 

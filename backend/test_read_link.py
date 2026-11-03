@@ -574,6 +574,65 @@ def t_no_new_route_no_new_tool_no_new_gate_action():
           len(imports) == 1, [getattr(n, "lineno", None) for n in imports])
 
 
+def t_a_negated_or_past_sentence_raises_no_card():
+    """A STATEMENT is not a request (2026-11-03 audit, BUG 3).
+
+    "don't read https://x" and "i already read https://x yesterday" both used
+    to match, and each raised a real approval card. Nothing is fetched without
+    a yes, so the blast radius was one unwanted card - but an ordinary sentence
+    must not raise a card at all.
+    """
+    for words in ("don't read https://example.com/kettle",
+                  "do not read https://example.com/kettle",
+                  "didn't read https://example.com/kettle",
+                  "never summarise https://example.com/kettle",
+                  "i already read https://example.com/kettle yesterday",
+                  "i read https://example.com/kettle yesterday"):
+        got = Q.match(words)
+        check(f"a statement is not a read request: {words!r}",
+              got is None or got.name != "read_link",
+              None if got is None else (got.name, got.f))
+        check(f"...and the matcher refuses it itself: {words!r}",
+              Q._read_link_intent(words, words.lower()) is None,
+              Q._read_link_intent(words, words.lower()))
+    for words in ("read https://example.com/kettle",
+                  "read this link https://example.com/kettle",
+                  "summarise https://example.com/kettle",
+                  "read https://example.com/kettle, not the other one",
+                  "not sure, read https://example.com/kettle and tell me"):
+        got = Q.match(words)
+        check(f"a real request still matches: {words!r}",
+              got is not None and got.name == "read_link",
+              None if got is None else (got.name, got.f))
+
+
+def t_read_this_link_with_no_address_says_how_to_give_one():
+    """BUG 5: `READ_LINK_NO_URL` was a constant nothing could ever print.
+
+    *"read this link"* with no address fell to the model, so the friendly
+    sentence - "Say the address to read, starting with http:// or https://" -
+    was unreachable. The matcher now produces the intent with an empty url for
+    exactly that shape, and the runner answers with the constant; a bare "read
+    this" is still the model's, because it may mean anything.
+    """
+    for words in ("read this link", "summarise this page", "read the article"):
+        got = Q.match(words)
+        check(f"{words!r} reaches the runner with no address",
+              got is not None and got.name == "read_link"
+              and got.f.get("url") == "", None if got is None else (got.name, got.f))
+        if got is not None and got.name == "read_link":
+            res = Q._run_read_link(got.f, gate=FakeGate(), tier_of=never_tier)
+            check("...and answers with the sentence that was dead",
+                  res is not None and res.reply == Q.READ_LINK_NO_URL
+                  and Q.READ_LINK_NO_URL.startswith("Say the address"),
+                  None if res is None else res.reply)
+    for words in ("read this", "here is a link https://example.com/kettle"):
+        got = Q.match(words)
+        check(f"{words!r} is still not a read_link",
+              got is None or got.name != "read_link",
+              None if got is None else got.name)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":

@@ -1422,6 +1422,429 @@ def t_undo_nothing_says_nothing_is_mine_to_take_back():
         R.BOOL_SETTINGS = real
 
 
+# --------------------------------------------------------------------------
+#   9. The 2026-11-03 audit's BUG 1: an undo must hand the setter its VALUE
+#      (the suites above missed it: they drive a bool with a stub setter)
+# --------------------------------------------------------------------------
+
+class _Owners:
+    """The nine modules the ten named-choice rows own, kept in memory.
+
+    WHY A STAND-IN AND NOT THE REAL MODULES. Two of the ten cannot run at a
+    test desk at all: `focus_preset` really applies a preset and raises a
+    model-switch card, and the face needs the running server's appearance
+    patch. The rest would need a voices pack, a Manner contract and a schedule
+    file - state this suite must not read or write.
+
+    So each module is replaced by a stand-in that keeps ONE value and is read
+    by exactly the functions `ChoiceSetting.now()` calls and written by exactly
+    the function that row's setter calls. Both sides therefore see the same
+    value, and every stand-in ACCEPTS ITS MODULE'S REAL VALUES AND REFUSES
+    ANYTHING ELSE (a mode id, a voice id, a preset id, a face id, the two
+    approval modes). That is what makes the old word-for-value bug fail here
+    instead of passing quietly: the receipt used to store the display word
+    ("stop early", "Arc", "skip"), and these setters refuse it exactly as the
+    real ones did.
+    """
+
+    _ABSENT = object()
+
+    MODES = {"handoff_mode": ("stop_early", "keep_offering"),
+             "handoff_front": ("leave_in_place", "bring_to_front")}
+    VOICES = {"am_heart": "American (female) - Heart",
+              "am_sky": "American (female) - Sky"}
+    PERSONALITIES = {"warm_peer": ("Warm Collaborator", ("warm",)),
+                     "tactical_ops": ("Plain Tactician", ("plain",))}
+    PRESETS = (("coding", "Coding Focus"), ("writing", "Long-Form Writing"))
+    FACES = (("arc", "Arc"), ("redpanda", "Red Panda"))
+    TODO_WORDS = ({"value": "rollover", "label": "Daily rollover"},
+                  {"value": "day", "label": "Day by day"})
+
+    def __init__(self):
+        #: key -> the VALUE the row's setter takes, which is what each module
+        #: really stores (the mode id, the voice id, ...). `small_approvals` is
+        #: the BOOL its signature asks for, mapped to a mode by the stand-in.
+        self.state = {
+            "handoff_mode": "keep_offering",
+            "handoff_front": "bring_to_front",
+            "voice_speed": "normal",
+            "voice_speaker": "am_heart",
+            "personality": "warm_peer",
+            "focus_preset": "coding",
+            "face": "arc",
+            "antislop_mode": "during",
+            "small_approvals": False,      # jarvis_owner_check.MODE_SMALL
+            "todo_carryover": "day",
+        }
+        self.calls = []
+        self._saved = {}
+
+    # ---- the stand-in modules' functions -------------------------------
+    def _handoff(self, which, mode):
+        self.calls.append((which, mode))
+        if mode not in self.MODES[which]:
+            said = ('Choose "Stop early" or "Keep offering it".' if which == "handoff_mode"
+                    else 'Choose "Leave it where it is" or "Bring it to the front".')
+            return 400, {"ok": False, "error": said}
+        self.state[which] = mode
+        return 200, {"ok": True, "said": f"{mode} now."}
+
+    def _voice(self, body, field, allowed, key):
+        value = str((body or {}).get(field) or "")
+        self.calls.append((key, value))
+        if value not in allowed:
+            return 400, {"ok": False, "message": f"{value!r} is not a {field}."}
+        self.state[key] = value
+        return 200, {"ok": True, "said": f"{field}: {value}."}
+
+    def _personality(self, pid, *, keep_dials=False):
+        self.calls.append(("personality", pid))
+        if pid not in self.PERSONALITIES:
+            return False, "I do not have a personality called that."
+        self.state["personality"] = pid
+        return True, f"Personality: {self.PERSONALITIES[pid][0]}."
+
+    def _preset(self, body):
+        pid = str((body or {}).get("preset") or "")
+        self.calls.append(("focus_preset", pid))
+        if pid not in dict(self.PRESETS):
+            return 400, {"ok": False, "message": "I do not have a preset called that."}
+        self.state["focus_preset"] = pid
+        return 200, {"ok": True, "said": f"Preset: {dict(self.PRESETS)[pid]}."}
+
+    def _antislop_mode(self, mode):
+        self.calls.append(("antislop_mode", mode))
+        if mode not in ("during", "after"):
+            raise ValueError('The Anti-Slop mode is "during" or "after".')
+        self.state["antislop_mode"] = mode
+        return {"ok": True, "said": f"Anti-Slop mode: {mode}."}
+
+    def _face(self, face_id):
+        self.calls.append(("face", face_id))
+        ids = [fid for fid, _name in self.FACES]
+        if str(face_id) not in ids:
+            return 400, {"error": "unknown face",
+                         "faces": [name for _fid, name in self.FACES]}
+        self.state["face"] = str(face_id)
+        return 200, {"ok": True, "said": "Face set."}
+
+    def _approvals_mode(self):
+        return "risky" if self.state["small_approvals"] else "small"
+
+    def _set_approvals_mode(self, mode):
+        self.calls.append(("small_approvals", mode))
+        self.state["small_approvals"] = (str(mode) != "small")
+        return str(mode)
+
+    def _set_todo_mode(self, mode):
+        self.calls.append(("todo_carryover", mode))
+        if str(mode) not in ("rollover", "day"):
+            raise ValueError("The to-do list mode is rollover or day.")
+        self.state["todo_carryover"] = str(mode)
+        return str(mode)
+
+    def _todo_get(self):
+        owner = self
+
+        class _Stored:
+            def todo_mode(self_inner):
+                return owner.state["todo_carryover"]
+
+        return _Stored()
+
+    # ---- the modules themselves ----------------------------------------
+    def modules(self):
+        import types
+        import dataclasses as _dc
+        out = {}
+
+        hm = types.ModuleType("jarvis_handoff_mode")
+        hm.view = lambda: {"mode": self.state["handoff_mode"]}
+        hm.request = lambda mode: self._handoff("handoff_mode", str(mode))
+        out["jarvis_handoff_mode"] = hm
+
+        hf = types.ModuleType("jarvis_handoff_front")
+        hf.view = lambda: {"mode": self.state["handoff_front"]}
+        hf.request = lambda mode: self._handoff("handoff_front", str(mode))
+        out["jarvis_handoff_front"] = hf
+
+        jv = types.ModuleType("jarvis_voices")
+        jv.speed_view = lambda: {"choice": self.state["voice_speed"]}
+        jv.set_speed = lambda body: self._voice(
+            body, "speed", ("slower", "normal", "faster"), "voice_speed")
+        jv.speaker_view = lambda: {
+            "choice": self.state["voice_speaker"],
+            "choices": [{"id": pid, "label": label} for pid, label in self.VOICES.items()]}
+        jv.set_speaker = lambda body: self._voice(
+            body, "speaker", tuple(self.VOICES), "voice_speaker")
+        out["jarvis_voices"] = jv
+
+        mn = types.ModuleType("jarvis_manner")
+        mn.all_personalities = lambda: [
+            {"id": pid, "title": title, "aliases": list(aliases)}
+            for pid, (title, aliases) in self.PERSONALITIES.items()]
+        mn.current_personality = lambda conversation_id=None: self.state["personality"]
+        mn.preset = lambda pid: ({"id": pid,
+                                  "title": self.PERSONALITIES[pid][0]}
+                                 if pid in self.PERSONALITIES else None)
+        mn.set_personality = self._personality
+        out["jarvis_manner"] = mn
+
+        jp = types.ModuleType("jarvis_presets")
+        jp.PRESETS = [_dc.make_dataclass("P", ["id", "title"])(pid, title)
+                      for pid, title in self.PRESETS]
+        jp.choice = lambda: self.state["focus_preset"]
+        jp.by_id = lambda pid: next((p for p in jp.PRESETS if p.id == pid), None)
+        jp.apply_from_body = self._preset
+        out["jarvis_presets"] = jp
+
+        av = types.ModuleType("jarvis_antislop")
+        av.get_state = lambda: {"mode": self.state["antislop_mode"]}
+        av.set_mode = self._antislop_mode
+        out["jarvis_antislop"] = av
+
+        oc = types.ModuleType("jarvis_owner_check")
+        oc.MODE_SMALL, oc.MODE_RISKY, oc.MODE_EVERY = "small", "risky", "every"
+        oc.approvals_mode = self._approvals_mode
+        oc.set_approvals_mode = self._set_approvals_mode
+        oc.from_this_pc = lambda peer, local=None, own=None: True
+        out["jarvis_owner_check"] = oc
+
+        js = types.ModuleType("jarvis_schedule")
+        js.UNDO_WINDOW = 600.0
+        js.TODO_MODE_WORDS = tuple(self.TODO_WORDS)
+        js.get = self._todo_get
+        js.set_todo_mode_here = self._set_todo_mode
+        out["jarvis_schedule"] = js
+
+        hud = types.ModuleType("jarvis_hud")
+        hud._appearance_faces = lambda: [{"id": fid, "name": name}
+                                         for fid, name in self.FACES]
+        hud._appearance_view = lambda: {"readable": True, "face": self.state["face"]}
+        hud._appearance_set_face = self._face
+        out["jarvis_hud"] = hud
+        return out
+
+    def install(self):
+        mods = self.modules()
+        self._saved = {name: sys.modules.get(name, self._ABSENT) for name in mods}
+        sys.modules.update(mods)
+        return self
+
+    def restore(self):
+        for name, old in self._saved.items():
+            if old is self._ABSENT:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = old
+        self._saved = {}
+
+
+def t_every_named_choice_undoes_to_its_own_value_read_back_by_its_own_reader():
+    """EVERY one of the ten CHOICE_SETTINGS rows: change it, undo it, read it.
+
+    THE TEST THE 2026-11-03 AUDIT ASKED FOR. The audit's BUG 1 was invisible
+    because the only undo test drove a BOOL with a stub setter: the receipt
+    stored the row's DISPLAY WORD and the reversal handed that word to a setter
+    that takes the VALUE. `small_approvals` came back with the fingerprint
+    still required while the answer claimed success, and the face, both
+    hand-off rows, the voice, the personality and the preset were refused.
+
+    So this drives each row's REAL setter through the REAL receipt and the REAL
+    "undo", then reads the value back through the ROW'S OWN READER
+    (`current_value` -> `ChoiceSetting.now` -> the owning module) and requires
+    it to equal what it was before. On the code before this fix, SEVEN of the
+    ten fail: both hand-off rows, the voice, the personality, the focus preset,
+    the face and `small_approvals`.
+
+    THE STAND-INS ARE CARDLESS, ON PURPOSE, so the round trip can be measured.
+    On a real PC three of these reversals raise the setting's own approval card
+    and the value only goes back after that card is answered: `handoff_mode`
+    back to "keep offering", `handoff_front` back to "bring it to the front",
+    and `focus_preset` back to a preset (its switch_model card). Their cards are
+    pinned by test_handoff_mode.py, test_handoff_front.py and
+    test_presets_apply.py, and JARVIS-API §183 states the rule. What THIS test
+    pins is the half that was broken and that no suite covered: the value the
+    setter is handed is the row's own VALUE, never its display word.
+    """
+    import time
+
+    import jarvis_receipts as RC
+
+    owners = _Owners().install()
+    try:
+        check("the fixture covers every CHOICE_SETTINGS row",
+              {c.key for c in R.CHOICE_SETTINGS} <= set(owners.state),
+              sorted(set(owners.state)))
+        for setting in R.CHOICE_SETTINGS:
+            key = setting.key
+            conv = f"settings-undo-choice-{key}"
+            before_word = R.current_value(setting)
+            before_value = owners.state.get(key)
+            check(f"{key}: the row's own reader answers before the change",
+                  before_word is not None, before_word)
+            values = list(dict.fromkeys(setting.options().values()))
+            change = next((v for v in values if v != before_value), None)
+            check(f"{key}: the row offers a second value to change to",
+                  change is not None, values)
+            if change is None or before_word is None:
+                continue
+            res = Q._run_settings_choice({"key": key, "value": change}, None, None,
+                                         conversation=conv)
+            check(f"{key}: the change really happened",
+                  owners.state.get(key) == change,
+                  (change, owners.state.get(key), None if res is None else res.reply))
+            rows = len(RC.recent(200))
+            undo = Q._run_undo({"noun": None, "soft": False}, _SchedStub(),
+                               time.time(), conv)
+            check(f"{key}: the change left its one receipt",
+                  rows >= 1 and undo is not None,
+                  (rows, None if undo is None else undo.reply))
+            check(f"{key}: 'undo' puts the setter's VALUE back",
+                  owners.state.get(key) == before_value,
+                  (before_value, owners.state.get(key),
+                   None if undo is None else undo.reply))
+            check(f"{key}: ...and the row's own reader says so",
+                  R.current_value(setting) == before_word,
+                  (before_word, R.current_value(setting),
+                   None if undo is None else undo.reply))
+    finally:
+        owners.restore()
+
+
+def t_small_approvals_undo_puts_the_fingerprint_rule_back():
+    """The one row that LIED about it, checked on its own, in the owner's terms.
+
+    "Ask for my fingerprint on the small cards too", then "undo": before this
+    fix the answer said it worked and `jarvis_owner_check.approvals_mode()` was
+    still MODE_RISKY, so the fingerprint stayed on every small card. The value
+    the setter takes is a BOOL, and that is what the receipt must hold.
+    """
+    import time
+
+    import jarvis_receipts as RC
+
+    owners = _Owners().install()
+    setting = next(c for c in R.CHOICE_SETTINGS if c.key == "small_approvals")
+    conv = "settings-undo-small-approvals"
+    try:
+        check("the small-approvals row starts at the shipped default (no fingerprint)",
+              owners._approvals_mode() == "small", owners._approvals_mode())
+        Q._run_settings_choice({"key": "small_approvals", "value": True}, None, None,
+                               conversation=conv)
+        check("asking for the fingerprint really turns it on",
+              owners._approvals_mode() == "risky", owners._approvals_mode())
+        undo = Q._run_undo({"noun": None, "soft": False}, _SchedStub(),
+                           time.time(), conv)
+        check("'undo' reads the mode back to MODE_SMALL - the fingerprint is NOT required "
+              "for small cards again",
+              owners._approvals_mode() == "small",
+              (owners._approvals_mode(), None if undo is None else undo.reply))
+        check("...and the row's own reader says 'skip', the word the owner may say back",
+              R.current_value(setting) == "skip", R.current_value(setting))
+        check("...and the receipt is marked undone, so no app offers it again",
+              bool(undo) and RC.get(str((RC.recent(1) or [{}])[0].get("receipt_id")
+                                        or "")).get("undone") is True,
+              (None if undo is None else undo.reply, RC.recent(1)))
+    finally:
+        owners.restore()
+
+
+def t_a_refused_undo_quotes_the_setter_and_keeps_the_chat_pointer():
+    """A plain setter refusal is NOT a card, and a failed undo is not the end.
+
+    BUG 2 (2026-11-03 audit): every failure said "Undo raised its own card and
+    it was not answered", including a setter that refused outright and raised
+    no card at all. BUG 4: the chat's pointer was popped BEFORE the reversal,
+    so the next "undo" answered "nothing here for me to take back" while the
+    receipt was still undoable in the store.
+    """
+    import time
+
+    class _Refuses:
+        def __init__(self):
+            self.calls = []
+
+        def set_(self, on, *, peer=None, local=None):
+            self.calls.append(bool(on))
+            if on:
+                return R.Outcome(True, "It is on now.")
+            return R.Outcome(False, "That cannot be put back from here. Nothing was "
+                                    "changed.")
+
+        def setting(self):
+            return R.BoolSetting("a refusing test setting",
+                                 ("a refusing test setting",), None, self.set_)
+
+    sw = _Refuses()
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(real) + (sw.setting(),)
+    conv = "settings-undo-0007"
+    try:
+        Q._run_settings_bool({"key": "a refusing test setting", "on": True}, None, None,
+                             conversation=conv)
+        undo = Q._run_undo({"noun": None, "soft": False}, _SchedStub(),
+                           time.time(), conv)
+        check("a refused reversal quotes the setter's own words",
+              undo is not None and "cannot be put back from here" in undo.reply,
+              None if undo is None else undo.reply)
+        check("...and does NOT invent an approval card",
+              undo is not None and "raised its own card" not in undo.reply,
+              None if undo is None else undo.reply)
+        check("...and says plainly that nothing was changed",
+              undo is not None and "nothing was changed" in undo.reply.lower(),
+              None if undo is None else undo.reply)
+        again = Q._run_undo({"noun": None, "soft": False}, _SchedStub(),
+                            time.time(), conv)
+        check("a failed undo keeps the chat's pointer, so 'undo' really tries again",
+              sw.calls == [True, False, False],
+              (sw.calls, None if again is None else again.reply))
+        check("...and the retry repeats the refusal, never 'nothing to take back'",
+              again is not None and again.reply != Q.UNDO_NOTHING_SAID
+              and "cannot be put back from here" in again.reply,
+              None if again is None else again.reply)
+    finally:
+        R.BOOL_SETTINGS = real
+
+
+def t_only_a_real_unanswered_card_says_the_card_thing():
+    """The other half of BUG 2: when a card IS what stopped it, say so - once."""
+    import time
+
+    class _Cards:
+        def __init__(self):
+            self.calls = []
+
+        def set_(self, on, *, peer=None, local=None):
+            self.calls.append(bool(on))
+            if on:
+                return R.Outcome(True, "It is on now.")
+            return R.Outcome(True, "Waiting for your approval.", waiting=True)
+
+        def setting(self):
+            return R.BoolSetting("a carded test setting",
+                                 ("a carded test setting",), None, self.set_)
+
+    sw = _Cards()
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(real) + (sw.setting(),)
+    conv = "settings-undo-0008"
+    try:
+        Q._run_settings_bool({"key": "a carded test setting", "on": True}, None, None,
+                             conversation=conv)
+        undo = Q._run_undo({"noun": None, "soft": False}, _SchedStub(),
+                           time.time(), conv)
+        check("a reversal that raised its own card says the card thing",
+              undo is not None and "raised its own card" in undo.reply
+              and "not answered" in undo.reply,
+              None if undo is None else undo.reply)
+        check("...and still never claims the setting changed",
+              undo is not None and "nothing was changed" in undo.reply.lower(),
+              None if undo is None else undo.reply)
+    finally:
+        R.BOOL_SETTINGS = real
+
+
 if __name__ == "__main__":
     for fn in (t_the_tool_exists_and_is_offered_only_when_enabled,
                t_asking_and_speaking_run_the_same_function,
@@ -1454,6 +1877,10 @@ if __name__ == "__main__":
                t_undo_carries_the_device_that_asked_so_a_phone_cannot_use_it,
                t_the_receipt_is_persisted_and_a_restart_can_still_put_it_back,
                t_undo_nothing_says_nothing_is_mine_to_take_back,
+               t_every_named_choice_undoes_to_its_own_value_read_back_by_its_own_reader,
+               t_small_approvals_undo_puts_the_fingerprint_rule_back,
+               t_a_refused_undo_quotes_the_setter_and_keeps_the_chat_pointer,
+               t_only_a_real_unanswered_card_says_the_card_thing,
                t_it_ships_on_so_a_turn_really_offers_it,
                t_its_description_tells_the_model_to_call_it,
                t_the_tier_rule_is_untouched_by_the_wording):

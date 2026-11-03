@@ -3478,13 +3478,54 @@ _READ_LINK_VERB = re.compile(
 _READ_LINK_WATCH = re.compile(
     r"\b(?:tell|let|notify|text|message|ping|mail|email)\s+me\s+(?:when|if)\b")
 
+#: A sentence that is a STATEMENT, not a request (2026-11-03 audit, BUG 3).
+#: "don't read https://x" and "i already read https://x yesterday" are the
+#: owner telling Jarvis something, not asking it - and each one used to raise a
+#: real approval card. Refused here, beside the watch guard, in the same shape:
+#:
+#:   * a negation or a completed-action word BEFORE a read verb
+#:     ("don't ... read", "already ... read", "never ... summarise"); and
+#:   * a first/third-person subject directly before "read" ("i read ...",
+#:     "she already read ..."), which is the past tense spelled like the
+#:     imperative.
+#:
+#: The order matters: "read https://x, not the other one" is still a request,
+#: because the "not" comes after the verb, and so is "not sure, read ..." - a
+#: bare "not" only refuses when the read verb follows it within one word
+#: ("not read", "not to read"), never when it starts another clause.
+_READ_LINK_STATEMENT = re.compile(
+    r"(?:\b(?:do\s+not|don'?t|did\s+not|didn'?t|does\s+not|doesn'?t|never|"
+    r"no\s+longer|already)\b[^.!?]{0,40}?"
+    r"\b(?:read|reading|summari[sz]e|summari[sz]ing|sum\s+up)\b)"
+    r"|(?:\bnot\s+(?:\w+\s+){0,1}?(?:read|reading|summari[sz]e|summari[sz]ing|"
+    r"sum\s+up)\b)"
+    r"|(?:\b(?:i|we|he|she|they)\s+(?:already\s+|just\s+|once\s+)?read\b)")
+
+#: "read this link" with NO address (2026-11-03 audit, BUG 5). The runner's own
+#: sentence (`READ_LINK_NO_URL`) tells the owner how to give one, and until this
+#: was matched that constant could never be printed. Only a read verb plus one
+#: of the nouns that cannot mean anything else is matched: a bare "read this"
+#: is still the model's, because it may mean anything.
+_READ_LINK_WANT = re.compile(
+    r"\b(?:read|reading|summari[sz]e|summari[sz]ing|sum\s+up)\b"
+    r"[^.!?]{0,40}?\b(?:link|url|address|web\s*page|webpage|page|article|video)\b")
+
 
 def _read_link_intent(text, s: str) -> Optional[Intent]:
     """`Intent("read_link", {"url", "words"})`, or None - the sentence is not
     a request to read a link."""
     raw = str(text or "")
+    low = str(s or "").lower()
+    if _READ_LINK_WATCH.search(low):
+        return None              # a watch on a page, not a read of it
+    if _READ_LINK_STATEMENT.search(low):
+        return None              # a statement, not a request (BUG 3)
     m = _READ_LINK_URL.search(raw)
     if m is None:
+        # No address at all: only "read this link"-shaped words reach the
+        # runner, so its own "say the address" sentence is reachable (BUG 5).
+        if _READ_LINK_WANT.search(low):
+            return Intent("read_link", {"url": "", "words": low})
         return None
     url = m.group(0).rstrip(".,;:!?]}'\u2019\u201d\"")
     # A closing bracket that OPENS inside the link is part of it
@@ -3493,9 +3534,6 @@ def _read_link_intent(text, s: str) -> Optional[Intent]:
         url = url[:-1].rstrip(".,;:!?]}")
     if not url or len(url) > 500:
         return None
-    low = str(s or "").lower()
-    if _READ_LINK_WATCH.search(low):
-        return None              # a watch on a page, not a read of it
     if not _READ_LINK_VERB.search(low):
         return None              # a link with no "read it" in the sentence
     return Intent("read_link", {"url": url, "words": low})
@@ -14583,10 +14621,67 @@ _SETTINGS_UNDO_MAX = 200
 #: fingerprint) must not be put back by a phone either.
 _SETTINGS_UNDO_CALLER = threading.local()
 
-#: Said when "undo" found a receipt it could not put back. Never a claim that
-#: the setting changed.
-SETTINGS_UNDO_FAILED = ("I could not put {label} back, so nothing was changed. Undo "
-                        "raised its own card and it was not answered.")
+#: Said when "undo" found a receipt it could not put back and the setting's own
+#: setter gave no words at all. Never a claim that the setting changed, and
+#: never a claim that a card exists - a plain setter refusal is not a card.
+SETTINGS_UNDO_FAILED = "I could not put {label} back, so nothing was changed."
+
+#: Said ONLY when the reversal really raised that setting's own approval card
+#: and it was not answered (2026-11-03 audit, BUG 2). One case, one sentence:
+#: before this, every failure - including a setter that refused outright and
+#: raised no card at all - was reported as an unanswered card.
+SETTINGS_UNDO_CARD = ("I could not put {label} back, so nothing was changed. Undo raised "
+                      "its own card and it was not answered.")
+
+
+class _UndoRefused(RuntimeError):
+    """A reversal the setting's own setter refused, carrying its own words.
+
+    `waiting` is True ONLY when that setter raised its own approval card, so
+    "undo" can say the card thing for a card and quote the setter otherwise.
+    """
+
+    def __init__(self, said: str, waiting: bool = False):
+        super().__init__(str(said or ""))
+        self.said = str(said or "")
+        self.waiting = bool(waiting)
+
+
+#: The words of the LAST refusal in this thread, and whether a card is what
+#: stopped it. `_restore_settings_change` writes it before raising, so "undo"
+#: can quote a refusal whichever way it was reached: the live closure this
+#: process registered, or - after a restart, when the receipts module falls back
+#: to the snapshot restorer - the same function by name. A failed undo releases
+#: its claim but NOT its closure, so the second try arrives by that second path.
+_SETTINGS_UNDO_LAST = threading.local()
+
+
+def _settings_refuse(said: str, waiting: bool = False):
+    """Raise the refusal AND remember its words for the answer in this thread."""
+    err = _UndoRefused(said, waiting)
+    _SETTINGS_UNDO_LAST.said = err.said
+    _SETTINGS_UNDO_LAST.waiting = err.waiting
+    raise err
+
+
+def _settings_undo_words(label: str, said: str, waiting: bool = False) -> str:
+    """What "undo" says when the reversal did NOT happen - one honest case each.
+
+    A real, unanswered card says the card thing (`SETTINGS_UNDO_CARD`). A plain
+    setter refusal quotes the setter's own words (`choice_bad_words`,
+    `_SMALL_APPROVALS_PC_ONLY`, ...), prefixed by the one fact that is always
+    true - nothing was changed - and never mentions a card it did not raise.
+    With no words from anyone, `SETTINGS_UNDO_FAILED` says only what is known.
+    """
+    said = " ".join(str(said or "").split())
+    if waiting:
+        return SETTINGS_UNDO_CARD.format(label=label)
+    if not said:
+        return SETTINGS_UNDO_FAILED.format(label=label)
+    low = said.lower()
+    if "nothing was changed" in low or "nothing has changed" in low:
+        return said
+    return f"{SETTINGS_UNDO_FAILED.format(label=label)} {said}"
 
 
 def _setting_label(setting) -> str:
@@ -14610,52 +14705,128 @@ def _settings_waiting_line(setting) -> str:
             f"phone or PC and it changes.")
 
 
+def _settings_row(key: str, kind: str = ""):
+    """`(kind, row)` for a stored receipt's `before` snapshot.
+
+    The KIND is written into the snapshot for the rows that are not a setting
+    object (the animal switches, the sun and moon, the weather source). A
+    receipt written before 2026-11-03 carries no kind, so the key alone finds
+    the row - which is what the registry's unique keys are for.
+    """
+    import jarvis_settings_registry as R
+    if kind in ("", "bool"):
+        row = next((b for b in R.BOOL_SETTINGS if b.key == key), None)
+        if row is not None:
+            return "bool", row
+    if kind in ("", "choice"):
+        row = next((c for c in R.CHOICE_SETTINGS if c.key == key), None)
+        if row is not None:
+            return "choice", row
+    if kind in ("", "number"):
+        row = next((n for n in R.NUMBER_SETTINGS if n.key == key), None)
+        if row is not None:
+            return "number", row
+    return str(kind or ""), None
+
+
+def _choice_value(setting, value):
+    """The VALUE this row's setter takes, from a snapshot's stored value.
+
+    A snapshot written by the first version of this receipt stored the row's
+    own DISPLAY WORDS (`ChoiceSetting.now()`), and handing those to a setter is
+    the 2026-11-03 audit's BUG 1. They are resolved through the row's own
+    `options()` - `choice_from_words`, the same step the write path makes,
+    never a second hand-typed mapping - so an older receipt is repaired too.
+    A value that is already a value (a bool, or an id the row does not list as
+    an alias) is left exactly as it is.
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        import jarvis_settings_registry as R
+        got = R.choice_from_words(setting, value)
+    except Exception:                       # noqa: BLE001 - the value is the answer
+        got = None
+    return value if got is None else got
+
+
 def _restore_settings_change(before, peer=None, local=None):
     """Put one settings receipt's `before` value back, through its OWN setter.
 
     This is BOTH the restorer the receipts module keeps for a new process
     (registered just before the receipt is written) and the function a spoken
-    "undo" ends in. It goes through the same `BoolSetting.set` /
-    `ChoiceSetting.set` every other path uses, so a "put it back" that loosens
-    something raises that setting's own card like any other change - and one
-    that only the PC may change still refuses from the phone.
+    "undo" ends in. It goes through the same setter every other change uses,
+    so a "put it back" that loosens something raises that setting's own card
+    like any other change - and one that only the PC may change still refuses
+    from the phone.
 
-    Raises when the setting did NOT really go back, so the receipt is not
-    marked undone for a change that did not happen - and the setter's own
-    sentence is the exception's message, so the answer can quote it.
+    The snapshot holds the VALUE, not the words the answer prints: a named
+    choice is resolved back through the row's own `options()` (`_choice_value`),
+    and the number, the animal switches, the sun and moon and the weather
+    source each reach the same registry setter their own runner calls. A
+    refusal from any of them is a refusal here - nothing is marked undone.
+
+    Raises `_UndoRefused` when the setting did NOT really go back, carrying the
+    setter's own sentence (and whether a card is what stopped it), so the answer
+    can quote it.
     """
     got = dict(before or {})
     key = str(got.get("key") or "")
     value = got.get("value")
     import jarvis_settings_registry as R
-    setting = next((b for b in R.BOOL_SETTINGS if b.key == key), None)
-    if setting is not None:
-        out = setting.set(bool(value), peer=peer, local=local)
-    else:
-        setting = next((c for c in R.CHOICE_SETTINGS if c.key == key), None)
-        if setting is None:
-            raise RuntimeError("that setting is not on this PC any more, so nothing was "
-                               "changed")
+    kind, setting = _settings_row(key, str(got.get("kind") or ""))
+    if kind in ("bool", "choice", "number") and setting is not None:
+        if kind == "bool":
+            value = bool(value)
+        elif kind == "choice":
+            value = _choice_value(setting, value)
+        else:
+            try:
+                value = int(round(float(value)))
+            except (TypeError, ValueError):
+                _settings_refuse(f"the receipt did not hold a number for {key}, so "
+                                 f"nothing was changed")
         out = setting.set(value, peer=peer, local=local)
+    elif kind == "animal_switch":
+        out = R.set_animal_switch(key, bool(value), peer=peer, local=local)
+    elif kind == "sky_show":
+        out = R.set_sky_show(bool(value), peer=peer, local=local)
+    elif kind == "weather_source":
+        out = R.set_weather_source(str(value or ""), peer=peer, local=local)
+    else:
+        _settings_refuse("that setting is not on this PC any more, so nothing was "
+                         "changed")
     if getattr(out, "waiting", False) or not getattr(out, "ok", False):
-        raise RuntimeError(str(getattr(out, "said", "") or "").strip()
-                           or "the setting did not go back")
+        _settings_refuse(str(getattr(out, "said", "") or "").strip()
+                         or "the setting did not go back",
+                         waiting=bool(getattr(out, "waiting", False)))
     return out
 
 
 def _setting_before(setting, f: dict):
-    """{"key", "value"} - the setting's value before this change, or None.
+    """{"kind", "key", "value"} - the setting's VALUE before this change, or None.
 
     A bool needs no reader: it has two states, so the value it just changed
-    FROM is the other one, exactly. A named-choice setting does need one, and
-    the registry's own reader may not exist on every PC yet (it is being added
-    by another slice), so it is only ever asked for defensively. None means
-    "not readable", and then NO receipt is written rather than one whose
-    "before" is a guess.
+    FROM is the other one, exactly. A named-choice setting DOES need one, and
+    the registry's own reader answers in the row's own WORDS - so the word is
+    resolved back to the VALUE its setter takes, through that row's own
+    `options()` (`choice_from_words`), the same step the write path makes.
+
+    Storing the word instead was the 2026-11-03 audit's BUG 1: `small_approvals`
+    was handed "skip" (a truthy string, so the stricter branch ran and the
+    fingerprint stayed on) and the face, both hand-off rows, the voice, the
+    personality and the focus preset were refused. `small_approvals` now stores
+    the bool its setter's signature asks for.
+
+    None means "not readable, OR not a value this row can be put back TO", and
+    then NO receipt is written rather than one whose "before" is a guess. The
+    face with no face chosen and the focus preset with no preset applied are
+    that second case: the row reads, but nothing in its own list is the value
+    that means "none" - applying a preset or a face is one-way.
     """
     key = str((f or {}).get("key") or "")
     if "on" in (f or {}):
-        return {"key": key, "value": not bool(f.get("on"))}
+        return {"kind": "bool", "key": key, "value": not bool(f.get("on"))}
     now = None
     try:
         import jarvis_settings_registry as R
@@ -14677,7 +14848,20 @@ def _setting_before(setting, f: dict):
             break
     if now is None:
         return None
-    return {"key": key, "value": now}
+    kind = "choice"
+    try:
+        import jarvis_settings_registry as R
+        if isinstance(setting, R.ChoiceSetting):
+            value = R.choice_from_words(setting, now)
+        elif isinstance(setting, R.NumberSetting):
+            kind, value = "number", now
+        else:
+            kind, value = "bool", bool(now)
+    except Exception:                       # noqa: BLE001 - None is the answer
+        value = None
+    if value is None:
+        return None                         # the row has no such value to go back to
+    return {"kind": kind, "key": key, "value": value}
 
 
 def _newest_receipt_id() -> str:
@@ -14697,7 +14881,7 @@ def _newest_receipt_id() -> str:
 
 
 def _settings_receipt(conversation, setting, before, after, summary: str,
-                      since: str = "") -> None:
+                      since: str = "", label: str = "") -> None:
     """One receipt for a CARDLESS settings change, and the record "undo" reads.
 
     `changeable_words()` has told the owner 'say "undo" in the same chat if you
@@ -14710,21 +14894,25 @@ def _settings_receipt(conversation, setting, before, after, summary: str,
     `since` is the newest receipt's id read BEFORE the setter ran: when the
     setting's own module has written one in between, that receipt is the one
     the apps show and this function writes nothing.
+
+    `label` names the change for the answer and the row's summary. The rows
+    that are not a setting object (an animal switch, the sun and moon, the
+    weather source, the Live timeout) have no `names`, so their own runner
+    passes the label the Settings page shows.
     """
     if _newest_receipt_id() != str(since or ""):
         return                          # the setting's own module already receipted it
     entry: dict = {"receipt_id": "", "before": dict(before or {}), "said": {},
-                   "label": _setting_label(setting), "at": time.time()}
+                   "label": label or _setting_label(setting), "at": time.time()}
 
     def undo() -> None:
         peer = getattr(_SETTINGS_UNDO_CALLER, "peer", None)
         local = getattr(_SETTINGS_UNDO_CALLER, "local", None)
-        try:
-            out = _restore_settings_change(before, peer=peer, local=local)
-        except Exception as exc:                      # noqa: BLE001
-            entry["said"]["said"] = str(exc)
-            raise
-        entry["said"]["said"] = str(getattr(out, "said", "") or "")
+        # A refusal raises `_UndoRefused` and records its own words in
+        # `_SETTINGS_UNDO_LAST`; nothing is captured here, so the after-a-restart
+        # snapshot path (which never reaches this closure) says the same thing.
+        out = _restore_settings_change(before, peer=peer, local=local)
+        entry["said"] = {"said": str(getattr(out, "said", "") or ""), "waiting": False}
 
     try:
         import jarvis_receipts as RC
@@ -14779,7 +14967,7 @@ def _run_settings_bool(f: dict, peer, local, live: bool = False,
     out = setting.set(f["on"], peer=peer, local=local)
     if getattr(out, "ok", False) and not getattr(out, "waiting", False):
         _settings_receipt(conversation, setting, before,
-                          {"key": f["key"], "value": bool(f["on"])},
+                          {"kind": "bool", "key": f["key"], "value": bool(f["on"])},
                           f"Turned {_setting_label(setting)} "
                           f"{'on' if f['on'] else 'off'}", since=since)
     return Result(_settings_said(setting, out, live), "settings_bool")
@@ -14801,7 +14989,7 @@ def _run_settings_choice(f: dict, peer, local, live: bool = False,
     out = setting.set(f["value"], peer=peer, local=local)
     if getattr(out, "ok", False) and not getattr(out, "waiting", False):
         _settings_receipt(conversation, setting, before,
-                          {"key": f["key"], "value": str(f["value"])},
+                          {"kind": "choice", "key": f["key"], "value": f["value"]},
                           f"Set {_setting_label(setting)} to {f['value']}", since=since)
     return Result(_settings_said(setting, out, live), "settings_choice")
 
@@ -15080,12 +15268,20 @@ def _run_settings_card_mode(f: dict, peer, local) -> Result:
     return Result(out.said, "settings_card_mode")
 
 
-def _run_animal(n: str, f: dict, peer, local) -> Result:
+def _run_animal(n: str, f: dict, peer, local,
+                conversation: Optional[str] = None) -> Result:
     """Animal options by asking - the same functions the switches call, so
     the same rules: the shared switches and the sun and moon at once, the
     weather off or Home Assistant at once, Open-Meteo ONE approval card
     (jarvis_sky raises it; nothing changes until it is approved); sharpness
-    and frame rate on the device that asked, named in X-Jarvis-Route."""
+    and frame rate on the device that asked, named in X-Jarvis-Route.
+
+    Every one of these is CARDLESS except Open-Meteo's card, so every one of
+    them leaves the same ONE undo receipt a switch does (2026-11-03, the
+    audit's BUG 6 - "a cardless change leaves one receipt" was false for
+    exactly the settings this slice's headline names). The snapshot holds the
+    VALUE each setter takes, read from the owning module's own table.
+    """
     if n == "animal_ask":
         return Result(ANIMAL_QUESTIONS.get(f.get("about"), ANIMAL_QUESTIONS["animal"]), n)
     if n == "animal_device":
@@ -15100,17 +15296,55 @@ def _run_animal(n: str, f: dict, peer, local) -> Result:
     except Exception:
         return Result(SETTINGS_MISSING, n)
     if n == "animal_switch":
-        out = R.set_animal_switch(f["key"], f["on"], peer=peer, local=local)
+        key = str(f.get("key") or "")
+        before = R.animal_switch_value(key)
+        since = _newest_receipt_id()
+        out = R.set_animal_switch(key, f["on"], peer=peer, local=local)
+        if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+                and before is not None and before != bool(f["on"])):
+            label = R.animal_switch_label(key)
+            _settings_receipt(
+                conversation, None,
+                {"kind": "animal_switch", "key": key, "value": before},
+                {"kind": "animal_switch", "key": key, "value": bool(f["on"])},
+                f"Turned {label} {'on' if f['on'] else 'off'}", since=since,
+                label=label)
     elif n == "animal_sky":
+        before = R.sky_show_value()
+        since = _newest_receipt_id()
         out = R.set_sky_show(f["on"], peer=peer, local=local)
+        if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+                and before is not None and before != bool(f["on"])):
+            label = "the sun and moon"
+            _settings_receipt(
+                conversation, None,
+                {"kind": "sky_show", "key": "the sun and moon", "value": before},
+                {"kind": "sky_show", "key": "the sun and moon",
+                 "value": bool(f["on"])},
+                f"Turned {label} {'on' if f['on'] else 'off'}", since=since,
+                label=label)
     elif n == "animal_weather":
-        out = R.set_weather_source(f["source"], peer=peer, local=local)
-        if out.ok and out.waiting:
+        source = str(f.get("source") or "")
+        before = R.weather_source_id()
+        since = _newest_receipt_id()
+        out = R.set_weather_source(source, peer=peer, local=local)
+        if getattr(out, "ok", False) and getattr(out, "waiting", False):
             # jarvis_sky's own two sentences, in one: the card is up and
             # nothing has changed (the card is the only yes - a spoken one
             # approves nothing).
             return Result("An approval card is up - nothing is sent to Open-Meteo until you "
                           "approve it, on your PC or phone.", n)
+        if (getattr(out, "ok", False) and before and before != source):
+            # THE VALUE, NOT THE WORDS: `set_weather_source` takes the id
+            # ("home_assistant") while the answer prints the label.
+            _settings_receipt(
+                conversation, None,
+                {"kind": "weather_source", "key": "the weather source",
+                 "value": before},
+                {"kind": "weather_source", "key": "the weather source",
+                 "value": source},
+                f"Set the weather source to {R.weather_source_label(source)}",
+                since=since, label="the weather source")
     else:
         return Result(ANIMAL_QUESTIONS["animal"], "animal_ask")
     return Result(out.said, n)
@@ -15474,7 +15708,8 @@ def _run_live_idle_ask() -> Result:
         "live_idle_ask")
 
 
-def _run_live_idle_set(f: dict, peer, local) -> Result:
+def _run_live_idle_set(f: dict, peer, local,
+                       conversation: Optional[str] = None) -> Result:
     """Change how long Jarvis Live waits, or refuse and change nothing.
 
     THE ONE WRITER IS THE ROUTE'S OWN. `setting.set` is
@@ -15484,6 +15719,11 @@ def _run_live_idle_set(f: dict, peer, local) -> Result:
     plate. So the range check, the write and the sentence are the ones the owner
     already gets from Settings; this runner adds no rule of its own except
     reading the value back before it says it worked.
+
+    A change that really happened leaves the SAME ONE undo receipt a switch
+    does (2026-11-03, the audit's BUG 6): a before/after pair of the NUMBER in
+    seconds - the value `set_live_idle` takes, not the words "3 minutes" - so
+    "undo" puts the old window back through that same writer.
 
     WHAT IT SAYS, in order:
       * a length that is not a number -> ask for one, change nothing;
@@ -15517,6 +15757,7 @@ def _run_live_idle_set(f: dict, peer, local) -> Result:
     if before == seconds:
         return Result(f"Jarvis Live already waits {want} before it turns off. "
                       f"Nothing was changed.", "live_idle_set")
+    since = _newest_receipt_id()
     try:
         out = setting.set(seconds, peer=peer, local=local)
     except Exception as exc:                # noqa: BLE001 - said, never swallowed
@@ -15539,6 +15780,12 @@ def _run_live_idle_set(f: dict, peer, local) -> Result:
         return Result("I asked the PC to change how long Jarvis Live waits, but it "
                       f"does not read that back, so I will not say it worked. "
                       f"Nothing was changed.", "live_idle_set")
+    _settings_receipt(
+        conversation, setting,
+        {"kind": "number", "key": setting.key, "value": before},
+        {"kind": "number", "key": setting.key, "value": int(seconds)},
+        f"Changed how long Jarvis Live waits to {want}", since=since,
+        label=str(setting.title()))
     return Result(
         f"Okay - Jarvis Live will now wait {want} before turning off when it "
         f"hears nothing. It can be anything {setting.range_words()}, and you can "
@@ -15732,7 +15979,7 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "live_idle_ask":
         return _run_live_idle_ask()
     if n == "live_idle_set":
-        return _run_live_idle_set(f, peer, local)
+        return _run_live_idle_set(f, peer, local, conversation=conversation)
     if n == "settings_choice":
         return _run_settings_choice(f, peer, local, live=live,
                                     conversation=conversation)
@@ -15835,7 +16082,7 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "feature_switch_refused":
         return _run_feature_switch_refused(f)
     if n.startswith("animal_"):
-        return _run_animal(n, f, peer, local)
+        return _run_animal(n, f, peer, local, conversation=conversation)
     if n == "manner_from_now_on":
         return _run_from_now_on(f, conversation, temporary)
     if n == "personality_set":
@@ -16546,37 +16793,54 @@ def _run_settings_undo(conversation, peer=None, local=None) -> Optional[Result]:
     which claims the row with one conditional UPDATE, so even two callers at
     once cannot put the same change back twice. What it says afterwards is the
     SETTER's own sentence when the reversal reached it (the same words the owner
-    would hear saying the change the other way), and a plain "could not put it
-    back" otherwise. A receipt whose reversal raises its own approval card is
-    NOT reported as undone - the setter's "a card is waiting" sentence is.
+    would hear saying the change the other way), and an honest sentence
+    otherwise - a setter's refusal quotes the setter, and only a real card that
+    was not answered says the card thing (`_settings_undo_words`). A receipt
+    whose reversal raises its own approval card is NOT reported as undone.
+
+    A FAILED reversal keeps this chat's pointer (`_SETTINGS_UNDO`), so "undo"
+    can be tried again and the receipt, which is still undoable in the store, is
+    still reachable (2026-11-03 audit, BUG 4: the pointer used to be popped
+    first, so the second "undo" said there was nothing to take back).
 
     `peer`/`local` are THIS request's own address, handed to the setter exactly
     as the change itself would hand them: a phone cannot put back a setting the
     PC only may change, and gets the setter's own refusal saying so.
     """
     key = str(conversation or "")
-    entry = _SETTINGS_UNDO.pop(key, None)
+    entry = _SETTINGS_UNDO.get(key)
     if not entry:
         return None
     n = "undo"
     label = str(entry.get("label") or "that setting")
+    # Clear what a PREVIOUS attempt said, so a failure that never reached the
+    # setter cannot quote the last one's words.
+    entry["said"] = {}
+    _SETTINGS_UNDO_LAST.said = ""
+    _SETTINGS_UNDO_LAST.waiting = False
     _SETTINGS_UNDO_CALLER.peer, _SETTINGS_UNDO_CALLER.local = peer, local
     try:
         import jarvis_receipts as RC
         out = RC.undo(str(entry.get("receipt_id") or ""))
     except Exception:
-        return Result(SETTINGS_UNDO_FAILED.format(label=label), n)
+        return Result(_settings_undo_words(label, ""), n)
     finally:
         _SETTINGS_UNDO_CALLER.peer = _SETTINGS_UNDO_CALLER.local = None
-    said = str((entry.get("said") or {}).get("said") or "").strip()
+    said = str((entry.get("said") or {}).get("said")
+               or getattr(_SETTINGS_UNDO_LAST, "said", "") or "").strip()
+    waiting = bool((entry.get("said") or {}).get("waiting")
+                   or getattr(_SETTINGS_UNDO_LAST, "waiting", False))
     if out.get("ok"):
+        _SETTINGS_UNDO.pop(key, None)
         _SETTINGS_UNDONE[key] = {"label": label, "at": time.time()}
         return Result(said or f"Put {label} back the way it was.", n)
     if out.get("already_undone"):
+        _SETTINGS_UNDO.pop(key, None)
         _SETTINGS_UNDONE[key] = {"label": label, "at": time.time()}
         return Result(f"{label[:1].upper()}{label[1:]} was already back the way it was, so "
                       f"nothing was changed.", n)
-    return Result(said or SETTINGS_UNDO_FAILED.format(label=label), n)
+    # NOT undone: keep the pointer so the next "undo" can try again.
+    return Result(_settings_undo_words(label, said, waiting), n)
 
 
 def _run_undo(f: dict, sched, now: float, conversation, peer=None,
