@@ -531,23 +531,37 @@ def _read_big_model_job(job: str):
     return reader
 
 
-def _read_second_card_feature(feature: str):
-    def reader():
-        import jarvis_second_card as M
-        features = M.status().get("features") or {}
-        if feature not in features:
-            raise LookupError(feature)
-        return features.get(feature) is True
-    return reader
+def _read_second_card_combined():
+    """Read through the module's OWN public reader (2026-11-02).
+
+    The old reader parsed `M.status()["features"]` as a dict keyed by feature
+    id, and looked for "combined" in it. The module changed shape underneath
+    it: `status()` has no "features" key at all any more, the features are a
+    LIST of rows under FEATURE_IDS, and "combined" was never one of them - it
+    is a sibling of `master`, not a feature. So the reader raised, read_state
+    said None, and the Feature Guide answered "I could not read The second
+    graphics card's switch" for a card whose state the module reports fine.
+    `switch_enabled()` is the reader the module itself now exposes for exactly
+    this question: the same state file and the same defaults its own setters
+    use, and an unknown name raises rather than answering "off".
+    """
+    import jarvis_second_card as M
+    return M.switch_enabled("combined") is True
 
 
 def _read_second_card_suggest(signal: str):
+    """Read one suggestion signal through `suggest_setting()` (2026-11-02).
+
+    The old reader looked for `suggest_settings()["switches"]`, which does not
+    exist: that answer is `{available, title, detail, signals:[{id, enabled}]}`
+    - the rows are `signals`, not `switches`. Every second-card suggestion
+    therefore read as None. `suggest_setting(signal)` is the module's own
+    public reader for one signal, and it applies the same default the switch
+    does (both suggestions ON when the state file is missing or damaged).
+    """
     def reader():
         import jarvis_second_card as M
-        for row in M.suggest_settings().get("switches") or ():
-            if isinstance(row, dict) and row.get("id") == signal:
-                return row.get("enabled") is True
-        raise LookupError(signal)
+        return M.switch_enabled(signal) is True
     return reader
 
 
@@ -591,7 +605,7 @@ STATE_READERS = {
     "big_model": _read_big_model,
     "big_model_wiki": _read_big_model_job("wiki"),
     "big_model_deep_questions": _read_big_model_job("deep_questions"),
-    "second_card_combined": _read_second_card_feature("combined"),
+    "second_card_combined": _read_second_card_combined,
     "second_card_suggest_struggle": _read_second_card_suggest("struggle"),
     "second_card_suggest_correction": _read_second_card_suggest("correction"),
     # 2026-11-01: "Say \"One moment\" if I'm kept waiting" became a real switch
@@ -625,32 +639,70 @@ def _registry():
         return None
 
 
-def switches_for(row: dict) -> list:
-    """The BoolSetting objects whose Settings place this feature covers.
+#: Feature id -> switch keys the feature's `covers` section links that are NOT
+#: its own control. A section can hold two unrelated switches, and the section
+#: link alone cannot tell them apart.
+#:
+#: `anti-slop` (measured 2026-11-02): its row covers `settings.manner` because
+#: the filter is switched on the How Jarvis talks card, and that card also holds
+#: the HUMOUR switch. `antislop`'s own BoolSetting carries section None (it is
+#: not a section switch), so the section link found `humor` and missed the real
+#: one: "is the Anti-Slop filter on?" answered "on right now (humour)" and "turn
+#: on the anti-slop filter" resolved to the humour setter. The row's own switch
+#: is linked by `EXTRA_CONTROLS` below; this entry drops the section-mate.
+#: Every key here must be a real switch in the row's own sections, and the row
+#: must still name one switch afterwards - `test_feature_guide.py` checks both,
+#: so the entry cannot quietly remove a row's only control.
+SECTION_MATES_NOT_THIS_FEATURE = {
+    "anti-slop": ("humor",),
+}
 
-    The link is the feature list's own `covers` (`settings.<section id>`) and
-    BoolSetting.section - the same section ids `jarvis_quick` opens by name.
+
+def switches_for(row: dict) -> list:
+    """The BoolSetting objects this feature's OWN controls are.
+
+    The link starts with the feature list's own `covers` (`settings.<section
+    id>`) and BoolSetting.section - the same section ids `jarvis_quick` opens
+    by name - and is then corrected twice, because a section link alone can be
+    wrong in both directions:
+
+      * a switch whose BoolSetting has NO section (its control is drawn inside
+        another card) is linked by hand in `EXTRA_CONTROLS`, exactly as the
+        read path always did. Without this, the answer said "say turn on write
+        like me" while `switch_target()` refused the same phrase as a
+        "Command-Only ability" (write-like-me, lights, picture-mode), and
+        anti-slop read the humour switch instead of its own filter. Measured
+        2026-11-02 on this tree.
+      * a section can hold a DIFFERENT feature's switch as well; those are
+        named in `SECTION_MATES_NOT_THIS_FEATURE` and dropped.
 
     An Always-On SAFETY RULE owns no switch (ALWAYS_ON_IDS, Lead's 2026-10-22
-    ruling), and the section link alone cannot know that: two features can
-    share a section. "Lock Jarvis" (app-lock) and the chat-history switch both
-    live in Settings, Security, so without this an Always-On title would find
-    one switch in its section and "turn on Lock Jarvis" would have turned chat
-    history on (2026-10-28, caught by tools/check_feature_controls.py guard 2
-    when chat_history.section became "security", the settings audit's G5).
+    ruling): "Lock Jarvis" (app-lock) and the chat-history switch both live in
+    Settings, Security, so without that an Always-On title would find one
+    switch in its section and "turn on Lock Jarvis" would have turned chat
+    history on (2026-10-28, caught by tools/check_feature_controls.py guard 2).
     `_build_matrix` clears them again for the same reason; this keeps every
     other caller - including jarvis_quick.switch_target - on the same rule."""
     R = _registry()
     if R is None or not row:
         return []
-    if str(row.get("id") or "") in ALWAYS_ON_IDS:
+    fid = str(row.get("id") or "")
+    if fid in ALWAYS_ON_IDS:
         return []
-    covers = set(row.get("covers") or [])
+    covers = set(row.get("covers") or ())
     out = []
     for setting in R.BOOL_SETTINGS:
         section = getattr(setting, "section", None)
         if section and f"settings.{section}" in covers:
             out.append(setting)
+    for key in EXTRA_CONTROLS.get(fid, ()):     # links the covers cannot name
+        if key not in [s.key for s in out]:
+            setting = _setting_by_key(key)
+            if setting is not None:
+                out.append(setting)
+    mates = SECTION_MATES_NOT_THIS_FEATURE.get(fid, ())
+    if mates:
+        out = [s for s in out if s.key not in mates]
     return out
 
 
@@ -686,9 +738,10 @@ def feature_switches(row: dict) -> list:
     few rows' switch is linked by hand in `EXTRA_CONTROLS` (Memory saved ->
     Background learning, Your past chats -> Chat history), and `covers` cannot
     name them. Using the matrix keeps "is it on?" and "can I change it?" naming
-    the SAME switch the five labels are built from; `switches_for()` stays the
-    write path's own rule, untouched, because `switch_target()` must not start
-    resolving a switch it did not before.
+    the SAME switch the five labels are built from. `switches_for()` - the
+    write path's rule - now reads `EXTRA_CONTROLS` and the section-mate
+    exclusions too (2026-11-02), so `switch_target()` resolves the same switch
+    the answer names rather than refusing a phrase this answer just gave.
     """
     mine = _matrix_row(row)
     keys = list((mine or {}).get("switch_keys") or [])
@@ -1975,13 +2028,53 @@ def is_like(words) -> dict:
 #   "Is it on?": a feature, or a plain setting the registry already names
 # --------------------------------------------------------------------------
 
+def _setting_by_own_label(text):
+    """The switch whose OWN registered name is `text`, compared with case and
+    punctuation folded, or None.
+
+    2026-11-02, measured: `R.find_bool_setting` is an EXACT alias match on
+    purpose (a half-heard sentence must fall through rather than change a
+    switch nobody named), but it compares a lower-cased, punctuation-freed
+    query against names kept as written. So a switch whose Settings label has
+    a capital or an apostrophe could not be named by that label at all:
+    "saving facts in Jarvis's own words" (the label the owner read on the new
+    learning card) folded to "saving facts in s own words" once `_norm` and the
+    generic-word filter both ran, and there is no other path to it - the guide
+    said "I do not have a feature called ...". This compares the owner's words
+    with each switch's own names through the SAME fold on both sides, and only
+    when they are equal: it widens punctuation and case, never the words. It
+    cannot hand back a different setting, because a name is that setting's own.
+    """
+    want = _norm(text)
+    if not want:
+        return None
+    R = _registry()
+    if R is None:
+        return None
+    for setting in getattr(R, "BOOL_SETTINGS", ()):
+        for name in getattr(setting, "names", ()) or ():
+            if _norm(name) == want:
+                return setting
+    return None
+
+
 def _setting_target(words):
-    """(setting, label) for a plain on/off setting named exactly, or (None, "")."""
+    """(setting, label) for a plain on/off setting named exactly, or (None, "").
+
+    Two looks, in this order: the registry's own exact alias match (the
+    vocabulary the spoken phrases are built on), then the switch's own
+    registered LABEL with case and punctuation folded - so the words printed on
+    the Settings card always answer, even when they carry an apostrophe or a
+    capital the exact index does not hold. Neither look guesses: both require
+    the whole name.
+    """
     R = _registry()
     if R is None:
         return None, ""
     text = " ".join(w for w in _norm(words).split() if w not in _GENERIC)
     setting = R.find_bool_setting(text)
+    if setting is None:
+        setting = _setting_by_own_label(words)
     if setting is None:
         return None, ""
     return setting, _setting_words(setting)
@@ -2347,6 +2440,20 @@ NO_COMMAND_REASON = {
     # is data the owner types into that reminder, not a stored setting - there
     # is nothing to switch on, and the kind that acts raises its own card.
     "reminder-actions": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # 2026-11-02 (self-explain coverage): two abilities the catalogue now has a
+    # row for. Neither has a BoolSetting switch - the phone's list is the
+    # settings file's [phone_apps] table, and the model answer is a read - so
+    # both are a behaviour, and the sentences above are the same rule the other
+    # Command-Only rows carry. A setting a part of them owns keeps its own row
+    # (control_phone is opt-in in [tools].enabled, and the model switch is the
+    # models row's).
+    "phone-apps": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    "model-knowledge": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # The price radar has a switch, but it is the settings file's own
+    # `[price_radar] enabled` line, not a registered BoolSetting, and it has no
+    # chat approval card yet - so the ROW is a read/behaviour, and the switch it
+    # does have is named in its own `where`/`limit`.
+    "price-radar": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,
@@ -2377,6 +2484,13 @@ EXTRA_CONTROLS = {
     # matrix is told by hand rather than through a `covers` section that the
     # pages do not have.
     "jarvis-calendar": ("jarvis_calendar",),
+    # The Anti-Slop filter's own switch (2026-11-02, measured): the row covers
+    # `settings.manner` because that is the card it is switched on, and the
+    # card's own bool is HUMOUR. `antislop` has section None, so without this
+    # link the row read the humour switch and "is the Anti-Slop filter on?"
+    # answered with the wrong control. `SECTION_MATES_NOT_THIS_FEATURE` above
+    # drops the section-mate, leaving this one.
+    "anti-slop": ("antislop",),
 }
 
 #: Features that ARE command-controllable but have NO desktop Settings control

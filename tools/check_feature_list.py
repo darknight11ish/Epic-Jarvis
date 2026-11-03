@@ -482,6 +482,25 @@ TEACHING_GAP = {
         "teaches the phone's floating face, quick tiles and screen rate; "
         "nothing about Android's own picture-in-picture window, what it shows "
         "or that it never approves anything"),
+    # Added with the row (2026-11-02, the self-explain coverage audit): the
+    # phone's app allow-list and opening a listed app are real and reachable
+    # (the phone_apps tool, control_phone and the [phone_apps] table), but no
+    # lesson teaches them yet. phone-extras is the nearest lesson, and it
+    # teaches the floating face, tiles and screen rate only. A work item for
+    # the teaching side, not an exemption.
+    "phone-apps": (
+        "phone-extras",
+        "teaches the phone's floating face, quick tiles and screen rate; "
+        "nothing about the list of apps Jarvis may open on the phone, the card "
+        "that adds or removes one, or the opt-in control_phone tool"),
+    # Added with the row (2026-11-02, the self-explain coverage audit): the
+    # price radar is built, off by default and reachable by asking about it,
+    # and no lesson teaches flight prices at all.
+    "price-radar": (
+        "money-and-health",
+        "teaches spending summaries, the retirement what-if and the monthly "
+        "money limit; flight prices, the local price history and the "
+        "off-by-default read-only radar are in no step"),
 }
 
 #: Rule 7: how a `must_mention` list is judged. Only its SHAPE, plus whether

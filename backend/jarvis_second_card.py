@@ -872,6 +872,27 @@ def suggest_settings() -> dict:
     }
 
 
+def switch_enabled(name: str) -> bool:
+    """ONE of this module's own switches, for a reader outside it.
+
+    THE FEATURE GUIDE'S READER (2026-11-02). "Is the second graphics card's
+    one-bigger-model switch on?" has to read the same state file, through the
+    same defaults, that this module's own setters and `status()` read - never
+    a second copy of the rule. `name` is `"master"`, `"combined"`, or one of
+    `SUGGEST_SIGNALS`; an unknown name RAISES rather than answering `False`,
+    so a caller that asked about a switch that does not exist is told it could
+    not read it instead of being handed an invented "off". Never raises for a
+    name that IS one of this module's own: a missing or damaged file reads
+    exactly as `_read_switches()` documents (everything off, both suggestions
+    on).
+    """
+    if name in ("master", "combined"):
+        return _read_switches()[name] is True
+    if name in SUGGEST_SIGNALS:
+        return suggest_setting(name)
+    raise KeyError(name)
+
+
 def handle_suggest_post(body) -> tuple:
     """POST /api/second-card/suggest {"signal": "struggle"|"correction",
     "enabled": true|false} - NO CARD EITHER WAY (see the section above: this
