@@ -300,8 +300,19 @@ await check("CONTROL: the route stores addresses in a plain file, and refuses a 
   assert.match(py, /def addresses_path\(\)[\s\S]*?accounts\.json/);
   assert.match(py, /def handle_settings/);
   assert.match(py, /REFUSES_SECRETS/);
-  assert.doesNotMatch(py, /JARVIS_IMAP_PASSWORD|JARVIS_HOME_TOKEN|JARVIS_CALENDAR_ICS_SECRET_URL/,
-    "the addresses module names a secret's own environment variable");
+  // The appended accounts self-knowledge section (2026-11-03) NAMES these four
+  // variables on purpose, so one row can say which environment variable wins;
+  // it never reads a value. The ADDRESSES half must still never name one, so
+  // the scan below stops at the marker that opens the appended section - and
+  // the marker's presence is checked, so a renamed marker cannot silently
+  // widen the scan back to the whole file. Same rule in
+  // backend/test_account_addresses.py.
+  const marker = "THE ACCOUNTS JARVIS CAN USE - appended 2026-11-03";
+  const addressesHalf = py.split(marker)[0];
+  assert.ok(addressesHalf.length < py.length, "the appended section marker is missing");
+  assert.doesNotMatch(addressesHalf,
+    /JARVIS_IMAP_PASSWORD|JARVIS_HOME_TOKEN|JARVIS_CALENDAR_ICS_SECRET_URL/,
+    "the addresses half names a secret's own environment variable");
   const patch = readRepo("backend/accounts.patch");
   assert.ok(patch.includes("/api/accounts/addresses"), "the patch adds no addresses route");
   assert.doesNotMatch(patch, /\/api\/accounts\/(key|secret|password|token)\b/);
