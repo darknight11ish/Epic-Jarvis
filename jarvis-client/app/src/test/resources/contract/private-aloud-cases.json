@@ -995,6 +995,118 @@
       "read": false
     },
     {
+      "name": "the tool goals_list ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "goals_list"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "goals_list"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool goal_add ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "goal_add"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "goal_add"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool goal_progress ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "goal_progress"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "goal_progress"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool goal_done ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "goal_done"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "goal_done"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool change_setting ran",
       "heard": {
         "private_aloud": false,
