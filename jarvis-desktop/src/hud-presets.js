@@ -410,7 +410,12 @@ export function modelPresetRows(payload) {
       title: typeof row.title === "string" && row.title ? row.title : row.id,
       focus: typeof row.focus === "string" ? row.focus : "",
       chosen: row.id === chosen,
+      // Heavy mode is a COST, not a refusal (2026-11-02): the PC has a pooled
+      // both-card lane, so the row is a real button and this sentence says what
+      // pressing it does. The PC sends its own `heavy_words`.
       heavy: row.heavy_mode === true,
+      heavyWords: (typeof row.heavy_words === "string" && row.heavy_words)
+        || HEAVY_PRESET_WORDS,
       pending: row.pending === true,
     }));
 }
@@ -477,12 +482,15 @@ export function modelApplyBody(id, provider) {
   return body;
 }
 
-/** The one plain-words line the PC's own contract says a heavy preset cannot
- *  be applied. VERBATIM the phone's (`FocusPresets.kt:66-68`), because it is
- *  the same refusal and the two apps must not describe it differently. */
+/** The one plain-words COST of a heavy preset - both cards at once, and the
+ *  everyday/Fast models paused while it runs. It is not a refusal any more
+ *  (2026-11-02): the PC's pooled both-card lane exists, so the row is a real
+ *  button and this is what it tells the owner before they press it. The PC's
+ *  own `heavy_words` wins when it sends one; this is the fallback for an older
+ *  PC. The phone carries the same sentence (`FocusPresets.kt` HEAVY_COST). */
 export const HEAVY_PRESET_WORDS = "This preset needs both cards at once as one "
-  + "pooled lane. Your PC refuses heavy mode until that lane support lands, so "
-  + "it cannot be used from here yet.";
+  + "pooled lane. While it runs, the other two models are paused - they "
+  + "come back when you apply another preset. Loading it takes about half a minute.";
 
 const cloudText = (value) => (typeof value === "string" ? value.trim() : "");
 
@@ -1045,9 +1053,12 @@ export function mountHudPresets(options = {}) {
    *  PC's own `chosen_preset` / `cloud.provider`, and the section says the card
    *  rule in words before any click.
    *
-   *  A HEAVY PRESET IS NOT A BUTTON (2026-10-27, contract audit F1): the PC
-   *  always answers 409 for it, so the row says so in the PC's own sentence
-   *  instead of offering a dead action. The same rule the phone follows. */
+   *  A HEAVY PRESET IS A BUTTON WITH ITS COST SAID (2026-11-02). Until the
+   *  pooled both-card lane existed the PC answered 409 for it and this menu
+   *  drew a dead paragraph instead (contract audit F1, 2026-10-27). The lane is
+   *  here, so the row is offered like every other one and the sentence beneath
+   *  it says what choosing it does: both cards, and the other two models
+   *  paused while it runs. The same rule the phone follows. */
   function renderModelPresets() {
     // "Focus presets" is the ONE name this feature has everywhere else - the
     // phone's title, Settings, the bar and JARVIS-API (2026-10-27 audit F5).
@@ -1072,13 +1083,6 @@ export function mountHudPresets(options = {}) {
     group.appendChild(note("Applying one asks the PC for ONE approval card - nothing is chosen until you answer it."));
     for (const row of rows) {
       const asking = pcBusy.preset === row.id;
-      if (row.heavy) {
-        // Unavailable, in the PC's own words - never a button that always fails.
-        const dead = el(doc, "p", "hud-presets-empty", `${row.title} - ${HEAVY_PRESET_WORDS}`);
-        dead.dataset.preset = row.id;
-        group.appendChild(dead);
-        continue;
-      }
       const button = menuItem(
         `${row.title}${asking ? " - asking..." : ""}`,
         row.focus,
@@ -1095,6 +1099,13 @@ export function mountHudPresets(options = {}) {
       // how the owner's Space press ended up on <body> (P2-2). Only the
       // label says it is waiting.
       group.appendChild(button);
+      if (row.heavy) {
+        // What choosing it does, in the PC's own words, UNDER the button - the
+        // row stays a real choice (2026-11-02).
+        const cost = el(doc, "p", "hud-presets-empty", row.heavyWords);
+        cost.dataset.presetCost = row.id;
+        group.appendChild(cost);
+      }
     }
     if (cloud) group.appendChild(renderCloudRow(cloud));
     return group;

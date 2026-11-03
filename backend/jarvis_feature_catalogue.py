@@ -3,7 +3,7 @@
 The owner's feature list, as data: 168 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 82f0499231d6068aead1e0baba78036c0dbc505a5f5f6f3567f3c98b8648d7f0); the apps' Features pages read their own
+`features/features.json` (sha256 8a0fb3e144bbb968011e41ae6f51137c74d0c13c6e1184d90ff9e614b6308b7c); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "82f0499231d6068aead1e0baba78036c0dbc505a5f5f6f3567f3c98b8648d7f0"
+SOURCE_SHA256 = "8a0fb3e144bbb968011e41ae6f51137c74d0c13c6e1184d90ff9e614b6308b7c"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1397,7 +1397,7 @@ FEATURES = (
         "what": "Nine presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
         "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
-        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset's heavy mode refuses until its both-card lane support lands. The Cloud row beside these nine is a separate cloud service choice, described in its own row.",
+        "limit": "An apply starts the preset's lane, then switches the model behind that one approval card; a declined card leaves the started lane running with no model switched. The Coding preset runs on ONE pooled both-card lane (port 11450) that the apply starts and the next apply that is not heavy stops: it pauses the other two lane models while it runs and puts them back, proved from /api/ps, and it is refused in plain words if the cards cannot be freed, the model spills, or a lane will not pause. The Cloud row beside these nine is a separate cloud service choice, described in its own row.",
         "surface": "both",
         "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],

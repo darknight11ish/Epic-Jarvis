@@ -1259,10 +1259,20 @@ def t_the_automatic_half_has_the_same_safety_properties():
           "_AUTO_START: Callable = start" in text)
     check("... and the probe it uses is the module's own, on loopback",
           "_AUTO_PROBE: Callable = probe" in text)
-    check("nothing here raises a card, answers a card or approves anything - "
-          "rule 4 is untouched, because no card exists on this path",
-          "import jarvis_gate" not in text and "decide_approval" not in text
-          and "approvals.db" not in text, "jarvis_gate")
+    # The NAMED-lane path raises no card (its permission argument is in the
+    # module header: the owner's own logon task already runs this command). The
+    # POOLED lane does raise ONE `switch_model` card (2026-11-02), because it is
+    # about to unload the owner's two models - and this module answers no card
+    # and approves nothing, which is the half rule 4 governs.
+    check("the named-lane path raises no card, answers no card and approves "
+          "nothing - rule 4 is untouched",
+          "decide_approval" not in text and "approvals.db" not in text
+          and text.count("jarvis_gate.check(action") == 1, "jarvis_gate")
+    check("... and the ONE card the pooled lane raises is the EXISTING "
+          "switch_model action, never a new gate name",
+          '(gate or _pooled_gate)(' in text
+          and '"switch_model",' in text and "power_manage" not in text,
+          "jarvis_gate")
     check("it still runs exactly one external program, as argv, and never a "
           "shell", "shell=True" not in text and text.count("schtasks") >= 3,
           text.count("schtasks"))
