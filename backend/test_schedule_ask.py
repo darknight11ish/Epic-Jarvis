@@ -54,6 +54,7 @@ Standard library only. No network, no model, no owner's files.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -64,6 +65,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import jarvis_habits as H  # noqa: E402
 import jarvis_schedule as S  # noqa: E402
 
 PASSED, FAILED, SKIPPED = [], [], []
@@ -555,12 +557,49 @@ def t_where_an_answer_is_written() -> None:
     code, body = w3.s.answer(jid3, 0)
     check("a goal with no progress log on this PC says so, truthfully",
           S.GOAL_NOT_SET_UP in body.get("problems", []), body.get("problems"))
-    check("a habit that is not wired yet says so, truthfully",
-          S.HABIT_NOT_SET_UP in body.get("problems", []), body.get("problems"))
+    check("a habit this PC does not have says so, truthfully",
+          "That habit is not on this PC any more." in body.get("problems", []),
+          body.get("problems"))
     check("neither of those stops the answer being kept",
           len(w3.s.job(jid3)["answers"]) == 1, w3.s.job(jid3).get("answers"))
     check("and the answer says what DID happen", "its own history" in body.get("said", ""),
           body.get("said"))
+
+    # The habit lane IS wired in this tree (backend/jarvis_habits.py ships with the
+    # habits feature, #1108), so the honest assertion is no longer "not set up":
+    # a REAL habit on this PC records the tick. This is the strictly stronger
+    # test - it proves the seam between the scheduler and the habit store lands
+    # an actual row, which is what the feature promises. The habit store is the
+    # module's own temporary file, never the owner's; its audit is captured the
+    # same way this file captures the scheduler's.
+    w4 = World(1_800_000_000.0, name="habit-wired")
+    jid4 = _fired_ask(w4, buttons=block["buttons"],
+                      record={"history": True, "goal": "g-1", "habit": "h-1"})
+    old_db, old_audit = os.environ.get("JARVIS_HABITS_DB"), H._audit
+    os.environ["JARVIS_HABITS_DB"] = str(_TMP / "habits-wired.db")
+    H._audit = lambda event, detail: None
+    try:
+        with H._connect() as c:
+            c.execute("INSERT INTO habits (id, text, rule, job, created, changed, "
+                      "stopped) VALUES (?,?,?,?,?,?,NULL)",
+                      ("h-1", "take your medication",
+                       json.dumps({"kind": "every-day"}), None,
+                       float(w4.clock.t), float(w4.clock.t)))
+        code, body = w4.s.answer(jid4, 0)
+        ticks = H._history("h-1", 1)
+    finally:
+        H._audit = old_audit
+        if old_db is None:
+            os.environ.pop("JARVIS_HABITS_DB", None)
+        else:
+            os.environ["JARVIS_HABITS_DB"] = old_db
+    check("a habit that IS wired records the tick",
+          code == 200 and "a habit tick" in body.get("wrote", [])
+          and S.HABIT_NOT_SET_UP not in body.get("problems", []), body)
+    check("...and it is ONE row in the habit's own store, for today",
+          len(ticks) == 1, ticks)
+    check("...and the answer is still kept",
+          len(w4.s.job(jid4)["answers"]) == 1, w4.s.job(jid4).get("answers"))
 
 
 def t_an_answer_that_cannot_count_is_refused() -> None:
