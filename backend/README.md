@@ -16382,8 +16382,10 @@ design). Built on the backend and in both apps (`docs/JARVIS-API.md` section
 
 - Press **Live** (the Jarvis bar's button, the tray row, or Home -> Live on
   the phone), or say "Hey Jarvis, let's talk". From then on you just talk:
-  no "Hey Jarvis" before each sentence. Every sentence is still checked to
-  be your voice on the PC before any words are made of it.
+  no "Hey Jarvis" before each sentence. Your voice is checked once on the
+  PC - the session's first full sentence (2.0 s or more) - and that check
+  verifies the whole session, which is not re-checked sentence by sentence;
+  ending Live ends that trust.
 - It ends when you press End Live, say "Okay Jarvis, that's all for now",
   after 90 quiet seconds, at the time limit (30 minutes; "give me twenty
   more minutes" adds time), or on Stop everything. The sign ("Jarvis Live ·

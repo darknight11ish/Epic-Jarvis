@@ -963,7 +963,7 @@
       {
        "fixed": true,
        "id": "fixed:live",
-       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Your voice is checked once per Live session and not again on each sentence; ending Live ends that trust. A card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
        "says": "Does it without asking",
        "title": "Start Jarvis Live (a back-and-forth voice conversation)"
       },
@@ -2580,7 +2580,7 @@
       {
        "fixed": true,
        "id": "fixed:live",
-       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Your voice is checked once per Live session and not again on each sentence; ending Live ends that trust. A card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
        "says": "Does it without asking",
        "title": "Start Jarvis Live (a back-and-forth voice conversation)"
       },
@@ -4192,7 +4192,7 @@
       {
        "fixed": true,
        "id": "fixed:live",
-       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Your voice is checked once per Live session and not again on each sentence; ending Live ends that trust. A card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
        "says": "Does it without asking",
        "title": "Start Jarvis Live (a back-and-forth voice conversation)"
       },
@@ -5799,7 +5799,7 @@
       {
        "fixed": true,
        "id": "fixed:live",
-       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Your voice is checked once per Live session and not again on each sentence; ending Live ends that trust. A card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
        "says": "Does it without asking",
        "title": "Start Jarvis Live (a back-and-forth voice conversation)"
       },
@@ -7406,7 +7406,7 @@
       {
        "fixed": true,
        "id": "fixed:live",
-       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Your voice is checked once per Live session and not again on each sentence; ending Live ends that trust. A card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
        "says": "Does it without asking",
        "title": "Start Jarvis Live (a back-and-forth voice conversation)"
       },
@@ -9027,7 +9027,7 @@
       {
        "fixed": true,
        "id": "fixed:live",
-       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Your voice is checked once per Live session and not again on each sentence; ending Live ends that trust. A card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
        "says": "Does it without asking",
        "title": "Start Jarvis Live (a back-and-forth voice conversation)"
       },
@@ -10639,7 +10639,7 @@
       {
        "fixed": true,
        "id": "fixed:live",
-       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Your voice is checked once per Live session and not again on each sentence; ending Live ends that trust. A card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
        "says": "Does it without asking",
        "title": "Start Jarvis Live (a back-and-forth voice conversation)"
       },
