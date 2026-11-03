@@ -10543,23 +10543,46 @@ object JarvisRuntime {
     }
 
     /**
-     * Deletes ONE conversation from the PC, after the History screen's
+     * Asks the PC to delete ONE conversation, after the History screen's
      * confirm. Held on a stale link (rule 4), the same as the desktop's
      * History and its Forget: it cannot be undone, and it acts on a list read
      * over a link that cannot be confirmed live. One already gone counts as
-     * deleted. @return whether it is gone now, and the sentence to show.
+     * deleted.
+     *
+     * **Two-phase since F6 (2026-11-03).** The request names exactly one
+     * conversation id; the PC raises ONE approval card naming that
+     * conversation, saying it cannot be undone and that the facts it taught are
+     * KEPT. A waiting answer is NOT a delete: this returns `gone = false` and
+     * says a card is waiting, the row stays, and the queue is read again so the
+     * owner can answer the card on this phone as well as on the PC. Nothing
+     * here ever deletes in bulk or without that card, and `chatsGone` (which
+     * starts a new conversation when Home was in the deleted one) runs only
+     * once the PC says the conversation is really gone.
+     *
+     * @return whether it is gone now, whether the PC is asking first, and the
+     *   sentence to show.
      */
-    suspend fun deleteHistory(id: String): Pair<Boolean, String> {
-        actionBlocker()?.let { return false to it }
+    suspend fun deleteHistory(id: String): com.jarvis.client.net.ChatLog.Delete {
+        val words = com.jarvis.client.net.ChatLog
+        actionBlocker()?.let {
+            return com.jarvis.client.net.ChatLog.Delete(gone = false, waiting = false, said = it)
+        }
         return when (val r = api.deleteHistory(id)) {
-            // The chat Home is in, deleted: a new conversation, said on Home.
-            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.deleteSaid(r.value).also { (gone, _) ->
-                if (gone) chatsGone(listOf(id))
+            is ApiResult.Ok -> words.deleteReply(r.value.first, r.value.second).also { reply ->
+                // The chat Home is in, deleted: a new conversation, said on Home.
+                if (reply.gone) chatsGone(listOf(id))
+                // A card was raised: read the queue again, so it appears on
+                // this phone's Home at once - the owner may answer it here.
+                if (reply.waiting) runCatching { refreshPending() }
             }
             is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
-                true to com.jarvis.client.net.ChatLog.ALREADY_GONE
+                com.jarvis.client.net.ChatLog.Delete(gone = true, waiting = false, said = words.ALREADY_GONE)
             } else {
-                false to "Not deleted. " + describe(r.error)
+                com.jarvis.client.net.ChatLog.Delete(
+                    gone = false,
+                    waiting = false,
+                    said = "Not deleted. " + describe(r.error),
+                )
             }
         }
     }

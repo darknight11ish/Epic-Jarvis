@@ -94,7 +94,10 @@ class OpenPlaceTest {
         for (id in OpenPlace.KNOWN) {
             val where = OpenPlace.whereFor(id)
             if (where is OpenPlace.Where.Go && where.screen == Screen.SETTINGS) {
-                assertTrue("$id goes to Settings, which has no row keyed ${where.section}", where.section in keys)
+                // A screen-level place ("settings" itself) opens at the top;
+                // any id with a row must name a row that exists.
+                val section = where.section ?: continue
+                assertTrue("$id goes to Settings, which has no row keyed $section", section in keys)
             }
         }
     }
@@ -128,11 +131,19 @@ class OpenPlaceTest {
      * A Brain plate's key is looked up by equality elsewhere (the screen's own
      * `plateKeyAt`), so this also accepts the literal `item(key = "brain-plate:...")`
      * spelling, which is what `BrainListTest` pins.
+     *
+     * F6 (2026-11-03): two plates - Memory and Wiki - are drawn through the
+     * "is this plate drawn at all" guard, `plate(if (plateDrawn("memory"))
+     * "memory" else "memory-hidden")`, so the literal `plate("memory")` form
+     * never appears for them. Their key is still exactly "memory"/"wiki" (the
+     * recorder takes the if-expression's value), which is why the fourth
+     * spelling is accepted here rather than renaming the plates.
      */
     private fun String.draws(name: String): Boolean =
         plateDrawnUnder(name) ||
             contains("item(key = \"$name\")") ||
-            contains("item(key = \"${PlateList.PLATE_PREFIX}$name\")")
+            contains("item(key = \"${PlateList.PLATE_PREFIX}$name\")") ||
+            contains("plate(if (plateDrawn(\"$name\"))")
 
     /**
      * Whether some `plate("...")` call here names [name] - with or without the
