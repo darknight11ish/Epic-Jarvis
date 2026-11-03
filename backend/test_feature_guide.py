@@ -2332,7 +2332,7 @@ _WHERE_OPENERS = frozenset({
     "press", "hold", "click", "type", "open", "share", "put", "set", "turn",
     "scroll", "either", "on", "in", "off", "nothing", "no", "it", "notion",
     "incognito", "history", "routes", "tray", "hud", "pc:", "phone:",
-    "desktop:",
+    "desktop:", "backend",
 })
 # `hud` joined on 2026-11-02, when this branch merged main's #1109: the list
 # above already named the HUD as a real surface, but no row STARTED a `where`
@@ -2340,6 +2340,11 @@ _WHERE_OPENERS = frozenset({
 # The set is a vocabulary of real surfaces, so the omission was this list's,
 # not that row's - and the row's own "Brain, Work, Coming up" place is still
 # proved against the real menu catalogue by the check below.
+# `backend` joined the same day, in the stacked merge with #1108's life-coach
+# pair: both rows say "Backend only today: GET/POST /api/habits ..." - an
+# honest surface (the feature really is backend-only today) naming a real
+# route, which the catalogue's route check proves. The words are the row's,
+# not this list's.
 
 
 

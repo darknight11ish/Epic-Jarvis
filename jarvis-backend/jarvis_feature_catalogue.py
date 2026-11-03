@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 172 rows from features/features.json.
+The owner's feature list, as data: 174 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 6687901cef4433b99053a6da3b132c39ec1226f76cffdd3e80b4d35e2fc644b9); the apps' Features pages read their own
+`features/features.json` (sha256 a219240213df07a1da75741877b6d8c2d12caf35c30282791d82a079244353ca); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "6687901cef4433b99053a6da3b132c39ec1226f76cffdd3e80b4d35e2fc644b9"
+SOURCE_SHA256 = "a219240213df07a1da75741877b6d8c2d12caf35c30282791d82a079244353ca"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -966,6 +966,30 @@ FEATURES = (
         "surface": "both",
         "aliases": ["airfare", "flight cost", "flight price", "price history for flights"],
         "covers": ["money-and-health"],
+    },
+    {
+        "id": "habit-checkins",
+        "group": "Money and health",
+        "title": "Habit check-ins",
+        "what": "A repeating thing you want to do - walk, stretch, practise - with a nudge at the time you picked and one tap that records it happened that day.",
+        "where": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+        "asks": "No card for logging: a new habit and a tick are the cardless plain_repeat class, and stopping is immediate.",
+        "limit": "No score, streak, percentage or chart of judgement anywhere in it - the record is one row per habit per day, and stopping keeps every row.",
+        "surface": "both",
+        "aliases": ["habit tracker", "habit check-in", "habit check-ins", "track a habit"],
+        "covers": [],
+    },
+    {
+        "id": "mood-log",
+        "group": "Money and health",
+        "title": "Mood log",
+        "what": "Your own log of how the day felt: one 1-5 tap and optional words, kept on this PC, with a history you can look at.",
+        "where": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+        "asks": "No card for logging: a mood entry is personal logging, like ticking a to-do.",
+        "limit": "One row per day, and a second entry that day replaces the first. It is excluded from learning entirely - mood data never becomes a fact, by construction rather than by a card - and it is never the crisis path.",
+        "surface": "both",
+        "aliases": ["mood tracker", "mood log", "mood journal", "mood diary"],
+        "covers": [],
     },
     {
         "id": "home-status",

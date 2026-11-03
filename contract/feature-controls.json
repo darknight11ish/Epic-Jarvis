@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 172,
+  "feature_count": 174,
   "features": [
     {
       "id": "typing",
@@ -1614,6 +1614,57 @@
       "label_note": ""
     },
     {
+      "id": "media-transport",
+      "name": "Play or pause what is on this PC",
+      "group": "Talking",
+      "surface": "both",
+      "where": "Say the object with the action - \"pause the music\", \"next song\", \"what's playing\". Bare \"pause\" while a focus session is running is the focus session's; it controls the media session already playing on the PC.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Play or pause what is on this PC",
+        "turn_off": "turn off Play or pause what is on this PC",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Say the object with the action - \"pause the music\", \"next song\", \"what's playing\". Bare \"pause\" while a focus session is running is the focus session's; it controls the media session already playing on the PC.",
+        "search": [
+          "Play or pause what is on this PC"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Say the object with the action - \"pause the music\", \"next song\", \"what's playing\". Bare \"pause\" while a focus session is running is the focus session's; it controls the media session already playing on the PC.",
+        "search": [
+          "play or pause what is on this pc"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Play or pause what is on this PC",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "memory-tab",
       "name": "The Memory tab",
       "group": "Memory",
@@ -2617,6 +2668,57 @@
       "label_note": "typed control works; no phone Settings location"
     },
     {
+      "id": "places",
+      "name": "Where did I put things",
+      "group": "Memory",
+      "surface": "both",
+      "where": "Just tell Jarvis where something is, then ask where you put it; both are your own words.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Where did I put things",
+        "turn_off": "turn off Where did I put things",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Just tell Jarvis where something is, then ask where you put it; both are your own words.",
+        "search": [
+          "Where did I put things"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Just tell Jarvis where something is, then ask where you put it; both are your own words.",
+        "search": [
+          "where did i put things"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Where did I put things",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "look-at-this",
       "name": "Look at this",
       "group": "Screen and pictures",
@@ -2998,6 +3100,57 @@
       "label_note": "typed control works; no phone Settings location"
     },
     {
+      "id": "search-audio-video",
+      "name": "Search what was said in audio and video",
+      "group": "Screen and pictures",
+      "surface": "desktop",
+      "where": "Settings, Searchable recordings and videos (the media index); it only looks inside folders already listed for Jarvis.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Search what was said in audio and video",
+        "turn_off": "turn off Search what was said in audio and video",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Settings, Searchable recordings and videos (the media index); it only looks inside folders already listed for Jarvis.",
+        "search": [
+          "Search what was said in audio and video"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Settings, Searchable recordings and videos (the media index); it only looks inside folders already listed for Jarvis.",
+        "search": [
+          "search what was said in audio and video"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Search what was said in audio and video",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "decks",
       "name": "My study decks",
       "group": "Notes and files",
@@ -3135,57 +3288,6 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Create and customize your notes",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "file-from-pc",
-      "name": "File from your PC",
-      "group": "Notes and files",
-      "surface": "both",
-      "where": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on File from your PC",
-        "turn_off": "turn off File from your PC",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
-        "search": [
-          "File from your PC"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
-        "search": [
-          "file from your pc"
-        ],
-        "found": true
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on File from your PC",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
@@ -3844,6 +3946,159 @@
       "label_note": ""
     },
     {
+      "id": "file-from-pc",
+      "name": "File from your PC",
+      "group": "Notes and files",
+      "surface": "both",
+      "where": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on File from your PC",
+        "turn_off": "turn off File from your PC",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
+        "search": [
+          "File from your PC"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Ask in chat on the PC or the phone. The phone's Settings row, File from your PC, lists the approved file.",
+        "search": [
+          "file from your pc"
+        ],
+        "found": true
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on File from your PC",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "notion-import",
+      "name": "Import a Notion export into an Obsidian vault",
+      "group": "Notes and files",
+      "surface": "desktop",
+      "where": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Import a Notion export into an Obsidian vault",
+        "turn_off": "turn off Import a Notion export into an Obsidian vault",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
+        "search": [
+          "Import a Notion export into an Obsidian vault"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
+        "search": [
+          "import a notion export into an obsidian vault"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Import a Notion export into an Obsidian vault",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "vault-organizer",
+      "name": "Organize an Obsidian vault",
+      "group": "Notes and files",
+      "surface": "desktop",
+      "where": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Organize an Obsidian vault",
+        "turn_off": "turn off Organize an Obsidian vault",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
+        "search": [
+          "Organize an Obsidian vault"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
+        "search": [
+          "organize an obsidian vault"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Organize an Obsidian vault",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "spending",
       "name": "Spending summaries",
       "group": "Money and health",
@@ -4098,6 +4353,210 @@
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Always On (Core Safety Rule — Cannot Be Turned Off)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "parking",
+      "name": "What a parking stay costs, and free parking",
+      "group": "Money and health",
+      "surface": "both",
+      "where": "Ask \"how much is parking at ...\" or \"free parking near ...\". \"Parking for my next event\" prices the parking around the next calendar event that has a place; it never adds or edits an event.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on What a parking stay costs, and free parking",
+        "turn_off": "turn off What a parking stay costs, and free parking",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Ask \"how much is parking at ...\" or \"free parking near ...\". \"Parking for my next event\" prices the parking around the next calendar event that has a place; it never adds or edits an event.",
+        "search": [
+          "What a parking stay costs, and free parking"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Ask \"how much is parking at ...\" or \"free parking near ...\". \"Parking for my next event\" prices the parking around the next calendar event that has a place; it never adds or edits an event.",
+        "search": [
+          "what a parking stay costs, and free parking"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on What a parking stay costs, and free parking",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "price-radar",
+      "name": "Flight prices and a price history",
+      "group": "Money and health",
+      "surface": "both",
+      "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Flight prices and a price history",
+        "turn_off": "turn off Flight prices and a price history",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
+        "search": [
+          "Flight prices and a price history"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
+        "search": [
+          "flight prices and a price history"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Do arithmetic",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "habit-checkins",
+      "name": "Habit check-ins",
+      "group": "Money and health",
+      "surface": "both",
+      "where": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Habit check-ins",
+        "turn_off": "turn off Habit check-ins",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+        "search": [
+          "Habit check-ins"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+        "search": [
+          "habit check-ins"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "A habit tick is an action, not a stored setting: there is nothing to switch on or off, and the one job it sets up is stopped from its own Stop control rather than a preference. No app has a screen for it yet.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Habit check-ins",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "A habit tick is an action, not a stored setting: there is nothing to switch on or off, and the one job it sets up is stopped from its own Stop control rather than a preference. No app has a screen for it yet.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "mood-log",
+      "name": "Mood log",
+      "group": "Money and health",
+      "surface": "both",
+      "where": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Mood log",
+        "turn_off": "turn off Mood log",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+        "search": [
+          "Mood log"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+        "search": [
+          "mood log"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "A mood entry is a tap, not a stored setting: there is nothing to switch on or off, and no job of its own. No app has a screen for it yet.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Mood log",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "A mood entry is a tap, not a stored setting: there is nothing to switch on or off, and no job of its own. No app has a screen for it yet.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
       },
       "own_keys": [],
       "own_intents": [],
@@ -5015,6 +5474,56 @@
       "label_note": ""
     },
     {
+      "id": "phone-pip",
+      "name": "Picture-in-picture",
+      "group": "Phone",
+      "surface": "phone",
+      "where": "Settings, Picture-in-picture.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": null,
+        "turn_off": null,
+        "adjust": [],
+        "intent": null
+      },
+      "desktop": {
+        "section": "pip-mode",
+        "location": "— (no desktop row: Android's own window over other apps)",
+        "search": [],
+        "found": false
+      },
+      "phone": {
+        "section": "pip-mode",
+        "location": "Settings > picture in picture",
+        "search": [
+          "picture in picture",
+          "Picture-in-picture"
+        ],
+        "found": true
+      },
+      "status": "pc-only",
+      "owner": "Session B",
+      "reason": "Phone-only, by the platform: Android's picture-in-picture is an OS window over other apps, and the desktop's nearest equivalent is the floating face over other windows (docs/ARCHITECTURE.md section 8). Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
+      "label": "PC-Only Setting (Honest Refusal on Phone)",
+      "label_evidence": {
+        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
+        "screen_path": "desktop: no row (Android only); phone: Settings, Picture-in-picture"
+      },
+      "command": {
+        "status": "open-only",
+        "reason_code": "app-local",
+        "owner": "Session B",
+        "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
+        "settings_gap": null,
+        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "phone-tiles",
       "name": "Quick Settings tiles",
       "group": "Phone",
@@ -5265,6 +5774,57 @@
         "reason_code": "read-only",
         "owner": "none-needed",
         "reason": "An information or navigation page - it shows facts or opens a place. There is no setting here to change.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "phone-apps",
+      "name": "Open an app on your phone",
+      "group": "Phone",
+      "surface": "both",
+      "where": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Open an app on your phone",
+        "turn_off": "turn off Open an app on your phone",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+        "search": [
+          "Open an app on your phone"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+        "search": [
+          "open an app on your phone"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Do arithmetic",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
       },
@@ -7395,6 +7955,669 @@
       "label_note": ""
     },
     {
+      "id": "reminder-actions",
+      "name": "A reminder that opens something, or asks to do one task",
+      "group": "The PC itself",
+      "surface": "desktop",
+      "where": "PC: Reminders, Then. Phone: shows a note and the one card; no way to create or edit one.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on A reminder that opens something, or asks to do one task",
+        "turn_off": "turn off A reminder that opens something, or asks to do one task",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "PC: Reminders, Then.",
+        "search": [
+          "A reminder that opens something, or asks to do one task"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Phone: shows a note and the one card; no way to create or edit one.",
+        "search": [
+          "A reminder that opens something, or asks to do one task"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "remind me to open my invoice at seven",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "thinking-levels",
+      "name": "Thinking levels",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Settings, Thinking levels; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Thinking levels",
+        "turn_off": "turn off Thinking levels",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Settings, Thinking levels; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
+        "search": [
+          "Thinking levels"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Settings, Thinking levels; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
+        "search": [
+          "thinking levels"
+        ],
+        "found": true
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Thinking levels",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "calculator",
+      "name": "Do arithmetic",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Just ask a sum - \"what is 18% of 240?\" - the model uses the calculator tool.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Do arithmetic",
+        "turn_off": "turn off Do arithmetic",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Just ask a sum - \"what is 18% of 240?\" - the model uses the calculator tool.",
+        "search": [
+          "Do arithmetic"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Just ask a sum - \"what is 18% of 240?\" - the model uses the calculator tool.",
+        "search": [
+          "do arithmetic"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Do arithmetic",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "open-programs",
+      "name": "Open a program or Windows panel by name",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Just say \"open ...\"; the app opens the program this PC's Start menu finds, or the named Windows panel.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Open a program or Windows panel by name",
+        "turn_off": "turn off Open a program or Windows panel by name",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Just say \"open ...\"; the app opens the program this PC's Start menu finds, or the named Windows panel.",
+        "search": [
+          "Open a program or Windows panel by name"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Just say \"open ...\"; the app opens the program this PC's Start menu finds, or the named Windows panel.",
+        "search": [
+          "open a program or windows panel by name"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Open a program or Windows panel by name",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "github-research",
+      "name": "Find and grade a library on GitHub",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Find and grade a library on GitHub",
+        "turn_off": "turn off Find and grade a library on GitHub",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "search": [
+          "Find and grade a library on GitHub"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "search": [
+          "find and grade a library on github"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Find and grade a library on GitHub",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "computer-control",
+      "name": "Click and type in another program",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Click and type in another program",
+        "turn_off": "turn off Click and type in another program",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "search": [
+          "Click and type in another program"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "search": [
+          "click and type in another program"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Click and type in another program",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "browser-control",
+      "name": "Drive one browser tab",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Drive one browser tab",
+        "turn_off": "turn off Drive one browser tab",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "search": [
+          "Drive one browser tab"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "search": [
+          "drive one browser tab"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Drive one browser tab",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "shell-commands",
+      "name": "Run one shell command",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Run one shell command",
+        "turn_off": "turn off Run one shell command",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "search": [
+          "Run one shell command"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "search": [
+          "run one shell command"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Run one shell command",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "read-web-page",
+      "name": "Read one web page out loud",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Read one web page out loud",
+        "turn_off": "turn off Read one web page out loud",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
+        "search": [
+          "Read one web page out loud"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
+        "search": [
+          "read one web page out loud"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Read one web page out loud",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "reverse-engineering",
+      "name": "Inspect a program or app statically",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Inspect a program or app statically",
+        "turn_off": "turn off Inspect a program or app statically",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
+        "search": [
+          "Inspect a program or app statically"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
+        "search": [
+          "inspect a program or app statically"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Inspect a program or app statically",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "android-builder",
+      "name": "Build the Android app in a project task",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "In a project task, say 'build the Android app' or 'build my app and put it on my phone'. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Build the Android app in a project task",
+        "turn_off": "turn off Build the Android app in a project task",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
+        "search": [
+          "Build the Android app in a project task"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
+        "search": [
+          "build the android app in a project task"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Build the Android app in a project task",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "docker-containers",
+      "name": "Docker containers Jarvis ships",
+      "group": "The PC itself",
+      "surface": "desktop",
+      "where": "Routes only, no app page: GET /api/docker/containers and /api/docker/service. The Docker plugin ships the containers.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Docker containers Jarvis ships",
+        "turn_off": "turn off Docker containers Jarvis ships",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Routes only, no app page: GET /api/docker/containers and /api/docker/service. The Docker plugin ships the containers.",
+        "search": [
+          "Docker containers Jarvis ships"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Routes only, no app page: GET /api/docker/containers and /api/docker/service. The Docker plugin ships the containers.",
+        "search": [
+          "docker containers jarvis ships"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Docker containers Jarvis ships",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "model-knowledge",
+      "name": "Ask which model is answering",
+      "group": "The PC itself",
+      "surface": "both",
+      "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Ask which model is answering",
+        "turn_off": "turn off Ask which model is answering",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+        "search": [
+          "Ask which model is answering"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+        "search": [
+          "ask which model is answering"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Do arithmetic",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "approvals",
       "name": "Approval cards",
       "group": "Safety",
@@ -8084,668 +9307,6 @@
       "label_note": ""
     },
     {
-      "id": "reminder-actions",
-      "name": "A reminder that opens something, or asks to do one task",
-      "group": "The PC itself",
-      "surface": "desktop",
-      "where": "PC: Reminders, Then. Phone: shows a note and the one card; no way to create or edit one.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on A reminder that opens something, or asks to do one task",
-        "turn_off": "turn off A reminder that opens something, or asks to do one task",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "PC: Reminders, Then.",
-        "search": [
-          "A reminder that opens something, or asks to do one task"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Phone: shows a note and the one card; no way to create or edit one.",
-        "search": [
-          "A reminder that opens something, or asks to do one task"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "remind me to open my invoice at seven",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "phone-pip",
-      "name": "Picture-in-picture",
-      "group": "Phone",
-      "surface": "phone",
-      "where": "Settings, Picture-in-picture.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": null,
-        "turn_off": null,
-        "adjust": [],
-        "intent": null
-      },
-      "desktop": {
-        "section": "pip-mode",
-        "location": "— (no desktop row: Android's own window over other apps)",
-        "search": [],
-        "found": false
-      },
-      "phone": {
-        "section": "pip-mode",
-        "location": "Settings > picture in picture",
-        "search": [
-          "picture in picture",
-          "Picture-in-picture"
-        ],
-        "found": true
-      },
-      "status": "pc-only",
-      "owner": "Session B",
-      "reason": "Phone-only, by the platform: Android's picture-in-picture is an OS window over other apps, and the desktop's nearest equivalent is the floating face over other windows (docs/ARCHITECTURE.md section 8). Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
-      "label": "PC-Only Setting (Honest Refusal on Phone)",
-      "label_evidence": {
-        "example_phrase": "— (no fixed phrase; ask for it in your own words)",
-        "screen_path": "desktop: no row (Android only); phone: Settings, Picture-in-picture"
-      },
-      "command": {
-        "status": "open-only",
-        "reason_code": "app-local",
-        "owner": "Session B",
-        "reason": "Saved by each app locally (this computer's or this phone's own appearance or behaviour) with no backend route to change it. The Settings control is its one true home; a typed path would need a client-side route the backend cannot invent.",
-        "settings_gap": null,
-        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "media-transport",
-      "name": "Play or pause what is on this PC",
-      "group": "Talking",
-      "surface": "both",
-      "where": "Say the object with the action - \"pause the music\", \"next song\", \"what's playing\". Bare \"pause\" while a focus session is running is the focus session's; it controls the media session already playing on the PC.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Play or pause what is on this PC",
-        "turn_off": "turn off Play or pause what is on this PC",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Say the object with the action - \"pause the music\", \"next song\", \"what's playing\". Bare \"pause\" while a focus session is running is the focus session's; it controls the media session already playing on the PC.",
-        "search": [
-          "Play or pause what is on this PC"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Say the object with the action - \"pause the music\", \"next song\", \"what's playing\". Bare \"pause\" while a focus session is running is the focus session's; it controls the media session already playing on the PC.",
-        "search": [
-          "play or pause what is on this pc"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Play or pause what is on this PC",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "parking",
-      "name": "What a parking stay costs, and free parking",
-      "group": "Money and health",
-      "surface": "both",
-      "where": "Ask \"how much is parking at ...\" or \"free parking near ...\". \"Parking for my next event\" prices the parking around the next calendar event that has a place; it never adds or edits an event.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on What a parking stay costs, and free parking",
-        "turn_off": "turn off What a parking stay costs, and free parking",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Ask \"how much is parking at ...\" or \"free parking near ...\". \"Parking for my next event\" prices the parking around the next calendar event that has a place; it never adds or edits an event.",
-        "search": [
-          "What a parking stay costs, and free parking"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Ask \"how much is parking at ...\" or \"free parking near ...\". \"Parking for my next event\" prices the parking around the next calendar event that has a place; it never adds or edits an event.",
-        "search": [
-          "what a parking stay costs, and free parking"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on What a parking stay costs, and free parking",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "places",
-      "name": "Where did I put things",
-      "group": "Memory",
-      "surface": "both",
-      "where": "Just tell Jarvis where something is, then ask where you put it; both are your own words.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Where did I put things",
-        "turn_off": "turn off Where did I put things",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Just tell Jarvis where something is, then ask where you put it; both are your own words.",
-        "search": [
-          "Where did I put things"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Just tell Jarvis where something is, then ask where you put it; both are your own words.",
-        "search": [
-          "where did i put things"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Where did I put things",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "thinking-levels",
-      "name": "Thinking levels",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Settings, Thinking levels; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Thinking levels",
-        "turn_off": "turn off Thinking levels",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Settings, Thinking levels; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
-        "search": [
-          "Thinking levels"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Settings, Thinking levels; or say \"think deeply\", \"quick answer\" or \"what thinking level is on?\".",
-        "search": [
-          "thinking levels"
-        ],
-        "found": true
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Thinking levels",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "calculator",
-      "name": "Do arithmetic",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Just ask a sum - \"what is 18% of 240?\" - the model uses the calculator tool.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Do arithmetic",
-        "turn_off": "turn off Do arithmetic",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Just ask a sum - \"what is 18% of 240?\" - the model uses the calculator tool.",
-        "search": [
-          "Do arithmetic"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Just ask a sum - \"what is 18% of 240?\" - the model uses the calculator tool.",
-        "search": [
-          "do arithmetic"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Do arithmetic",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "open-programs",
-      "name": "Open a program or Windows panel by name",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Just say \"open ...\"; the app opens the program this PC's Start menu finds, or the named Windows panel.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Open a program or Windows panel by name",
-        "turn_off": "turn off Open a program or Windows panel by name",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Just say \"open ...\"; the app opens the program this PC's Start menu finds, or the named Windows panel.",
-        "search": [
-          "Open a program or Windows panel by name"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Just say \"open ...\"; the app opens the program this PC's Start menu finds, or the named Windows panel.",
-        "search": [
-          "open a program or windows panel by name"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Open a program or Windows panel by name",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "github-research",
-      "name": "Find and grade a library on GitHub",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Find and grade a library on GitHub",
-        "turn_off": "turn off Find and grade a library on GitHub",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "search": [
-          "Find and grade a library on GitHub"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "search": [
-          "find and grade a library on github"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Find and grade a library on GitHub",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "computer-control",
-      "name": "Click and type in another program",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Click and type in another program",
-        "turn_off": "turn off Click and type in another program",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "search": [
-          "Click and type in another program"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "search": [
-          "click and type in another program"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Click and type in another program",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "browser-control",
-      "name": "Drive one browser tab",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Drive one browser tab",
-        "turn_off": "turn off Drive one browser tab",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "search": [
-          "Drive one browser tab"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "search": [
-          "drive one browser tab"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Drive one browser tab",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "shell-commands",
-      "name": "Run one shell command",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Run one shell command",
-        "turn_off": "turn off Run one shell command",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "search": [
-          "Run one shell command"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "search": [
-          "run one shell command"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Run one shell command",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "read-web-page",
-      "name": "Read one web page out loud",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Read one web page out loud",
-        "turn_off": "turn off Read one web page out loud",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
-        "search": [
-          "Read one web page out loud"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
-        "search": [
-          "read one web page out loud"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Read one web page out loud",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
       "id": "propose-plan",
       "name": "A short plan of several steps, one card",
       "group": "Safety",
@@ -8781,159 +9342,6 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on A short plan of several steps, one card",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "reverse-engineering",
-      "name": "Inspect a program or app statically",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Inspect a program or app statically",
-        "turn_off": "turn off Inspect a program or app statically",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
-        "search": [
-          "Inspect a program or app statically"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
-        "search": [
-          "inspect a program or app statically"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Inspect a program or app statically",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "android-builder",
-      "name": "Build the Android app in a project task",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "In a project task, say 'build the Android app' or 'build my app and put it on my phone'. Gradle runs on this PC; adb installs the APK over the cable. Writing the fixed template needs no card.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Build the Android app in a project task",
-        "turn_off": "turn off Build the Android app in a project task",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
-        "search": [
-          "Build the Android app in a project task"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "In a project task, ask for the Android build; Gradle runs on this PC and adb installs it over the cable. Building and installing are separate cards.",
-        "search": [
-          "build the android app in a project task"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Build the Android app in a project task",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "docker-containers",
-      "name": "Docker containers Jarvis ships",
-      "group": "The PC itself",
-      "surface": "desktop",
-      "where": "Routes only, no app page: GET /api/docker/containers and /api/docker/service. The Docker plugin ships the containers.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Docker containers Jarvis ships",
-        "turn_off": "turn off Docker containers Jarvis ships",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Routes only, no app page: GET /api/docker/containers and /api/docker/service. The Docker plugin ships the containers.",
-        "search": [
-          "Docker containers Jarvis ships"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Routes only, no app page: GET /api/docker/containers and /api/docker/service. The Docker plugin ships the containers.",
-        "search": [
-          "docker containers jarvis ships"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Docker containers Jarvis ships",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
@@ -9036,312 +9444,6 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on A receipt for every change",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "search-audio-video",
-      "name": "Search what was said in audio and video",
-      "group": "Screen and pictures",
-      "surface": "desktop",
-      "where": "Settings, Searchable recordings and videos (the media index); it only looks inside folders already listed for Jarvis.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Search what was said in audio and video",
-        "turn_off": "turn off Search what was said in audio and video",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Settings, Searchable recordings and videos (the media index); it only looks inside folders already listed for Jarvis.",
-        "search": [
-          "Search what was said in audio and video"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Settings, Searchable recordings and videos (the media index); it only looks inside folders already listed for Jarvis.",
-        "search": [
-          "search what was said in audio and video"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Search what was said in audio and video",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "notion-import",
-      "name": "Import a Notion export into an Obsidian vault",
-      "group": "Notes and files",
-      "surface": "desktop",
-      "where": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Import a Notion export into an Obsidian vault",
-        "turn_off": "turn off Import a Notion export into an Obsidian vault",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
-        "search": [
-          "Import a Notion export into an Obsidian vault"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
-        "search": [
-          "import a notion export into an obsidian vault"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Import a Notion export into an Obsidian vault",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "vault-organizer",
-      "name": "Organize an Obsidian vault",
-      "group": "Notes and files",
-      "surface": "desktop",
-      "where": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Organize an Obsidian vault",
-        "turn_off": "turn off Organize an Obsidian vault",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
-        "search": [
-          "Organize an Obsidian vault"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Ask in chat, on the PC: the default is the WHOLE vault, and you can name the notes to limit it (\"organize these notes: ...\"). The plan is words in chat; saying \"apply the plan\" raises the module's ONE card. It is also off by default in its settings-file/API switch ([vault_organizer] enabled = true); there is no screen yet.",
-        "search": [
-          "organize an obsidian vault"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Organize an Obsidian vault",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "phone-apps",
-      "name": "Open an app on your phone",
-      "group": "Phone",
-      "surface": "both",
-      "where": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Open an app on your phone",
-        "turn_off": "turn off Open an app on your phone",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
-        "search": [
-          "Open an app on your phone"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
-        "search": [
-          "open an app on your phone"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Do arithmetic",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "model-knowledge",
-      "name": "Ask which model is answering",
-      "group": "The PC itself",
-      "surface": "both",
-      "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Ask which model is answering",
-        "turn_off": "turn off Ask which model is answering",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
-        "search": [
-          "Ask which model is answering"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
-        "search": [
-          "ask which model is answering"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Do arithmetic",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
-      },
-      "command": {
-        "status": "not-a-setting",
-        "reason_code": "not-a-setting",
-        "owner": "none-needed",
-        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-        "settings_gap": null,
-        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
-      },
-      "own_keys": [],
-      "own_intents": [],
-      "own_actions": {},
-      "label_note": ""
-    },
-    {
-      "id": "price-radar",
-      "name": "Flight prices and a price history",
-      "group": "Money and health",
-      "surface": "both",
-      "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
-      "control": {
-        "type": "refused",
-        "setting_keys": [],
-        "turn_on": "turn on Flight prices and a price history",
-        "turn_off": "turn off Flight prices and a price history",
-        "adjust": [],
-        "intent": "feature_switch_refused"
-      },
-      "desktop": {
-        "section": null,
-        "location": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
-        "search": [
-          "Flight prices and a price history"
-        ],
-        "found": true
-      },
-      "phone": {
-        "section": null,
-        "location": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
-        "search": [
-          "flight prices and a price history"
-        ],
-        "found": false
-      },
-      "status": "not-a-setting",
-      "owner": "none-needed",
-      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
-      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
-      "label_evidence": {
-        "example_phrase": "turn on Do arithmetic",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
@@ -13663,7 +13765,7 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 98
+      "not-a-setting": 101
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 29,
@@ -13680,11 +13782,11 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 99,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 101,
     "Switchable / Adjustable (Typed & Settings)": 43,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2
   },
-  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (self-explain coverage): the phone-apps manage/open row, the model-knowledge row and the price-radar row joined as Command-Only (95 -> 98 Command-Only, 168 -> 171 features), measured from the contract, not chosen. 2026-11-02 (merged with main's #1109 reminder builder): the reminder-asks row joined as Command-Only (98 -> 99 Command-Only, 171 -> 172 features), measured from the contract, not chosen."
+  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (self-explain coverage): the phone-apps manage/open row, the model-knowledge row and the price-radar row joined as Command-Only (95 -> 98 Command-Only, 168 -> 171 features), measured from the contract, not chosen. 2026-11-02 (merged with main's #1109 reminder builder): the reminder-asks row joined as Command-Only (98 -> 99 Command-Only, 171 -> 172 features), measured from the contract, not chosen. 2026-11-02 (stacked #1108 into #1110 for the merge train): the life-coach rows habit-checkins and mood-log joined as Command-Only, so 43/2/16/101/12 (174 total). Measured from the contract, not chosen."
 }

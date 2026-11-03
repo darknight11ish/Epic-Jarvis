@@ -1,0 +1,7 @@
+{
+  "name": "mood",
+  "summary": "the owner's own mood log: one 1-5 tap a day with optional words, kept on this PC, never learned, never sent anywhere, and never turned into a score or a judgement.",
+  "module": "jarvis_mood",
+  "install": "handler",
+  "stack_order": 164
+}
