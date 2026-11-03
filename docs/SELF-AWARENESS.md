@@ -291,4 +291,4 @@ running Jarvis, not a reset. If nothing changed, it says exactly that.
   deliberately one-sided: [ARCHITECTURE.md](ARCHITECTURE.md) section 13 and
   section 8 ("One-sided on purpose").
 - The owner's own decision, dated:
-  `decisions.d/2026-11-03-self-model-navigation-and-clears.md`.
+  `decisions.d/2026-11-03-self-portrait-imported-and-clear-one-card.md`.

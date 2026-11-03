@@ -227,8 +227,11 @@ TITLES = {
     # (title and message count) and says the facts it taught are kept.
     "conversation_clear": "delete one conversation from this PC",
     # jarvis_storage_health.py (2026-11-03, a separate drop-in): ONE card listing
-    # every path in full before anything is deleted or moved.
-    "storage_cleanup": "tidy up temporary files and old deploy backups",
+    # every path in full before anything is deleted or moved. The wording is
+    # #1117's (the feature owner's) deliberately - #1116 must not carry a second
+    # title for the same action into the merge; #1117 drops its own duplicate
+    # line when it rebases after this PR.
+    "storage_cleanup": "clear Jarvis's temporary files",
     "user_profile_manage": "change your profile",
     # --- voices
     "custom_voice": "keep or use a custom voice",

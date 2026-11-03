@@ -1083,7 +1083,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy up temporary files and old deploy backups"
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",
@@ -2716,7 +2716,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy up temporary files and old deploy backups"
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",
@@ -4344,7 +4344,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy up temporary files and old deploy backups"
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",
@@ -5967,7 +5967,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy up temporary files and old deploy backups"
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",
@@ -7590,7 +7590,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy up temporary files and old deploy backups"
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",
@@ -9227,7 +9227,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy up temporary files and old deploy backups"
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",
@@ -10855,7 +10855,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy up temporary files and old deploy backups"
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",

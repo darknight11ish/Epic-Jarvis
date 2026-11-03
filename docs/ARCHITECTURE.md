@@ -5171,7 +5171,7 @@ memory or conversation on request, and know every setting/function/ability it
 has". This section is the design of the half that is new: a self portrait, a
 wider navigation vocabulary, extra conversation windows, ONE carded clear, and a
 version read-back for Updates. The wire shapes are JARVIS-API §184; the
-decision is `decisions.d/2026-11-03-self-model-navigation-and-clears.md`.
+decision is `decisions.d/2026-11-03-self-portrait-imported-and-clear-one-card.md`.
 
 Five rules hold it together, and each is enforced by code rather than by this
 page.

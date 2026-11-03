@@ -489,6 +489,13 @@ def clear_is_one_exact_item_one_card():
           "KEPT" in seen["text"] and "never forgets them" in seen["text"])
     check("the card says copies in older backups remain",
           "older backups" in seen["text"])
+    # THE TWO-PRESS GUARD (2026-11-03 audit): a card that deletes data must be
+    # marked as REPLACING data, or it gets ONE press while delete_file and
+    # memory_forget_range take two. The marker is the documented route for an
+    # action of a module outside the gate's own _REPLACES_ACTIONS table.
+    check("the clear card's detail marks it as REPLACING data (two-press guard)",
+          seen["detail"].get("replaces") is True,
+          str(seen["detail"].get("replaces")))
     check("exactly the one conversation the card named was deleted",
           stub.deletes == ["conv-aaaa"], str(stub.deletes))
     check("the last outcome says it was done",
@@ -745,9 +752,28 @@ def storage_wiring_is_optional_and_defensive():
         check("with no storage module, it advertises no storage routes",
               SP.storage_routes() == () and
               SP.handle_get("/api/self/storage")[0] == 404)
+        # THE DEPENDENCY IS VISIBLE, NOT HIDDEN: a plain guarded import the two
+        # audits can see (this branch ships before PR #1117's module does), and
+        # the absence has its own sentence rather than reading as silence.
+        src = Path(SP.__file__).read_text(encoding="utf-8")
+        check("the storage import is a plain guarded import the audits can see",
+              "import jarvis_storage_health as _STORAGE" in src
+              and "except ImportError:" in src
+              and "importlib.import_module" not in src)
+        check("a PC without the storage self-scan says so in one plain sentence",
+              SP.storage_absence_words() == SP.STORAGE_MISSING
+              and "not installed" in SP.STORAGE_MISSING
+              and SP.storage_available() is False)
+        check("its start-up banner says the storage self-scan is not installed",
+              "storage self-scan NOT installed" in _install_banner(),
+              _install_banner())
         SP._STORAGE = _FakeStorage()
         check("with the storage module present, its routes are served",
               set(SP.storage_routes()) == set(_FakeStorage.ROUTES))
+        check("with the storage module present, the absence sentence is empty",
+              SP.storage_absence_words() == "" and SP.storage_available() is True)
+        check("its start-up banner says the storage scan is beside it",
+              "storage scan beside it" in _install_banner(), _install_banner())
         code, out = SP.handle_get("/api/self/storage")
         check("its scan route answers through this module", code == 200
               and out.get("route") == "/api/self/storage")
@@ -763,6 +789,74 @@ def storage_wiring_is_optional_and_defensive():
               code == 503 and isinstance(out, dict))
     finally:
         SP._STORAGE = real
+
+
+def _install_banner() -> str:
+    """What install() returns for a fresh handler class (the start-up line)."""
+    class _H:
+        def do_GET(self):
+            pass
+
+        def do_POST(self):
+            pass
+
+        def _send(self, code, out):
+            return code
+
+    return SP.install(_H, origin_ok=lambda h: True, token_ok=lambda h: True,
+                      read_body=lambda h: b"{}")
+
+
+def clear_card_is_a_replacing_card():
+    """The marker reaches jarvis_gate's OWN two-press guard and words.
+
+    The audit's requirement was not "the key exists" but that the card really
+    renders/behaves as a replacing card, so this asks the published base's
+    jarvis_gate (the code the live PC runs) rather than our own dict:
+    `replaces_for()` is what `pending()` uses to put `replaces` on every
+    waiting card, and `replaces_words_for()` is the heading/note both apps
+    draw. Run in a subprocess with the base on sys.path so this suite never
+    imports the gate into its own process.
+    """
+    import subprocess
+    base = REPO / "jarvis-backend"
+    detail = {"what": "delete ONE conversation from this PC", "replaces": True}
+    script = (
+        "import json, sys\n"
+        "sys.path.insert(0, %r)\n"
+        "import jarvis_gate as G\n"
+        "d = %s\n"
+        "print(json.dumps({\n"
+        "  'in_table': 'conversation_clear' in G._REPLACES_ACTIONS,\n"
+        "  'replaces': G.replaces_for('conversation_clear', d),\n"
+        "  'kind': G.replaces_kind_for('conversation_clear', d),\n"
+        "  'words': G.replaces_words_for('conversation_clear', d),\n"
+        "  'ordinary': G.replaces_for('conversation_clear', {}),\n"
+        "}))\n" % (str(base), repr(detail)))
+    env = dict(os.environ)
+    env["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "base-gate-config")
+    try:
+        done = subprocess.run([sys.executable, "-B", "-c", script],
+                              cwd=str(base), env=env, capture_output=True,
+                              text=True, timeout=120)
+        if done.returncode == 0:
+            got = json.loads(done.stdout.strip().splitlines()[-1])
+        else:
+            got = {}
+            check("the published base's gate can be asked about the clear card",
+                  False, ((done.stderr or "") + (done.stdout or ""))[-700:])
+    except Exception as exc:                # noqa: BLE001 - reported, not raised
+        got = {}
+        check("the published base's gate can be asked about the clear card",
+              False, f"{type(exc).__name__}: {exc}")
+    check("the published base's jarvis_gate marks the clear card as replacing",
+          got.get("replaces") is True and got.get("ordinary") is False, str(got))
+    check("its warning category is the DELETES one, and it has real words",
+          got.get("kind") == "deletes_data"
+          and bool((got.get("words") or {}).get("heading"))
+          and bool((got.get("words") or {}).get("note")), str(got.get("words")))
+    check("the action is NOT put in the gate's own table (the marker is used)",
+          got.get("in_table") is False, str(got.get("in_table")))
 
 
 # ---------------------------------------------------------------------------
@@ -953,6 +1047,7 @@ def main() -> int:
         version_surface_is_honest()
         conversations_are_the_stores_own()
         clear_is_one_exact_item_one_card()
+        clear_card_is_a_replacing_card()
         install_is_one_wrapper_that_owns_only_its_routes()
         audit_fixes_are_in()
         refresh_rereads_and_restarts_nothing()

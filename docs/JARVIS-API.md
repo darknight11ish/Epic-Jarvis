@@ -31730,7 +31730,7 @@ build follows them rather than the first sketch:
   doorbell with no reader is a known defect in this codebase
   (`docs/ARCHITECTURE.md` section 6).
 
-The decision is `decisions.d/2026-11-03-self-model-navigation-and-clears.md`.
+The decision is `decisions.d/2026-11-03-self-portrait-imported-and-clear-one-card.md`.
 
 **Where it lives, and why there is no patch.** `backend/jarvis_self_portrait.py`
 (shipped whole, in `backend/` and `jarvis-backend/`) exports `install()`, which
@@ -32258,7 +32258,7 @@ other tool, and §184.10 says what the shipped list names on this tree.
 
 | Piece | Desktop | Phone | Why |
 |---|---|---|---|
-| `/api/self`, `/api/self/version`, `/api/conversations` | read through `hud_proxy.rs`'s fixed HUD allowlist (12 paths now: `HUD_GET_PATHS`, `/api/self` and `/api/conversations` added) and by the shell's version handshake | can read them like any route; the phone has no self screen | it is a read; both apps' chats already reach the PC |
+| `/api/self`, `/api/self/version`, `/api/conversations` | **on this tree: NOT yet reachable from the page** - `hud_proxy.rs` carries none of the three (`HUD_GET_PATHS` has 12 paths and no `/api/self`); the desktop's own PR #1115 adds `/api/self`, `/api/conversations` and - after this branch's `/api/self/version` - its allowlist becomes 14 paths. The version STRING is read by the shell's version handshake, not only the page | can read them like any route; the phone has no self screen | it is a read; both apps' chats already reach the PC |
 | "Open a place" | `hud_nav.rs` table + `open_jarvis_area` | `OpenPlace` table + the one-time settings request | same field, each app's own surfaces |
 | More than one conversation window | **desktop only** - the extra `chat-*` windows | one screen at a time | recorded in `docs/ARCHITECTURE.md` section 8 |
 | Clearing one conversation | the card is answered in any window (Windows Hello where the gate asks) | the card is answered on Home like any card; its History delete keeps its own confirm | one action, one decision, everywhere |
@@ -32280,7 +32280,14 @@ bytes, and the user-data folder byte-identical before and after),
 copies; the desktop's `cargo test` unit tests in `hud_nav.rs`, `chat_windows.rs`
 and `backend_self.rs`; the phone's `OpenPlaceTest`, `OpenPlaceAreasTest` and
 `ConversationClearTest`. The two
-checkers named by the parity rule - `tools/check_parity.py` and
-`tools/check_event_names.py` - classify nothing new from this feature except
-the routes the two apps call, and the feature directory entry is in
-`features/features.json`; the PR says exactly what each one reported.
+checkers named by the parity rule do NOT classify nothing: `tools/check_parity.py`
+adds **nine `BACKEND_ONLY` entries** for this feature - `/api/self`,
+`/api/self/version`, `/api/self/refresh`, `/api/conversations`,
+`/api/conversations/{id}`, `/api/conversations/clear`, and the storage
+self-scan's `/api/storage/scan`, `/api/storage/cleanup/plan`,
+`/api/storage/cleanup` - each carrying its follow-up lane in the reason, because
+neither app calls any of them on this tree. `tools/check_event_names.py`
+classifies nothing new because no event kind is added (navigation stays on the
+existing per-answer `X-Jarvis-Route` field). **No `features/features.json` entry
+is added by this work** - that row is still waiting on the app lanes; the PR
+says exactly what each checker reported.

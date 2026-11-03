@@ -96,40 +96,45 @@ CLEAR_PATH = "/api/conversations/clear"
 ROUTES = (SELF_PATH, VERSION_PATH, REFRESH_PATH, CONVERSATIONS_PATH, CLEAR_PATH)
 
 #: The storage self-scan's own routes, when `jarvis_storage_health.py` is on
-#: this PC (a separate worker's module, shipped as its own drop-in folder). It
-#: is NOT a dependency: with the module absent its routes are simply not
-#: served, and everything here works exactly as before. The wiring lives here
-#: only because this module already owns the self routes the storage page sits
-#: beside; the scan itself, its plan and its ONE-card apply are that module's.
+#: this PC (a separate worker's module, shipped as PR #1117's own drop-in). It
+#: is NOT a dependency: with the module absent its routes are simply not served
+#: and everything here works exactly as before; the scan itself, its plan and
+#: its ONE-card apply are that module's.
 #:
-#: THE NAME IS BUILT, NOT A LITERAL INSIDE import_module(). Two of this
-#: repository's audits read a name out of that call - the base's own import walk
-#: (backend/test_base_matches_repo.py) and the shipped-modules accounting
-#: (backend/test_shipped_modules.py), which fails any module imported by a
-#: shipped file that is not itself shipped. This drop-in is NOT shipped by this
-#: repository yet (it lands as its own pull request), so a literal there would
-#: make both audits call this branch incomplete; and once it lands it is in
-#: $SHIPPED, so the same wiring keeps working either way.
-_STORAGE_MODULE = "jarvis_" + "storage_health"
-_STORAGE = None
+#: THE IMPORT IS A PLAIN, GUARDED `import` ON PURPOSE, and the two audits that
+#: read it are told the truth instead of being routed around (2026-11-03, after
+#: an audit found this call site had been hidden behind a built name):
+#:   * backend/test_shipped_modules.py now lists ("jarvis_self_portrait.py",
+#:     "jarvis_storage_health") in REPO_ONLY_IMPORTS with this reason, so the
+#:     dependency is VISIBLE and accounted for while PR #1117 is unmerged;
+#:   * backend/test_base_matches_repo.py allows it by name in OPTIONAL_IMPORTS
+#:     (the published base cannot carry a module this repository does not ship
+#:     yet) with the same reason.
+#: Both entries are removed when #1117 is in the shipped set and the base is
+#: re-taken; until then a PC without the module must SAY so rather than serving
+#: nothing quietly - see storage_absence_words() and the start-up banner line.
+try:
+    import jarvis_storage_health as _STORAGE
+except ImportError:                          # not installed on this PC (PR #1117)
+    _STORAGE = None
+except Exception:                            # noqa: BLE001 - a damaged drop-in must not
+    _STORAGE = None                          # take the self portrait down with it
+
+#: The one sentence said when the storage self-scan is not on this PC. It is
+#: TESTED (test_self_portrait.py) so the absence cannot silently read as "there
+#: is nothing to scan".
+STORAGE_MISSING = ("The storage self-scan is not installed on this PC, so there "
+                   "is no scan to run yet. Everything else works as before.")
 
 
-def _load_storage():
-    """`jarvis_storage_health` when its drop-in module is on this PC, else None.
-
-    Loaded through importlib on purpose (see _STORAGE_MODULE above): a plain
-    `import` statement is what the base's own import walk reads, and this module
-    is a drop-in that the published base does not carry. This is the same reason
-    jarvis_plugins loads its drop-ins this way.
-    """
-    try:
-        import importlib
-        return importlib.import_module(_STORAGE_MODULE)
-    except Exception:                       # noqa: BLE001 - older PC, or not shipped
-        return None
+def storage_available() -> bool:
+    """True when PR #1117's drop-in module is really on this PC."""
+    return _STORAGE is not None
 
 
-_STORAGE = _load_storage()
+def storage_absence_words() -> str:
+    """The plain sentence for a PC without the storage self-scan, or ""."""
+    return "" if _STORAGE is not None else STORAGE_MISSING
 
 
 def storage_routes() -> tuple:
@@ -1012,9 +1017,19 @@ def _decide(job: dict, gate: Callable, tier_of: Callable) -> None:
     says so. Deleting a conversation never touches the memory store.
     """
     token, text, cid = job["token"], job["text"], job["id"]
+    # `replaces` IS NOT DECORATION (2026-11-03, audit finding): jarvis_gate's
+    # replaces_for() gives a card the two-press "REPLACES CURRENT DATA" guard
+    # either when its action is in _REPLACES_ACTIONS or when the module that
+    # raised it marks its own detail with {"replaces": True}. This card DELETES
+    # a kept conversation and cannot be undone, so it must carry the marker:
+    # without it one press would delete data while delete_file and
+    # memory_forget_range take two. The action itself is deliberately NOT added
+    # to _REPLACES_ACTIONS - that table lives in the patch stack, and the marker
+    # is the documented route for an action of a module outside it.
     detail = {"text": text, "what": "delete ONE conversation from this PC",
               "conversation_id": cid, "title": job["title"],
-              "messages": job["messages"], "leaves_this_pc": False}
+              "messages": job["messages"], "leaves_this_pc": False,
+              "replaces": True}
     try:
         v = gate(CLEAR_ACTION, detail, text)
     except Exception as exc:                # noqa: BLE001 - a card that failed
@@ -1274,9 +1289,12 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         n_settings = len(settings())
     except Exception:                       # noqa: BLE001 - the banner must print
         n_places = n_settings = 0
-    extra = ""
-    if storage_routes():
-        extra = "; storage scan beside it"
+    # SAY SO WHEN THE STORAGE SELF-SCAN IS ABSENT, in the start-up banner. The
+    # module is PR #1117's and is wired optionally; a deploy without it must not
+    # read as "the storage feature is on" by silence, which is the hazard the
+    # audit named when the import was hidden behind a built name.
+    extra = ("; storage scan beside it" if storage_available()
+             else "; storage self-scan NOT installed")
     return (f"  self       Self portrait: {n_places} places, {n_settings} settings "
             f"(GET /api/self, /api/self/version, POST /api/self/refresh, "
             f"/api/conversations; clear needs one card{extra})")

@@ -468,29 +468,25 @@ TOOL_GROUPS = (
      ("protect_from_jarvis", "github_search", "send_file_to_phone")),
 )
 #: The storage self-scan's own tools, appended ONLY when its module is really
-#: on this PC (a separate 2026-11-03 worker ships jarvis_storage_health.py as
-#: its own drop-in folder). Defensive on purpose: this page must never name a
-#: tool the PC does not have, and a PC without that module is exactly as it was
-#: before. Its own module exports TOOL_ROWS in exactly this shape.
-#:
-#: Loaded through importlib, NOT a plain `import` statement: the base's own
-#: import walk (backend/test_base_matches_repo.py) reads static imports, and
-#: this drop-in is not part of this repository's published base - a static
-#: import would make the base look incomplete. Same reason jarvis_plugins
-#: loads its drop-ins this way. THE NAME IS BUILT for one more audit:
-#: backend/test_shipped_modules.py reads a literal out of import_module() and
-#: fails a module imported by a shipped file that is not itself shipped, and
-#: this drop-in lands as its own pull request - so the literal would read as
-#: this branch being incomplete. Once it lands it is in $SHIPPED, and this
-#: wiring is unchanged.
-_STORAGE_HEALTH_MODULE = "jarvis_" + "storage_health"
+#: on this PC (PR #1117's drop-in). The import is a PLAIN, GUARDED one on
+#: purpose, and the audits are told the truth rather than routed around:
+#: backend/test_shipped_modules.py lists ("jarvis_asks_first.py",
+#: "jarvis_storage_health") in REPO_ONLY_IMPORTS, and
+#: backend/test_base_matches_repo.py allows it in OPTIONAL_IMPORTS, both with
+#: this reason - jarvis_storage_health.py is not in this repository's shipped set
+#: yet (it lands as PR #1117), so the published base cannot carry it either.
+#: Both entries are removed when #1117 is in the shipped set and the base is
+#: re-taken. Until then a PC without the module has exactly the four shipped
+#: groups and its start-up line says the storage scan is not installed.
 _storage_health = None
-try:                                        # noqa: SIM105 - absent is normal
-    import importlib as _importlib
-    _storage_health = _importlib.import_module(_STORAGE_HEALTH_MODULE)
-    TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
-except Exception:                           # noqa: BLE001 - not shipped on this PC
+try:
+    import jarvis_storage_health as _storage_health
+except ImportError:                          # not installed on this PC (PR #1117)
     _storage_health = None
+except Exception:                            # noqa: BLE001 - a damaged drop-in must
+    _storage_health = None                   # not take the ask-first page down
+if _storage_health is not None:
+    TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
 
