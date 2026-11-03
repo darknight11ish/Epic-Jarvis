@@ -30516,6 +30516,157 @@ system prompt appears after the in-app Approve on a real device, and that a tap 
 reaches the PC over Tailscale after the process was killed. The desk check proves the compile and
 the JVM rules only.
 
+## 178. The skills menu: install, import, turn off, edit (added 2026-11-02)
+
+The owner asked, in these words:
+
+> "is jarvis fully compatible with hermes skills? if so, can we make a plug in
+> menu where i can add or remove or change plug ins for hermes? only do research
+> right now, no actual work"
+
+The research was `.dsh-scratch/OWNER-QUEUE-2026-11-02/HERMES-SKILLS-RESEARCH.md`,
+and the owner then chose its **scope B**: the PC's skills menu that installs
+from a folder or a `.zip`, enables and disables a skill, edits one behind the
+same card, and imports the skills already in `%USERPROFILE%\.hermes\skills` -
+with **no marketplace** and nothing downloaded.
+
+A "skill" was already a thing in Jarvis: a folder with a `SKILL.md` in it, whose
+frontmatter and body say when the agent should read it (`backend/jarvis_skills.py`,
+sections 135 and 138). What did not exist was any way to add one from an app.
+`jarvis-skills`' own docstring said so: *"there is deliberately no route that
+installs a skill, because installing runs the scanner and the approval gate on
+the PC"* (the phone's `Skills.kt`). This section is that route - on the PC,
+where the scanner and the card already live.
+
+### 178.1 The module, and the folder that installs it
+
+`backend/jarvis_skill_menu.py`, shipped whole by
+`scripts/apply-patches.ps1`, and its five routes come from
+`plugins/ready/skill-menu/` (`jarvis_skill_menu.install()`) - **no patch and no
+edit to `jarvis_hud.py`**, the same shape `jarvis_skill_hub.py` uses.
+
+It calls `jarvis_skills.py` for everything that matters and re-implements none
+of it: `parse_skill`, `scan_text`, `vet`, `install`, `_quarantine`, the index,
+and the `modify_own_code` card. One additive change was needed for the card's
+words and is a patch of its own - `backend/skill-install-note.patch`:
+
+- `install(..., note="")` puts ONE caller-written line on the same single card
+  (the sentence in 178.4). With no `note` the card is byte-identical to before.
+- `install()` now re-checks the card's **tier**, the way
+  `jarvis_skills.refine()` already did. `jarvis_gate.check` returns
+  `allowed=True` on `notify` ("you were told after") and `auto` (nobody in the
+  loop), so before this a config that listed `modify_own_code` as `notify`
+  would have installed a skill with no person asked. A skill IS instructions
+  the agent will follow, so the card has to be a real card.
+
+### 178.2 The five routes
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/skills/menu` | every installed skill (verdict, trust, uses, `scripts/` count), every turned-off one, and whether `%USERPROFILE%\.hermes\skills` exists | none |
+| `GET /api/skills/menu?name=<skill>` | ONE skill, plus its own `SKILL.md` text so the owner can read and edit it | none |
+| `POST /api/skills/install` | `{"path"}` a folder or `.zip` on this PC, or `{"hermes"}` a folder the scan named; `"dry_run": true` stops after the scanner; `"accept_warnings"` for a warning-level skill | **ONE** `modify_own_code` card |
+| `POST /api/skills/import/scan` | a READ-ONLY scan of `%USERPROFILE%\.hermes\skills`: every `SKILL.md`, its verdict, its `scripts/` count. Copies, moves and installs nothing | none |
+| `POST /api/skills/state` | `{"name", "on"}`: off moves the folder to `skills-off\` and drops its index row; on runs the scanner and the card again | on: **ONE**; off: none |
+| `POST /api/skills/edit` | `{"name", "text"}`: the new `SKILL.md`, scanned and installed through the same path | **ONE** |
+
+`GET /api/skills` (the list) and `POST /api/skills/decide` (removal, with its
+"are you sure?") are unchanged and still the only routes both apps call: the
+Settings menu's **Remove** calls the same `brain_remove_skill` command the
+Brain already had, so there is one removal path, not two.
+
+### 178.3 The safety model, in the order it happens
+
+1. **The scanner runs first, on every source.** `parse_skill` + `vet` -
+   the same regex-over-raw-bytes scanner, the same limits - run before any card
+   exists. A `.zip` is unpacked into a throwaway folder first (below) and its
+   contents are scanned exactly as a folder's would be.
+2. **A refusal never becomes a card.** A `refuse` verdict is copied into
+   `skills-quarantine\` with its report and returns `{"asked": false}`. This is
+   the point of the whole module: the attack these rules exist for works by
+   producing a dialog that looks routine, so "may I install this?" for a
+   curl-pipe-bash skill is the last step of the exploit, not a safeguard.
+3. **A warning waits for a person.** A `review` verdict returns
+   `{"needs": "accept_warnings"}` and raises no card; the same request again
+   with `"accept_warnings": true` raises the ONE card. The page shows the
+   warnings first, and asks "Install anyway?".
+4. **ONE card, and one only.** `install()` is reached exactly once per request
+   (`backend/test_skill_menu.py` counts the calls). Three skills are three
+   cards: there is no "install all", no "import all" and no yes-to-all, because
+   this project does not build bulk approval.
+5. **The person must really answer.** The tier check in 178.1.
+6. **The trust is not the client's to set.** A request that sent
+   `{"trust": "local"}` is ignored: anything arriving through this route is
+   `third_party`, the strictest level, because `local` scans less strictly
+   (bundled scripts become a note, and a missing licence is not flagged).
+7. **The `.zip` bounds are refusals, never truncations.** A member that is
+   absolute, carries a drive letter, climbs with `..`, or is a symlink refuses
+   the whole archive before it is written; the file count and total size are
+   the skill's own (`MAX_FILES` 64, `MAX_SKILL_DIR` 5 MB). An archive with no
+   `SKILL.md`, or with more than one, is refused with the count - guessing at
+   which one the owner meant is not this route's business.
+8. **A GitHub `.zip` works.** `my-skill-main/SKILL.md` whose frontmatter says
+   `name: my-skill` is renamed in the throwaway copy to the name the frontmatter
+   declares, and the same `parse_skill` checks the result. The spec's rule (the
+   folder IS the name) is what makes a skill addressable, and it is not relaxed
+   - only the archive's own folder name is.
+9. **Nothing is downloaded, and nothing in a skill is run.** There is no
+   marketplace, no catalogue to browse, no URL, and no socket: the module
+   imports no network library and starts no process. A skill's `scripts/` is
+   copied and never executed - by this route or by anything else in Jarvis.
+
+### 178.4 The sentence on the card and on the row (Gemini's ruling 6)
+
+Skills stay instructions-only, and Hermes skills that ship a `scripts/` folder
+say so in the owner's words, on the install card and on the skill's row:
+
+```
+Imported SKILL.md instructions (N file(s) in scripts/ are kept inert and never
+run automatically).
+```
+
+It is built in one place (`jarvis_skill_menu.INERT_SENTENCE`) and reaches the
+card through `install(..., note=...)`, so the card and the row cannot drift -
+`backend/test_skill_menu.py` and `jarvis-desktop/tests/skills-menu.mjs` both pin
+the exact characters. A skill with no `scripts/` folder says nothing about one,
+on purpose: a sentence that is always there stops being read.
+
+What a Hermes skill does and does not get here: the format is the same
+(agentskills.io - `name`, `description` and a Markdown body), so a Hermes folder
+usually installs as it is. Hermes-only metadata (`platforms`,
+`metadata.hermes.*` conditional activation, `required_environment_variables`) is
+kept in the parsed skill's `extra_fields` and **does nothing** in Jarvis, which
+has no OS gating and no toolset-conditional activation for skills. A skill that
+relied on a bundled script for its behaviour loses that behaviour entirely -
+which is the point of the sentence above, not a bug to work around.
+
+### 178.5 What is NOT built
+
+- **No marketplace and no remote install.** No ClawHub, no skills.sh, no
+  GitHub fetch, no auto-install, no "browse skills". The three sources are: a
+  folder on this PC, a `.zip` on this PC, and `%USERPROFILE%\.hermes\skills` if
+  it is already there. Nothing opens a socket.
+- **No phone install, turn-on or edit screen.** The phone keeps exactly what it
+  had (`GET /api/skills` and Remove with its "are you sure?"). The five routes
+  are classified `deliberate` in `tools/check_parity.py` and the reason is in
+  `docs/ARCHITECTURE.md` §8.
+- **No renaming.** An edit cannot change a skill's name: the frontmatter
+  `name:` must still match the folder, which is what stops a skill from being
+  addressed by a name it does not own. Renaming is a new install plus a
+  removal.
+- **No Hermes-metadata behaviour.** See 178.4.
+
+### 178.6 What this slice cannot prove at the desk
+
+The Settings card's two Windows dialogs (`src-tauri/src/folders.rs`'s
+`What::SkillFolder` and `What::SkillZip`) are compiled and unit-tested but are
+not driven here: no test opens a dialog. The owner's own click is the proof.
+Everything else - the scanner, the refusal, the ONE card, the `.zip` bounds, the
+Hermes scan against a fake folder, the off/on round trip, the edit, the routes'
+origin and token checks - is driven against temp folders and a stub gate by
+`backend/test_skill_menu.py`, and the page and the Rust are read for their
+wiring by `jarvis-desktop/tests/skills-menu.mjs`.
+
 ## 179. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
 
 The owner's question of 2026-11-02 ~00:20 PT, and his answer the same night

@@ -5693,7 +5693,7 @@ def _run_reminders(name: str, surface: str) -> "Result":
 # The live owner asked "what plug-ins do you have integrated into you?" and
 # the model said it had no plug-ins, only built-in capabilities. False: the
 # loader (backend/jarvis_plugins.py) imports every folder in jarvis_plugins\
-# beside jarvis_hud.py and calls its own install(); plugins/ready/ holds 45
+# beside jarvis_hud.py and calls its own install(); plugins/ready/ holds 46
 # drop-in modules and plugins/loader/README.md documents it. This table is
 # generated from those folders' own plugin.json summaries and pinned by
 # backend/test_plugins_honesty.py, so a plug-in cannot silently vanish from
@@ -5739,6 +5739,7 @@ PLUGIN_CATALOGUE = (
     ('send-file', "send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaq..."),
     ('setup', 'the setup questionnaire: a guided path through settings that already exist.'),
     ('skill-hub', "the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and..."),
+    ("skill-menu", "the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\\.hermes\\skills, turn one off and back on, and edit its..."),
     ('sky', 'the sun, the moon and the weather behind the animal faces and the robot (which counts as an animal face for every option).'),
     ('spending', '"How much did I spend on food last month?", added up from a bank export the owner dropped into a folder Jarvis may look in.'),
     ('tool-updates', '"Check for tool updates", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newe...'),

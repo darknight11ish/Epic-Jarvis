@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "0ca88600afe669f1249d1fca9db24bb2e197b92c48abde189f4491a44f7ee37a",
+  "source_sha256": "1a12d8b03f31e27d5b2212524d233027b1cca1817ad3811e8840a505d79208ce",
   "feature_count": 168,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -1729,8 +1729,8 @@ export const FEATURE_DIRECTORY = {
       "label_note": "",
       "example": "turn on Skills",
       "example_ok": true,
-      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
-      "where_desktop": "All features and abilities",
+      "where": "desktop Settings: skills; phone: All features and abilities",
+      "where_desktop": "skills",
       "where_phone": "All features and abilities",
       "note": "",
       "not_a_control": true

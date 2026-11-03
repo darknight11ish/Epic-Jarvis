@@ -232,6 +232,11 @@ pub(crate) mod picker {
         ProtectFolder,
         /// One file the owner protects from Jarvis (the same card).
         ProtectFile,
+        /// One skill folder: a folder with a SKILL.md in it, for Settings'
+        /// "Skills" (skills_menu.rs, 2026-11-02).
+        SkillFolder,
+        /// One skill `.zip`, for the same card.
+        SkillZip,
     }
 
     /// `Ok(None)` when the owner cancelled.
@@ -298,6 +303,27 @@ pub(crate) mod picker {
                     )
                     .map_err(fail)?;
             }
+            What::SkillFolder => {
+                dialog
+                    .SetTitle(w!("Choose a skill folder (one with a SKILL.md in it)"))
+                    .map_err(fail)?;
+                dialog
+                    .SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST)
+                    .map_err(fail)?;
+            }
+            What::SkillZip => {
+                let types = [COMDLG_FILTERSPEC {
+                    pszName: w!("Skill archive (.zip)"),
+                    pszSpec: w!("*.zip"),
+                }];
+                dialog.SetFileTypes(&types).map_err(fail)?;
+                dialog.SetTitle(w!("Choose a skill .zip")).map_err(fail)?;
+                dialog
+                    .SetOptions(
+                        options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST,
+                    )
+                    .map_err(fail)?;
+            }
             What::Zip => {
                 let types = [COMDLG_FILTERSPEC {
                     pszName: w!("Notion export (.zip)"),
@@ -343,12 +369,22 @@ pub(crate) mod picker {
         ProtectFolder,
         /// One file the owner protects from Jarvis (protected.rs).
         ProtectFile,
+        /// One skill folder, and one skill `.zip`, for Settings' "Skills"
+        /// (skills_menu.rs).
+        SkillFolder,
+        SkillZip,
     }
 
     pub fn pick(what: What) -> Result<Option<String>, String> {
         let _ = matches!(
             what,
-            What::Folder | What::Zip | What::ChatExport | What::ProtectFolder | What::ProtectFile
+            What::Folder
+                | What::Zip
+                | What::ChatExport
+                | What::ProtectFolder
+                | What::ProtectFile
+                | What::SkillFolder
+                | What::SkillZip
         );
         Err("choosing a folder or a file needs the Windows dialog".to_string())
     }

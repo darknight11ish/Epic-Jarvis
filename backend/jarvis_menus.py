@@ -473,6 +473,18 @@ MENUS: tuple = (
        names=("what asks first", "asks first", "what asks first settings")),
     _m("settings.reach", "What Jarvis can reach", "Which tools Jarvis may use.",
        names=("what jarvis can reach", "reach")),
+    # The skills menu (2026-11-02, JARVIS-API section 178): the PC's Settings
+    # card that lists the skills Jarvis may follow, installs one from a folder
+    # or a .zip, imports what is in the PC's own Hermes folder, turns one off
+    # and back on and edits one. Desktop only - every door that writes runs the
+    # PC's scanner and raises ONE card on the PC - so the phone's
+    # MenuVisibilityTest/FindAnythingTest must not treat it as a phone menu it
+    # cannot reach (OpenPlace.kt has the same decision in PC_ONLY).
+    _m("settings.skills-menu", "Skills",
+       "The skills Jarvis may follow: install one, import your Hermes skills, "
+       "turn one off and back on, and edit one.", (DESKTOP,),
+       names=("skills", "the skills menu", "my skills", "hermes skills",
+              "install a skill")),
     # "Data and maths sandbox" (LM-1C, 2026-10-18): the switch that offers the
     # small read-only Python tool to the AI model. A card on the desktop and a
     # row on the phone, both from GET /api/sandbox; the plugin folder
