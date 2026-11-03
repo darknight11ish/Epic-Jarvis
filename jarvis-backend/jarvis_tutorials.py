@@ -1307,15 +1307,18 @@ CATALOGUE = (
              "where": "The talk button on the phone's Home screen",
              "point": {"desktop": None, "phone": "talk-button"}},
             {"title": "Slide away to cancel",
-             "body": "A hold is easy to start by accident, and once the PC has "
-                     "checked a clip it cannot be unsent. So sliding your finger "
+             "body": "A hold is easy to start by accident, and once a clip has "
+                     "been sent it cannot be unsent. So sliding your finger "
                      "off the button before you let go throws the recording away "
                      "without sending it.",
              "where": "The talk button on the phone's Home screen",
              "point": {"desktop": None, "phone": "talk-button"}},
             {"title": "The words are worked out on the PC",
-             "body": "Your voice is sent to this PC, where the voice check runs "
-                     "and the model makes the words. The phone never turns speech "
+             "body": "Your voice is sent to this PC, where the model makes the "
+                     "words. The phone's talk button is not put to the voice "
+                     "check - a press on your own phone is your act, like typing "
+                     "- while \"Hey Jarvis\" and Jarvis Live still are. The phone "
+                     "never turns speech "
                      "into text itself, and it never keeps the model or your "
                      "memory.",
              "where": "Nothing to change - this is how it is built",

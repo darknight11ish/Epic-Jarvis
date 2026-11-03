@@ -1041,7 +1041,7 @@ permissions = [
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off, pin or unpin a fact on \"Always keep in mind\", and tag or untag a fact for \"Between us\". One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its three automatic-learning switches on (an approval card) or off, pin or unpin a fact on \"Always keep in mind\", and tag or untag a fact for \"Between us\". One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
@@ -1064,13 +1064,20 @@ permissions = [
   # switches' state (GET /api/memory/learning, a read); the "Saved
   # automatically" list - a read, held back like the other memory lists
   # while "Windows Hello for memory lists and chat history" hides them; and
-  # its two switches, ONE setting per call. ON only raises an approval card
+  # its three switches, ONE setting per call. ON only raises an approval card
   # (tier `ask`) and is held while the event stream is stale; OFF is
   # immediate. Forgetting one of them is brain_memory_forget above.
   "allow-brain-memory-learning-status",
   "allow-brain-memory-auto-list",
   "allow-brain-memory-learning-auto",
   "allow-brain-memory-learning-sensitive",
+  # The third switch (2026-11-02, option C1 of the memory-card research):
+  # "Save facts even when Jarvis had to reword them". The Brain draws it
+  # beside the other two in the same card (brain.js paintAutoSettings), so the
+  # Brain must hold it - leaving it to `learning-settings` alone left the
+  # switch drawn here and refused here. One setting per call; ON raises ONE
+  # card and is held on a stale link, OFF is immediate.
+  "allow-brain-memory-learning-paraphrase",
   # The ids of facts saved automatically that the owner has not looked at
   # yet, counted in Rust because the Brain is destroyed when it is closed
   # (brain/auto_learn.rs note_saved). Ids only, never a fact's words; it
@@ -1789,11 +1796,12 @@ permissions = [
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "learning-settings"
-description = "Read the two learning switches and their waiting cards, turn background learning on (one approval card on this PC) or off at once, and turn automatic remembering of sensitive topics on (one card) or off. Settings only; it never reads a saved fact, never forgets one and never exports anything."
+description = "Read the three learning switches and their waiting cards, turn background learning on (one approval card on this PC) or off at once, turn automatic remembering of sensitive topics on (one card) or off, and turn \"Save facts even when Jarvis had to reword them\" on (one card) or off (2026-11-02). Settings only; it never reads a saved fact, never forgets one and never exports anything."
 permissions = [
   "allow-brain-memory-learning",
   "allow-brain-memory-learning-status",
   "allow-brain-memory-learning-sensitive",
+  "allow-brain-memory-learning-paraphrase",
 ]
 
 # ---------------------------------------------------------------------------

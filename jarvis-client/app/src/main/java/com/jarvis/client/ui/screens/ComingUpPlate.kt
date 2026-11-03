@@ -444,9 +444,13 @@ internal fun ComingUpSection(
  * ([ScheduleRow] below, `chrome.badInk`) and reaches a fired job since
  * 2026-10-13 (DEF-008; net/Schedule.kt's [Schedule.WENT_OFF_ACTIONS] says why
  * it is worded "Delete" and not "Clear this"). Neither asks anything first.
+ *
+ * Shared with the phone's own Reminders screen (ui/screens/RemindersScreen.kt,
+ * 2026-11-02), like [ScheduleRow] below: a reminder that went off is drawn the
+ * one way in both places.
  */
 @Composable
-private fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> Unit) {
+internal fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> Unit) {
     val chrome = LocalChrome.current
     Gap(10)
     Column(Modifier.fillMaxWidth()) {
@@ -468,9 +472,16 @@ private fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> U
     }
 }
 
-/** One job: its kind, its title, its lines, and its own buttons - ONE job per tap. */
+/**
+ * One job: its kind, its title, its lines, and its own buttons - ONE job per tap.
+ *
+ * Shared with the phone's own Reminders screen (ui/screens/RemindersScreen.kt,
+ * 2026-11-02): the owner's reminders are drawn by the ONE row here, so the
+ * Brain plate and the dedicated screen cannot say a different thing about the
+ * same job or offer a different button for it.
+ */
 @Composable
-private fun ScheduleRow(
+internal fun ScheduleRow(
     job: Schedule.Job,
     sinceMs: Long,
     enabled: Boolean,

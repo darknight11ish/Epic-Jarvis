@@ -282,7 +282,8 @@ def t_b13_an_accepted_sensitive_card_stays_sensitive_when_used():
 def t_b13_saved_under_the_switch_keeps_its_topic():
     E, A, w = _world("switch")
     keep = A.settings
-    A.settings = lambda: {"auto": True, "auto_sensitive": True, "why": ""}
+    A.settings = lambda: {"auto": True, "auto_sensitive": True,
+                            "auto_paraphrase": False, "why": ""}
     try:
         _q, res = _learn(E, A, w, LIAM, LIAM_FACT, {"sensitive": True, "category": "health"})
         check("guard: with \"Also remember sensitive topics automatically\" on it is saved",

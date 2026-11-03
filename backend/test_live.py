@@ -1343,21 +1343,30 @@ def t_live_phrases_on_the_speech_path():
               sp.w.engine.status()["on"] and h["text"] == ""
               and sorted(sp.calls) == ["owner_check", "stt"], (h, sp.calls))
         sp.w.engine.stop()
-        h = sp.hear(source="push_to_talk", words="Let's talk.")
-        check("the talk button's 'let's talk': Live starts on this device, 'I'm listening.'",
+        h = sp.hear(source="push_to_talk", words="Let's talk.", mic="desktop")
+        check("the desktop talk button's 'let's talk': Live starts on this device, "
+              "'I'm listening.'",
               h["live"] == "started" and h["live_say"] == L.SAY_STARTED and h["text"] == ""
-              and sp.w.engine.status()["device"] == "phone"
+              and sp.w.engine.status()["device"] == "desktop"
               and sp.w.engine.status()["started_by"] == "voice", h)
         sp.w.engine.stop()
+        h = sp.hear(source="push_to_talk", words="Let's talk.", mic="phone")
+        check("the phone's mic press is NOT checked, so its 'let's talk' does not open "
+              "Live: the words are an ordinary message (2026-11-02; Live still needs a "
+              "passed check or the app's own Start)",
+              h["live"] == "" and h["text"] == "Let's talk."
+              and not sp.w.engine.status()["on"], h)
+        sp.w.engine.stop()
         h = sp.hear(source="push_to_talk", words="Let's talk.", mic="")
-        check("...but not from an app that names no device: then it is an ordinary question",
+        check("...nor from an app that names no device: then it is an ordinary question",
               h["live"] == "" and h["text"] == "Let's talk." and not sp.w.engine.status()["on"], h)
-        h = sp.hear(source="push_to_talk", who="stranger", words="let's talk")
-        check("a stranger cannot start it", not sp.w.engine.status()["on"], h)
+        h = sp.hear(source="push_to_talk", who="stranger", words="let's talk", mic="desktop")
+        check("a stranger on a checked talk button cannot start it",
+              not sp.w.engine.status()["on"], h)
         sp.w.engine.voice_ready = lambda d: L.NEEDS_VOICE
-        h = sp.hear(source="push_to_talk", words="let's talk")
+        h = sp.hear(source="push_to_talk", words="let's talk", mic="desktop")
         check("no real voice check: 'let's talk' is refused in plain words, nothing said",
-              h["live"] == "refused" and h["reason"] == L.needs_voice_words("phone")
+              h["live"] == "refused" and h["reason"] == L.needs_voice_words("desktop")
               and h["live_say"] == ""
               and not sp.w.engine.status()["on"], h)
 

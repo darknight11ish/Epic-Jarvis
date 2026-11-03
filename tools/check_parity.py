@@ -477,6 +477,12 @@ CLASSIFICATION = {
     # automatically (net/AutoLearn.kt, AutoLearnPlate.kt).
     "/api/memory/learning/auto": ("ported", "\"Learn automatically\": ON is one approval card (learning_auto_enable), OFF is immediate. Both apps hold ON on a stale link and say \"waiting\" while the card is in the queue, wherever it was raised. Its state rides on GET /api/memory/learning."),
     "/api/memory/learning/sensitive": ("ported", "\"Also remember sensitive topics automatically\" (off by default): ON is one approval card (learning_sensitive_enable), OFF is immediate. The same holds as the other switch. Both apps say, in the same words, that passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses always wait for a yes (the PC enforces it)."),
+    # 2026-11-02, option C1 of the memory-card research: ONE named switch, off
+    # by default, that relaxes ONE check - "not in your own words" - and none
+    # of the others. On both apps it is drawn beside the other two, in exactly
+    # the same shape (a fact it saves carries the "Jarvis's own words" mark in
+    # "Saved automatically" in both).
+    "/api/memory/learning/paraphrase": ("ported", "\"Save facts even when Jarvis had to reword them\" (off by default): ON is one approval card (learning_paraphrase_enable), OFF is immediate. It relaxes ONE check - the words not being the owner's own - and nothing else: sensitive topics, passwords and ID numbers, pasted text, a tool's reading, provenance, corrections, forgotten facts, the switches and the per-pass ceiling are all unchanged. A fact it saves carries the \"Jarvis's own words\" mark in Saved automatically in both apps, and a one-tap Forget like any other. Its state rides on GET /api/memory/learning (`paraphrase`, `paraphrase_waiting`, `paraphrase_last`) and on GET /api/memory/auto."),
     "/api/memory/auto": ("ported", "\"Saved automatically\": the facts saved without a card, newest first, with Load older, a \"said aloud\" mark for voice, \"said again N times\", \"true from <date>\" (one shared wording fixture, contract/memory-words-cases.json) and a Forget on each. Both apps read it again on the memory_saved event (ids only, never the text) and hide it under the phone's \"Hide memory lists and chat history\"."),
     "/api/memory/learning": ("ported", "The learning on/off switch on the phone's Brain screen (MemoryCountsSection). Turning learning ON raises an approval card on the PC (learning-asks.patch, 2026-09-24): the phone says \"waiting\" while a learning_enable card is in the queue, and holds ON on a stale link; OFF is immediate. GET /api/memory/learning (auto-learn.patch, planned for both apps) reads both switches and whether a card for either is waiting."),
     "/api/memory/pending": ("ported", "The review queue."),
@@ -983,6 +989,20 @@ BACKEND_ONLY = {
     "/api/projects/{id}/app/tasks/{id}/android/build": "The Gradle build of one app task (JARVIS-API section 166.3): ONE risky card (app_build_android), then exactly `<task copy>/gradlew.bat assembleDebug`. PC only (403 pc_only): the SDK, the wrapper and the build's output are on this machine. The card is drawn by both apps, so the owner may approve it from the phone - only the ROUTE is desktop-side, which is why this is classified here rather than given a phone screen.",
     "/api/projects/{id}/app/tasks/{id}/android/install": "The sideload of the built APK (JARVIS-API section 166.4): ONE risky card (app_install_android), then exactly `adb install -r <the apk inside the task's copy>`. PC only (403 pc_only) because the phone is on THIS PC's cable. The card reaches both apps; the route cannot, and the phone deliberately has no install button for its own phone.",
     "/api/protection/propose": "The chat door to the Protected from Jarvis list (JARVIS-API section 170; backend jarvis_protection.py and the model tool protect_from_jarvis): the owner asks in chat to protect a folder, file or program, the route validates the words before it raises anything, then ONE protect_item card waits; the store is written only after that card's own yes and GET ?id= reads how the card ended. No app window calls it - both apps reach it by chatting and the model tool is what calls it inside the backend - so it is backend-only rather than a missing screen. The desktop's own Settings add is /api/protection/add (immediate, no card) and the phone has no add route on purpose (ARCHITECTURE section 8).",
+    "/api/phone/apps": "The phone's app allow-list, managed (JARVIS-API section 176; backend/phone-apps.patch, jarvis_phone_apps.py): ONE path with two verbs - GET reads [phone_apps] (read-only) and POST asks for ONE app to be added or removed, raising ONE change_own_config card that names the friendly name and the exact package id; nothing is written until a person approves and there is no bulk path. The feature is reachable from BOTH apps today through the `phone_apps` model tool in chat and Live, which is why these routes are not the only door. The SETTINGS screens are the remaining half of this slice: the desktop section (typed package id, each write through POST) and the phone's READ-ONLY list plus 'ask Jarvis to add an app' (GET), because typing a name AND a package is deep config editing and stays off the phone (ARCHITECTURE section 8, docs/DECISIONS.md 2026-11-02). When the desktop section lands this entry is removed and the route becomes `ported`; when the phone's read-only screen lands it is `todo`, never `ported`, on purpose.",
+    # GET reads [phone_apps] (read-only) and POST asks for ONE app to be added
+    # or removed, raising ONE change_own_config card that names the friendly
+    # name and the exact package id; nothing is written until a person approves
+    # and there is no bulk path. The feature is reachable from BOTH apps today
+    # through the `phone_apps` model tool in chat and Live, which is the reason
+    # these two routes are not the only door. The SETTINGS screens are the
+    # remaining half of this slice: the desktop section (typed package id, each
+    # write through POST) and the phone's READ-ONLY list plus "ask Jarvis to add
+    # an app" (GET), because typing a name AND a package is deep config editing
+    # and stays off the phone (ARCHITECTURE section 8, docs/DECISIONS.md
+    # 2026-11-02). When the desktop section lands, this entry is removed and the
+    # route becomes `ported`; when the phone's read-only screen lands it is
+    # `todo`, never `ported`, on purpose.
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

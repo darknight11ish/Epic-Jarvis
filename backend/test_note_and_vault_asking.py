@@ -66,6 +66,7 @@ import secrets
 import shutil
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import types
@@ -117,7 +118,7 @@ class Verdict:
 
 GATE = {"tainted": False, "allowed": True, "outcome": "approved",
         "tier": "auto", "calls": [], "cards": [], "explode": False,
-        "gate_pending": []}
+        "gate_pending": [], "entered": None, "release": None}
 
 
 def gate_check(action, detail=None, prompt="", **kwargs):
@@ -125,6 +126,13 @@ def gate_check(action, detail=None, prompt="", **kwargs):
     GATE["cards"].append((action, detail, prompt))
     if GATE["explode"]:
         raise RuntimeError("gate exploded")
+    # The 2026-11-02 half: a real tier-"ask" card BLOCKS here until someone
+    # answers it, and the route answers "waiting" to whoever asked in the
+    # meantime. These two events are how a test holds a card up.
+    entered, release = GATE.get("entered"), GATE.get("release")
+    if entered is not None and release is not None:
+        entered.set()
+        release.wait(20)
     if GATE["tainted"] and action != "write_notes_after_outside_text":
         # A real gate would not receive this from the quick path; failing here
         # proves the escalation is what made the call.
@@ -187,12 +195,18 @@ def reset_vault() -> None:
 def reset_gate(*, tainted=False, allowed=True, outcome="approved",
                tier="auto") -> None:
     GATE.update(tainted=tainted, allowed=allowed, outcome=outcome, tier=tier,
-                calls=[], cards=[], explode=False, gate_pending=[])
+                calls=[], cards=[], explode=False, gate_pending=[],
+                entered=None, release=None)
 
 
 def reset_all(*, organizer_on=False, tainted=False) -> None:
     reset_vault()
     reset_gate(tainted=tainted)
+    # No capture job from the test before this one is still waiting: the
+    # module keeps at most four, and a leftover would answer the next test
+    # with the 429 "several notes are already waiting for approval".
+    with NC._lock:
+        NC._jobs.clear()
     V.reset_for_tests()
     try:
         V.state_path().unlink()
@@ -934,6 +948,109 @@ def t_note_reading_questions_really_read_or_say_they_cannot():
     check("'open my notes' still opens the Brain's Notes plate",
           got is not None and got.intent == "open_app",
           got.intent if got else "the model")
+
+
+# --------------------------------------------------------------------------
+# 9. A note left waiting names its job, so the chat can say how it ended
+# --------------------------------------------------------------------------
+def t_a_waiting_note_answer_names_the_job_that_settles_it():
+    """The owner's report, 2026-11-02: after a short voice note and the card's
+    approval, the phone's chat still said "Waiting for your approval." beside a
+    note that existed.
+
+    The fast path's answer IS the capture route's own 202 sentence - the whole
+    answer, not a status line - so the one thing that can settle that chat line
+    is the job's id on the answer's route (`note_job`). This proves both
+    halves: the answer names a real, still-waiting job, and the same job says
+    in the PC's own words how it ended once the card is approved. The phone's
+    half (reading the id, following it, replacing the line) is
+    `jarvis-client`'s NoteWaitingTest.
+    """
+    reset_all()
+    GATE["entered"], GATE["release"] = threading.Event(), threading.Event()
+    out = {}
+    t = threading.Thread(target=lambda: out.update(got=ask("make a note: buy milk")),
+                         daemon=True)
+    t.start()
+    check("the card really goes up", GATE["entered"].wait(10),
+          "the gate was never asked")
+    t.join(10)
+    got = out.get("got")
+    check("a note left waiting is answered by the fast path",
+          got is not None and got.intent == "note_make_waiting",
+          got.intent if got else "the model")
+    check("... with the capture route's own waiting sentence",
+          got is not None and got.reply == "Waiting for your approval.",
+          got.reply if got else None)
+    job = str((Q.route_fields(got) if got else {}).get("note_job") or "")
+    check("... and the answer names the capture job that will settle it",
+          job.startswith("note_"), job or "(no note_job in the route)")
+    code, body = NC.capture_status(job)
+    check("... which is a real job on this PC, still waiting",
+          code == 202 and body.get("state") == "waiting", (code, body))
+    check("... and nothing has been written yet", not TODAY_NOTE.exists(),
+          str(TODAY_NOTE))
+
+    # The owner taps Approve: the PC files the note, and the job says so. That
+    # sentence is what an app holding this id shows instead of its waiting line.
+    GATE["release"].set()
+    deadline = time.time() + 10
+    code, body = 202, {}
+    while time.time() < deadline:
+        code, body = NC.capture_status(job)
+        if body.get("state") != "waiting":
+            break
+        time.sleep(0.05)
+    rel = TODAY_NOTE.relative_to(VAULT).as_posix()
+    check("after the approval the same job says the note was filed",
+          code == 200 and body.get("state") == "filed"
+          and body.get("message") == f"Filed in Obsidian, {rel}.",
+          (code, body))
+    check("... and the daily note really holds the owner's words",
+          TODAY_NOTE.is_file() and "buy milk" in TODAY_NOTE.read_text(encoding="utf-8"),
+          TODAY_NOTE.read_text(encoding="utf-8") if TODAY_NOTE.is_file() else "")
+
+
+def t_a_denied_note_job_says_nothing_was_written_through_the_same_id():
+    """The other ending: a denied card. The chat must be able to say this in
+    the PC's words too, or the fix would trade one wrong line for another."""
+    reset_all()
+    GATE.update(allowed=False, outcome="denied")
+    GATE["entered"], GATE["release"] = threading.Event(), threading.Event()
+    out = {}
+    t = threading.Thread(target=lambda: out.update(got=ask("make a note: denied one")),
+                         daemon=True)
+    t.start()
+    GATE["entered"].wait(10)
+    t.join(10)
+    got = out.get("got")
+    job = str((Q.route_fields(got) if got else {}).get("note_job") or "")
+    check("a denied note also names its job", job.startswith("note_"), job)
+    GATE["release"].set()
+    deadline = time.time() + 10
+    code, body = 202, {}
+    while time.time() < deadline:
+        code, body = NC.capture_status(job)
+        if body.get("state") != "waiting":
+            break
+        time.sleep(0.05)
+    check("... and the same id says the owner said no, in the module's words",
+          code == 200 and body.get("state") == "not_filed"
+          and body.get("message") == "You said no, so nothing was written.",
+          (code, body))
+    check("... and the vault is still empty", not TODAY_NOTE.exists(),
+          str(TODAY_NOTE))
+
+
+def t_a_note_filed_at_once_names_no_job():
+    reset_all()
+    got = ask("make a note: filed straight away")
+    check("a note filed at once is not left waiting",
+          got is not None and got.intent == "note_made" and TODAY_NOTE.is_file(),
+          got.intent if got else "the model")
+    check("... so its answer names no job to follow",
+          (Q.route_fields(got) if got else {}).get("note_job") is None,
+          Q.route_fields(got) if got else None)
 
 
 def main() -> int:

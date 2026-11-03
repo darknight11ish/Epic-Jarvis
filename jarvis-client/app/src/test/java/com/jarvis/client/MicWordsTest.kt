@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -90,5 +91,21 @@ class MicWordsTest {
         assertTrue(MicWords.NOT_OFFERED.contains("Train my voice"))
         assertTrue(MicWords.NO_PERMISSION.contains("settings"))
         assertTrue(MicWords.ANSWERING.contains("Stop"))
+    }
+
+    @Test
+    fun `the waiting line does not claim a voice check`() {
+        // The owner, 2026-11-02: "when i do the mic press to make a short
+        // verbal message to jarvis, dont have it confirm my voice through the
+        // voice id". The clip is still sent and still heard; it is the voice
+        // print that no longer runs, and this one line is shared with "hey
+        // Jarvis" and Live, which ARE still checked - so it must describe what
+        // the PC is doing without claiming a check either way.
+        val line = MicWords.WAITING
+        assertTrue("the waiting line is blank", line.isNotBlank())
+        assertFalse(
+            "the waiting line still claims a voice check: $line",
+            line.lowercase().contains("voice") || line.lowercase().contains("check"),
+        )
     }
 }

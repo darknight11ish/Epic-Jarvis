@@ -101,7 +101,33 @@ object AutoLearn {
             waitingKey = "sensitive_waiting",
             lastKey = "sensitive_last",
         ),
+
+        /**
+         * 2026-11-02, option C1 of the memory-card research: ONE named switch,
+         * off by default, that relaxes ONE check - "not in your own words".
+         * The desktop says the same words (auto-learn.js PARAPHRASE_LABEL).
+         */
+        PARAPHRASE(
+            path = "/api/memory/learning/paraphrase",
+            action = "learning_paraphrase_enable",
+            title = "Save facts even when Jarvis had to reword them",
+            under = "When a fact's words are Jarvis's own rather than yours, it saves it and " +
+                "marks it \"Jarvis's own words\" instead of asking. It may write down " +
+                "something you did not say, so every one is listed here with Forget. " +
+                "Nothing else is relaxed.",
+            key = "paraphrase",
+            waitingKey = "paraphrase_waiting",
+            lastKey = "paraphrase_last",
+        ),
     }
+
+    /** The mark a fact saved under [Which.PARAPHRASE] carries, in both apps. */
+    const val REWORDED_MARK = "Jarvis's own words"
+
+    /** Said under the mark, for a long press or a screen reader. */
+    const val REWORDED_NOTE =
+        "Jarvis reworded this in its own words, and you turned on \"Save facts even " +
+            "when Jarvis had to reword them\". Forget it if it does not say what you said."
 
     fun enabledBody(on: Boolean): String = "{\"enabled\":$on}"
 
@@ -118,10 +144,13 @@ object AutoLearn {
     data class Status(
         val auto: Boolean?,
         val autoSensitive: Boolean?,
+        val paraphrase: Boolean? = null,
         val autoWaiting: Boolean = false,
         val sensitiveWaiting: Boolean = false,
+        val paraphraseWaiting: Boolean = false,
         val autoLast: Last? = null,
         val sensitiveLast: Last? = null,
+        val paraphraseLast: Last? = null,
         /**
          * The PC's `why`: its own sentence when the settings file is damaged
          * or unreadable (both switches then read off). Null when all is well
@@ -132,16 +161,19 @@ object AutoLearn {
         fun on(which: Which): Boolean? = when (which) {
             Which.AUTO -> auto
             Which.SENSITIVE -> autoSensitive
+            Which.PARAPHRASE -> paraphrase
         }
 
         fun waiting(which: Which): Boolean = when (which) {
             Which.AUTO -> autoWaiting
             Which.SENSITIVE -> sensitiveWaiting
+            Which.PARAPHRASE -> paraphraseWaiting
         }
 
         fun last(which: Which): Last? = when (which) {
             Which.AUTO -> autoLast
             Which.SENSITIVE -> sensitiveLast
+            Which.PARAPHRASE -> paraphraseLast
         }
     }
 
@@ -163,10 +195,13 @@ object AutoLearn {
     fun status(body: JsonObject): Status = Status(
         auto = body.flag(Which.AUTO.key),
         autoSensitive = body.flag(Which.SENSITIVE.key),
+        paraphrase = body.flag(Which.PARAPHRASE.key),
         autoWaiting = body.flag(Which.AUTO.waitingKey) == true,
         sensitiveWaiting = body.flag(Which.SENSITIVE.waitingKey) == true,
+        paraphraseWaiting = body.flag(Which.PARAPHRASE.waitingKey) == true,
         autoLast = body.last(Which.AUTO.lastKey),
         sensitiveLast = body.last(Which.SENSITIVE.lastKey),
+        paraphraseLast = body.last(Which.PARAPHRASE.lastKey),
         why = body.str("why"),
     )
 
@@ -175,8 +210,11 @@ object AutoLearn {
      * `auto` and `auto_sensitive` too) - used only when the settings read
      * failed, so the switches still show which way they are.
      */
-    fun statusFromList(body: JsonObject): Status =
-        Status(auto = body.flag(Which.AUTO.key), autoSensitive = body.flag(Which.SENSITIVE.key))
+    fun statusFromList(body: JsonObject): Status = Status(
+        auto = body.flag(Which.AUTO.key),
+        autoSensitive = body.flag(Which.SENSITIVE.key),
+        paraphrase = body.flag(Which.PARAPHRASE.key),
+    )
 
     // --------------------------------------------------------- switch ---
 
@@ -232,6 +270,8 @@ object AutoLearn {
         Which.AUTO -> "Waiting for your approval to turn on learning automatically. ${Approvals.WHERE}"
         Which.SENSITIVE -> "Waiting for your approval to remember sensitive topics automatically. " +
             Approvals.WHERE
+        Which.PARAPHRASE ->
+            "Waiting for your approval to save facts in Jarvis's own words. ${Approvals.WHERE}"
     }
 
     /**
@@ -246,22 +286,28 @@ object AutoLearn {
             Switch.UNKNOWN -> return when (which) {
                 Which.AUTO -> "Couldn't tell whether Jarvis learns automatically."
                 Which.SENSITIVE -> "Couldn't tell whether sensitive topics are remembered automatically."
+                Which.PARAPHRASE -> "Couldn't tell whether facts in Jarvis's own words are saved."
             }
             Switch.ON -> when (which) {
                 Which.AUTO -> "On. Facts from your own words are saved without asking, and listed " +
                     "under Saved automatically."
                 Which.SENSITIVE -> "On. Sensitive facts from your own words are saved without asking too."
+                Which.PARAPHRASE -> "On. A fact in Jarvis's own words is saved and marked " +
+                    "\"Jarvis's own words\"."
             }
             Switch.OFF -> when (which) {
                 Which.AUTO -> "Off. Every fact Jarvis learns waits for your yes, as a card."
                 Which.SENSITIVE -> "Off. Sensitive facts wait for your yes, as a card."
+                Which.PARAPHRASE -> "Off. A fact in Jarvis's own words waits for your yes, as a card."
             } + " Turning it on asks you first, with an approval card."
         }
         // The background-learning note goes under "Learn automatically" only:
         // said once, like the desktop's, not again under the sensitive switch.
         val caveat = when {
             which == Which.AUTO && learningOn == false -> " $LEARNING_OFF_NOTE"
-            which == Which.SENSITIVE && autoOn == false -> " $SENSITIVE_NEEDS_AUTO"
+            // 2026-11-02: the third switch means nothing without "Learn
+            // automatically" either, and says so in the same words.
+            which != Which.AUTO && autoOn == false -> " $SENSITIVE_NEEDS_AUTO"
             else -> ""
         }
         return if (switch == Switch.ON) base + caveat else base
@@ -341,6 +387,8 @@ object AutoLearn {
                 "Jarvis no longer learns automatically. New facts wait for your yes."
             Which.SENSITIVE -> if (on) "Sensitive topics are remembered automatically." else
                 "Sensitive topics wait for your yes again."
+            Which.PARAPHRASE -> if (on) "Facts in Jarvis's own words are saved and marked." else
+                "A fact in Jarvis's own words waits for your yes again."
         }
     }
 
@@ -368,6 +416,12 @@ object AutoLearn {
          * "not used in answers" ([Topics.notUsedTag]).
          */
         val topic: Int? = null,
+        /**
+         * 2026-11-02: saved under "Save facts even when Jarvis had to reword
+         * them" - the words are Jarvis's, not the owner's. A flag only; the
+         * row shows [AutoLearn.REWORDED_MARK].
+         */
+        val reworded: Boolean = false,
     ) {
         /** Said aloud to Jarvis (a verified voice turn), not typed. */
         val aloud: Boolean get() = provenance == Provenance.VOICE
@@ -417,6 +471,7 @@ object AutoLearn {
                 // As sent, not trimmed: the desktop reads it the same way.
                 trueFrom = (o["true_from"] as? JsonPrimitive)?.takeIf { it.isString }?.content,
                 topic = o.prim("topic")?.takeIf { !it.isString }?.longOrNull?.takeIf { it > 0 }?.toInt(),
+                reworded = o.flag("reworded") == true,
             )
         }
         return Page(

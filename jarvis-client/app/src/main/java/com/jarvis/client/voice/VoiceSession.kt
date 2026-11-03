@@ -129,9 +129,13 @@ class VoiceSession(
         CAPTURING,
 
         /**
-         * Sent. The desktop is checking whose voice it is, and only then
-         * transcribing — verify first, transcribe second, so a voice that is
-         * not his is never turned into words.
+         * Sent; the PC has the clip and is working on it - finding the speech,
+         * checking the voice on the surfaces that check it, and making the
+         * words. Not every clip is checked: since 2026-11-02 the phone's mic
+         * press is not (the owner's request), while "hey Jarvis" and Jarvis
+         * Live still are. So this phase is drawn with
+         * [com.jarvis.client.MicWords.WAITING], which claims no check, never
+         * with the old "Checking it's you…".
          */
         VERIFYING,
 
@@ -1198,7 +1202,7 @@ class VoiceSession(
         val result = api.utterance(wav, source, waitedMs)
         if (result is ApiResult.Failed) {
             setPhase(turn, Phase.OFF)
-            setNotice(turn, "Could not reach the desktop to check that.")
+            setNotice(turn, "Could not reach the desktop to hear that.")
             return null
         }
         val heard = (result as ApiResult.Ok).value

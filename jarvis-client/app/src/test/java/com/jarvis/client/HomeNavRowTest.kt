@@ -24,12 +24,17 @@ import java.io.File
  *
  * What that has to mean in this app, and what this file holds:
  *
- *  1. **The row draws Reminders, and Reminders opens Coming up.** It is the
- *     same destination "open coming up" and Find anything's own row already
- *     use - `brain.work.coming-up`, the plate Brain draws under the item key
- *     `coming-up` - so a tap on the button and a typed search land in the same
- *     place. Coming up can never be hidden (`ComingUpReachabilityTest`), which
- *     is why the button needs no show-for-visit and is always drawn.
+ *  1. **The row draws Reminders, and Reminders opens the phone's own Reminders
+ *     screen.** Until the owner's second ask the same day - *"I want a custom
+ *     reminders screen ... I also want another option within the reminders that
+ *     includes a daily to-do list"* - the button opened Brain -> Coming up. It
+ *     now opens `Screen.REMINDERS` (`ui/screens/RemindersScreen.kt`,
+ *     `RemindersTest`), and the Coming up plate is unchanged and still
+ *     reachable through "open coming up", Find anything's own row and the
+ *     Brain's Work section - it is still the way into the named lists, the
+ *     standby schedule and a file from the PC. The button is always drawn
+ *     rather than gated on a menu switch, because none of those is a hideable
+ *     menu.
  *  2. **No Appearance item is in the row** - not the button, not its icon, not
  *     the callback. The id `entry.appearance` is KEPT (ids are never reused or
  *     renamed, and the phone still has Appearance) but it is no longer a
@@ -123,43 +128,52 @@ class HomeNavRowTest {
     }
 
     @Test
-    fun `the Reminders button opens Coming up, the same place Find uses`() {
+    fun `Coming up is still the place Find and open coming up use`() {
         assertEquals(
             "the Brain item that holds Coming up",
             "brain.work.coming-up",
             MenuPlaces.menuFor(Screen.BRAIN.name, "coming-up"),
         )
         val row = FindAnything.row("brain.work.coming-up")
-        assertNotNull("Coming up must be findable, or the button has no twin", row)
+        assertNotNull("Coming up must still be findable", row)
         assertEquals("it opens the Brain", Screen.BRAIN, row!!.screen)
         assertEquals("at the Coming up plate", "coming-up", row.section)
-        // Coming up is never hideable, which is what lets the button be drawn
-        // unconditionally: a due reminder must stay reachable.
+        // Coming up is never hideable: a due reminder must stay reachable now
+        // that Home's button no longer goes there.
         assertTrue(
-            "Coming up must stay in NEVER_HIDE for the button to be unconditional",
+            "Coming up must stay in NEVER_HIDE",
             "brain.work.coming-up" in MenuCatalog.NEVER_HIDE,
         )
         assertTrue(
-            "nothing can hide Coming up, so the button is always drawn",
+            "nothing can hide Coming up",
             MenuView(MenuState(hidden = setOf("brain.work.coming-up"))).shows("brain.work.coming-up"),
         )
     }
 
     @Test
-    fun `MainActivity lands the button on the Coming up plate`() {
+    fun `MainActivity lands the button on the phone's own Reminders screen`() {
         val activity = repoFile(ACTIVITY).readText()
         val body = activity.substringAfter("onOpenReminders = {", "").substringBefore("},")
         assertTrue("Home's Reminders callback is not wired up at all", body.isNotBlank())
         val compact = body.replace(Regex("\\s+"), " ")
         assertTrue(
-            "the button does not name the plate it opens: $compact",
-            compact.contains("pendingSection = \"coming-up\""),
+            "the button does not open the phone's own Reminders screen: $compact",
+            compact.contains("nav.go(Screen.REMINDERS)"),
         )
+        assertFalse(
+            "the button still jumps into the Brain: $compact",
+            compact.contains("Screen.BRAIN"),
+        )
+        assertFalse(
+            "the button still names the Brain's plate for the visit: $compact",
+            compact.contains("pendingSection"),
+        )
+        // The destination it opens really is that screen, drawn with the same
+        // two guards every other phone screen has (rule 4 and the private lists).
         assertTrue(
-            "the plate is not named for the Brain screen: $compact",
-            compact.contains("pendingSectionScreen = Screen.BRAIN.name"),
+            "no destination draws RemindersScreen",
+            activity.contains("Screen.REMINDERS -> com.jarvis.client.ui.screens.RemindersScreen("),
         )
-        assertTrue("the button does not open the Brain: $compact", compact.contains("nav.go(Screen.BRAIN)"))
         // The Home row's old direct jump to the Appearance screen is gone. The
         // one that stays is the SETTINGS screen's own row callback, which is
         // how Appearance is reached now.

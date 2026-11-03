@@ -84,7 +84,10 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: 31 since the settings audit's G1 (2026-10-28) gave the two learning switches
 #: their own Settings card - the only real switch features with no Settings row
 #: on either app before that.
-EXPECTED_ROWS = 31
+#: 32 since "Save facts even when Jarvis had to reword them" joined that card
+#: (2026-11-02, option C1 of the memory-card research): one more toggle row,
+#: one more spoken setting, both generated from SETTINGS_ROWS.
+EXPECTED_ROWS = 32
 
 #: The rows that are not settings switches, with the reason. These are in
 #: SETTINGS_ROWS (so the page and the table still agree) but carry
@@ -161,11 +164,12 @@ def t_the_count_is_what_it_is():
           f"re-count and update EXPECTED_ROWS and SETTINGS_ROWS together")
     bare = len(re.findall(r'^[ \t]*<label class="toggle">[ \t]*$',
                           SETTINGS_HTML.read_text(encoding="utf-8"), re.M))
-    check("24 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
-          bare == 24 and len(page) - bare == 7,
+    # 2026-11-02: the new row carries a label id, so 24 bare + 8 with an id.
+    check("25 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
+          bare == 25 and len(page) - bare == 7,
           f"bare={bare}, with-id={len(page) - bare} - this is the trap that "
           f"produced the wrong '19'")
-    check("all 31 desktop rows are described",
+    check("all 32 desktop rows are described",
           len(R.DESKTOP_ROWS) == EXPECTED_ROWS, str(len(R.DESKTOP_ROWS)))
     check("the three phone rows are described too",
           len(R.SETTINGS_ROWS) == EXPECTED_ROWS + 3, str(len(R.SETTINGS_ROWS)))
@@ -214,8 +218,10 @@ def t_setting_links_are_real():
            if r.setting and r.setting not in keys]
     check("every row's `setting` names a real BoolSetting", not bad, "; ".join(bad))
     linked = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.setting)
-    check("nineteen desktop rows are the same switch as a spoken setting",
-          len(linked) == 19, f"{linked} - if this grew, the row was given a setter")
+    check("twenty desktop rows are the same switch as a spoken setting",
+          len(linked) == 20, f"{linked} - if this grew, the row was given a setter")
+    # TWENTY SINCE 2026-11-02: `learning-paraphrase` joined the linked
+    # rows with its own spoken setting, `learn_paraphrase`.
     # NINETEEN SINCE 2026-11-01: `voice-one-moment` ("Say \"One moment\" if I'm
     # kept waiting") became a real switch, `one_moment`, on the owner's own ask
     # ("...includimg no longer saying one moment while it comprehends or
@@ -344,6 +350,10 @@ def t_bool_settings_is_the_measured_thirteen():
     rows this file counts. Its `section` is "manner", so "open how jarvis
     talks" lands on the card that draws it.
 
+    Thirty-five since 2026-11-02: `learn_paraphrase`, "Save facts even when
+    Jarvis had to reword them". One of the twenty linked rows above, because
+    `learning-paraphrase` was added to the page with its setter.
+
     Thirty-three since 2026-10-29: `jarvis_calendar`, the Jarvis-owned local
     calendar's switch. Cardless either way, ON by default, OFF keeps every
     event; an orphan above too, because the Calendar Settings card that will
@@ -357,8 +367,8 @@ def t_bool_settings_is_the_measured_thirteen():
     says which FEATURE a switch belongs to and the "voice" card is the wake
     word's; its own comment says so.
     """
-    check("BOOL_SETTINGS holds its thirty-four spoken settings",
-          len(R.BOOL_SETTINGS) == 34, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-five spoken settings",
+          len(R.BOOL_SETTINGS) == 35, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

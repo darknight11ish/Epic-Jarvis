@@ -495,7 +495,13 @@ def t_after_waking():
         body = json.loads(fake.chats()[-1]) if len(fake.chats()) == n + 1 else {}
         check("the model chat used: warmed with the tools that turn had",
               out["state"] == "warmed"
-              and [t["function"]["name"] for t in body.get("tools") or []] == ["web_search"],
+              # `web_search` brings the conversation web-search approval and its
+              # stop with it (jarvis_agent.GRANT_ASK_TOOLS, 2026-11-02): the
+              # warm-up must send the SAME tools the real turn sends, which is
+              # the whole point of this check, so the ride-alongs are in it.
+              and [t["function"]["name"] for t in body.get("tools") or []]
+              == ["web_search", "approve_web_search_for_conversation",
+                  "stop_web_search_approval"],
               (out, list(body)))
 
         class FakeOllama:

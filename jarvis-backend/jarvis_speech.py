@@ -49,6 +49,29 @@ local model may now run beside the check and its answer is dropped unread,
 saving ~140 ms on every clip the owner speaks. The safe failure is still to
 say nothing back, not to say something quietly wrong.
 
+THE ONE EXCEPTION, and it is one surface (the owner's request of 2026-11-02):
+the phone's own mic press - a clip with `source=push_to_talk` AND
+`mic="phone"`, and nothing else - does not run step 4 below, and the "too
+short to be sure it was you" refusal that exists only to feed that check is
+skipped with it. The owner's words: "when i do the mic press to make a short
+verbal message to jarvis, dont have it confirm my voice through the voice
+id". The press on his own paired phone is the act, the way typing is; the
+voice check used to stand between that press and the question, and what it
+also bought - a private, memory or sensitive answer READ ALOUD, and a fact
+learned without a card - is still refused, because such a reply says
+`strictness: ""` and `mode: "quick_message"` (`_QuickMessage` below), and
+both `_really_checked` and `jarvis_auto_learn.check_voice` answer no to
+that. EVERY other surface still checks every clip: Jarvis Live's
+`source=live` clips, the phone's `source=wake_word` clips, the desktop's
+talk button (`mic="desktop"`), and a clip that does not name its microphone
+(fail closed). Live's own gate is untouched
+(`jarvis_live._default_voice_ready`), and so is the phone's button gate
+(`listening.push_to_talk`: a trained print, the voice-ID model and
+speech-to-text). The exception does not open Jarvis Live either: "let's
+talk" from that press is an ordinary message, because Live's own rule is
+"NO LIVE WITHOUT A REAL VOICE CHECK" - the app's Start control and
+"Hey Jarvis, let's talk" are the doors.
+
 The whole order, since 2026-09-23 (each step can only refuse, never add):
 
     0. source=barge_in (2026-09-24): Jarvis is talking; barge_in() answers
@@ -79,7 +102,9 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
        little more". A short wake-word clip that is only "hey Jarvis"
        still goes on (it opens the listening window, step 6); a short one
        with a command in it is refused after step 5, its words dropped.
+       Not for the phone's mic press: nothing is checked there (above).
     4. the owner check (jarvis_voice)    not the owner   -> refused
+       The phone's mic press skips this step and step 3b (above).
        since 2026-10-20 steps 4 and 5 run AT THE SAME TIME when a
        speech-to-text engine is installed: the words are made beside the
        check and DISCARDED unless it passes - never returned, logged,
@@ -107,7 +132,10 @@ passed). Its words may end Live ("that's all for now") or extend it ("20
 more minutes") - jarvis_live.phrase(), only after the owner check. "Hey
 Jarvis, let's talk" (or the talk button's
 "let's talk") starts Live on the device that heard it, also only after the
-owner check. While Live is on one device, the OTHER device's "hey Jarvis"
+owner check. The phone's mic press is not checked (the exception above), so
+its words do not open Live: they are an ordinary message, and Live still
+needs a passed check or the app's own Start control. While Live is on one
+device, the OTHER device's "hey Jarvis"
 clips are dropped before the spotter (`other_device`, "Live is on your
 phone"). The owner's answer of 2026-09-28: under "only trust the talk
 button" a Live clip is trusted like the talk button unless the voice
@@ -2319,6 +2347,22 @@ def _really_checked(verdict, *, very: bool = False) -> bool:
     return bool(strictness)
 
 
+#: The one clip that skips the owner check (the owner's request of
+#: 2026-11-02): the phone's own mic press. BOTH the source and the
+#: microphone must say so - the desktop's talk button sends the same
+#: `push_to_talk` with `mic=desktop` and is still checked, and a clip that
+#: does not name its microphone is treated as unknown, so it is checked too
+#: (fail closed).
+QUICK_MESSAGE_SOURCE = "push_to_talk"
+QUICK_MESSAGE_MIC = "phone"
+
+
+def _is_quick_message(source: str, mic: str) -> bool:
+    """Is this the phone's mic press - the one surface with no owner check?
+    See `QUICK_MESSAGE_SOURCE` and `_QuickMessage`."""
+    return str(source or "") == QUICK_MESSAGE_SOURCE and str(mic or "") == QUICK_MESSAGE_MIC
+
+
 def _memory_aloud() -> bool:
     try:
         return bool(jarvis_voice.memory_aloud())
@@ -2507,6 +2551,51 @@ class _SessionTrusted:
 
     def __init__(self, strictness: str = ""):
         self.strictness = str(strictness or "")
+
+
+class _QuickMessage:
+    """The phone's mic press: a clip that is deliberately NOT voice-checked.
+
+    The owner's request of 2026-11-02: "when i do the mic press to make a
+    short verbal message to jarvis, dont have it confirm my voice through the
+    voice id". The press on his own paired phone is the act (like typing a
+    message), so this verdict lets the words through without
+    `jarvis_voice.verify()` ever being called - and the "say a little more"
+    refusal, which exists only to give a speaker model enough audio, goes
+    with it (`hear()`'s `short` is false for this clip).
+
+    What it deliberately is NOT is a passed check. `mode` is not "owner",
+    `strictness` and `voice_print` are empty, and `score`/`threshold` are 0,
+    so:
+
+      * `_really_checked()` answers False: no answer that draws on email,
+        the calendar, notes or memory, and no answer that uses a saved fact,
+        is READ ALOUD on this clip's say-so (`private_aloud`, `memory_aloud`
+        and `sensitive_aloud` are all false - the answer is on the phone's
+        screen). `screen_aloud` is the one that was never conditioned on the
+        voice check, so it is unchanged.
+      * automatic learning (`jarvis_auto_learn.check_voice`, GUARDS L8)
+        refuses it for the same reason: a fact it mentions waits for the
+        owner's card instead of being learned silently.
+      * `threshold` 0 is also what the phone reads as "no check ran": a
+        refusal that DID run the check has `threshold > 0`, and that is how
+        the app tells "that didn't sound like you" from a short or unusable
+        clip (`Heard.Outcome` in VoiceModels.kt).
+      * it cannot open Jarvis Live: "let's talk" from this clip is an
+        ordinary message (`hear()` does not read Live's phrases for it), so
+        the one way into a session stays a passed check or the app's own
+        Start control.
+
+    Nothing may mistake it for a fresh check - `mode` says "quick_message" in
+    the reply, in the chat log's `voice_check` facts, and in the delay table.
+    """
+    is_owner = True
+    score = 0.0
+    threshold = 0.0
+    mode = "quick_message"
+    voice_print = ""
+    strictness = ""
+    reason = ""
 
 
 def _live_started(out: dict, engine: str, wake: bool, common: dict,
@@ -3004,6 +3093,10 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     mic = str(mic or "").strip().lower()
     if mic not in ("phone", "desktop"):
         mic = ""
+    # The phone's own mic press, and only that, skips the owner check below
+    # (the owner's request of 2026-11-02; the whole rule and its cost are in
+    # the module docstring and in `_QuickMessage`).
+    quick = _is_quick_message(source, mic)
     if source == SOURCE_BARGE_IN:
         b = barge_in(raw, mic=mic)
         return Heard(False, source=source, available=bool(b.get("available")),
@@ -3066,8 +3159,11 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     live_trust = ""
     need = _min_command_seconds()
     # Only once there is a print to check against: with none, the owner
-    # needs "train your voice first", not "say a little more".
-    short = need > 0 and spoken < need and _has_print(mic)
+    # needs "train your voice first", not "say a little more". Not for the
+    # phone's mic press: nothing is checked there, so a short message is
+    # taken (the owner's request of 2026-11-02 - a "short verbal message"
+    # was being refused as too short to check).
+    short = need > 0 and spoken < need and _has_print(mic) and not quick
 
     # 3. The wake word. Switched on? Then: is "hey Jarvis" in it?
     via_window = False
@@ -3264,6 +3360,8 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     #        as little as possible on a clip that may not be the owner. If a
     #        thread cannot be started, the words are made after the check,
     #        exactly as before, and the full clip is checked exactly as before.
+    #        For the phone's mic press there is no check to run beside; the
+    #        worker still makes the words, and step 5 joins it as usual.
     early = None
     if not check_only and _stt_engine() is not None:
         try:
@@ -3285,6 +3383,16 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         embedder = None
         steps["owner_check"] = 0.0
         steps["owner_check_early"] = 0.0
+    elif quick:
+        # The phone's mic press: no speaker model is run, at all - the one
+        # surface the owner asked for on 2026-11-02. `_QuickMessage` is
+        # `is_owner` True so the words below are used, and answers "no real
+        # check" to everything that would grant a privilege for one. No
+        # `steps["owner_check"]`: the step did not run, and `note_heard` omits
+        # a step that is not in `steps`, so the delay table's "checking it is
+        # you" row counts only clips that were really checked.
+        verdict = _QuickMessage()
+        embedder = None
     else:
         try:
             verdict, embedder, used_early, check_ms = _decide_owner(
@@ -3494,7 +3602,13 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                 text = rest
         if wake and text.strip() and not _claim_wake(mic, t_in):
             return other_device()
-        said = _live_phrase(text)
+        # "Let's talk" starts Live only from a clip that was really checked.
+        # The phone's mic press is not (2026-11-02), so on that one surface the
+        # words are an ordinary message: opening Live still needs a passed
+        # check (there or "Hey Jarvis"), or the app's own Start control - the
+        # owner's 2026-09-28 rule "NO LIVE WITHOUT A REAL VOICE CHECK" is not
+        # loosened by a route that skips the check.
+        said = None if quick else _live_phrase(text)
         started = _live_start(mic) if said is not None and said[0] == "start" else None
         if started is not None:
             # "Let's talk" - with the talk button, or in the window after a
