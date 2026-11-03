@@ -179,6 +179,14 @@ TOOL_NAMES = {
                                            "everything else still asks; until you say stop or 8 hours pass)",
     "stop_web_search_approval": "Putting the card back in front of every web search "
                                 "in this chat (instant, no card)",
+    # The two drop-in plugin tools (2026-11-02, the owner's decision: "Jarvis may
+    # list plugins and turn them on/off by chat, one card per change"). Listed
+    # here because test_reach.py requires every tool to have plain words for the
+    # "What can Jarvis reach" page; the card is the existing modify_own_code row,
+    # so the page's own asking words come from that action.
+    "plugin_list": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+    "plugin_switch": "Switching ONE of Jarvis's own drop-in plugins on (one card) "
+                     "or off (instant); it takes effect the next time Jarvis starts",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as

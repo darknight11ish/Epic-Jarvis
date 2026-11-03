@@ -86,9 +86,11 @@ export const DESKTOP_FAQ = Object.freeze([
     q: "What is Jarvis Live, and how do I end it?",
     a: "A back-and-forth voice conversation. Click Live in the Jarvis bar (or say " +
       "\"Hey Jarvis, let's talk\") and just talk: no \"Hey Jarvis\" before each " +
-      "sentence. Every sentence is still checked for your voice on this PC before " +
-      "any words are made of it, and a card that comes up still waits for your " +
-      "click. A red dot on the tray icon and a small sign at the top of the screen " +
+      "sentence. Your voice is checked once for the Live session on this PC - one " +
+      "full sentence verifies you - and after that this session is not checked " +
+      "sentence by sentence; ending Live ends that trust. A card that comes up still " +
+      "waits for your click. A red dot on the tray icon and a small sign at the top " +
+      "of the screen " +
       "show while it is on. To end it, click End Live on the sign, say \"Okay " +
       "Jarvis, that's all for now\", or just stop talking for 90 seconds. Mic off " +
       "closes the microphone without ending it. Live needs your voice trained first " +

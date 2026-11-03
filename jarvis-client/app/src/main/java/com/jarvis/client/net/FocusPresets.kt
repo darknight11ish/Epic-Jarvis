@@ -63,9 +63,18 @@ object FocusPresets {
     const val MODELS = "Model and card:"
     const val HELPER = "Second worker:"
     const val PENDING = "Being prepared"
-    const val HEAVY =
-        "This preset needs both cards at once as one pooled lane. Your PC refuses heavy mode " +
-            "until that lane support lands, so it cannot be used from here yet."
+    /**
+     * The COST of a heavy preset: both cards at once, and the other models
+     * paused while it runs. It is not a refusal any more (2026-11-02): the PC
+     * has a pooled both-card lane, so the phone offers the preset and this is
+     * what it says trying it means. The PC sends its own `heavy_words`; this is
+     * the fallback for an older PC, and the same sentence both desktop copies
+     * carry.
+     */
+    const val HEAVY_COST =
+        "This preset needs both cards at once as one pooled lane. While it runs, " +
+            "the everyday and Fast models are paused - they come back when you apply " +
+            "another preset. Loading it takes about half a minute."
     const val APPLY_UNPUBLISHED =
         "The PC has not published this preset's apply action yet, so nothing can be asked here."
     const val STALE =
@@ -128,6 +137,8 @@ object FocusPresets {
         val pending: Boolean,
         /** true when the preset's model needs both cards together (the PC's words say why). */
         val heavyMode: Boolean,
+        /** The PC's own plain-words COST of a heavy preset; "" for every other one. */
+        val heavyWords: String = "",
         val apply: Apply,
     )
 
@@ -205,6 +216,7 @@ object FocusPresets {
                 },
                 pending = o.bool("pending") ?: false,
                 heavyMode = o.bool("heavy_mode") ?: false,
+                heavyWords = o.str("heavy_words").orEmpty(),
                 apply = apply,
             )
         }
@@ -255,16 +267,30 @@ object FocusPresets {
         }
     }
 
-    /** Null when this preset may be used now, else the one sentence saying why not. */
+    /**
+     * Null when this preset may be used now, else the one sentence saying why not.
+     *
+     * Heavy mode is NOT one of the reasons any more (2026-11-02): the PC's
+     * pooled both-card lane applies it, so the phone offers it like every other
+     * preset and its cost is shown as the preset's own [Preset.cost] /
+     * [Preset.worse] lines, plus [HEAVY_COST] where the card has no PC words.
+     */
     fun blocker(view: View, preset: Preset, stale: Boolean, linkUp: Boolean): String? = when {
         !linkUp -> STALE
         stale -> STALE
         preset.pending -> PENDING + ". " + preset.cost
-        preset.heavyMode -> HEAVY
         preset.apply.auto -> APPLY_UNPUBLISHED
         preset.apply.postRoute == null -> APPLY_UNPUBLISHED
         else -> null
     }
+
+    /**
+     * What the phone says about a heavy preset beside its cost: the PC's own
+     * `heavy_words` when it sends one, else the shared fallback. Never empty for
+     * a heavy preset and "" for every other one, so a card can add it as a line.
+     */
+    fun heavyCost(preset: Preset): String =
+        if (!preset.heavyMode) "" else preset.heavyWords.ifBlank { HEAVY_COST }
 
     /**
      * The body for the contract's action: an explicit contract body wins; the

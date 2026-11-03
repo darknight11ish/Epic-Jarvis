@@ -2025,6 +2025,18 @@ $PATCHES = @(
     # backend/test_jobs.py rehearses this patch against
     # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
     'jobs-routes.patch'
+    # A skill's ONE install card can now carry a line the caller wrote
+    # (`jarvis_skills.install(..., note=...)`), and the card is only a card on
+    # the tiers where a person really answers: `jarvis_gate.check` returns
+    # allowed=True on `notify` and `auto`, so before this the install path
+    # could have gone through with nobody asked, if a config listed
+    # `modify_own_code` that way. `refine()` already re-checks the tier for
+    # exactly this reason; `install()` did not, because nothing called it
+    # until the skills menu did. Additive: with no `note` the card's words are
+    # unchanged. Appended last (before the loader) so every other patch's
+    # context is untouched; backend/test_skill_menu.py rehearses it against
+    # jarvis-backend/jarvis_skills.py, apply and reverse.
+    'skill-install-note.patch'
 
     # phone-apps.patch (2026-11-02) - the management of the owner's phone app
     # allow-list, so filling `[phone_apps]` is not a hand edit of
@@ -2772,13 +2784,41 @@ $SHIPPED = @(
     # 2026-10-31): shipped whole, no patch; reads the model/preset and the
     # measured rows, and asks the EXISTING switch/apply cards.
     'jarvis_model_knowledge.py'
-    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
-    # JARVIS-API section 176): reads and writes ONE table of the owner's
-    # settings file, [phone_apps], one line at a time - card first, through
-    # the same atomic section writer the other settings use. Shipped whole,
-    # no patch of its own; phone-apps.patch is the two routes that reach it.
-    # The same entry is at the end of backend/_where.py's SHIPPED list.
-    'jarvis_phone_apps.py'
+    # ORDER MATTERS TO ONE READER: backend/_where.py's list is read by
+    # tools/check_zero_jargon.py, which only matches a comma-terminated entry,
+    # so jarvis_phone_apps.py stays LAST - appending after it would newly
+    # expose an untouched module to the jargon ratchet it was never measured
+    # against. Both lists keep the same order (test_shipped_modules.py).
+    # The skills menu's PC doors (jarvis_skill_menu.py, 2026-11-02; owner's
+    # Hermes-skills scope B): install a skill from a folder or a .zip, import
+    # one from %USERPROFILE%\.hermes\skills, turn an installed one off and back
+    # on, and edit its SKILL.md. Shipped whole, no patch of its own - its five
+    # routes come from plugins\ready\skill-menu. Every install, every turn-on
+    # and every edit is ONE modify_own_code card raised by the EXISTING
+    # jarvis_skills.install(), whose scanner refuses (and never asks) on a
+    # block finding. Nothing here re-implements the scanner, the card, the
+    # quarantine or the skill index. The same entry is at the end of
+    # backend/_where.py's SHIPPED list.
+    'jarvis_skill_menu.py',
+    # Habit check-ins (jarvis_habits.py, 2026-11-02; JARVIS-API section 180,
+    # the owner's life-coach decision D1-D4): habits.db beside goals.db, one
+    # row per habit per DAY, the plain_repeat path on the one scheduler so a
+    # tick and a new habit raise no card, and no score, streak or percentage
+    # anywhere in it. GET/POST /api/habits come from its own install(), called
+    # by the drop-in folder plugins\ready\habits: NO patch, which is what the
+    # loader is for. The same entry, in the same position, is in
+    # backend/_where.py's SHIPPED list.
+    'jarvis_habits.py',
+    # The owner's own mood log (jarvis_mood.py, the same 2026-11-02 decision
+    # D1): one 1-5 tap a day with optional words in mood.db, an upsert per day,
+    # no card for logging, and EXCLUDED FROM LEARNING ENTIRELY by construction
+    # (D2 - no learner module names it and it names none;
+    # backend/test_learning_exclusion.py proves both directions). GET/POST
+    # /api/mood come from its own install(), called by plugins\ready\mood: NO
+    # patch. The same entry, in the same position, is in backend/_where.py's
+    # SHIPPED list.
+    'jarvis_mood.py',
+'jarvis_phone_apps.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

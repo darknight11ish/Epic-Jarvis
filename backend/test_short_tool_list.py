@@ -284,7 +284,7 @@ def t_what_it_saves():
           str(short))
     # Pinned 1,560 -> 1,600 on 2026-11-02, by the same rule: the goals tools
     # (goals_list, goal_add, goal_progress, goal_done; jarvis_goals.py,
-    # JARVIS-API section 180) get their own group rather than joining "timers"
+    # JARVIS-API section 182) get their own group rather than joining "timers"
     # ("a timer, the to-do list, what is coming up"), because that line would
     # tell the model something untrue about what the group opens. A group
     # costs its name and one short line in more_tools' description. Measured
@@ -360,7 +360,7 @@ def t_what_it_saves():
     # group whose own one line would tell the model something untrue about what
     # it opens, which this note has already turned down twice.
     # Pinned 395 -> 425 on 2026-11-02, for the goals group the note above
-    # describes (jarvis_goals.py, JARVIS-API section 180). Measured with this
+    # describes (jarvis_goals.py, JARVIS-API section 182). Measured with this
     # module's own estimate_tokens rule on this tree: without the group 387,
     # with it 411 - so the old 395 had 8 tokens spare and the group needs 24.
     # 425 leaves 14. The same alternative was turned down for the same reason:

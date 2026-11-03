@@ -302,6 +302,44 @@
  {
   "type": "function",
   "function": {
+   "name": "plugin_list",
+   "description": "List Jarvis's drop-in plugins: every plugin folder, whether it is on, and why it is off (switched off, failed to load, a broken plugin.json, or added after Jarvis started). Use when the owner asks what plugins Jarvis has, whether one is on, or why one is not working. Read-only: it lists the folder and changes nothing, so no card.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "plugin_switch",
+   "description": "Turn ONE drop-in plugin on or off by name, exactly as plugin_list shows it. \"off\" is instant and needs no card; \"on\" raises ONE approval card, because a plugin is program code. Either way it takes effect the NEXT time Jarvis starts - say that plainly; never offer to restart Jarvis. ONE plugin per call; never delete, move or invent one.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "plugin": {
+      "type": "string",
+      "description": "the plugin's name, from plugin_list"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off"
+      ]
+     }
+    },
+    "required": [
+     "plugin",
+     "action"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "github_search",
    "description": "Check GitHub for an existing library for a coding idea, graded by maintenance and licence. For a general web search, use web_search.",
    "parameters": {

@@ -70,6 +70,22 @@ the plainest phrasings through the same setter their Settings switch already
 calls, the four others keep the guide's own explanation, and an applied change
 is answered with a read-back of the old and new value.
 
+**And the plugins by chat need NO patch either (2026-11-02, `jarvis_agent.py`).**
+The owner's decision - "Jarvis may list plugins and turn them on/off by chat, one
+card per change" - is two model tools in `backend/jarvis_agent.py`, which is a
+shipped module like `jarvis_quick.py` above (so a patch against it would be
+overwritten by step 3, exactly the same trap). `plugin_list` reads
+`jarvis_plugins.py`'s own `discover()`/`status()` and names every plugin with
+its state and why it is off; `plugin_switch` turns ONE named plugin on behind
+ONE `modify_own_code` card (the existing action - no gate hunk, no new tier
+line) or off at once with no card. The write is the loader's own `disabled`
+marker file and nothing else: no plugin folder is deleted, moved or edited, and
+`plugin.json` is never rewritten. Nothing restarts the backend, so every answer
+says the change lands the next time Jarvis starts. There is no route, no
+Settings screen and no app change, which is why `tools/check_parity.py` is
+untouched. Proved by `backend/test_plugin_switch.py`; documented in
+`docs/JARVIS-API.md` section 181 and `docs/ARCHITECTURE.md` section 8.
+
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
 
@@ -228,7 +244,7 @@ on a throwaway copy instead.
 | `picture-card.patch` | `jarvis_hud.py` | **Which card draws the pictures** (the owner's decision of 2026-10-10; `docs/PICTURE-CARDS-DESIGN.md`, `docs/JARVIS-API.md` section 124). `GET` and `POST /api/picture-card`: the three ways of running a picture-maker beside the everyday chat - pictures on the 12 GB card with the chat stepping aside; on the 12 GB card with the chat moved to the 8 GB card; or small pictures on the 8 GB card with the chat untouched - each its own switch, ALL OFF until the owner turns one on. **It draws nothing** (asking for a picture is `pictures.patch`'s own route, section 129) **and starts nothing**: `D:\Jarvis\ImageGen\Start-Pictures.ps1` starts the picture-maker on the right card, reading these settings. It only chooses a card for a local program and unloads/reloads the owner's own chat, so it needs no gate line and no card. Its ONE hunk goes on the OWNER's own lines just before the main socket is built, **NOT inside the chain of install blocks above it** - that chain ends at the owner's `# Before the main socket` line and every block in it anchors on the block the patch before wrote, so a block inserted in the middle leaves the next patch's hunk without its context. That was measured on 2026-10-11: this patch was first written between `progress.patch` and `topics.patch`, and the stack's walk had to invent its pre-image (51 hunks against a pin of 50) and the script's own rehearsal would have refused the whole run with "will not apply". It sits immediately before `plugin-loader.patch`, which MUST be last of all, as well as after `devices.patch`. Needs `jarvis_picture_card.py` (shipped whole); without it, or on any error, the banner says so and the routes are simply not there. |
 | `big-coder.patch` | `jarvis_hud.py` | **The 30B coder: both cards, with Jarvis paused** (2026-10-11; `docs/JARVIS-API.md` section 126). It only ADDS two new route blocks to `jarvis_hud.py`, anchored on handler lines no other patch here writes, so its position is order-independent: `GET /api/big-coder` - READ-ONLY: the opt-in switch, what is loaded where right now, and what a start would touch; it loads nothing, unloads nothing and writes nothing, and every call is loopback - and `POST /api/big-coder`, the one write: `{"on": true\|false}` sets the opt-in switch (ON is ONE approval card, `change_own_config`, tier `ask`; OFF is immediate) and `{"action": "start"\|"stop"}` runs the mode. Starting announces the pause, pauses BOTH live lanes, proves from `/api/ps` that they went, loads the model on both cards at the largest zero-spill context measured, and puts both lanes back exactly as they were when it stops: **a lane that will not pause means NOTHING is loaded** - it never runs beside a lane. It touches no gate list, adds no tier row and no `_RISK` row, and wires no startup call. It sits here, before `plugin-loader.patch`, because that one must stay last of all. Needs `jarvis_big_coder.py` (shipped whole); without it the route answers 503. |
 | `pictures.patch` | `jarvis_hud.py` | **"Ask for a picture, and keep it"** (the owner's decision of 2026-09-27: "12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both cannot sit on the card at once)"; `docs/JARVIS-API.md` section 129). ONE install block appended to the block above it: `GET /api/pictures`, `GET /api/pictures/file` and `POST /api/pictures`. A prompt the owner typed is drawn by a program on this PC (ComfyUI or stable-diffusion.cpp, a setting), saved in a folder on this PC with a sidecar holding what made it. **Nothing leaves the PC and no route sends a picture anywhere, so making one needs NO approval card** - the same shape as a timer or a note - and it is off until the owner turns it on (the second card is shared with the everyday model). It sits immediately BEFORE `plugin-loader.patch`, which must stay LAST OF ALL (`test_gate_touches.py`, `test_uncensored_optins.py`): every core patch goes above the loader, and only drop-in folders come after it. Because this block is appended to another install block, the loader's own hunk anchors on THIS block's last two lines - which is the patch `tools/check_plugins.py` says the hook must anchor on. Needs `jarvis_pictures.py` (shipped whole); without it, or on any error, the banner says so and the routes are simply not there. |
-| `presets.patch` | `jarvis_hud.py` | **The nine focus presets: one shared contract, both apps, and the ONE apply action** (the owner's preset selector; `docs/JARVIS-API.md` section 145; the contract half merged as #603, the live route and apply action as #611). ONE install block - `jarvis_presets.install(Handler, ...)` - answering `GET /api/work` (the new shape; it shadows `work.patch`'s own `GET /api/work`, whose `recommend`/`choose` POSTs still answer) and `GET /api/presets` with the shared contract: the nine presets in order, the hardware questionnaire, the lane table, which preset is chosen and which lane is active. Plus `POST /api/work/apply`, the ONE apply action: `{"preset": "<id>"}` starts the named lane on demand, switches the model through the SAME existing `switch_model` ask card (`change_own_config`), points chat at the new lane, remembers the chosen preset, and on any later failure rolls back - restoring the lane pointer and the remembered preset AND calling the auto-tier `jarvis_models.rollback()` once a switch has happened. A pending preset and heavy-mode Coding refuse in plain words before anything changes. **The lane start is BEFORE the card on purpose** - a lane that is down cannot answer the switch's `is_installed` read - so a DENIED card leaves the started lane running with no model switched; that is stated in the module, in `docs/JARVIS-API.md` section 145 and in the 2026-10-19 audit rather than claiming nothing happens before the card. Its install block was the chain's last until `setup.patch`; `plugin-loader.patch` is re-anchored onto setup.patch's block and MUST stay last of all. Needs `jarvis_presets.py` (shipped whole); without it the old work-setup `GET /api/work` stays in place and the apply route is absent. |
+| `presets.patch` | `jarvis_hud.py` | **The nine focus presets: one shared contract, both apps, and the ONE apply action** (the owner's preset selector; `docs/JARVIS-API.md` section 145; the contract half merged as #603, the live route and apply action as #611). ONE install block - `jarvis_presets.install(Handler, ...)` - answering `GET /api/work` (the new shape; it shadows `work.patch`'s own `GET /api/work`, whose `recommend`/`choose` POSTs still answer) and `GET /api/presets` with the shared contract: the nine presets in order, the hardware questionnaire, the lane table, which preset is chosen and which lane is active. Plus `POST /api/work/apply`, the ONE apply action: `{"preset": "<id>"}` starts the named lane on demand, switches the model through the SAME existing `switch_model` ask card (`change_own_config`), points chat at the new lane, remembers the chosen preset, and on any later failure rolls back - restoring the lane pointer and the remembered preset AND calling the auto-tier `jarvis_models.rollback()` once a switch has happened. A pending preset refuses in plain words before anything changes. Heavy-mode Coding no longer refuses: since 2026-11-02 it runs on ONE pooled both-card lane (`jarvis_model_lanes.start_pooled_lane`), which raises its own `switch_model` card BEFORE it unloads anything and refuses in the machine's own words only when the lane cannot really start (a lane that will not pause, a load that spills); see the section at the end of this file. **The lane start is BEFORE the card on purpose** - a lane that is down cannot answer the switch's `is_installed` read - so a DENIED card leaves the started lane running with no model switched; that is stated in the module, in `docs/JARVIS-API.md` section 145 and in the 2026-10-19 audit rather than claiming nothing happens before the card. Its install block was the chain's last until `setup.patch`; `plugin-loader.patch` is re-anchored onto setup.patch's block and MUST stay last of all. Needs `jarvis_presets.py` (shipped whole); without it the old work-setup `GET /api/work` stays in place and the apply route is absent. |
 | `setup.patch` | `jarvis_hud.py` | **The owner's setup questionnaire - the backend half only, no app UI yet** (owner, 2026-10-20: a first-run / re-runnable series of multiple-choice questions that set the defaults, with a summary accepted before anything changes; design `.dsh-scratch/DESIGN-SETUP-QUESTIONNAIRE-2026-10-20.md`, `docs/JARVIS-API.md` section 147). ONE install block - `jarvis_setup.install(Handler, ...)` - answering `GET /api/setup` (the ordered questions, current values, last answers), `POST /api/setup/plan` (`{"answers": {...}}` -> a read-only summary: what changes at once and what raises a card) and `POST /api/setup/apply` (`{"answers": ..., "confirm": true}` -> per-setting outcomes). The rules are entirely in the shipped `jarvis_setup.py`, which is a GUIDE through the EXISTING setters: every option calls the same `jarvis_settings_registry` setter the matching Settings control calls, so every loosening change still raises its OWN existing card, one at a time (apply waits for that card before raising the next - never a combined/bulk card, never auto-approval, no new gate tier or action, no latch, no model switch). The preset answer is a RECOMMENDATION only; applying one stays the preset selector's own `POST /api/work/apply` card. Plan writes nothing; apply saves only the owner's choices and a completed timestamp in `setup.json` in the settings folder (no chat, facts, voice or files). Its install block is the chain's last, and `plugin-loader.patch` is re-anchored onto its last two printed lines and MUST stay last of all. Needs `jarvis_setup.py` (shipped whole); without it the routes are absent and the banner says so. The desktop and phone screens are the NEXT slices - no app calls these routes yet. |
 | `app-control.patch` | `jarvis_hud.py` | **App control on the phone - the backend half only, and OFF by default** (the owner's decisions of 2026-10-19: "fuller automation inside other apps", then "enable accessibility service with control by jarvis **as an option** in the android app", with an EMPTY allow-list and no read-only phase). The PC is the brain and the gate, the phone is the hands: TWO new route blocks, `POST /api/app-control/run` (validates the owner's allow-list and one atomic step, raises exactly ONE `change_own_config` card and returns a run id - **nothing runs before approval**) and `POST /api/app-control/step` (the phone asks for the ONE approved step, re-checked against its fresh screen snapshot: a changed screen STOPS the run rather than guess; Stop is immediate and needs no card; a done/failed result ends it). The rules are entirely in the shipped `jarvis_app_control.py`: an empty allow-list refuses everything, an unlisted app refuses, and password/credential/2FA fields, money/banking apps, send/post/share steps, delete/move steps, gate-protected files and any action but tap/swipe/type/back/home are refused BEFORE any card. The audit line is app + verb only - never the typed text or the screen's words; the card (a local approvals row) is the only place the exact step is written. **The feature is OFF**: `[app_control] enabled = false` in the framework template, a settings file with no `[app_control]` table reads as OFF, and this slice adds no way to switch it on - both routes answer "App control is switched off on this PC" until the next slice. It adds NO install block, touches no gate file and no tier row, and its context is `big-coder.patch`'s own last lines plus the `/api/memory/decide` block, so it applies to real text; it sits after `presets.patch` and before `setup.patch`, and `plugin-loader.patch` must stay LAST of all, and `_stack.py`'s jarvis_hud.py RATCHET does not move. Needs `jarvis_app_control.py` (shipped whole); without it the routes answer 503. The Android AccessibilityService, the allow-list Settings screen and the running banner/Stop are the NEXT slice - no app calls these routes yet. `docs/JARVIS-API.md` section 146 is the contract. |
 | `update-in-chat.patch` | `jarvis_gate.py` | **Updates in chat: "is there an update?", "what changed?", "update Jarvis"** (the owner's request, 2026-10-26; `docs/JARVIS-API.md` section 158). The two questions are answered from the same release manifest the app's own updater reads, and starting an update is ONE approval card (`desktop_update`, tier `ask`, PC only with Windows Hello in `jarvis_owner_check.PC_ONLY_ACTIONS`) that the desktop shell's own `update.rs` runs - nothing is downloaded before the yes. ONE hunk: the action joins the "a no is not a standing rule" set, at the END of the list, right after `uncensored-optins.patch`'s own last entry, so a "no" on that one card proposes no standing rule. It sits after `uncensored-optins.patch` and before `gate-touches.patch` (which `backend/test_gate_touches.py` requires to be the last patch writing `jarvis_gate.py`). It touches no other file, adds no route and no new module: `jarvis_quick.py` and the action's `[autonomy.tiers]` line are shipped whole in this repository, so this patch only puts the action's name in the gate's own table. |
@@ -16403,8 +16419,10 @@ design). Built on the backend and in both apps (`docs/JARVIS-API.md` section
 
 - Press **Live** (the Jarvis bar's button, the tray row, or Home -> Live on
   the phone), or say "Hey Jarvis, let's talk". From then on you just talk:
-  no "Hey Jarvis" before each sentence. Every sentence is still checked to
-  be your voice on the PC before any words are made of it.
+  no "Hey Jarvis" before each sentence. Your voice is checked once on the
+  PC - the session's first full sentence (2.0 s or more) - and that check
+  verifies the whole session, which is not re-checked sentence by sentence;
+  ending Live ends that trust.
 - It ends when you press End Live, say "Okay Jarvis, that's all for now",
   after 90 quiet seconds, at the time limit (30 minutes; "give me twenty
   more minutes" adds time), or on Stop everything. The sign ("Jarvis Live ·
@@ -20773,3 +20791,78 @@ write, so it materialises no pre-image.
 read-only Settings screen are not in this patch; they are named in the PR body
 with the exact files they would touch. The routes they need are here and
 documented in `docs/JARVIS-API.md` section 176.
+
+---
+
+## The Coding preset's pooled both-card lane (2026-11-02)
+
+**What was wrong.** The Coding focus preset was a row both apps drew and the PC
+always refused with a 409 ("heavy mode needs the both-card lane, arriving
+later"). Its model, `qwen3-coder-30b-a3b-ud-q3-k-xl`, is about 14.8 GB of
+GPU-resident memory against a 12,288 MiB card and an 8,192 MiB card, so neither
+of the owner's single-card lanes (11436 on the 2060, 11435 on the 2080 SUPER)
+could hold it at any context: the refusal was true. The one thing that could
+hold it was `jarvis_big_coder.py`'s both-cards mode, which had its own opt-in
+switch and its own `power_manage` card, and no preset could reach it.
+
+**What is there now.** `jarvis_model_lanes.py` grew a third lane, `pooled` -
+port 11450, "both cards", one Ollama started on demand with no card pin. It
+does not re-implement the server, the pause, the load or the restore: those are
+`jarvis_big_coder`'s own (`server_start`, `pause_lanes`, `load_coder`,
+`unload_coder`, `server_stop`, `restore_lanes`), and `load_coder` gained one
+`num_ctx` argument so a lane can ask for its own measured rung instead of
+copying the mode's constant. Three small public wrappers were added to that
+module (`loaded_row`, `spill_bytes`, `announce_pause`) so the lane reads the
+same `/api/ps` rows and says the same pause, rather than a second copy of each.
+
+The apply itself is `jarvis_presets.apply_preset`: the Coding row's
+`lane` is `pooled`, so its `_default_start_lane("pooled")` is
+`start_pooled_lane()`, which:
+
+1. raises the ONE `switch_model` card - the same action and `from`/`to`/`why`
+   detail `jarvis_models.switch_to` sends, with the preset's own `heavy_words`
+   - **before it unloads anything**; a denied card changes nothing at all;
+2. announces the pause, starts the both-cards server, unloads BOTH lane models
+   and proves them gone from `/api/ps`, then loads the model at 16,384 tokens
+   and refuses any load that spills or comes up at another context - undoing
+   everything it took;
+3. records the model chat uses WITHOUT a second card and WITHOUT `switch_to`:
+   `jarvis_presets._default_adopt` writes the same record `switch_to` writes,
+   through `jarvis_models`' own state read/write. `switch_to` cannot be used
+   here because its tripwire smoke test runs at `jarvis_models.OLLAMA`, a
+   single-card lane, so it would load a 14 GB model on a 12 GB card or evict
+   the model the pooled lane just loaded. The argument is in that function's
+   docstring and in `docs/JARVIS-API.md` §145.1.
+
+Leaving the lane is the other half: applying any preset that is not heavy stops
+the pooled lane FIRST (`_default_stop_pooled`, which unloads the model, stops
+the server this process started and puts both lane models back, proved from
+`/api/ps`), and refuses in plain words if it cannot. A later failure inside a
+Coding apply stops the pool FIRST too, then rolls the model back, then the
+chat lane and the chosen preset - the order matters because nothing can be
+loaded on a card the 30B is still holding.
+
+**Wording, everywhere the false sentence lived.** `HEAVY_MODE_LINE` and its
+409 are gone from `jarvis_presets.py`; the preset's `what`/`cost`/`worse` say
+what it really does; a new additive contract field `heavy_words` carries the
+PC's own plain-words cost. The desktop HUD (`backend/static/hud-presets.js` and
+its two vendored copies), the bar (`jarvis_hud.html`, three copies), the
+desktop presets module (`focus-presets.js`), and the phone
+(`FocusPresets.kt`) all stopped blocking a heavy row and say the cost instead;
+`tools/gen_feature_guide_catalogue.py` regenerated the feature list.
+
+**Measured, for real, through this path** (`docs/MEASURED-2026-11-02-POOLED-LANE.md`):
+cold load 32.5 s, 77.5 / 85.3 / 85.6 tok/s on a fixed three-prompt coding set,
+zero spill, 11,899 MiB of the 2060 and 7,674 MiB of the 2080 SUPER in use while
+it ran, and both lane models back afterwards with zero spill. The 28,672-token
+rung the 2026-10-18 measurement used NO LONGER FITS this PC: it spilled 212
+MiB, and 16,384 was the largest rung that loaded with none - so the preset asks
+for 16,384 and says why. The measurement's own state was put back: the two lane
+models at their own contexts, the coding lane empty as it was found, no server
+left on 11450 and the owner's backend still answering.
+
+**What is not proved.** The apps were not driven against a real card by a
+person: the desktop and phone suites prove the words and the enabled action,
+and the backend suites prove the order, the refusals and every restore against
+fakes. `start_pooled_lane`'s real run on this PC is the measurement above, not
+a unit test.

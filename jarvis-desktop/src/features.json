@@ -244,7 +244,7 @@
     "what": "A back-and-forth voice conversation you start and stop, with no wake word between turns.",
     "where": "Press Start Live in the Jarvis bar, or say \"Hey Jarvis, let's talk\". On the phone, Live on Home or the Quick Settings tile. A PC hotkey can start and end it (asked for once, off until you pick one).",
     "asks": "Cards are still decided by tapping, never by voice. Ending Live never asks.",
-    "limit": "Not full-duplex, so a turn takes a couple of seconds. The voice check still runs on every clip, and side remarks meant for someone else are ignored and not kept.",
+    "limit": "Not full-duplex, so a turn takes a couple of seconds. Your voice is checked once per Live session, not on every sentence, and side remarks meant for someone else are ignored and not kept.",
     "surface": "both",
     "covers": [
       "safety.live-stop",
@@ -409,6 +409,28 @@
     ],
     "gate": [
       "schedule_repeat"
+    ],
+    "lesson_id": "timers-reminders"
+  },
+  {
+    "id": "reminder-asks",
+    "group": "Talking",
+    "title": "A reminder that asks you a question",
+    "what": "A reminder can ask you a question in your own words, with up to three buttons you wrote yourself - each one records the answer, marks the reminder done, or snoozes it - and the answer is written where you chose: the reminder's own history, today's Obsidian note, a goal's progress or a habit tick.",
+    "where": "HUD, Reminders (or Brain, Work, Coming up), the Add form's \"Then: Ask me a question\"; the question and its buttons are answered on the HUD's \"Just went off\" row and on the phone's notification.",
+    "asks": "No card, either way: answering is a log line, like ticking a to-do item, and it decides nothing about anything else.",
+    "limit": "The PC is the clock and it draws the question; your phone shows it with the same buttons only while it is connected, so a question that goes off while the phone is away appears when it links again and is not pushed later. Answering from the phone needs it unlocked, because the answer writes a personal record; a locked screen shows a generic phrase. A button cannot open a file or a page yet. The Obsidian note is written only when a vault is set up, and goal progress and habit ticks wait for those two records to exist on this PC - each says so in one sentence and the answer is still kept.",
+    "surface": "both",
+    "covers": [
+      "timers-reminders"
+    ],
+    "aliases": [
+      "reminder buttons",
+      "ask me a question",
+      "reminder answer"
+    ],
+    "must_mention": [
+      "just went off"
     ],
     "lesson_id": "timers-reminders"
   },
@@ -1188,7 +1210,7 @@
     "group": "Notes and files",
     "title": "Ask about a PDF, a Word file or a Notion page",
     "what": "Jarvis reads a document you point it at and answers questions about it.",
-    "where": "Put the file in a folder Jarvis may look in, then ask about it.",
+    "where": "Put the file in a folder Jarvis may look in, or attach it to the question in chat, then ask about it.",
     "asks": "Reading needs no card. Writing a note back after reading it raises one, as any note write after outside text does.",
     "limit": "Only files in a folder Jarvis may look in; text from a document is outside text and is never learned as a fact.",
     "surface": "both",
@@ -1597,6 +1619,60 @@
       "calendar"
     ],
     "lesson_id": "parking"
+  },
+  {
+    "id": "price-radar",
+    "group": "Money and health",
+    "title": "Flight prices and a price history",
+    "what": "A read-only price and flight radar: ask it to check a route and dates and it reads Google Flights' public search page, and it keeps a local price history with target prices. Prices only - it never books, holds a seat, adds to a cart or checks out.",
+    "where": "Ask in chat - \"how much is a flight from Seattle to Tokyo in March?\", \"is the price radar on?\", \"what is the price radar?\". It is off by default; turning it on is the settings file's own line, [price_radar] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet.",
+    "asks": "A lookup asks nothing: the radar is read-only. Turning it on is a hand edit of the settings file today, with no card; turning it off is immediate.",
+    "limit": "Off by default, so nothing is searched until it is on. Google Flights' public page is unofficial and experimental, so it can change or break; a failed read says so and no price is invented. It never books, holds a seat, adds to a cart or checks out - there is no such code path.",
+    "surface": "both",
+    "aliases": [
+      "airfare",
+      "flight cost",
+      "flight price",
+      "price history for flights"
+    ],
+    "covers": [
+      "money-and-health"
+    ],
+    "lesson_id": "money-and-health"
+  },
+  {
+    "id": "habit-checkins",
+    "group": "Money and health",
+    "title": "Habit check-ins",
+    "what": "A repeating thing you want to do - walk, stretch, practise - with a nudge at the time you picked and one tap that records it happened that day.",
+    "where": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+    "asks": "No card for logging: a new habit and a tick are the cardless plain_repeat class, and stopping is immediate.",
+    "limit": "No score, streak, percentage or chart of judgement anywhere in it - the record is one row per habit per day, and stopping keeps every row.",
+    "surface": "both",
+    "covers": [],
+    "aliases": [
+      "habit tracker",
+      "habit check-in",
+      "habit check-ins",
+      "track a habit"
+    ]
+  },
+  {
+    "id": "mood-log",
+    "group": "Money and health",
+    "title": "Mood log",
+    "what": "Your own log of how the day felt: one 1-5 tap and optional words, kept on this PC, with a history you can look at.",
+    "where": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+    "asks": "No card for logging: a mood entry is personal logging, like ticking a to-do.",
+    "limit": "One row per day, and a second entry that day replaces the first. It is excluded from learning entirely - mood data never becomes a fact, by construction rather than by a card - and it is never the crisis path.",
+    "surface": "both",
+    "covers": [],
+    "aliases": [
+      "mood tracker",
+      "mood log",
+      "mood journal",
+      "mood diary"
+    ]
   },
   {
     "id": "home-status",
@@ -2045,6 +2121,32 @@
     "lesson_id": "phone-limits"
   },
   {
+    "id": "phone-apps",
+    "group": "Phone",
+    "title": "Open an app on your phone",
+    "what": "Ask Jarvis to open an app on your phone, and say which apps it may open at all. The list ships empty, so nothing can be opened until you add an app.",
+    "where": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+    "asks": "Adding or removing one app raises one approval card naming its friendly name and its exact package id, and nothing is written until you approve it. Opening a listed app is one approved call; each step of the plan is shown on that card.",
+    "limit": "The list ships empty, so nothing can be opened until you add an app, and control_phone is off by default. The phone must be connected to the PC over the cable (adb). A com.jarvis package is refused, so Jarvis can never tap its own Approve button.",
+    "surface": "both",
+    "aliases": [
+      "phone app allow-list",
+      "phone apps",
+      "apps on my phone",
+      "which apps can you open on my phone",
+      "add an app to my phone",
+      "remove an app from my phone"
+    ],
+    "covers": [
+      "phone-extras"
+    ],
+    "gate": [
+      "change_own_config",
+      "control_phone"
+    ],
+    "lesson_id": "phone-extras"
+  },
+  {
     "id": "appearance",
     "group": "The PC itself",
     "title": "Appearance",
@@ -2127,7 +2229,7 @@
     "group": "The PC itself",
     "title": "Set up Jarvis",
     "what": "The card a new install meets first: the five choices that matter before Jarvis is any use.",
-    "where": "Settings, the first card on the page.",
+    "where": "Settings, Set up Jarvis - the first card on the page.",
     "asks": "No card - it is the setup page itself.",
     "limit": "Desktop only. The phone's first screen is pairing instead.",
     "surface": "desktop",
@@ -2258,19 +2360,23 @@
     "group": "The PC itself",
     "title": "Skills",
     "what": "Extra abilities installed for Jarvis, each with a scan verdict.",
-    "where": "Brain, Model, Skills.",
+    "where": "Brain, Model, Skills. And Settings, Skills on the PC: install one from a folder or a .zip, import your Hermes skills, turn one off and back on, or edit one.",
     "asks": "Installing or removing one is its own decision.",
-    "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing one happens only on the PC, and no app can install one. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
+    "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing, turning one on and editing happen ONLY on the PC, through the scanner and ONE approval card, and a skill the scanner refuses is never installed at all. A skill that ships a scripts/ folder says so and never runs it. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
     "surface": "both",
     "covers": [
       "skills",
       "brain.model.skills",
-      "model-page"
+      "model-page",
+      "settings.skills-menu"
     ],
     "must_mention": [
       "skill"
     ],
-    "lesson_id": "model-page"
+    "lesson_id": "model-page",
+    "gate": [
+      "modify_own_code"
+    ]
   },
   {
     "id": "model-memory",
@@ -3069,6 +3175,34 @@
     "lesson_id": "docker-containers"
   },
   {
+    "id": "model-knowledge",
+    "group": "The PC itself",
+    "title": "Ask which model is answering",
+    "what": "Ask which AI model is answering right now and which preset is in force, what else this PC has installed, how fast each one was measured here, and which model suits a job. A named preset or model can be switched to from the same question.",
+    "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+    "asks": "Answering asks nothing. Applying a preset or switching a model raises one approval card, the same one the model switch already uses; nothing is downloaded or swapped until you approve it.",
+    "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed is only stated when this PC measured it; the phone still has no list of models to browse.",
+    "surface": "both",
+    "aliases": [
+      "model knowledge",
+      "which model is answering",
+      "what model is answering",
+      "what ai model",
+      "the model you are running"
+    ],
+    "covers": [
+      "model-page"
+    ],
+    "must_mention": [
+      "model",
+      "answering"
+    ],
+    "gate": [
+      "switch_model"
+    ],
+    "lesson_id": "model-page"
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",
@@ -3381,5 +3515,24 @@
       "undo"
     ],
     "lesson_id": "receipts"
+  },
+  {
+    "id": "plugin-switch",
+    "group": "Safety",
+    "title": "Turn a drop-in module on or off by asking",
+    "what": "Jarvis lists its drop-in plugins (the small program folders, or modules, that live beside jarvis_hud.py) and switches ONE of them on or off when you ask in chat.",
+    "where": "Chat on either app, through the plugin_list and plugin_switch tools. There is no screen and no route on purpose: a plugin is a folder on this PC, and the chat tool is the door.",
+    "asks": "Listing raises no card. Turning one on raises ONE card (modify_own_code), because a plugin is program code that runs inside Jarvis at start-up; turning one off is immediate and needs no card.",
+    "limit": "One plugin per call, by a name Jarvis lists. A change lands the next time Jarvis starts - Jarvis cannot restart itself - so the copy running now keeps going until then. No plugin folder is ever deleted, moved or edited, and a plugin switched off inside its own plugin.json is a hand edit, not a chat toggle.",
+    "surface": "both",
+    "covers": [],
+    "aliases": [
+      "plugins",
+      "drop-in plugins",
+      "plugin list"
+    ],
+    "gate": [
+      "modify_own_code"
+    ]
   }
 ]

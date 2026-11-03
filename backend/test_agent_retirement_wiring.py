@@ -390,7 +390,7 @@ def t_the_short_list():
     # alternatives are test_short_tool_list.py's own note, which raised this same
     # expression's pin 380 -> 395 in the same change; this copy was left at 380.
     # 425 since 2026-11-02: the goals tools (goals_list, goal_add,
-    # goal_progress, goal_done; jarvis_goals.py, JARVIS-API section 180) needed
+    # goal_progress, goal_done; jarvis_goals.py, JARVIS-API section 182) needed
     # a `more_tools` group of their own - one more group name and one more line -
     # and that card measures 411 on this tree with this module's own
     # estimate_tokens, against 387 without it. test_short_tool_list.py's note

@@ -6783,6 +6783,46 @@ object JarvisRuntime {
     }
 
     /**
+     * ONE button of ONE reminder that ASKED a question (2026-11-02).
+     *
+     * The owner's own request: *"a notification on my Android phone saying 'Did
+     * you take your medication?' with a Yes or No button"*. The answer is a
+     * LOG, not an approval: no card anywhere, like ticking a to-do item, and the
+     * same question may be answered again - so this is held on a stale link
+     * (rule 4 refuses a CHANGE on a stale link) but never on an approval.
+     *
+     * It is only taken with the phone UNLOCKED, because the answer writes a
+     * personal record on the PC: the same rule the approval envelope keeps for
+     * Approve, without pretending an answer is an approval. The empty phone
+     * that is merely asleep counts as locked, which is what the owner asked
+     * for - a tap on a locked screen must not write into his journal.
+     *
+     * [button] is the button's INDEX, never its label: the PC reads the question
+     * and its buttons back from its own row, so this call can never name what is
+     * written. @return whether it was kept, and the sentence to show.
+     */
+    suspend fun scheduleAnswer(id: String, button: Int): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (screenLocked()) return false to ANSWER_NEEDS_UNLOCK
+        val body = com.jarvis.client.net.Schedule.answerBody(id, button)
+            ?: return false to "That is not one button of this reminder."
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ACT_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also { (kept, _) ->
+                _scheduleTick.update { n -> n + 1 }
+                // Answered here: the notice has done its job and goes. The log
+                // is on the PC, where "Just went off" and the reminder's own
+                // row still show it - nothing is lost with the notification.
+                if (kept) {
+                    appContext?.let { ctx ->
+                        runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id) }
+                    }
+                }
+            }
+            is ApiResult.Failed -> false to ("Not answered. " + describe(r.error))
+        }
+    }
+
+    /**
      * One new to-do item, in the owner's words - on a named list when [list]
      * says one ("shopping"). Held on a stale link.
      */
@@ -8016,6 +8056,11 @@ object JarvisRuntime {
                 // A job "going off": a notification whose job the PC no longer
                 // lists at all is taken away by the reconcile pass.
                 scheduleKind = kind,
+                // A question's own buttons (2026-11-02), in the owner's words.
+                // A late notice is quiet and carries no action - the owner's own
+                // decision of 2026-09-26 for a missed one - and an older PC never
+                // sends the block at all.
+                ask = if (late) null else job?.ask,
             )
         }
     }
@@ -8942,6 +8987,18 @@ object JarvisRuntime {
 
     private const val LIVE_MISSING = "This PC's Jarvis does not have Jarvis Live yet. Run " +
         "scripts\\apply-patches.ps1 on the PC to add it."
+
+    /**
+     * What a locked phone says instead of answering a question (2026-11-02).
+     *
+     * The owner's own rule, said in his words: an answer writes a personal
+     * record, so it needs the phone unlocked - the same rule the approval
+     * envelope keeps for Approve, without pretending an answer is an approval.
+     * One sentence, shown as a toast, because the app is very likely not on
+     * screen when a notification's button is pressed.
+     */
+    const val ANSWER_NEEDS_UNLOCK =
+        "Unlock your phone to answer - the answer writes a personal record."
     private const val LIVE_WATCH_MS = 1000L
 
     /** How often a captured notification asks the PC for its switch again, at most. */

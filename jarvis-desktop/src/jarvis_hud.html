@@ -1862,6 +1862,19 @@ html[data-hud-shell="split-stage"] .bento-waiting{display:flex; flex-direction:c
 .rem-help{margin:0; font-family:var(--f-mono); font-size:10px; line-height:1.45;
   color:var(--text-faint);}
 .rem-help[hidden]{display:none !important;}
+/* A reminder that ASKS (2026-11-02): the question is the row's own words when it
+   goes off, its own line above the meta, and the owner's buttons sit under it.
+   Styling only - every word comes from the PC's own answer. */
+.rem-question{margin:3px 0 0; font-size:12.5px; line-height:1.4; color:var(--text);}
+.rem-ask{gap:6px;}
+.rem-btn.rem-answer{border-color:var(--line-hot);}
+.rem-ask-row{align-items:flex-start;}
+.rem-ask-buttons{display:flex; flex-direction:column; gap:5px; flex:1 1 220px; min-width:0;}
+.rem-ask-button{display:flex; align-items:center; gap:5px; min-width:0;}
+.rem-ask-button input[type="text"]{flex:1 1 90px;}
+.rem-ask-button select{flex:0 1 105px;}
+.rem-ask-button input[type="number"]{flex:0 1 62px;}
+.rem-ask-button input[hidden]{display:none !important;}
 /* Phase 2 (2026-10-22): the inline row editor, the one Edit control and the
    keyboard Up/Down reorder. The same words/field model come from
    src/hud-actions.js; this is styling only. */
@@ -3803,6 +3816,7 @@ html[data-cal-view="day"] .cal-side{display:none;}
             <option value="open-webpage">Open a web page</option>
             <option value="open-file">Open a file on this PC</option>
             <option value="run-task">Do a task (one card)</option>
+            <option value="ask" id="rem-then-ask-option">Ask me a question</option>
           </select>
         </div>
         <div class="rem-form-row" id="rem-then-note-row" hidden>
@@ -3825,6 +3839,63 @@ html[data-cal-view="day"] .cal-side{display:none;}
             <option value="briefing">Put my morning briefing together</option>
             <option value="backup">Run a backup</option>
           </select>
+        </div>
+        <!-- A reminder that ASKS (2026-11-02, the owner's request: *"a notification
+             on my Android phone saying 'Did you take your medication?' with a Yes
+             or No button"*, and then *"as much flexibility or options as I want"*).
+             The question is the notification's body; each button is the owner's
+             own words and does exactly ONE thing. THREE is the ceiling, because
+             that is how many actions Android draws - the PC row mirrors it. -->
+        <div class="rem-form-row" id="rem-then-question-row" hidden>
+          <label for="rem-then-question">Question</label>
+          <input id="rem-then-question" type="text" maxlength="200"
+                 placeholder="Did you take your medication?">
+        </div>
+        <div class="rem-form-row rem-ask-row" id="rem-then-buttons-row" hidden>
+          <span class="rem-days-label">Buttons</span>
+          <span class="rem-ask-buttons">
+            <span class="rem-ask-button">
+              <input id="rem-ask-label-1" type="text" maxlength="24" placeholder="Taken">
+              <select id="rem-ask-does-1" aria-label="what the first button does">
+                <option value="record">Records it</option>
+                <option value="done">Marks it done</option>
+                <option value="snooze">Snoozes it</option>
+              </select>
+              <input id="rem-ask-minutes-1" type="number" min="1" max="1440" step="1"
+                     value="30" aria-label="minutes to snooze for" hidden>
+            </span>
+            <span class="rem-ask-button">
+              <input id="rem-ask-label-2" type="text" maxlength="24" placeholder="Skipped">
+              <select id="rem-ask-does-2" aria-label="what the second button does">
+                <option value="record">Records it</option>
+                <option value="done">Marks it done</option>
+                <option value="snooze">Snoozes it</option>
+              </select>
+              <input id="rem-ask-minutes-2" type="number" min="1" max="1440" step="1"
+                     value="30" aria-label="minutes to snooze for" hidden>
+            </span>
+            <span class="rem-ask-button">
+              <input id="rem-ask-label-3" type="text" maxlength="24" placeholder="(a third, optional)">
+              <select id="rem-ask-does-3" aria-label="what the third button does">
+                <option value="record">Records it</option>
+                <option value="done">Marks it done</option>
+                <option value="snooze">Snoozes it</option>
+              </select>
+              <input id="rem-ask-minutes-3" type="number" min="1" max="1440" step="1"
+                     value="30" aria-label="minutes to snooze for" hidden>
+            </span>
+          </span>
+        </div>
+        <div class="rem-form-row rem-ask-row" id="rem-then-record-row" hidden>
+          <span class="rem-days-label">Record in</span>
+          <span class="rem-days">
+            <label><input type="checkbox" id="rem-record-history" checked> its own history</label>
+            <label><input type="checkbox" id="rem-record-obsidian"> today's Obsidian note</label>
+          </span>
+          <input id="rem-record-goal" type="text" maxlength="64"
+                 placeholder="goal id (optional)">
+          <input id="rem-record-habit" type="text" maxlength="64"
+                 placeholder="habit id (optional)">
         </div>
         <p class="rem-help" id="rem-then-help" hidden></p>
         <div class="rem-form-actions">
@@ -7466,14 +7537,15 @@ window.addEventListener("jarvis:cloud-escalate", e => {
 /** Draw the five preset buttons from the PC's own list (no innerHTML: every
  *  word is server text, so it is set with textContent).
  *
- *  A HEAVY PRESET IS DRAWN, BUT IT CANNOT BE CLICKED (2026-10-27, the same
- *  contract audit's F1 that the Presets menu fixes): the PC always refuses it -
- *  both cards as one pooled lane is not built - so the button says why in the
- *  same sentence the phone uses (`FocusPresets.kt` HEAVY) instead of offering
- *  a dead action. The five rows stay: the order and the count are the PC's. */
+ *  A HEAVY PRESET IS A BUTTON WITH ITS COST IN THE TOOLTIP (2026-11-02). Until
+ *  the pooled both-card lane existed the PC answered 409 for it, so this drew a
+ *  disabled button saying so (2026-10-27, contract audit F1). The lane is here,
+ *  so the button is offered like every other one and says what choosing it
+ *  does: both cards, and the other two models paused while it runs. The five
+ *  rows stay: the order and the count are the PC's. */
 const HEAVY_PRESET_WORDS = "This preset needs both cards at once as one "
-  + "pooled lane. Your PC refuses heavy mode until that lane support lands, so "
-  + "it cannot be used from here yet.";
+  + "pooled lane. While it runs, the other two models are paused - they "
+  + "come back when you apply another preset. Loading it takes about half a minute.";
 function renderPresets(){
   const box = $("presets");
   if(!box) return;
@@ -7495,10 +7567,10 @@ function renderPresets(){
     b.appendChild(model);
     const what = [p.what, p.focus, p.model].filter(x => typeof x === "string" && x).join(" - ");
     if(p.heavy_mode === true){
-      b.disabled = true;
-      b.classList.add("blocked");
-      b.title = HEAVY_PRESET_WORDS;
-      b.setAttribute("aria-label", String(p.title || p.id || "preset") + " - " + HEAVY_PRESET_WORDS);
+      const cost = (typeof p.heavy_words === "string" && p.heavy_words) || HEAVY_PRESET_WORDS;
+      b.title = cost;
+      b.setAttribute("aria-label", String(p.title || p.id || "preset") + " - " + cost);
+      b.addEventListener("click", () => applyPreset(String(p.id || "")));
       box.appendChild(b);
       return;
     }
@@ -10071,16 +10143,59 @@ subscribe();
   /* A reminder's one action, kept to the four kinds and their one payload
      string. Anything else is dropped, exactly like an unknown field: the PC is
      the authority and this page never guesses at a shape it was not given. */
-  var ACTION_KINDS = ["show-note", "open-webpage", "open-file", "run-task"];
+  var ACTION_KINDS = ["show-note", "open-webpage", "open-file", "run-task", "ask"];
   var ACTION_KEY = { "show-note": "note", "open-webpage": "url",
                      "open-file": "path", "run-task": "task" };
+  var ASK_DOES = ["record", "done", "snooze"];
+  /* A reminder that ASKS (2026-11-02): the question, up to three buttons in the
+     owner's own words, and where an answer is written. Kept to the shape the PC
+     hands out - anything else draws nothing, exactly like an unknown field: the
+     PC is the authority and this page never guesses at a shape it was not
+     given. `question` is the one word the notice and the phone show first. */
+  function askedOf(j) {
+    var a = j && typeof j.action === "object" && j.action ? j.action : null;
+    if (!a || txt(a.kind) !== "ask") return null;
+    var question = txt(a.question);
+    if (!question) return null;
+    var buttons = (Array.isArray(a.buttons) ? a.buttons : []).map(function (b) {
+      if (!b || typeof b !== "object") return null;
+      var label = txt(b.label);
+      var does = txt(b.does);
+      if (!label || ASK_DOES.indexOf(does) < 0) return null;
+      var one = { label: label, does: does };
+      if (does === "snooze") {
+        one.minutes = typeof b.minutes === "number" && b.minutes > 0 ? b.minutes : 0;
+      }
+      return one;
+    }).filter(function (b) { return b !== null; }).slice(0, 3);
+    if (!buttons.length) return null;
+    var rec = a.record && typeof a.record === "object" ? a.record : {};
+    return { kind: "ask", value: question, buttons: buttons,
+             record: { history: rec.history === true,
+                       obsidian_daily: rec.obsidian_daily === true,
+                       goal: txt(rec.goal), habit: txt(rec.habit) } };
+  }
   function actionOf(j) {
+    var asked = askedOf(j);
+    if (asked) return asked;
     var a = j && typeof j.action === "object" && j.action ? j.action : null;
     if (!a || ACTION_KINDS.indexOf(txt(a.kind)) < 0) return null;
     var key = ACTION_KEY[txt(a.kind)];
+    if (!key) return null;
     var value = txt(a[key]);
     if (!value) return null;
     return { kind: txt(a.kind), value: value };
+  }
+  /* The answers already given (oldest first): the PC's own clock, the label the
+     owner pressed and what was written. Never a shape this page invents. */
+  function answersOf(j) {
+    return (Array.isArray(j.answers) ? j.answers : []).map(function (e) {
+      if (!e || typeof e !== "object") return null;
+      var button = txt(e.button);
+      if (!button) return null;
+      return { clock: txt(e.clock), button: button, does: txt(e.does),
+               wrote: (Array.isArray(e.wrote) ? e.wrote : []).map(txt) };
+    }).filter(function (e) { return e !== null; });
   }
   function readSchedule(a) {
     var src = a && typeof a === "object" ? a : {};
@@ -10108,7 +10223,13 @@ subscribe();
                // every row written before today - draws exactly what it drew.
                action: actionOf(j),
                actionProblem: txt(j.action_problem),
-               actionUnreadable: j.action_unreadable === true };
+               actionUnreadable: j.action_unreadable === true,
+               // A reminder that ASKS (2026-11-02): every answer already given,
+               // oldest first, and the PC's own marker that it can take one.
+               // Both are empty unless the PC said them, so every other row -
+               // and every row written before today - draws what it always did.
+               answers: answersOf(j),
+               asks: j.asks === true };
     };
     var lists = Array.isArray(src.lists) ? src.lists.filter(function (l) {
       return l && typeof l === "object" && typeof l.name === "string" && l.name
@@ -10128,6 +10249,11 @@ subscribe();
       // backend DROPS an action silently, so the form's whole "Then" row is
       // hidden unless the PC says it can keep one - and the row says why.
       actions: available && src.actions === true,
+      // ...and the same for a question (2026-11-02): an older backend refuses
+      // an `ask` block at save AND has no `answer` verb, so the form's "Ask me a
+      // question" choice and the row's buttons are only offered when the PC
+      // says it can take an answer.
+      asks: available && src.asks === true,
       hiddenCount: typeof src.hidden_count === "number" ? src.hidden_count : 0,
       jobs: available ? src.jobs.filter(ok).map(row) : [],
       todo: available ? src.todo.filter(ok).map(row) : [],
@@ -10196,6 +10322,21 @@ subscribe();
       else if (a.kind === "show-note") out.push("Note: " + a.value);
       else if (a.kind === "run-task") out.push("Asks you once on a card before it " +
         taskWords(a.value));
+      else if (a.kind === "ask") {
+        // What answering WRITES, said before anything is pressed - and the
+        // answers already given, newest last, in the PC's own clock.
+        var where = [];
+        if (a.record.history) where.push("its own history");
+        if (a.record.obsidian_daily) where.push("today's Obsidian note");
+        if (a.record.goal) where.push("goal progress");
+        if (a.record.habit) where.push("a habit tick");
+        if (where.length) out.push("Records in " + where.join(", ") + " when you press a button that records");
+        if (job.answers.length) {
+          out.push("Answered: " + job.answers.slice(-3).map(function (e) {
+            return e.clock + " " + e.button;
+          }).join(", "));
+        }
+      }
     }
     if (!job.hidden && job.actionProblem) out.push(job.actionProblem);
     if (job.actionUnreadable) {
@@ -10591,8 +10732,16 @@ subscribe();
     row.setAttribute("data-rem-kind", job.kind);
     if (Number.isInteger(job.rank)) row.setAttribute("data-rem-rank", String(job.rank));
     row.append(el("p", "rem-title", rowTitle(job)));
+    // A question is the row's REAL words when it goes off (2026-11-02): the
+    // reminder's own text is what it is about, the question is what is asked.
+    // Set with textContent, never HTML - the owner's own words.
+    if (job.action && job.action.kind === "ask" && !job.hidden) {
+      row.append(el("p", "rem-question", job.action.question));
+    }
     var meta = rowMeta(job);
     if (meta) row.append(el("p", "rem-meta", meta));
+    var askBar = askBarOf(job, wentOff);
+    if (askBar) row.append(askBar);
     var openBtn = openButtonOf(job, wentOff);
     if (openBtn) row.append(openBtn);
     var controls = controlsOf(job, groupJobs);
@@ -10712,6 +10861,49 @@ subscribe();
     });
   }
 
+  /* ---- answering a question (2026-11-02) ------------------------------- */
+  /* The owner's own buttons, in his own words, on the row that has gone off -
+     and ONLY while the PC says it can take an answer (`asks`). Pressing one is a
+     LOG, not an approval: no card (the design's own sentence - "answering is a
+     log, cardless like ticking a to-do"), the same question may be answered
+     again, and nothing about it decides anything else on this PC. Drawn only on
+     a row that went off (there is nothing to answer before its time) and never
+     while App lock hides the words: the question is the owner's own. */
+  function askBarOf(job, wentOff) {
+    if (!job.action || job.action.kind !== "ask" || job.hidden) return null;
+    if (!wentOff || !job.asks) return null;
+    var bar = el("div", "rem-actions rem-ask");
+    job.action.buttons.forEach(function (b, i) {
+      var btn = el("button", "rem-btn rem-answer", b.label);
+      btn.type = "button";
+      btn.setAttribute("data-rem-answer", String(i));
+      btn.title = b.does === "snooze"
+        ? "Snoozes it for " + b.minutes + " minutes, and records the answer"
+        : (b.does === "done" ? "Marks the reminder done" : "Records the answer");
+      btn.addEventListener("click", function () { answer(job, i, btn); });
+      bar.append(btn);
+    });
+    return bar;
+  }
+  function answer(job, index, button) {
+    if (busy) return;
+    busy = true;
+    if (button) button.disabled = true;
+    // ONE call, one job, the button's INDEX - never its label, so a re-worded
+    // button cannot be answered by accident. The PC checks everything again.
+    invoke("hud_schedule_act", { id: job.id, action: "answer", button: index })
+      .then(function (v) {
+        var said = v && typeof v === "object" ? txt(v.said) : "";
+        note.textContent = said || "Answered.";
+        note.hidden = false;
+        askedAt = Date.now();
+      }).catch(showError).then(function () {
+        busy = false;
+        if (button) button.disabled = false;
+        return afterChange();
+      });
+  }
+
   /* ---- opening what a reminder points at (2026-10-27) ------------------ */
   /* The Open button is the ONLY way anything opens, and pressing it IS the
      approval: there is no card, because nothing is opened by itself and opening
@@ -10768,6 +10960,14 @@ subscribe();
     var canAct = kind === "reminder" && !!(view && view.actions);
     $("rem-then-row").hidden = !canAct;
     if (!canAct) $("rem-then").value = "";
+    // "Ask me a question" is offered only when the PC says it can take an
+    // ANSWER as well as keep the block (`asks`): an older backend refuses the
+    // block at save, and one without the verb would leave buttons nothing can
+    // press. A choice already made is cleared with the option, unseen.
+    var askOption = $("rem-then-ask-option");
+    var canAsk = canAct && !!(view && view.asks);
+    if (askOption) askOption.hidden = !canAsk;
+    if (!canAsk && $("rem-then").value === "ask") $("rem-then").value = "";
     syncThen();
     var repeat = $("rem-repeat").value;
     $("rem-days").hidden = !(when && (repeat === "week" || repeat === "custom"));
@@ -10781,6 +10981,16 @@ subscribe();
     $("rem-then-url-row").hidden = kind !== "open-webpage";
     $("rem-then-path-row").hidden = kind !== "open-file";
     $("rem-then-task-row").hidden = kind !== "run-task";
+    // A question (2026-11-02): its own question, its buttons, and where an
+    // answer is written. Each button's minutes box appears only for a Snooze.
+    $("rem-then-question-row").hidden = kind !== "ask";
+    $("rem-then-buttons-row").hidden = kind !== "ask";
+    $("rem-then-record-row").hidden = kind !== "ask";
+    for (var i = 1; i <= 3; i++) {
+      var does = $("rem-ask-does-" + i);
+      var mins = $("rem-ask-minutes-" + i);
+      if (does && mins) mins.hidden = does.value !== "snooze";
+    }
     var help = $("rem-then-help");
     if (!help) return;
     var words = thenHelp(kind);
@@ -10810,17 +11020,76 @@ subscribe();
         taskWords($("rem-then-task").value) + ". Nothing happens unless you say yes, " +
         "and if you say no the reminder stays in your list as it was.";
     }
+    if (kind === "ask") {
+      return "At its time the question is shown here and on your phone, with these " +
+        "buttons. Pressing one is a LOG, not an approval: no card, like ticking a " +
+        "to-do item, and it can be pressed again. Your phone shows the buttons only " +
+        "while it is connected - a reminder that goes off while it is away appears " +
+        "when it comes back, it is not pushed later. A button cannot open a file or " +
+        "a page in this build: use \"Open a file\" above for that.";
+    }
     return "";
   }
   /* The action the form's own choices make, or null for "Nothing", or an Error
      whose sentence is shown as it is. The PC checks all of this again - this is
      only so the owner is told before anything is sent. */
+  function askedAction() {
+    var question = $("rem-then-question").value.trim();
+    if (!question) {
+      return new Error("Write the question first - it is what you will read when it " +
+        "goes off.");
+    }
+    if (question.length > 200) return new Error("A question is up to 200 characters.");
+    var buttons = [];
+    for (var i = 1; i <= 3; i++) {
+      var label = $("rem-ask-label-" + i).value.trim();
+      if (!label) continue;
+      if (label.length > 24) {
+        return new Error("A button's words are up to 24 characters.");
+      }
+      var does = $("rem-ask-does-" + i).value;
+      var one = { label: label, does: does };
+      if (does === "snooze") {
+        var mins = parseInt($("rem-ask-minutes-" + i).value, 10);
+        if (!(mins >= 1 && mins <= 1440)) {
+          return new Error("A snooze button is 1 to 1440 minutes.");
+        }
+        one.minutes = mins;
+      }
+      buttons.push(one);
+    }
+    if (!buttons.length) {
+      return new Error("A question needs at least one button - that is what you press " +
+        "when it goes off.");
+    }
+    var record = {};
+    if ($("rem-record-history").checked) record.history = true;
+    if ($("rem-record-obsidian").checked) record.obsidian_daily = true;
+    var goal = $("rem-record-goal").value.trim();
+    if (goal) record.goal = goal;
+    var habit = $("rem-record-habit").value.trim();
+    if (habit) record.habit = habit;
+    var records = false;
+    for (var j = 0; j < buttons.length; j++) {
+      if (buttons[j].does === "record") records = true;
+    }
+    if (records && !Object.keys(record).length) {
+      return new Error("A button records the answer, so pick where: its own history, " +
+        "today's Obsidian note, a goal or a habit.");
+    }
+    var block = { kind: "ask", question: question, buttons: buttons };
+    if (Object.keys(record).length) block.record = record;
+    return block;
+  }
   function chosenAction() {
     var kind = $("rem-then") ? $("rem-then").value : "";
     if (!kind) return null;
     if ($("rem-kind").value !== "reminder") {
       return new Error("Only a reminder can carry an action. Choose Reminder, " +
         "or Then: Nothing.");
+    }
+    if (kind === "ask") {
+      return askedAction();
     }
     if (kind === "show-note") {
       var note = $("rem-then-note").value.trim();
@@ -10924,6 +11193,18 @@ subscribe();
       $("rem-then-note").value = "";
       $("rem-then-url").value = "";
       $("rem-then-path").value = "";
+      // ...and a question's own fields, so the next reminder never asks the
+      // last one's question with the last one's buttons.
+      if ($("rem-then-question")) {
+        $("rem-then-question").value = "";
+        for (var i = 1; i <= 3; i++) {
+          if ($("rem-ask-label-" + i)) $("rem-ask-label-" + i).value = "";
+          if ($("rem-ask-does-" + i)) $("rem-ask-does-" + i).value = "record";
+        }
+        if ($("rem-record-goal")) $("rem-record-goal").value = "";
+        if ($("rem-record-habit")) $("rem-record-habit").value = "";
+        if ($("rem-record-obsidian")) $("rem-record-obsidian").checked = false;
+      }
       syncThen();
     }).catch(showError).then(function () {
       busy = false;
@@ -10945,6 +11226,12 @@ subscribe();
       var field = $(id);
       if (field) field.addEventListener("input", syncThen);
     });
+    // A question's own controls: the minutes box follows the Snooze choice, and
+    // the sentence under the row follows what is typed - nothing is sent.
+    for (var n = 1; n <= 3; n++) {
+      if ($("rem-ask-does-" + n)) $("rem-ask-does-" + n).addEventListener("change", syncThen);
+      if ($("rem-ask-label-" + n)) $("rem-ask-label-" + n).addEventListener("input", syncThen);
+    }
     $("rem-form").addEventListener("submit", submitAdd);
     syncForm();
     refresh();

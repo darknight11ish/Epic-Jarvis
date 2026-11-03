@@ -3624,7 +3624,13 @@ setting is implied or loosened: a sensitive saved fact still needs
 `privacy: voice_is_enough`, and `screen_aloud` is unchanged. A >= 2.0 s clip
 still gets the silent strict check itself (what refuses another voice, and what
 a read-aloud answer needs), and a failed check or a re-enrolled print voids the
-session's verification.
+session's verification. A session started by voice is verified by the clip that
+started it: the phrase is only answered after that clip passed the owner check,
+so it is the session's one check and the first `source=live` clip is not asked
+for a second full sentence (2026-11-02). A session started by a button, the
+tray or a key has no such clip, so its first full sentence (>= 2.0 s) is the
+check; a start whose check was not a real one (broad mode lets every voice in)
+records nothing.
 Under the default, `same_as_button`, nothing changes. The utterance route itself still reads a
 request with no `?source=` as `push_to_talk` (that line is in the owner's
 `jarvis_hud.py`), so **send `source` on every clip**: `push_to_talk` for
@@ -5944,12 +5950,25 @@ A `job`:
                                   Open control is then not drawn
  "action_unreadable": true,       the stored block could not be read at all, so the
                                   reminder fires as an ordinary one and opens nothing
+ "asks": true,                    this reminder ASKS a question and the PC can take an
+                                  answer (21.14). ABSENT on every other job.
+ "answers": [{...}],              the answers already given, oldest first (21.14).
+                                  ABSENT until the first one.
  "created", "source": "quick"|"tool"|"app"}
 ```
 
 `rule` is one of `{"every": "day", "at": "HH:MM"}`, `{"every": "weekday",
 "at"}`, `{"every": "week", "at", "days": [0-6, 0 = Monday]}`, `{"every":
-"hours", "hours": N, "start": epoch}` (N at least 1). Limits: 300
+"hours", "hours": N, "start": epoch}` (N at least 1), and since 2026-11-02
+(section 21.14): `{"every": "days", "days": N, "at", "start": epoch}`,
+`{"every": "weeks", "weeks": N, "at", "days": [0-6], "start": epoch}`,
+`{"every": "month", "at", "day": 1-31}` (a day past the month's end is that
+month's last day), `"times": ["HH:MM", ...]` (up to eight, several in one day,
+on every rule with a time of day) and `"ends": epoch` (an optional last day,
+honoured by the same tick that already stops a "tell me when"). `at` is
+ALWAYS the earliest time, so a reader that knows only `at` still reads the
+first time it goes off, and `times` appears only when there is more than one -
+an ordinary rule's block is byte for byte what it was. Limits: 300
 characters of words, 100 timers and reminders, 300 open to-do items, a
 timer up to 24 hours, a time up to a year ahead - each said in a sentence
 when reached.
@@ -6079,6 +6098,7 @@ What it understands:
 | Morning briefing | "brief me now", "brief me every weekday at 7" (**a card**), "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
 | Features (§130) | "what is the prompt coach", "what does the prompt coach do", "is the prompt coach on", "is the prompt coach on right now", "how do I turn on the prompt coach", "how do I turn off the prompt coach", "what features do you have", "list the memory features", "turn on <a feature that names one switch>" - added 2026-10-20 |
+| Model and preset questions (2026-11-02) | "what AI model will you use in the coding preset", "what model does the coding preset use", "which model will you use in the fast preset", "what model does the fast preset use", "which model does <preset> load", "what is <preset>'s model", "are you using both cards", "does it layer across both cards", "what model are you using now" - answered from `jarvis_presets.py`'s own rows and this PC's model record: **no model call and no approval card** |
 
 **A reminder the grammar missed can no longer become a model's prose success
 (2026-10-27, the owner's HUD bug).** The owner typed "add a reminder ..." into
@@ -6115,6 +6135,28 @@ only an explicit "Jarvis, what is <thing> feature" gets "I do not have that
 one". The "turn on <feature>" wording goes through that setting's own setter
 and approval rule - the same `BoolSetting.set` the settings phrases and the
 `change_setting` tool use - and answers with its real outcome.
+
+**Model and preset questions come from the preset contract (2026-11-02).**
+The owner asked "what AI model will you use in the coding preset?" and the
+deployed chat answered `qwen3.5:9b` - the General preset's model - and denied
+that any preset spans both cards. Both were false: the row in
+`backend/jarvis_presets.py` is `qwen3-coder-30b-a3b-ud-q3-k-xl`, heavy mode
+across both cards. Those sentences now read that row itself - the model, the
+heavy flag, the window, the honest `cost` and `worse`, and `heavy_words` when
+the build has it (PR #1106's field; otherwise the row's own `cost` is the
+fallback). The Coding answer always says both cards, ONE approval card first,
+and that the preset is **not live until the pooled both-card lane's code is
+deployed** - which, on a tree without that lane, is today, and the PC's own
+refusal sentence is quoted beside it. An unknown preset name gets "There is no
+preset called ..." plus the real titles, never an invented model.
+"what model are you using now" reads `jarvis_models`' own record and says "I
+do not know yet" when no record exists rather than quoting the chosen
+preset's model as if it were running. "Are you using both cards" reads the
+pooled lane, the separate "One bigger model on both cards" mode and the
+preset choice, and says "yes", "not right now" or "I cannot read that"
+accordingly - never a guess. None of these raises a card or calls a model, and
+the two new intents are in `READ_ONLY_INTENTS`, so such an answer never takes
+away what "cancel that" would undo.
 
 **"How long is left" is only ours while something is left to measure.** With
 no timer running, the **bare** sentence ("how long is left", "how much time is
@@ -6744,6 +6786,9 @@ PC's folders, and a client must not edit deep configuration). It shows a fired
 `show-note`'s note and the one card, and approves that card through the existing
 `POST /api/approve`. **No route was added**, so `tools/check_parity.py` has
 nothing new to classify; the one-sided reason is in `docs/ARCHITECTURE.md` §8.
+*(Since 2026-11-02 the phone also shows a fired `ask` reminder's question and
+takes its answers — section 21.14. That changes nothing here: an `ask` block is
+a different kind, and the phone still creates none of it.)*
 
 **Not in this slice, said plainly:** editing an action on an existing reminder
 (the form adds one; the editor does not change it yet), `open-app`, a phone
@@ -6895,8 +6940,173 @@ Google answer's read and event sentences driven with a stubbed read, and a
 mutation check that the setup sentence reaches the model when the new matcher
 is disabled.
 
-## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
+### 21.14 A reminder that ASKS - the owner's question, up to three of his own buttons, and where an answer is written (added 2026-11-02)
 
+The owner asked for it twice in one evening. First: *"I would like to tell Jarvis
+exactly how I want the reminder to appear and what interactive elements there are
+- e.g. 'hey Jarvis remind me to take a medication at 10:00 a.m.' -> at 10:00 a.m.
+a notification on my Android phone saying 'Did you take your medication?' with a
+Yes or No button."* Then, asked how much flexibility he wanted: *"as much
+flexibility or options as I want."* `DESIGN.md`
+(`.dsh-scratch/REMINDER-ACTIONS-2026-11-02/DESIGN.md`) carries his clickable
+answers; this is what was built from them.
+
+**Fifth action kind, same one action per reminder, NO new permission model and NO
+new route.** A reminder's `action` block may now be:
+
+```
+{"kind": "ask",
+ "question": "Did you take your medication?",        the notification's body
+ "buttons": [                                        one to THREE, his words
+   {"label": "Taken",   "does": "record"},
+   {"label": "Skipped", "does": "record"},
+   {"label": "Later",   "does": "snooze", "minutes": 30}
+ ],
+ "record": {"history": true, "obsidian_daily": true,   where a `record` writes
+            "goal": "g-1", "habit": "h-7"}}
+```
+
+**A button does exactly ONE of three things** (`ASK_DOES`): `record` (write the
+chosen destinations), `done` (this occurrence is dealt with — a one-off leaves
+the list; a repeating reminder STOPS repeating, which is what deleting it would
+do and only ever makes Jarvis quieter), or `snooze` (the same one-off copy every
+other Snooze makes, N minutes later, 1 to 1440). **Three is the ceiling because
+Android draws three notification actions**; the PC's row mirrors it, so a fourth
+button is refused rather than silently undrawn. Two buttons may not say the same
+thing (there would be no way to tell which one was pressed).
+
+**`open-file` / `open-webpage` buttons are REFUSED in this build, by name, with
+their reason** (`ASK_NO_ACT`): the design asked for them, and the desktop's one
+opener (`open_reminder_target`, `reminder_open.rs`) opens a reminder's own SINGLE
+action and takes the job id only, so a per-button target needs a SECOND opener in
+Rust — a security surface (a page that can name a path is an exec primitive), and
+one that belongs to whoever owns that command. The sentence the owner reads says
+so in plain words and points at "Then: Open a file", which still works.
+
+**The hard rails do not flex.** There is no shell, command, script, webhook or
+"run this program" button, and `ask` is refused if one is asked for by name. No
+answer raises an approval card, approves in bulk or clears a rush latch: **an
+answer is a log line, cardless like ticking a to-do**. Any button that only
+quietens something needs no card for the same reason `act("done")` does not.
+
+**Checked when it is SAVED, and again when it is READ** — the two-check pattern
+§21.11 already keeps. The question is at most 200 characters and 3 lines; a label
+is one line of at most 24 characters (Android cuts a notification action's label
+at about twenty, and a label the owner cannot read is worse than a refused one);
+`record` names at least one destination whenever a button records, and an unknown
+key anywhere in the block is refused. The READ door is the SAME function
+(`_decode_ask` calls `_clean_ask`), so the rules cannot drift: a row edited on the
+owner's own disk reads as `action_unreadable`, fires as an ordinary reminder and
+offers no buttons at all.
+
+**Where an answer is written.** Any of four, in any combination, per reminder:
+`history` (the reminder's own log — the only new stored thing: a new nullable
+`jobs.answers`, JSON, appended with the PC's clock, the label, what the button did
+and what was written, keeping the newest 40); `obsidian_daily` (one plain line
+appended to that day's Obsidian note through `jarvis_note_capture`, the module
+that already owns it — `10:00 — medication: Taken`); `goal` (the goal's own
+progress log, through `jarvis_goals.progress(goal_id, text, at=...)` when this PC
+has that module); `habit` (a tick, through `jarvis_habits.tick(habit_id, at=...,
+text=...)`, wired by the life-coach lane). **The last two degrade rather than
+fail**: this tree's `jarvis_goals.py` has no progress log yet and there is no
+`jarvis_habits.py`, so a reminder that names either says one truthful sentence
+("Goal progress is not set up on this PC yet, so that part was not written. The
+answer itself was kept.") and keeps the answer. Nothing is silently pretended.
+
+**Answering.** `POST /api/schedule/act {"do": "answer", "id", "button": <index>,
+"source"?}` — the same route and the same write door as every other schedule
+change, so **no route was added** and `tools/check_parity.py` has nothing new to
+classify. `button` is the button's INDEX, never its label: the PC reads the
+question, the buttons and the destinations back from its own stored row, so an
+app can never name what is written. It answers 200 `{"ok", "id", "button",
+"does", "wrote", "problems", "said", "answers"}`, 404 for a job that is gone, 409
+for a reminder that has not gone off yet (or a job that is not a question, or one
+whose `FIRED_KEEP` day has passed), and 400 for an index that is not there.
+Answering the same question twice is two answers, because a question is not a
+card and does not close.
+
+**The PC is the clock, and it draws the question.** The HUD's "Just went off" row
+shows the question in the owner's words with one button per stored button; each
+press sends one answer through `hud_schedule_act` (`action: "answer"` with the
+index — `answer_body` in `brain/schedule.rs` is the only way that body is built,
+and the page never holds the token). Adding one is on the same form, "Then: Ask
+me a question", offered only when `status()["asks"]` says the PC can take an
+answer; the option is hidden on an older backend rather than shown and refused.
+
+**The phone.** A fired `ask` reminder's notification carries the QUESTION as its
+body and the owner's buttons as its actions (at most three, which is Android's
+own ceiling — so a question's buttons REPLACE the ordinary Snooze/Stop pair, and
+nothing is lost, because an ask is a reminder and a reminder never rings). Each
+button is a `PendingIntent` to `EventService` with `ACTION_ANSWER`, the job id and
+the index; it waits for the link like Snooze does and then sends ONE answer
+(`JarvisRuntime.scheduleAnswer`), which is refused while the phone is LOCKED
+("Unlock your phone to answer — the answer writes a personal record."): the same
+rule the approval envelope keeps for Approve, without pretending an answer is an
+approval. While App lock or "Hide memory lists" is on, the notification says only
+`ASK_ON_LOCK_SCREEN` — the question is the owner's own words about his own life.
+
+**Honest limits, said in the UI and here.** The phone shows the notification only
+while it is CONNECTED to the PC: a reminder that goes off while the phone is away
+appears when it links again, and is not retro-pushed. A late (quiet) notice
+carries no buttons at all, by the owner's own 2026-09-26 rule for a missed one.
+The Windows toast still says its generic line and carries no answer buttons in
+this build — the HUD's row and the phone's notification are where the question is
+answered. A daily note is not written when no Obsidian vault is set up, and the
+goal/habit destinations are not set up in this tree; each says so in one sentence
+and the answer is kept.
+
+**Privacy.** The audit gets ids, kinds, the button's INDEX and the destination
+NAMES only: `schedule.answered {"id", "button", "does", "wrote", "problems",
+"source"}` — never the question, never a label, never a line that was written.
+The answer log lives in the same `schedule.db` as the reminder's own words, and
+the row (and its log) is deleted `FIRED_KEEP` after it last went off.
+
+**Back-compat and rollback.** A job without an `ask` block carries no new key at
+all, in the payload or in the event. An older build ignores the `answers` column
+and the `ask` kind (it refuses the block at save rather than storing something it
+cannot draw), so a code rollback leaves every job readable.
+
+**Not in this slice, said plainly:** a button that opens a file or a page (see
+above), editing an existing reminder's question or buttons (the form adds one;
+the editor does not change it yet), a builder on the phone (it answers; it does
+not create — the reason is in `docs/ARCHITECTURE.md` §8), and answer buttons on
+the Windows toast.
+
+**The repeat grammar the same request asked for** (this section's other half).
+On top of `every day`, `every weekday`, `every week on chosen days` and `every N
+hours`, a rule may now be:
+
+* `{"every": "days", "days": N, "at": "HH:MM", "start": <epoch>}` — every N days,
+  counted from the owner's own first occurrence (`start`, a date or an epoch; the
+  PC reads it on its own clock and stores the day's midnight);
+* `{"every": "weeks", "weeks": N, "at", "days": [0-6], "start"}` — every N weeks
+  on the chosen weekdays, counted from the week `start` falls in;
+* `{"every": "month", "at", "day": 1-31}` — monthly on a day of the month; a day
+  past that month's end is that month's last day (the 31st is 28 February);
+* `"times": ["08:00", "13:00", "20:00"]` on any rule with a time of day — several
+  times in one day, up to eight, earliest first (and `at` stays the earliest
+  one);
+* `"ends": <epoch>` on any rule — an optional last day, honoured by the tick that
+  already stops a "tell me when", so there is one code path and not two.
+
+Every one of those is said in ONE readable sentence, and an end date is said last:
+`rule_words` gives "every 2 weeks on Monday and Thursday at 09:00, starting Monday
+9 November, until Thursday 31 December" and "every day at 08:00, 13:00 and
+20:00". **There was no monthly rule before this** — the brief said there was, and
+it was not there (`jarvis_schedule.check_rule` knew four kinds, none of them
+monthly); it is here now, and `RULES`' own refusal sentence names every kind so a
+mistake is answerable.
+
+Tests: `backend/test_schedule_ask.py` — 152 checks over the block at save and at
+read, the three button verbs, the rails, firing with no card, every answer path,
+a snoozed question coming back as a question, the four destinations (with the
+journal faked, so nothing on the owner's PC is touched), the 40-answer bound, the
+route, the audit never carrying a word, and the whole grammar with its plain
+words and its end date really stopping a repeat.
+The PC's own half is pinned in `hud_schedule.rs` and `brain/schedule.rs`; the
+phone's in `ScheduleTest`.
+
+## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for
 briefings; anything that repeats asks once with a card listing the next run
 times, a one-off needs none; simple commands are answered without the AI
@@ -13712,11 +13922,13 @@ The owner's decision and answers of 2026-09-28 (`CLAUDE.md`, "Jarvis
 Live"), designed in `docs/LIVE-DESIGN.md` (which also lists what was built,
 what the owner answered and what changed). A conversation the owner starts
 and ends: no "Hey Jarvis" between sentences, and every sentence is still a
-whole clip, **checked for the owner's voice before any words exist**, and
-turned into words on the PC only. The session lives on the PC
-(`backend/jarvis_live.py`, shipped whole; `backend/live.patch` installs the
-route). Desktop: `live.rs`, `live-rules.js`, the Jarvis bar and the
-always-on-top badge. Phone: `voice/LiveRules.kt`, `service/LiveService.kt`,
+whole clip, turned into words on the PC only. The owner's voice is verified
+once per session - its first full clip is **checked for the owner's voice
+before any words exist** - and the same session is not re-checked sentence
+by sentence after that; ending Live ends the trust. The session lives on
+the PC (`backend/jarvis_live.py`, shipped whole; `backend/live.patch`
+installs the route). Desktop: `live.rs`, `live-rules.js`, the Jarvis bar and
+the always-on-top badge. Phone: `voice/LiveRules.kt`, `service/LiveService.kt`,
 `ui/screens/LiveScreen.kt`. Both apps are held to one table,
 `live-cases.json` (`tools/gen_live_cases.py`).
 
@@ -25077,11 +25289,15 @@ this is what the desktop and Android readers expect. `chosen`, `lane` and
 `active_lane` are live PC state and are deliberately not in the fixture.
 
 Each preset carries `id/title/focus/what/cost/worse/model/lane{key,card,port,
-words}/context/helper/policy/measured/pending/heavy_mode/apply{action,
+words}/context/helper/policy/measured/pending/heavy_mode/heavy_words/apply{action,
 switch_route,apply_route,lane_start,auto:false}`. A `pending` preset has no
-model tag or figure and says it is waiting; `heavy_mode` (Coding on the 30B
-coder) is not applicable until the pooled both-GPU lane exists. `chosen` is
-the id last applied; `active_lane` is the lane chat is pointed at now.
+model tag or figure and says it is waiting. `heavy_mode` (Coding on the 30B
+coder) means the preset's model needs BOTH cards as ONE pooled lane; since
+2026-11-02 that lane exists and the row is applicable like every other one,
+with `heavy_words` carrying the PC's own plain-words cost (both cards, and the
+other two models paused while it runs). Both fields are additive: a reader that
+ignores them behaves exactly as before. `chosen` is the id last applied;
+`active_lane` is the lane chat is pointed at now.
 
 **`POST /api/work/apply` - the ONE asked action.** `{"preset": "<id>"}`: one
 `switch_model` approval card (never automatic). The lane is started on demand
@@ -25095,19 +25311,87 @@ has switched, any later failure rolls it back with the auto-tier
 preset. **Every one of those three restores is CHECKED, and only what was seen
 is claimed** (silent-failure audit 2026-10-27, row 2): a refused apply answers
 `{"ok": false, "changed": false, "error": "...", "restored": [...],
-"not_restored": [...]}`, where the two lists name which of `"the model"`,
-`"the chat lane"` and `"the chosen preset"` were put back and which could not
-be, and `error` says the same in words - it contains "were rolled back" only
-when every attempted restore succeeded. `changed: false` means the preset is
-not the chosen one; it says nothing about the model, the lane or the choice
-file, and `not_restored` is the fact about those. Both keys are additive, so a
-reader that ignores them behaves exactly as before. **Said plainly:** a card
-the owner DENIES leaves the started lane
+"not_restored": [...]}`, where the two lists name which of `"the pooled lane"`,
+`"the model"`, `"the chat lane"` and `"the chosen preset"` were put back and
+which could not be, and `error` says the same in words - it contains "were
+rolled back" only when every attempted restore succeeded. `changed: false`
+means the preset is not the chosen one; it says nothing about the model, the
+lane or the choice file, and `not_restored` is the fact about those. Both keys
+are additive, so a reader that ignores them behaves exactly as before. **Said
+plainly:** a card the owner DENIES leaves the started lane
 running - it starts no model and switches nothing. A `pending` preset refuses
-before anything happens, heavy-mode Coding refuses with "heavy mode needs the
-both-card lane, arriving later". Both apps call this route now: the desktop's
+before anything happens. Both apps call this route now: the desktop's
 focus-presets bridge sends it, and the Android preset screen reads and sends
 the same `apply_path` the GET advertises.
+
+### 145.1 The Coding preset's pooled both-card lane (2026-11-02, added)
+
+Coding is the ONE preset whose model cannot run on either named lane: 14.8 GB
+against a 12 GB card and an 8 GB card. Its `lane` is therefore `pooled` - ONE
+Ollama on port 11450, started on demand by this apply with **no card pin**, so
+the engine sees both cards (`jarvis_model_lanes.start_pooled_lane`, reusing
+`jarvis_big_coder`'s server, pause, load and restore - `jarvis_model_lanes.py`
+and `jarvis_big_coder.py` ship whole).
+
+What an apply does, in order, and what it never does:
+
+1. **ONE `switch_model` card first**, raised by the pooled lane's start, with
+   the same `from`/`to`/`why` detail `jarvis_models.switch_to` sends and the
+   preset's own `heavy_words` as the card's text. It names both cards and the
+   two lane models about to be paused. **Nothing is unloaded before it is
+   answered**, so a denied card changes NOTHING on this path (that is stricter
+   than the named-lane path, where the lane start comes first and a denied card
+   leaves it running).
+2. The pause is ANNOUNCED (event bus + audit log) before the first unload, both
+   lane models are unloaded and proved gone from `/api/ps`, the model is loaded
+   **naming 16,384 tokens**, and `/api/ps` must show it present, at that
+   context and with **zero spill**. A load that spills or comes up elsewhere is
+   unloaded again, both lanes are restored and the answer says why (503) - the
+   refusal is the machine's own words, never a canned one.
+3. The model is then recorded as the one chat uses. It is NOT a second card and
+   NOT `switch_to`: `jarvis_models.switch_to` runs its tripwire smoke test at
+   `jarvis_models.OLLAMA`, which is a single-card lane, so asking it for a
+   14 GB model would load it on a 12 GB card (or evict the model the pooled
+   lane just loaded). The preset writes the same record `switch_to` writes,
+   through that module's own state read/write, only after the card was approved
+   and the model really loaded.
+4. Chat is pointed at `http://127.0.0.1:11450` and the preset id saved. Any
+   later failure stops the pooled lane FIRST (unload, stop the server, restore
+   both lane models), then rolls the model back with the auto-tier
+   `jarvis_models.rollback()`, then restores the lane pointer and the choice.
+5. **Leaving it:** applying any preset that is not heavy stops the pooled lane
+   before anything else, in the same apply - it unloads the 30B, restores both
+   lane models and proves it from `/api/ps`. If it cannot be stopped, the apply
+   refuses in plain words (503) and changes nothing else.
+
+`POST /api/big-coder {"action":"stop"}` stops the same server by the same code
+(§126). Both routes are loopback only and behind the server's own origin and
+token checks.
+
+**One interaction that is stated rather than hidden.** The background learner
+(`jarvis_extract`, which `jarvis_hud.py` feeds the chat's own current model)
+talks to the address in `OLLAMA_URL` - the everyday lane - not to the preset's
+lane pointer. While the Coding preset is applied, that lane holds no model and
+cannot hold the 30B, so a learning pass asks for a model the lane cannot load
+and the learner fails in its own words (it will not load 14 GB on a 12 GB
+card). Nothing is sent anywhere and nothing is corrupted; learning pauses while
+the heavy preset is on and resumes when another preset is applied. It is not
+claimed to work, and it was not driven live in this slice. The same is true of
+`GET /api/models`' resident list, which reads the everyday lane: while Coding
+runs, the Current Models panel does not show the pooled model.
+
+**Measured on this PC, 2026-11-02** (`docs/MEASURED-2026-11-02-POOLED-LANE.md`):
+cold load 32.5 s, **77.5 / 85.3 / 85.6 tokens a second** on a fixed
+three-prompt coding set (median 85.3), the model 14,886 MiB **entirely in video
+memory** (zero spill), 11,899 MiB used on the RTX 2060 and 7,674 MiB on the
+RTX 2080 SUPER while it ran, and both lane models proved back afterwards at
+`qwen3.5:9b ctx=196608` and `qwen3:8b ctx=16384` with zero spill. The whole
+start took 69.9 s and the stop 59.1 s, the pause and the restores included.
+**The 28,672-token rung the 2026-10-18 measurement used no longer fits this
+PC**: 28,672, 24,576 and 20,480 all spilled 204-212 MiB, and 16,384 was the
+largest rung that loaded with none, which is why the preset asks for 16,384.
+`jarvis_big_coder.NUM_CTX` (28,672) is that mode's own measured rung and was
+not changed.
 
 **The HUD's left rail renders this contract too** (the owner's request of
 2026-10-21: "i would like this part of the jarvis HUD to have the presets we
@@ -26025,7 +26309,12 @@ and its own docstring is the contract.
   `my_files` by default (2026-10-20: the post-install field test found a fresh
   install was offered only the first three, so the calculator and memory
   search the docs describe were missing too; the full default list is in the
-  template and pinned by `backend/test_tool_defaults.py`). With no folders,
+  template and pinned by `backend/test_tool_defaults.py`). Since 2026-11-02 the
+  same list also names `plugin_list` and `plugin_switch`, the two tools that
+  list Jarvis's drop-in plugins and turn one on or off by chat (section 181);
+  both stay on this PC - `plugin_list` only reads the plugin folder, and
+  `plugin_switch` raises ONE `modify_own_code` card to turn one on and needs no
+  card to turn one off. With no folders,
   `jarvis_agent.offered_tools` omits `my_files` entirely - chat search cannot
   run even while this switch is ON, and that omission is on purpose: with no
   folder listed the tool costs no tokens and reads nothing. The Settings card
@@ -30487,6 +30776,157 @@ system prompt appears after the in-app Approve on a real device, and that a tap 
 reaches the PC over Tailscale after the process was killed. The desk check proves the compile and
 the JVM rules only.
 
+## 178. The skills menu: install, import, turn off, edit (added 2026-11-02)
+
+The owner asked, in these words:
+
+> "is jarvis fully compatible with hermes skills? if so, can we make a plug in
+> menu where i can add or remove or change plug ins for hermes? only do research
+> right now, no actual work"
+
+The research was `.dsh-scratch/OWNER-QUEUE-2026-11-02/HERMES-SKILLS-RESEARCH.md`,
+and the owner then chose its **scope B**: the PC's skills menu that installs
+from a folder or a `.zip`, enables and disables a skill, edits one behind the
+same card, and imports the skills already in `%USERPROFILE%\.hermes\skills` -
+with **no marketplace** and nothing downloaded.
+
+A "skill" was already a thing in Jarvis: a folder with a `SKILL.md` in it, whose
+frontmatter and body say when the agent should read it (`backend/jarvis_skills.py`,
+sections 135 and 138). What did not exist was any way to add one from an app.
+`jarvis-skills`' own docstring said so: *"there is deliberately no route that
+installs a skill, because installing runs the scanner and the approval gate on
+the PC"* (the phone's `Skills.kt`). This section is that route - on the PC,
+where the scanner and the card already live.
+
+### 178.1 The module, and the folder that installs it
+
+`backend/jarvis_skill_menu.py`, shipped whole by
+`scripts/apply-patches.ps1`, and its five routes come from
+`plugins/ready/skill-menu/` (`jarvis_skill_menu.install()`) - **no patch and no
+edit to `jarvis_hud.py`**, the same shape `jarvis_skill_hub.py` uses.
+
+It calls `jarvis_skills.py` for everything that matters and re-implements none
+of it: `parse_skill`, `scan_text`, `vet`, `install`, `_quarantine`, the index,
+and the `modify_own_code` card. One additive change was needed for the card's
+words and is a patch of its own - `backend/skill-install-note.patch`:
+
+- `install(..., note="")` puts ONE caller-written line on the same single card
+  (the sentence in 178.4). With no `note` the card is byte-identical to before.
+- `install()` now re-checks the card's **tier**, the way
+  `jarvis_skills.refine()` already did. `jarvis_gate.check` returns
+  `allowed=True` on `notify` ("you were told after") and `auto` (nobody in the
+  loop), so before this a config that listed `modify_own_code` as `notify`
+  would have installed a skill with no person asked. A skill IS instructions
+  the agent will follow, so the card has to be a real card.
+
+### 178.2 The five routes
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/skills/menu` | every installed skill (verdict, trust, uses, `scripts/` count), every turned-off one, and whether `%USERPROFILE%\.hermes\skills` exists | none |
+| `GET /api/skills/menu?name=<skill>` | ONE skill, plus its own `SKILL.md` text so the owner can read and edit it | none |
+| `POST /api/skills/install` | `{"path"}` a folder or `.zip` on this PC, or `{"hermes"}` a folder the scan named; `"dry_run": true` stops after the scanner; `"accept_warnings"` for a warning-level skill | **ONE** `modify_own_code` card |
+| `POST /api/skills/import/scan` | a READ-ONLY scan of `%USERPROFILE%\.hermes\skills`: every `SKILL.md`, its verdict, its `scripts/` count. Copies, moves and installs nothing | none |
+| `POST /api/skills/state` | `{"name", "on"}`: off moves the folder to `skills-off\` and drops its index row; on runs the scanner and the card again | on: **ONE**; off: none |
+| `POST /api/skills/edit` | `{"name", "text"}`: the new `SKILL.md`, scanned and installed through the same path | **ONE** |
+
+`GET /api/skills` (the list) and `POST /api/skills/decide` (removal, with its
+"are you sure?") are unchanged and still the only routes both apps call: the
+Settings menu's **Remove** calls the same `brain_remove_skill` command the
+Brain already had, so there is one removal path, not two.
+
+### 178.3 The safety model, in the order it happens
+
+1. **The scanner runs first, on every source.** `parse_skill` + `vet` -
+   the same regex-over-raw-bytes scanner, the same limits - run before any card
+   exists. A `.zip` is unpacked into a throwaway folder first (below) and its
+   contents are scanned exactly as a folder's would be.
+2. **A refusal never becomes a card.** A `refuse` verdict is copied into
+   `skills-quarantine\` with its report and returns `{"asked": false}`. This is
+   the point of the whole module: the attack these rules exist for works by
+   producing a dialog that looks routine, so "may I install this?" for a
+   curl-pipe-bash skill is the last step of the exploit, not a safeguard.
+3. **A warning waits for a person.** A `review` verdict returns
+   `{"needs": "accept_warnings"}` and raises no card; the same request again
+   with `"accept_warnings": true` raises the ONE card. The page shows the
+   warnings first, and asks "Install anyway?".
+4. **ONE card, and one only.** `install()` is reached exactly once per request
+   (`backend/test_skill_menu.py` counts the calls). Three skills are three
+   cards: there is no "install all", no "import all" and no yes-to-all, because
+   this project does not build bulk approval.
+5. **The person must really answer.** The tier check in 178.1.
+6. **The trust is not the client's to set.** A request that sent
+   `{"trust": "local"}` is ignored: anything arriving through this route is
+   `third_party`, the strictest level, because `local` scans less strictly
+   (bundled scripts become a note, and a missing licence is not flagged).
+7. **The `.zip` bounds are refusals, never truncations.** A member that is
+   absolute, carries a drive letter, climbs with `..`, or is a symlink refuses
+   the whole archive before it is written; the file count and total size are
+   the skill's own (`MAX_FILES` 64, `MAX_SKILL_DIR` 5 MB). An archive with no
+   `SKILL.md`, or with more than one, is refused with the count - guessing at
+   which one the owner meant is not this route's business.
+8. **A GitHub `.zip` works.** `my-skill-main/SKILL.md` whose frontmatter says
+   `name: my-skill` is renamed in the throwaway copy to the name the frontmatter
+   declares, and the same `parse_skill` checks the result. The spec's rule (the
+   folder IS the name) is what makes a skill addressable, and it is not relaxed
+   - only the archive's own folder name is.
+9. **Nothing is downloaded, and nothing in a skill is run.** There is no
+   marketplace, no catalogue to browse, no URL, and no socket: the module
+   imports no network library and starts no process. A skill's `scripts/` is
+   copied and never executed - by this route or by anything else in Jarvis.
+
+### 178.4 The sentence on the card and on the row (Gemini's ruling 6)
+
+Skills stay instructions-only, and Hermes skills that ship a `scripts/` folder
+say so in the owner's words, on the install card and on the skill's row:
+
+```
+Imported SKILL.md instructions (N file(s) in scripts/ are kept inert and never
+run automatically).
+```
+
+It is built in one place (`jarvis_skill_menu.INERT_SENTENCE`) and reaches the
+card through `install(..., note=...)`, so the card and the row cannot drift -
+`backend/test_skill_menu.py` and `jarvis-desktop/tests/skills-menu.mjs` both pin
+the exact characters. A skill with no `scripts/` folder says nothing about one,
+on purpose: a sentence that is always there stops being read.
+
+What a Hermes skill does and does not get here: the format is the same
+(agentskills.io - `name`, `description` and a Markdown body), so a Hermes folder
+usually installs as it is. Hermes-only metadata (`platforms`,
+`metadata.hermes.*` conditional activation, `required_environment_variables`) is
+kept in the parsed skill's `extra_fields` and **does nothing** in Jarvis, which
+has no OS gating and no toolset-conditional activation for skills. A skill that
+relied on a bundled script for its behaviour loses that behaviour entirely -
+which is the point of the sentence above, not a bug to work around.
+
+### 178.5 What is NOT built
+
+- **No marketplace and no remote install.** No ClawHub, no skills.sh, no
+  GitHub fetch, no auto-install, no "browse skills". The three sources are: a
+  folder on this PC, a `.zip` on this PC, and `%USERPROFILE%\.hermes\skills` if
+  it is already there. Nothing opens a socket.
+- **No phone install, turn-on or edit screen.** The phone keeps exactly what it
+  had (`GET /api/skills` and Remove with its "are you sure?"). The five routes
+  are classified `deliberate` in `tools/check_parity.py` and the reason is in
+  `docs/ARCHITECTURE.md` §8.
+- **No renaming.** An edit cannot change a skill's name: the frontmatter
+  `name:` must still match the folder, which is what stops a skill from being
+  addressed by a name it does not own. Renaming is a new install plus a
+  removal.
+- **No Hermes-metadata behaviour.** See 178.4.
+
+### 178.6 What this slice cannot prove at the desk
+
+The Settings card's two Windows dialogs (`src-tauri/src/folders.rs`'s
+`What::SkillFolder` and `What::SkillZip`) are compiled and unit-tested but are
+not driven here: no test opens a dialog. The owner's own click is the proof.
+Everything else - the scanner, the refusal, the ONE card, the `.zip` bounds, the
+Hermes scan against a fake folder, the off/on round trip, the edit, the routes'
+origin and token checks - is driven against temp folders and a stub gate by
+`backend/test_skill_menu.py`, and the page and the Rust are read for their
+wiring by `jarvis-desktop/tests/skills-menu.mjs`.
+
 ## 179. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
 
 The owner's question of 2026-11-02 ~00:20 PT, and his answer the same night
@@ -30604,7 +31044,264 @@ passes. The number is deliberate: the Lead reassigned it from 178 on
 2026-11-02 so it cannot collide with #1092's. Verified at the desk, not
 assumed.
 
-## 180. Goals in the reminder area: a progress log, and talking to Jarvis about it (added 2026-11-02)
+## 180. Habit check-ins, the owner's own mood log, and the week in review: one tap, no card, never learned (backend, routes for both apps, no screen yet, added 2026-11-02)
+
+The owner's life-coach set, decided 2026-11-02
+(`.dsh-scratch/LIFE-COACH-RESEARCH-2026-11-02/OWNER-DECISIONS.md`, decisions
+D1-D4): a **habit check-in** - "I want to walk three times a week", a nudge at
+the time he picked, and one tap that records it happened that day - and his
+**own mood log**: one 1-5 tap a day, optional words, and a history he can look
+at. Both are **backend only today**: the two modules below answer their routes,
+and **neither app has a screen for either one yet** - the Habits and Mood
+section on the phone's Reminders screen and its PC equivalent are a later lane
+(that is also what the two `features/features.json` rows say, rather than
+claiming a UI that does not exist). No new gate tier, no shell or script kind,
+no card anywhere in this section.
+
+The two decisions this section records are in `decisions.d/`:
+`2026-11-02-mood-log-recorded.md` (the mood log is built, reversing the
+2026-09-26 decline *for the owner's own log and nothing else*) and
+`2026-11-02-habit-mood-never-learned.md` (habit and mood data are excluded
+from learning **entirely**, which is stricter than the project's existing
+card-gated rule for sensitive facts).
+
+### 180.1 Habit check-ins - `GET`, `POST /api/habits`
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/habits` | every habit, newest first, each with its own recent ticks (rows, never a rate) | none |
+| `POST /api/habits` | create a habit: its own words, an optional `rule`; sets up ONE repeating job of kind `habit_checkin` at once | **none** - the cardless `plain_repeat` class, like a plain repeating reminder (decided 2026-09-26) |
+| `GET /api/habits/<id>` | one habit and its ticks | none |
+| `POST /api/habits/<id>/tick` | record ONE tick, body `{"day"?: "YYYY-MM-DD", "words"?}` | none - the same class as ticking a to-do |
+| `POST /api/habits/<id>/untick` | take back one day's tick | none |
+| `POST /api/habits/<id>/stop` | stop tracking: deletes the repeating job and **keeps every tick** | none - immediate, one tap |
+
+**One row per habit per DAY, by construction.** `ticks` has
+`PRIMARY KEY (habit, day)`, so a second tap on the same day changes nothing and
+returns `"added": false` with the same row. Two taps cannot make two rows,
+which is also why no score is possible to inflate. A tick on another day is a
+second row.
+
+**What it deliberately does not do.** No score, no streak, no percentage, no
+"longest run", no trend and no praise: the nudge both apps show under the job
+is one fixed sentence in the owner's own words. That is a deliberate downgrade
+of every habit product's main hook, and this project has removed a streak twice
+on purpose (§21's report card, §19472/§19577).
+
+**Where it is kept.** `habits.db` beside `goals.db`/`schedule.db`/`memory.db`
+in the Jarvis settings folder (`JARVIS_HABITS_DB` overrides it, for the tests).
+Two tables: `habits` and `ticks`. Nothing is logged beyond an id and a day.
+
+**The reminder lane's entry point.** `jarvis_habits.record_tick(habit_id, ...)`
+is the clean function anything else calls to record a tick without a route - a
+reminder's answer destination, a quick reply, a voice action. It needs no
+listening server, touches no scheduler, raises no card, and is safe from a
+background thread. `jarvis_schedule.py` is not edited by this change.
+
+### 180.2 The mood log - `GET`, `POST /api/mood`
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/mood?days=N` | the last N days as rows (newest first) for the chart, the latest entry, the scale's limits and the fixed words | none |
+| `POST /api/mood` | save ONE day: `{"value": 1-5, "words"?: "...", "day"?: "YYYY-MM-DD"}`; a second entry that day **replaces** the first | none - personal logging, like ticking a to-do |
+| `POST /api/mood` with `{"clear": true, "day": ...}` | remove that one day | none |
+
+**One row per day.** A `mood.db` primary key on `day`, an upsert on save, no
+average, no trend and no verdict computed anywhere: the chart is a display
+concern and this module returns rows. The scale is exactly the whole numbers
+1-5; a float, a bool or `0`/`6` is refused in plain words.
+
+**Excluded from learning entirely, not card-gated.** Neither module imports a
+learner and no learner module names either one, so there is no code path by
+which a habit name or a mood value could become a fact. That is D2's
+straightforward reading, and `backend/test_learning_exclusion.py` proves it in
+both directions - including that writing a habit and a mood creates
+`habits.db`/`mood.db` and **no fact store at all**. It is stricter than the
+existing mood rule (`jarvis_intake.mood_rule`, "a passing mood ... is not a
+fact. Do not propose it"), and both hold: the model is told not to propose a
+mood, and the log is not a place a fact could come from in the first place.
+
+**It is not the crisis path.** A sentence bigger than a mood note still goes to
+`jarvis_wellbeing.py` and a real person; the mood module holds no help-line
+logic and imports no wellbeing module, which a test pins so it cannot grow a
+second, unreviewed one.
+
+### 180.3 The week in review - `GET /api/habits/week`, `POST /api/habits/week/start|stop`
+
+Once a week, **counts of stored rows and nothing else**: habit ticks, goal
+steps whose own `done_at` falls in the window, reminders that went off (the
+scheduler's own `fired_since`), and how many days of the week hold a mood row
+(a COUNT - the values are never read). The window is the seven days **before**
+the review day, so it is the week that passed. A count that could not be read
+prints "not read on this PC", never a confident zero.
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/habits/week` | the four counts above, the renderer's own text, and whether the review job is on | none |
+| `POST /api/habits/week/start` | turns the review on: ONE repeating job of kind `week_review`, at once | **none** - the same `plain_repeat` class as a repeating reminder |
+| `POST /api/habits/week/stop` | turns it off, in one tap | none |
+
+- When it fires it files **one line** through the existing cardless notes route
+  (`jarvis_note_capture.capture`, the function `POST /api/notes/capture` calls:
+  `append_obsidian_daily` and `append_logseq_journal` are tier `auto`,
+  `create_joplin_note` is `notify`, so nothing asks). It picks the first journal
+  this PC is set up for, appends rather than edits, and a PC with no journal
+  says so instead of failing.
+- It interprets nothing: the line ends by saying these are counts of what is
+  stored, not a judgement. No model is called and no tool runs.
+
+### 180.4 The GROW bridge in the Reflective Coach manner
+
+The `reflect` personality's own prompt material now names the GROW path - Goal,
+Reality, Options, Will, one question at a time, then one offer of a goal draft
+(the existing cardless `POST /api/goals` draft). The three sentences live in the
+preset's `post_history_hint`, which `jarvis_agent.with_manner_note` inserts on
+every turn of a chosen personality, because the assembled persona block is at a
+measured hard cap of 750 characters and the Reflective Coach was already at 729
+of them: the safety text could not be cut to make room (`§` the 2026-11-02
+skeptic decision records the same "a rewrite paid for by cuts" rule).
+`backend/test_grow_bridge.py` pins the GROW words and, beside them, the
+sentences that must never go with them: one gentle question, never diagnose,
+never a therapist, harm is bigger than Jarvis and a real person can help, no
+therapy record.
+
+### 180.5 What is deliberately not built here
+
+- **No screen on either app yet** - a Habits/Mood section on the Reminders
+  screen and the chart are the next lane, so `features/features.json` says so
+  in its `where`.
+- **No intervention, no unprompted "how are you feeling?"**, no sentiment
+  model, no diagnosis, no therapy record, no advice - the module counts and
+  stores, and the Reflective Coach's own wording rules govern the talking.
+- **No import from another habit app, no sync, no cloud.** Nothing in either
+  module opens a socket.
+- **No new permission model, no new gate tier, no shell/script kind, no
+  batching**: nothing here acts, so there is nothing to approve.
+
+## 181. The drop-in plugins, by chat: list them, and switch ONE on or off (backend, both apps' chat, added 2026-11-02)
+
+*Numbering note, 2026-11-02: this section was written as 180; the life-coach section (also 2026-11-02) took 180 first in the merge train, so this one is 181. The words below are unchanged.*
+
+**What it is.** `jarvis_plugins.py` loads optional features from folders: a
+folder in `jarvis_plugins\` beside `jarvis_hud.py` is discovered at start-up,
+its own `install()` is called, and the feature is on. A `disabled` marker file
+in that folder keeps it off, and so does `"enabled": false` in the folder's own
+`plugin.json`. Both of those already existed; nothing in this section invents a
+third way. Until now the only way to see the list or switch one was to open the
+folder by hand. Now the owner's own words are the door:
+
+> "Jarvis may list plugins and turn them on/off by chat, one card per change."
+> - the owner, 2026-11-02 (the decision is
+> `decisions.d/2026-11-02-plugin-switch-by-chat.md`)
+
+**The two tools** (`backend/jarvis_agent.py`). They are ordinary model tools, so
+they work from either app's chat: the model runs on this PC, and the phone's
+chat is the same turn reaching the same backend.
+
+| tool | arguments | what it answers | card |
+|---|---|---|---|
+| `plugin_list` | none | every plugin folder, whether it is on, and why it is off | none - it only reads |
+| `plugin_switch` | `plugin` (a name `plugin_list` showed) and `action` (`on` or `off`) | that one plugin, and what happens next | **on**: ONE `modify_own_code` card. **off**: no card |
+
+**ON is carded, OFF is not** - the project's own on/off rule, and here is why it
+fits. A plugin is program code that runs inside the backend process at start-up,
+with the same trust as `jarvis_hud.py` itself (`jarvis_plugins.py`'s own
+docstring says so). Turning one ON is therefore a change to Jarvis's own running
+code, so it is decided under the **existing** `modify_own_code` action - the one
+`jarvis_skills.write_skill` and the skill hub already raise for the same kind of
+act - which ships at tier `ask`. It goes through `jarvis_gate.check` exactly
+like every other card; nothing here approves, auto-approves or decides anything
+itself. Turning one OFF only narrows what runs, so it is immediate and cardless,
+the same rule the settings apply ("turning it on raises an approval card;
+turning it off is immediate"). The tool is also in `NEEDS_A_PERSON`, which is
+the belt: if `modify_own_code` is ever loosened in a settings file, an "allowed"
+verdict with nobody asked is refused and nothing is written.
+
+**What a toggle means at runtime - said honestly, never pretended.** The loader
+runs ONCE, at HUD start-up, so **neither direction is live in the process that
+is already running**. Every answer says that in plain words: the change lands
+the next time Jarvis starts, the copy running now keeps going until then, and
+Jarvis cannot restart itself. Nothing in this feature restarts the backend, and
+the model is told not to offer to.
+
+**The exact file it writes, and the only one.** OFF creates the loader's own
+`disabled` marker in that one plugin folder (`O_CREAT|O_EXCL`, so nothing
+already there is overwritten). ON removes that same marker - and only after
+checking the folder and its `plugin.json` are still where the card said they
+were. `plugin.json` is **never** rewritten: a plugin switched off by
+`"enabled": false` inside its own manifest is **reported and refused**, because
+that is a hand edit on the PC, not something chat changes. No folder is
+created, moved, renamed or deleted, and `backend/test_plugin_switch.py` proves
+it by comparing the folder byte for byte across a full off/on/off cycle and by
+parsing the module for any folder-delete call.
+
+**What the list reports, because they are different problems.** `plugin_list`
+names a plugin as:
+
+- **on** - it loaded when Jarvis started;
+- **switched off** - a `disabled` marker is in its folder (chat can remove it);
+- **switched off in its own plugin.json** - `"enabled": false`; a hand edit;
+- **did not load** - `install()` raised or the module was missing, with the
+  loader's own reason in the answer;
+- **no working plugin.json** - the folder's manifest is missing or will not
+  parse, with the loader's own reason;
+- **added after Jarvis started** - a working folder that appeared since, so it
+  has not loaded in this process;
+- **its folder is gone** - it loaded when Jarvis started and the folder has
+  since been removed; it keeps running until Jarvis restarts. Saying nothing
+  here would be the lie this list exists to prevent.
+
+A missing plugin folder is reported too: "There is no plugin folder at ...", not
+an empty list that reads like "no plugins". The answer never raises, and its
+"why" text is the loader's own words where the loader has them.
+
+**No new route, and no new card wording.** `tools/check_parity.py` is unchanged
+and clean: there is no `GET`/`POST` for any of this, no Rust command, no
+Settings section, and no app screen. The card the ON half raises is the existing
+`modify_own_code` action, which `jarvis_asks_first.py` already lists in the
+"What asks first" page's "Jarvis's own code" group - so no new action, no tier
+line, no risk row and no card wording is invented. The `gate_lookup_name` is
+`skill_manage`, the one published `_TOOL_ACTIONS` key that already maps to
+`modify_own_code`, so no `jarvis_gate.py` patch is needed either.
+
+**Nothing goes bulk, and nothing leaves the PC.** The schema has one `plugin`
+string and one `action` enum; there is no array, and a call naming two plugins
+is refused by `check_call` before anything is prepared. Both tools are in
+`[tools].enabled` in both shipped settings copies, because a feature reachable
+only by hand-editing that same list would not be reachable by chat - the same
+reason `phone_apps` is. Both are listed in `jarvis_reach.TOOL_NAMES` (the "What
+can Jarvis reach" page), in one short-list group (`settings`), and with their
+own tool-diet hints. Nothing is downloaded, nothing is sent anywhere, and the
+answer carries no file's contents.
+
+**Tests.** `backend/test_plugin_switch.py` (110 checks) drives the REAL
+`_one_call` with a fake gate and a throwaway plugin folder - no model, no
+network, no real card, and the owner's own plugin folder is never read or
+written. It proves: the list names every state and why; a listing writes,
+touches and deletes nothing (a full folder snapshot before and after); a
+missing folder reports itself; a plugin whose folder has gone is still listed;
+OFF is immediate, one marker file and no card; ON is exactly one card under
+`modify_own_code`, the card names the plugin and the exact file, a denied card
+and a timed-out card change nothing, and a loosened tier cannot let ON through
+with nobody asked; an unknown name, a path, a blank and a broken manifest are
+refused in plain words with no card; there is no bulk path; nothing is ever
+deleted; and a plugin switched off in its own `plugin.json` is reported and not
+rewritten. `backend/test_tool_defaults.py`, `test_tool_contract.py`,
+`test_tool_text.py`, `test_tool_eval.py`, `test_short_tool_list.py`,
+`test_reach.py`, `test_smarter_answers.py` and `test_private_aloud.py` all pass
+with the two tools added, and the generated fixtures they read
+(`tools/tool_eval/jarvis_tools.json`, `reach-cases.json`,
+`private-aloud-cases.json`) were regenerated by their own generators.
+
+**What is not proved here.** The switch has not been driven against a real
+`jarvis_hud.py` on the owner's PC (this repository has no HUD): what is proved
+is the loader's own `discover()`/`status()` and the real `_one_call` path. It is
+also not proved for a plugin whose `install()` starts a background thread that
+outlives a restart - the marker stops the NEXT start, not a thread already
+running. And a plugin folder that appears while Jarvis is running is reported as
+"added after Jarvis started" rather than loaded; nothing hot-loads.
+
+## 182. Goals in the reminder area: a progress log, and talking to Jarvis about it (added 2026-11-02)
 
 The owner's ask of 2026-11-02 (*"add a goals section in the reminder area and
 a way for me to record progress there along with talking to jarvis"*), on top

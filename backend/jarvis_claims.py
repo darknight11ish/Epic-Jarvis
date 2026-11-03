@@ -138,6 +138,10 @@ READ_ONLY_TOOLS = frozenset({
     # back out of the store and changes nothing - the three goal WRITES are
     # in ACTING_TOOLS below.
     "goals_list",
+    # "plugin_list" (2026-11-02): it lists the drop-in plugin folder - names,
+    # on/off state and the reason a plugin is off - and changes nothing. The
+    # writing half is plugin_switch, in ACTING_TOOLS.
+    "plugin_list",
 })
 
 #: The other half of the same classification (audit H4): every tool that can
@@ -183,6 +187,13 @@ ACTING_TOOLS = frozenset({
     # an ACTION tool, the direction that cannot wrongly correct a true
     # "I've added it to your phone apps".
     "phone_apps",
+    # "plugin_switch" (2026-11-02): turning a plugin off writes the loader's own
+    # `disabled` marker, and turning one on removes it after a modify_own_code
+    # card - both change what Jarvis loads, so a claim like "the news plugin is
+    # on now" must be corrected when only the card was raised or the write
+    # failed. `plugin_list` is the read-only half and is in READ_ONLY_TOOLS: it
+    # only lists the folder.
+    "plugin_switch",
 })
 
 #: The line added to a typed answer that claimed an action nobody took.

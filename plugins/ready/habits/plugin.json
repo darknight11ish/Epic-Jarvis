@@ -1,0 +1,7 @@
+{
+  "name": "habits",
+  "summary": "habit check-ins: a repeating thing the owner wants to do - walk, stretch, practise - with one tap recording that it happened that day, and no score, streak, percentage or chart of judgement anywhere in it.",
+  "module": "jarvis_habits",
+  "install": "handler",
+  "stack_order": 163
+}

@@ -6,12 +6,13 @@
 //! * **Start** (the Jarvis bar's Live button, or the tray's row): no card -
 //!   Live is the owner's own act - but refused while the event stream is
 //!   stale (rule 4) or App lock would ask Windows Hello, and refused by the
-//!   PC itself until the owner's voice is trained (the voice check runs on
-//!   every clip). Then `POST /api/voice/live {"do": "start", "device":
+//!   PC itself until the owner's voice is trained (one check verifies a Live
+//!   session). Then `POST /api/voice/live {"do": "start", "device":
 //!   "desktop"}`, the microphone in Live mode (voice.rs `open_for_live`:
-//!   every sentence goes as `source=live`, checked for the owner's voice
-//!   before any words exist - only ever to a server on THIS PC), the
-//!   always-on-top "Jarvis Live" badge, and the watcher.
+//!   every sentence goes as `source=live`; the session's first full clip is
+//!   checked for the owner's voice before any words exist, and the session is
+//!   then trusted without checking each sentence - only ever to a server on
+//!   THIS PC), the always-on-top "Jarvis Live" badge, and the watcher.
 //! * **The watcher**, once a second while Live is on here, reads
 //!   `GET /api/voice/live` and tells every window (`LIVE_STATUS`); the badge
 //!   and the bar draw the sign from it (live-rules.js). It:

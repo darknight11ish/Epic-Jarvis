@@ -172,6 +172,17 @@ class EventService : Service() {
             snoozeFromNotification(intent.getStringExtra(ScheduleNotifier.EXTRA_JOB_ID))
             return START_STICKY
         }
+        if (intent?.action == ACTION_ANSWER) {
+            // One of a question's own buttons (2026-11-02): the stream first,
+            // like Snooze, then ONE answer once the link is live. It is a LOG,
+            // not an approval, and it is refused while the phone is locked.
+            JarvisRuntime.startStream()
+            answerFromNotification(
+                intent.getStringExtra(ScheduleNotifier.EXTRA_JOB_ID),
+                intent.getIntExtra(ScheduleNotifier.EXTRA_BUTTON, -1),
+            )
+            return START_STICKY
+        }
         JarvisRuntime.startStream()
         return START_STICKY
     }
@@ -192,6 +203,29 @@ class EventService : Service() {
             val (changed, said) = JarvisRuntime.scheduleAct(id, "snooze")
             runCatching { Toast.makeText(this@EventService, said, Toast.LENGTH_LONG).show() }
             if (changed) runCatching { ScheduleNotifier.cancel(this@EventService, id) }
+        }
+    }
+
+    /**
+     * One of a reminder's own buttons on its notification (2026-11-02): the
+     * question it asked, answered.
+     *
+     * It waits for the link like [snoozeFromNotification] - an answer is a
+     * write, and a write is refused on a stale link (rule 4) - then sends ONE
+     * answer through [JarvisRuntime.scheduleAnswer], which also refuses while
+     * the phone is locked, because the answer writes a personal record. The
+     * sentence the PC makes (or the unlock line) is shown as a toast: the app
+     * is very likely not on screen. Nothing here is an approval, and nothing
+     * here can answer twice - the notification goes once the PC said yes.
+     */
+    private fun answerFromNotification(id: String?, button: Int) {
+        if (id == null || !com.jarvis.client.net.Schedule.validId(id)) return
+        if (button < 0) return
+        scope.launch {
+            awaitLive()
+            val (kept, said) = JarvisRuntime.scheduleAnswer(id, button)
+            runCatching { Toast.makeText(this@EventService, said, Toast.LENGTH_LONG).show() }
+            if (kept) runCatching { ScheduleNotifier.cancel(this@EventService, id) }
         }
     }
 
@@ -598,6 +632,16 @@ class EventService : Service() {
          */
         const val ACTION_APPROVE = "com.jarvis.client.APPROVE_FROM_NOTIFICATION"
         const val ACTION_SNOOZE = "com.jarvis.client.SNOOZE_JOB"
+
+    /**
+     * One of a question's own buttons on a reminder's notification (2026-11-02).
+     *
+     * Deliberately its own action, and deliberately not [ACTION_APPROVE]: an
+     * answer is a LOG, not a decision about anything - cardless, like ticking a
+     * to-do item - so nothing about it may ever reach the approval path. It
+     * carries the job's id and the button's INDEX, and nothing else.
+     */
+    const val ACTION_ANSWER = "com.jarvis.client.ANSWER_REMINDER"
         const val ACTION_STOP_RINGING = "com.jarvis.client.STOP_RINGING"
         const val ACTION_CHATBOT_STOP = "com.jarvis.client.STOP_CHATBOT"
 
