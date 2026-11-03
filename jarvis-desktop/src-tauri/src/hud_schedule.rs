@@ -23,7 +23,8 @@ use tauri::AppHandle;
 
 use crate::brain;
 use crate::brain::schedule::{
-    act_body, change_body, change_timeout, hud_add_body, post, post_with_timeout, ScheduleChange,
+    act_body, answer_body, change_body, change_timeout, hud_add_body, post, post_with_timeout,
+    ScheduleChange,
 };
 
 /// The Reminders tab's Add form: ONE reminder, timer, alarm or to-do item.
@@ -71,6 +72,12 @@ pub async fn hud_schedule_add(
 /// 202 for a repeat edit, whose wait gets the longer budget. This command has
 /// NO list form: Ruling 15 keeps "clear named list" out of the HUD (the Brain
 /// window does it), and the builders refuse anything that is not one job's.
+///
+/// `action: "answer"` (2026-11-02) is the tenth name and the one that changes
+/// nothing: ONE button of ONE question, pressed, carrying the button's INDEX in
+/// `button` and never its label. It is cardless - an answer is a log line, like
+/// ticking a to-do item - and [`answer_body`] is the only way that body is
+/// built, so a page can never name what is written.
 #[tauri::command]
 pub async fn hud_schedule_act(
     app: AppHandle,
@@ -78,8 +85,13 @@ pub async fn hud_schedule_act(
     action: String,
     seconds: Option<f64>,
     change: Option<ScheduleChange>,
+    button: Option<u32>,
 ) -> Result<serde_json::Value, String> {
     brain::require_link_live(&app)?;
+    if action == "answer" {
+        let body = answer_body(&id, button)?;
+        return post(&app, "/api/schedule/act", body).await;
+    }
     if let Some(change) = change {
         let body = change_body(&id, &action, &change)?;
         let timeout = change_timeout(&action, &change);
@@ -92,7 +104,7 @@ pub async fn hud_schedule_act(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::brain::schedule::SNOOZE_SECONDS;
+    use crate::brain::schedule::{ACTIONS, MAX_ASK_BUTTONS, SNOOZE_SECONDS};
 
     #[test]
     fn one_job_actions_keep_the_brains_own_rules() {
@@ -164,5 +176,31 @@ mod tests {
             change_timeout("pause", &ScheduleChange::default()).as_secs(),
             20
         );
+    }
+
+    /// 2026-11-02: answering one button of one question, and the rails around
+    /// it - an id the PC makes, an INDEX (never a label, never a target), and
+    /// the three-button ceiling the PC enforces.
+    #[test]
+    fn one_button_of_one_question_is_answered_by_index_only() {
+        assert_eq!(
+            answer_body("s0123456789", Some(0)).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "answer", "button": 0})
+        );
+        assert_eq!(
+            answer_body("s0123456789", Some(2)).unwrap()["button"],
+            serde_json::json!(2)
+        );
+        // No id the PC would make, no button, and a fourth button - refused
+        // here, in the words both apps use, before anything leaves this app.
+        assert!(answer_body("", Some(0)).is_err());
+        assert!(answer_body("not-an-id", Some(0)).is_err());
+        assert!(answer_body("s0123456789", None).is_err());
+        assert!(answer_body("s0123456789", Some(3)).is_err());
+        assert!(answer_body("s0123456789", Some(99)).is_err());
+        // And `answer` is reachable by NAME through the closed action list, so
+        // the page's own invoke is the only door it has.
+        assert!(ACTIONS.contains(&"answer"));
+        assert_eq!(MAX_ASK_BUTTONS, 3);
     }
 }

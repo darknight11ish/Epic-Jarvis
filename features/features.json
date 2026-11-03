@@ -413,6 +413,28 @@
     "lesson_id": "timers-reminders"
   },
   {
+    "id": "reminder-asks",
+    "group": "Talking",
+    "title": "A reminder that asks you a question",
+    "what": "A reminder can ask you a question in your own words, with up to three buttons you wrote yourself - each one records the answer, marks the reminder done, or snoozes it - and the answer is written where you chose: the reminder's own history, today's Obsidian note, a goal's progress or a habit tick.",
+    "where": "HUD, Reminders (or Brain, Work, Coming up), the Add form's \"Then: Ask me a question\"; the question and its buttons are answered on the HUD's \"Just went off\" row and on the phone's notification.",
+    "asks": "No card, either way: answering is a log line, like ticking a to-do item, and it decides nothing about anything else.",
+    "limit": "The PC is the clock and it draws the question; your phone shows it with the same buttons only while it is connected, so a question that goes off while the phone is away appears when it links again and is not pushed later. Answering from the phone needs it unlocked, because the answer writes a personal record; a locked screen shows a generic phrase. A button cannot open a file or a page yet. The Obsidian note is written only when a vault is set up, and goal progress and habit ticks wait for those two records to exist on this PC - each says so in one sentence and the answer is still kept.",
+    "surface": "both",
+    "covers": [
+      "timers-reminders"
+    ],
+    "aliases": [
+      "reminder buttons",
+      "ask me a question",
+      "reminder answer"
+    ],
+    "must_mention": [
+      "just went off"
+    ],
+    "lesson_id": "timers-reminders"
+  },
+  {
     "id": "today",
     "group": "Talking",
     "title": "Today",
