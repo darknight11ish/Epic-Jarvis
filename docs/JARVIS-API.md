@@ -6669,7 +6669,29 @@ written before it.
 {"kind": "open-webpage", "url":  "https://example.com/invoice-42"}
 {"kind": "open-file",    "path": "C:\\Users\\you\\Pictures\\taxes.png"}
 {"kind": "run-task",     "task": "briefing"}
+{"kind": "run-task",     "job":  "add milk to my shopping list"}
 ```
+
+A `run-task` carries **exactly one** of two keys, never both: `task` is the
+closed name (the two-name list below, unchanged) and `job` is **the owner's own
+words** for the job, up to 240 characters of plain words (added 2026-11-03; the
+owner's decision: *"scheduled tasks may run any job in his own words - at fire
+time Jarvis starts it and raises ONE card naming exactly what it will do"*).
+`job` is resolved through `jarvis_quick.match()` - the same pure parse half chat's
+fast path uses - **when the reminder is saved** and **again when it fires**, so a
+phrase that no longer means what it did is refused at 07:00 instead of running
+something else. A phrase asking for a program, a command or a script is refused
+outright: there is still no shell/command/script kind, and none is ever created
+from the owner's words. A phrase that resolves to **an intent that raises its own
+approval card** (`forget_range`, `update_start`, a setting change that asks, a
+repeating briefing, "read this link", …) is **refused when the reminder is
+saved**, in one plain sentence that says it needs the owner's approval each time,
+that it therefore cannot be scheduled as one card, and which action the words
+matched; nothing is written. The refusal is repeated at fire time for any row
+that got in before the rule (or from an older build): it raises **no** second
+card, runs nothing, writes `schedule.action_refused` with `outcome:
+"needs_approval"`, and its own row view carries `action_problem` saying it did
+not run and why. A job that raises no card of its own is unchanged.
 
 No other kind exists in this slice. `open-app` was evaluated and is deliberately
 NOT shipped: the only resolver for a program is the desktop's own Start-menu
@@ -6723,13 +6745,16 @@ folder Jarvis may look in. Add its folder in Settings, Folders.").
   `PC_ONLY_ACTIONS` because it is local and reversible. A denial, an expiry, a
   refusal, a tier that is not "ask", a gate that raised, and a reminder edited
   while the card waited all run nothing, and the audit says which. Its `detail`
-  carries the job id, `due`, `what`, the closed-list task name and
-  `leaves_this_pc: false` - **never** the reminder's words, the address, the path
-  or the note, because `_redact` returns `detail` verbatim when redaction is off
-  and `detail` is handed to both apps on `/api/pending`. The target the owner
-  needs is in the card's own text.
+  carries the job id, `due`, `what`, **one of the two payloads** - the closed-list
+  task name as `task`, or the resolved intent name as `intent` for a `job` - and
+  `leaves_this_pc: false` - **never** the reminder's words, the owner's `job`
+  sentence, the address, the path or the note, because `_redact` returns `detail`
+  verbatim when redaction is off and `detail` is handed to both apps on
+  `/api/pending`. The target the owner needs is in the card's own text, which for
+  a `job` names the action in plain words (and the resolved intent beside it) -
+  e.g. "What it will do: add it to your to-do list (todo add)".
 
-**The task list is two names and nothing else:** `briefing` and `backup`.
+**The `task` list is two names and nothing else:** `briefing` and `backup`.
 `briefing` calls `jarvis_briefing.make` and rings the existing `schedule` ->
 `"ready"` event, so a briefing made by a reminder appears exactly like one made by
 a briefing job. **`backup` is refused when the reminder is saved, with its
@@ -6739,7 +6764,11 @@ past the response that shows it once"), and a reminder that fired at 07:00 has
 nobody to show it to - so it would write an archive nobody could ever open. The
 sentence says that and points at "Back up now" in the Brain. `switch_model` is
 deliberately not on the list either: a reminder must not be able to pre-approve a
-loosening that has its own card.
+loosening that has its own card. **`job` is the other door, and it reaches no
+executor of its own:** it runs through `jarvis_quick.run`, the same chat path, so
+every job that runs without a card of its own can be scheduled, and every job
+that would raise one is refused by the rule above. `backup` remains unreachable
+this way too: "back up now" is not a `jarvis_quick` intent at all.
 
 **The desktop command: `open_reminder_target(id)`.** ONE new Tauri command, and it
 takes the reminder's **id and nothing else** - never a URL, never a path, so no
@@ -6779,7 +6808,12 @@ id only.
 `schedule.action_asked {"id","kind","what"}`, `schedule.action_refused
 {"id","outcome"}`, `schedule.action_ran {"id","what"}`, `schedule.action_failed
 {"id","what","error": <ExceptionName>}`, `schedule.action_unreadable {"id"}`.
-Never the words, the address, the path or the note.
+Never the words, the address, the path, the note or the `job` sentence. A
+`job`'s `what` is the resolved intent name (a closed token), never the owner's
+words. `schedule.action_refused`'s `outcome` is `refused`, `denied`,
+`timed_out`, `withdrawn`, `unknown` (the phrase stopped resolving, or asked for
+a shell/command/script) or `needs_approval` (the phrase resolved to a job that
+raises its own card, so the one-card guard did not run it).
 
 **Phone.** It creates and edits nothing in this slice (a phone cannot read the
 PC's folders, and a client must not edit deep configuration). It shows a fired

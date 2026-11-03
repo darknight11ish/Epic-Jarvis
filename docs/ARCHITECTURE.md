@@ -2744,6 +2744,25 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **A scheduled task's own words (`job`) can be sent by neither app's Reminders
+  screen yet, and that is one-sided on purpose** (2026-11-03; the owner's
+  decision of 2026-11-02 that a scheduled task may run any job in his own words,
+  JARVIS-API §21.11; `backend/test_schedule_any_job.py` holds the whole slice).
+  The ABILITY is in the backend and works from any client that sends the field:
+  a reminder's `run-task` action may carry `job` (the owner's phrase, up to 240
+  characters) instead of the closed `task` name, resolved through
+  `jarvis_quick.match` at save and again at fire, refused when it would raise its
+  own approval card, and run through `jarvis_quick.run`. What is deliberately
+  one-sided is the screen: the desktop's reminder editor still sends only the
+  closed name (`jarvis-desktop/src/jarvis_hud.html:11125` returns
+  `{kind: "run-task", task: <the fixed "Then" select>}`), and the phone has no
+  `run-task` equivalent at all (`git grep run-task -- jarvis-client` finds
+  nothing). A UI on both apps is the named follow-up, not a silent omission; it
+  was kept out of this slice so the backend contract, the refusal and their
+  tests could land first. Nothing here adds a route, a Rust command, a
+  permission or a patch-carried file, so `tools/check_parity.py` has nothing new
+  to classify.
+
 - **Plugins are listed and switched by chat, and neither app has a screen for
   it - one-sided on purpose** (2026-11-02; the owner's decision: *"Jarvis may
   list plugins and turn them on/off by chat, one card per change"*; JARVIS-API

@@ -19,8 +19,22 @@ one would touch modules:
   - an unresolvable phrase is refused when it is saved, in one plain sentence;
   - a shell / command / script phrase is refused when it is saved, in the
     owner's own decision's words - every one of the sample forms;
+  - a phrase that resolves to an intent raising its OWN approval card (the
+    batch audit's C2: `forget_range`, `update_start`, a carded setting change, a
+    repeating briefing) is refused when it is SAVED, in one plain sentence that
+    says it needs the owner's approval each time, that it cannot be scheduled as
+    one card, and what the phrase matched - and no reminder is written;
+  - a phrase that raises no card of its own still saves, and at fire time raises
+    exactly ONE `schedule_action` card;
   - at fire time the phrase is resolved AGAIN: a phrase that no longer
     resolves raises NO card and runs nothing;
+  - the fire path checks the resolved intent itself: a stored row that now
+    resolves to a carded intent (saved by an older build, or a resolver that
+    said yes) raises NO second card, runs nothing, says `needs_approval` in the
+    audit, and its own row view says it did not run and why;
+  - every intent `jarvis_quick.py` can construct is classified as carded or
+    cardless, so a new one cannot arrive unclassified and slip a second card
+    through;
   - a job that resolves raises exactly ONE `schedule_action` card, its body says
     the action in plain words and says nothing happens before a yes, and its
     `detail` carries no owner words;
@@ -36,6 +50,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -158,6 +173,15 @@ def fire_job(w, hits, phrase="add milk to my shopping list"):
     with_resolver(go)
 
 
+def fire_real(w, hits, phrase="add milk to my shopping list"):
+    """The same, but the REAL resolver decides at save AND at fire time."""
+    job = add(w, {"kind": "run-task", "job": phrase})
+    setattr(w.s, "_run_job", fake_runner(hits))
+    w.clock.t += 20.0
+    w.s.tick()
+    return job
+
+
 # ---------------------------------------------------------------------------
 #   Saving: the owner's words, the two old names, and the refusals
 # ---------------------------------------------------------------------------
@@ -221,6 +245,51 @@ def t_the_two_existing_names_still_work():
     for name in ("shell", "sleep", "rm -rf /", "open-app", ""):
         got, sentence = refused(lambda n=name: add(w, {"kind": "run-task", "task": n}))
         check(f"the closed name {name!r} is still refused", got, sentence)
+
+
+# ---------------------------------------------------------------------------
+#   The ONE-card promise: a job that would raise its OWN card is refused
+# ---------------------------------------------------------------------------
+
+def t_a_carded_phrase_is_refused_at_save():
+    """The batch audit's C2: `forget_range`, `update_start` and a carded
+    settings change each raise their own card, so scheduling one would put a
+    SECOND card on screen. Refused at save, in one honest sentence."""
+    w = World(1_800_000_000.0, name="save-carded")
+    cases = (
+        # phrase, the words the refusal must use, what the phrase matched
+        ("forget everything from last week", "needs your approval each time",
+         "forget a time frame"),
+        ("update jarvis", "needs your approval each time", "install an update"),
+        ("turn on background learning", "can need your approval each time",
+         "change a setting"),
+        ("brief me every weekday at 7", "needs your approval each time",
+         "set up a repeating briefing"),
+    )
+    for phrase, need, matched in cases:
+        got, sentence = refused(lambda p=phrase: add(w, {"kind": "run-task", "job": p}))
+        check(f"the carded phrase {phrase!r} is refused at save", got, sentence)
+        check(f"... {phrase!r}: it cannot be scheduled as one card",
+              "cannot be scheduled as one card" in sentence, sentence)
+        check(f"... {phrase!r}: the sentence says {need!r}", need in sentence, sentence)
+        check(f"... {phrase!r}: it names what the phrase matched ({matched!r})",
+              matched in sentence, sentence)
+        check(f"... {phrase!r}: it says the reminder was not saved",
+              "It was not saved." in sentence, sentence)
+    check("... and no reminder was saved for any of them",
+          w.s.listed() == [], w.s.listed())
+    # The check is on the FORM that would ask, not on a name: a once-only
+    # briefing raises no card of its own, so it still saves.
+    once = add(w, {"kind": "run-task", "job": "brief me tomorrow at 7"})
+    check("a once-only briefing still saves (only its repeating form is carded)",
+          once.get("action") == {"kind": "run-task", "job": "brief me tomorrow at 7"},
+          once.get("action"))
+    # A new intent this build has never classified is refused too, in its own
+    # honest sentence - never treated as "no card" by default.
+    unknown = S._job_card_refusal(Intent("brand_new_job"))
+    check("an unclassified intent is refused conservatively, in its own sentence",
+          unknown.startswith("Jarvis cannot tell whether that job")
+          and S._job_own_card(Intent("brand_new_job")) is S._JOB_UNSURE, unknown)
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +367,75 @@ def t_a_phrase_that_stopped_resolving_refuses_at_fire():
           lines and lines[-1].get("outcome") == "unknown", lines[-1:])
 
 
+def t_a_cardless_phrase_still_saves_and_fires_one_card():
+    """(b) of the fix: the refusal is not a fence around the whole feature."""
+    hits = []
+    w = World(1_800_000_000.0, name="fire-real-cardless")
+    job = fire_real(w, hits)
+    check("a cardless phrase still saves through the REAL resolver",
+          job.get("action") == {"kind": "run-task", "job": "add milk to my shopping list"},
+          job.get("action"))
+    check("... and going off raises exactly ONE card", len(w.cards) == 1, w.cards)
+    check("... the scheduler's own `schedule_action` card",
+          w.card().get("action") == "schedule_action", w.card().get("action"))
+    check("... and it runs the job once", len(hits) == 1
+          and hits[0]["intent"] == "todo_add", hits)
+
+
+def t_a_stored_carded_job_is_refused_at_fire():
+    """(c) of the fix: a row an OLDER build let in (the permissive stub stands
+    in for that save-time resolver) must not raise a second card now. It is
+    refused at fire time, the audit says why, and the row's own view says it did
+    not run."""
+    hits = []
+    w = World(1_800_000_000.0, name="fire-stored-carded")
+    phrase = "forget everything from last week"
+
+    def save_like_an_older_build():
+        # `with_resolver` makes the save path say "todo_add" for everything, so
+        # the row is written with the owner's words and no card check - exactly
+        # what a build without this fix would have stored.
+        return add(w, {"kind": "run-task", "job": phrase})
+
+    job = with_resolver(save_like_an_older_build)
+    setattr(w.s, "_run_job", fake_runner(hits))
+    w.clock.t += 20.0
+    w.s.tick()
+    check("a stored carded job raises NO card at fire time", w.cards == [], w.cards)
+    check("... and it runs nothing", hits == [], hits)
+    lines = [d for e, d in _AUDIT if e == "schedule.action_refused"]
+    check("... the audit says it needs approval, with the id and outcome only",
+          lines and lines[-1].get("outcome") == "needs_approval"
+          and set(lines[-1]) == {"id", "outcome"}, lines[-1:])
+    view = w.s.job(job["id"]) or {}
+    problem = str(view.get("action_problem") or "")
+    check("... and the row says it did not run and why",
+          "needs your approval each time" in problem
+          and "forget a time frame" in problem, view.get("action_problem"))
+
+
+def t_fire_rechecks_the_intent_even_when_resolution_says_yes():
+    """The fire path's OWN check, not only the resolver's: even if a resolver
+    handed back a carded intent as allowed, `_fire_action` refuses it."""
+    hits = []
+    w = World(1_800_000_000.0, name="fire-recheck")
+    add(w, {"kind": "run-task", "job": "add milk to my shopping list"})
+    setattr(w.s, "_run_job", fake_runner(hits))
+    real = S.resolve_job
+    S.resolve_job = lambda words: (Intent("forget_range"), "")
+    try:
+        w.clock.t += 20.0
+        w.s.tick()
+    finally:
+        S.resolve_job = real
+    check("a carded intent that resolution let through raises NO card",
+          w.cards == [], w.cards)
+    check("... and runs nothing", hits == [], hits)
+    lines = [d for e, d in _AUDIT if e == "schedule.action_refused"]
+    check("... and the audit says it needs approval",
+          lines and lines[-1].get("outcome") == "needs_approval", lines[-1:])
+
+
 def t_the_closed_name_path_is_unchanged():
     """`briefing` still raises the same ONE card with the same detail keys."""
     calls = []
@@ -373,6 +511,47 @@ def t_run_job_is_the_chat_path():
             sys.modules["jarvis_quick"] = keep
 
 
+def t_every_intent_the_resolver_can_return_is_classified():
+    """Every `Intent("...")` name in `jarvis_quick.py` is in exactly one of the
+    carded / cardless sets, so a future intent cannot arrive unclassified and
+    slip a second card through. Also pins that each carded name has plain words
+    for the refusal, and that the sets do not overlap."""
+    source = (HERE / "jarvis_quick.py").read_text(encoding="utf-8")
+    names = set(re.findall(r'Intent\("([a-z0-9_]+)"', source))
+    import jarvis_quick as Q
+    groups = {
+        "read_only": set(Q.READ_ONLY_INTENTS),
+        "cardless": set(S._JOB_CARDLESS),
+        "carded": set(S._JOB_CARDED),
+        "can_need": set(S._JOB_CAN_NEED),
+        "repeat_carded": set(S._JOB_REPEAT_CARDED),
+    }
+    known = set().union(*groups.values())
+    missing = sorted(names - known)
+    check("every intent jarvis_quick.py constructs is classified carded/cardless",
+          not missing, missing)
+    overlaps = sorted((a & b) for a, b in
+                      ((groups["cardless"], groups["carded"]),
+                       (groups["cardless"], groups["can_need"]),
+                       (groups["cardless"], groups["repeat_carded"]),
+                       (groups["carded"], groups["can_need"]),
+                       (groups["carded"], groups["repeat_carded"]),
+                       (groups["can_need"], groups["repeat_carded"]))
+                      if a & b)
+    check("... and none are in two of the carded/cardless sets at once",
+          not overlaps, overlaps)
+    carded = groups["carded"] | groups["can_need"] | groups["repeat_carded"]
+    read_collision = sorted(groups["read_only"] & carded)
+    check("... and no READ_ONLY intent is also classified as carded",
+          not read_collision, read_collision)
+    no_words = sorted(n for n in carded if n not in S._JOB_CARD_WORDS)
+    check("... and every carded intent has plain words for its refusal",
+          not no_words, no_words)
+    check("the read-only set is used as-is (a read-only intent is never refused)",
+          all(S._job_own_card(Intent(n)) == "" for n in sorted(Q.READ_ONLY_INTENTS)
+              if n in names), "a READ_ONLY intent was classified as carded")
+
+
 # ---------------------------------------------------------------------------
 
 def main():
@@ -380,12 +559,17 @@ def main():
                t_an_unresolvable_phrase_is_refused_at_save,
                t_a_shell_command_or_script_is_refused_at_save,
                t_the_two_existing_names_still_work,
+               t_a_carded_phrase_is_refused_at_save,
                t_fire_raises_exactly_one_card_naming_the_action,
                t_a_denied_or_unanswered_card_runs_nothing,
                t_a_non_ask_tier_raises_no_card_and_runs_nothing,
                t_a_phrase_that_stopped_resolving_refuses_at_fire,
+               t_a_cardless_phrase_still_saves_and_fires_one_card,
+               t_a_stored_carded_job_is_refused_at_fire,
+               t_fire_rechecks_the_intent_even_when_resolution_says_yes,
                t_the_closed_name_path_is_unchanged,
-               t_run_job_is_the_chat_path):
+               t_run_job_is_the_chat_path,
+               t_every_intent_the_resolver_can_return_is_classified):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
