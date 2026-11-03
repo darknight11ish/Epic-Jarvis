@@ -252,7 +252,13 @@ impl LockState {
 /// the same conversation: `Covered::from_label` maps them to `Covered::Hud`,
 /// and a focused one must hold the lock open exactly as a focused HUD does, or
 /// reading a chat window while App lock is on would start the away-clock and
-/// hide it.
+/// hide it. The lock is per SESSION, not per conversation - Windows Hello
+/// unlocks every covered surface at once - so a chat window showing a
+/// different conversation from the one the owner last read is not a separate
+/// thing to protect: it can only be on screen after the same unlock, and
+/// `chat_windows::open_for` refuses to put one up (or focus a hidden one)
+/// while the lock is closed. A focused chat window therefore means the owner
+/// is here, exactly as a focused HUD does.
 fn covered_focused(app: &AppHandle) -> bool {
     let named = Covered::ALL
         .iter()

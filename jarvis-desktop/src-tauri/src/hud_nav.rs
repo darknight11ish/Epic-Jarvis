@@ -246,11 +246,18 @@ pub fn dispatch(app: &AppHandle, area: &str, anchor: Option<&str>) -> NavOutcome
                 ));
             }
         }
-        Target::NewChatWindow => {
-            if let Err(err) = crate::chat_windows::open_for(app, None) {
-                crate::logfile::log(&format!("[jarvis] navigate: {err}"));
+        Target::NewChatWindow => match crate::chat_windows::open_for(app, None) {
+            // An empty label is the app lock's own answer: `chat_windows`
+            // refused, and Windows Hello is being asked (the same rule every
+            // other way to a HUD surface takes). Nothing was opened yet.
+            Ok(label) if label.is_empty() => {
+                crate::logfile::log(
+                    "[jarvis] navigate: a new chat window waited for Windows Hello (App lock)",
+                );
             }
-        }
+            Ok(_) => {}
+            Err(err) => crate::logfile::log(&format!("[jarvis] navigate: {err}")),
+        },
         Target::Unknown => {
             words(&outcome);
             // The owner asked Jarvis to open something, so show the window that
