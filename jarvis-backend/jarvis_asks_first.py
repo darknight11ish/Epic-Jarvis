@@ -634,7 +634,7 @@ GROUPS = (
                             "send_file_to_phone",
                             "protect_item", "unprotect_item",
                             "edit_vault_note"]),
-    ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
+    ("Timers and reminders", ["fixed:timers", "todo_add", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat",
                               # reminder-actions.patch (2026-10-27): a reminder
                               # may carry ONE action, and the kind that ACTS
@@ -836,6 +836,13 @@ FIXED = {
                       "Your own words only; the answer says when it next goes off, and "
                       "deleting is immediate. A repeating morning briefing and \"tell me when\" "
                       "still ask (below)."),
+    # `todo_add` (2026-11-02): the cardless action the four goals tools resolve
+    # under (jarvis_agent.GOAL_GATE_ACTION), and a real gate action of its own.
+    # It is a row here because the card-words table names it ("add to your
+    # to-do list") and this page lists every action a card can name; the row
+    # says what is already true - adding to the to-do list never asks.
+    "todo_add": ("Add an item to your to-do list", SAYS_NO_CARD,
+                 "Your own words only; ticking it off and deleting it are immediate."),
     # Goals (jarvis_goals.py): the page promises every action, and none of a
     # goal's own actions asks (cohesiveness audit, 2026-09-29). Extended
     # 2026-11-02 with the progress log and the done/paused states the reminder

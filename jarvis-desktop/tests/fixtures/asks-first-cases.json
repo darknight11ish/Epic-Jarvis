@@ -300,6 +300,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -1917,6 +1924,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -3531,6 +3545,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -5138,6 +5159,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -6742,6 +6770,13 @@
        "note": "Your own words only; deleting is immediate.",
        "says": "Does it without asking",
        "title": "Set a timer, or a reminder or alarm that goes off once"
+      },
+      {
+       "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
       },
       {
        "fixed": true,
@@ -8364,6 +8399,13 @@
       },
       {
        "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
+      },
+      {
+       "fixed": true,
        "id": "fixed:repeats",
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
@@ -9975,6 +10017,13 @@
        "note": "Your own words only; deleting is immediate.",
        "says": "Does it without asking",
        "title": "Set a timer, or a reminder or alarm that goes off once"
+      },
+      {
+       "fixed": true,
+       "id": "todo_add",
+       "note": "Your own words only; ticking it off and deleting it are immediate.",
+       "says": "Does it without asking",
+       "title": "Add an item to your to-do list"
       },
       {
        "fixed": true,
