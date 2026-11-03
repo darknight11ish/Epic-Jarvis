@@ -1,0 +1,55 @@
+diff --git a/jarvis_skills.py b/jarvis_skills.py
+index dbca893..c225d4b 100644
+--- a/jarvis_skills.py
++++ b/jarvis_skills.py
+@@ -554,7 +554,7 @@ def _safe_dest(name: str) -> Path:
+ 
+ 
+ def install(source: Path, trust: str = "third_party",
+-            accept_warnings: bool = False) -> dict:
++            accept_warnings: bool = False, note: str = "") -> dict:
+     """Vet a skill folder and, if it survives, copy it in.
+ 
+     Gated as `modify_own_code` - tier "ask" - because a skill is
+@@ -565,6 +565,19 @@ def install(source: Path, trust: str = "third_party",
+     queue. The attack being defended against works by producing a dialog
+     that looks routine, so an approval prompt for a curl-pipe-bash skill is
+     not a safeguard - it is the last step of the exploit.
++
++    `note` is a line the CALLER adds to that one card - the skills menu uses
++    it to say what is being imported and that a bundled `scripts/` folder is
++    kept inert. It is text on the card, never a way round it: the scan still
++    runs first, a refusal still never reaches the queue, and this parameter
++    cannot skip the gate.
++
++    The gate is only a card on the tiers where a person really answers.
++    `jarvis_gate.check` returns allowed=True on `notify` ("you were told
++    after") and on `auto` with nobody in the loop at all, and a skill IS
++    instructions the agent will follow - so `refine()` below makes the same
++    check for the same reason. Without it, a config that listed
++    `modify_own_code` as `notify` would install a skill without asking.
+     """
+     source = Path(source).resolve()
+     try:
+@@ -589,9 +602,19 @@ def install(source: Path, trust: str = "third_party",
+     v = _gate("modify_own_code",
+               {"skill": skill.name, "trust": skill.trust,
+                "files": len(skill.files), "sha256": skill.sha256,
+-               "verdict": report["verdict"], "warnings": report["warnings"]},
++               "verdict": report["verdict"], "warnings": report["warnings"],
++               "note": note},
+               prompt=(f"Install the skill {skill.name!r} ({skill.trust})? "
+-                      f"{skill.description[:200]}"))
++                      f"{skill.description[:200]}"
++                      + (f"\n\n{note}" if note else "")))
++    tier = getattr(v, "tier", "unknown")
++    if tier not in ("ask", "never"):
++        return {"ok": False, "installed": False, "report": report,
++                "asked": False, "tier": tier,
++                "reason": f"installing a skill needs a person to answer for it, "
++                          f"and modify_own_code is tier {tier!r}. Set it to 'ask' "
++                          f"in jarvis-framework.toml, or to 'never' to refuse "
++                          f"these outright."}
+     if not getattr(v, "allowed", False):
+         return {"ok": False, "installed": False, "report": report,
+                 "asked": True, "reason": getattr(v, "reason", "refused")}

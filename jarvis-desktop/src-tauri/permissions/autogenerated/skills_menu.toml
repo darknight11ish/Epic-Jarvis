@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-skills-menu"
+description = "Enables the skills_menu command without any pre-configured scope."
+commands.allow = ["skills_menu"]
+
+[[permission]]
+identifier = "deny-skills-menu"
+description = "Denies the skills_menu command without any pre-configured scope."
+commands.deny = ["skills_menu"]

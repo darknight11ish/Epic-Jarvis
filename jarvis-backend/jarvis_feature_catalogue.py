@@ -3,7 +3,7 @@
 The owner's feature list, as data: 169 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 c3eb866065a11868220a4f09f3006187d76bc695acacdb6bcba4d0749270d117); the apps' Features pages read their own
+`features/features.json` (sha256 756ddc4b6dccf071520a385c813b4a5351c370821b089b5cde98768564711abc); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "c3eb866065a11868220a4f09f3006187d76bc695acacdb6bcba4d0749270d117"
+SOURCE_SHA256 = "756ddc4b6dccf071520a385c813b4a5351c370821b089b5cde98768564711abc"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1327,11 +1327,11 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Skills",
         "what": "Extra abilities installed for Jarvis, each with a scan verdict.",
-        "where": "Brain, Model, Skills.",
+        "where": "Brain, Model, Skills. And Settings, Skills on the PC: install one from a folder or a .zip, import your Hermes skills, turn one off and back on, or edit one.",
         "asks": "Installing or removing one is its own decision.",
-        "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing one happens only on the PC, and no app can install one. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
+        "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing, turning one on and editing happen ONLY on the PC, through the scanner and ONE approval card, and a skill the scanner refuses is never installed at all. A skill that ships a scripts/ folder says so and never runs it. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
         "surface": "both",
-        "covers": ["skills", "brain.model.skills", "model-page"],
+        "covers": ["skills", "brain.model.skills", "model-page", "settings.skills-menu"],
     },
     {
         "id": "model-memory",

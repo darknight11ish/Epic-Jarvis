@@ -949,6 +949,22 @@ permissions = [
   # stays with the two windows that start and stop it, which is why this is one
   # line here rather than the whole `screen-watch` set.
   "allow-screen-status",
+  # The skills menu's one command (2026-11-02, JARVIS-API section 178): read
+  # the list, pick a folder or a .zip, scan it, install it behind ONE card,
+  # scan the Hermes folder read-only, turn a skill off at once or back on
+  # behind one card, and edit a SKILL.md behind the same card. The PC decides
+  # every one of them; this window only passes the answer on. Nothing is
+  # downloaded, nothing inside a skill is ever run, and nothing installs
+  # before a person answers.
+  "allow-skills-menu",
+  # The Skills card's Remove, and the reason it is THIS command: removing a
+  # skill already exists as `brain_remove_skill` (POST /api/skills/decide with
+  # {"remove": true}, the "are you sure?" before it, and the Brain's own list).
+  # Granting the same command here means one removal path rather than a second
+  # one that could drift from it - the Settings card and the Brain ask the PC
+  # the same question and get the same answer. It removes one skill, at once,
+  # with no card, exactly as it always has; nothing else is reachable with it.
+  "allow-brain-remove-skill",
 ]
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "9435e5be6ffa885a6a72b17444bdc5991791200323252433854acc454f67dfb6",
+  "source_sha256": "5f437ceb6bcee4926e92563b150942385c852f0e16e57c5459afdba2fec4a14d",
   "feature_count": 169,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -1740,8 +1740,8 @@
       "label_note": "",
       "example": "turn on Skills",
       "example_ok": true,
-      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
-      "where_desktop": "All features and abilities",
+      "where": "desktop Settings: skills; phone: All features and abilities",
+      "where_desktop": "skills",
       "where_phone": "All features and abilities",
       "note": "",
       "not_a_control": true

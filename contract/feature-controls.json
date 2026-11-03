@@ -5868,7 +5868,7 @@
       "name": "Skills",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Brain, Model, Skills.",
+      "where": "Brain, Model, Skills. And Settings, Skills on the PC: install one from a folder or a .zip, import your Hermes skills, turn one off and back on, or edit one.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -5878,10 +5878,12 @@
         "intent": "feature_switch_refused"
       },
       "desktop": {
-        "section": null,
-        "location": "Brain, Model, Skills.",
+        "section": "skills-menu",
+        "location": "Settings > skills",
         "search": [
-          "Skills"
+          "skills",
+          "install a skill",
+          "hermes skills"
         ],
         "found": true
       },
@@ -5899,10 +5901,10 @@
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
         "example_phrase": "turn on Skills",
-        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+        "screen_path": "desktop Settings: skills; phone: All features and abilities"
       },
       "command": {
-        "status": "not-a-setting",
+        "status": "open-only",
         "reason_code": "not-a-setting",
         "owner": "none-needed",
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
@@ -10550,6 +10552,20 @@
       "where": "settings",
       "in_desktop_settings": true,
       "in_phone_settings": true
+    },
+    {
+      "id": "skills-menu",
+      "names": [
+        "skills",
+        "the skills menu",
+        "my skills",
+        "hermes skills",
+        "install a skill"
+      ],
+      "app": "desktop",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": false
     },
     {
       "id": "sandbox",
