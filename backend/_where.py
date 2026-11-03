@@ -1456,19 +1456,18 @@ SHIPPED = (
     "jarvis_model_knowledge.py",
     # ORDER MATTERS TO ONE READER: tools/check_zero_jargon.py walks this tuple
     # and only matches an entry that ends with a comma, so the LAST entry is
-    # never scanned. These two are inserted BEFORE jarvis_phone_apps.py rather
-    # than after it so that adding them does not newly expose an untouched
-    # module to the jargon ratchet it was never measured against; if that
-    # scan set is ever widened on purpose, re-take
-    # docs/REVIEW-8-ZERO-JARGON-BASELINE-2026-10-23.json in its own change.
-    # Habit check-ins (jarvis_habits.py, 2026-11-02; JARVIS-API section 180,
-    # the owner's life-coach decision D1-D4): habits.db beside goals.db, one
-    # row per habit per DAY, the plain_repeat path on the one scheduler so a
-    # tick and a new habit raise no card, and no score, streak or percentage
-    # anywhere in it. GET/POST /api/habits come from its own install(), called
-    # by the drop-in folder plugins/ready/habits, so it needs no patch of its
-    # own. The same entry, in the same position, is in $SHIPPED in
-    # scripts/apply-patches.ps1.
+    # never scanned. jarvis_phone_apps.py therefore stays last: appending
+    # after it would newly expose an untouched module to the jargon ratchet
+    # it was never measured against.
+    # The skills menu's PC doors (jarvis_skill_menu.py, 2026-11-02; the owner's
+    # Hermes-skills scope B): install a skill from a folder or a .zip, import
+    # one from %USERPROFILE%\.hermes\skills, turn an installed one off and back
+    # on, and edit its SKILL.md. Shipped whole, no patch of its own - its five
+    # routes come from plugins/ready/skill-menu, the same way jarvis_skill_hub's
+    # do. It re-implements none of jarvis_skills.py: the scanner, the ONE
+    # modify_own_code card, the quarantine and the index are all CALLED. The
+    # same entry is at the end of the script's $SHIPPED.
+    "jarvis_skill_menu.py",
     "jarvis_habits.py",
     # The owner's own mood log (jarvis_mood.py, the same 2026-11-02 decision
     # D1): one 1-5 tap a day with optional words in mood.db, an upsert per day,

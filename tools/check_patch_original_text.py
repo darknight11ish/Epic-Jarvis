@@ -96,8 +96,13 @@ A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 `main` with eight findings - the false positives the audit's own next sentence
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
-`_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all TWENTY-TWO - those thirteen, plus `private-chat.patch` at position 152, added
+`_stack.py`'s RATCHET comments, which name most of them. The twenty-third,
+added 2026-11-02, is `skill-install-note.patch` at position 166: all three of
+its hunks read the owner's own `jarvis_skills.py` - install()'s signature, its
+docstring and the `_gate(...)` call it already makes - and that file is one of
+the five the patcher edits, so `backend/_stack.py` has no stand-in for those
+lines and nothing earlier in the walk writes them. The pin below records
+all TWENTY-THREE - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -208,6 +213,16 @@ PIN = {
     "attention-settings.patch":                (2, 13),    # position 125 - _stack.py: the new hunk invents the dispatch tuple's own lines
     "limits-read.patch":                       (2, 13),    # position 127 - _stack.py: names limits-read.patch: 2
     "retrieve-count.patch":                    (2, 17),    # position 131 - _stack.py: names retrieve-count.patch: 2
+    # position 166 - the skills menu's install card (2026-11-02). HONEST, not
+    # drift: all three hunks read the owner's own `jarvis_skills.py` - install()'s
+    # signature, its docstring, and the `_gate(...)` call it already makes.
+    # `jarvis_skills.py` is one of the five files the patcher edits and is NOT in
+    # this repository, so `backend/_stack.py` has no stand-in for those lines and
+    # nothing earlier in the walk could have written them. No other patch has a
+    # hunk in install(), so this one cannot collide with one either - and
+    # backend/test_skill_menu.py applies it to the published base forwards and
+    # reverses it back byte for byte.
+    "skill-install-note.patch":                (3, 22),    # position 166
     # position 137 - 2 hunks / 15 lines were the PROTECTED-rule change. RAISED
     # 2026-10-18 to 5/59 for the DEF-012 and I6 hunks: gate_tool's whole-args
     # prompt, latch_taint's process-local fallback, and clear_taint's reset are

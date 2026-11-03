@@ -2292,19 +2292,23 @@
     "group": "The PC itself",
     "title": "Skills",
     "what": "Extra abilities installed for Jarvis, each with a scan verdict.",
-    "where": "Brain, Model, Skills.",
+    "where": "Brain, Model, Skills. And Settings, Skills on the PC: install one from a folder or a .zip, import your Hermes skills, turn one off and back on, or edit one.",
     "asks": "Installing or removing one is its own decision.",
-    "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing one happens only on the PC, and no app can install one. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
+    "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing, turning one on and editing happen ONLY on the PC, through the scanner and ONE approval card, and a skill the scanner refuses is never installed at all. A skill that ships a scripts/ folder says so and never runs it. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
     "surface": "both",
     "covers": [
       "skills",
       "brain.model.skills",
-      "model-page"
+      "model-page",
+      "settings.skills-menu"
     ],
     "must_mention": [
       "skill"
     ],
-    "lesson_id": "model-page"
+    "lesson_id": "model-page",
+    "gate": [
+      "modify_own_code"
+    ]
   },
   {
     "id": "model-memory",

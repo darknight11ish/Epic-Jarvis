@@ -91,7 +91,10 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     receipts.db, the action receipts and their Undo snapshots
     (jarvis_receipts.py); and (2026-10-21) price-radar.db, the flight price
     history (jarvis_price_radar.py) - a fare observed yesterday cannot be
-    re-fetched, so the history is carried like the owner's other data. A receipt holds the owner's own words - what changed,
+    re-fetched, so the history is carried like the owner's other data; and
+    (2026-11-02) habits.db and mood.db, the owner's own habit ticks and mood
+    log (jarvis_habits.py, jarvis_mood.py) - the record of what he did and how
+    the day felt, which he cannot retype and which nothing else copies. A receipt holds the owner's own words - what changed,
     and what the thing looked like before - and a restore that put goals.db or
     projects.db back while dropping the receipts for those rows would leave
     Undo pointing at changes the archive had already replaced. The whole
@@ -635,7 +638,16 @@ SOURCE_DBS = ("memory.db", CHAT_HISTORY_DB, "schedule.db", "feedback.db", "proje
               # The Jarvis calendar's own events (2026-10-29). Backups copy a
               # LIST of files, not the folder, so a name missing here silently
               # drops every event; the file is kept while the feature is off.
-              "calendar.db")
+              "calendar.db",
+              # Habit check-ins and the owner's own mood log (2026-11-02,
+              # JARVIS-API section 180). Both are the owner's own record of
+              # what he did and how the day felt, kept on this PC only - and a
+              # backup that carried his goals and his to-do list while dropping
+              # these two would silently lose the history he cannot retype.
+              # "Excluded from learning entirely" is about the learner, not
+              # about his own backup: this archive is encrypted and local, and
+              # a bare-metal restore is exactly when he would want them back.
+              "habits.db", "mood.db")
 
 
 #: How long a snapshot/table-count connection waits for a lock before giving

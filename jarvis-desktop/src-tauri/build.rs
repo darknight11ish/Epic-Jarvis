@@ -1087,6 +1087,15 @@ fn main() {
             // read the switch and counts, turn it off at once, ask to turn it
             // back on (ONE card on the PC), and the one Delete. Settings only.
             "media_index",
+            // The skills menu (2026-11-02, JARVIS-API section 178): ONE
+            // command, nine actions - read the list, pick a folder or a .zip,
+            // scan it, install it behind ONE card, scan the Hermes folder
+            // read-only, turn a skill off at once or back on behind one card,
+            // and edit a SKILL.md behind the same card. Settings window only
+            // (permissions/surfaces.toml's `settings-surface` set). Without
+            // this line the command has no permission at all and every press
+            // is refused at the ACL.
+            "skills_menu",
             // The to-do list's day carry-over (todo_carryover.rs; 2026-11-02;
             // JARVIS-API section 179). Settings only: the read (the mode in
             // force and the two modes in the PC's own words) and the one change.
