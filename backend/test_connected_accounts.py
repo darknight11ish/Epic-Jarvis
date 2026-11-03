@@ -421,9 +421,30 @@ def t_facts_match_the_owning_modules():
                if not re.search(r"(?m)^" + re.escape(aid) + r"\s*=\s*\"", toml)]
     check("every ability id is a real [autonomy.tiers] line", not missing, missing)
 
-    gate_src = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
-    check("home_control is the action jarvis_gate maps the home write tool to",
-          '"jarvis_home_control_run": "home_control"' in gate_src)
+    # Behavioral, not a source pin (tools/check_no_source_pins.py forbids new
+    # tests that pin production source text). The gate ships in the published
+    # base (`jarvis-backend/`), not in `backend/`, so it is loaded from its own
+    # file instead of the suite's import path - then asked, as a caller would,
+    # which action the home write tool resolves to.
+    import importlib.util
+    base = str(REPO / "jarvis-backend")
+    sys.path.insert(0, base)
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "gate_for_this_check", REPO / "jarvis-backend" / "jarvis_gate.py")
+        gate = importlib.util.module_from_spec(spec)
+        # dataclasses looks its own class up in sys.modules while the module is
+        # still executing, so it must be registered before exec_module.
+        sys.modules[spec.name] = gate
+        try:
+            spec.loader.exec_module(gate)
+        finally:
+            sys.modules.pop(spec.name, None)
+    finally:
+        sys.path.remove(base)
+    home_action, _strict = gate.action_for_tool("jarvis_home_control_run")
+    check("home_control is the action jarvis_gate uses for the home write tool",
+          home_action == "home_control", home_action)
     check("google_calendar_write and edit_vault_note are real action names",
           GC.ACTION_WRITE == "google_calendar_write"
           and NOTES_EDIT.ACTION == "edit_vault_note")
