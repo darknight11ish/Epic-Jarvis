@@ -742,6 +742,11 @@ import_notion_export     = "ask"
 # has seen - takes this action. A missing line means "ask" anyway; it is
 # here so the tier is the owner's setting, not a fall-through.
 organize_obsidian_vault   = "ask"
+# The storage self-cleanup (backend/jarvis_storage_health.py, 2026-11-03; the
+# owner's decision that Jarvis may clear its own temporary files after ONE
+# card). The module refuses any tier but "ask" itself, so this is the owner's
+# setting for a path the gate already always asks about.
+storage_cleanup           = "ask"
 
 [self_modification]
 enabled = true

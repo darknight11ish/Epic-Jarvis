@@ -301,6 +301,10 @@ TITLES = {
     "agent_kill": "stop a helper task",
     "execute_pending_actions": "run actions it has lined up",
     "unclassified_tool": "use a tool it has no plain name for",
+    # --- the storage self-cleanup (jarvis_storage_health.py, 2026-11-03)
+    # ONE card per cleanup of Jarvis's own temporary files; the card lists every
+    # path, so the words say only the kind of thing being cleared.
+    "storage_cleanup": "clear Jarvis's temporary files",
 }
 
 #: The SHORT words on a card, keyed on the same action names as TITLES - what
@@ -491,6 +495,10 @@ SUMMARY = {
     "agent_kill": "stop a helper task",
     "execute_pending_actions": "run actions it has lined up",
     "unclassified_tool": "use a tool it has no plain name for",
+    # --- the storage self-cleanup (jarvis_storage_health.py, 2026-11-03)
+    # ONE card per cleanup of Jarvis's own temporary files; the card lists every
+    # path, so the words say only the kind of thing being cleared.
+    "storage_cleanup": "clear Jarvis's temporary files",
 }
 
 #: The most words a summary may be. Long enough for the honest ones above

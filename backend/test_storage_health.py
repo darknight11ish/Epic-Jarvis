@@ -589,6 +589,59 @@ def t_plan_expiry_and_changed_categories_refuse():
     check("neither refusal touched the disk", before == after)
 
 
+def t_a_dry_run_plan_does_not_block_the_cleanup():
+    """The owner's 2026-11-03 audit bug: plan -> POST answered 409 "a cleanup
+    card is already waiting" while no card had ever been raised, so the feature
+    was dead on arrival. A preview must store nothing; the cleanup request is
+    what stores the plan and raises the one card."""
+    with tempfile.TemporaryDirectory() as raw:
+        world = build_world(Path(raw))
+        user_before = tree_hash(world["userdata"])
+        code, plan = H.handle_get(H.PLAN_PATH, "categories=pycache",
+                                  roots=world["roots"], now=NOW)
+        waiting_after_preview = H.status(now=NOW)["waiting"]
+        check("the dry-run plan answers 200 and lists the paths",
+              code == 200 and plan.get("count", 0) >= 1, (code, plan.get("count")))
+        check("a preview leaves NO card waiting behind it",
+              waiting_after_preview is False, waiting_after_preview)
+        gate = Gate("approved", "ask")
+        code2, out2 = H.handle_post(H.APPLY_PATH, {"categories": ["pycache"]},
+                                    gate=gate, tier_of=lambda action: "ask",
+                                    spawn=sync_spawn, roots=world["roots"],
+                                    now=NOW + 1)
+        last = H.status(now=NOW + 2)["last"]
+        user_after = tree_hash(world["userdata"])
+        check("the cleanup request AFTER a preview raises the card, not a 409",
+              code2 == 202 and out2.get("waiting") is True, (code2, out2))
+        check("... exactly ONE card, under the cleanup action",
+              len(gate.calls) == 1
+              and gate.calls[0]["action"] == H.CLEANUP_ACTION, gate.calls)
+        check("... a person's yes then carries the plan out",
+              last and last["ok"] is True and last["outcome"] == "done", last)
+        check("... the previewed caches really are gone",
+              not (world["live"] / "__pycache__").exists()
+              and not (world["repo"] / "backend" / "__pycache__").exists())
+        check("... and the owner's data is untouched", user_before == user_after)
+        check("... and no plan is left waiting",
+              H.status(now=NOW + 3)["waiting"] is False)
+    # A preview of a category with nothing in it must not block the next real
+    # request either (the same dead end, one category over).
+    with tempfile.TemporaryDirectory() as raw:
+        world = build_world(Path(raw))
+        code, empty = H.handle_get(H.PLAN_PATH, "categories=logs",
+                                   roots=world["roots"], now=NOW)
+        H.handle_get(H.PLAN_PATH, "categories=pycache", roots=world["roots"],
+                     now=NOW)
+        gate = Gate("approved", "ask")
+        code2, out2 = H.handle_post(H.APPLY_PATH, {"categories": ["pycache"]},
+                                    gate=gate, tier_of=lambda action: "ask",
+                                    spawn=sync_spawn, roots=world["roots"],
+                                    now=NOW + 1)
+    check("two previews in a row still let the cleanup request raise its card",
+          code == 200 and code2 == 202 and len(gate.calls) == 1,
+          (code, code2, gate.calls))
+
+
 def t_the_one_approval_card():
     with tempfile.TemporaryDirectory() as raw:
         world = build_world(Path(raw))
@@ -742,6 +795,7 @@ def main():
                t_apply_stops_when_a_planned_file_changed,
                t_logs_and_snapshots_are_quarantined_not_deleted,
                t_plan_expiry_and_changed_categories_refuse,
+               t_a_dry_run_plan_does_not_block_the_cleanup,
                t_the_one_approval_card,
                t_a_no_and_a_non_ask_tier_do_nothing,
                t_an_empty_plan_raises_no_card,

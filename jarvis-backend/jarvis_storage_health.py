@@ -1143,9 +1143,14 @@ def _tracked_files(repo: Optional[Path]):
     answer = None
     try:
         import subprocess
+        try:
+            import jarvis_child_env
+            child_env = jarvis_child_env.inherited()
+        except Exception:                       # noqa: BLE001 - older install
+            child_env = {}
         done = subprocess.run(
             ["git", "-C", os.fspath(repo), "ls-files", "-z"],
-            capture_output=True, timeout=10)
+            capture_output=True, timeout=10, env=child_env)
     except (OSError, ValueError, ImportError):
         done = None
     if done is not None and done.returncode == 0:
@@ -1262,7 +1267,7 @@ def _same_volume(a, b) -> bool:
     return os.path.normcase(drive_a) == os.path.normcase(drive_b)
 
 
-def plan_cleanup(categories=None, roots=None, *, now=None) -> dict:
+def plan_cleanup(categories=None, roots=None, *, now=None, store: bool = True) -> dict:
     """The DRY RUN: exactly what would be deleted or moved, and nothing else.
 
     Returns `ok`, the items (absolute paths, bytes, category, action), the
@@ -1270,6 +1275,12 @@ def plan_cleanup(categories=None, roots=None, *, now=None) -> dict:
     every candidate that failed a safety check, with the reason - "not safe to
     clear automatically" rather than silently dropped. Planning touches
     nothing: there are no writes on this path at all.
+
+    `store=False` makes it a PREVIEW ONLY: no pending plan is left behind, so
+    a `GET /api/storage/cleanup/plan` can never block the cleanup card (the
+    defect the 2026-11-03 audit reproduced: preview -> POST -> 409 "a cleanup
+    card is already waiting", with no card ever raised). Only the real cleanup
+    request, through the one card, stores a plan to carry out.
     """
     now = _now() if now is None else float(now)
     cats = _parse_categories(categories)
@@ -1346,12 +1357,13 @@ def plan_cleanup(categories=None, roots=None, *, now=None) -> dict:
                     "approving the card is what runs it."),
     }
     with _LOCK:
-        _PENDING["plan"] = {"plan": plan, "at": now,
-                            "expires_at": now + PLAN_TTL_SECONDS,
-                            "roots": {rid: os.fspath(p) for rid, p in rmap.items()},
-                            "token": token, "categories": list(cats),
-                            "items": [dict(i) for i in items],
-                            "quarantine_dir": quarantine}
+        if store:
+            _PENDING["plan"] = {"plan": plan, "at": now,
+                                "expires_at": now + PLAN_TTL_SECONDS,
+                                "roots": {rid: os.fspath(p) for rid, p in rmap.items()},
+                                "token": token, "categories": list(cats),
+                                "items": [dict(i) for i in items],
+                                "quarantine_dir": quarantine}
     return plan
 
 
@@ -1770,8 +1782,14 @@ def request_apply(body, *, gate=None, tier_of=None, spawn=None, roots=None,
         return 503, {"ok": False, "error": "The storage scan failed ({0}).".format(
             type(exc).__name__)}
     if not plan.get("ok"):
+        # plan_cleanup stored a pending plan before we knew it could be used;
+        # a plan that cannot be carried out must not block the next request.
+        with _LOCK:
+            _PENDING["plan"] = None
         return 400, {"ok": False, "error": str(plan.get("error") or "the plan failed")}
     if not plan.get("items"):
+        with _LOCK:
+            _PENDING["plan"] = None
         return 200, {"ok": True, "nothing_to_clear": True, "categories": cats,
                      "refused": plan.get("refused") or [],
                      "message": "There is nothing safe to clear in that category right now."}
@@ -1800,7 +1818,10 @@ def request_apply(body, *, gate=None, tier_of=None, spawn=None, roots=None,
 
 def handle_get(path, query="", *, roots=None, now=None) -> tuple:
     """GET the inventory, or the dry-run plan. Never returns the plan token:
-    a plan token is minted by the card path, so a dry run cannot be replayed."""
+    a plan token is minted by the card path, so a dry run cannot be replayed.
+    The plan is a PREVIEW: it stores no pending plan (`store=False`), so a
+    preview followed by the cleanup request raises the card instead of the
+    409 "a cleanup card is already waiting" that no card could ever clear."""
     route = str(path or "").split("?", 1)[0].rstrip("/") or "/"
     if route == SCAN_PATH:
         try:
@@ -1816,7 +1837,7 @@ def handle_get(path, query="", *, roots=None, now=None) -> tuple:
         except Exception:                       # noqa: BLE001 - bad query is not fatal
             raw = ""
         try:
-            plan = plan_cleanup(raw or None, roots=roots, now=now)
+            plan = plan_cleanup(raw or None, roots=roots, now=now, store=False)
         except ValueError as exc:
             return 400, {"ok": False, "error": str(exc)}
         out = dict(plan)

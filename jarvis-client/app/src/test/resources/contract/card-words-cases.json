@@ -423,6 +423,10 @@
       "title": "Jarvis wants to stop asking before every web search"
     },
     {
+      "action": "storage_cleanup",
+      "title": "Jarvis wants to clear Jarvis's temporary files"
+    },
+    {
       "action": "support_chat",
       "title": "Jarvis wants to chat with a company's customer support for you"
     },
@@ -1720,6 +1724,18 @@
         "full": "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change. nothing has happened yet.",
         "body": "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change. nothing has happened yet.",
         "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "storage_cleanup",
+      "notice": {
+        "title": "Jarvis wants to clear Jarvis's temporary files",
+        "summary": "Jarvis wants to clear Jarvis's temporary files.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }
