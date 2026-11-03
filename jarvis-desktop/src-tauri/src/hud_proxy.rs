@@ -58,7 +58,7 @@ use crate::ChatState;
 /// writes are NOT here - `/api/calendar/add`, `/api/calendar/act` and
 /// `/api/calendar/settings` stay refused, and the first two go through
 /// `hud_calendar_add` / `hud_calendar_act`, which hold the stale-link rule.
-pub const HUD_GET_PATHS: [&str; 11] = [
+pub const HUD_GET_PATHS: [&str; 13] = [
     "/api/status",
     "/api/graph",
     "/api/pending",
@@ -66,6 +66,17 @@ pub const HUD_GET_PATHS: [&str; 11] = [
     "/api/memory/pending",
     "/api/presets",
     "/api/schedule",
+    // What this Jarvis knows it can do and where those places are (2026-11-03,
+    // the F6 self-portrait work): `{backend:{version,started_at}, settings[],
+    // tools[], plugins[], screens[], stores[], abilities[]}`. Read-only, no
+    // path parameter, and it never carries the token the page does not have.
+    // The HUD uses it for one thing here: the honest version line and the list
+    // of screen ids a `ui.navigate` request may name.
+    "/api/self",
+    // The same conversation inventory `GET /api/self` points at, for the shell
+    // and the page's own lists (2026-11-03). Read-only; the HUD's History
+    // panel keeps using the richer `/api/history` reads below.
+    "/api/conversations",
     // The HUD calendar's window (2026-10-29): the owner's own local events,
     // read-only. Its `?days=N` is checked by `allowed_get`; the writes are the
     // two commands in hud_calendar.rs, never the page's own POSTs.

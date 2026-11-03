@@ -156,6 +156,15 @@ impl Covered {
     ];
 
     fn from_label(label: &str) -> Option<Self> {
+        // An extra chat window (2026-11-03) shows the SAME thing the HUD does -
+        // the conversation, what was recalled for each answer, the memory
+        // graph - so it is covered by the app lock exactly as the HUD is.
+        // `Covered::Hud`'s label is the main HUD, which is the window the lock
+        // shows through Windows Hello; a chat window is hidden by the same
+        // sweep (see the hide loop in `spawn_watch`).
+        if crate::chat_windows::is_chat_window(label) {
+            return Some(Self::Hud);
+        }
         match label {
             crate::QUICKBAR_LABEL => Some(Self::Quickbar),
             crate::windows::BRAIN_LABEL => Some(Self::Brain),
@@ -232,13 +241,13 @@ impl LockState {
     }
 }
 
-/// True when the Jarvis bar, the Brain, Settings or the HUD has the keyboard
-/// focus. Asked of Windows through Tauri each time, not remembered.
+/// True when the Jarvis bar, the Brain, Settings, the HUD or an extra chat
+/// window has the keyboard focus. Asked of Windows through Tauri each time,
+/// not remembered.
 fn covered_focused(app: &AppHandle) -> bool {
-    Covered::ALL
-        .iter()
-        .filter_map(|c| app.get_webview_window(c.label()))
-        .any(|w| w.is_focused().unwrap_or(false))
+    app.webview_windows()
+        .values()
+        .any(|w| Covered::from_label(w.label()).is_some() && w.is_focused().unwrap_or(false))
 }
 
 // ---------------------------------------------------------------------------
@@ -526,10 +535,19 @@ pub fn sweep(app: &AppHandle) {
     let mut swept = SWEPT.lock().unwrap_or_else(|p| p.into_inner());
     let last = swept.as_ref().map(|(last, _)| *last);
     let mut reached = swept.take().map(|(_, reached)| reached).unwrap_or_default();
-    let present: Vec<&'static str> = SNAPSHOT_LABELS
+    let mut present: Vec<&'static str> = SNAPSHOT_LABELS
         .into_iter()
         .filter(|label| app.get_webview_window(label).is_some())
         .collect();
+    // The extra chat windows draw the same words as the HUD, so a capture is
+    // kept off them by the same sweep (2026-11-03). Their labels are a fixed
+    // `&'static str` set (chat_windows.rs), which is what lets them join this
+    // table without changing its type.
+    present.extend(
+        crate::chat_windows::CHAT_LABELS
+            .into_iter()
+            .filter(|label| app.get_webview_window(label).is_some()),
+    );
     let set = to_set(excluded, last, &mut reached, &present);
     for label in set {
         if let Some(window) = app.get_webview_window(label) {
@@ -1028,6 +1046,16 @@ pub fn spawn_watch(app: AppHandle) {
             if security.app_lock {
                 for which in Covered::ALL {
                     if let Some(window) = app.get_webview_window(which.label()) {
+                        if window.is_visible().unwrap_or(false) {
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                // The extra chat windows hold the same conversation text as
+                // the HUD, so a locked PC hides them by the same rule
+                // (2026-11-03). They are a fixed label set for exactly this.
+                for label in crate::chat_windows::CHAT_LABELS {
+                    if let Some(window) = app.get_webview_window(label) {
                         if window.is_visible().unwrap_or(false) {
                             let _ = window.hide();
                         }

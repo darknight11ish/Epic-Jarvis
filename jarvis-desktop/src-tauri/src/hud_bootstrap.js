@@ -510,6 +510,15 @@
       else if (channel === "appearance") appearanceChanged(payload);
       else if (channel === "bar") barStateChanged(payload);
       else if (channel === "update") updateProgress(payload);
+      /* 2026-11-03: the shell's own navigation. `push_to_hud_main` sends this
+       * to the MAIN HUD window only, so an extra chat window can never jump
+       * because a phone asked the PC to open a settings card (RESEARCH.md F4:
+       * a global emit would make every window obey). */
+      else if (channel === "nav") handleNav(payload);
+      /* The honest "this desktop has no such screen" sentence. */
+      else if (channel === "notice") handleNotice(payload);
+      /* The version handshake: one line, only when the backend is older. */
+      else if (channel === "version") handleVersion(payload);
     } catch (err) {
       console.error("[jarvis] feed failed", err);
     }
@@ -1115,6 +1124,22 @@
       return;
     }
     if (!route || typeof route !== "object") return;
+    // The F6 area form (2026-11-03): ONE id for every surface this desktop can
+    // open, through the ONE Rust table (`hud_nav.rs`), which knows the real
+    // areas and answers honestly for one it does not have. This is EXTENDING
+    // the existing per-answer route path, not a second mechanism: the two
+    // fields below keep their tested behaviour, and a backend that sends only
+    // those behaves exactly as before. `open_area` wins when both are present
+    // because it is the wider vocabulary.
+    if (typeof route.open_area === "string" && route.open_area.trim()) {
+      var areaSent = shellInvoke("open_jarvis_area", {
+        area: route.open_area.trim(),
+        anchor: typeof route.open_anchor === "string" && route.open_anchor.trim()
+          ? route.open_anchor.trim() : null,
+      });
+      if (areaSent && areaSent.catch) areaSent.catch(function () {});
+      return;
+    }
     // Settings: a section named by the settings grammar (`open_settings`), or
     // the `jarvis` kind of "open settings" (`open_place`, where "" is the top
     // of the window - a real answer, not a missing one).
@@ -2251,6 +2276,395 @@
   } else {
     hudSettingsGear();
   }
+
+  /* ---------------------------------------------------------------- *
+   * 6. Navigation, and more than one chat window (2026-11-03)
+   *
+   * THE OWNER'S REQUIREMENT (F6, 2026-11-03): Jarvis must be able to open any
+   * menu or setting area on request, and more than one conversation window may
+   * be open at once. Two things this file does NOT do: it does not decide
+   * which areas exist (that is `hud_nav.rs`'s ONE table, in Rust, shared with
+   * the `ui.navigate` event path), and it never opens a window the owner did
+   * not ask for. It only performs the page's own switch when the shell says
+   * where to go.
+   *
+   * `push_to_hud_main` delivers a `nav` payload to THIS window only - the
+   * extra chat windows are never sent one - for the same reason RESEARCH.md
+   * F4 gives: a navigation broadcast would make every open chat window jump.
+   *
+   * An area the shell does not recognise never reaches this function (the
+   * shell draws the plain sentence itself), but a BUNDLED page can be older or
+   * newer than the shell that drives it, so an area this page cannot switch is
+   * answered with the same kind of plain sentence rather than a silent no-op.
+   * ---------------------------------------------------------------- */
+
+  /** One Tauri command, or null outside the shell (a browser tab). */
+  function navInvoke(command, args) {
+    var tauri = window.__TAURI__;
+    var invoke = tauri && tauri.core && tauri.core.invoke;
+    if (typeof invoke !== "function") return null;
+    return invoke(command, args);
+  }
+
+  /* Where settings.js reads the card a chat answer named (plain-errors.js
+   * SETTINGS_PLACE_KEY). Spelled a second time here on purpose - this file is
+   * injected as a plain script and cannot import src/plain-errors.js - and
+   * actOnOpenRoute above has carried the same literal since 2026-10-31. */
+  var SETTINGS_PLACE_KEY = "jarvis.settings.place";
+
+  /** A system line in the page's own chat log, or the console when the page is
+   *  not far enough along to have one. The same shape `hudMicNote` uses. */
+  function hudNavNote(text) {
+    if (typeof window.addMessage === "function") {
+      try {
+        window.addMessage("system", text);
+        return;
+      } catch (err) {
+        /* fall through to the console */
+      }
+    }
+    console.warn("[jarvis] " + text);
+  }
+
+  /** Opens the Settings window at one card id (the tested path the chat
+   *  answers already use: the place key, then `open_fix_place`). */
+  function openSettingsAt(place) {
+    if (place) {
+      try {
+        localStorage.setItem(
+          SETTINGS_PLACE_KEY,
+          JSON.stringify({ place: place, at: Date.now() })
+        );
+      } catch (err) {
+        /* no storage: Settings opens at the top, and the answer says where */
+      }
+    }
+    var p = navInvoke("open_fix_place", { place: "settings" });
+    if (p && p.catch) p.catch(function () {});
+  }
+
+  /** Opens the Brain window at one of its own places. */
+  function openBrainAt(place) {
+    var named = place === "history" || place === "tutorials" ? place : "brain";
+    var p = navInvoke("open_fix_place", { place: named });
+    if (p && p.catch) p.catch(function () {});
+  }
+
+  /** The areas this PAGE can switch: the ones the Rust table can send as a
+   *  HUD view/tab/panel. Kept as one array so `tests/hud-nav.mjs` can hold it
+   *  to `hud_nav.rs`'s table. */
+  var PAGE_AREAS = [
+    "talk", "brain", "today", "reminders", "memory", "telemetry",
+    "history", "presets",
+  ];
+
+  function clickIfPresent(id) {
+    var el = document.getElementById(id);
+    if (!el) return false;
+    el.click();
+    return true;
+  }
+
+  function openHistoryPanel() {
+    // The panel's own module exposes its one open routine; the rail button is
+    // the same routine. Either is the page's real door, not a copy.
+    if (window.hudHistory && typeof window.hudHistory.open === "function") {
+      if (window.hudHistory.open()) return true;
+    }
+    return clickIfPresent("rail-history");
+  }
+
+  function applyNav(area, anchor) {
+    area = String(area || "").trim().toLowerCase();
+    anchor = anchor ? String(anchor) : "";
+    if (!area) return false;
+    if (area === "settings") {
+      openSettingsAt(anchor);
+      return true;
+    }
+    if (area === "brain-window") {
+      openBrainAt(anchor);
+      return true;
+    }
+    if (area === "history") {
+      if (openHistoryPanel()) return true;
+    } else if (area === "presets") {
+      if (clickIfPresent("rail-presets")) return true;
+    } else if (area === "talk" || area === "brain" || area === "galaxy") {
+      // The page's own view switch. "galaxy" is the HUD's memory map; the
+      // Brain WINDOW is a different place and is named "brain-window".
+      var view = area === "galaxy" ? "brain" : area;
+      if (typeof window.setView === "function") {
+        window.setView(view);
+        return true;
+      }
+    } else if (
+      area === "today" || area === "reminders" || area === "memory" ||
+      area === "telemetry"
+    ) {
+      // The Studio stage tabs, through the page's own routine. A page whose
+      // layout has no such tab simply has no setTab and falls to the sentence.
+      if (typeof window.setTab === "function") {
+        window.setTab(area);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /* A nav that arrives before the page's own script has run (the shell can
+   * push one the moment a chat answer lands, and the page parses after this
+   * injected script) is held here and applied on DOMContentLoaded, in order,
+   * rather than dropped. */
+  var pendingNavs = [];
+  var navReady = false;
+
+  function flushPendingNavs() {
+    navReady = true;
+    var queued = pendingNavs.slice();
+    pendingNavs.length = 0;
+    for (var i = 0; i < queued.length; i++) {
+      var nav = queued[i];
+      if (!applyNav(nav.area, nav.anchor)) {
+        hudNavNote(
+          'Jarvis asked to open "' + String(nav.area || "") +
+            '", but this HUD page cannot switch to it. Nothing was opened.'
+        );
+      }
+    }
+  }
+
+  function handleNav(payload) {
+    if (!payload || typeof payload !== "object") return;
+    var area = String(payload.area || "").trim().toLowerCase();
+    if (!area) return;
+    // A chat window is not the navigation target: the shell only sends nav to
+    // the main HUD, but a page that somehow hears one keeps the conversation
+    // it was asked to open and does not jump.
+    if (window.__jarvisChatWindow === true) return;
+    if (!navReady) {
+      pendingNavs.push({ area: area, anchor: payload.anchor || "" });
+      return;
+    }
+    if (!applyNav(area, payload.anchor || "")) {
+      hudNavNote(
+        'Jarvis asked to open "' + area +
+          '", but this HUD page cannot switch to it. Nothing was opened.'
+      );
+    }
+  }
+
+  function handleNotice(payload) {
+    if (!payload || typeof payload.words !== "string" || !payload.words.trim()) return;
+    hudNavNote(payload.words.trim());
+  }
+
+  function handleVersion(payload) {
+    if (!payload || typeof payload.words !== "string") return;
+    if (String(payload.state || "") === "older") hudNavNote(payload.words);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", flushPendingNavs, { once: true });
+  } else {
+    flushPendingNavs();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Two little buttons beside the settings gear: another conversation
+   * window, and this conversation in a new window.
+   *
+   * Same page, same classes as the gear (`rail-toolbar-btn`), so the rail's
+   * sizing and the "icons match the buttons beside them" rule (2026-10-27)
+   * hold without new CSS. Only with the shell: a page in a plain browser has
+   * no extra windows to open.
+   *
+   * "This chat in a new window" reads the page's OWN current conversation id
+   * (`window.hudHistoryHost.current()`, the host the History sidebar already
+   * uses). The shell FOCUSES an existing window on that conversation instead
+   * of opening a second copy (`chat_windows.rs`), so pressing it twice never
+   * gives two windows on one transcript.
+   * ---------------------------------------------------------------- */
+  var NEW_WINDOW_SAID = "New chat window";
+  var OPEN_IN_WINDOW_SAID = "Open this chat in a new window";
+
+  function railGlyph(paths) {
+    return (
+      '<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.8" aria-hidden="true" focusable="false">' +
+      paths +
+      "</svg>"
+    );
+  }
+
+  function railButton(id, said, glyph, onClick) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.id = id;
+    button.className = "rail-toolbar-btn hud-settings";
+    button.title = said;
+    button.setAttribute("aria-label", said);
+    button.style.flex = "0 0 auto";
+    button.style.justifyContent = "center";
+    button.innerHTML = glyph;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  function currentConversation() {
+    var host = window.hudHistoryHost;
+    if (host && typeof host.current === "function") {
+      try {
+        return String(host.current() || "");
+      } catch (err) {
+        return "";
+      }
+    }
+    return "";
+  }
+
+  function addChatWindowButtons() {
+    var railToolbar = document.querySelector(".rail-toolbar");
+    if (!railToolbar || document.getElementById("hud-new-chat-window")) return;
+    var plus = railButton(
+      "hud-new-chat-window",
+      NEW_WINDOW_SAID,
+      railGlyph('<path d="M12 5v14M5 12h14" />'),
+      function () {
+        var sent = navInvoke("new_chat_window");
+        if (sent && sent.catch) {
+          sent.catch(function (err) {
+            hudNavNote(
+              "Could not open another chat window: " +
+                String((err && err.message) || err)
+            );
+          });
+        }
+      }
+    );
+    var fork = railButton(
+      "hud-open-chat-window",
+      OPEN_IN_WINDOW_SAID,
+      railGlyph(
+        '<rect x="3" y="5" width="12" height="14" rx="2" />' +
+          '<path d="M9 9h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6" />'
+      ),
+      function () {
+        var conv = currentConversation();
+        if (!conv) {
+          hudNavNote(
+            "This window has no conversation to move yet. Type something first, or use " +
+              NEW_WINDOW_SAID + "."
+          );
+          return;
+        }
+        var sent = navInvoke("open_conversation_window", { conversation: conv });
+        if (sent && sent.catch) {
+          sent.catch(function (err) {
+            hudNavNote(
+              "Could not open this chat in a new window: " +
+                String((err && err.message) || err)
+            );
+          });
+        }
+      }
+    );
+    railToolbar.appendChild(plus);
+    railToolbar.appendChild(fork);
+  }
+
+  function hudChatWindowButtons() {
+    var tauri = window.__TAURI__;
+    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+    addChatWindowButtons();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", hudChatWindowButtons, { once: true });
+  } else {
+    hudChatWindowButtons();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The conversation this window was opened on.
+   *
+   * An extra chat window is asked for one conversation id
+   * (`?conversation=<id>`, or the injected `window.__jarvisConversation`; the
+   * shell writes both, `chat_windows.rs`). It is opened through the page's own
+   * History host here - the SAME `host.open(conv)` the "Open" row in the
+   * History sidebar calls - so this window, and only this window, carries that
+   * transcript. The page keeps its conversation id per window, so two windows
+   * can never append one chat.
+   * ---------------------------------------------------------------- */
+  function bootstrapConversation() {
+    var conv = "";
+    try {
+      if (typeof window.__jarvisConversation === "string" && window.__jarvisConversation) {
+        conv = window.__jarvisConversation;
+      } else {
+        var params = new URL(window.location.href).searchParams;
+        conv = params.get("conversation") || "";
+      }
+    } catch (err) {
+      conv = "";
+    }
+    if (!conv) return;
+    // Make the query string real in this webview too, so a reload reopens the
+    // same chat (and a plain-browser load of the same URL behaves the same).
+    try {
+      history.replaceState(null, "", "?conversation=" + encodeURIComponent(conv));
+    } catch (err) {
+      /* the injected marker still names it for this load */
+    }
+    var tries = 40;
+    function attempt() {
+      var host = window.hudHistoryHost;
+      if (!host || typeof host.open !== "function") {
+        if (--tries <= 0) {
+          hudNavNote(
+            "This window was asked to open one of your kept chats, but the page did not " +
+              "come up in time. Its History panel lists the chat."
+          );
+          return;
+        }
+        setTimeout(attempt, 250);
+        return;
+      }
+      var request = null;
+      try {
+        request = window.fetch(
+          "/api/history/conversation?id=" + encodeURIComponent(conv),
+          { cache: "no-store", headers: { "X-Jarvis-Client": "hud" } }
+        );
+      } catch (err) {
+        request = null;
+      }
+      if (!request) {
+        hudNavNote("Could not read that chat; its History panel still lists it.");
+        return;
+      }
+      request
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error("the PC answered " + ((res && res.status) || "nothing"));
+          return res.json();
+        })
+        .then(function (doc) {
+          if (!doc || typeof doc !== "object") throw new Error("that chat could not be read");
+          host.open(doc);
+        })
+        .catch(function (err) {
+          hudNavNote(
+            "Could not open that chat in this window: " +
+              String((err && err.message) || err)
+          );
+        });
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", attempt, { once: true });
+    } else {
+      attempt();
+    }
+  }
+  bootstrapConversation();
 })();
 
 /* ---------------------------------------------------------------------------

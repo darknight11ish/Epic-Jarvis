@@ -61,6 +61,7 @@ guessing:
 from __future__ import annotations
 
 import json
+import fnmatch
 import re
 import sys
 from pathlib import Path
@@ -452,6 +453,14 @@ def windows_to_pages() -> dict[str, str]:
                 page = found[-1] if found else None
             if page:
                 out[label] = page.split("#")[0]
+        # A window built with a label chosen at RUNTIME cannot be read off a
+        # builder call: the extra chat windows (`chat_windows.rs`) pick one of a
+        # fixed static table, and the capability names them as the glob
+        # `chat-*`. That module declares the table for exactly this reason, so
+        # read it here; `main()` expands the glob against it below.
+        for m in re.finditer(r"CHAT_WINDOW_PAGES[^=]*=\s*\[(.*?)\];", text, re.S):
+            for label, page in re.findall(r'\("([^"]+)",\s*"([^"]+)"\)', m.group(1)):
+                out[label] = page
     conf = json.loads((SRC_TAURI / "tauri.conf.json").read_text(encoding="utf-8"))
     for window in conf.get("app", {}).get("windows", []):
         out.setdefault(window["label"], window["url"])
@@ -548,13 +557,28 @@ def main() -> int:
                 allowed.add(name)
         for label in labels:
             granted[label] = allowed
-            page = label_page.get(label)
-            if page is None:
-                problems.append(f"::error::capabilities/{cap}.json grants window "
-                                f"{label!r}, but nothing here says which page it "
-                                f"loads - this check cannot judge its calls")
-            else:
-                page_cap.setdefault(page, cap)
+            # A capability may name a family of windows as a glob (`chat-*`):
+            # Tauri accepts these. Expand it against the pages the shell really
+            # builds, so a glob cannot stand for windows nobody knows. A glob
+            # that matches nothing is the old error, unchanged.
+            expanded = [label]
+            if "*" in label:
+                expanded = [k for k in label_page if fnmatch.fnmatchcase(k, label)]
+                if not expanded:
+                    problems.append(f"::error::capabilities/{cap}.json grants window "
+                                    f"{label!r}, but nothing here says which page it "
+                                    f"loads - this check cannot judge its calls")
+                    continue
+                for name in expanded:
+                    granted[name] = allowed
+            for name in expanded:
+                page = label_page.get(name)
+                if page is None:
+                    problems.append(f"::error::capabilities/{cap}.json grants window "
+                                    f"{name!r}, but nothing here says which page it "
+                                    f"loads - this check cannot judge its calls")
+                else:
+                    page_cap.setdefault(page, cap)
 
     pages = sorted(p.name for p in SRC.glob("*.html"))
     files = sorted(str(p.relative_to(SRC)).replace("\\", "/")
@@ -666,3 +690,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
