@@ -582,6 +582,41 @@ object ChatHistory {
     }
 
     /**
+     * One finished pair's answer replaced, or the list untouched - the ONE
+     * way a chat line is ever changed after it has been shown (2026-11-02).
+     *
+     * It exists for an answer that was only ever a WAIT: "make a note: ..."
+     * with an approval card up answers "Waiting for your approval.", and the
+     * note really is filed (or refused, or the card times out) when that card
+     * is answered. Nothing was watching it, so the chat went on claiming to
+     * wait for ever, next to a note that existed. The PC gives the app that
+     * job's id (`note_job` in `X-Jarvis-Route`), the app asks how it ended,
+     * and [ChatSession.settleAnswer] calls this with the PC's own sentence.
+     *
+     * The pair is found by its QUESTION **and** its answer, newest first, so
+     * two notes asked one after the other in the same chat settle in the
+     * right order: both waiting lines read exactly the same words, and
+     * matching on the answer alone would let one note's outcome land on the
+     * other's line. A pair that is not there (the thread was cleared by a new
+     * conversation, or a newer chat replaced it) is left alone: the same list
+     * instance comes back, so nothing redraws for a stale follow.
+     *
+     * [from] and [to] blank, and [from] == [to], are no-ops for the same
+     * reason.
+     */
+    fun settle(
+        exchanges: List<Exchange>,
+        question: String,
+        from: String,
+        to: String,
+    ): List<Exchange> {
+        if (from.isBlank() || to.isBlank() || from == to) return exchanges
+        val i = exchanges.indexOfLast { it.question == question && it.answer == from }
+        if (i < 0) return exchanges
+        return exchanges.toMutableList().also { it[i] = it[i].copy(answer = to) }
+    }
+
+    /**
      * The finished pairs above the one on screen: all of [thread], less its
      * last pair when that is the question Home is showing with its answer.
      * A pair joins the thread only once its answer has finished, so while

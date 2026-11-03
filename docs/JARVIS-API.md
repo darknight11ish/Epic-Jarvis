@@ -2387,6 +2387,30 @@ tools) is a different path: after outside text in that turn it always
 waits for a yes, as `write_notes_after_outside_text` (§4, "Tool calls and
 outside text"). This route is not affected.
 
+**A note asked for in chat, left waiting (2026-11-02).** "Make a note: X",
+"note that X", "jot down X" and the rest of the fast path's note grammar
+answer WITHOUT the model, through this route's own `capture()`
+(`backend/jarvis_quick.py`, `_run_note_make`). While the card is up, that
+answer is the job's 202 words and nothing else - in practice the literal
+sentence **"Waiting for your approval."** - and it is the whole reply the
+chat gets, not a status line. The note is then filed the moment the card is
+approved, and nothing in that reply ever said so: the chat line went on
+claiming to wait beside a note that already existed (the owner's report,
+2026-11-02).
+
+The answer therefore carries the job's id in `X-Jarvis-Route` as
+**`"note_job": "note_<hex>"`** (the same `id` `GET /api/notes/capture?id=`
+answers), so a client can ask how the note really ended and replace its
+waiting line with the job's own `message` - "Filed in Obsidian,
+2026-11-02.md.", "You said no, so nothing was written.", "Nobody answered
+the approval card in time, so nothing was written.". The key is absent on
+every other answer, including a note filed at once; a client that does not
+know it shows the waiting line exactly as before. Ids are
+`"note_"` + 16 lowercase hex, and a client should refuse to use one of any
+other shape. The phone follows it (`NoteCapture.jobFromRoute`,
+`JarvisRuntime.followNoteAnswer`, `ChatSession.settleAnswer`); the desktop
+shows the waiting line and does not follow the id yet (ARCHITECTURE §8).
+
 ### Power — `backend/power-mode.patch`
 
 | Route | Body | Answers | What it does |

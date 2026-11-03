@@ -11689,7 +11689,16 @@ def _run_note_make(f: dict) -> Result:
             pass
         return Result(said or "Filed in Obsidian.", "note_made")
     if state == "waiting":
-        return Result(said or "Waiting for your approval.", "note_make_waiting")
+        # The id of the capture job the card is holding (2026-11-02). The
+        # sentence below is all the chat has to say for now, and the note may
+        # be filed a second later - so the app is told WHICH job to ask about
+        # (`GET /api/notes/capture?id=`), and can settle its own
+        # "Waiting for your approval." line with what really happened instead
+        # of leaving it saying that for ever. Empty when this backend's
+        # capture module is older than the id it now returns; the app then
+        # shows the waiting line exactly as it always did.
+        return Result(said or "Waiting for your approval.", "note_make_waiting",
+                      note_job=str(body.get("id") or "").strip() or None)
     return Result(said or "Not filed, so nothing was written.", "note_make_refused")
 
 
@@ -13793,6 +13802,13 @@ class Result:
     # settings" is Windows'; this is how to ask for Jarvis's). Never an error,
     # never a card: the request was answered.
     open_app_note: Optional[str] = None
+    # The note-capture job a "make a note: ..." answer left waiting (2026-11-02,
+    # `_run_note_make`): the id `GET /api/notes/capture?id=` reads. Published in
+    # X-Jarvis-Route as `note_job`, so an app can ask how that note really ended
+    # and replace its own "Waiting for your approval." line - the note is filed
+    # the moment the card is approved, and nothing else ever told the chat that.
+    # None for every other answer, and for a note filed at once.
+    note_job: Optional[str] = None
 
 
 def _join(items: list) -> str:
@@ -16372,6 +16388,15 @@ def route_fields(res: Result) -> dict:
         # the owner taps a chat.
         out["file_under"] = int(res.file_under)
         out["history_q"] = str(res.history_q or "")
+    if res.note_job:
+        # "make a note: ..." while its approval card is still up (2026-11-02):
+        # the capture job's id, which `GET /api/notes/capture?id=` answers.
+        # The app follows it and settles its own "Waiting for your approval."
+        # line with the PC's own last sentence ("Filed in Obsidian, <file>.",
+        # "You said no, so nothing was written."). Additive, like every key
+        # above: an app that does not know it shows the waiting line exactly
+        # as it always did. Never the note's text - an id and nothing else.
+        out["note_job"] = res.note_job
     return out
 
 
