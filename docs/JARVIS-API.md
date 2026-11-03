@@ -31387,3 +31387,318 @@ model call, no scheduler job of its own, no delete from chat, and no change to
 the plan/check-in half of §59. `backend/test_goals_progress.py` proves the
 routes (with the origin and token refusals), the append-only log, the states
 and the four tools; `backend/test_goals.py` still proves §59 unchanged.
+
+## 183. Every setting explains itself with its value, and "read this link" reads one link behind one card (added 2026-11-03)
+
+The owner's ask of 2026-11-03: for **any** feature, function or setting, Jarvis
+must say what it is, where it lives, **what it is set to right now**, and the
+**exact phrase** that changes it - in a typed chat and in Jarvis Live. Two halves
+land here and neither adds a route. The first is the explain door: it reads the
+same settings tables the setters use (§130, §132), so an answer cannot describe a
+setting the write path does not have. The second is a chat path that reads a link
+the owner pastes (below) - which is deliberately **not** a new model tool and
+does **not** make the page reader switchable (the last two paragraphs).
+
+**THE FOUR FACTS, AND WHERE EACH COMES FROM.** `find_explain_setting(words)` in
+`jarvis_settings_registry.py` names the ONE setting a how/where/explain question
+names; `explain_setting_words(found)` builds the answer. It has nine kinds:
+`page` (a Settings row with no spoken route), `bool`, `choice`, `number`,
+`animal` (a shared animal switch), `device` (the per-device automatic quality),
+`sky` (show the sun and moon), `weather` (the weather source) and `area` (a
+desktop-only control such as the theme). The order
+is safety order: a page-only refusal first, then a plain switch, then a named
+choice, then the animal switch and the per-device auto quality, then the sun and
+moon, then the weather source, then the number, then the two desktop-only
+areas. A subject no table owns returns `None`, and the turn carries
+on to whatever answered it before - so an unknown sentence is never given a
+made-up setting.
+
+Every value is read through ONE entry point, `current_value(setting)`: a switch
+through `jarvis_feature_guide.STATE_READERS` (the table that already answers "is
+it on?"), a named choice through `ChoiceSetting.now()`, the number through
+`NumberSetting.now()` (which reads `jarvis_live.quiet_seconds()`, the reader the
+engine itself obeys), an animal switch through `jarvis_animal.values()`, the sun
+and moon through `jarvis_sky.view()["show"]`, and the weather source through
+`jarvis_sky.view()["weather"]["source"]`, in the sky module's own label. Nothing
+is stored twice and nothing is defaulted here: a module that is missing, a read
+that raises, or a reader that answers nothing all give `None`.
+
+**THE WORDING, EXACTLY.** Four answers as the shipped code builds them:
+
+```
+"web search" is an on/off setting in Settings, web search. Right now: on. Say
+"turn on web search" or "turn off web search" and I will do it; a change that
+loosens a rule still asks on a card first.
+
+The personality is a choice in Settings, how jarvis talks. Right now: Warm
+Collaborator. Say "set the personality to advocate" and I will do it; a change
+that needs approval still asks on a card first. To hear every value, ask "what
+are the choices for the personality?".
+
+"How long Jarvis Live waits before it turns off" is a number in Settings, limits.
+Right now: 1 minute and 30 seconds. Say "set the jarvis live timeout to 3
+minutes" to change it. It can be anything from 30 seconds to 10 minutes.
+
+"Show the sun and moon behind the face" is an on/off option in Settings, animal
+options. Right now: off. Say "turn on the sun and moon" or "turn off the sun and
+moon" and I will do it at once - it is cosmetic, so no card is needed.
+```
+
+An animal switch and the weather source use that same shape:
+`"Listening nods" is an on/off option in Settings, animal options. Right now:
+on. ...`, and `"Weather behind the face" is a choice in Settings, animal options.
+Right now: Off (default). Say one of: "set the weather source to off"; "set the
+weather source to home assistant"; "set the weather source to open meteo" - and
+turning Open-Meteo on asks on a card first, because it sends your rough position
+to the internet.` The choice answer's example value is the row's own first option
+in sorted order, so it is a value `change_setting` accepts; the answer says how
+to hear all of them, and the phrase it prints is checked against the real
+matcher rather than typed twice.
+
+One answer is honest rather than complete: the per-device automatic quality.
+*"Auto adjust" is the automatic sharpness and frame rate for one device, in
+Settings, animal options. It covers sharpness and frame rate. Right now: I could
+not read its current value on this PC, so I will not guess. Say "turn on auto
+adjust" (or "set the sharpness back to auto") and it changes at once, on that
+device only - it is cosmetic, so no card is needed.* The value is kept by the
+app that draws the face, per device, and this backend has no reader for it - so
+that answer gives the fixed sentence instead of a default, while still naming a
+phrase that really changes it.
+
+**TEXT CHAT AND JARVIS LIVE READ THE SAME ANSWER.** The explain answer is the
+read-only `setting_explain` intent, listed in `READ_ONLY_INTENTS`, so it raises
+no card, changes nothing, and cannot take back what "cancel that" would. Both
+doors get that same text: a Live turn is an ordinary `/api/chat` turn marked
+`live: true` with `provenance: "voice"` (§63), its answer is spoken as it is
+written, and there is no shortened Live rendering of an explain answer.
+`backend/test_live_parity.py` keeps a read-only turn's typed and spoken answers
+identical. The ONE place the two doors differ is a **carded change**, where Live
+says one calm sentence instead of the setter's own sentence (below) - and that
+branch fires only when a card is really waiting, never for a read.
+
+**THE HONEST GAP: "I COULD NOT READ IT".** When a reader cannot answer, the
+sentence is exactly
+
+> I could not read its current value on this PC, so I will not guess.
+
+One constant, `UNREADABLE_VALUE_WORDS`, is used by every kind, so the promise
+cannot be worded three ways. It is never a default dressed up as the value, and
+the word `None` never reaches an answer. A reader's own normalisation (a damaged
+hand-edited file read through the module's own "this is the default I would use"
+rule) is not this case: that is the value the product itself acts on, not a
+guess made here. `backend/test_setting_explain.py` replaces
+every reader and every setter to prove both halves - the fixed sentence instead
+of a guess, and no setter called at all, so explaining cannot change anything.
+
+**WHAT CANNOT BE CHANGED BY ASKING STILL SAYS SO.** `theme` and `hud layout` are
+desktop-only areas: the answer names the Settings card they are drawn in and says
+"I cannot change it by asking". Every one of the nine `NOT_BY_ASKING` rows gets
+that registry's own refusal, naming the page and the exact row to open - and it
+is decided FIRST, on filler-tolerant words, so "turn off the Windows Hello for
+memory lists setting" is the page-only refusal and never `chat_history` (the
+word those sentences contain). `face-auto` ("Auto adjust") is deliberately NOT
+one of them, because "turn on auto adjust" really does change it: it has its own
+`device` kind (quoted above) rather than a refusal that would be false.
+
+**A CARDLESS CHANGE LEAVES ONE UNDO RECEIPT.** A setting that loosens nothing is
+immediate, and that change now writes ONE row in `jarvis_receipts` (§132) under
+the tool name `change_setting`: the summary in the owner's own words ("Turned
+web search off"), a before snapshot of `{"kind": ..., "key": ..., "value": ...}`
+and an after one. That is true for every cardless change this section names: a
+switch, a named choice, the one number setting (`live_idle_seconds`), every
+animal switch, the sun-and-moon switch and the weather source (its two cardless
+directions, off and Home Assistant - switching to Open-Meteo is the carded one
+and follows the card rule below). A
+change that is waiting on a card writes **none**, because nothing has happened
+yet - there is nothing to take back, and the answer says so. A restorer is
+registered just before the receipt is written, so a new process can put the
+change back through the store's snapshot path (§132.5) and not only this one.
+
+**THE SNAPSHOT HOLDS THE VALUE, NEVER THE WORDS THE ANSWER PRINTS.** A switch's
+before value is exact, because it has two states. A named choice's is read
+through the registry's own reader (`ChoiceSetting.now`) and then resolved back
+to the value its setter takes through **that row's own `options()`**
+(`choice_from_words`) - the same step the write path makes. Handing the display
+word to the setter was a real bug the 2026-11-03 audit found: `small_approvals`
+stored the word "skip", a truthy string, so its undo re-entered the stricter
+branch and left the fingerprint required on every small card while answering as
+though it had worked. `small_approvals` is a bool row, and now stores the bool.
+The face (whose reader returns the display **name** while its setter wants the
+**id**) and both hand-off rows were refused outright by the same mistake; they
+work now. The weather source stores the **source id** (`home_assistant`), never
+the label the answer prints. A row whose current value has no corresponding
+value in its own list - the face with no face chosen, the focus preset with no
+preset applied - writes no receipt, because applying a preset or a face is
+one-way and "put it back to none" is not an operation its setter has.
+
+**WHAT "UNDO" DOES, AND WHAT IT REFUSES.** Saying "undo" (or "cancel that") in
+the same chat takes back the newest **cardless settings change made by talking in
+that chat**, once. A scheduler record always wins, so "cancel that" after a
+reminder still cancels the reminder. The reversal goes through the setting's own
+setter - the same `BoolSetting.set` / `ChoiceSetting.set` every other change
+uses - so a reversal that loosens something raises that setting's own card, and
+if that card is not answered the change is NOT reported as undone. A second
+"undo" in the same
+window says *"I already put <the setting> back in this chat, so there is nothing
+left to undo."*; a receipt the store has already undone says *"<the setting> was
+already back the way it was, so nothing was changed."*
+
+**A FAILED REVERSAL SAYS WHICH FAILURE IT WAS, AND KEEPS THE POINTER.** Three
+sentences, one per real case, and none of them ever claims the setting went
+back:
+
+* the setter's own card was raised and not answered -
+  *"I could not put <the setting> back, so nothing was changed. Undo raised its
+  own card and it was not answered."*;
+* the setter REFUSED and raised no card (`handoff_mode`'s "Choose …", the
+  fingerprint's PC-only sentence, the small-approvals refusal) - *"I could not
+  put <the setting> back, so nothing was changed."* followed by **the setter's
+  own words**, quoted;
+* nothing said anything at all - only *"I could not put <the setting> back, so
+  nothing was changed."*
+
+The 2026-11-03 audit found the single old sentence asserted a card for both of
+the last two cases, where no card exists. A failed reversal also **keeps** this
+chat's pointer: the receipt is still undoable in the store, so the next "undo"
+tries again (and the store gives the claim back), rather than answering "there
+is nothing here for me to take back". It takes back one change, not a list, and
+never another chat's. The receipt row itself is in the receipts database; the
+pointer "undo" follows is in memory, keyed by the conversation, so the spoken
+undo belongs to the chat that made the change in the process that made it. After
+a backend restart that pointer is gone (the row is not), and the same chat's
+"undo" answers "there is nothing here for me to take back".
+
+**ONE CALM LINE IN JARVIS LIVE.** A carded settings change in a Live turn answers
+with one sentence -
+
+```
+A card is waiting for <the setting>, so approve it on your phone or PC and it changes.
+```
+
+It has no card id, no list and no question back. It is one sentence and it does
+not ask the owner to say yes: the card is answered by tapping, and there is no
+spoken approval anywhere in this project. The typed answer is unchanged
+(the setter's own sentence). The pause is not new code: `jarvis_live.tick()` sees
+the card in the gate's queue and pauses, and resumes on the first tick after the
+card leaves it (§63). Nothing is approved by voice anywhere, and
+`backend/test_live_parity.py` keeps both halves pinned: identical answers for a
+read-only turn, one calm sentence and no "approve or deny" for a carded one.
+
+**THE READ-A-LINK CHAT PATH.** A sentence naming **one** `http://` or `https://`
+address plus a read verb ("read", "reading", "summarise"/"summarize", "sum up",
+"tell me about", "what's in") is matched by `jarvis_quick._read_link_intent` and
+run by `_run_read_link`. It is placed after the "tell me when ..." watcher, and a
+watch-shaped sentence ("tell me when/if ...") is refused by the matcher as well,
+so "tell me when this page changes" stays a watch on a page (§30.3.1) and is
+never a read. A sentence with a link and no read verb is left alone, so a pasted
+address on its own is not fetched.
+
+**A STATEMENT IS NOT A REQUEST.** The matcher also refuses a sentence whose read
+verb is preceded by a negation or a completed-action word - "don't read
+https://x", "do not …", "didn't …", "never summarise …", "i already read https://x
+yesterday", "i read https://x yesterday" - because those are things the owner is
+telling Jarvis, not asking it, and each used to raise a real approval card
+(2026-11-03 audit). The order matters: "read https://x, not the other one" is
+still a request, because the "not" comes after the verb. This is a word guard,
+not a grammar: a statement with no such marker ("he read … yesterday") still
+matches, and nothing here claims otherwise.
+
+**"READ THIS LINK" WITH NO ADDRESS.** A read verb plus one of the nouns that
+cannot mean anything else ("link", "url", "address", "page", "web page",
+"article", "video") reaches the same runner with an empty address, and the
+runner answers *"Say the address to read, starting with http:// or https://."*
+Before 2026-11-03 that sentence existed but was unreachable, because the matcher
+required an address first; a bare "read this" is still the model's, because it
+may mean anything. Nothing is fetched and no card is raised for the no-address
+case. Only the FIRST address in one message is
+used: a message carrying two links reads the first, and the second is read when
+it is sent as its own message, under its own card.
+
+The link picks the reader: a YouTube host goes to `jarvis_youtube`
+(`parse_link` → `card` → `fetch_captions` → `clean_text`, §112); any other
+address goes to `jarvis_readpage` (`prepare` → `describe` → `run`, §115). A
+YouTube host whose link is not one video (a playlist, a channel, a search) is
+answered in the caption reader's own refusal and fetches nothing - it is never
+quietly fetched as a page.
+
+**One card per link, before anything is fetched.** Each link is one call, and each
+call raises exactly one card through that reader's own gate action -
+`youtube_captions_read` for a video, `read_web_page` for a page. The card's text
+is the reader's own, byte for byte: `jarvis_youtube.card(parsed)` is the Quiz
+page's card (§112.1), which carries its own terms sentence - *"This breaks
+YouTube's terms and may be blocked. YouTube may refuse the request, and it may
+block this PC's address for a while. You chose to accept that."* - and
+`jarvis_readpage.describe(page)` is §115's card. The
+YouTube card also still says the video is read "then quiz you on it" - that line
+is the Quiz page's wording, reused unchanged here, although this chat path only
+reads the captions. Another link is another message and another card, never a
+standing permission;
+a declined, timed-out or unraisable card fetches nothing and answers in plain
+words - the YouTube reader's own three refusal sentences, used for both readers,
+because the page reader has none of its own; and if the settings file gives that
+action a tier other than
+`ask`, no card is raised and the answer is *"This needs your yes every time, but
+the settings file says otherwise, so it is switched off."*
+
+The gate call is synchronous, the same shape as a spoken settings change: the
+turn waits for the person's answer, so nothing is fetched before a yes, and the
+card is in the gate's queue while it waits - which is the queue `jarvis_live.tick`
+reads to pause Live. After a yes, a video's captions are fetched once for that
+one video (never its sound, never the video itself, never the comments) and a
+page is read with ONE plain GET of that one address. The answer quotes at most
+900 characters of what was read, cut at a word boundary, and adds the reader's
+own outside-text sentence; a page answer also carries `ONE_PAGE_LINE` -
+*"One card covers this one address. Another page is another card."* - and no link
+on the page is ever followed.
+
+**The turn is marked as having read outside text.** The `Result` carries
+`read=["youtube_captions_read"]` or `read=["read_web_page"]`, which is the same
+mark every reading tool sets, so the turn is recorded as shaped by outside text.
+That is why `change_setting` refuses in the same turn with `SETTINGS_AFTER_OUTSIDE`
+(§130's rule): outside text does not get to shape a settings change. It is a rule
+to keep, not to fight, and a decline or a playlist refusal carries no read mark
+because it read nothing.
+
+**NO NEW ROUTE, NO NEW TOOL, NO NEW GATE ACTION.** `read_link` is answered by the
+fast path and is not in `jarvis_agent.TOOLS`; no `read_youtube` tool exists; the
+two gate actions are the readers' own, unchanged; the `read_link` intent is NOT
+in `READ_ONLY_INTENTS` (it can raise a card, so "cancel that" must not reach back
+past it); and `jarvis_quick.py` still has exactly one `jarvis_gate` import. There
+is no app screen and no route to poll, because the answer is an ordinary chat
+answer in both apps - the phone posts `/api/chat`, the PC answers, and a card is a
+card either way.
+
+**THE PAGE READER IS NOT MADE SWITCHABLE, ON PURPOSE.** `read_web_page` is a model
+tool (§115) and it stays exactly where it was: off by default (not in
+`[tools].enabled`), in `jarvis_asks_first.TIER_C` and out of `TOOLS_SWITCHABLE`,
+still in `HARD_LIMITS` and `MUST_ASK`, so `request_tool_enable` keeps answering
+`403` with `TOOLS_TOML_ONLY_NOTE` for it and no app may turn it on. Hand-editing
+`[tools].enabled` on this PC remains the only way to offer it to the model, and
+that is the decision of 2026-11-03
+(`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`), not an omission.
+The chat path above does not need that switch: it calls `jarvis_readpage`'s own
+prepare/run behind the same `ask` card, so reading a link works today with the
+model tool still off. `backend/test_reach.py`'s "no app may switch it on"
+assertion is unchanged and still passes.
+
+**WHAT IT DOES NOT DO.** No in-app switch for the page reader, no `read_youtube`
+tool, no quiz from chat, no playlists or channels, no several links in one card,
+no following a link on a page, no download of video or audio, no new route, no
+new tier, and no change to either reader's own module beyond being called. The
+captions path is proved with a stubbed fetch; it has not been driven against the
+real YouTube site here, the same limit §112 records.
+
+**TESTS AND FILES.** `backend/test_setting_explain.py` (every one of the 35
+switches, 10 named choices and one number row explains with its own reader's
+value or the ONE fixed sentence; every printed phrase resolves through the real
+matcher; the animal, sun-and-moon and weather options explain; the page-only rows
+answer honestly; explaining calls no setter) and `backend/test_read_link.py`
+(exactly one card per link under the reader's own action, the card's words byte
+for byte, a declined card fetching nothing, no captions and non-page bodies said
+plainly, the watch still winning, and the outside-text mark refusing a settings
+change in that turn). Extended in the same slice: `backend/test_live.py`,
+`backend/test_live_parity.py`, `backend/test_settings_registry.py`,
+`backend/test_settings_tool.py` and `backend/test_feature_guide.py`. Nothing here
+is generated, so no fixture or catalogue needed regenerating, and
+`docs/ARCHITECTURE.md` §8 carries the one-sided half: the settings receipt has no
+screen in either app, so "say undo in the same chat" is the only way back.
