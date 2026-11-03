@@ -2353,6 +2353,14 @@ NO_COMMAND_REASON = {
     # change; the plugin's OWN on/off state is the `disabled` marker in its
     # folder, which the tool writes, not a [settings] key.
     "plugin-switch": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # Reminder builder (2026-11-02): a reminder that ASKS is the same shape - the
+    # question, its buttons and where an answer is written are data the owner
+    # sets on ONE reminder, not a stored setting, and answering raises no card at
+    # all. Its words reach the PC through the same form as the row above. One
+    # entry, appended at the end of the dict so a crossing pull request conflicts
+    # nowhere: this file is another lane's, and this is the smallest touch that
+    # lets a new feature row exist (the checker below fails a silent omission).
+    "reminder-asks": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,

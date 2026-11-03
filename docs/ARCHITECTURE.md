@@ -2761,6 +2761,19 @@ backend routes, in both directions; the rest are listed here only.
   feature itself is on both apps' Features pages (`features/features.json`,
   `plugin-switch`). `backend/test_plugin_switch.py` holds both halves.
 
+- **A question on a reminder is ANSWERED on both apps and CREATED only on the
+  PC, and that is one-sided on purpose** (2026-11-02, the owner's ask;
+  JARVIS-API §21.14). A reminder may carry a question and up to three of the
+  owner's own buttons; the PC draws them on its "Just went off" row and the phone
+  on its notification, both through the same `POST /api/schedule/act
+  {"do": "answer"}`, so answering is not one-sided at all. What IS one-sided is
+  the builder: a question's destinations include a file on this PC's Obsidian
+  vault and a goal or habit id, and a phone cannot read this PC's folders - the
+  same reason "Then: Open a file" has never had a phone form (§21.11). The phone
+  therefore answers a question and never creates one, and it says so rather than
+  offering a control that would have to guess. No route was added, so
+  `tools/check_parity.py` has nothing new to classify.
+
 - **Approving a card from a notification is the phone's surface, and that is
   one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
   desktop does not post approval cards to Windows notifications, so there is
@@ -2773,6 +2786,28 @@ backend routes, in both directions; the rest are listed here only.
   the five-point envelope (Deny locked, Approve unlock-gated, biometric for
   everything not small, Review over 240 characters, redacted lock screen)
   exists to avoid.
+- **The skills menu installs, turns on and edits on the PC alone, and that is
+  one-sided on purpose** (2026-11-02; the owner's decision, the Hermes-skills
+  research document's scope B; JARVIS-API §178). The phone keeps exactly what
+  it had: the list it always read (`GET /api/skills`, `net/Skills.kt`) and
+  Remove with its "are you sure?" (`POST /api/skills/decide`). What is
+  PC-only is the five new doors - `GET /api/skills/menu`,
+  `POST /api/skills/install`, `POST /api/skills/import/scan`,
+  `POST /api/skills/state` and `POST /api/skills/edit` - and the reasons are
+  the ones that already govern the phone: a skill is instructions the model
+  will follow, so an install, a turn-on and an edit each raise ONE
+  `modify_own_code` card, and the PC is where the scanner, the card and the
+  files are; the sources are a folder or a `.zip` on this PC, which the phone
+  has no picker to reach; and editing a `SKILL.md` is deep config editing,
+  which `CLAUDE.md` keeps off the phone. The phone is **not** missing a
+  capability it can use: it still lists every installed skill and can still
+  remove one, and the index the PC's menu keeps honest is the same one the
+  phone's list reads. `tools/check_parity.py` carries all five as
+  `deliberate`, with this paragraph named in each. **The honest follow-up,
+  recorded rather than implied:** an ON/OFF switch is a switch, not a file
+  editor, so a phone toggle for `/api/skills/state` is the one piece of this
+  that could reasonably go on both apps next - `install` and `edit` should
+  not, for the reasons above.
 - **The phone's mic press does not check the voice print, and the desktop's
   talk button still does - one-sided on purpose** (2026-11-02; the owner's
   words: *"when i do the mic press to make a short verbal message to jarvis,

@@ -641,4 +641,100 @@ class ScheduleTest {
         // read, so the switch keeps showing which of the two is on.
         assertEquals(Schedule.MODE_DAY, hidden.todoMode)
     }
+
+    // ---- a reminder that ASKS (2026-11-02) --------------------------------
+    //
+    // The owner's request: *"a notification on my Android phone saying 'Did you
+    // take your medication?' with a Yes or No button"*. What is proved here is
+    // the phone's half only - the PC's own rules (the lengths, the three-button
+    // ceiling, the destinations) are proved in backend/test_schedule_ask.py, and
+    // this side never re-checks them: it draws what the PC handed out, and drops
+    // a shape it could not draw honestly.
+
+    private val asked = obj(
+        """{"available":true,"asks":true,"jobs":[],
+           "todo":[{"id":"s0000000010","kind":"reminder","text":"medication",
+             "state":"fired","fired_at":1800000000,"went_off_at":"10:00",
+             "asks":true,
+             "action":{"kind":"ask","question":"Did you take your medication?",
+               "buttons":[{"label":"Taken","does":"record"},
+                          {"label":"Skipped","does":"record"},
+                          {"label":"Later","does":"snooze","minutes":30}],
+               "record":{"history":true,"obsidian_daily":true,"goal":"g-1"}},
+             "answers":[{"at":1800000000,"clock":"10:00","button":"Taken",
+                         "does":"record","wrote":["its own history"]}]}]}""",
+    )
+
+    @Test
+    fun aQuestionIsReadWithItsButtonsAndItsAnswers() {
+        val job = Schedule.parse(asked)!!.todo.single()
+        assertTrue(job.asks)
+        val ask = job.ask!!
+        assertEquals("Did you take your medication?", ask.question)
+        assertEquals(listOf("Taken", "Skipped", "Later"), ask.buttons.map { it.label })
+        assertEquals(listOf("record", "record", "snooze"), ask.buttons.map { it.does })
+        assertEquals(30, ask.buttons.last().minutes)
+        // Only the snooze button carries a time; the others have none at all.
+        assertEquals(0, ask.buttons.first().minutes)
+        assertTrue(ask.record.history)
+        assertTrue(ask.record.obsidianDaily)
+        assertEquals("g-1", ask.record.goal)
+        assertEquals("", ask.record.habit)
+        val answer = job.answers.single()
+        assertEquals("10:00", answer.clock)
+        assertEquals("Taken", answer.button)
+        assertEquals(listOf("its own history"), answer.wrote)
+    }
+
+    @Test
+    fun theNotificationSaysTheQuestionInTheOwnersWords() {
+        val job = Schedule.parse(asked)!!.todo.single()
+        assertEquals(
+            Schedule.title("reminder") to "Did you take your medication?",
+            Schedule.notification("reminder", job, private = false),
+        )
+        // While App lock or "Hide memory lists" is on, the generic line only -
+        // the question is the owner's own words about his own health.
+        assertEquals(
+            Schedule.title("reminder") to Schedule.ASK_ON_LOCK_SCREEN,
+            Schedule.notification("reminder", job, private = true),
+        )
+        // A reminder with no question is untouched.
+        val plain = Schedule.parse(list)!!.jobs.first { it.id == "s0000000003" }
+        assertEquals("take my pills", Schedule.notification("reminder", plain, false).second)
+    }
+
+    @Test
+    fun aQuestionThisPhoneCannotDrawIsDroppedWhole() {
+        fun askOf(body: String) = Schedule.parse(
+            obj("""{"available":true,"jobs":[],"todo":[{"id":"s0000000011","kind":"reminder",
+                     "text":"x","state":"fired","fired_at":1,"action":$body}]}"""),
+        )!!.todo.single().ask
+        assertNull("no question", askOf("""{"kind":"ask","buttons":[{"label":"Yes","does":"done"}]}"""))
+        assertNull("no buttons", askOf("""{"kind":"ask","question":"q?","buttons":[]}"""))
+        assertNull("a verb this build has no answer for",
+            askOf("""{"kind":"ask","question":"q?","buttons":[{"label":"Go","does":"shell"}]}"""))
+        assertNull("a snooze with no minutes",
+            askOf("""{"kind":"ask","question":"q?","buttons":[{"label":"Later","does":"snooze"}]}"""))
+        assertNull("another kind entirely",
+            askOf("""{"kind":"open-webpage","url":"https://example.com"}"""))
+        // A fourth button is not drawn: three is Android's own ceiling.
+        val four = askOf("""{"kind":"ask","question":"q?","buttons":[
+            {"label":"a","does":"done"},{"label":"b","does":"done"},
+            {"label":"c","does":"done"},{"label":"d","does":"done"}]}""")!!
+        assertEquals(3, four.buttons.size)
+    }
+
+    @Test
+    fun oneAnswerIsOneJobAndTheButtonsIndex() {
+        assertEquals("""{"id":"s0000000010","do":"answer","button":0}""",
+            Schedule.answerBody("s0000000010", 0))
+        assertEquals("""{"id":"s0000000010","do":"answer","button":2}""",
+            Schedule.answerBody("s0000000010", 2))
+        // Never a label, never a target, never a fourth button, never a made-up id.
+        assertNull(Schedule.answerBody("s0000000010", 3))
+        assertNull(Schedule.answerBody("s0000000010", -1))
+        assertNull(Schedule.answerBody("all", 0))
+        assertNull(Schedule.answerBody("", 0))
+    }
 }

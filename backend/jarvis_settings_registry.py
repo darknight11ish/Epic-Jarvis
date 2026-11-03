@@ -340,6 +340,16 @@ SECTIONS: tuple = (
     Section("asks-first", ("what asks first", "asks first settings")),
     Section("prompt-coach", ("prompt coach settings", "the prompt coach page")),
     Section("reach", ("what jarvis can reach", "what jarvis can access")),
+    # The skills menu (2026-11-02, JARVIS-API section 178): the PC's Settings
+    # card that lists the skills Jarvis may follow, installs one from a folder
+    # or a .zip, imports what is in %USERPROFILE%\.hermes\skills, turns one
+    # off and back on, and edits one. `app="desktop"` because every door that
+    # writes runs on the PC: the scanner, the ONE approval card and the files
+    # are all there. The phone keeps the list and Remove it always had, and
+    # docs/ARCHITECTURE.md section 8 records that one-sided slice.
+    Section("skills-menu", ("skills", "the skills menu", "my skills",
+                            "hermes skills", "install a skill"),
+            app="desktop"),
     # "Data and maths sandbox" (LM-1C, 2026-10-18): the switch that offers the
     # small read-only Python tool to the AI model. A card on the desktop and a
     # row on the phone, both drawn from GET /api/sandbox, so the two apps say
