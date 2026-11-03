@@ -3339,23 +3339,40 @@ not missing a control: its own app already reads and acts on the same
 schedule. `tools/check_parity.py` has nothing new to classify, because no
 backend route is added and the phone's read of `/api/schedule` is unchanged.
 
-**The phone's Home row gained a Reminders button on 2026-11-02, and it is one
-more way in to the same Coming up read surface, not a second reminders screen**
-(the owner: *"move appearance to only in settings for the android app and
-replace the appearance button with a reminders button instead"*). The button
-opens Brain -> Coming up (`brain.work.coming-up`, the plate the phone already
-had and can never hide), exactly as "open coming up" and Find anything's own
-row do; it reads nothing new and adds no route, so `tools/check_parity.py` has
-nothing to classify. **The HUD's Reminders tab above is unchanged and stays the
-desktop HUD's**, and no desktop surface changed at all - the phone's row is the
-only thing that moved, which is why this is a note here rather than a parity
-gap. Appearance is reached only from its Settings row on the phone now (still
-`settings.appearance-card`, still hideable there), and the old home-row menu id
-`entry.appearance` is KEPT - ids are never reused or renamed - with
-`hide=False` and a written reason in `backend/jarvis_menus.py`: a switch over a
-button that no longer exists would turn nothing off. The phone's Home row
-therefore reads no `menus.shows(...)` at all; its six buttons are always drawn,
-like Settings and Help.
+**The phone's Home row gained a Reminders button on 2026-11-02, and since that
+afternoon it opens the phone's OWN Reminders screen - the Brain's Coming up
+plate is unchanged and still reachable** (the owner, twice the same day: *"move
+appearance to only in settings for the android app and replace the appearance
+button with a reminders button instead"*, then *"I want a custom reminders
+screen on the jarvis Android app. right now when I open it it just takes me to
+a subsection of the brain that has reminders. I also want another option within
+the reminders that includes a daily to-do list"*). The second ask is what the
+button does now: it opens `Screen.REMINDERS`
+(`jarvis-client/.../ui/screens/RemindersScreen.kt`, the pure half in
+`net/Reminders.kt`), a screen of its own with TWO choices - **Reminders** (the
+timers, alarms, reminders and repeating jobs, "Just went off" first) and
+**Daily to-do list** (the scheduler's to-do list, JARVIS-API section 179). Both
+choices come from the ONE `GET /api/schedule` read the Brain plate already made,
+the rows are the SAME composables the plate draws (`ScheduleRow`, `WentOffRow`),
+and every change goes through the existing `JarvisRuntime.scheduleAct`,
+`addTodo` and `setTodoMode` - one job per tap, no delete-all, no bulk anything,
+no card added or removed - so `tools/check_parity.py` has nothing to classify
+and no backend file changed. **The one bulk action stays where it was**: the
+named lists ("shopping") with their Add box and their single "Clear list" are
+still drawn only by Brain -> Coming up, and the new screen's to-do tab says
+where they are instead of growing a second copy. The Brain plate itself is
+untouched and still the way in to those lists, the standby schedule and "a file
+from your PC"; it can never be hidden (`brain.work.coming-up`), so nothing that
+used to be one tap away became unreachable. **The HUD's Reminders tab above is
+unchanged and stays the desktop HUD's**, and no desktop surface changed at all -
+the phone's own screen is the only thing that moved, which is why this is a note
+here rather than a parity gap. Appearance is reached only from its Settings row
+on the phone now (still `settings.appearance-card`, still hideable there), and
+the old home-row menu id `entry.appearance` is KEPT - ids are never reused or
+renamed - with `hide=False` and a written reason in `backend/jarvis_menus.py`: a
+switch over a button that no longer exists would turn nothing off. The phone's
+Home row therefore reads no `menus.shows(...)` at all; its six buttons are always
+drawn, like Settings and Help.
 
 **Wave D-1's proactive surfaces are desktop-first in one place, and that is
 written down rather than implied** (2026-10-22; PR #722; JARVIS-API sections 22

@@ -3609,6 +3609,24 @@ class MainActivity : FragmentActivity() {
                         },
                     )
 
+                    // "Reminders" (the owner's ask of 2026-11-02): the phone's
+                    // own screen for the reminders, with the "Daily to-do list"
+                    // inside it, instead of a jump into Brain's Coming up plate
+                    // (which stays exactly where it was). It reads the ONE
+                    // scheduler route Coming up reads and writes through the
+                    // scheduler's own two doors, so `canAct` here only decides
+                    // whether the buttons are offered - JarvisRuntime holds each
+                    // write on a stale link itself, and nothing on this screen
+                    // raises or answers an approval card.
+                    Screen.REMINDERS -> com.jarvis.client.ui.screens.RemindersScreen(
+                        canAct = link == LinkState.CONNECTED && !stale,
+                        privateHidden = privateHidden,
+                        showPrivateBusy = ownerCheckBusy.value,
+                        onShowPrivate = ::showPrivateLists,
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+
                     // "Edit HUD" (2026-11-02): the phone's own editor for what
                     // its Home screen shows - the four sections, the five
                     // read-only built-in arrangements, the owner's copies and
@@ -4489,19 +4507,25 @@ class MainActivity : FragmentActivity() {
                                 // Reminders, where Appearance's button was until
                                 // 2026-11-02 (the owner: Appearance only in
                                 // Settings, a Reminders button in its place).
-                                // It opens the Brain's own Coming up plate -
-                                // "Reminders, alarms, timers and repeating
-                                // jobs" - exactly as "open coming up" and Find
-                                // anything's own row do. Nothing new is read
-                                // and no route is added; Coming up can never be
-                                // hidden (`brain.work.coming-up` is in
-                                // MenuCatalog.NEVER_HIDE, ComingUpReachabilityTest),
-                                // so there is no menu to show for this visit.
-                                onOpenReminders = {
-                                    pendingSection = "coming-up"
-                                    pendingSectionScreen = Screen.BRAIN.name
-                                    nav.go(Screen.BRAIN)
-                                },
+                                //
+                                // Since the owner's second ask the same day -
+                                // "I want a custom reminders screen on the jarvis
+                                // Android app. right now when I open it it just
+                                // takes me to a subsection of the brain that has
+                                // reminders. I also want another option within
+                                // the reminders that includes a daily to-do
+                                // list" - the button opens the phone's OWN
+                                // Reminders screen (Screen.REMINDERS,
+                                // ui/screens/RemindersScreen.kt) instead of
+                                // jumping to Brain -> Coming up. That plate is
+                                // unchanged and still reachable ("open coming
+                                // up", Find anything's own row, and the Brain's
+                                // Work section), and it is still the way into the
+                                // named lists, the standby schedule and a file
+                                // from the PC. Nothing new is read and no route
+                                // is added: the new screen reads the same
+                                // `GET /api/schedule`.
+                                onOpenReminders = { nav.go(Screen.REMINDERS) },
                                 // Settings from Home's own row (2026-10-08).
                                 // Appearance is Settings-only on the phone since
                                 // 2026-11-02: its own row in Settings still opens

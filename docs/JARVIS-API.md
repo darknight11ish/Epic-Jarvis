@@ -30331,6 +30331,10 @@ carry-over"), `src-tauri/src/todo_carryover.rs` (one command: the read, and
 `{mode}` to change it). Phone: `net/Schedule.kt` (`carry`, `createdDate`,
 `todoMode`, `todoModes`, `todoDays`, `todoModeBody`, `carryOf`),
 `ui/screens/ComingUpPlate.kt` (the tag, and the day headings),
+`ui/screens/RemindersScreen.kt` + `net/Reminders.kt` (the phone's own Reminders
+screen's "Daily to-do list" choice, since 2026-11-02: the same items, both
+modes, the same `todo_mode` write, and the mode control offered only when the
+PC sent `todo_modes`),
 `ui/screens/TodoCarryoverPlate.kt` + `ui/screens/LimitsPlate.kt`'s card (the
 same two modes, drawn from the PC's own words), `JarvisRuntime.setTodoMode`.
 Nothing is decided by a client's clock: the PC wrote the item and the PC says
