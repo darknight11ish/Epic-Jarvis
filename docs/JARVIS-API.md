@@ -31036,3 +31036,137 @@ are missing between 175 and 179 - the most that rule allows - and the check
 passes. The number is deliberate: the Lead reassigned it from 178 on
 2026-11-02 so it cannot collide with #1092's. Verified at the desk, not
 assumed.
+
+## 180. Habit check-ins, the owner's own mood log, and the week in review: one tap, no card, never learned (backend, routes for both apps, no screen yet, added 2026-11-02)
+
+The owner's life-coach set, decided 2026-11-02
+(`.dsh-scratch/LIFE-COACH-RESEARCH-2026-11-02/OWNER-DECISIONS.md`, decisions
+D1-D4): a **habit check-in** - "I want to walk three times a week", a nudge at
+the time he picked, and one tap that records it happened that day - and his
+**own mood log**: one 1-5 tap a day, optional words, and a history he can look
+at. Both are **backend only today**: the two modules below answer their routes,
+and **neither app has a screen for either one yet** - the Habits and Mood
+section on the phone's Reminders screen and its PC equivalent are a later lane
+(that is also what the two `features/features.json` rows say, rather than
+claiming a UI that does not exist). No new gate tier, no shell or script kind,
+no card anywhere in this section.
+
+The two decisions this section records are in `decisions.d/`:
+`2026-11-02-mood-log-recorded.md` (the mood log is built, reversing the
+2026-09-26 decline *for the owner's own log and nothing else*) and
+`2026-11-02-habit-mood-never-learned.md` (habit and mood data are excluded
+from learning **entirely**, which is stricter than the project's existing
+card-gated rule for sensitive facts).
+
+### 180.1 Habit check-ins - `GET`, `POST /api/habits`
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/habits` | every habit, newest first, each with its own recent ticks (rows, never a rate) | none |
+| `POST /api/habits` | create a habit: its own words, an optional `rule`; sets up ONE repeating job of kind `habit_checkin` at once | **none** - the cardless `plain_repeat` class, like a plain repeating reminder (decided 2026-09-26) |
+| `GET /api/habits/<id>` | one habit and its ticks | none |
+| `POST /api/habits/<id>/tick` | record ONE tick, body `{"day"?: "YYYY-MM-DD", "words"?}` | none - the same class as ticking a to-do |
+| `POST /api/habits/<id>/untick` | take back one day's tick | none |
+| `POST /api/habits/<id>/stop` | stop tracking: deletes the repeating job and **keeps every tick** | none - immediate, one tap |
+
+**One row per habit per DAY, by construction.** `ticks` has
+`PRIMARY KEY (habit, day)`, so a second tap on the same day changes nothing and
+returns `"added": false` with the same row. Two taps cannot make two rows,
+which is also why no score is possible to inflate. A tick on another day is a
+second row.
+
+**What it deliberately does not do.** No score, no streak, no percentage, no
+"longest run", no trend and no praise: the nudge both apps show under the job
+is one fixed sentence in the owner's own words. That is a deliberate downgrade
+of every habit product's main hook, and this project has removed a streak twice
+on purpose (§21's report card, §19472/§19577).
+
+**Where it is kept.** `habits.db` beside `goals.db`/`schedule.db`/`memory.db`
+in the Jarvis settings folder (`JARVIS_HABITS_DB` overrides it, for the tests).
+Two tables: `habits` and `ticks`. Nothing is logged beyond an id and a day.
+
+**The reminder lane's entry point.** `jarvis_habits.record_tick(habit_id, ...)`
+is the clean function anything else calls to record a tick without a route - a
+reminder's answer destination, a quick reply, a voice action. It needs no
+listening server, touches no scheduler, raises no card, and is safe from a
+background thread. `jarvis_schedule.py` is not edited by this change.
+
+### 180.2 The mood log - `GET`, `POST /api/mood`
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/mood?days=N` | the last N days as rows (newest first) for the chart, the latest entry, the scale's limits and the fixed words | none |
+| `POST /api/mood` | save ONE day: `{"value": 1-5, "words"?: "...", "day"?: "YYYY-MM-DD"}`; a second entry that day **replaces** the first | none - personal logging, like ticking a to-do |
+| `POST /api/mood` with `{"clear": true, "day": ...}` | remove that one day | none |
+
+**One row per day.** A `mood.db` primary key on `day`, an upsert on save, no
+average, no trend and no verdict computed anywhere: the chart is a display
+concern and this module returns rows. The scale is exactly the whole numbers
+1-5; a float, a bool or `0`/`6` is refused in plain words.
+
+**Excluded from learning entirely, not card-gated.** Neither module imports a
+learner and no learner module names either one, so there is no code path by
+which a habit name or a mood value could become a fact. That is D2's
+straightforward reading, and `backend/test_learning_exclusion.py` proves it in
+both directions - including that writing a habit and a mood creates
+`habits.db`/`mood.db` and **no fact store at all**. It is stricter than the
+existing mood rule (`jarvis_intake.mood_rule`, "a passing mood ... is not a
+fact. Do not propose it"), and both hold: the model is told not to propose a
+mood, and the log is not a place a fact could come from in the first place.
+
+**It is not the crisis path.** A sentence bigger than a mood note still goes to
+`jarvis_wellbeing.py` and a real person; the mood module holds no help-line
+logic and imports no wellbeing module, which a test pins so it cannot grow a
+second, unreviewed one.
+
+### 180.3 The week in review - `GET /api/habits/week`, `POST /api/habits/week/start|stop`
+
+Once a week, **counts of stored rows and nothing else**: habit ticks, goal
+steps whose own `done_at` falls in the window, reminders that went off (the
+scheduler's own `fired_since`), and how many days of the week hold a mood row
+(a COUNT - the values are never read). The window is the seven days **before**
+the review day, so it is the week that passed. A count that could not be read
+prints "not read on this PC", never a confident zero.
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/habits/week` | the four counts above, the renderer's own text, and whether the review job is on | none |
+| `POST /api/habits/week/start` | turns the review on: ONE repeating job of kind `week_review`, at once | **none** - the same `plain_repeat` class as a repeating reminder |
+| `POST /api/habits/week/stop` | turns it off, in one tap | none |
+
+- When it fires it files **one line** through the existing cardless notes route
+  (`jarvis_note_capture.capture`, the function `POST /api/notes/capture` calls:
+  `append_obsidian_daily` and `append_logseq_journal` are tier `auto`,
+  `create_joplin_note` is `notify`, so nothing asks). It picks the first journal
+  this PC is set up for, appends rather than edits, and a PC with no journal
+  says so instead of failing.
+- It interprets nothing: the line ends by saying these are counts of what is
+  stored, not a judgement. No model is called and no tool runs.
+
+### 180.4 The GROW bridge in the Reflective Coach manner
+
+The `reflect` personality's own prompt material now names the GROW path - Goal,
+Reality, Options, Will, one question at a time, then one offer of a goal draft
+(the existing cardless `POST /api/goals` draft). The three sentences live in the
+preset's `post_history_hint`, which `jarvis_agent.with_manner_note` inserts on
+every turn of a chosen personality, because the assembled persona block is at a
+measured hard cap of 750 characters and the Reflective Coach was already at 729
+of them: the safety text could not be cut to make room (`§` the 2026-11-02
+skeptic decision records the same "a rewrite paid for by cuts" rule).
+`backend/test_grow_bridge.py` pins the GROW words and, beside them, the
+sentences that must never go with them: one gentle question, never diagnose,
+never a therapist, harm is bigger than Jarvis and a real person can help, no
+therapy record.
+
+### 180.5 What is deliberately not built here
+
+- **No screen on either app yet** - a Habits/Mood section on the Reminders
+  screen and the chart are the next lane, so `features/features.json` says so
+  in its `where`.
+- **No intervention, no unprompted "how are you feeling?"**, no sentiment
+  model, no diagnosis, no therapy record, no advice - the module counts and
+  stores, and the Reflective Coach's own wording rules govern the talking.
+- **No import from another habit app, no sync, no cloud.** Nothing in either
+  module opens a socket.
+- **No new permission model, no new gate tier, no shell/script kind, no
+  batching**: nothing here acts, so there is nothing to approve.

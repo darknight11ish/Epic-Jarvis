@@ -1621,6 +1621,40 @@
     "lesson_id": "parking"
   },
   {
+    "id": "habit-checkins",
+    "group": "Money and health",
+    "title": "Habit check-ins",
+    "what": "A repeating thing you want to do - walk, stretch, practise - with a nudge at the time you picked and one tap that records it happened that day.",
+    "where": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+    "asks": "No card for logging: a new habit and a tick are the cardless plain_repeat class, and stopping is immediate.",
+    "limit": "No score, streak, percentage or chart of judgement anywhere in it - the record is one row per habit per day, and stopping keeps every row.",
+    "surface": "both",
+    "covers": [],
+    "aliases": [
+      "habit tracker",
+      "habit check-in",
+      "habit check-ins",
+      "track a habit"
+    ]
+  },
+  {
+    "id": "mood-log",
+    "group": "Money and health",
+    "title": "Mood log",
+    "what": "Your own log of how the day felt: one 1-5 tap and optional words, kept on this PC, with a history you can look at.",
+    "where": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+    "asks": "No card for logging: a mood entry is personal logging, like ticking a to-do.",
+    "limit": "One row per day, and a second entry that day replaces the first. It is excluded from learning entirely - mood data never becomes a fact, by construction rather than by a card - and it is never the crisis path.",
+    "surface": "both",
+    "covers": [],
+    "aliases": [
+      "mood tracker",
+      "mood log",
+      "mood journal",
+      "mood diary"
+    ]
+  },
+  {
     "id": "home-status",
     "group": "Home",
     "title": "Ask how the house is",
