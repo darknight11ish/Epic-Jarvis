@@ -344,6 +344,12 @@ LESSON_EXEMPT = {
     # there is nothing to teach yet: the Calendar screens (HUD card, phone
     # plate, widget) are the next slice, and their lesson lands with them.
     "jarvis-calendar": "the store and routes come first; the screens and their lesson are the next slice",
+    # The owner's 2026-11-02 life-coach set: the habit and mood routes and
+    # their stores land before either screen, so there is nothing to teach yet -
+    # there is no habit row to tap and no 1-5 plate to press. Their lessons land
+    # with the screens on the Reminders screen (the named next lane).
+    "habit-checkins": "the routes and the store come first; there is no habit row to tap yet, and the lesson lands with the screen",
+    "mood-log": "the routes and the store come first; there is no 1-5 plate to press yet, and the lesson lands with the screen",
     "interrupt": "the talk button stops the answer; there is nothing to learn",
     "temporary-chat": "one switch in the chat head; its own label is the lesson",
     "private-chat": "one chip in the chat head, and its own strip line says what it does: no memory, nothing kept, no tools, no changes",
@@ -371,6 +377,7 @@ LESSON_EXEMPT = {
     "setup-questionnaire": "the card explains itself: fourteen questions in the owner's own words, a read-only plan naming each effect, and one Apply that asks twice; a lesson would repeat the card",
     "reminder-actions": "the Reminders lesson was written before a reminder could carry an action and does not teach it; this is a work item for the teaching side, and until then the HUD's own Then row says, in one sentence under the field, what will happen when the reminder goes off",
     "anti-slop": "one switch, one mode and one line saying what OFF costs, on the How Jarvis talks card that already has its own lesson; a lesson would repeat the card's own words, and the card is the lesson",
+    "plugin-switch": "the two chat tools and the modify_own_code card are the whole feature, and both answers already say what a toggle means: it lands the next time Jarvis starts; a lesson would repeat the card and the reply",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each
@@ -482,6 +489,25 @@ TEACHING_GAP = {
         "teaches the phone's floating face, quick tiles and screen rate; "
         "nothing about Android's own picture-in-picture window, what it shows "
         "or that it never approves anything"),
+    # Added with the row (2026-11-02, the self-explain coverage audit): the
+    # phone's app allow-list and opening a listed app are real and reachable
+    # (the phone_apps tool, control_phone and the [phone_apps] table), but no
+    # lesson teaches them yet. phone-extras is the nearest lesson, and it
+    # teaches the floating face, tiles and screen rate only. A work item for
+    # the teaching side, not an exemption.
+    "phone-apps": (
+        "phone-extras",
+        "teaches the phone's floating face, quick tiles and screen rate; "
+        "nothing about the list of apps Jarvis may open on the phone, the card "
+        "that adds or removes one, or the opt-in control_phone tool"),
+    # Added with the row (2026-11-02, the self-explain coverage audit): the
+    # price radar is built, off by default and reachable by asking about it,
+    # and no lesson teaches flight prices at all.
+    "price-radar": (
+        "money-and-health",
+        "teaches spending summaries, the retirement what-if and the monthly "
+        "money limit; flight prices, the local price history and the "
+        "off-by-default read-only radar are in no step"),
 }
 
 #: Rule 7: how a `must_mention` list is judged. Only its SHAPE, plus whether

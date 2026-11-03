@@ -25289,11 +25289,15 @@ this is what the desktop and Android readers expect. `chosen`, `lane` and
 `active_lane` are live PC state and are deliberately not in the fixture.
 
 Each preset carries `id/title/focus/what/cost/worse/model/lane{key,card,port,
-words}/context/helper/policy/measured/pending/heavy_mode/apply{action,
+words}/context/helper/policy/measured/pending/heavy_mode/heavy_words/apply{action,
 switch_route,apply_route,lane_start,auto:false}`. A `pending` preset has no
-model tag or figure and says it is waiting; `heavy_mode` (Coding on the 30B
-coder) is not applicable until the pooled both-GPU lane exists. `chosen` is
-the id last applied; `active_lane` is the lane chat is pointed at now.
+model tag or figure and says it is waiting. `heavy_mode` (Coding on the 30B
+coder) means the preset's model needs BOTH cards as ONE pooled lane; since
+2026-11-02 that lane exists and the row is applicable like every other one,
+with `heavy_words` carrying the PC's own plain-words cost (both cards, and the
+other two models paused while it runs). Both fields are additive: a reader that
+ignores them behaves exactly as before. `chosen` is the id last applied;
+`active_lane` is the lane chat is pointed at now.
 
 **`POST /api/work/apply` - the ONE asked action.** `{"preset": "<id>"}`: one
 `switch_model` approval card (never automatic). The lane is started on demand
@@ -25307,19 +25311,87 @@ has switched, any later failure rolls it back with the auto-tier
 preset. **Every one of those three restores is CHECKED, and only what was seen
 is claimed** (silent-failure audit 2026-10-27, row 2): a refused apply answers
 `{"ok": false, "changed": false, "error": "...", "restored": [...],
-"not_restored": [...]}`, where the two lists name which of `"the model"`,
-`"the chat lane"` and `"the chosen preset"` were put back and which could not
-be, and `error` says the same in words - it contains "were rolled back" only
-when every attempted restore succeeded. `changed: false` means the preset is
-not the chosen one; it says nothing about the model, the lane or the choice
-file, and `not_restored` is the fact about those. Both keys are additive, so a
-reader that ignores them behaves exactly as before. **Said plainly:** a card
-the owner DENIES leaves the started lane
+"not_restored": [...]}`, where the two lists name which of `"the pooled lane"`,
+`"the model"`, `"the chat lane"` and `"the chosen preset"` were put back and
+which could not be, and `error` says the same in words - it contains "were
+rolled back" only when every attempted restore succeeded. `changed: false`
+means the preset is not the chosen one; it says nothing about the model, the
+lane or the choice file, and `not_restored` is the fact about those. Both keys
+are additive, so a reader that ignores them behaves exactly as before. **Said
+plainly:** a card the owner DENIES leaves the started lane
 running - it starts no model and switches nothing. A `pending` preset refuses
-before anything happens, heavy-mode Coding refuses with "heavy mode needs the
-both-card lane, arriving later". Both apps call this route now: the desktop's
+before anything happens. Both apps call this route now: the desktop's
 focus-presets bridge sends it, and the Android preset screen reads and sends
 the same `apply_path` the GET advertises.
+
+### 145.1 The Coding preset's pooled both-card lane (2026-11-02, added)
+
+Coding is the ONE preset whose model cannot run on either named lane: 14.8 GB
+against a 12 GB card and an 8 GB card. Its `lane` is therefore `pooled` - ONE
+Ollama on port 11450, started on demand by this apply with **no card pin**, so
+the engine sees both cards (`jarvis_model_lanes.start_pooled_lane`, reusing
+`jarvis_big_coder`'s server, pause, load and restore - `jarvis_model_lanes.py`
+and `jarvis_big_coder.py` ship whole).
+
+What an apply does, in order, and what it never does:
+
+1. **ONE `switch_model` card first**, raised by the pooled lane's start, with
+   the same `from`/`to`/`why` detail `jarvis_models.switch_to` sends and the
+   preset's own `heavy_words` as the card's text. It names both cards and the
+   two lane models about to be paused. **Nothing is unloaded before it is
+   answered**, so a denied card changes NOTHING on this path (that is stricter
+   than the named-lane path, where the lane start comes first and a denied card
+   leaves it running).
+2. The pause is ANNOUNCED (event bus + audit log) before the first unload, both
+   lane models are unloaded and proved gone from `/api/ps`, the model is loaded
+   **naming 16,384 tokens**, and `/api/ps` must show it present, at that
+   context and with **zero spill**. A load that spills or comes up elsewhere is
+   unloaded again, both lanes are restored and the answer says why (503) - the
+   refusal is the machine's own words, never a canned one.
+3. The model is then recorded as the one chat uses. It is NOT a second card and
+   NOT `switch_to`: `jarvis_models.switch_to` runs its tripwire smoke test at
+   `jarvis_models.OLLAMA`, which is a single-card lane, so asking it for a
+   14 GB model would load it on a 12 GB card (or evict the model the pooled
+   lane just loaded). The preset writes the same record `switch_to` writes,
+   through that module's own state read/write, only after the card was approved
+   and the model really loaded.
+4. Chat is pointed at `http://127.0.0.1:11450` and the preset id saved. Any
+   later failure stops the pooled lane FIRST (unload, stop the server, restore
+   both lane models), then rolls the model back with the auto-tier
+   `jarvis_models.rollback()`, then restores the lane pointer and the choice.
+5. **Leaving it:** applying any preset that is not heavy stops the pooled lane
+   before anything else, in the same apply - it unloads the 30B, restores both
+   lane models and proves it from `/api/ps`. If it cannot be stopped, the apply
+   refuses in plain words (503) and changes nothing else.
+
+`POST /api/big-coder {"action":"stop"}` stops the same server by the same code
+(§126). Both routes are loopback only and behind the server's own origin and
+token checks.
+
+**One interaction that is stated rather than hidden.** The background learner
+(`jarvis_extract`, which `jarvis_hud.py` feeds the chat's own current model)
+talks to the address in `OLLAMA_URL` - the everyday lane - not to the preset's
+lane pointer. While the Coding preset is applied, that lane holds no model and
+cannot hold the 30B, so a learning pass asks for a model the lane cannot load
+and the learner fails in its own words (it will not load 14 GB on a 12 GB
+card). Nothing is sent anywhere and nothing is corrupted; learning pauses while
+the heavy preset is on and resumes when another preset is applied. It is not
+claimed to work, and it was not driven live in this slice. The same is true of
+`GET /api/models`' resident list, which reads the everyday lane: while Coding
+runs, the Current Models panel does not show the pooled model.
+
+**Measured on this PC, 2026-11-02** (`docs/MEASURED-2026-11-02-POOLED-LANE.md`):
+cold load 32.5 s, **77.5 / 85.3 / 85.6 tokens a second** on a fixed
+three-prompt coding set (median 85.3), the model 14,886 MiB **entirely in video
+memory** (zero spill), 11,899 MiB used on the RTX 2060 and 7,674 MiB on the
+RTX 2080 SUPER while it ran, and both lane models proved back afterwards at
+`qwen3.5:9b ctx=196608` and `qwen3:8b ctx=16384` with zero spill. The whole
+start took 69.9 s and the stop 59.1 s, the pause and the restores included.
+**The 28,672-token rung the 2026-10-18 measurement used no longer fits this
+PC**: 28,672, 24,576 and 20,480 all spilled 204-212 MiB, and 16,384 was the
+largest rung that loaded with none, which is why the preset asks for 16,384.
+`jarvis_big_coder.NUM_CTX` (28,672) is that mode's own measured rung and was
+not changed.
 
 **The HUD's left rail renders this contract too** (the owner's request of
 2026-10-21: "i would like this part of the jarvis HUD to have the presets we
@@ -26237,7 +26309,12 @@ and its own docstring is the contract.
   `my_files` by default (2026-10-20: the post-install field test found a fresh
   install was offered only the first three, so the calculator and memory
   search the docs describe were missing too; the full default list is in the
-  template and pinned by `backend/test_tool_defaults.py`). With no folders,
+  template and pinned by `backend/test_tool_defaults.py`). Since 2026-11-02 the
+  same list also names `plugin_list` and `plugin_switch`, the two tools that
+  list Jarvis's drop-in plugins and turn one on or off by chat (section 181);
+  both stay on this PC - `plugin_list` only reads the plugin folder, and
+  `plugin_switch` raises ONE `modify_own_code` card to turn one on and needs no
+  card to turn one off. With no folders,
   `jarvis_agent.offered_tools` omits `my_files` entirely - chat search cannot
   run even while this switch is ON, and that omission is on purpose: with no
   folder listed the tool costs no tokens and reads nothing. The Settings card
@@ -30966,3 +31043,260 @@ are missing between 175 and 179 - the most that rule allows - and the check
 passes. The number is deliberate: the Lead reassigned it from 178 on
 2026-11-02 so it cannot collide with #1092's. Verified at the desk, not
 assumed.
+
+## 180. Habit check-ins, the owner's own mood log, and the week in review: one tap, no card, never learned (backend, routes for both apps, no screen yet, added 2026-11-02)
+
+The owner's life-coach set, decided 2026-11-02
+(`.dsh-scratch/LIFE-COACH-RESEARCH-2026-11-02/OWNER-DECISIONS.md`, decisions
+D1-D4): a **habit check-in** - "I want to walk three times a week", a nudge at
+the time he picked, and one tap that records it happened that day - and his
+**own mood log**: one 1-5 tap a day, optional words, and a history he can look
+at. Both are **backend only today**: the two modules below answer their routes,
+and **neither app has a screen for either one yet** - the Habits and Mood
+section on the phone's Reminders screen and its PC equivalent are a later lane
+(that is also what the two `features/features.json` rows say, rather than
+claiming a UI that does not exist). No new gate tier, no shell or script kind,
+no card anywhere in this section.
+
+The two decisions this section records are in `decisions.d/`:
+`2026-11-02-mood-log-recorded.md` (the mood log is built, reversing the
+2026-09-26 decline *for the owner's own log and nothing else*) and
+`2026-11-02-habit-mood-never-learned.md` (habit and mood data are excluded
+from learning **entirely**, which is stricter than the project's existing
+card-gated rule for sensitive facts).
+
+### 180.1 Habit check-ins - `GET`, `POST /api/habits`
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/habits` | every habit, newest first, each with its own recent ticks (rows, never a rate) | none |
+| `POST /api/habits` | create a habit: its own words, an optional `rule`; sets up ONE repeating job of kind `habit_checkin` at once | **none** - the cardless `plain_repeat` class, like a plain repeating reminder (decided 2026-09-26) |
+| `GET /api/habits/<id>` | one habit and its ticks | none |
+| `POST /api/habits/<id>/tick` | record ONE tick, body `{"day"?: "YYYY-MM-DD", "words"?}` | none - the same class as ticking a to-do |
+| `POST /api/habits/<id>/untick` | take back one day's tick | none |
+| `POST /api/habits/<id>/stop` | stop tracking: deletes the repeating job and **keeps every tick** | none - immediate, one tap |
+
+**One row per habit per DAY, by construction.** `ticks` has
+`PRIMARY KEY (habit, day)`, so a second tap on the same day changes nothing and
+returns `"added": false` with the same row. Two taps cannot make two rows,
+which is also why no score is possible to inflate. A tick on another day is a
+second row.
+
+**What it deliberately does not do.** No score, no streak, no percentage, no
+"longest run", no trend and no praise: the nudge both apps show under the job
+is one fixed sentence in the owner's own words. That is a deliberate downgrade
+of every habit product's main hook, and this project has removed a streak twice
+on purpose (§21's report card, §19472/§19577).
+
+**Where it is kept.** `habits.db` beside `goals.db`/`schedule.db`/`memory.db`
+in the Jarvis settings folder (`JARVIS_HABITS_DB` overrides it, for the tests).
+Two tables: `habits` and `ticks`. Nothing is logged beyond an id and a day.
+
+**The reminder lane's entry point.** `jarvis_habits.record_tick(habit_id, ...)`
+is the clean function anything else calls to record a tick without a route - a
+reminder's answer destination, a quick reply, a voice action. It needs no
+listening server, touches no scheduler, raises no card, and is safe from a
+background thread. `jarvis_schedule.py` is not edited by this change.
+
+### 180.2 The mood log - `GET`, `POST /api/mood`
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/mood?days=N` | the last N days as rows (newest first) for the chart, the latest entry, the scale's limits and the fixed words | none |
+| `POST /api/mood` | save ONE day: `{"value": 1-5, "words"?: "...", "day"?: "YYYY-MM-DD"}`; a second entry that day **replaces** the first | none - personal logging, like ticking a to-do |
+| `POST /api/mood` with `{"clear": true, "day": ...}` | remove that one day | none |
+
+**One row per day.** A `mood.db` primary key on `day`, an upsert on save, no
+average, no trend and no verdict computed anywhere: the chart is a display
+concern and this module returns rows. The scale is exactly the whole numbers
+1-5; a float, a bool or `0`/`6` is refused in plain words.
+
+**Excluded from learning entirely, not card-gated.** Neither module imports a
+learner and no learner module names either one, so there is no code path by
+which a habit name or a mood value could become a fact. That is D2's
+straightforward reading, and `backend/test_learning_exclusion.py` proves it in
+both directions - including that writing a habit and a mood creates
+`habits.db`/`mood.db` and **no fact store at all**. It is stricter than the
+existing mood rule (`jarvis_intake.mood_rule`, "a passing mood ... is not a
+fact. Do not propose it"), and both hold: the model is told not to propose a
+mood, and the log is not a place a fact could come from in the first place.
+
+**It is not the crisis path.** A sentence bigger than a mood note still goes to
+`jarvis_wellbeing.py` and a real person; the mood module holds no help-line
+logic and imports no wellbeing module, which a test pins so it cannot grow a
+second, unreviewed one.
+
+### 180.3 The week in review - `GET /api/habits/week`, `POST /api/habits/week/start|stop`
+
+Once a week, **counts of stored rows and nothing else**: habit ticks, goal
+steps whose own `done_at` falls in the window, reminders that went off (the
+scheduler's own `fired_since`), and how many days of the week hold a mood row
+(a COUNT - the values are never read). The window is the seven days **before**
+the review day, so it is the week that passed. A count that could not be read
+prints "not read on this PC", never a confident zero.
+
+| Route | What it does | Card |
+|---|---|---|
+| `GET /api/habits/week` | the four counts above, the renderer's own text, and whether the review job is on | none |
+| `POST /api/habits/week/start` | turns the review on: ONE repeating job of kind `week_review`, at once | **none** - the same `plain_repeat` class as a repeating reminder |
+| `POST /api/habits/week/stop` | turns it off, in one tap | none |
+
+- When it fires it files **one line** through the existing cardless notes route
+  (`jarvis_note_capture.capture`, the function `POST /api/notes/capture` calls:
+  `append_obsidian_daily` and `append_logseq_journal` are tier `auto`,
+  `create_joplin_note` is `notify`, so nothing asks). It picks the first journal
+  this PC is set up for, appends rather than edits, and a PC with no journal
+  says so instead of failing.
+- It interprets nothing: the line ends by saying these are counts of what is
+  stored, not a judgement. No model is called and no tool runs.
+
+### 180.4 The GROW bridge in the Reflective Coach manner
+
+The `reflect` personality's own prompt material now names the GROW path - Goal,
+Reality, Options, Will, one question at a time, then one offer of a goal draft
+(the existing cardless `POST /api/goals` draft). The three sentences live in the
+preset's `post_history_hint`, which `jarvis_agent.with_manner_note` inserts on
+every turn of a chosen personality, because the assembled persona block is at a
+measured hard cap of 750 characters and the Reflective Coach was already at 729
+of them: the safety text could not be cut to make room (`§` the 2026-11-02
+skeptic decision records the same "a rewrite paid for by cuts" rule).
+`backend/test_grow_bridge.py` pins the GROW words and, beside them, the
+sentences that must never go with them: one gentle question, never diagnose,
+never a therapist, harm is bigger than Jarvis and a real person can help, no
+therapy record.
+
+### 180.5 What is deliberately not built here
+
+- **No screen on either app yet** - a Habits/Mood section on the Reminders
+  screen and the chart are the next lane, so `features/features.json` says so
+  in its `where`.
+- **No intervention, no unprompted "how are you feeling?"**, no sentiment
+  model, no diagnosis, no therapy record, no advice - the module counts and
+  stores, and the Reflective Coach's own wording rules govern the talking.
+- **No import from another habit app, no sync, no cloud.** Nothing in either
+  module opens a socket.
+- **No new permission model, no new gate tier, no shell/script kind, no
+  batching**: nothing here acts, so there is nothing to approve.
+
+## 181. The drop-in plugins, by chat: list them, and switch ONE on or off (backend, both apps' chat, added 2026-11-02)
+
+*Numbering note, 2026-11-02: this section was written as 180; the life-coach section (also 2026-11-02) took 180 first in the merge train, so this one is 181. The words below are unchanged.*
+
+**What it is.** `jarvis_plugins.py` loads optional features from folders: a
+folder in `jarvis_plugins\` beside `jarvis_hud.py` is discovered at start-up,
+its own `install()` is called, and the feature is on. A `disabled` marker file
+in that folder keeps it off, and so does `"enabled": false` in the folder's own
+`plugin.json`. Both of those already existed; nothing in this section invents a
+third way. Until now the only way to see the list or switch one was to open the
+folder by hand. Now the owner's own words are the door:
+
+> "Jarvis may list plugins and turn them on/off by chat, one card per change."
+> - the owner, 2026-11-02 (the decision is
+> `decisions.d/2026-11-02-plugin-switch-by-chat.md`)
+
+**The two tools** (`backend/jarvis_agent.py`). They are ordinary model tools, so
+they work from either app's chat: the model runs on this PC, and the phone's
+chat is the same turn reaching the same backend.
+
+| tool | arguments | what it answers | card |
+|---|---|---|---|
+| `plugin_list` | none | every plugin folder, whether it is on, and why it is off | none - it only reads |
+| `plugin_switch` | `plugin` (a name `plugin_list` showed) and `action` (`on` or `off`) | that one plugin, and what happens next | **on**: ONE `modify_own_code` card. **off**: no card |
+
+**ON is carded, OFF is not** - the project's own on/off rule, and here is why it
+fits. A plugin is program code that runs inside the backend process at start-up,
+with the same trust as `jarvis_hud.py` itself (`jarvis_plugins.py`'s own
+docstring says so). Turning one ON is therefore a change to Jarvis's own running
+code, so it is decided under the **existing** `modify_own_code` action - the one
+`jarvis_skills.write_skill` and the skill hub already raise for the same kind of
+act - which ships at tier `ask`. It goes through `jarvis_gate.check` exactly
+like every other card; nothing here approves, auto-approves or decides anything
+itself. Turning one OFF only narrows what runs, so it is immediate and cardless,
+the same rule the settings apply ("turning it on raises an approval card;
+turning it off is immediate"). The tool is also in `NEEDS_A_PERSON`, which is
+the belt: if `modify_own_code` is ever loosened in a settings file, an "allowed"
+verdict with nobody asked is refused and nothing is written.
+
+**What a toggle means at runtime - said honestly, never pretended.** The loader
+runs ONCE, at HUD start-up, so **neither direction is live in the process that
+is already running**. Every answer says that in plain words: the change lands
+the next time Jarvis starts, the copy running now keeps going until then, and
+Jarvis cannot restart itself. Nothing in this feature restarts the backend, and
+the model is told not to offer to.
+
+**The exact file it writes, and the only one.** OFF creates the loader's own
+`disabled` marker in that one plugin folder (`O_CREAT|O_EXCL`, so nothing
+already there is overwritten). ON removes that same marker - and only after
+checking the folder and its `plugin.json` are still where the card said they
+were. `plugin.json` is **never** rewritten: a plugin switched off by
+`"enabled": false` inside its own manifest is **reported and refused**, because
+that is a hand edit on the PC, not something chat changes. No folder is
+created, moved, renamed or deleted, and `backend/test_plugin_switch.py` proves
+it by comparing the folder byte for byte across a full off/on/off cycle and by
+parsing the module for any folder-delete call.
+
+**What the list reports, because they are different problems.** `plugin_list`
+names a plugin as:
+
+- **on** - it loaded when Jarvis started;
+- **switched off** - a `disabled` marker is in its folder (chat can remove it);
+- **switched off in its own plugin.json** - `"enabled": false`; a hand edit;
+- **did not load** - `install()` raised or the module was missing, with the
+  loader's own reason in the answer;
+- **no working plugin.json** - the folder's manifest is missing or will not
+  parse, with the loader's own reason;
+- **added after Jarvis started** - a working folder that appeared since, so it
+  has not loaded in this process;
+- **its folder is gone** - it loaded when Jarvis started and the folder has
+  since been removed; it keeps running until Jarvis restarts. Saying nothing
+  here would be the lie this list exists to prevent.
+
+A missing plugin folder is reported too: "There is no plugin folder at ...", not
+an empty list that reads like "no plugins". The answer never raises, and its
+"why" text is the loader's own words where the loader has them.
+
+**No new route, and no new card wording.** `tools/check_parity.py` is unchanged
+and clean: there is no `GET`/`POST` for any of this, no Rust command, no
+Settings section, and no app screen. The card the ON half raises is the existing
+`modify_own_code` action, which `jarvis_asks_first.py` already lists in the
+"What asks first" page's "Jarvis's own code" group - so no new action, no tier
+line, no risk row and no card wording is invented. The `gate_lookup_name` is
+`skill_manage`, the one published `_TOOL_ACTIONS` key that already maps to
+`modify_own_code`, so no `jarvis_gate.py` patch is needed either.
+
+**Nothing goes bulk, and nothing leaves the PC.** The schema has one `plugin`
+string and one `action` enum; there is no array, and a call naming two plugins
+is refused by `check_call` before anything is prepared. Both tools are in
+`[tools].enabled` in both shipped settings copies, because a feature reachable
+only by hand-editing that same list would not be reachable by chat - the same
+reason `phone_apps` is. Both are listed in `jarvis_reach.TOOL_NAMES` (the "What
+can Jarvis reach" page), in one short-list group (`settings`), and with their
+own tool-diet hints. Nothing is downloaded, nothing is sent anywhere, and the
+answer carries no file's contents.
+
+**Tests.** `backend/test_plugin_switch.py` (110 checks) drives the REAL
+`_one_call` with a fake gate and a throwaway plugin folder - no model, no
+network, no real card, and the owner's own plugin folder is never read or
+written. It proves: the list names every state and why; a listing writes,
+touches and deletes nothing (a full folder snapshot before and after); a
+missing folder reports itself; a plugin whose folder has gone is still listed;
+OFF is immediate, one marker file and no card; ON is exactly one card under
+`modify_own_code`, the card names the plugin and the exact file, a denied card
+and a timed-out card change nothing, and a loosened tier cannot let ON through
+with nobody asked; an unknown name, a path, a blank and a broken manifest are
+refused in plain words with no card; there is no bulk path; nothing is ever
+deleted; and a plugin switched off in its own `plugin.json` is reported and not
+rewritten. `backend/test_tool_defaults.py`, `test_tool_contract.py`,
+`test_tool_text.py`, `test_tool_eval.py`, `test_short_tool_list.py`,
+`test_reach.py`, `test_smarter_answers.py` and `test_private_aloud.py` all pass
+with the two tools added, and the generated fixtures they read
+(`tools/tool_eval/jarvis_tools.json`, `reach-cases.json`,
+`private-aloud-cases.json`) were regenerated by their own generators.
+
+**What is not proved here.** The switch has not been driven against a real
+`jarvis_hud.py` on the owner's PC (this repository has no HUD): what is proved
+is the loader's own `discover()`/`status()` and the real `_one_call` path. It is
+also not proved for a plugin whose `install()` starts a background thread that
+outlives a restart - the marker stops the NEXT start, not a thread already
+running. And a plugin folder that appears while Jarvis is running is reported as
+"added after Jarvis started" rather than loaded; nothing hot-loads.

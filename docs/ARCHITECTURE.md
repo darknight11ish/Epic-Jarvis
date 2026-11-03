@@ -2744,6 +2744,23 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Plugins are listed and switched by chat, and neither app has a screen for
+  it - one-sided on purpose** (2026-11-02; the owner's decision: *"Jarvis may
+  list plugins and turn them on/off by chat, one card per change"*; JARVIS-API
+  §180). The ABILITY is on both apps' chats, because the model tools
+  (`plugin_list`, `plugin_switch`) run on this PC and either app's chat is the
+  same turn. What is deliberately one-sided is a screen: neither app draws a
+  plugin list or a switch. A plugin is a folder beside `jarvis_hud.py` on this
+  PC, so a list screen on the phone would be deep config editing (the standing
+  rule against it), and a desktop section would be a second door beside the one
+  the owner asked for. Nothing here adds a route, a Rust command, a Settings
+  section or a permission path - there is no `GET`/`POST` for it at all, and
+  `tools/check_parity.py` is unchanged and clean. What asks first is the
+  EXISTING `modify_own_code` card, already listed on the "What asks first" page
+  in its "Jarvis's own code" group, so no new page row was invented either; the
+  feature itself is on both apps' Features pages (`features/features.json`,
+  `plugin-switch`). `backend/test_plugin_switch.py` holds both halves.
+
 - **A question on a reminder is ANSWERED on both apps and CREATED only on the
   PC, and that is one-sided on purpose** (2026-11-02, the owner's ask;
   JARVIS-API §21.14). A reminder may carry a question and up to three of the
@@ -2756,6 +2773,7 @@ backend routes, in both directions; the rest are listed here only.
   therefore answers a question and never creates one, and it says so rather than
   offering a control that would have to guess. No route was added, so
   `tools/check_parity.py` has nothing new to classify.
+
 - **Approving a card from a notification is the phone's surface, and that is
   one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
   desktop does not post approval cards to Windows notifications, so there is
@@ -4316,6 +4334,8 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 **The stale note waiting line is fixed on the phone; the desktop's chat still says it** (2026-11-02, the owner's report: a short voice note, the card approved, the note created, and the phone's chat still reading "Waiting for your approval."; JARVIS-API §11; `backend/jarvis_quick.py`'s `_run_note_make` and its `note_job` key). "Make a note: X" is answered by the fast path without the model, so while its card is up the WHOLE reply is the capture route's 202 sentence - in practice "Waiting for your approval." - and the note is filed the moment the card is approved. The answer now names the capture job (`note_job` in `X-Jarvis-Route`, the same id `GET /api/notes/capture?id=` answers), and the PHONE follows it and replaces that one line with the PC's own last sentence ("Filed in Obsidian, 2026-11-02.md.", "You said no, so nothing was written."), matched on the question too so two notes asked one after another cannot swap their endings. **What is one-sided, said plainly:** the desktop HUD shows the same fast-path answer in its chat and does not follow `note_job` yet, so its line goes on saying "Waiting for your approval." after the note is filed. No route is missing for it - the id is already on the answer - and the bar already settles its OWN card lines when a card leaves the queue (`brain.js`'s `onQueue`, `modelAsk`/`learningAsk`), so the missing half is that same settle pointed at a chat line. Written down rather than quietly left, and the phone is where the owner saw it.
 
+
+**Habit check-ins and the mood log are backend only today, on BOTH apps, and that is a lane boundary rather than a platform decision** (2026-11-02; the owner's life-coach set, JARVIS-API §180; `backend/jarvis_habits.py` and `backend/jarvis_mood.py`, installed by the drop-in folders `plugins/ready/habits` and `plugins/ready/mood`; the two decisions are `decisions.d/2026-11-02-mood-log-recorded.md` and `decisions.d/2026-11-02-habit-mood-never-learned.md`). The routes are built, documented and classified backend-only in `tools/check_parity.py`: `GET`/`POST /api/habits` with tick/untick/stop, the weekly review and its on/off, and `GET`/`POST /api/mood`. **Neither app has a screen for either feature** - no habit row, no tick control, no 1-5 mood plate and no chart - so this is one gap on both sides at once, not one app missing what the other has. The UI half is the next lane, and when it is built it goes on BOTH apps on these same routes and stores: the phone's Reminders screen beside Reminders / Daily to-do / Goals, and the PC's equivalent (the owner's placement decision D3). Already decided and not the UI lane's to re-decide: no score, streak, percentage or praise anywhere; the mood chart is a picture of the owner's own taps and never a judgement; a tick and a mood entry raise no card; and neither store's data is ever learned, by construction rather than by a card (`backend/test_learning_exclusion.py`).
 
 ## 9. Where the backend lives
 
