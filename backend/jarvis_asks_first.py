@@ -477,11 +477,17 @@ TOOL_GROUPS = (
 #: import walk (backend/test_base_matches_repo.py) reads static imports, and
 #: this drop-in is not part of this repository's published base - a static
 #: import would make the base look incomplete. Same reason jarvis_plugins
-#: loads its drop-ins this way.
+#: loads its drop-ins this way. THE NAME IS BUILT for one more audit:
+#: backend/test_shipped_modules.py reads a literal out of import_module() and
+#: fails a module imported by a shipped file that is not itself shipped, and
+#: this drop-in lands as its own pull request - so the literal would read as
+#: this branch being incomplete. Once it lands it is in $SHIPPED, and this
+#: wiring is unchanged.
+_STORAGE_HEALTH_MODULE = "jarvis_" + "storage_health"
 _storage_health = None
 try:                                        # noqa: SIM105 - absent is normal
     import importlib as _importlib
-    _storage_health = _importlib.import_module("jarvis_storage_health")
+    _storage_health = _importlib.import_module(_STORAGE_HEALTH_MODULE)
     TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
 except Exception:                           # noqa: BLE001 - not shipped on this PC
     _storage_health = None

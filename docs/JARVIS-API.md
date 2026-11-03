@@ -31744,7 +31744,7 @@ the origin and the pairing token with the server's own two checks before
 answering (its `install`'s own origin-and-token check), like every other private route,
 and a caller that fails one gets the ordinary 403/401.
 
-### 184.1 The five routes
+### 184.1 The routes
 
 | Route | Method | Answers | Card |
 |---|---|---|---|

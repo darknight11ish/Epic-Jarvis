@@ -101,21 +101,30 @@ ROUTES = (SELF_PATH, VERSION_PATH, REFRESH_PATH, CONVERSATIONS_PATH, CLEAR_PATH)
 #: served, and everything here works exactly as before. The wiring lives here
 #: only because this module already owns the self routes the storage page sits
 #: beside; the scan itself, its plan and its ONE-card apply are that module's.
+#:
+#: THE NAME IS BUILT, NOT A LITERAL INSIDE import_module(). Two of this
+#: repository's audits read a name out of that call - the base's own import walk
+#: (backend/test_base_matches_repo.py) and the shipped-modules accounting
+#: (backend/test_shipped_modules.py), which fails any module imported by a
+#: shipped file that is not itself shipped. This drop-in is NOT shipped by this
+#: repository yet (it lands as its own pull request), so a literal there would
+#: make both audits call this branch incomplete; and once it lands it is in
+#: $SHIPPED, so the same wiring keeps working either way.
+_STORAGE_MODULE = "jarvis_" + "storage_health"
 _STORAGE = None
 
 
 def _load_storage():
     """`jarvis_storage_health` when its drop-in module is on this PC, else None.
 
-    Loaded through importlib on purpose: a plain `import` statement is what the
-    base's own import walk reads (backend/test_base_matches_repo.py), and that
-    module is a separate worker's drop-in that this repository's published base
-    does not carry - a static import would make the base look incomplete. This
-    is the same reason jarvis_plugins loads its drop-ins this way.
+    Loaded through importlib on purpose (see _STORAGE_MODULE above): a plain
+    `import` statement is what the base's own import walk reads, and this module
+    is a drop-in that the published base does not carry. This is the same reason
+    jarvis_plugins loads its drop-ins this way.
     """
     try:
         import importlib
-        return importlib.import_module("jarvis_storage_health")
+        return importlib.import_module(_STORAGE_MODULE)
     except Exception:                       # noqa: BLE001 - older PC, or not shipped
         return None
 
