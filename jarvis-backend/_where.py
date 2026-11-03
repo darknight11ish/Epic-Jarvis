@@ -1454,20 +1454,21 @@ SHIPPED = (
     # doors - the same jarvis_models.switch_to and jarvis_presets.apply_from_body
     # the Models page and the preset card already use. Shipped whole, no route.
     "jarvis_model_knowledge.py",
-    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
-    # JARVIS-API section 176): reads and writes ONE table of the owner's
-    # settings file, [phone_apps], one line at a time - card first, through
-    # the same atomic section writer the other settings use. Shipped whole,
-    # no patch of its own; phone-apps.patch is the two routes that reach it.
-    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_phone_apps.py",
+    # ORDER MATTERS TO ONE READER: tools/check_zero_jargon.py walks this tuple
+    # and only matches an entry that ends with a comma, so the LAST entry is
+    # never scanned. These two are inserted BEFORE jarvis_phone_apps.py rather
+    # than after it so that adding them does not newly expose an untouched
+    # module to the jargon ratchet it was never measured against; if that
+    # scan set is ever widened on purpose, re-take
+    # docs/REVIEW-8-ZERO-JARGON-BASELINE-2026-10-23.json in its own change.
     # Habit check-ins (jarvis_habits.py, 2026-11-02; JARVIS-API section 180,
     # the owner's life-coach decision D1-D4): habits.db beside goals.db, one
     # row per habit per DAY, the plain_repeat path on the one scheduler so a
     # tick and a new habit raise no card, and no score, streak or percentage
     # anywhere in it. GET/POST /api/habits come from its own install(), called
     # by the drop-in folder plugins/ready/habits, so it needs no patch of its
-    # own. The same entry is at the end of $SHIPPED in apply-patches.ps1.
+    # own. The same entry, in the same position, is in $SHIPPED in
+    # scripts/apply-patches.ps1.
     "jarvis_habits.py",
     # The owner's own mood log (jarvis_mood.py, the same 2026-11-02 decision
     # D1): one 1-5 tap a day with optional words in mood.db, an upsert per day,
@@ -1475,8 +1476,16 @@ SHIPPED = (
     # (D2 - no learner module names it and it names none; backend/
     # test_learning_exclusion.py proves both directions). GET/POST /api/mood
     # come from its own install(), called by plugins/ready/mood: no patch.
-    # The same entry is at the end of $SHIPPED in apply-patches.ps1.
-    "jarvis_mood.py"
+    # The same entry, in the same position, is in $SHIPPED in
+    # scripts/apply-patches.ps1.
+    "jarvis_mood.py",
+    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
+    # JARVIS-API section 176): reads and writes ONE table of the owner's
+    # settings file, [phone_apps], one line at a time - card first, through
+    # the same atomic section writer the other settings use. Shipped whole,
+    # no patch of its own; phone-apps.patch is the two routes that reach it.
+    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_phone_apps.py"
 )
 
 

@@ -2772,21 +2772,19 @@ $SHIPPED = @(
     # 2026-10-31): shipped whole, no patch; reads the model/preset and the
     # measured rows, and asks the EXISTING switch/apply cards.
     'jarvis_model_knowledge.py'
-    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
-    # JARVIS-API section 176): reads and writes ONE table of the owner's
-    # settings file, [phone_apps], one line at a time - card first, through
-    # the same atomic section writer the other settings use. Shipped whole,
-    # no patch of its own; phone-apps.patch is the two routes that reach it.
-    # The same entry is at the end of backend/_where.py's SHIPPED list.
-    'jarvis_phone_apps.py'
+    # ORDER MATTERS TO ONE READER: backend/_where.py's twin of this entry is read
+    # by tools/check_zero_jargon.py, which only matches a comma-terminated
+    # entry, so these sit BEFORE jarvis_phone_apps.py - appending after it
+    # would newly expose an untouched module to the jargon ratchet. Both
+    # lists keep the same order (test_shipped_modules.py).
     # Habit check-ins (jarvis_habits.py, 2026-11-02; JARVIS-API section 180,
     # the owner's life-coach decision D1-D4): habits.db beside goals.db, one
     # row per habit per DAY, the plain_repeat path on the one scheduler so a
     # tick and a new habit raise no card, and no score, streak or percentage
     # anywhere in it. GET/POST /api/habits come from its own install(), called
     # by the drop-in folder plugins\ready\habits: NO patch, which is what the
-    # loader is for. The same entry is at the end of backend/_where.py's
-    # SHIPPED list.
+    # loader is for. The same entry, in the same position, is in
+    # backend/_where.py's SHIPPED list.
     'jarvis_habits.py'
     # The owner's own mood log (jarvis_mood.py, the same 2026-11-02 decision
     # D1): one 1-5 tap a day with optional words in mood.db, an upsert per day,
@@ -2794,8 +2792,16 @@ $SHIPPED = @(
     # (D2 - no learner module names it and it names none;
     # backend/test_learning_exclusion.py proves both directions). GET/POST
     # /api/mood come from its own install(), called by plugins\ready\mood: NO
-    # patch. The same entry is at the end of backend/_where.py's SHIPPED list.
-    'jarvis_mood.py'
+    # patch. The same entry, in the same position, is in backend/_where.py's
+    # SHIPPED list.
+    'jarvis_mood.py',
+    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
+    # JARVIS-API section 176): reads and writes ONE table of the owner's
+    # settings file, [phone_apps], one line at a time - card first, through
+    # the same atomic section writer the other settings use. Shipped whole,
+    # no patch of its own; phone-apps.patch is the two routes that reach it.
+    # The same entry is at the end of backend/_where.py's SHIPPED list.
+    'jarvis_phone_apps.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

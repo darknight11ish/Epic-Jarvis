@@ -271,7 +271,7 @@ PATH = "/api/mood"
 
 def handle_get(route: str, query: str = "") -> tuple:
     if route != PATH:
-        return 404, {"ok": False, "error": "not found"}
+        return 404, {"ok": False, "error": "That address is not a mood entry on this PC."}
     days = 30
     try:
         from urllib.parse import parse_qs
@@ -289,7 +289,7 @@ def handle_get(route: str, query: str = "") -> tuple:
 
 def handle_post(route: str, body) -> tuple:
     if route != PATH:
-        return 404, {"ok": False, "error": "not found"}
+        return 404, {"ok": False, "error": "That address is not a mood entry on this PC."}
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "need a JSON object"}
     try:
