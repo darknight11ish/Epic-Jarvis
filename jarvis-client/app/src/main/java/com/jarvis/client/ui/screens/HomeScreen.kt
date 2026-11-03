@@ -158,6 +158,7 @@ import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.State
+import com.jarvis.client.ui.parts.landOnNewest
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.parts.scrollToKey
 import com.jarvis.client.ui.theme.LocalAccent
@@ -1438,11 +1439,29 @@ fun HomeScreen(
         // The answer's own menu was asked for in words. Bring the answer into
         // view FIRST: a LazyColumn composes only what is on screen, and the
         // composable that owns the menu has to exist before it can open one
-        // (the owner may have scrolled up the thread before typing).
+        // (the owner may have scrolled up the thread before typing). It lands
+        // on the answer's END, not its top - the answer is usually taller than
+        // the panel, and its top is where "Earlier in this chat" is, which is
+        // the same half-visible panel this screen had to stop showing from
+        // "Show chat" (2026-11-02).
         LaunchedEffect(answerMenuTick) {
-            if (answerMenuTick > 0) {
-                listState.animateScrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
-            }
+            if (answerMenuTick > 0) landOnNewest(listState, animate = true)
+        }
+
+        // "Show chat" lands on the newest words, not on the top of the thread
+        // (the owner's report of 2026-11-02, with two screenshots: "the show
+        // chat and then back to full screen in the Android app not showing the
+        // chat properly", the transcript line cut by the panel edge). Full
+        // screen composes no conversation list at all, so tapping "Show chat"
+        // lays this list out for the FIRST time - and a LazyColumn laid out for
+        // the first time starts at its first row: the Home cards, then "Earlier
+        // in this chat", then half a question, with the answer that was just on
+        // screen below the bottom edge. Nothing else moves it: the reply's own
+        // follow effect only runs while an answer is still arriving, so a
+        // finished chat stayed where it was laid out. Every time the chat is
+        // opened, including after "Back to full screen", it lands again.
+        LaunchedEffect(peekChat) {
+            if (peekChat) landOnNewest(listState)
         }
 
         LaunchedEffect(state.streaming, state.followReply, state.focusApproval) {

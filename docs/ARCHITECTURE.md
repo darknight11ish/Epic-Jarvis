@@ -2744,6 +2744,18 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Approving a card from a notification is the phone's surface, and that is
+  one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
+  desktop does not post approval cards to Windows notifications, so there is
+  no desktop action to mirror: its approval cards are already on screen, and
+  Windows Hello is its check. Nothing here adds a route, a backend change or
+  a second permission path - the phone's two approve routes both end at the
+  existing `/api/approve` that the app's own card uses. No Windows
+  notification is added either: the desktop's cards are already on screen,
+  its check is Windows Hello, and a second approve surface is exactly what
+  the five-point envelope (Deny locked, Approve unlock-gated, biometric for
+  everything not small, Review over 240 characters, redacted lock screen)
+  exists to avoid.
 - **The phone's mic press does not check the voice print, and the desktop's
   talk button still does - one-sided on purpose** (2026-11-02; the owner's
   words: *"when i do the mic press to make a short verbal message to jarvis,
@@ -4224,6 +4236,12 @@ route plus the desktop command plus the phone's row, and it is named as the
 follow-up rather than half-built. Nothing about the chat path depends on it:
 the sentence works, is saved, survives a restart, and both apps stay quiet -
 what is missing is only the Settings screen agreeing about who turned it off.
+
+
+**The to-do list's day carry-over is in both apps; three small things are not, and are said here** (2026-11-02; JARVIS-API §179; the owner's choice of both modes with full daily rollover as the default). The tag ("from yesterday", "from Friday (3d ago)", "from Oct 26") and the two modes are drawn by the Brain's Coming up card and by the phone's Coming up plate, built from the PC's own `carry`/`todo_mode`/`todo_modes`, and both Settings surfaces change the one value through the same method a spoken sentence runs. What is deliberately not there yet, said rather than implied:
+- **the desktop HUD's reminder board does not show the age tag.** `jarvis-desktop/src/jarvis_hud.html` draws its own to-do rows and has no `carry` line; the Brain's card and the phone's plate do. A named follow-up, not a hidden difference - and the HUD is a third surface on the PC, not the phone's half.
+- **the phone's switch is drawn inside the existing "Limits and how often Jarvis does things" card**, not as a Settings row of its own: a new Settings row needs a catalogue menu id (generated into `MenuCatalog.kt` from `backend/jarvis_menus.py`) or it is a row nothing may hide, and that menu id is a backend lane. The desktop's is its own card in Settings (`#todo-carryover`). Both read and write the same PC value, so this is placement, not coverage.
+- **nothing on either app works the age out itself.** The PC computes the words (`jarvis_schedule.carry_words`) and the apps print them; a phone whose clock is a day out therefore cannot mislabel an item. While "Hide memory lists and chat history" or App lock is on, the tag is dropped with the words - an age is a fact about them.
 
 
 ## 9. Where the backend lives

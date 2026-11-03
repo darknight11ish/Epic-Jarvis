@@ -28755,8 +28755,9 @@ may do; nothing is applied until the owner taps Add. The PC's own sentence says 
 - While App lock, "Hide memory lists and chat history" or a phone with no secure lock screen is in
   force, the phone does not use the custom layout at all: `NotificationStyle.plan(...)` returns null
   and the notification is built exactly as it was before this feature existed.
-- An approval card still offers **Deny only**, still opens the Inbox, and is still never approvable
-  from a notification: styling changes how the words are drawn and nothing else.
+- A style changes how the words are drawn and nothing else. On 2026-11-02 the owner asked for an
+  Approve button on the approval notification itself; that button (and its five-point security
+  envelope) is §177's, and a style may not alter it. Deny and the tap-through are unchanged.
 
 ### What it does not style
 
@@ -30191,3 +30192,213 @@ a thing to keep in sync for no gain.
   `test_reach.py`, `test_smarter_answers.py`, `test_asks_first.py` (the two tools
   are listed in "Safety and sharing"), `test_gate_risk_words.py`,
   `test_gate_names.py`, `test_gate_unknown_risk.py`.
+
+## 177. Approving a card from an Android notification, with Deny, Approve and Review (phone, added 2026-11-02)
+
+The owner asked, 2026-11-02: *"make sure i can approve jarvis cards through an android
+notification with a deny or approve button or tap too see more button if the summary that's short
+enough to fit into an android notification isn't long enough."*
+
+**What already existed, checked before building anything.** Approval notifications were not
+missing: `service/ApprovalNotifier.kt` has posted one per pending card since the foreground service
+was built, with the card's safe `notice` words, a group summary, Deny, a tap that opens the card,
+`VISIBILITY_PRIVATE` plus a redacted `publicVersion`, restart-safe id bookkeeping, and a `sync()`
+that cancels a notification when `/api/pending` stops carrying its id. What was missing was
+**Approve**: that file said, in code and in a source-pin test, "Deny only, never Approve", every
+approve action on that surface was refused, and the lock screen's public words were a generic
+sentence rather than the one the owner asked for.
+
+### 177.1 The five-point envelope (Gemini's ruling, binding)
+
+1. **Deny may run from the lock screen.** Refusing without reading is the safe direction, and it
+   was already allowed there.
+2. **Approve requires the device unlocked.** Every approve action is built with
+   `setAuthenticationRequired(true)`, so Android itself withholds the `PendingIntent` until the
+   phone is unlocked. No Kotlin check is the lock-screen wall.
+3. **Tier-aware biometric.** Only a card that `SecurityRules.isSmall` exempts (the owner's
+   2026-11-01 request, the same small read-only actions) and that the owner's setting does not
+   ask about may submit its decision from the notification. Every write, config, send-file,
+   phone-app or otherwise non-small card's Approve opens Jarvis on that card and runs the same
+   `BiometricPrompt` the card's own Approve runs - forced even where the card alone would not have
+   asked (`ApprovalNotificationPolicy.notificationApproveNeedsCheck`). The mapping to this app's
+   UI: Jarvis has no separate approval sheet, so "the approval sheet" is Home focused on that
+   card, with the system prompt over it.
+4. **No blind approval of a clipped card.** When the text the notification shows (title and body
+   together) is longer than **240 characters**, Approve is replaced by **Review in Jarvis** and
+   Deny stays. The same replacement applies to a PC-only card and to a proposal that needs one of
+   several plans chosen, neither of which the phone can approve.
+5. **Privacy and lifecycle.** The notification is `VISIBILITY_PRIVATE`; the lock screen's
+   `publicVersion` says exactly **"Jarvis: 1 approval waiting"** and carries no title, summary or
+   action name; a card that leaves `/api/pending` - answered here, on the PC, or expired - has its
+   notification cancelled in the same `sync()` pass. Nothing secret (token, card detail, a
+   stranger's words) is added; the text is still the desktop's `notice` and nothing composed on
+   the phone.
+
+**One consequence, said plainly.** A redacted notification - App lock on, "Hide memory lists and
+chat history" on, or a phone whose own screen lock is not secure - offers **Review in Jarvis and
+Deny, and no Approve**. Approving words the notification did not show is the blind approval rule 4
+forbids, and the redaction itself is the owner's existing privacy rule (`SecurityRules
+.notificationsLocked`, 2026-09-30), not something this feature weakens. **App lock defaults ON at
+setup**, so the owner will see Review rather than Approve until he turns App lock off; the app's
+Settings, Security row is where that choice lives.
+
+### 177.2 The two Approve routes
+
+- **Direct (`ACTION_APPROVE`, small read-only cards).** The action targets the app's own
+  non-exported `EventService`. It waits briefly for a live link, re-reads the card from the live
+  queue (with one direct `refreshPending()` if missing), re-checks `isSmall`, the owner's setting
+  and the phone's current privacy state, and only then calls the existing
+  `JarvisRuntime.decide(item, approve = true)` - the same POST the app makes, with the same stale
+  and expiry rules. If any re-check fails it refuses and says "open Jarvis"; the notification is
+  never the authority.
+- **In-app (`InternalLaunch.APPROVE_ACTION`, everything else).** It opens `MainActivity` on the
+  card and calls the same `approveItem` the card's Approve calls, with
+  `fromNotification = true`, which forces `confirmed(force = true)` for non-small cards. The
+  signed-approval path is unchanged, so a risky card with signed approvals on still signs with the
+  key, and one with them off still shows the offer notice instead of approving.
+
+Both routes carry `InternalLaunch`'s secret in the `PendingIntent`, and the in-app one is honoured
+only on a fresh launch (not a rotation or a Recents replay). `notice.approve_ok` is still ignored:
+the phone's own envelope decides, not the desktop's hint. **No backend change and no new route** -
+both routes end at the existing `/api/approve`.
+
+### 177.3 Where it lives
+
+| File | What it holds |
+|---|---|
+| `jarvis-client/app/src/main/java/com/jarvis/client/service/ApprovalNotificationPolicy.kt` | the pure policy: which buttons, the 240-character line, the unlock flags, the public words, the clear rule |
+| `.../service/ApprovalNotifier.kt` | turns the policy into two actions, the redacted public version, and the cancel pass |
+| `.../service/EventService.kt` | the direct small-card approve, re-checked against the live queue |
+| `.../MainActivity.kt` | the proof-gated in-app approve: opens the card, forces the check, then the existing `decide` |
+| `.../InternalLaunch.kt` | `APPROVE_ACTION` and the proof/freshness decision (`approvesApproval`) |
+
+### 177.4 Tests, and what is not proved here
+
+`ApprovalNotificationPolicyTest` (19 checks) holds the envelope on the JVM: Deny unlocked, every
+Approve unlock-gated, small direct vs non-small in-app, the forced check for a write card that the
+setting alone would skip, 240 vs 241 characters, locked means no Approve, PC-only and
+plan-choice cards are Review, the exact public words, the cancel-on-clear rule, the proof rule, and
+source pins that the notifier is private/redacted and the two approve routes re-check before
+sending. `AppProjectsTest`, `NotificationStyleTest`, `MainActivityLaunchTest` and
+`ApprovalDecisionTest` were updated to the new envelope; the other existing suites still pass. The
+whole command is **3,223 tests, 0 failed, `BUILD SUCCESSFUL`**; the one pre-existing `main` failure
+this branch inherited (`SettingsSearchTest`, after #1079 added the `edit-hud` row) was fixed by
+#1089 and merged in, and is nothing this feature changed.
+
+**NOT-TESTABLE without the owner's phone:** that Android really draws two actions in the collapsed
+shade, that the lock screen shows the redacted sentence and refuses Approve until unlock, that the
+system prompt appears after the in-app Approve on a real device, and that a tap on a direct Approve
+reaches the PC over Tailscale after the process was killed. The desk check proves the compile and
+the JVM rules only.
+## 179. The to-do list's own day: full daily rollover by default, and day by day as the other way (backend §21, both apps, added 2026-11-02)
+
+The owner's question of 2026-11-02 ~00:20 PT, and his answer the same night
+(`.dsh-scratch/OWNER-QUEUE-2026-11-02/OWNER-QUEUE.md` item 4): *is Jarvis smart
+enough that, next day, "what's on my to-do list today" brings up yesterday's
+unfinished items **while saying they are from yesterday**?* Measured against
+`origin/main` before any change: the items DID carry over (they stay until done
+or removed), but nothing said they were yesterday's - and the Today board's
+`rollover_cards` had never been built. Asked which way he wanted it, he chose
+**both**: *"To-do carry-over: build BOTH, with full daily rollover (option B) as
+the DEFAULT, changeable by asking Jarvis or in Settings."* This is the todo
+half of that; the decision is
+`decisions.d/2026-11-02-todo-day-carryover.md`.
+
+**THE ONE NEW FACT: `created_date`, and it never changes.** Every job row gains
+`created_date` - the day it was written, `YYYY-MM-DD` in THIS PC's local time
+(`jarvis_schedule._day_of`). A to-do item's whole age is measured from it, so
+it is written ONCE, inside `Scheduler._insert`, and no later path writes it
+again: not midnight, not an `edit`, not `done`, not the mode switch. That is
+Gemini's ruling 8 (2026-11-02) and the reason it is a column rather than
+arithmetic at read time: a rollover that stamped everything with "today" would
+erase the very thing it is meant to show.
+
+**MIGRATION, once, on the open that first finds the column missing.** Every row
+with no `created_date` is backfilled from its own `created` stamp, in local
+time; a legacy row whose stamp is missing or `0` is stamped **today** - the one
+answer that never claims an age the data cannot support. It is idempotent (it
+reads only `created_date IS NULL` rows and writes only those), it runs inside
+the same `BEGIN IMMEDIATE` as the Phase 2 `ALTER TABLE`s, and after the first
+open there is nothing NULL left to stamp.
+
+**THE TWO WAYS OF SHOWING THE SAME LIST.** `todo_mode` is ONE value on the PC
+(`meta['todo_mode']`, `Scheduler.todo_mode()`/`set_todo_mode()`), never a copy
+per device, and the switch moves no item, copies nothing and re-stamps no day -
+so toggling is lossless by construction and `created_date` is identical in both
+modes.
+
+- `"rollover"` - **the default**. Today's list is every open item written today
+  or earlier, and each older one carries a tag built on the PC
+  (`jarvis_schedule.carry_words`), handed out as the item's `carry` field:
+  - 1 day old -> `from yesterday`
+  - 2 to 6 days old -> `from <Weekday> (<N>d ago)`, e.g. `from Friday (3d ago)`
+  - 7 or more days old -> `from <MMM D>`, e.g. `from Oct 26`
+
+  A 3-day-old item therefore never says `from yesterday`: the wording is
+  measured from `created_date`, never from "is it still on the list". An item
+  written today grows **no** `carry` key at all.
+- `"day"` - each item stays on the day it was written, grouped under that
+  day's own heading (`Today`, `Yesterday`, `Friday (3d ago)`, `Oct 26`). The
+  heading already names the day, so the rows do not repeat the tag.
+
+**WHAT `GET /api/schedule` ADDS (all additive; an older app ignores them).**
+`todo` is unchanged in both modes - the same flat list, in the PC's order - and
+each to-do item gains `created_date` and, when it is older than today, `carry`.
+The answer also carries `todo_mode` (`"rollover"`/`"day"`, read as rollover for
+an older PC that sends nothing), `todo_modes` (the two modes in the PC's own
+words, for both Settings controls: `{value, label, detail}`) and `todo_days`
+(the same open items grouped by day: `{date, label, count, items}` with `items`
+the ids of rows in `todo`, so no item is sent twice, today first).
+
+**THE CHANGE: `POST /api/schedule/act` with `{"do": "todo_mode", "mode": ...}`.**
+It rides the scheduler's ONE existing write route rather than opening a second
+door - the same choice `clear_list` made, and the second form on that route
+that is not one job (`Scheduler.handle_act` says so). No approval card either
+way: it changes only how the owner's own list is drawn, and it touches no row.
+400 in words for anything that is not one of the two modes; 200 carries
+`{ok, mode, said, todo_modes}`, `said` being the PC's own sentence.
+
+**THE SAME CHANGE BY ASKING.** `jarvis_settings_registry.py` gains the choice
+setting `todo_carryover` (names: "the to-do carry-over", "the to-do list
+mode", ...; values `rollover`/`day`), whose setter calls
+`jarvis_schedule.set_todo_mode_here` - the very method the route calls. So
+"set the to-do list mode to day by day" (the phrase grammar, no model), the
+`change_setting` tool (any wording, model) and either app's control cannot
+disagree about the state. Both directions are cardless, like every other
+"how is this drawn" preference.
+
+**THE READ-OUT SAYS IT TOO.** `jarvis_quick.py`'s to-do answer tags each older
+item with the PC's own `carry` words: *"Your to-do list: renew the prescription
+(from Saturday (2d ago)), buy milk."* An item written today reads exactly as it
+did before this existed.
+
+**BOTH APPS.** Desktop: `jarvis-desktop/src/coming-up.js` (`carryOf`,
+`todoDays`, `todoModes`, and the tag as a meta line on a rollover row),
+`src/brain.js` (the tag, and the day headings in "Day by day"),
+`src/todo-carryover-settings.js` + `src/settings.html` (Settings -> "To-do list
+carry-over"), `src-tauri/src/todo_carryover.rs` (one command: the read, and
+`{mode}` to change it). Phone: `net/Schedule.kt` (`carry`, `createdDate`,
+`todoMode`, `todoModes`, `todoDays`, `todoModeBody`, `carryOf`),
+`ui/screens/ComingUpPlate.kt` (the tag, and the day headings),
+`ui/screens/TodoCarryoverPlate.kt` + `ui/screens/LimitsPlate.kt`'s card (the
+same two modes, drawn from the PC's own words), `JarvisRuntime.setTodoMode`.
+Nothing is decided by a client's clock: the PC wrote the item and the PC says
+how old it is, so a phone a day out cannot mislabel it.
+
+**WHAT IT DOES NOT DO.** It does not "close" yesterday: no item is moved,
+archived or hidden by the day turning over, and the list is the SAME rows read
+two ways. It adds no new route, no card and no gate, and it changes nothing
+about adding, ticking off or removing an item (`done` and `delete` are exactly
+what they were). The Today board's own `rollover_cards` is untouched and still
+returns `[]` - this is the scheduler's to-do list, not the board.
+
+**THE SECTION NUMBER, AND THE CHECK THAT USED TO FAIL.** The rule in
+`backend/test_pictures.py` used to want sections 129..N with no gap; it now
+wants them unique and strictly ascending, with at most three missing between
+neighbours (Gemini's ruling 1, 2026-11-02, which replaced the contiguous pin).
+This file adds **179**: 175 is on `main` from #1074's squash merge, and 176,
+177 and 178 are held by the in-flight #1073, #1091 and #1092, so exactly three
+are missing between 175 and 179 - the most that rule allows - and the check
+passes. The number is deliberate: the Lead reassigned it from 178 on
+2026-11-02 so it cannot collide with #1092's. Verified at the desk, not
+assumed.

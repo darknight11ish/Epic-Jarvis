@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.jarvis.client.InternalLaunch
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
@@ -154,13 +155,12 @@ object ApprovalNotifier {
         silenced = 0
         warnedSilenced = false
 
-        val live = pending.associateBy { it.id }
-
-        for ((id, notificationId) in assigned.entries.toList()) {
-            if (id !in live) {
-                manager.cancel(notificationId)
-                assigned.remove(id)
-            }
+        // The cards that have been answered elsewhere, or have expired, lose
+        // their notification in the same pass that posts the rest. The rule is
+        // in ApprovalNotificationPolicy.cleared, so a JVM test can hold
+        // "the card clears, the notification goes" without a phone.
+        for (id in ApprovalNotificationPolicy.cleared(assigned.keys, pending)) {
+            assigned.remove(id)?.let { manager.cancel(it) }
         }
 
         for (item in pending) {
@@ -305,42 +305,58 @@ object ApprovalNotifier {
             .addExtras(Bundle().apply { putString(EXTRA_APPROVAL_ID, item.id) })
             .setGroup(GROUP)
             .setContentIntent(openCard(context, item.id, notificationId))
-            // Deny only, never Approve - and Deny only when the desktop's own
-            // notice says refusing without reading is safe.
+            // The owner's ask of 2026-11-02, under Gemini's five-point
+            // envelope: Deny, Approve, and Review in Jarvis when the words do
+            // not fit. The DECISION of which button may exist is
+            // ApprovalNotificationPolicy's (and its JVM tests'); this block
+            // only turns that decision into Android actions.
             //
-            // Approve is not offered on any account, and would be ignored by
-            // EventService if it somehow arrived: approving from a
-            // notification is refused on this side's own terms, not on the
-            // server's say-so. Both gates that make an approval safe live
-            // inside the app - the staleness check, which refuses to send a
-            // decision the phone cannot confirm is still live, and the
-            // fingerprint on anything outbound or irreversible - and a
-            // notification action from the lock screen routes around both.
+            // Every approve action asks Android to require an unlocked device
+            // (`setAuthenticationRequired(true)`): the system itself refuses
+            // to deliver the PendingIntent until then, so the lock-screen half
+            // of the envelope cannot be lost by a future code path forgetting
+            // a check in Kotlin. Deny carries none - refusing without reading
+            // is the safe direction, and it was already allowed from the lock
+            // screen before this feature.
             //
-            // Deny carries neither gate even inside the app - see
-            // MainActivity.onDeny, which sends `decide(item, approve = false)`
-            // with no biometric prompt - so offering it here moves the same
-            // unguarded call to a second surface rather than weakening
-            // anything. This was declined once before on the reasoning that
-            // the extra tap is cheap and a notification is the surface where
-            // a mistaken tap is least recoverable; asked again, the answer
-            // was to add it.
+            // A small read-only card (the owner's 2026-11-01 exemption) sends
+            // the decision through EventService, which re-reads the live card
+            // and re-checks `isSmall` before deciding - the notification is
+            // never the authority. Every other card's Approve opens
+            // MainActivity on that card and runs its own gate; MainActivity
+            // forces the BiometricPrompt for these even where the card alone
+            // would not have asked (ApprovalNotificationPolicy
+            // .notificationApproveNeedsCheck), so the fingerprint is never
+            // bypassed by the notification route.
             .apply {
-                if (item.notice?.denyOk != false) {
-                    addAction(
-                        R.drawable.ic_notification,
-                        context.getString(R.string.approval_deny_action),
-                        denyIntent(context, item, notificationId),
-                    )
+                for (offered in ApprovalNotificationPolicy.plan(item, sec, locked, title, body).actions) {
+                    val label = when (offered.action) {
+                        ApprovalNotificationPolicy.Action.DENY -> R.string.approval_deny_action
+                        ApprovalNotificationPolicy.Action.APPROVE_DIRECT,
+                        ApprovalNotificationPolicy.Action.APPROVE_IN_APP,
+                        -> R.string.approval_approve_action
+                        ApprovalNotificationPolicy.Action.REVIEW -> R.string.approval_review_action
+                    }
+                    val intent = when (offered.action) {
+                        ApprovalNotificationPolicy.Action.DENY ->
+                            denyIntent(context, item, notificationId)
+                        ApprovalNotificationPolicy.Action.APPROVE_DIRECT ->
+                            approveHereIntent(context, item, notificationId)
+                        ApprovalNotificationPolicy.Action.APPROVE_IN_APP ->
+                            approveInAppIntent(context, item, notificationId)
+                        ApprovalNotificationPolicy.Action.REVIEW ->
+                            openCard(context, item.id, notificationId)
+                    }
+                    addAction(action(context, label, intent, offered.requiresUnlock))
                 }
             }
             // The owner's own notification style (2026-10-30). A no-op when no
             // style is live for approval cards, or while [locked] is true - so
             // a locked phone gets exactly the notification it got before this
             // feature existed, and the redacted path never meets the custom
-            // layout. It changes only HOW the words are drawn: Deny stays the
-            // only action, Approve is still offered nowhere, and the approval
-            // id, the group and the tap-through are untouched.
+            // layout. It changes only HOW the words are drawn: the buttons are
+            // still exactly ApprovalNotificationPolicy's, and the approval id,
+            // the group and the tap-through are untouched.
             .apply {
                 StyledNotification.apply(
                     this, context, NotificationStyle.Kind.APPROVAL, title, body, locked,
@@ -349,6 +365,12 @@ object ApprovalNotifier {
             .build()
     }
 
+    /**
+     * The lock screen's copy: [ApprovalNotificationPolicy.PUBLIC_WORDS] and
+     * nothing else. No card title, no summary, no action name and no count of
+     * anything private - the owner's own sentence, and the same whether one
+     * card or five is waiting.
+     */
     private fun redacted(context: Context): Notification =
         NotificationCompat.Builder(context, CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
@@ -356,9 +378,9 @@ object ApprovalNotifier {
             // Android bridges notifications to a paired device otherwise.
             .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(context.getString(R.string.app_name))
-            .setContentText(context.getString(R.string.approval_locked))
+            .setContentTitle(ApprovalNotificationPolicy.PUBLIC_WORDS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(openCard(context, null, SUMMARY_ID))
             .build()
 
     private fun summary(context: Context, count: Int, loud: Boolean): Notification =
@@ -408,6 +430,79 @@ object ApprovalNotifier {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+    }
+
+    /**
+     * The Approve that may submit on its own: a small read-only card, tapped
+     * on an unlocked phone.
+     *
+     * It routes to [EventService] for the same reason Deny does, and it is
+     * NOT trusted: the service re-reads the live queue, re-checks that the
+     * card is still small, and re-checks the phone's privacy state before it
+     * calls `decide`. The notification only says which card the finger meant.
+     *
+     * The intent carries [InternalLaunch]'s proof. EventService is not
+     * exported, so no other app can send it - but a decision route should
+     * still be able to say where it came from.
+     */
+    private fun approveHereIntent(context: Context, item: PendingItem, notificationId: Int): PendingIntent {
+        val intent = Intent(context, EventService::class.java)
+            .setAction(EventService.ACTION_APPROVE)
+            .putExtra(EXTRA_APPROVAL_ID, item.id)
+        InternalLaunch.stamp(context, intent)
+        return PendingIntent.getService(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /**
+     * The Approve that must NOT submit on its own: it opens Jarvis on the
+     * card, where the same `BiometricPrompt` path the card's own button uses
+     * runs before anything is sent.
+     *
+     * This is the write/config/send-file/phone-app half of Gemini's ruling.
+     * The action still says "Approve" because that is what the owner means;
+     * what it opens is the approval, not a decision already taken.
+     */
+    private fun approveInAppIntent(context: Context, item: PendingItem, notificationId: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .setAction(InternalLaunch.APPROVE_ACTION)
+            .putExtra(EXTRA_APPROVAL_ID, item.id)
+        InternalLaunch.stamp(context, intent)
+        return PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /**
+     * One notification action.
+     *
+     * [requiresUnlock] is `setAuthenticationRequired(true)`: Android will not
+     * deliver the PendingIntent until the device is unlocked. It is set from
+     * [ApprovalNotificationPolicy.Offered] and nowhere else, so the two
+     * approve actions cannot drift apart, and Deny/Review stay reachable on
+     * the lock screen exactly as the envelope allows.
+     */
+    private fun action(
+        context: Context,
+        label: Int,
+        intent: PendingIntent,
+        requiresUnlock: Boolean,
+    ): NotificationCompat.Action {
+        val builder = NotificationCompat.Action.Builder(
+            R.drawable.ic_notification,
+            context.getString(label),
+            intent,
+        )
+        if (requiresUnlock) builder.setAuthenticationRequired(true)
+        return builder.build()
     }
 
     private fun openCard(context: Context, approvalId: String?, requestCode: Int): PendingIntent {

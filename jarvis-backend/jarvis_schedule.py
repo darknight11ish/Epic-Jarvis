@@ -145,6 +145,7 @@ the scrubber worked.
 from __future__ import annotations
 
 import atexit
+import datetime
 import hashlib
 import json
 import os
@@ -527,6 +528,10 @@ CREATE TABLE IF NOT EXISTS commands (
     digest TEXT PRIMARY KEY,
     at     REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 #: Columns added after the first release (2026-09-25): a file made before
@@ -574,7 +579,20 @@ _ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "
                   # only when it decodes to a known kind, and old code ignores
                   # the column, so a code rollback stays safe: the same contract
                   # `rank` was added under.
-                  ("action", "TEXT"))
+                  ("action", "TEXT"),
+                  # The day a to-do item was written (2026-11-02, the owner's
+                  # choice; Gemini's ruling 8): a calendar day as YYYY-MM-DD in
+                  # THIS PC's own local time. It is written once, when the row
+                  # is created, and never rewritten - not at midnight, not by an
+                  # edit, not by the mode switch. It is what "carry over with a
+                  # tag saying how old it is" is measured from, so a rollover
+                  # that moved it to today would erase the very thing being
+                  # shown. Every row written before this column exists is
+                  # backfilled from its own `created` stamp (or today, for a
+                  # legacy row with no usable stamp) the first time this code
+                  # opens the file; see `_backfill_created_dates`. Old code
+                  # ignores the column, so a code rollback stays safe.
+                  ("created_date", "TEXT"))
 
 #: The one value `jobs.source_taint` holds. It is a value, not a boolean, so
 #: a later reason (a pasted-text job, say) can be added without a rewrite.
@@ -1003,6 +1021,136 @@ def _digest(text: str) -> str:
 
 
 # --------------------------------------------------------------------------
+#   A to-do item's own day, and the two ways of showing it (2026-11-02)
+# --------------------------------------------------------------------------
+# THE OWNER'S CHOICE (2026-11-02 ~00:41 PT, after measuring the gap: yesterday's
+# unfinished items DID appear tomorrow but nothing said they were yesterday's).
+# He asked for BOTH, with full daily rollover as the DEFAULT:
+#
+#   * every to-do item keeps the day it was written, for good. It is
+#     `created_date`, a calendar day in THIS PC's local time, written once when
+#     the row is created and never rewritten. There is deliberately no code
+#     path that moves it: a rollover that stamped everything with today would
+#     erase the age it is supposed to show (Gemini's ruling 8, 2026-11-02);
+#   * ROLLOVER (the default): today's list is every open item written today or
+#     earlier, and each older one carries a tag saying how old it is:
+#         1 day      "from yesterday"
+#         2-6 days   "from <Weekday> (<N>d ago)"     e.g. "from Friday (3d ago)"
+#         7+ days    "from <MMM D>"                  e.g. "from Oct 26"
+#     A 3-day-old item therefore never says "from yesterday" - the wording is
+#     measured from `created_date`, never from "is it still on the list";
+#   * DAY BY DAY: each item stays on its own day instead, grouped under that
+#     day's own heading. NOTHING is moved, copied or deleted by the switch - the
+#     rows and their `created_date` are identical in both modes, which is what
+#     makes toggling 100% lossless. The mode is ONE value in this file
+#     (`meta['todo_mode']`), changed from either app's Settings, or by asking
+#     Jarvis in chat (`jarvis_settings_registry.py`'s `todo_carryover` setting
+#     is the one door, so a tap and a sentence cannot disagree).
+#
+# The tag words are built HERE, on the PC, and handed to both apps - the same
+# rule `age_s` follows. A phone whose clock is a day behind must never decide
+# for itself that yesterday's item is today's.
+TODO_MODE_ROLLOVER = "rollover"
+TODO_MODE_DAY = "day"
+TODO_MODE_DEFAULT = TODO_MODE_ROLLOVER
+TODO_MODES = (TODO_MODE_ROLLOVER, TODO_MODE_DAY)
+
+#: The two modes in the owner's words, for the Settings switch on both apps and
+#: for the answer a spoken sentence gets. Handed out by `status()`.
+TODO_MODE_WORDS = (
+    {"value": TODO_MODE_ROLLOVER, "label": "Daily rollover",
+     "detail": "Today's list is everything still open, and each older item says how "
+               "old it is: from yesterday, from Friday (3d ago), from Oct 26."},
+    {"value": TODO_MODE_DAY, "label": "Day by day",
+     "detail": "Each day keeps its own list. An item stays on the day it was written, "
+               "and yesterday's unfinished ones are not moved to today."},
+)
+
+
+def _day_of(ts) -> str:
+    """The local calendar day a moment falls on, YYYY-MM-DD ("" for junk)."""
+    try:
+        return time.strftime("%Y-%m-%d", time.localtime(float(ts)))
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+
+
+def _day_date(day) -> Optional[datetime.date]:
+    """A stored YYYY-MM-DD as a date, or None when it is not one."""
+    try:
+        parts = [int(x) for x in str(day or "").split("-")]
+        if len(parts) != 3:
+            return None
+        return datetime.date(parts[0], parts[1], parts[2])
+    except (TypeError, ValueError):
+        return None
+
+
+def _day_gap(day, today) -> int:
+    """How many days `day` is BEFORE `today` (0 today, 1 yesterday, -1 future).
+    0 when either is not a real day, which reads as "today" everywhere below -
+    a damaged value never becomes a claim about how old an item is."""
+    a, b = _day_date(day), _day_date(today)
+    if a is None or b is None:
+        return 0
+    return (b - a).days
+
+
+def _weekday_name(day) -> str:
+    d = _day_date(day)
+    return d.strftime("%A") if d is not None else ""
+
+
+def _short_day(day) -> str:
+    d = _day_date(day)
+    return f"{d.strftime('%b')} {d.day}" if d is not None else ""
+
+
+def carry_words(created_date, now: float) -> str:
+    """"from yesterday" / "from Friday (3d ago)" / "from Oct 26", or "" for an
+    item written today (or one with no usable day). ONE function, so the two
+    apps and the spoken read-out can never say it differently."""
+    today = _day_of(now)
+    n = _day_gap(created_date, today)
+    if n <= 0:
+        return ""
+    if n == 1:
+        return "from yesterday"
+    if n < 7:
+        return f"from {_weekday_name(created_date)} ({n}d ago)"
+    return f"from {_short_day(created_date)}"
+
+
+def day_label(created_date, now: float) -> str:
+    """The heading a day-labelled list puts above one day's items: "Today",
+    "Yesterday", "Friday (3d ago)", "Oct 26"."""
+    today = _day_of(now)
+    n = _day_gap(created_date, today)
+    if n <= 0:
+        return "Today"
+    if n == 1:
+        return "Yesterday"
+    if n < 7:
+        return f"{_weekday_name(created_date)} ({n}d ago)"
+    return _short_day(created_date)
+
+
+def _todo_days(items: list, now: float) -> list:
+    """A day-labelled view of the same items: [{date, label, count, items}],
+    today's day first, then each earlier one. `items` are the ids of the rows
+    in the flat `todo` list, so a client never receives one twice."""
+    groups: dict = {}
+    for j in items:
+        day = str(j.get("created_date") or _day_of(now))
+        groups.setdefault(day, []).append(str(j.get("id")))
+    out = []
+    for day in sorted(groups, reverse=True):
+        out.append({"date": day, "label": day_label(day, now),
+                    "count": len(groups[day]), "items": groups[day]})
+    return out
+
+
+# --------------------------------------------------------------------------
 #   Named lists
 # --------------------------------------------------------------------------
 
@@ -1148,11 +1296,22 @@ class Scheduler:
                 needs_backfill = c.execute(
                     "SELECT 1 FROM jobs WHERE kind = 'todo' AND state IN ('active','paused') "
                     "AND rank IS NULL LIMIT 1").fetchone() is not None
-            if missing or needs_backfill:
+            # The to-do day carry-over (2026-11-02): a row written before
+            # `created_date` existed has none, and is stamped from its own
+            # `created` on this first open. A row that already has one is never
+            # touched - the column is immutable by design (see the day section
+            # above), and re-stamping it here would be exactly the midnight
+            # rewrite the owner ruled out.
+            needs_days = False
+            if "created_date" in have and not missing:
+                needs_days = c.execute(
+                    "SELECT 1 FROM jobs WHERE created_date IS NULL LIMIT 1").fetchone() is not None
+            if missing or needs_backfill or needs_days:
                 c.execute("BEGIN IMMEDIATE")
                 for name, typ in missing:
                     c.execute(f"ALTER TABLE jobs ADD COLUMN {name} {typ}")
                 self._backfill_ranks(c)
+                self._backfill_created_dates(c)
 
     def _backfill_ranks(self, c) -> None:
         """One-time rank backfill (HUD Reminders Phase 2, 2026-10-22).
@@ -1181,6 +1340,34 @@ class Scheduler:
             value = nxt.get(key, 0)
             c.execute("UPDATE jobs SET rank = ? WHERE id = ?", (value, r["id"]))
             nxt[key] = value + 1
+
+    def _backfill_created_dates(self, c) -> None:
+        """One-time backfill of `created_date` (2026-11-02).
+
+        Every row with no day of its own is stamped from its own `created`
+        stamp, in local time; a legacy row whose stamp is missing or unusable is
+        stamped TODAY, as the owner's brief says - there is no honest way to know
+        when it was written, and today is the one answer that never claims an age
+        the data cannot support.
+
+        Idempotent by construction: it reads only rows where the column is NULL
+        and writes only those (`AND created_date IS NULL` in the UPDATE too, so
+        two writers cannot fight). Never runs on the hot path: after the first
+        open there is nothing NULL left to stamp."""
+        rows = c.execute("SELECT id, created FROM jobs WHERE created_date IS NULL").fetchall()
+        if not rows:
+            return
+        today = _day_of(self.now())
+        for r in rows:
+            try:
+                stamp = float(r["created"])
+            except (TypeError, ValueError):
+                stamp = 0.0
+            # A zero (or negative) `created` is the legacy row the brief names:
+            # there is no timestamp to read, and 1970 is not an honest age.
+            day = (_day_of(stamp) if stamp > 0 else "") or today
+            c.execute("UPDATE jobs SET created_date = ? WHERE id = ? AND created_date IS NULL",
+                      (day, r["id"]))
 
     # ---- storage ------------------------------------------------------------
 
@@ -1236,14 +1423,18 @@ class Scheduler:
                 rank = int(top) + 1
             c.execute("INSERT INTO jobs (id, kind, text, state, due, rule, duration, created, "
                       "changed, source, list_name, snooze_of, extra, context_bundle, trigger, "
-                      "condition_kind, condition_target, rank, source_taint, action) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      "condition_kind, condition_target, rank, source_taint, action, created_date) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (jid, kind, text, state, due,
                        json.dumps(rule) if rule else None, duration, now, now, source,
                        list_name, snooze_of, json.dumps(extra) if extra else None,
                        json.dumps(context_bundle) if context_bundle else None,
                        trigger or "time", condition_kind, condition_target, rank, taint,
-                       json.dumps(action) if action else None))
+                       json.dumps(action) if action else None,
+                       # The day this row was written, set ONCE here and never
+                       # written again by any path (2026-11-02). An item's age is
+                       # measured from it for as long as it stays open.
+                       _day_of(now)))
         _audit("schedule.add", {"id": jid, "kind": kind, "repeats": bool(rule)})
         self._changed(jid, kind)
         return jid
@@ -1369,6 +1560,44 @@ class Scheduler:
                             "('active','paused','waiting')",
                             (json.dumps(extra or {}), self.now(), str(jid)))
             return cur.rowcount > 0
+
+    # ---- the to-do list's one mode (2026-11-02) ----------------------------
+
+    def todo_mode(self) -> str:
+        """Which way the to-do list is shown, "rollover" (the default) or "day".
+
+        ONE value in this file, kept in `meta`, so the Settings switch on either
+        app, a spoken sentence and a fact test all read the same answer. An
+        unknown or damaged value reads as the default rather than raising: a
+        schedule.db edited by hand must not stop the to-do list from opening."""
+        with self._lock, self._db() as c:
+            row = c.execute("SELECT value FROM meta WHERE key = ?", ("todo_mode",)).fetchone()
+        mode = str(row["value"]) if row is not None else ""
+        return mode if mode in TODO_MODES else TODO_MODE_DEFAULT
+
+    def set_todo_mode(self, mode) -> str:
+        """Change the mode and return the one now in force. ValueError, with the
+        owner's own wording, for anything that is not one of the two.
+
+        It moves NO item and rewrites NO `created_date`: the very same rows are
+        handed out in the other shape, which is what makes the switch lossless
+        in both directions."""
+        want = " ".join(str(mode or "").split()).lower()
+        if want not in TODO_MODES:
+            raise ValueError("the to-do list is either \"rollover\" (today's list carries "
+                             "yesterday's open items) or \"day\" (each day keeps its own)")
+        with self._lock, self._db() as c:
+            c.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                      ("todo_mode", want))
+        _audit("schedule.todo_mode", {"mode": want})
+        return want
+
+    def todo_days(self) -> list:
+        """The open to-do items grouped by the day they were written, for the
+        day-labelled mode: [{date, label, count, items}], today first. Each
+        entry's `items` are ids into the same flat `todos()` list."""
+        now = self.now()
+        return _todo_days(self.todos(), now)
 
     def listed_of(self, kind: str) -> list:
         """The ACTIVE jobs of one kind, oldest first, as raw fields - {"id",
@@ -2757,6 +2986,24 @@ class Scheduler:
         if kind == "todo":
             # "" is the to-do list itself; a name is a named list ("shopping").
             v["list"] = row["list_name"] or ""
+            # The day it was written, and how old that is in the owner's own
+            # words (2026-11-02). `carry` is absent for an item written today
+            # and for one with no usable day - so old payloads grow no keys they
+            # did not have, and today's item never says "from today".
+            try:
+                created_date = str(row["created_date"] or "")
+            except (IndexError, KeyError):
+                created_date = ""
+            if not _day_date(created_date):
+                try:
+                    stamp = float(row["created"])
+                except (TypeError, ValueError):
+                    stamp = 0.0
+                created_date = (_day_of(stamp) if stamp > 0 else "") or _day_of(now)
+            v["created_date"] = created_date
+            carry = carry_words(created_date, now)
+            if carry:
+                v["carry"] = carry
         if row["snooze_of"]:
             v["snoozed"] = True
         # Phase 2: a to-do's position within its list, a number (None for an
@@ -2931,6 +3178,7 @@ class Scheduler:
 
     def status(self) -> dict:
         now = self.now()
+        todo = self.todos()
         return {# Phase 2 (2026-10-22): ONE additive boolean capability marker -
                 # a newer UI hides edit/move/reorder controls when it is absent
                 # (an older backend), and every old client ignores it.
@@ -2943,7 +3191,17 @@ class Scheduler:
                 # when this is absent and says why, and every old client ignores
                 # the key. The same contract `phase2` has.
                 "actions": True, "now": now, "tz": _tz_name(now),
-                "jobs": self.listed(), "todo": self.todos(),
+                "jobs": self.listed(), "todo": todo,
+                # The to-do list's own day (2026-11-02): which mode is in
+                # force, the two modes in the owner's words for the Settings
+                # switch, and - for the day-labelled one - the same open items
+                # grouped by the day they were written. `todo` itself is
+                # UNCHANGED in both modes: the flat list, in the PC's order, with
+                # `created_date` and (when it is older than today) `carry` on
+                # each item. An app from before this ignores all three keys.
+                "todo_mode": self.todo_mode(),
+                "todo_modes": [dict(m) for m in TODO_MODE_WORDS],
+                "todo_days": _todo_days(todo, now),
                 # 2026-09-25: what went off in the last hour (Snooze), and
                 # the named lists. An app from before them ignores both.
                 "went_off": self.went_off(now), "lists": self.lists(),
@@ -3122,6 +3380,19 @@ def start() -> Scheduler:
     return get()
 
 
+def set_todo_mode_here(mode) -> str:
+    """Change the to-do list's mode from THIS process, and return the one now in
+    force (2026-11-02).
+
+    This is the ONE door the settings registry calls
+    (`jarvis_settings_registry.set_todo_carryover`), so a sentence typed or
+    spoken at Jarvis, the Settings switch on either app and
+    POST /api/schedule/act {"do": "todo_mode"} all end at the same method - they
+    cannot disagree about the state. ValueError for anything that is not one of
+    the two modes."""
+    return get().set_todo_mode(mode)
+
+
 def was_command(text: str) -> bool:
     """For jarvis_intake.owner_turns: did this sentence set a job? False on
     any failure - the other checks there still run."""
@@ -3166,6 +3437,34 @@ def _num(v) -> Optional[float]:
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return None
     return float(v)
+
+
+def handle_mode(body: dict) -> tuple:
+    """The to-do list's ONE mode (2026-11-02), through POST /api/schedule/act.
+
+    Body: {"do": "todo_mode", "mode": "rollover" | "day"}. Nothing else is
+    taken: one value, no items, no times. No approval card either way - it
+    changes how the owner's own list is DRAWN and touches no item: no row is
+    moved, copied, deleted or re-stamped, so there is nothing to ask about and
+    nothing to undo.
+
+    It rides `/api/schedule/act` rather than a route of its own on purpose: the
+    one scheduler keeps ONE write door for changes that need no card (the same
+    choice `clear_list` made), and adding a route to `jarvis_hud.py` here would
+    have re-anchored two later patches' invented pre-images in the patch-stack
+    audit (`tools/check_patch_original_text.py`) for no gain to the owner."""
+    body = body if isinstance(body, dict) else {}
+    try:
+        mode = get().set_todo_mode(body.get("mode"))
+    except ValueError as exc:
+        return 400, {"ok": False, "error": _sentence(exc)}
+    except Exception as exc:                       # noqa: BLE001 - code only
+        return 503, {"ok": False, "error": type(exc).__name__}
+    said = ("Today's list is everything still open, and each item says how old it is."
+            if mode == TODO_MODE_ROLLOVER else
+            "Each day keeps its own list now. Nothing was moved and nothing was lost.")
+    return 200, {"ok": True, "mode": mode, "said": said,
+                 "todo_modes": [dict(m) for m in TODO_MODE_WORDS]}
 
 
 def wall_at(date, hhmm) -> float:
@@ -3281,12 +3580,22 @@ def handle_act(body: dict) -> tuple:
      (cardless) / repeat (ONE card, old rule active until approved) / a to-do's
     list; {"id", "do": "move", "list"?} - a to-do to a named list or null for
     the to-do list; {"id", "do": "reorder", "rank"?|"before"?|"after"?} - a
-    to-do's position within its list. The one other form:
+    to-do's position within its list. Two forms are not one job:
     {"do": "clear_list", "list", "count"} - one NAMED list, cleared after the
-    app's "are you sure?"."""
+    app's "are you sure?" - and, since 2026-11-02,
+    {"do": "todo_mode", "mode": "rollover"|"day"} - which way the to-do list is
+    shown (see `handle_mode`)."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "need a JSON object"}
-    if str(body.get("do") or "").strip().lower() == "clear_list":
+    verb = str(body.get("do") or "").strip().lower()
+    if verb == "todo_mode":
+        # The second form that is not one job (2026-11-02, the owner's choice):
+        # the to-do list's own mode. It moves no item, deletes nothing and
+        # re-stamps no day, so it rides this route rather than opening a second
+        # write door to the one scheduler - the same reason `clear_list` is the
+        # first such form.
+        return handle_mode(body)
+    if verb == "clear_list":
         # The one form that is not one job: every item on ONE named list,
         # after the app's "are you sure?", and only when `count` matches what
         # the app showed (Scheduler.clear_list). Never the to-do list.

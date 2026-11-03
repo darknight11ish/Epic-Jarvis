@@ -35,6 +35,18 @@ object InternalLaunch {
     /** The intent extra that carries the secret. */
     const val EXTRA_PROOF = "com.jarvis.client.extra.INTERNAL_PROOF"
 
+    /**
+     * The approval notification's Approve, the one that must open Jarvis and
+     * run the card's own check (2026-11-02).
+     *
+     * It is a separate action from [com.jarvis.client.service.ApprovalNotifier
+     * .ACTION_OPEN_APPROVAL] because it does more than focus a card: it runs
+     * the same `BiometricPrompt` the card's Approve runs. MainActivity is
+     * exported, so this action is honoured only with [EXTRA_PROOF] and only on
+     * a fresh launch - see [approvesApproval].
+     */
+    const val APPROVE_ACTION = "com.jarvis.client.APPROVE_APPROVAL"
+
     private const val PREFS = "internal_launch"
     private const val KEY = "proof"
 
@@ -69,6 +81,23 @@ object InternalLaunch {
             else -> Launch.IGNORE
         }
     }
+
+    /**
+     * Whether a notification's Approve may run here.
+     *
+     * Three things together, and every one of them is required:
+     *  - the action is [APPROVE_ACTION], not any other intent action;
+     *  - [fresh] is true, so a rotation or a replay from Recents cannot fire
+     *    an approval again from an intent already answered;
+     *  - [presented] proves this app's own notification posted it, which no
+     *    other app can forge because the secret is in this app's private
+     *    storage.
+     *
+     * Nothing about the CARD is decided here - the card is re-read from the
+     * live queue and its own gate still runs (MainActivity.approveItem).
+     */
+    fun approvesApproval(action: String?, presented: String?, expected: String?, fresh: Boolean): Boolean =
+        action == APPROVE_ACTION && fresh && proves(presented, expected)
 
     /** The secret, made on first use. */
     @Synchronized

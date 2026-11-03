@@ -411,29 +411,42 @@ class AppProjectsTest {
             s.startsWith("//") || s.startsWith("*") || s.startsWith("/*")
         }
 
+    /**
+     * The owner asked for an Approve button on the notification on 2026-11-02,
+     * under Gemini's envelope. This test keeps the widget out of that change,
+     * and pins the two rules that make the notification's Approve safe:
+     *
+     *  - [com.jarvis.client.service.ApprovalNotifier] itself NEVER decides.
+     *    It builds intents; the decision is taken by a surface that re-reads
+     *    the live queue.
+     *  - the only direct approve in the service is guarded by
+     *    `SecurityRules.isSmall`, so a write/config/send/phone-app card can
+     *    never take that path even if a notification was posted for it.
+     */
     @Test
-    fun `the widget and the notification never approve - Deny and opening the app are all they do`() {
+    fun `the widget never approves, and the notification's only direct approve is a small card`() {
         val base = "jarvis-client/app/src/main/java/com/jarvis/client"
         val files = listOf("widget", "service").flatMap { sourceDir("$base/$it").listFiles().orEmpty().toList() }
             .filter { it.name.endsWith(".kt") }
         assertTrue("found the widget and service sources", files.any { it.name == "ApprovalWidget.kt" } &&
             files.any { it.name == "ApprovalNotifier.kt" })
-        val approving = Regex("""approve\s*=\s*true|\.approve\(|decideDetached\(|Approve\w*Callback""")
         val deciding = Regex("""JarvisRuntime\.decide\w*\(""")
-        for (f in files) {
-            for (line in codeLines(f)) {
-                assertFalse("${f.name} must not approve: $line", approving.containsMatchIn(line))
-                if (deciding.containsMatchIn(line)) {
-                    assertTrue("${f.name}: a decision from here can only be a Deny: $line", "approve = false" in line)
-                }
-            }
-        }
-        // The widget's way to Approve is to open the app, where the card and the check are.
+        // The widget is unchanged: Approve there still means "open the app".
         val widget = codeLines(files.first { it.name == "ApprovalWidget.kt" }).joinToString("\n")
+        assertFalse(widget.contains("JarvisRuntime.decide"))
+        assertFalse(widget.contains("approve = true"))
         assertTrue(widget.contains("actionStartActivity<MainActivity>()"))
-        // The notification carries exactly one action, and it is Deny.
+        // The notifier builds buttons, never a decision.
         val notifier = codeLines(files.first { it.name == "ApprovalNotifier.kt" }).joinToString("\n")
-        assertEquals(1, Regex("""addAction\(""").findAll(notifier).count())
-        assertTrue(notifier.contains("denyIntent(context, item, notificationId)"))
+        assertFalse("ApprovalNotifier must not decide anything", deciding.containsMatchIn(notifier))
+        assertTrue(notifier.contains("EventService.ACTION_APPROVE"))
+        assertTrue(notifier.contains("InternalLaunch.APPROVE_ACTION"))
+        // The service's one direct approve is the small-card path, and it
+        // re-checks the live card before it sends.
+        val event = codeLines(files.first { it.name == "EventService.kt" }).joinToString("\n")
+        assertTrue(event.contains("JarvisRuntime.decide(item, approve = true)"))
+        assertTrue(event.contains("SecurityRules.isSmall(item)"))
+        assertTrue(event.contains("ApprovalNotificationPolicy.notificationApproveNeedsCheck")
+            || event.contains("SecurityRules.approvalNeedsCheck(security, item)"))
     }
 }

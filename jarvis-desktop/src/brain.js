@@ -141,6 +141,7 @@ import {
   actionsOf,
   addPlaceholder,
   anyTicking,
+  carryOf,
   CLEAR_LIST_LABEL,
   clearListQuestion,
   EMPTY_JOBS,
@@ -156,6 +157,7 @@ import {
   standbyTimes,
   tagOf,
   titleOf,
+  todoDays,
   todoItems,
   WAITING,
   WENT_OFF_ACTIONS,
@@ -9620,6 +9622,34 @@ function wentOffRow(job) {
  * an Add box, and Clear list. While the private lists are hidden the names
  * and words are gone (Rust took them out) and nothing is offered but Show.
  */
+/**
+ * The to-do list in "Day by day" (2026-11-02; JARVIS-API section 179): the
+ * SAME open items, grouped under the heading of the day the PC says each was
+ * written ("Today", "Yesterday", "Friday (3d ago)", "Oct 26"). Nothing is
+ * moved, copied or re-ordered by this - it is the rollover list's own rows,
+ * drawn in their own days - so switching the mode back and forth loses
+ * nothing. The day is already on the heading, so each row keeps its words and
+ * grows no second tag.
+ */
+function paintTodoDays(v, todo) {
+  const days = todoDays(v);
+  if (!days.length) {
+    dom.todoList.replaceChildren(el("p", "empty", EMPTY_TODO));
+    return;
+  }
+  const out = [];
+  for (const d of days) {
+    const part = el("div", "todo-day");
+    part.dataset.date = d.date;
+    part.append(el("h3", "subhead", d.label));
+    const list = el("div", "rows");
+    for (const j of d.items) list.append(scheduleRow(j, todo));
+    part.append(list);
+    out.push(part);
+  }
+  dom.todoList.replaceChildren(...out);
+}
+
 function paintNamedLists(v) {
   const box = dom.namedLists;
   if (!box) return;
@@ -9629,7 +9659,7 @@ function paintNamedLists(v) {
     part.dataset.list = l.name;
     part.append(el("h3", "subhead", l.title));
     const list = el("div", "rows");
-    for (const j of l.items) list.append(scheduleRow(j, l.items));
+    for (const j of l.items) list.append(scheduleRow(j, l.items, carryOf(j)));
     part.append(list);
     if (!v.hidden) {
       const form = el("form", "todo-form");
@@ -9685,13 +9715,13 @@ async function addStandby() {
   await loadComingUp();
 }
 
-function scheduleRow(job, groupJobs) {
+function scheduleRow(job, groupJobs, carry = "") {
   const since = Date.now() - upL.readAt;
   const item = row({
     tag: tagOf(job),
     state: job.state === "waiting" ? "warn" : job.state === "paused" ? "" : "ok",
     title: titleOf(job),
-    meta: metaOf(job, since),
+    meta: metaOf(job, since, carry),
     actions: actionsOf(job).map((a) =>
       button(labelOf(a), () => scheduleAct(job, a), { live: true, danger: a === "delete" })),
   });
@@ -9787,7 +9817,11 @@ function paintComingUp() {
   if (dom.wentOff) rows(dom.wentOff, v.wentOff, wentOffRow, "");
   if (dom.todoList) {
     const todo = todoItems(v);
-    rows(dom.todoList, todo, (j) => scheduleRow(j, todo), EMPTY_TODO);
+    if (v.todoMode === "day") {
+      paintTodoDays(v, todo);
+    } else {
+      rows(dom.todoList, todo, (j) => scheduleRow(j, todo, carryOf(j)), EMPTY_TODO);
+    }
   }
   paintNamedLists(v);
   // Its example says "milk": nothing of that shape shows while hidden.
