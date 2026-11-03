@@ -1174,7 +1174,12 @@ def t_a_voice_start_is_the_sessions_own_check():
               "remembered answer may be said, a private one keeps its setting",
               h["memory_aloud"] is True and h["private_aloud"] is False, h)
         sp.calls.clear()
-        h = sp.hear(source="push_to_talk", words="let's talk", seconds=2.5)
+        # The DESKTOP's talk button (`mic=desktop`). The phone's
+        # `push_to_talk`+`phone` clip is #1099's quick message - no voice
+        # check at all, and deliberately no way into Live - so the checked
+        # talk button this feature is about is the desktop's.
+        h = sp.hear(source="push_to_talk", mic="desktop", words="let's talk",
+                    seconds=2.5)
         check("said with the talk button, 'let's talk' is the same one check",
               h["ok"] and h["live"] == "started"
               and sorted(sp.calls) == ["owner_check", "stt"]
