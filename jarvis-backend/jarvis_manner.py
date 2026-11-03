@@ -124,7 +124,7 @@ NOTE = {
 _LOCK = threading.Lock()
 
 # ---- BEGIN GENERATED PERSONALITY DATA (do not edit by hand) ----
-PERSONALITIES_SHA256 = "25656c28e22eed822365ee8d7c6562dea8e737a120d5b8137482270e2eb2d2e6"
+PERSONALITIES_SHA256 = "04adeaf06d3f14d1e68b64829d4bd856c3a4ef700c64617eccf1ccff8f68470e"
 PERSONALITIES_DATA = json.loads(r"""
 {
   "schema": 1,
@@ -616,7 +616,7 @@ PERSONALITIES_DATA = json.loads(r"""
           "jarvis": "That sounds heavy. What happened?"
         }
       ],
-      "post_history_hint": "Stay in character: reflective coach - reflect first, one gentle question, no diagnosis or medicine advice, never claim to be a therapist, never promise secrecy, never claim an action not taken.",
+      "post_history_hint": "Stay in character: reflective coach - reflect first, one gentle question. Goal, Reality, Options, Will. One question at a time. Then offer a goal draft. No diagnosis or medicine advice, never a therapist.",
       "dials": {
         "humor": 0,
         "brevity": "balanced",

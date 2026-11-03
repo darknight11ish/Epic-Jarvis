@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 168,
+  "feature_count": 170,
   "features": [
     {
       "id": "typing",
@@ -9150,6 +9150,108 @@
       "own_intents": [],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "habit-checkins",
+      "name": "Habit check-ins",
+      "group": "Money and health",
+      "surface": "both",
+      "where": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Habit check-ins",
+        "turn_off": "turn off Habit check-ins",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+        "search": [
+          "Habit check-ins"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Backend only today: GET/POST /api/habits and POST /api/habits/<id>/tick, .../untick and .../stop in backend/jarvis_habits.py, installed by the drop-in folder plugins/ready/habits. Neither app has a screen for it yet - the Habits section on the Reminders screen is the next lane.",
+        "search": [
+          "habit check-ins"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "A habit tick is an action, not a stored setting: there is nothing to switch on or off, and the one job it sets up is stopped from its own Stop control rather than a preference. No app has a screen for it yet.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Habit check-ins",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "A habit tick is an action, not a stored setting: there is nothing to switch on or off, and the one job it sets up is stopped from its own Stop control rather than a preference. No app has a screen for it yet.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "mood-log",
+      "name": "Mood log",
+      "group": "Money and health",
+      "surface": "both",
+      "where": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Mood log",
+        "turn_off": "turn off Mood log",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+        "search": [
+          "Mood log"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Backend only today: GET/POST /api/mood in backend/jarvis_mood.py, installed by the drop-in folder plugins/ready/mood. The chart is a display concern and no app draws it yet - the Mood section on the Reminders screen is the next lane.",
+        "search": [
+          "mood log"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "A mood entry is a tap, not a stored setting: there is nothing to switch on or off, and no job of its own. No app has a screen for it yet.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Mood log",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "A mood entry is a tap, not a stored setting: there is nothing to switch on or off, and no job of its own. No app has a screen for it yet.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -13460,11 +13562,11 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 95,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 97,
     "Switchable / Adjustable (Typed & Settings)": 43,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2
   },
-  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features)."
+  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (life-coach set): the Habit check-ins and Mood log rows joined as Command-Only (95 -> 97 Command-Only, 168 -> 170 features), because each is an action with no setting behind it - a habit tick and a 1-5 mood tap - and neither app has a screen for them yet; the Habits/Mood section on the Reminders screen is the next lane."
 }

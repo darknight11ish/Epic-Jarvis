@@ -2347,6 +2347,14 @@ NO_COMMAND_REASON = {
     # is data the owner types into that reminder, not a stored setting - there
     # is nothing to switch on, and the kind that acts raises its own card.
     "reminder-actions": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # The owner's 2026-11-02 life-coach set (JARVIS-API section 180). Both are
+    # ACTIONS with no setting behind them - there is nothing to switch on or
+    # off - and neither app has a screen for them yet, so the row's own `where`
+    # says "backend only today". The Habits/Mood section on the Reminders
+    # screen is the next lane; if it ever adds a real switch, that switch gets
+    # its own row and this reason is deleted (a stale entry FAILS the suite).
+    "habit-checkins": ('not-a-setting', 'A habit tick is an action, not a stored setting: there is nothing to switch on or off, and the one job it sets up is stopped from its own Stop control rather than a preference. No app has a screen for it yet.', 'none-needed'),
+    "mood-log": ('not-a-setting', 'A mood entry is a tap, not a stored setting: there is nothing to switch on or off, and no job of its own. No app has a screen for it yet.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,
