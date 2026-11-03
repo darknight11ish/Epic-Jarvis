@@ -47,6 +47,7 @@ chatbot-routes.patch	chatbot-routes/59b73f8.patch	59b73f84de12bc9c9661fa7ef16200
 chatbot.patch	chatbot/8b95a55.patch	8b95a5550048e1a6ae397787b2f1ac8eef2e6ee5	2026-09-28T01:31:34Z	Chatbot driver, step 2: the Gemini website adapter (not usable from the apps yet)
 cloud-honesty.patch	cloud-honesty/b357424.patch	b357424b0a819745b37e22b674a62009a8f40897	2026-10-27T18:29:29-07:00	fix(honesty): the cloud lane gets the local lane's corrections, and a crisis turn never leaves this PC
 cloud-one-turn.patch	cloud-one-turn/7fda1b7.patch	7fda1b7a7ad8bd26508e0e7bae5a4539ede50410	2026-09-23T22:32:19Z	Follow-ups remember the conversation, on the phone and the quickbar
+cloud-say-yes.patch	cloud-say-yes/e250f32.patch	e250f323a4bd75b6b7021b85ff42c1b893292f47	2026-10-16T03:00:54-07:00	fix(cloud-say-yes): make the patch self-contained, so an older text can be replaced (#472)
 cloud-say-yes.patch	cloud-say-yes/21146d3.patch	21146d37878bd9044b8a462ee4fa4ea321b4570d	2026-10-15T18:47:31-07:00	feat(projects): a project that is not Shareable cannot reach a cloud lane (#468)
 cloud-say-yes.patch	cloud-say-yes/3583bf0.patch	3583bf0211eecf87e9335b33bf6638a5b0d0c606	2026-09-27T20:58:06Z	Backend: the owner's yes reaches jarvis_router's cloud-offer gate
 decide-once.patch	decide-once/6383842.patch	63838420943523cdcb608d60c8669e68bf4fce02	2026-09-16T16:52:07Z	Fix findings from two eight-agent audits: desktop<->Android and memory/self-improvement
@@ -111,6 +112,7 @@ memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d4
 no-expiry-cards.patch	no-expiry-cards/0712359.patch	07123594c31eff25ac0ab2a4ec693740eef602cc	2026-10-23T15:49:55-07:00	feat(gate): only pairing, an approval key and a restore may never expire (rescue #4, Q1)
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49Z	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28Z	Logseq and Joplin notes that are really filed
+ollama-direct.patch	ollama-direct/310c72a.patch	310c72a179c13c9d87cdc23a5a35a649d45233fc	2026-10-06T23:58:10-07:00	the cloud lane asks the service's model, not its own lane name
 ollama-direct.patch	ollama-direct/b2c3a98.patch	b2c3a989bd85f94967c053e5140e94b301f5d7db	2026-10-06T23:24:11-07:00	the cloud lane's resolution leaves the HUD, and the six rehearsals find their text again
 ollama-direct.patch	ollama-direct/d03bc52.patch	d03bc52361f9379928d7667a7d664340d566ef05	2026-10-06T20:32:34-07:00	The cloud lane gets a real transport, and DeepSeek is behind it
 ollama-direct.patch	ollama-direct/0fbadf7.patch	0fbadf7f0a3918c9862eae9a563c2def3697378e	2026-09-18T00:10:00Z	backend: ollama-direct.patch - local chat was calling a program that never ran

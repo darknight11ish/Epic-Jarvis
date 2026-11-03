@@ -476,8 +476,9 @@ def _read(chunks, **kw):
 def t_an_automatic_turn_is_answered_here_and_the_working_out_is_not_shown():
     says, body = _read(_stream(), auto=True, fallback=lambda: "It is chaotic.")
     check("an automatic turn with no usable answer shows the LOCAL answer, under one "
-          "honest line",
-          "this PC answered it instead" in body and "It is chaotic." in body, body)
+          "honest line that names the budget failure",
+          "used its whole answer budget thinking" in body
+          and "It is chaotic." in body, body)
     check("... and NOT the model's private working-out",
           WORKING_OUT not in body, body)
     check("... and it is never reported as 'the working-out was shown'",
@@ -492,12 +493,23 @@ def t_an_automatic_turn_is_answered_here_and_the_working_out_is_not_shown():
           "did not answer this one" in body and WORKING_OUT not in body, body)
 
 
-def t_a_clicked_turn_keeps_the_2026_10_14_rule():
+def t_a_clicked_turn_uses_the_same_rule_as_2026_iiii():
+    # 2026-11-03 (the owner's decision): the 2026-10-14 "show the working-out on
+    # a clicked turn" rule is REPLACED. A clicked turn with no usable answer is
+    # answered on this PC under the same one honest line, and the working-out is
+    # never shown - the two kinds of turn now obey one rule.
+    says, body = _read(_stream(), auto=False, fallback=lambda: "It is chaotic.")
+    check("a turn the owner clicked for is answered on this PC, under the budget line",
+          "used its whole answer budget thinking" in body
+          and "It is chaotic." in body, body)
+    check("... and the working-out is NOT shown", WORKING_OUT not in body, body)
+    check("... and it is never reported as 'the working-out was shown'",
+          says.used_reasoning is False and says.answered_here is True,
+          (says.used_reasoning, says.answered_here))
     says, body = _read(_stream(), auto=False)
-    check("a turn the owner clicked for still shows the working-out, marked",
-          "ran out of room before it wrote an answer" in body
-          and WORKING_OUT in body, body)
-    check("... and says so on the answer", says.used_reasoning is True)
+    check("a clicked turn with no local answer says plainly that the cloud sent "
+          "only its working-out",
+          "sent only its working-out" in body and WORKING_OUT not in body, body)
     says, body = _read(_stream(reasoning="", content=""), auto=False)
     check("a clicked turn with nothing at all gets the plain 'did not send an answer'",
           "did not send an answer this time" in body, body)
@@ -516,13 +528,13 @@ def t_a_whole_body_reply_obeys_the_same_rule():
     body = (says.feed(raw) + says.close()).decode("utf-8", "replace")
     got = json.loads(body)["choices"][0]["message"]["content"]
     check("a one-shot reply (not streamed) obeys the same rule",
-          "this PC answered it instead" in got and "It is chaotic." in got
+          "used its whole answer budget thinking" in got and "It is chaotic." in got
           and WORKING_OUT not in got, got)
     says = API.CloudAnswer(False)
     body = (says.feed(raw) + says.close()).decode("utf-8", "replace")
     got = json.loads(body)["choices"][0]["message"]["content"]
-    check("... and a clicked one-shot reply still shows the working-out, marked",
-          "ran out of room" in got and WORKING_OUT in got, got)
+    check("... and a clicked one-shot reply no longer shows the working-out either",
+          WORKING_OUT not in got and "sent only its working-out" in got, got)
 
 
 # ==========================================================================
@@ -541,7 +553,7 @@ TESTS = [
     t_the_patch_bounds_the_hud_flag,
     t_the_patch_applies_and_reverses_on_the_published_base,
     t_an_automatic_turn_is_answered_here_and_the_working_out_is_not_shown,
-    t_a_clicked_turn_keeps_the_2026_10_14_rule,
+    t_a_clicked_turn_uses_the_same_rule_as_2026_iiii,
     t_a_whole_body_reply_obeys_the_same_rule,
 ]
 
