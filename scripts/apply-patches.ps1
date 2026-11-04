@@ -2866,7 +2866,7 @@ $SHIPPED = @(
     # and its own `bench.jsonl` (never `speed.jsonl`). `bench.patch` is the
     # routes that reach it. Standard library only, loopback only. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
-    'jarvis_bench.py'
+    'jarvis_bench.py',
     # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
     # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
     # conversation about any of its tools). One entry per name in
