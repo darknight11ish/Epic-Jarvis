@@ -64,8 +64,8 @@ export const SET_LIMIT_COMMAND = "set_limit";
  * today and be duplicated by the generator tomorrow. When the backend lands:
  *
  *   py -3 tools/gen_settings_cases.py
- *   # then add  { key: "notif_setup", pref: "setup", kind: "bool" }  here,
- *   # and the `setup` entry in notifications-settings.js's SWITCHES.
+ *   # then add the notif_setup row (pref "setup", kind "bool") here, and the
+ *   # `setup` entry in notifications-settings.js's SWITCHES.
  *
  * Until then this page never SENDS `setup`, which matters: `refresh()` pushes
  * every switch it shows back to Rust, so a missing row plus a lenient payload
