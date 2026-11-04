@@ -25889,22 +25889,27 @@ and the phone's read-only card call these routes now, and nothing about the
 permission model changes.
 
 **It is a GUIDE, not a second settings system.** `backend/jarvis_setup.py`
-(shipped whole, twin in `jarvis-backend/`) holds 14 ordered questions and their
-options as pure data. Every option maps to an EXISTING setter: the
-`BoolSetting`s and named setters in `jarvis_settings_registry.py` (which call
-the exact function the matching Settings control calls, with the same tier
-check and the same words), plus `jarvis_asks_first.py` for the "how careful"
-bundle and the reading tools. It invents no gate action or tier, adds no latch,
+(shipped whole, twin in `jarvis-backend/`) holds 25 ordered questions in seven
+sections, and their options, as pure data. Every option maps to an EXISTING
+setter: the `BoolSetting`s and named setters in `jarvis_settings_registry.py`
+(which call the exact function the matching Settings control calls, with the
+same tier check and the same words), plus `jarvis_asks_first.py` for the "how
+careful" bundle and the reading tools. It invents no gate action or tier, adds no latch,
 switches no model, and never calls a preset's apply route: the "what will you
 mostly use it for" answer is a **recommendation** only (its `id`/`title` come
 from `jarvis_presets.PRESETS`; applying one stays the preset selector's own
 `POST /api/work/apply` and its ONE `switch_model` card).
 
+**Wave B (2026-11-03) renamed the card "Personalize Jarvis"** and widened the
+question set to these 25 in seven sections. The answers already saved still
+prefill it, and a partial retake now keeps every earlier answer: the PC merges
+what was submitted into what was saved instead of replacing it.
+
 **The switch/flag:** none of its own. The routes are installed by
 `backend/setup.patch` (ONE install block, after `presets.patch` and
 `app-control.patch`, immediately before `plugin-loader.patch`, whose hunk is
 re-anchored onto setup.patch's last two printed lines). When `jarvis_setup.py`
-is missing, the three routes are simply absent and the boot banner says so.
+is missing, the four routes are simply absent and the boot banner says so.
 Nothing about the questionnaire is on by itself: it is only read when an app
 asks, and an app that never calls it changes nothing.
 
@@ -25912,8 +25917,11 @@ asks, and an app that never calls it changes nothing.
 
 Read-only, behind the same origin and token checks as every route:
 
-    {"available",
-     "questions": [{"id", "title", "help", "multi",
+    {"available", "version": 2, "completed_version": 1, "runs": 3,
+     "dismissed_at": <float or null>, "answered_count": 9,
+     "in_progress": {"section", "question", "started_at", "draft_answers"},
+     "sections": [{"id", "title"}],
+     "questions": [{"id", "title", "help", "section", "version", "multi",
                     "options": [{"id", "label", "detail"}], "all_none"}],
      "current": {"<change key>": <current value>},
      "answers": {<question id>: <option id> | [<option id>...]},
@@ -25927,6 +25935,24 @@ read is LEFT OUT rather than guessed. For the "what asks first" rows it is a
 boolean: `true` means that action asks first today (its tier in
 `jarvis-framework.toml` is `ask`). `answers` and `completed_at` are the last
 accepted run, for a re-run's prefill and for a first-run offer to show once.
+
+`version` is the question-set version (`2` today), and `completed_version` is
+the one the owner last finished or accepted (`0` when never, `1` for a file
+completed before the new questions - so the first launch after deploy offers
+the new ones once, instead of claiming the old file is current). `runs` is how
+many applies have been accepted. `dismissed_at` is when "Not now" was last
+pressed, or `null`. `in_progress` is where the desktop card is
+(`{section, question, started_at, draft_answers}`), or `{}` when it has not
+said. A file from before versioning reads as `version 1`, with
+`completed_version 1` when it has a `completed_at` and `0` when it does not;
+reading never writes.
+
+`sections` is the seven `{id, title}` pairs in card order, and every question
+carries its own `section` and `version`, so neither app types a section id or a
+question count. The PC holds 25 questions in seven sections. `answered_count`
+counts the question ids that have an answer in `answers` or in the card's draft
+- it is the one number both apps and the HUD say "9 of 25" from, and an id that
+is no longer in the quiz does not count.
 
 **GET is metadata only** (audited 2026-10-20, Gemini Area 1B): it returns
 question text and setting values, and it reads no folder, no account and no
@@ -26013,56 +26039,151 @@ closed when the PC cannot tell where the request came from. `peer is None` is
 only the project's documented in-process convention, never how a routed
 request is treated.
 
-### The apps (S2, added 2026-10-20)
+### `POST /api/setup/progress` - where the owner is in the card (desktop only)
 
-**Desktop Settings → "First-time setup".** Three new files and one Rust command
+One of three small bodies:
+
+    {"section": "learning", "question": "reworded_memories",
+     "draft_answers": {"reworded_memories": "on"}}
+        -> 200 {"ok": true, "in_progress": {...}}
+    {"dismiss": true}
+        -> 200 {"ok": true, "dismissed_at": 1793...}
+    {"keep_current": true}
+        -> 200 {"ok": true, "completed_version": 2, "dismissed_at": 1793...}
+
+The first records where the owner is: the section and question the card has
+open, and the answers drafted so far. `section` is optional, and a value that
+is not one of the seven falls back to the question's own section. Every draft
+answer is cleaned to the questionnaire's own question ids, and only a string or
+a list of strings/numbers is kept - an unknown id or a value of another shape
+is dropped, never stored. An explicit empty `draft_answers` (`{}`) clears the
+stored draft; a non-empty one is merged, so a choice staged in chat and the
+card's own answer both survive.
+
+`{"dismiss": true}` stores `dismissed_at` - the 24-hour "Not now".
+`{"keep_current": true}` stores `completed_version = QUIZ_VERSION` and the same
+timestamp without touching one answer or one setting: it is "Keep current
+settings", not a quiz answer. Both answer `{"ok": true}` with the fields they
+recorded.
+
+**It records the owner's own Option ids; it calls no setter, raises no card and
+never applies.** It is cardless and gateless on the PC: no approval card, no
+taint check, no gate action and no setter. The only file it writes is
+`setup.json`, through the module's one save, and the whole read document is
+written back, so `answers`, `completed_at`, `outcomes`, `completed_version`,
+`runs` and `dismissed_at` are preserved by construction. The draft is never
+applied: applying stays `POST /api/setup/apply`, the card's two-press action.
+
+**It is desktop-only.** A request from another device is **`403`** with
+`"pc_only": true` and writes nothing - the same `from_this_pc` rule
+`/api/setup/apply` uses for its PC-only answers. The desktop card is the
+route's only caller for a place and for the two buttons. The HUD banner's
+"Not now" reaches it through the shell's `hud_setup_dismiss` command, because
+the HUD holds no token and cannot POST. The phone reads progress from
+`GET /api/setup` and never moves it.
+
+A body that is not a JSON object, or one that carries neither a known
+`question` nor `dismiss`/`keep_current`, is **`400`** in plain words. A missing
+or wrong token is **`401`**, before anything is read. **`503`** means the
+progress could not be saved, so nothing was recorded.
+
+### The apps (S2, added 2026-10-20; "Personalize Jarvis" from 2026-11-03)
+
+**Desktop Settings → "Personalize Jarvis".** The same card, upgraded in place:
+no new window and no second page. Three files and one Rust command
 (`jarvis-desktop/src/setup-questionnaire.js`, `setup-bridge.js`,
-`setup-settings.js`, `src-tauri/src/setup_questionnaire.rs`). The card shows all
-fourteen questions in the PC's order, with the last accepted answers as the
-prefill; changing an answer asks `POST /api/setup/plan` and draws every change
+`setup-settings.js`, `src-tauri/src/setup_questionnaire.rs`). The card shows
+the PC's 25 questions in its own order, split by its seven sections behind a
+row of section tabs, with the last accepted answers as the prefill. It opens
+stepped one question at a time ("Step through one by one"), with Back, Skip and
+Next; "Show all" draws the whole list instead. Skip leaves the question out of
+the submitted body, so the earlier answer survives. A "show only new /
+unanswered" filter shows a question that has no answer yet, or whose own
+`version` is newer than `completed_version`, and the count in its label is
+computed from that data, never typed. A "8 of 25 answered" line is counted from
+the draft. "Take it again" clears the draft and starts at the first question,
+and a partial retake now keeps every earlier answer, because the PC merges the
+submitted answers into the saved ones instead of replacing them.
+
+Changing an answer asks `POST /api/setup/plan` and draws every change
 in the PC's own sentence with its effect - **Instant**, **Asks you on a card**
 or **Blocked** - plus everything the PC says would not change and why, and the
 preset answer labelled a recommendation only. **A plan writes nothing and
-raises no card**, so it is asked whenever the answers change. The one write is
-a two-press action: "Apply these changes", then "Yes, apply them now". Only the
-second press builds and sends `confirm: true`; loading the card, reconnecting
-the link and changing an answer never apply anything. Applying is held while
-the event stream is stale (rule 4). The card says how long one approval card
-may wait, and while it runs it says the PC works through the changes one at a
-time. An outcome the PC reports as `asked-no-answer` is drawn as **still
-waiting** - never as done, never as failed - and the last run's outcomes are
-drawn from `GET /api/setup` exactly as the PC saved them. The Rust command
-sends only the three bodies, refuses `apply` unless its `confirm` argument is
-exactly `true`, and puts `confirm` in no other body; the page itself names no
-route and no gate action, so nothing here invents an action or a tier.
+raises no card**, so it is asked whenever the answers change. The one write to
+a setting is a two-press action: "Apply these changes", then "Yes, apply them
+now". Only the second press builds and sends `confirm: true`; loading the card,
+reconnecting the link and changing an answer never apply anything. Applying is
+held while the event stream is stale (rule 4). The card says how long one
+approval card may wait, and while it runs it says the PC works through the
+changes one at a time. An outcome the PC reports as `asked-no-answer` is drawn
+as **still waiting** - never as done, never as failed - and the last run's
+outcomes are drawn from `GET /api/setup` exactly as the PC saved them. The Rust
+command sends only the four bodies, refuses `apply` unless its `confirm`
+argument is exactly `true`, and puts `confirm` in no other body; the page
+itself names no route and no gate action, so nothing here invents an action or
+a tier. A plan or a progress note can never carry `confirm`.
+
+**Two buttons write progress, not settings.** "Not now" sends
+`{"dismiss": true}`, and "Keep current settings" sends `{"keep_current": true}`:
+neither carries an answer, calls a setter or raises a card, and the second is
+how the owner says they are happy as they are in one press. The stepper's own
+position is sent the same way, debounced, so the phone and the HUD can say
+where the PC's card is. None of this is held on a stale link: a position or a
+dismissal is not a change.
+
+**The rest of the desktop is the offer, never a second control.** While
+`completed_version` is behind `version`, the shell raises ONE quiet
+notification per launch - after the app has been up for a minute, and only if
+the notification store's `Setup` switch says yes (on by default; quiet hours
+hold it, because the quiz can wait). Its body is two counts and nothing else
+("9 of 25 answered. Finish now from the Settings card, or press Not now.") -
+never a question, never an answer. The HUD draws a banner with the same counts
+and two buttons: "Finish now" opens Settings at the card through the HUD's
+already-granted navigation, and "Not now" hides the banner for this launch and
+records the same 24-hour dismissal through the shell's `hud_setup_dismiss`
+command. The tray carries a "Setup unfinished — 9 of 25" row that opens the
+same card, and the row is absent, not greyed, once the quiz is done. Nothing
+steals focus: the Settings window opens only after the first-run walkthrough
+and when the owner presses "Finish now".
 
 **Phone: the same questions, read-only.** `net/SetupQuestionnaire.kt` and
 `ui/screens/SetupQuestionnairePlate.kt`, on Settings. It reads
-`GET /api/setup`, prefills the last accepted answers and may ask the read-only
-plan on one button, drawing the same effects and the same "would not change"
-reasons. **It has no apply path at all and never posts `/api/setup/apply`**, and
-the card says the changes are made on the PC. That is a decision, not a missing
-screen: applying calls the existing setters one at a time and waits on each
-existing card (a pass can take minutes), and several of those changes are
-PC-only by rules that already exist - `jarvis_asks_first` refuses a loosening
-request from any device but the PC. A phone button would either fail halfway or
-sit behind cards it cannot answer. `tools/check_parity.py` classifies
-`/api/setup` and `/api/setup/plan` as `ported` and `/api/setup/apply` as
-`deliberate`; `docs/ARCHITECTURE.md` section 8 records it with the reason.
+`GET /api/setup`, prefills the last accepted answers and draws the same 25
+questions split by the PC's own seven sections, behind a row of section tabs
+("All sections" first, then the PC's order). It may ask the read-only plan on
+one button, drawing the same effects and the same "would not change" reasons.
+ONE line says where the PC is: "Not finished - 9 of 25 answered. On the PC this
+is at question 8 of 25." while the set is unfinished, or "Finished <date>."
+once `completed_version` has reached `version`. It reads the answered count and
+`in_progress` from GET and never moves them: **it has no apply path and no
+progress path at all**, never posts `/api/setup/apply` or
+`/api/setup/progress`, and the card says the changes are made on the PC. That
+is a decision, not a missing screen: applying calls the existing setters one at
+a time and waits on each existing card (a pass can take minutes), and several
+of those changes are PC-only by rules that already exist - `jarvis_asks_first`
+refuses a loosening request from any device but the PC. A phone button would
+either fail halfway or sit behind cards it cannot answer.
+`tools/check_parity.py` classifies `/api/setup` and `/api/setup/plan` as
+`ported` and `/api/setup/apply` and `/api/setup/progress` as `deliberate` (the
+403 from another device is the enforcement, not this sentence);
+`docs/ARCHITECTURE.md` section 8 records it with the reason.
 
 **The questions are the PC's, in both apps.** Neither app hardcodes a question
-id, title or option. Both tests read the generated
+id, title, section or option. Both tests read the generated
 `backend/fixtures/setup_questions.json` (`tools/gen_setup_questions.py`, written
 from `backend/jarvis_setup.py`'s own `QUESTIONS`; the desktop suite runs
 `--check` and compares it to the live module), so a reworded question fails a
 test until the fixture is regenerated. The desktop suite is
-`jarvis-desktop/tests/setup-questionnaire.mjs` (the PC's real fourteen
-questions, the draft and "All"/"None", the read-only plan body, the one apply
-body, the stale-link gate, honest outcomes, the bridge's three calls, and
-source pins that no route or gate action is in the page and nothing applies on
-load); the Rust module carries its own body/timeout tests; the phone's is
-`SetupQuestionnaireTest.kt` (the same fixture, the prefill, the read-only plan
-and a pin that no apply path exists in the two phone files).
+`jarvis-desktop/tests/setup-questionnaire.mjs` (the PC's real 25 questions, the
+seven sections, the stepper's next-question rule, the "new / unanswered" filter,
+the draft and "All"/"None", the read-only plan body, the one apply body, the
+three progress bodies, the stale-link gate, honest outcomes, the bridge's four
+calls, and source pins that no route or gate action is in the page, nothing
+applies on load, and the HUD's one dismissal command is the only write the
+banner needs); the Rust module carries its own body/timeout tests; the phone's
+is `SetupQuestionnaireTest.kt` (the same fixture, the prefill, the read-only
+plan, the sections and the one progress line, and a pin that no apply or
+progress path exists in the two phone files).
 
 `backend/test_setup.py` is the proof, with no network, no model, no
 microphone and no owner's PC: every question/option maps to a real setter;
@@ -26074,8 +26195,21 @@ only the answers, and round-trips them for prefill; the module imports no
 model lane and no network, reads the gate's taint latch and never sets or
 clears it; the taint refusal (409) and the remote PC-only whole-refusal (403)
 happen before any setter; `pc_only` marks exactly the three PC-only families;
-GET exposes no path or account id; and the three routes keep the origin/token
+GET exposes no path or account id; and the four routes keep the origin/token
 order.
+
+`backend/test_setup_quiz.py` is the Wave B proof, with the same no-network,
+no-PC rule: the question set is 25 in seven sections with the 14 existing ids
+unchanged and in their order; every new `choice`/`number` change names a real
+Settings row and one of its own Option ids; a partial retake keeps every
+earlier answer, and an old three-key file reads as version 1 with
+`completed_version` 1; `progress()` writes only `in_progress` and preserves
+every other key, refuses a non-object and a body with nothing to record, cleans
+a bogus draft answer away, and is refused with 403 from another device; the
+progress route keeps the origin/token order and a bad body is 400;
+`{"keep_current": true}` sets `completed_version` without touching an answer or
+calling `apply()`; and the module still imports no model lane, switches no
+model, and `_run_setup_quiz` carries no `confirm`.
 
 typed text, and the patch's own pins (two routes, harness position, no
 install-block line, `_stack.py`'s RATCHET unchanged).
