@@ -32481,6 +32481,28 @@ row whose value cannot be read says `null` (or `count: null` with `why_not` /
 off. This is the injection-surface rule the research called F10: a self-model
 is text that reaches the model, so it is fixed data or nothing.
 
+**Added 2026-11-04 (self-awareness phase 3).** Two additions, both read-only
+and both inside this existing section:
+
+- `version.app_version_said` is ONE plain sentence. When the `VERSION` file is
+  beside the backend it names the version; when it is not (a checkout, or a
+  deployed backend folder, which carries modules and not repository files) it
+  says plainly that the app version could not be read, names the backend schema
+  and points at the deploy reseal - it is never blank, never `null`, and never
+  a guessed number. `app_version` stays exactly as it was (`"unknown"`), so an
+  older caller is unaffected.
+- The model's own `self_portrait` tool (`jarvis_agent._run_self_portrait`) now
+  hands back a `live_settings` digest beside the counts: `{available,
+  switches: {setting_id: true|false}, choices: {setting_id: chosen option},
+  unreadable: [setting_id], on, off, preset, preset_title, preset_model,
+  model, more}`. It is built by `jarvis_self_portrait.live_settings_digest()`
+  from the SAME `settings()` read this route serves - one source, no default -
+  and it is bounded (`DIGEST_MAX`). `preset`/`preset_model` are the chosen
+  preset and the model it plans to run; `model` is the PC's running-model
+  record and is `""` when none is recorded. It carries ids and values only: no
+  phrase, path or secret, and an unreadable switch is listed in `unreadable`
+  rather than shown as `false`.
+
 ### 184.3 The ids come from the two registries, not from a fourth list
 
 `places` is built by importing the registries every time (`jarvis_self_portrait.
@@ -32661,6 +32683,8 @@ The version block is in the portrait (184.2) and alone at `GET
 - `app_version` is the short `VERSION` file beside the backend when the folder
   has one; a checkout answers `"unknown"` with `app_version_source` naming why,
   because a deployed backend folder carries modules, not repository files.
+  `app_version_said` (added 2026-11-04, 184.2) says the same thing in one plain
+  sentence - or says plainly that it could not be read - and is never blank.
 - `deploy` is the installer's OWN record (`_jarvis-state.json` beside
   `jarvis_hud.py`, read at most once per 60 s): `recorded`, the run's schema and
   time, how many deployed files were recorded and verified, the sha256 of the

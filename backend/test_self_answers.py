@@ -315,24 +315,40 @@ def the_focus_preset_is_a_real_setting():
 
     The preset-detail grammar read the words as a preset called "focus" and
     answered "There is no preset called focus" - while `focus_preset` is a real
-    choice in the settings registry. A REAL preset must still answer as one.
+    choice in the settings registry. Phase 3 gave it the richer answer the
+    ruling asked for: every real preset row with its model, and which one is
+    chosen - read from `jarvis_presets`, not typed here. A REAL preset must
+    still answer as one.
     """
     got = Q.match("what is the focus preset")
-    check("it is a SETTING question, not a preset detail",
-          got is not None and got.name == "setting_explain"
-          and got.f.get("key") == "focus_preset",
+    check("it is the focus preset's own answer, not a preset detail",
+          got is not None and got.name == "focus_presets",
           f"{got.name if got else None} {getattr(got, 'f', None)}")
     r = answer("what is the focus preset")
     check("the answer never denies it exists",
           r is not None and "There is no preset called" not in r.reply,
           r and r.reply)
-    check("... it names the setting, its place and its live value",
+    check("... it names the setting and how many real rows it picks between",
           r is not None and "focus preset is a choice in Settings" in r.reply
-          and "Right now:" in r.reply, r and r.reply[:300])
+          and f"{len(_presets())} model presets" in r.reply,
+          r and r.reply[:300])
+    check("... every row it lists is a real row's own title and model",
+          r is not None and all(p.title in r.reply and p.model in r.reply
+                                for p in _presets()), r and r.reply[:600])
+    check("... and it says which one is chosen, or that none is",
+          r is not None and ("chosen on this PC right now" in r.reply
+                             or "none is chosen" in r.reply
+                             or "could not read which preset" in r.reply),
+          r and r.reply[-300:])
     got = Q.match("what is the coding preset")
     check("a REAL preset still answers as a preset",
           got is not None and got.name == "preset_detail"
           and got.f.get("name") == "coding", str(getattr(got, "f", None)))
+
+
+def _presets():
+    import jarvis_presets as P
+    return list(P.PRESETS)
 
 
 def the_two_settings_numbers_reconcile():

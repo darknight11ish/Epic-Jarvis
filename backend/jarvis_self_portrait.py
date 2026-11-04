@@ -453,6 +453,109 @@ def settings() -> list:
     return rows
 
 
+#: How many settings one digest may name. 47 is the measured total today (36
+#: switches + 10 choices + 1 number, and the digest carries switches and choices
+#: only), but the cap is ENFORCED rather than assumed: a registry that grows
+#: must not grow the model's context with it. `more` says what was left out.
+DIGEST_MAX = 60
+
+
+def live_settings_digest() -> dict:
+    """A compact, read-only `{setting id: live value}` digest for the model's tool.
+
+    WHY THIS EXISTS (Gemini ruling, 2026-11-04, SA-3 part C). The model's own
+    `self_portrait` tool handed back COUNTS: it could say how many settings
+    there were and not one of their values, so any unusual three-way question
+    ("if I turn off chat history but keep learning on, does the second card
+    care?") was answered from a guess. This is the live state, from the SAME
+    `settings()` read `/api/self` serves - no second source, no default:
+
+      * `switches` is `{setting_id: true|false}` for every switch whose real
+        reader answered, and `unreadable` names the ones that did not. A switch
+        that could not be read is NEVER put in `switches` as `false`.
+      * `choices` is `{setting_id: the chosen option}` for a choice that really
+        read a value; an unreadable choice goes in `unreadable` too.
+      * `preset`/`preset_title`/`preset_model` are the CHOSEN preset and the
+        model it plans to run, from `jarvis_presets`' own rows. `model` is the
+        PC's running-model record, and is "" when this PC records none - the
+        plan is named as a plan, never passed off as the running model.
+      * `on`, `off` and `more` are counts, computed here, never typed.
+
+    Nothing private can appear: the values are booleans and the settings' own
+    chosen option names. There is no phrase, no path, no secret and no word of
+    memory, chat or model text. Bounded by DIGEST_MAX.
+    """
+    switches: dict = {}
+    choices: dict = {}
+    unreadable: list = []
+    rows = settings()
+    for row in rows:
+        sid = str((row or {}).get("id") or "")
+        if not sid:
+            continue
+        kind = str(row.get("kind") or "")
+        if kind == "switch":
+            value = row.get("value")
+            if isinstance(value, bool):
+                switches[sid] = value
+            else:
+                unreadable.append(sid)
+        elif kind == "choice":
+            value = row.get("value")
+            if (row.get("value_known") is True and isinstance(value, str)
+                    and value.strip()):
+                choices[sid] = str(value)
+            else:
+                unreadable.append(sid)
+    # The chosen preset and its PLAN model, from the module that owns the rows.
+    preset, preset_title, preset_model = "", "", ""
+    try:
+        import jarvis_presets as P
+        preset = str(P.choice() or "")
+        for p in getattr(P, "PRESETS", ()) or ():
+            if str(getattr(p, "id", "")) == preset:
+                preset_title = str(getattr(p, "title", "") or "")
+                preset_model = str(getattr(p, "model", "") or "")
+                break
+    except Exception:                       # noqa: BLE001 - said as absent
+        preset = ""
+    # The RUNNING model, from the two real records (never the preset's plan).
+    model = ""
+    try:
+        import jarvis_models as M
+        model = str(M.current_model() or "")
+    except Exception:                       # noqa: BLE001 - try the other read
+        model = ""
+    if not model:
+        try:
+            import jarvis_hardware as H
+            model = str(H._current_model() or "")
+        except Exception:                   # noqa: BLE001 - said as unknown
+            model = ""
+    # Enforce the bound rather than trusting today's registry size.
+    every = list(switches) + list(choices) + list(unreadable)
+    more = 0
+    if len(every) > DIGEST_MAX:
+        keep = set(sorted(every)[:DIGEST_MAX])
+        more = len(every) - len(keep)
+        switches = {k: v for k, v in switches.items() if k in keep}
+        choices = {k: v for k, v in choices.items() if k in keep}
+        unreadable = [k for k in unreadable if k in keep]
+    return {
+        "available": bool(rows),
+        "switches": switches,
+        "choices": choices,
+        "unreadable": unreadable,
+        "on": sum(1 for value in switches.values() if value),
+        "off": sum(1 for value in switches.values() if not value),
+        "preset": preset,
+        "preset_title": preset_title,
+        "preset_model": preset_model,
+        "model": model,
+        "more": more,
+    }
+
+
 def asks_first() -> dict:
     """What asks first, straight from jarvis_asks_first's own view().
 
@@ -813,6 +916,28 @@ def _hex_ref(value) -> str:
     return text if re.fullmatch(r"[0-9a-f]{7,40}", text) else ""
 
 
+def app_version_said(version=None, source: str = "") -> str:
+    """ONE plain sentence for the app version - or for not being able to read it.
+
+    THE HONEST FALLBACK PHASE 2 LEFT OUT (2026-11-04, the self-awareness audit's
+    fix #10). A checkout, and every deployed backend folder, carries no VERSION
+    file: the block used to answer the bare word "unknown" (or, to a caller that
+    formatted it, nothing at all), which is not a sentence and reads as a blank.
+    This always returns a sentence and never invents or guesses a number:
+    `version`/`source` are the tests' own seam; by default it reads the same
+    `_app_version()` the block does.
+    """
+    if version is None:
+        version, source = _app_version()
+    text = str(version or "").strip()
+    if re.fullmatch(r"\d+\.\d+\.\d+", text):
+        return ("This PC runs app version " + text
+                + (f" ({source})" if str(source or "").strip() else "") + ".")
+    return ("I could not read the app version on this PC: there is no VERSION file "
+            "beside the backend (backend schema " + SCHEMA + "). Run the deploy "
+            "reseal to record one - until then I will not guess a version.")
+
+
 def version_block() -> dict:
     """The cheap, stable identity an updater can compare. No paths, no secrets.
 
@@ -834,6 +959,11 @@ def version_block() -> dict:
     return {"schema": SCHEMA,
             "app_version": version,
             "app_version_source": source,
+            # THE SENTENCE, not just the token (2026-11-04): a caller that shows
+            # `app_version` alone shows "unknown" on every install without the
+            # file, which reads as a blank. This says what could not be read and
+            # what would record it - never a guessed number.
+            "app_version_said": app_version_said(version, source),
             "api_version": _api_version(),
             "server": "jarvis-hud",
             "pid": os.getpid(),

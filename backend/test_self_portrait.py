@@ -25,7 +25,16 @@ setting area", "pull up any old conversation", "clear any conversation"):
     number (or "unknown"); `deploy` reads _jarvis-state.json and, on a PC
     without one, says recorded:false with a reason instead of failing. The
     identity is the recorded sha256 of gate/hud/skills, and a state file that
-    is damaged or holds nonsense is "unknown", never a crash.
+    is damaged or holds nonsense is "unknown", never a crash. Since 2026-11-04
+    the block carries `app_version_said` too: ONE plain sentence, and when the
+    file cannot be read it says so instead of a bare "unknown" a screen would
+    show as a blank (the self-awareness audit's fix #10).
+  - THE MODEL'S OWN TOOL SEES LIVE VALUES. `live_settings_digest()` (2026-11-04,
+    the audit's SA-3 part C) is the switch and choice values the model's
+    self_portrait tool now hands back: real booleans and chosen options read
+    from the registry's one reader, an unreadable value NAMED in `unreadable`
+    rather than shown as off, the chosen preset and its plan model, and a hard
+    bound (`DIGEST_MAX`).
   - CONVERSATIONS ARE THE EXISTING STORE'S. Both adapter routes hand straight
     through to jarvis_chat_log.handle_get, so the codes (200/400/404/423/503)
     and the list are the same answers /api/history gives. Nothing is duplicated.
@@ -82,12 +91,13 @@ if str(HERE / "rebuilt") not in sys.path:
     sys.path.append(str(HERE / "rebuilt"))
 from _where import require_shipped, BACKEND  # noqa: E402
 
-require_shipped("jarvis_self_portrait.py")
+require_shipped("jarvis_self_portrait.py", "jarvis_presets.py")
 
 import jarvis_self_portrait as SP  # noqa: E402
 import jarvis_asks_first as ASK  # noqa: E402
 import jarvis_feature_guide as FG  # noqa: E402
 import jarvis_menus as MENUS  # noqa: E402
+import jarvis_presets as PRESETS  # noqa: E402
 import jarvis_settings_registry as REG  # noqa: E402
 
 PASSED, FAILED = [], []
@@ -539,6 +549,42 @@ def version_surface_is_honest():
     else:
         check("a backend with no VERSION beside it says 'unknown', never a guess",
               block["app_version"] == "unknown", block["app_version"])
+    # THE HONEST FALLBACK (2026-11-04, the self-awareness audit's fix #10).
+    # `app_version` stays the short token it always was, so no older caller
+    # breaks; `app_version_said` is ONE sentence for a reader that needs words.
+    # It is never blank, never carries a bare "None", and never guesses a
+    # number - the two cases (a VERSION file, and none) are both driven here.
+    said = block.get("app_version_said")
+    check("the version block carries ONE plain sentence for the version",
+          isinstance(said, str) and bool(said.strip())
+          and said.rstrip().endswith(".") and "\n" not in said, repr(said))
+    check("... never a blank and never a bare 'None'",
+          "None" not in said and "null" not in said, said)
+    if block["app_version"] == "unknown":
+        check("... with no VERSION file it says plainly it could not read it",
+              "could not read the app version" in said, said)
+        check("... names the deploy reseal as what would record one",
+              "deploy reseal" in said, said)
+        check("... and never guesses a version number",
+              not re.search(r"\d+\.\d+\.\d+", said), said)
+    else:
+        check("... with a VERSION file it names that exact number",
+              block["app_version"] in said, said)
+        check("... and says where it was read from",
+              str(block["app_version_source"]) in said, said)
+    # The missing-file case driven directly at its seam - never typed from the
+    # machine this happens to run on.
+    missing = SP.app_version_said("unknown", "no VERSION file beside the backend")
+    check("the unreadable-version fallback is a sentence, not a token",
+          bool(missing.strip()) and missing.endswith(".") and "could not read" in missing,
+          missing)
+    check("... it names the backend schema it DOES know", SP.SCHEMA in missing, missing)
+    check("... and holds no 'None' and no guessed number",
+          "None" not in missing and not re.search(r"\d+\.\d+\.\d+", missing), missing)
+    for bad in ("", "unknown", "v0.2.0", "0.2", "latest"):
+        text = SP.app_version_said(bad, "probe")
+        check(f"app_version_said({bad!r}) falls back instead of quoting it",
+              "could not read the app version" in text, text)
     check("a checkout with no deploy record says so, and does not fail",
           block["deploy"]["recorded"] is False
           and bool(block["deploy"]["why_not"]))
@@ -579,6 +625,109 @@ def version_surface_is_honest():
     got = SP.deploy_block(_TMP / "state-missing")
     check("a missing deploy record is 'unknown', never a crash",
           got["recorded"] is False)
+
+
+# ---------------------------------------------------------------------------
+#   4b. The model's own live-settings digest (2026-11-04, SA-3 part C)
+# ---------------------------------------------------------------------------
+
+
+def live_settings_digest_is_read_not_assumed():
+    """`live_settings_digest()` is the model's tool seeing the REAL values.
+
+    Before it, `jarvis_agent`'s self_portrait tool handed the model COUNTS and
+    no value, so any unusual question about two or three settings was answered
+    from a guess. This proves the digest is the registry's own switches and
+    choices read through their one reader, that an unreadable value is NAMED
+    rather than shown as `false`, that it is bounded, and that it carries the
+    chosen preset and the model that preset plans to run.
+    """
+    got = SP.live_settings_digest()
+    check("the digest answers, from the real modules",
+          isinstance(got, dict) and got.get("available") is True, str(got)[:200])
+    check("it carries exactly the ids-and-values shape the tool documents",
+          set(got) == {"available", "switches", "choices", "unreadable", "on", "off",
+                       "preset", "preset_title", "preset_model", "model", "more"},
+          str(sorted(got)))
+    rows = SP.settings()
+    want_switches = {str(r["id"]) for r in rows if r.get("kind") == "switch"}
+    want_choices = {str(r["id"]) for r in rows if r.get("kind") == "choice"}
+    if not got.get("more"):
+        check("every switch the registry has is a real bool value or named unreadable",
+              set(got["switches"]) | (want_switches & set(got["unreadable"]))
+              == want_switches,
+              str(sorted(want_switches - set(got["switches"]))))
+        check("every choice that read a value keeps that value, and no other",
+              set(got["choices"]) == want_choices - set(got["unreadable"]),
+              f"{sorted(want_choices)} / {sorted(got['choices'])}")
+    else:
+        check("the registry fits the digest's bound, so nothing is left out",
+              False, f"more={got['more']}")
+    check("no switch is ever a non-bool pretending to be a value",
+          all(isinstance(v, bool) for v in got["switches"].values()),
+          str(got["switches"])[:200])
+    check("the on and off counts are the digest's own switches, not typed",
+          got["on"] == sum(1 for v in got["switches"].values() if v)
+          and got["off"] == sum(1 for v in got["switches"].values() if not v),
+          f"{got['on']}/{got['off']}")
+    check("the digest is bounded, and says how many it left out",
+          len(got["switches"]) + len(got["choices"]) + len(got["unreadable"])
+          <= SP.DIGEST_MAX and isinstance(got["more"], int), str(got["more"]))
+    check("the chosen preset is jarvis_presets' own answer",
+          got["preset"] == (PRESETS.choice() or ""), repr(got["preset"]))
+    if got["preset"]:
+        row = next((p for p in PRESETS.PRESETS if p.id == got["preset"]), None)
+        check("... and its title and plan model are that row's own",
+              row is not None and got["preset_title"] == row.title
+              and got["preset_model"] == row.model,
+              f"{got['preset_title']!r} / {got['preset_model']!r}")
+    else:
+        check("with no preset chosen, the digest names none rather than inventing one",
+              got["preset_title"] == "" and got["preset_model"] == "",
+              str(got)[:200])
+
+    # A reader that RAISES is named in `unreadable`, never turned into "off".
+    # This is the honest-failure case: a switch whose file is damaged must not
+    # look like a switch the owner turned off.
+    real = FG.STATE_READERS.get("chat_history")
+    try:
+        def _broken():
+            raise RuntimeError("probe: the switch file is unreadable")
+        FG.STATE_READERS["chat_history"] = _broken
+        hard = SP.live_settings_digest()
+        check("a switch whose reader raises is named unreadable, never off",
+              "chat_history" in hard["unreadable"]
+              and "chat_history" not in hard["switches"], str(hard["unreadable"]))
+        check("... and the counts still describe only the switches it did read",
+              hard["on"] + hard["off"] == len(hard["switches"]))
+    finally:
+        if real is None:
+            FG.STATE_READERS.pop("chat_history", None)
+        else:
+            FG.STATE_READERS["chat_history"] = real
+
+    # It is read at CALL time, not frozen at import.
+    quiet = SP.live_settings_digest()
+    try:
+        FG.STATE_READERS["chat_history"] = lambda: False
+        moved = SP.live_settings_digest()
+        check("flipping a real reader moves the digest",
+              moved["switches"].get("chat_history") is False
+              and quiet["switches"].get("chat_history") is not False,
+              f"{quiet['switches'].get('chat_history')} -> "
+              f"{moved['switches'].get('chat_history')}")
+    finally:
+        if real is None:
+            FG.STATE_READERS.pop("chat_history", None)
+        else:
+            FG.STATE_READERS["chat_history"] = real
+
+    # Nothing private: no sentence, no path, no secret-shaped value.
+    blob = json.dumps(got)
+    check("the digest carries no sentence, path or secret-shaped key",
+          " is " not in blob and "token" not in blob.lower()
+          and _TMP.as_posix() not in blob and "\\\\" not in blob,
+          blob[:200])
 
 
 # ---------------------------------------------------------------------------
@@ -1208,6 +1357,7 @@ def main() -> int:
         api_self_is_safe_and_complete()
         app_lock_can_only_withhold()
         version_surface_is_honest()
+        live_settings_digest_is_read_not_assumed()
         conversations_are_the_stores_own()
         clear_is_one_exact_item_one_card()
         clear_card_is_a_replacing_card()

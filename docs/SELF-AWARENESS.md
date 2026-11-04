@@ -37,9 +37,10 @@ What you can use today:
 - **It can answer what it is running on, how fast, how much it remembers and
   what it can schedule** - six questions that used to go to the AI model (see
   "Its own machine, speed and memory" below).
-- **It can answer about ten pairs of settings together**, and it warns you in
+- **It can answer about twelve pairs of settings together**, and it warns you in
   one line when one chat message names two of them (see "Two things at once"
-  below).
+  below). Any *other* two of its own features or settings are answered too: it
+  reads each one's live state and says honestly whether a rule links them.
 
 What is built but not yet connected, said plainly:
 
@@ -166,7 +167,7 @@ six reads a file, changes anything or raises a card.
 ## Two things at once
 
 One question at a time was always answered well; two things at once used to go
-to the AI model, which is never given your settings. Ten pairs now have a
+to the AI model, which is never given your settings. Twelve pairs now have a
 hand-built answer, each checked against the code that really enforces the
 interaction:
 
@@ -197,9 +198,20 @@ interaction:
   settings file.
 - "Does picture mode use the cloud?" - never: the picture lane refuses a cloud
   model by name and starts with cloud use switched off.
+- "What model and what card does the coding preset use?" - one preset row
+  decides its model, its card and its context window together, so the answer
+  reads that one row (and its measured speed), then says which preset is
+  chosen. "What context window and speed does Fast have?" is the same answer.
+- "Does cloud escalation send my private stuff?" - no. The standing cloud
+  switch only decides whether a hard question may go there; a latched
+  local-only block stops everything, and email, files, credentials and stored
+  memory stay on the local model whatever it says.
 
-Anything else that names two things still goes to the model, which is honest
-about not knowing your settings - no rule is invented for a pair nobody wrote.
+Any *other* two of its own features or settings are answered too: it reads each
+one's live state and says plainly whether a rule links them - and when no rule
+does, it says that instead of claiming they work independently. A sentence that
+names no real feature or setting still goes to the model, which is honest about
+not knowing your settings. No interaction is ever invented.
 
 **One chat message cannot change two settings.** If you name two of these pairs
 in one change request ("turn on web search and ask before every search"), the

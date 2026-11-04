@@ -1787,14 +1787,116 @@ def why_use(words) -> dict:
                       f"The honest limit: {_row_limit_words(row)}")}
 
 
+def _compare_state(row: dict) -> str:
+    """One short token for a feature's live state, from the same switch read.
+
+    Tokens, not prose, so a caller gets a structured side-by-side it can render
+    itself; `state_words` beside it carries the existing honest sentence. Every
+    branch below is a state the row really has - a switch that could not be read
+    is never turned into "off".
+    """
+    rows = _switch_state_rows(row)
+    known = [r["state"] for r in rows if isinstance(r["state"], bool)]
+    if known:
+        if all(known):
+            return "on"
+        if not any(known):
+            return "off"
+        return "partly on"
+    if rows:
+        return "cannot be read on this PC"
+    mine = _matrix_row(row) or {}
+    status = str(mine.get("status") or "")
+    if status in _HAS_A_CONTROL:
+        return "a control this build cannot read as on/off"
+    if status in ("planned", "not-a-setting"):
+        return "no on/off switch"
+    label = label_for(row)
+    if label == LABEL_ALWAYS_ON:
+        return "always on (core safety rule)"
+    if label == LABEL_COMMAND_ONLY:
+        return "always available by command"
+    if label == LABEL_SETTINGS_ONLY:
+        return "Settings only, no chat control"
+    if label == LABEL_PC_ONLY:
+        return "a setting read and changed on this PC"
+    return "no on/off switch"
+
+
+def state_token(row: dict) -> str:
+    """The row's short live-state token, for a caller that compares two rows.
+
+    The public form of `_compare_state` so the generic two-feature answer in
+    `jarvis_quick` reads the SAME token the difference answer carries - one
+    reader, one vocabulary, and no second state list.
+    """
+    return _compare_state(row)
+
+
+def _compare_facts(row: dict) -> dict:
+    """One feature's structured side of a comparison, from its own row + readers.
+
+    THE STRUCTURE, NOT JUST PROSE (2026-11-04, the self-awareness audit's fix
+    #4). A "what is the difference between X and Y" answer used to be two prose
+    paragraphs; a caller could not compare a field without parsing words. This
+    names each field the catalogue really holds - where it lives, the switch it
+    has (or none), its live on/off, what asks first, and its own honest limit -
+    and every value is read, never typed. `state_words` is the existing
+    `_state_clause` sentence, so the structured and the prose answers cannot
+    disagree.
+    """
+    switches = feature_switches(row)
+    return {
+        "id": str(row.get("id") or ""),
+        "title": str(row.get("title") or ""),
+        "where": str(row.get("where") or "").strip(),
+        "has_switch": bool(switches),
+        "switch": [str(s.get("label") or s.get("key") or "") for s in switches],
+        "state": _compare_state(row),
+        "state_words": _state_clause(_switch_state_rows(row), row),
+        "asks": str(row.get("asks") or "").strip(),
+        "limit": _row_limit_words(row),
+        "what": str(row.get("what") or "").strip(),
+        "kind_label": status_label(row),
+    }
+
+
 def _comparison_block(row: dict) -> str:
-    return (f"{row['title']}. Where: {str(row.get('where') or '').strip()} "
-            f"Does it ask first? {str(row.get('asks') or '').strip()} "
-            f"The honest limit: {_row_limit_words(row)}")
+    facts = _compare_facts(row)
+    switch = ("Its switch: " + ", ".join(facts["switch"]) + "." if facts["has_switch"]
+              else "It has no on/off switch.")
+    return (f"{facts['title']}. Where it lives: {facts['where']} {switch} "
+            f"{facts['state_words']} Does it ask first? {facts['asks']} "
+            f"The honest limit: {facts['limit']}")
+
+
+def _difference_sentence(a: dict, b: dict) -> str:
+    """ONE plain sentence saying what is different, from the rows' own words."""
+    a_what = str(a.get("what") or "").strip().rstrip(".")
+    b_what = str(b.get("what") or "").strip().rstrip(".")
+    a_title = str(a.get("title") or a.get("id") or "The first")
+    b_title = str(b.get("title") or b.get("id") or "the second")
+    if a_what and b_what:
+        return (f"The difference: {a_title} is for {a_what}; "
+                f"{b_title} is for {b_what}.")
+    if a_what or b_what:
+        known = a_title if a_what else b_title
+        what = a_what or b_what
+        return (f"The difference is not recorded for both: {known} is for {what}, "
+                f"and the feature list records no description for the other.")
+    return ("The feature list records no description for either row, so I cannot "
+            "say more than what is above.")
 
 
 def difference(first, second) -> dict:
-    """"What's the difference between X and Y?" - both rows, side by side."""
+    """"What's the difference between X and Y?" - both rows, side by side.
+
+    THE STRUCTURED SIDE-BY-SIDE (2026-11-04): the answer carries `compare`, one
+    `_compare_facts` dict per feature, beside the words. Every field comes from
+    the catalogue row or the live switch reader, so "where it lives", "its
+    switch", "is it on" and "what asks first" cannot be two different answers
+    from the prose and the structure. One plain sentence says the difference.
+    """
     if CATALOGUE is None:
         return {"ok": False, "kind": "missing",
                 "words": "The feature list is not installed on this PC, so I cannot read it."}
@@ -1808,18 +1910,23 @@ def difference(first, second) -> dict:
         # difference between them.
         return {"ok": True, "kind": "feature", "feature": _feature_facts(row_a),
                 "features": [{"id": row_a["id"], "title": row_a["title"]}],
+                "compare": [_compare_facts(row_a)],
                 "words": (f"Both names are in the same feature row - "
                           f"{_comparison_block(row_a)}")}
     if row_a is not None and row_b is not None:
         return {"ok": True, "kind": "feature",
                 "features": [{"id": row_a["id"], "title": row_a["title"]},
                              {"id": row_b["id"], "title": row_b["title"]}],
-                "words": _comparison_block(row_a) + "\n\n" + _comparison_block(row_b)}
+                "compare": [_compare_facts(row_a), _compare_facts(row_b)],
+                "words": (_comparison_block(row_a) + "\n\n"
+                          + _comparison_block(row_b) + "\n\n"
+                          + _difference_sentence(row_a, row_b))}
     if row_a is not None or row_b is not None:
         known = row_a or row_b
         missing = str(second if row_a is not None else first).strip()
         return {"ok": True, "kind": "feature", "feature": _feature_facts(known),
                 "features": [{"id": known["id"], "title": known["title"]}],
+                "compare": [_compare_facts(known)],
                 "words": (f"{_comparison_block(known)} The feature list has no "
                           f"\"{missing}\" row, so there is nothing to compare it with.")}
     if got_a["kind"] == "ambiguous":
