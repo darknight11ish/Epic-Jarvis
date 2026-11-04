@@ -21304,7 +21304,7 @@ the gate as `page_read`. One name for this feature, and it is neither.
 | **Never-loosened** | `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`; on the "What asks first" page under **The internet**; on `LOCKDOWN_ACTIONS`, so Lockdown covers it |
 | **Only a person's yes runs it** | `jarvis_agent.NEEDS_A_PERSON` - at any tier, a run nobody was asked about is refused |
 | **Read aloud** | `tools/gen_private_aloud_cases.py`'s `READ_ALOUD_TOOLS`, beside `web_search` |
-| **Off until switched on** | add `"read_web_page"` to `[tools].enabled` in `jarvis-framework.toml` - it is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
+| **Off until switched on** | a one-tool switch in Settings, What asks first, under "Let the AI use this" - ONE PC-only `enable_reading_tool` card plus Windows Hello (§43; switchable since 2026-11-04), or the same line by hand in the owner's `jarvis-framework.toml` `[tools].enabled`. It is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
 
 ### 115.2 One card, then one plain GET
 
@@ -32340,20 +32340,23 @@ is no app screen and no route to poll, because the answer is an ordinary chat
 answer in both apps - the phone posts `/api/chat`, the PC answers, and a card is a
 card either way.
 
-**THE PAGE READER IS NOT MADE SWITCHABLE, ON PURPOSE.** `read_web_page` is a model
-tool (§115) and it stays exactly where it was: off by default (not in
-`[tools].enabled`), in `jarvis_asks_first.TIER_C` and out of `TOOLS_SWITCHABLE`,
-still in `HARD_LIMITS` and `MUST_ASK`, so `request_tool_enable` keeps answering
-`403` with `TOOLS_TOML_ONLY_NOTE` for it and no app may turn it on. Hand-editing
-`[tools].enabled` on this PC remains the only way to offer it to the model, and
-that is the decision of 2026-11-03
-(`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`), not an omission.
-The chat path above does not need that switch: it calls `jarvis_readpage`'s own
-prepare/run behind the same `ask` card, so reading a link works today with the
-model tool still off. `backend/test_reach.py`'s "no app may switch it on"
-assertion is unchanged and still passes.
+**THE PAGE READER IS SWITCHABLE SINCE 2026-11-04.** `read_web_page` is a model
+tool (§115). It is still off by default (not in `[tools].enabled`) and still in
+`jarvis_asks_first.TIER_C`, but the owner's decision of 2026-11-04 put it in
+`TOOLS_SWITCHABLE` with every other tool the model can be offered, so
+`request_tool_enable` accepts ON for it with ONE PC-only `enable_reading_tool`
+card and Windows Hello (§43) - superseding the 2026-11-03 decision
+(`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`) that had kept it
+out. Its tier stays `ask`, and it stays in `HARD_LIMITS` and `MUST_ASK`, so
+nothing in an app can loosen it: offering it and making each read ask are two
+different things. The chat path above does not depend on that switch - it calls
+`jarvis_readpage`'s own prepare/run behind the same `ask` card, so reading a
+link works today with the model tool still off - and that is why turning the
+switch on is not needed for it. `backend/test_reach.py` now asserts the
+opposite of its old "no app may switch it on" line: the row names Settings,
+What asks first.
 
-**WHAT IT DOES NOT DO.** No in-app switch for the page reader, no `read_youtube`
+**WHAT IT DOES NOT DO.** No `read_youtube`
 tool, no quiz from chat, no playlists or channels, no several links in one card,
 no following a link on a page, no download of video or audio, no new route, no
 new tier, and no change to either reader's own module beyond being called. The
