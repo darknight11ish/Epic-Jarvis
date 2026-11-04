@@ -1207,16 +1207,24 @@ def t_it_is_a_two_file_change():
     """The module is SHIPPED, so the installer copies it, and the byte-for-byte
     twin is the repo's own checkers' job.
 
-    THIS TEST USED TO COMPARE `../jarvis-backend/jarvis_bench.py` ITSELF, and
-    that check could not pass in `backend/run_suites.py`: the sweep builds its
-    `jarvis-backend/` from the five files a suite can LIFT (jarvis_hud,
-    jarvis_gate, jarvis_extract, jarvis_models, jarvis_skills - see
-    backend/_base.py), so it holds no `jarvis_bench.py` and never will. The
-    twin rule is already enforced, twice, by suites that run in the required
-    `backend` job: `backend/test_base_matches_repo.py` (136 checks) and
-    `tools/check_stale_twins.py`. What THIS suite can assert everywhere is the
-    half that would be silently forgotten: that the module is on the list the
-    installer copies, in the same position in both files that carry it.
+    TWO CHECKS HERE HAVE ALREADY BEEN WRONG, and both for the same reason: this
+    suite must read only what is inside the folder it runs in.
+
+      * It used to compare `../jarvis-backend/jarvis_bench.py` itself. That
+        cannot pass in `backend/run_suites.py`, which builds its
+        `jarvis-backend/` from the five files a suite can LIFT (jarvis_hud,
+        jarvis_gate, jarvis_extract, jarvis_models, jarvis_skills - see
+        backend/_base.py), so that folder holds no `jarvis_bench.py`.
+      * It then also parsed `../scripts/apply-patches.ps1`. A sweep carries no
+        `scripts/` folder, so that read returned nothing and the check failed
+        for a reason that has nothing to do with the module.
+
+    So this asserts only what `backend/` itself can answer: the module is on
+    `SHIPPED`, where a new module is appended. The byte-for-byte twin is
+    `backend/test_base_matches_repo.py` (136 checks) and
+    `tools/check_stale_twins.py`, and the two SHIPPED lists agreeing is
+    `backend/test_shipped_modules.py` (855 checks) - all three run in the same
+    required `backend` job.
     """
     from _where import SHIPPED
     check("jarvis_bench.py is on the SHIPPED list, so the installer copies it",
@@ -1224,36 +1232,9 @@ def t_it_is_a_two_file_change():
     check("... and it is the LAST entry, where a new module is appended, so the "
           "two lists cannot disagree about its position",
           SHIPPED[-1] == "jarvis_bench.py", SHIPPED[-1])
-    ps1 = _powershell_shipped()
-    check("scripts/apply-patches.ps1's $SHIPPED names it too, and in the same "
-          "position - test_shipped_modules.py fails if the two lists differ",
-          ps1 and ps1[-1] == "jarvis_bench.py", ps1[-3:] if ps1 else None)
-
-
-def _powershell_shipped() -> list:
-    """`$SHIPPED` from scripts/apply-patches.ps1, read as a LIST OF NAMES by
-    finding the quoted entries - the runtime answer to "does the installer copy
-    this module", not a string searched for in the file."""
-    ps1 = BACKEND.parent / "scripts" / "apply-patches.ps1"
-    try:
-        text = ps1.read_text(encoding="utf-8")
-    except OSError:
-        return []
-    start = text.find("$SHIPPED = @(")
-    if start < 0:
-        return []
-    end = text.find("\n)", start)
-    if end < 0:
-        return []
-    out = []
-    for line in text[start:end].splitlines():
-        line = line.strip()
-        if not line.startswith("'"):
-            continue
-        name = line.split("'")[1]
-        if name.endswith(".py"):
-            out.append(name.rsplit("/", 1)[-1])
-    return out
+    check("... and it is named exactly once, so a copy-paste cannot ship it "
+          "twice", list(SHIPPED).count("jarvis_bench.py") == 1,
+          list(SHIPPED).count("jarvis_bench.py"))
 
 
 # ==========================================================================
