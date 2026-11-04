@@ -336,7 +336,7 @@ def the_focus_preset_is_a_real_setting():
 
 
 def the_two_settings_numbers_reconcile():
-    """79 vs 47: "what can I change?" and /api/self used to disagree.
+    """80 vs 48: "what can I change?" and /api/self used to disagree.
 
     Both numbers are honest - the spoken answer counts permission rules, tool
     offers and family rows; the portrait counts the Settings cards' own rows -
@@ -347,7 +347,7 @@ def the_two_settings_numbers_reconcile():
     data = REG.changeable_settings()
     registry_rows = (len(REG.BOOL_SETTINGS) + len(REG.CHOICE_SETTINGS)
                      + len(REG.NUMBER_SETTINGS))
-    check("the registry's own row count is 47", registry_rows == 47,
+    check("the registry's own row count is 48", registry_rows == 48,
           str(registry_rows))
     check("the spoken answer names how many of its count are those rows",
           f"{registry_rows} of them are the switches, named choices and numbers" in

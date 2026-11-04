@@ -32833,7 +32833,7 @@ before and after, and answers one small document
 
 ```json
 {"ok": true, "schema": "jarvis-self-portrait/1", "client": "hud",
- "counts": {"places": 190, "settings": 47,
+ "counts": {"places": 190, "settings": 48,
             "tools": 13, "tools_enabled": 13, "tools_registered": 51,
             "asks_first_rows": 136,
             "abilities": 175, "plugins": 0, "settings_places": 59,

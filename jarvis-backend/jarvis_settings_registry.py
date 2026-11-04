@@ -5446,15 +5446,16 @@ def changeable_words(rows=None, count=None) -> str:
     if count is None:
         count = len(rows)
     # THE TWO NUMBERS ARE RECONCILED HERE (2026-11-04 self-awareness audit,
-    # gap 9). "What can I change?" says 79 because a family row stands for
+    # gap 9). "What can I change?" says 80 because a family row stands for
     # several settings and the permission/tool rows are real changes too;
-    # GET /api/self lists 47 because the Settings cards carry exactly the
-    # registry's 36 switches + 10 choices + 1 number. Both are true, and the
+    # GET /api/self lists 48 because the Settings cards carry exactly the
+    # registry's 37 switches + 10 choices + 1 number. Both are true, and the
     # owner heard both from two doors with nothing saying how they relate, so
-    # the sentence now says the difference out loud: 47 of the 79 are the
+    # the sentence now says the difference out loud: 48 of the 80 are the
     # registry's own rows, and the rest are the permission rules, tool offers
     # and extra controls those cards do not list. The numbers are counted from
-    # the tables, never typed.
+    # the tables, never typed - so the figures above are only what they read on
+    # 2026-11-04, and the sentence always states the live counts.
     registry_rows = len(BOOL_SETTINGS) + len(CHOICE_SETTINGS) + len(NUMBER_SETTINGS)
     extra = count - registry_rows
     reconciliation = (f" {registry_rows} of them are the switches, named choices "
