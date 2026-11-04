@@ -2055,6 +2055,23 @@ $PATCHES = @(
     # there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
     # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
     'phone-apps.patch'
+    # The self-benchmark's routes (bench.patch, 2026-11-04; DESIGN.md section 6
+    # and phase 1). FIVE route branches in jarvis_hud.py and no install block:
+    # GET /api/bench, GET /api/bench/run/<id>, GET /api/bench/history,
+    # POST /api/bench/run and POST /api/bench/cancel - every one of them a
+    # 12-line call into a shipped module, so the logic stays in
+    # backend/jarvis_bench.py where its test can drive it with fake replies.
+    #
+    # It appends immediately before plugin-loader.patch (which must stay LAST
+    # of all) and adds no install block, so the loader's own anchor is
+    # untouched. Its two hunks anchor INSIDE hardware.patch's own added blocks
+    # (the GET /api/hardware body and the POST /api/hardware/apply body), so the
+    # stack walk invents no line of the owner's original file:
+    # tools/check_patch_original_text.py measures 0 hunks / 0 lines for it. Every
+    # patch that enumerates "the patches written after me" has had its name
+    # added there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
+    # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'bench.patch'
     'plugin-loader.patch'
 )
 
@@ -2849,6 +2866,18 @@ $SHIPPED = @(
     'jarvis_watch_policy.py'     # Stage one of the two-stage gate, and it is PURE: the seven REQUIRED checks vs the two informational ones, one batch per (pr, head_sha), the settle rules, the closed reason codes. Imports nothing from Jarvis - no disk, no network, no model - so "filtered events never reach the costly stage" is structural. Imported by jarvis_watch_ci.py; no route of its own
     'jarvis_watch_ci.py'         # The watch_pr_checks job body: polls ONE pull request through gh, folds the seven checks into one thread, writes a decision row (observe) or notifies (active), and holds the decisions ring buffer + watch-receipts.json so twenty polls of one commit alert once. Starts no polling of its own - a job created through POST /api/jobs is the only caller. Its install() answers GET /api/watch/decisions, so the owner can read what it would have said before promoting it from observe to active
     'jarvis_outbox.py'           # What Jarvis still owes the owner, written down BEFORE it is said: a deterministic (kind, key) outbox in outbox.json (temp file, fsync, rename) for parked approval cards, job-completion notices and CI notices. jarvis_jobs.py re-announces whatever is still owed on startup, which is what closes the restart card loss; settled entries are pruned, an owed one never is. Approves nothing, widens nothing, writes one file
+
+    # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
+    # owner's own request: measure Jarvis's own token speed across the local
+    # models, the layer placement and the context sizes, keep a separate
+    # history, and explain the results in plain words). Phase 1 is the engine
+    # and its store: one run = one model + one setup + N repeats on one lane,
+    # the prefill correction, per-card VRAM and utilisation from nvidia-smi,
+    # and its own `bench.jsonl` (never `speed.jsonl`). `bench.patch` is the
+    # routes that reach it. Standard library only, loopback only. The same
+    # entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_bench.py'
+
 )
 
 # The settings file. Installed only where none exists; never overwritten.

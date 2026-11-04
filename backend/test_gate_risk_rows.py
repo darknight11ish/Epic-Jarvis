@@ -105,6 +105,13 @@ def t_the_patch_is_registered_last():
              # phone-apps.patch (2026-11-02): three route branches in jarvis_hud.py
              # and no hunk in jarvis_gate.py at all.
              "phone-apps.patch",
+             # bench.patch (2026-11-04, the self-benchmark) is appended after this
+             # patch, immediately before plugin-loader.patch: TWO hunks, both in
+             # jarvis_hud.py (the GET /api/bench routes and the POST /api/bench
+             # routes), anchored inside hardware.patch's own added blocks. It touches
+             # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
+             # rewrites nothing this patch wrote.
+             "bench.patch",
              # reminder-actions.patch (2026-10-27): two hunks in jarvis_gate.py
              # only - a `_NO_RULE_FROM_DENIAL` line and a `_RISK` row - both
              # ADDED after the rows this patch removes, and it rewrites neither.

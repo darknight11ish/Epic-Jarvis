@@ -32925,7 +32925,184 @@ existing per-answer `X-Jarvis-Route` field). **No `features/features.json` entry
 is added by this work** - that row is still waiting on the app lanes; the PR
 says exactly what each checker reported.
 
-## 185. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
+## 185. Jarvis measures its own token speed: one run, two rates, and its own history (backend phase 1, added 2026-11-04)
+
+The owner's ask of 2026-11-04: measure Jarvis's own token speed across the
+local models, the RAM/GPU layer placement and the context sizes, keep a
+**separate** history of those runs, and explain the results in plain words.
+This section is phase 1 of the design in
+`.dsh-scratch/BENCHMARK-2026-11-04/DESIGN.md` - the measurement engine and its
+store, with **no screens yet**. `backend/jarvis_bench.py` (shipped whole, and
+its `jarvis-backend/` twin) does the work; `backend/bench.patch` is the five
+route branches in `jarvis_hud.py` that reach it, and it holds no logic of its
+own.
+
+**ONE RUN = one model + one setup + N repeats + one target lane.** A repeat
+asks Ollama one question, reads Ollama's own counters out of the reply, samples
+both graphics cards, and writes ONE row; the run then writes a second row with
+the setup and the median/min/max over its repeats. Every row goes to
+`~/.openjarvis/bench.jsonl` - a NEW file with its own allowlist, its own 500-run
+cap and a 2 MB ceiling. **`speed.jsonl` is never opened**: that file's promise
+is that rows are never deleted or rewritten, and this feature has a DELETE in a
+later phase, so mixing them would widen the allowlist that currently guarantees
+no conversation text can be written and would overload `speed.jsonl`'s
+`view()`.
+
+| Route | What it is |
+|---|---|
+| `GET /api/bench` | the controls screen's whole data: the defaults, the ladders the snapping controls snap to, each lane with the card it really is and what that lane has installed, the two cards and the driver from `nvidia-smi`, whether Jarvis is on standby, whether a run is in flight, and the last run. **Read-only: it starts and loads nothing.** `?model=` adds that model's `block_count` and trained `context_length`, which is one `/api/show` round trip and is paid only when a model is picked |
+| `POST /api/bench/run` | start ONE run. Body `{model, lane, num_ctx, num_gpu, num_predict, prefill_tokens, repeats, warmup, unload, confirm: {model, lane, may_evict: true}}`. **No approval card, and `confirm` is mandatory** (below). Asynchronous: it spawns and returns 200 `{ok, run_id, notes}`, so a two-minute run cannot hang a request thread |
+| `GET /api/bench/run/<id>` | how the run is going, and its numbers when it is done: `200 {state: running\|done\|failed, step, of, partial, result?}`; `404` when no run has that id |
+| `POST /api/bench/cancel` | `{run_id}` - stop after the repeat in flight. The repeat already running is **not** killed: a request cut off mid-answer leaves Ollama's counters unusable, and half a measured repeat is not a number. `409` when that run has already finished |
+| `GET /api/bench/history` | the run rows, newest first. `?limit=&model=&lane=&preset=`; a filter is an **exact** match on the stored name, because a fuzzy one would let a screen say `qwen3.5:9b` and mean `qwen3.5:4b`. `{runs, total, note}`, and `note` is always a sentence - "No benchmark runs on file yet." and "No benchmark runs match that filter." are different facts |
+
+Status codes follow the house style `hardware.patch` already uses: `200` ok,
+`400` bad body or missing `confirm`, `401` bad token, `403` cross-origin, `409`
+refused with a sentence, `503` could not start.
+
+**WHAT A RUN REFUSES, and why each one is a sentence rather than a silent no.**
+A benchmark started while something else is using the model measures the
+QUEUE, not the model. In this order:
+
+```
+409  a benchmark is already running; it takes a minute or two
+409  Jarvis is answering. Measuring now would time the queue, not the model.
+409  Jarvis is on standby, which keeps the graphics card free; measuring would
+     load a model onto it. Wake Jarvis first
+409  a task is running; it uses the model, so the benchmark would time the
+     queue instead of the model
+409  the <lane> lane is not running; start it first
+409  <model> is not installed on the <lane> lane. It has: <what is>
+400  Nothing was measured: Ollama's address (<base>) is not this PC, and a
+     benchmark only talks to this PC.
+400  nothing was measured: the run was not confirmed
+```
+
+**The lane is never started as a side effect.** If the chosen lane's Ollama is
+not running the run is refused; the only thing in Jarvis that starts a lane
+stays a preset apply (`jarvis_presets.APPLY_ACTION`). **"Jarvis is answering"
+is already wired to the real chat path without a patch hunk inside the chat
+handler**: the check asks `jarvis_power_switch._busy_reason()`, which reads the
+HUD's own activity state - `_activity("speaking")` when the first chunk goes
+out, `_activity("working")` during a tool call, `_activity("idle")` at the end -
+the same signal both apps already show the owner. A module flag
+(`jarvis_bench.note_answer_start()`) makes the same refusal reachable exactly
+from a caller that knows it is about to stream.
+
+**NO APPROVAL CARD, AND THAT IS THE RECORDED DECISION** (DESIGN section 7):
+`POST /api/hardware/measure` already runs with no card, for the stated reason
+that it "runs one short prompt per model on this PC and changes no setting", and
+here the owner pressing Measure is the actor - a card would ask him to approve
+his own button press. What a card would have bought is bought explicitly
+instead: the POST must carry `confirm: {model, lane, may_evict: true}`, and the
+UI fills it only after naming exactly what will happen. A `confirm` that names a
+different model or lane than the body is **not** a confirmation of this run and
+is refused too, so a stale screen cannot start a run nobody agreed to. Nothing
+is auto-approved and rule 4 is untouched.
+
+**THE PREFILL TRAP, WHICH IS THE REASON THIS FEATURE NEEDS ITS OWN FORMULA.**
+`prompt_eval_duration` times only the prompt tokens Ollama actually COMPUTED,
+while `prompt_eval_count` counts the WHOLE prompt including the part it read
+from its cache. So prompt speed is **always**
+
+```
+(prompt_eval_count - prompt_eval_cached_count) / (prompt_eval_duration / 1e9)
+```
+
+and never `prompt_eval_count / prompt_eval_duration`. The measured example
+(Ollama 0.34.0, `qwen2.5:7b`, RESEARCH section 3.1): 318 prompt tokens, **317 of
+them cached**, 23.00 ms of evaluation. The naive division reports **13,826
+tokens a second**; the model really read one token in 23 ms, which is **43** - a
+318x lie built from two numbers that are each individually correct. Two more
+rules follow and both are stored: when `cached == count` there is nothing left
+to time, so the row says **"cached - prefill not measured"** and never `0` and
+never infinity; and when `prompt_eval_cached_count` is absent (Ollama before
+0.33.3) the answer is **unknown, never 0**, because defaulting it to zero turns
+"I do not know" into a confident, too-high number. `jarvis_speed.timing_from_reply()`
+is deliberately **not** reused for this: its `first_word_ms` is
+`load_duration + prompt_eval_duration`, i.e. the UNCACHED prefill time, which
+under-reports time-to-first-token whenever part of the prompt was cached.
+
+**THE REST OF WHAT IS REPORTED**, all on the row and all from something that
+measured it: generation as `eval_count / eval_duration`; **two**
+time-to-first-token numbers - the harness's own wall clock from POST to the
+first streamed chunk (the one the owner waited), and Ollama's
+`load_duration + prompt_eval_duration` - with the row saying so when they
+disagree by more than 15%; `total_ms` and Ollama's `total_duration`; VRAM peak
+and base **per card** from `nvidia-smi` (`memory.used` sampled before, after
+every repeat and at the end) and `utilization.gpu`; the context really in use
+from `/api/ps` `context_length`, recorded **beside** the one that was asked for
+because they are not always the same; the model's `block_count` read from
+`/api/show`; and the offload from **two independent sources** - `/api/ps`
+`size` vs `size_vram` (`on_card_percent`) and `offloaded N/M layers to GPU`
+through `jarvis_hardware.parse_ollama_log`, which already had that parser and is
+not re-implemented here. When the two disagree **both are kept**. Per-process
+VRAM is not claimed at all: `nvidia-smi --query-compute-apps used_memory`
+answers `[N/A]` for every process on driver 617.42, so the row says "card 0 rose
+by X MB while this ran" and never "this model used X MB".
+
+**A SPILLED RUN IS LABELLED AND IS NEVER PRESENTED AS FAST.** When any of the
+model was off the card the run's one sentence opens with `PARTIAL:` and says the
+numbers are not comparable with a fully-on-card run, and the setup is described
+as what was **asked for** rather than as what happened - "32 of 32 layers on the
+card" beside "only 93% of it was in video memory" would be a sentence that
+contradicts itself, with no way for a reader to tell which half is the
+measurement. **A run that could not measure writes `ok: false` with a `why`
+sentence and never a zero**: there is no silent gap, because the next reader
+cannot tell a gap from a run that was never started. `ollama_version` and
+`driver_version` go on every row - this PC's driver has already moved once
+(616.56 to 617.42) and a tok/s number without them is not comparable to
+anything.
+
+**THE ROWS ARE TWO FLAT KINDS, with the same allowlist discipline as
+`jarvis_speed._clean()`**: `kind: "bench"` is one repeat and `kind:
+"bench-run"` is one run with its setup, its medians, `spilled`,
+`worst_repeat_ok`, and `words` - the one sentence both apps display, built in
+the engine so the desktop and the phone cannot word the same result two
+different ways. **No prompt text is ever stored**: the prefill prompt is
+generated from a fixed, counted word list with a per-repeat tag and is thrown
+away, and what is stored is how many tokens Ollama said it really counted. The
+allowlist is why `{"prompt": ...}` handed in by a caller that made a mistake is
+dropped rather than written.
+
+**THE ADVICE SENTENCE IS BUILT AND TESTED; ITS ROUTE IS PHASE 4.**
+`jarvis_bench.advice()` returns `{note, numbers, enough}` from `bench.jsonl` and
+nothing else - it cannot run a benchmark, delete a row, or reach the network.
+**Under three usable runs of a model it refuses to compare**, with "Only 2
+runs of that model are on file; three are needed before I compare them" - the
+same floor `jarvis_speed.compare_latency()` refuses under, because two lists of
+two can differ by 40% from noise alone. At three it names the fastest and the
+fastest that did not spill, and a comparison that spans a driver or Ollama
+version change says so rather than quietly mixing two machines into one
+verdict.
+
+**WHAT IS DELIBERATELY NOT WIRED YET, and this is not an accident.** The routes
+of DESIGN section 6 that phase 1 does **not** wire are `/api/bench/history/{id}`
+and its DELETE (the separate History window, phase 3), `/api/bench/presets`
+(two routes - benchmark presets are phase 4), `/api/bench/advice` (phase 4) and
+the read-only `benchmark_results` chat tool (phase 4). The desktop Benchmark
+panel is phase 2 and the phone's `BenchScreen`/`BenchHistoryScreen` are phase 5;
+until then `tools/check_parity.py` carries these five routes in `BACKEND_ONLY`
+with the lane named in each reason, because neither app calls any of them on
+this tree - a state that check FAILS the day an app starts calling one, which is
+the point of putting it there. **Nothing here has been measured on real
+hardware**: `backend/test_bench.py` drives every formula and every refusal from
+a fake Ollama reply and fake `nvidia-smi` text, and one real run is a field
+test, not a test (DESIGN section 12) - a CI runner has no cards and no models,
+so those rows are BLOCKED, never PASS.
+
+**PROVED BY** `backend/test_bench.py`: 236 checks, 0 failed - every refusal row
+of DESIGN section 2 with its exact sentence, the 318x trap (a reply of 318/317/
+23 ms must yield 43.48 and must NOT yield 13,826), the fully-cached case, absent
+is not zero, generation rate against a literal, both time-to-first-token
+numbers, the median/spread/warmup-drop pure functions, a run that is not fully
+on the card (its sentence leads with `PARTIAL:`), a failed run that writes
+`ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
+500-run cap keeping whole runs, the byte ceiling, the allowlist, the
+three-run comparison floor, and that no run can start without `confirm`.
+
+
+## 186. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
 
 A watcher that speaks about everything gets muted. That is the whole of this
 section. Three patterns from `deepseek-ai/dsh-superagent-prototype` (MIT) were
@@ -32944,7 +33121,7 @@ Three modules and one drop-in folder carry it:
 | the record | `backend/jarvis_outbox.py` | what is still owed to the owner, written to `outbox.json` BEFORE it is said, re-announced on startup. |
 | the route | `plugins/ready/watch-decisions/` | calls `jarvis_watch_ci.install()` for the one GET below. No patch: `jarvis_hud.py` is not shipped, and a route there would need a hunk in its dispatch tuple. |
 
-### 185.1 The three modes, and why the middle one is the default
+### 186.1 The three modes, and why the middle one is the default
 
 `WATCH_MODES = ("off", "observe", "active")` (`backend/jarvis_watch.py`).
 
@@ -32968,7 +33145,7 @@ answers a route; it starts no thread, no timer and no polling of its own. The
 watcher looks at a pull request only when a `watch_pr_checks` job names one,
 created through the existing `POST /api/jobs`.
 
-### 185.2 `GET /api/watch/decisions?limit=50`
+### 186.2 `GET /api/watch/decisions?limit=50`
 
 The read that makes `observe` worth having: *"what would your GitHub watcher
 have told me today?"* Newest first, `limit` clamped to 1..200 (default 50,
@@ -33026,7 +33203,7 @@ Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
 The buffer holds the newest 500 rows in `watch-decisions.json`, written
 temp-file-then-rename, so a crash leaves the previous whole file.
 
-### 185.3 One batch per pull request, and the seven that matter
+### 186.3 One batch per pull request, and the seven that matter
 
 A pull request runs **seven** checks that gate a merge - `rust`, `frontend`,
 `backend`, `backend-windows`, `credential-manager`, `powershell-5`,
@@ -33061,7 +33238,7 @@ that is already finished - and every later poll of that commit answers
 purpose: a commit that fails `rust`, is re-run and settles green owes the owner
 two different sentences.
 
-### 185.4 The two-stage gate, and what may never reach stage two
+### 186.4 The two-stage gate, and what may never reach stage two
 
 1. **`gate(trigger, thread)`** - pure. Allowlists, required-vs-informational
    names, receipts, settle rules, bot filtering. No disk, no network, no model,
@@ -33079,7 +33256,7 @@ two different sentences.
 built by plain string work over the log. So this is 0 GPU today, and the seam is
 where a local-model summary would go if that is ever wanted.
 
-### 185.5 The durable outbox, and what a restart owes (pattern 5B)
+### 186.5 The durable outbox, and what a restart owes (pattern 5B)
 
 `backend/jarvis_outbox.py` holds what Jarvis still owes the owner, in
 `outbox.json` beside `jobs.db` (`JARVIS_OUTBOX_PATH` overrides it; the path is
@@ -33117,7 +33294,7 @@ approval card, this takes the repeat.
 Settled entries are pruned back to 500; a pending one is never dropped, however
 old, because dropping it is the defect this module exists to prevent.
 
-### 185.6 Tests
+### 186.6 Tests
 
 `backend/test_watch_ci.py` (139 checks) and `backend/test_outbox.py` (63), both
 plain Python with a fake clock, a fake `gh` runner and temp files - no network,
@@ -33129,7 +33306,7 @@ thread, a fixed failure then green owing two sentences, `gate` never calling
 delivered exactly once afterwards, a restart re-announcing an unanswered card
 once and not repeating a delivered notice, and the route's own wrapper.
 
-### 185.7 What is NOT built, and said plainly
+### 186.7 What is NOT built, and said plainly
 
 - **No app screen for this route yet.** It is read on the PC while the mode is
   being decided; `tools/check_parity.py` classifies it `BACKEND_ONLY` with that
@@ -33139,6 +33316,7 @@ once and not repeating a delivered notice, and the route's own wrapper.
   file.
 - **No push, merge, label or comment.** This watcher reads; the only writes it
   can make are its own three files and the notification it hands to the arbiter.
-- **The second stage never calls a model today** (§185.4).
+- **The second stage never calls a model today** (§186.4).
 - **Not measured on the owner's PC**: the route and the job body are tested
   against the real modules and a fake `gh`, not against a live pull request.
+
