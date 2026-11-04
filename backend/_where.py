@@ -1508,6 +1508,17 @@ SHIPPED = (
     # no network, no elevation. The same entry is at the end of $SHIPPED in
     # scripts/apply-patches.ps1.
     "jarvis_storage_health.py",
+    # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
+    # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
+    # conversation about any of its tools). ONE entry per name in
+    # jarvis_agent.TOOLS plus one per capability family: what the thing is in
+    # beginner words, what it really lets the owner do, what it touches, what it
+    # refuses, what it pairs with, which switch turns it on, and the source
+    # files that prove each claim - with the pure functions that turn a question
+    # into a deterministic answer or a short context block for the model. Pure
+    # data and stdlib only: it opens nothing, changes nothing, and runs no tool.
+    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_tool_profiles.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate
@@ -1520,17 +1531,6 @@ SHIPPED = (
     # it. Standard library only, loopback only, no card and no model at import.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
     "jarvis_bench.py",
-    # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
-    # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
-    # conversation about any of its tools). ONE entry per name in
-    # jarvis_agent.TOOLS plus one per capability family: what the thing is in
-    # beginner words, what it really lets the owner do, what it touches, what it
-    # refuses, what it pairs with, which switch turns it on, and the source
-    # files that prove each claim - with the pure functions that turn a question
-    # into a deterministic answer or a short context block for the model. Pure
-    # data and stdlib only: it opens nothing, changes nothing, and runs no tool.
-    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_tool_profiles.py"
 )
 
 
