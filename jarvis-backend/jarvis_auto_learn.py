@@ -98,6 +98,48 @@ THE CHECKS (each a small function below, returning a reason in words or "")
               counted in stats() and said as the fault it is rather than
               read as the owner's facts being suspicious (C2c, 2026-11-02).
 
+TWO NARROW REPAIRS AND THEIR RECHECK (2026-11-03; the owner asked for seamless
+memory and chose "fix the cards first", and Gemini's rulings Q1-Q3 on the
+memory review hardened both). Measured on the owner's PC: five learning
+passes, zero facts saved, six carded - two because a tool had run somewhere in
+the same pass, two because the local model took too long to run the
+sensitive-topic check, two because the learner had reworded the fact. Every
+repair below is fail-closed; every other check is unchanged.
+
+  Attribution  ONE bad turn no longer cards the whole pass. Each fact is
+              attributed to the owner turns that hold every content word of
+              it (`_attributed`), and those turns must still be seen-arrived,
+              typed or strictly-verified voice, and must not have read outside
+              text themselves. TWO HARDENINGS (Gemini Q1): the words must fit
+              ONE clean turn, or TWO CONSECUTIVE clean turns with no other turn
+              between them - never stitched across a tainted turn, so a tool
+              output cannot supply half a fact; and when any turn of the pass
+              is not learnable from, "Save facts even when Jarvis had to
+              reword them" may not bypass the grounding check for that pass.
+              A fact that cannot be attributed keeps the pass's conservative
+              reason and stays a card, exactly as before. Why it is safe: the
+              fact's own words are then all in turns the owner's own words
+              introduced, so a tool running elsewhere in the conversation
+              cannot be where the fact came from.
+  Patient check  a sensitive-topic check that could not RUN (a timeout, no
+              local model, an unreadable answer) is asked once more after a
+              1.5 s pause (`SENSITIVE_RETRY_BACKOFF`; injectable - the tests
+              set it to 0.0) with a longer deadline before the fact is carded
+              (`_sensitive_again`). The learner's own model is frequently busy
+              or still loading right after an answer, and one 8-second
+              deadline then carded an ordinary fact with "the check could not
+              run" - measured on the owner's PC, two of the six. A check that
+              still cannot RUN is still a card, and nothing is ever saved
+              without a clean answer.
+  Recheck     the pending cards whose ONLY reason was "not in your own words"
+              are looked at again once that switch is ON
+              (`recheck_pending_proposals`) - on every pass, and when the
+              switch is turned on. The other two old reasons need the turns of
+              the pass that was carded, and those were never stored (checked
+              on the live store: proposals carry no turn column and a
+              conversation card's note has no provenance), so they stay cards
+              rather than be guessed at.
+
 NOTHING LEAVES THIS PC. There is no network code here; the sensitive-topic
 check asks the learner's own model, on this PC only. The event it raises,
 `memory_saved`, carries fact ids only - never the words (L10).
@@ -347,8 +389,22 @@ def set_sensitive(on: bool) -> dict:
 
 
 def set_paraphrase(on: bool) -> dict:
-    """The 2026-11-02 switch: "Save facts even when Jarvis had to reword them"."""
-    return dict(_save(auto_paraphrase=bool(on)), ok=True)
+    """The 2026-11-02 switch: "Save facts even when Jarvis had to reword them".
+
+    2026-11-03 (Gemini Q3 on the memory review): turning it ON also looks at
+    the pending cards that only waited for it (`recheck_pending_proposals`).
+    When there are none that call reads one settings file and one store
+    query, and touches no model."""
+    out = dict(_save(auto_paraphrase=bool(on)), ok=True)
+    if on:
+        try:
+            again = recheck_pending_proposals()
+            if again.get("saved"):
+                note_pass(saved=len(again["saved"]))
+        except Exception:                                     # noqa: BLE001
+            # The switch itself must never fail because a recheck did.
+            pass
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -1014,6 +1070,18 @@ def _source_trusted(source) -> bool:
 
 def check_taint(entry: dict) -> str:
     if entry.get("tainted") or entry.get("read_outside"):
+        return "the conversation read outside text (a tool ran)"
+    return ""
+
+
+def check_own_taint(entry: dict) -> str:
+    """The reason THIS turn may not be learned from - its own answer ran a
+    tool, not a tool turn earlier in the conversation (2026-11-03, per-fact
+    attribution, Gemini Q1). A turn this PC saw typed after an earlier tool
+    turn is still the owner's own words. check_turn_pairs keeps the
+    conversation-wide reason as the pass's `why`, so a fact that cannot be
+    attributed keeps the old, conservative card."""
+    if entry.get("read_outside"):
         return "the conversation read outside text (a tool ran)"
     return ""
 
@@ -1987,15 +2055,36 @@ def check_sensitive(fact: str, turns: list, allowed: bool) -> str:
 UNCHECKED_SUFFIX = (" - the check itself could not run, not a fact about you, "
                     "so it waits for your yes")
 
+#: How long the SECOND, patient attempt at the sensitive-topic check gets
+#: (2026-11-03). The first attempt uses jarvis_sensitive.MODEL_TIMEOUT (8 s),
+#: which is short enough that a model still busy or loading right after the
+#: answer times out - measured on the owner's PC, two of the six facts it
+#: carded were this. The learner pass is not on the chat's critical path, so
+#: this one is allowed to wait. It relaxes NOTHING: the second answer still has
+#: to be a clean "not sensitive", and a check that cannot run again is a card.
+SENSITIVE_RETRY_TIMEOUT = 30.0
+
+#: The pause before that second ask (2026-11-03, Gemini Q2 on the memory
+#: review): the first check timed out because the model was still busy, so
+#: asking again in the same instant would only time out again. Injectable -
+#: the tests set it to 0.0 so no suite ever sleeps.
+SENSITIVE_RETRY_BACKOFF = 1.5
+
 
 def sensitive_why(fact: str, turns: list, allowed: bool) -> str:
     """check_sensitive(), plus the two things a check that could NOT run needs
     (2026-11-02, C2c): its real reason named on the card as the fault it is,
     and one counter in stats() so a dead learning lane reads as a fault.
 
-    Nothing here can relax anything: a reason that is not one of the check's
-    own failure sentences comes back exactly as check_sensitive() gave it."""
+    Since 2026-11-03 a "could not run" answer is asked ONCE MORE with a longer
+    deadline (`_sensitive_again`) before the fact is carded, because the
+    learner's own model is often busy right after an answer. Nothing here can
+    relax anything: a reason that is not one of the check's own failure
+    sentences comes back exactly as check_sensitive() gave it, and a check
+    that fails again is still a card - counted and said as the fault it is."""
     why = check_sensitive(fact, turns, allowed)
+    if why and sensitive_could_not_run(why):
+        why = _sensitive_again(fact, turns, allowed, why)
     if why and sensitive_could_not_run(why):
         try:
             note_sensitive_unchecked(why)
@@ -2003,6 +2092,33 @@ def sensitive_why(fact: str, turns: list, allowed: bool) -> str:
             pass
         return why + UNCHECKED_SUFFIX
     return why
+
+
+def _sensitive_again(fact: str, turns: list, allowed: bool, first: str) -> str:
+    """" or the card's reason from ONE more, more patient ask of the same
+    check. Only ever called for a reason that is the check failing to run
+    (jarvis_sensitive's own failure table), never for a real topic.
+
+    `allowed` (the owner's "Also remember sensitive topics automatically")
+    short-circuits the check to the always-asks patterns, which cannot time
+    out on a model - so a failure there is not retried, it is returned.
+
+    The pause before asking again is `SENSITIVE_RETRY_BACKOFF` (1.5 s), taken
+    here and nowhere else; the tests set it to 0.0 so no suite ever sleeps."""
+    if allowed:
+        return first
+    if SENSITIVE_RETRY_BACKOFF:
+        time.sleep(SENSITIVE_RETRY_BACKOFF)
+    try:
+        import jarvis_sensitive
+        reason = jarvis_sensitive.card_reason(
+            fact, [t for t in turns or [] if isinstance(t, str)],
+            timeout=SENSITIVE_RETRY_TIMEOUT)
+    except Exception:
+        return first
+    if not isinstance(reason, str):
+        return first
+    return reason
 
 
 # --------------------------------------------------------------------------
@@ -2017,26 +2133,99 @@ def _live(conversation_id, text) -> Optional[dict]:
         return None
 
 
-def check_turns(turns: list, conversation_id) -> tuple:
-    """("" or the first reason, [registry entries]) for the owner turns a
-    pass read. Every turn must pass."""
+def check_turn_pairs(turns: list, conversation_id) -> tuple:
+    """(a reason that is the PASS being unreadable, [{"text","entry","why","clean"}])
+    for the owner turns a pass read - one pair per turn, EVERY turn classified
+    (2026-11-03).
+
+    `fatal` is the pass itself being unreadable ("the app did not say which
+    conversation this was", "no words of yours to learn from"); those cannot be
+    repaired by looking at one fact, and every proposal is a card. Otherwise
+    each pair's `why` is "" for a turn a fact may be learned from, or the
+    reason that turn may not be: words this PC never saw arrive, a voice let in
+    loosely, or a conversation that had read outside text - and `clean` is the
+    narrower per-turn answer attribution uses (2026-11-03, Gemini Q1): this
+    turn itself did not read outside text and its words are trustworthy.
+
+    after_pass uses this instead of check_turns so ONE bad turn no longer cards
+    a fact whose own words are all in clean turns; check_turns below is the old
+    pass-level answer, kept for callers that only need that."""
     if not (isinstance(conversation_id, str) and _CID.fullmatch(conversation_id)):
         return "the app did not say which conversation this was", []
-    entries = []
     if not turns:
         return "no words of yours to learn from", []
+    pairs = []
     for text in turns:
         entry = _live(conversation_id, text)
         # check_provenance/check_voice/check_taint pass first, so this PC has
         # already recorded that the owner typed (or said) every word of it -
         # which is why a LONG turn is not "pasted text" on length alone here
         # (2026-11-02, C2b). Any other outside-text sign still cards it.
+        #
+        # `why` keeps the CONSERVATIVE pass reason - a conversation tainted by
+        # a tool anywhere at or before this turn counts - so a fact that cannot
+        # be attributed keeps the old card. `clean` asks the narrower question
+        # per-fact attribution needs: did THIS turn itself run a tool, or come
+        # from somewhere untrustworthy? A typed turn after an earlier tool turn
+        # is still the owner's own words, and a fact whose every word is in it
+        # can be learned from it.
         why = (check_provenance(entry) or check_voice(entry) or check_taint(entry)
                or check_outside(text, seen_typed=True))
-        if why:
-            return why, entries
-        entries.append(entry)
+        here = (check_provenance(entry) or check_voice(entry) or check_own_taint(entry)
+                or check_outside(text, seen_typed=True))
+        pairs.append({"text": text, "entry": entry, "why": why,
+                      "clean": not here})
+    return "", pairs
+
+
+def check_turns(turns: list, conversation_id) -> tuple:
+    """("" or the first reason, [registry entries]) for the owner turns a
+    pass read. EVERY turn must pass - the pass-level answer, unchanged.
+
+    after_pass no longer uses this (2026-11-03): it calls check_turn_pairs() so
+    one bad turn only cards the facts that actually need that turn's words."""
+    fatal, pairs = check_turn_pairs(turns, conversation_id)
+    if fatal:
+        return fatal, []
+    entries = []
+    for p in pairs:
+        if p["why"]:
+            return p["why"], entries
+        entries.append(p["entry"])
     return "", entries
+
+
+def _attributed(fact: str, pairs: list) -> Optional[tuple]:
+    """(texts, entries) when EVERY content word and number of the fact is in
+    ONE clean owner turn, or in TWO CONSECUTIVE clean owner turns with no
+    other turn between them - else None (2026-11-03).
+
+    Gemini's Q1 hardening on the memory review: the union of all clean turns
+    is NOT enough. A tool output in one turn could prompt-inject a combination
+    of words that had appeared separately in a clean turn before it and a
+    clean turn after it, and the union would then look like the owner's words.
+    So a window is one turn, or two neighbours in the pass, and a tainted turn
+    can never be crossed. A fact split across three turns - even three clean
+    ones - is carded: fail closed, and rare enough that the honest answer is
+    the owner's yes.
+
+    `clean` is the per-turn answer check_turn_pairs gives (the turn itself did
+    not read outside text and its words are trustworthy); the conversation-wide
+    taint stays the pass's reason, so a fact that cannot be attributed here
+    keeps the old card."""
+    good = [p for p in pairs or [] if isinstance(p, dict)]
+    for i, p in enumerate(good):
+        if not p.get("clean"):
+            continue
+        window = [p]
+        if i + 1 < len(good) and good[i + 1].get("clean"):
+            window.append(good[i + 1])
+        texts = [str(w.get("text") or "") for w in window]
+        if any(not t for t in texts):
+            continue
+        if not ungrounded(fact, texts):
+            return texts, [w.get("entry") for w in window]
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -2270,6 +2459,102 @@ def _topic_card_noted(st=None) -> None:
         pass
 
 
+#: The one old card reason a later pass can honestly answer by itself
+#: (2026-11-03, Gemini Q3 on the memory review): the fact was marked "not in
+#: your own words" only because "Save facts even when Jarvis had to reword
+#: them" was off when it was proposed. Turning that switch ON is exactly the
+#: change that makes the reason obsolete.
+GROUNDED_CARD = "not in your own words"
+
+
+def recheck_pending_proposals(*, model=None, ollama=None,
+                              learning_on: bool = True, extract=None) -> dict:
+    """Save the pending cards whose ONLY old reason was "not in your own words"
+    once the reworded switch is on. Returns {"saved": [fact ids], "cards": {},
+    "why": ""}.
+
+    WHAT IT CANNOT DO, said plainly: the other two old card reasons - a
+    sensitive check that could not run, and the old pass-wide "the conversation
+    read outside text" - need the TURNS of the pass that was carded. Those were
+    never stored (checked on the live store: `proposals` has no turn column and
+    a conversation card's note has no provenance), so a recheck cannot honestly
+    re-derive them; they stay cards for the owner's yes instead of being
+    guessed at. A NEW pass will not make those cards again, because the two
+    repairs above fix their cause.
+
+    The checks that can be re-run without the turns are: source, correction,
+    instruction, forgotten-before, contradiction, and the sensitive-topic check
+    (asked here on the fact's own words; a check that cannot run is a reason to
+    leave the card alone, never a save). The fact is saved with meta.reworded,
+    the mark both apps show, and `REWORDED_MAX_PER_PASS` is the ceiling this
+    call may save. No model is touched when there is nothing to recheck.
+    Never raises."""
+    out = {"saved": [], "cards": {}, "why": ""}
+    try:
+        if not (settings().get("auto_paraphrase") is True):
+            return out
+        fault = check_settings(learning_on) or check_intake()
+        # The switch can be flipped by a caller that has no model handles
+        # (set_paraphrase from the approval flow); then only the checks above
+        # run, and the sensitive check fails closed on its own if it cannot.
+        if not fault and (model is not None or ollama is not None):
+            fault = check_local_model(ollama, model)
+        if fault:
+            out["why"] = fault
+            return out
+        st = _store()
+        allowed = settings()["auto_sensitive"]
+        with closing(st._connect()) as c:
+            _init_notes(c)
+            rows = c.execute(
+                "SELECT p.id, n.conversation_id FROM proposals p"
+                " JOIN auto_learn_notes n ON n.proposal_id = p.id"
+                " WHERE p.state='pending' AND p.source='conversation'"
+                " AND n.reason=? AND n.topic_ask IS NULL ORDER BY p.created",
+                (GROUNDED_CARD,)).fetchall()
+            todo = [(int(pid), cid) for pid, cid in rows
+                    if isinstance(cid, str) and _CID.fullmatch(cid)]
+            if not todo:
+                return out
+            candidates = []
+            by_cid = {}
+            for pid, cid in todo:
+                by_cid.setdefault(cid, []).append(pid)
+            for cid, pids in by_cid.items():
+                got = _rows(c, pids)
+                for pid in pids:
+                    row = got.get(pid)
+                    if row is not None and row.get("state") == "pending":
+                        candidates.append((int(pid), cid, row))
+        reworded_left = REWORDED_MAX_PER_PASS
+        for pid, cid, row in candidates:
+            if reworded_left <= 0:
+                break
+            fact = str(row.get("text") or "")
+            why = (check_source(row.get("source"))
+                   or check_not_correction(row) or check_instruction(fact))
+            if why:
+                continue
+            if like_forgotten(fact, st) or find_contradiction(fact, st) is not None:
+                continue
+            if sensitive_why(fact, [], allowed):
+                continue
+            meta = _meta("conversation", [], cid)
+            meta["reworded"] = True
+            fid = _save_fact(pid, meta, extract)
+            if fid is None:
+                continue
+            reworded_left -= 1
+            out["saved"].append(fid)
+            out["cards"].pop(pid, None)
+        if out["saved"]:
+            publish(out["saved"])
+            _entity_model_pass(out["saved"], ollama, model)
+    except Exception as exc:                                  # noqa: BLE001
+        out["why"] = type(exc).__name__
+    return out
+
+
 def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                learning_on: bool = True, extract=None, publish: Callable = _publish) -> dict:
     """Called by the learner after one pass, with what propose() just queued
@@ -2288,13 +2573,32 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             return result
         off = check_settings(learning_on)
         batch = off or check_intake() or check_local_model(ollama, model)
+        # 2026-11-03: ONE bad turn no longer cards the whole pass. Every fact
+        # is attributed to the turns that hold its words (`_attributed`), and
+        # only a fact needing a word from a turn this PC did not see arrive -
+        # or from a turn that read outside text - keeps that reason. A pass
+        # that cannot be read at all (no conversation id, no words) is still
+        # every proposal's card, and so is every settings/model/intake fault.
+        turn_why, pairs = "", []
         if not batch:
-            batch, entries = check_turns(texts, conversation_id)
+            fatal, pairs = check_turn_pairs(texts, conversation_id)
+            if fatal:
+                batch = fatal
+                pairs = []
+            else:
+                turn_why = next((p["why"] for p in pairs if p["why"]), "")
+        entries = [p["entry"] for p in pairs if not p["why"]]
         allowed = settings()["auto_sensitive"]
         # The third switch (2026-11-02): the ONE check it relaxes is read once,
         # here, and it can relax nothing else - every other check below runs in
         # the same order whether it is on or off.
         paraphrase_on = settings().get("auto_paraphrase") is True
+        # Gemini Q1's second hardening (2026-11-03): when ANY turn of the pass
+        # is not learnable from - a tool ran, or the words were re-sent - the
+        # extractor was fed those turns too, so the reworded switch may not
+        # bypass the grounding check for this pass. A reworded fact in a tool
+        # pass still cards.
+        paraphrase_here = paraphrase_on and not any(p.get("why") for p in pairs)
         reworded_left = REWORDED_MAX_PER_PASS
         st = _store()
         with closing(st._connect()) as c:
@@ -2303,6 +2607,7 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             topics = {}
             moves = {}
             rewords = {}
+            src_entries = {}
             for pid in pids:
                 row = rows.get(pid)
                 if row is None or row.get("state") != "pending":
@@ -2337,6 +2642,19 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 if not why and topic_why:
                     why = topic_why
                 src = source_turns(fact, texts) if not why else []
+                # 2026-11-03: a fact whose words are all in this pass's CLEAN
+                # turns is learned from those turns alone - the same checks
+                # then run on them, so nothing is relaxed, and a fact that
+                # needs a bad turn's words still gets the pass's reason.
+                fact_texts, fact_entries = texts, entries
+                if not why and turn_why:
+                    got = _attributed(fact, pairs)
+                    if got is None:
+                        why = turn_why
+                    else:
+                        fact_texts, fact_entries = got
+                        src = source_turns(fact, fact_texts)
+                src_entries[pid] = fact_entries
                 # Forgotten stays forgotten, layer 1 - whatever else the
                 # checks say, and also while automatic learning is off, so a
                 # just-forgotten fact is not back as a card a minute later.
@@ -2384,9 +2702,12 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 # them per pass, so one bad pass cannot rewrite the lot.
                 reworded = False
                 if not why:
-                    grounded = check_grounded(fact, texts)
+                    grounded = check_grounded(fact, fact_texts)
                     if grounded:
-                        if not paraphrase_on:
+                        # `paraphrase_here`, not `paraphrase_on`: a pass with a
+                        # tool turn or re-sent words may not relax grounding
+                        # (Gemini Q1, 2026-11-03).
+                        if not paraphrase_here:
                             why = grounded
                         elif reworded_left > 0:
                             reworded = True
@@ -2425,7 +2746,7 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             if why:
                 result["cards"][pid] = why
                 continue
-            meta = _meta("conversation", entries, conversation_id)
+            meta = _meta("conversation", src_entries.get(pid) or entries, conversation_id)
             if topics.get(pid):
                 meta["sensitive"] = topics[pid]
             if rewords.get(pid):
@@ -2448,6 +2769,19 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                     done = _apply_move(st, fid, moves[pid])
                     if done:
                         result.setdefault("moved", []).append({"id": fid, "how": done})
+        # 2026-11-03 (Gemini Q3): the pending cards that only waited for the
+        # reworded switch graduate by themselves once it is on, on every pass.
+        # Only when it is on: off, there is nothing a recheck could change.
+        if paraphrase_on:
+            try:
+                again = recheck_pending_proposals(model=model, ollama=ollama,
+                                                  learning_on=learning_on,
+                                                  extract=extract)
+            except Exception:                                 # noqa: BLE001
+                again = {}
+            for fid in (again.get("saved") or []):
+                if fid not in result["saved"]:
+                    result["saved"].append(fid)
         if result["saved"]:
             publish(result["saved"])
             _entity_model_pass(result["saved"], ollama, model)
