@@ -7,8 +7,8 @@
     "core": 142,
     "missing": 0
   },
-  "folder_count": 21,
-  "ready_count": 49,
+  "folder_count": 22,
+  "ready_count": 50,
   "folders": [
     {
       "name": "skill-hub",
@@ -40,6 +40,14 @@
       "install": "none",
       "stack_order": 150,
       "summary": "estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "watch-decisions",
+      "module": "jarvis_watch_ci",
+      "install": "handler",
+      "stack_order": 150,
+      "summary": "what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.",
       "why": "born as a folder: it replaces no patch"
     },
     {

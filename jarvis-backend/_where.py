@@ -1507,7 +1507,26 @@ SHIPPED = (
     # deploy snapshots are quarantined, never deleted. Standard library only,
     # no network, no elevation. The same entry is at the end of $SHIPPED in
     # scripts/apply-patches.ps1.
-    "jarvis_storage_health.py"
+    "jarvis_storage_health.py",
+    # --- The attention budget for watchers (2026-11-04; the owner-forwarded
+    # dsh-superagent spec, Part II patterns 1, 2, 3 and 5B). The same three
+    # entries, in the same order, are at the end of $SHIPPED in
+    # scripts/apply-patches.ps1.
+    #
+    # jarvis_watch_policy.py is stage one of the two-stage gate and imports
+    # NOTHING from Jarvis - no disk, no network, no model - so "a filtered event
+    # never reaches the stage that can cost anything" is structural rather than
+    # promised. jarvis_watch_ci.py is the watch_pr_checks job body plus the
+    # decisions ring buffer and the receipts, and it answers
+    # GET /api/watch/decisions from its own install(), called by
+    # plugins/ready/watch-decisions (no patch: jarvis_hud.py is not shipped and
+    # a new route there would need a hunk in its dispatch tuple).
+    # jarvis_outbox.py is the durable (kind, key) outbox jarvis_jobs.py writes
+    # a parked card and a completion notice to BEFORE publishing them, and
+    # re-announces on startup - the fix for the restart card loss.
+    "jarvis_watch_policy.py",
+    "jarvis_watch_ci.py",
+    "jarvis_outbox.py"
 )
 
 

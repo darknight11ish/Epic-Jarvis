@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **49 drop-in modules**, in [`ready/`](ready/) -
+- **50 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **28** replace a patch, and are generated from it;
-  - **21** replace no patch: they were born as folders, and
+  - **22** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **142 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -56,7 +56,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 21 were never patches. There is nothing in the core
+These 22 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -69,6 +69,7 @@ it is one `apply-patches.ps1` copies in.
 | 148 | `voiceprint` | Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it reaches a model. |
 | 149 | `receipts` | action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back. |
 | 150 | `auto-router` | estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first. |
+| 150 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
 | 151 | `vault` | a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value. |
 | 152 | `notion-obsidian` | bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo. |
 | 154 | `self-improve` | two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do. |

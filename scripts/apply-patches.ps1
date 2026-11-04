@@ -2840,6 +2840,15 @@ $SHIPPED = @(
     # Standard library only, no network. The same entry, in the same position,
     # is in backend/_where.py's SHIPPED list.
     'jarvis_storage_health.py'
+    # --- The attention budget for watchers (2026-11-04; the owner-forwarded
+    # dsh-superagent spec, Part II patterns 1, 2, 3 and 5B). Three modules and
+    # ONE drop-in folder, plugins\ready\watch-decisions, which calls
+    # jarvis_watch_ci.install() for GET /api/watch/decisions - NO patch, because
+    # jarvis_hud.py is not in $SHIPPED and a new route there would need a hunk
+    # in its dispatch tuple.
+    'jarvis_watch_policy.py'     # Stage one of the two-stage gate, and it is PURE: the seven REQUIRED checks vs the two informational ones, one batch per (pr, head_sha), the settle rules, the closed reason codes. Imports nothing from Jarvis - no disk, no network, no model - so "filtered events never reach the costly stage" is structural. Imported by jarvis_watch_ci.py; no route of its own
+    'jarvis_watch_ci.py'         # The watch_pr_checks job body: polls ONE pull request through gh, folds the seven checks into one thread, writes a decision row (observe) or notifies (active), and holds the decisions ring buffer + watch-receipts.json so twenty polls of one commit alert once. Starts no polling of its own - a job created through POST /api/jobs is the only caller. Its install() answers GET /api/watch/decisions, so the owner can read what it would have said before promoting it from observe to active
+    'jarvis_outbox.py'           # What Jarvis still owes the owner, written down BEFORE it is said: a deterministic (kind, key) outbox in outbox.json (temp file, fsync, rename) for parked approval cards, job-completion notices and CI notices. jarvis_jobs.py re-announces whatever is still owed on startup, which is what closes the restart card loss; settled entries are pruned, an owed one never is. Approves nothing, widens nothing, writes one file
 )
 
 # The settings file. Installed only where none exists; never overwritten.
