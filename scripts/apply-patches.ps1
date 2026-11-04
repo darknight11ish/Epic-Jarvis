@@ -2867,6 +2867,14 @@ $SHIPPED = @(
     # routes that reach it. Standard library only, loopback only. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
     'jarvis_bench.py'
+    # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
+    # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
+    # conversation about any of its tools). One entry per name in
+    # jarvis_agent.TOOLS plus one per capability family, with the pure functions
+    # that turn a question into a plain answer or a short context block. Pure
+    # data and stdlib only: it opens nothing, changes nothing, runs no tool. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_tool_profiles.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
