@@ -405,19 +405,25 @@ class RemindersTest {
         val plate = code(repoFile(COMING_UP_PLATE).readText())
         assertTrue("the parts block is not shared with the Brain plate",
             plate.contains("internal fun PartsBlock("))
-        assertTrue("the shared row no longer draws a routine's parts",
-            plate.contains("PartsBlock(job, enabled"))
-        assertTrue("a routine that went off no longer draws its parts",
-            plate.contains("PartsBlock(job, enabled, onAnswer ?: { _, _ -> })"))
+        assertEquals(
+            "both shared rows must draw a routine's parts",
+            2,
+            Regex("""PartsBlock\(job, enabled, onAnswer\)""").findAll(plate).count(),
+        )
         assertTrue("the row cannot be handed an answer",
             plate.contains("onAnswer: ((part: Int, button: Int) -> Unit)? = null"))
         // A part's buttons are the PC's own, and a press sends (part, button):
         // never a label, and never "all parts".
         assertTrue("a part's buttons are not drawn from what the PC sent",
             plate.contains("part.buttons.forEachIndexed"))
-        assertTrue("a press no longer names its part", plate.contains("onAnswer(index, at)"))
+        assertTrue("a press no longer names its part", plate.contains("onAnswer?.invoke(index, at)"))
         assertTrue("a part that could only be refused is still offered",
             plate.contains("part.canAnswer && part.buttons.isNotEmpty()"))
+        // A surface that cannot answer draws them READ-ONLY: never a live button
+        // that does nothing.
+        assertTrue("a button with no handler is drawn live",
+            plate.contains("val canPress = enabled && onAnswer != null"))
+        assertTrue(plate.contains("enabled = canPress"))
         // An unreadable routine says so in one line rather than drawing half of it.
         assertTrue(plate.contains("Schedule.PARTS_UNREADABLE"))
         // Its place and its missed count are the PC's words, not this phone's.

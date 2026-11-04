@@ -491,7 +491,7 @@ internal fun WentOffRow(
         // A routine's parts (2026-11-03): a fired routine is still a routine,
         // and the hour it sits here is exactly when its parts are ticked off.
         if (job.steps.isNotEmpty() || job.stepsUnreadable) {
-            PartsBlock(job, enabled, onAnswer ?: { _, _ -> })
+            PartsBlock(job, enabled, onAnswer)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Schedule.WENT_OFF_ACTIONS.forEach { action ->
@@ -550,7 +550,7 @@ internal fun ScheduleRow(
         // A routine's parts (2026-11-03), each with the PC's own mark on it and
         // its own buttons. Read and act per part; never created or edited here.
         if (job.steps.isNotEmpty() || job.stepsUnreadable) {
-            PartsBlock(job, enabled, onAnswer ?: { _, _ -> })
+            PartsBlock(job, enabled, onAnswer)
         }
         if (offer is AlsoOnPhone.Offer.Later) {
             Text(offer.why, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
@@ -601,9 +601,13 @@ internal fun ScheduleRow(
 internal fun PartsBlock(
     job: Schedule.Job,
     enabled: Boolean,
-    onAnswer: (part: Int, button: Int) -> Unit,
+    onAnswer: ((part: Int, button: Int) -> Unit)?,
 ) {
     val chrome = LocalChrome.current
+    // A surface that cannot answer (no handler) draws the parts READ-ONLY: the
+    // buttons are disabled rather than drawn live and doing nothing, which is
+    // the one thing this project never ships.
+    val canPress = enabled && onAnswer != null
     if (job.stepsUnreadable) {
         // The PC has parts for this row and could not read them: it fires as an
         // ordinary reminder, and this says so rather than drawing half a
@@ -634,7 +638,11 @@ internal fun PartsBlock(
         if (part.canAnswer && part.buttons.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 part.buttons.forEachIndexed { at, button ->
-                    Quiet(button.label, enabled = enabled, onClick = { onAnswer(index, at) })
+                    Quiet(
+                        button.label,
+                        enabled = canPress,
+                        onClick = { onAnswer?.invoke(index, at) },
+                    )
                 }
             }
         }
