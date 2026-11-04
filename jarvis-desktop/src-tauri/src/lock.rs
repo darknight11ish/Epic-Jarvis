@@ -156,6 +156,15 @@ impl Covered {
     ];
 
     fn from_label(label: &str) -> Option<Self> {
+        // An extra chat window (2026-11-03) shows the SAME thing the HUD does -
+        // the conversation, what was recalled for each answer, the memory
+        // graph - so it is covered by the app lock exactly as the HUD is.
+        // `Covered::Hud`'s label is the main HUD, which is the window the lock
+        // shows through Windows Hello; a chat window is hidden by the same
+        // sweep (see the hide loop in `spawn_watch`).
+        if crate::chat_windows::is_chat_window(label) {
+            return Some(Self::Hud);
+        }
         match label {
             crate::QUICKBAR_LABEL => Some(Self::Quickbar),
             crate::windows::BRAIN_LABEL => Some(Self::Brain),
@@ -232,13 +241,33 @@ impl LockState {
     }
 }
 
-/// True when the Jarvis bar, the Brain, Settings or the HUD has the keyboard
-/// focus. Asked of Windows through Tauri each time, not remembered.
+/// True when the Jarvis bar, the Brain, Settings, the HUD or an extra chat
+/// window has the keyboard focus. Asked of Windows through Tauri each time,
+/// not remembered.
+///
+/// Two halves on purpose. The first asks [`Covered::ALL`] - the four windows
+/// this lock knows by name - exactly as it always has, so "the owner is here"
+/// is still answered for the windows the security audit named. The second asks
+/// about the extra chat windows (2026-11-03), which are the same page showing
+/// the same conversation: `Covered::from_label` maps them to `Covered::Hud`,
+/// and a focused one must hold the lock open exactly as a focused HUD does, or
+/// reading a chat window while App lock is on would start the away-clock and
+/// hide it. The lock is per SESSION, not per conversation - Windows Hello
+/// unlocks every covered surface at once - so a chat window showing a
+/// different conversation from the one the owner last read is not a separate
+/// thing to protect: it can only be on screen after the same unlock, and
+/// `chat_windows::open_for` refuses to put one up (or focus a hidden one)
+/// while the lock is closed. A focused chat window therefore means the owner
+/// is here, exactly as a focused HUD does.
 fn covered_focused(app: &AppHandle) -> bool {
-    Covered::ALL
+    let named = Covered::ALL
         .iter()
         .filter_map(|c| app.get_webview_window(c.label()))
-        .any(|w| w.is_focused().unwrap_or(false))
+        .any(|w| w.is_focused().unwrap_or(false));
+    named
+        || app.webview_windows().values().any(|w| {
+            crate::chat_windows::is_chat_window(w.label()) && w.is_focused().unwrap_or(false)
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -526,10 +555,19 @@ pub fn sweep(app: &AppHandle) {
     let mut swept = SWEPT.lock().unwrap_or_else(|p| p.into_inner());
     let last = swept.as_ref().map(|(last, _)| *last);
     let mut reached = swept.take().map(|(_, reached)| reached).unwrap_or_default();
-    let present: Vec<&'static str> = SNAPSHOT_LABELS
+    let mut present: Vec<&'static str> = SNAPSHOT_LABELS
         .into_iter()
         .filter(|label| app.get_webview_window(label).is_some())
         .collect();
+    // The extra chat windows draw the same words as the HUD, so a capture is
+    // kept off them by the same sweep (2026-11-03). Their labels are a fixed
+    // `&'static str` set (chat_windows.rs), which is what lets them join this
+    // table without changing its type.
+    present.extend(
+        crate::chat_windows::CHAT_LABELS
+            .into_iter()
+            .filter(|label| app.get_webview_window(label).is_some()),
+    );
     let set = to_set(excluded, last, &mut reached, &present);
     for label in set {
         if let Some(window) = app.get_webview_window(label) {
@@ -569,13 +607,31 @@ fn hwnd_of(_window: &WebviewWindow) -> isize {
     0
 }
 
+/// The window a successful unlock must put back: the one the owner asked for.
+///
+/// The App lock covers a FAMILY of windows - the HUD and every extra chat
+/// window are one `Covered::Hud`, because they show the same conversation and
+/// the same recalled facts - so the category alone cannot say which window to
+/// bring back. `target` is the clicked/labelled window; `None` means "the
+/// category's own window", which is what a hotkey or a tray row that is
+/// opening a window which does not exist yet asks for. The main HUD must never
+/// steal a chat window's unlock (audit finding, 2026-11-03). An empty label is
+/// no target, never a window called "".
+fn unlock_target(which: Covered, target: Option<&str>) -> &str {
+    match target {
+        Some(label) if !label.is_empty() => label,
+        _ => which.label(),
+    }
+}
+
 /// The window the unlock prompt is shown over, when a hotkey or the tray
-/// asked to open something: the window being opened when it exists, else the
-/// Jarvis bar (created at startup, so it always does). Both are this app's
-/// own - the prompt belongs to this process, which is the one the hotkey or
-/// the tray click just gave the right to come to the front.
-fn owner_for(app: &AppHandle, which: Covered) -> isize {
-    app.get_webview_window(which.label())
+/// asked to open something: the window being unfolded when it exists, else the
+/// category's own window, else the Jarvis bar (created at startup, so it always
+/// does). All are this app's own - the prompt belongs to this process, which is
+/// the one the hotkey or the click just gave the right to come to the front.
+fn owner_for(app: &AppHandle, which: Covered, target: Option<&str>) -> isize {
+    app.get_webview_window(unlock_target(which, target))
+        .or_else(|| app.get_webview_window(which.label()))
         .or_else(|| app.get_webview_window(crate::QUICKBAR_LABEL))
         .map_or(0, |w| hwnd_of(&w))
 }
@@ -840,7 +896,32 @@ pub fn may_open(app: &AppHandle, which: Covered) -> bool {
         state.touch(now);
         return true;
     }
-    start_unlock(app, which);
+    start_unlock(app, which, None);
+    false
+}
+
+/// [`may_open`] for ONE named window. The extra chat windows are `Covered::Hud`
+/// but they are NOT the main HUD window, so a successful unlock has to bring
+/// back the one the owner asked for - without the label the unlock opened the
+/// main HUD and left the clicked chat window hidden (audit finding, 2026-11-03).
+///
+/// A label the lock does not cover is not a covered window, so there is nothing
+/// to unlock: true, and the caller may show it.
+pub fn may_open_window(app: &AppHandle, label: &str) -> bool {
+    let Some(which) = Covered::from_label(label) else {
+        return true;
+    };
+    let security = current(app);
+    if !security.app_lock {
+        return true;
+    }
+    let state = app.state::<LockState>();
+    let now = Instant::now();
+    if state.fresh(app, &security, now) {
+        state.touch(now);
+        return true;
+    }
+    start_unlock(app, which, Some(label.to_string()));
     false
 }
 
@@ -872,7 +953,7 @@ pub fn locked_now(app: &AppHandle) -> bool {
     !state.fresh(app, &security, Instant::now())
 }
 
-fn start_unlock(app: &AppHandle, which: Covered) {
+fn start_unlock(app: &AppHandle, which: Covered, target: Option<String>) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let state = app.state::<LockState>();
@@ -881,7 +962,11 @@ fn start_unlock(app: &AppHandle, which: Covered) {
         let Ok(one) = state.prompt.try_lock() else {
             return;
         };
-        let outcome = run_check(owner_for(&app, which), UNLOCK_MESSAGE.to_string()).await;
+        let outcome = run_check(
+            owner_for(&app, which, target.as_deref()),
+            UNLOCK_MESSAGE.to_string(),
+        )
+        .await;
         drop(one);
         match strict_verdict(outcome) {
             Ok(()) => {
@@ -890,7 +975,7 @@ fn start_unlock(app: &AppHandle, which: Covered) {
                 // being hidden from capture. `touch` above is what
                 // `capture_blocked` reads, so this is the unlock half.
                 sweep(&app);
-                open_now(&app, which);
+                open_now(&app, which, target.as_deref());
             }
             // Dismissed: the owner's own answer, nothing to say - but the
             // place this window was asked to open at never happened, and a
@@ -906,7 +991,27 @@ fn start_unlock(app: &AppHandle, which: Covered) {
     });
 }
 
-fn open_now(app: &AppHandle, which: Covered) {
+fn open_now(app: &AppHandle, which: Covered, target: Option<&str>) {
+    let wanted = unlock_target(which, target);
+    // The window the owner asked for comes back. A chat window is a covered
+    // `Hud` but is NOT the main HUD window: the match below shows the category's
+    // own window, so a chat window's unlock used to put the main HUD in front
+    // and leave the clicked window hidden (audit finding, 2026-11-03).
+    if wanted != which.label() {
+        if let Some(window) = app.get_webview_window(wanted) {
+            let shown = window
+                .show()
+                .and_then(|()| window.unminimize())
+                .and_then(|()| window.set_focus());
+            if let Err(err) = shown {
+                eprintln!("[jarvis] unlocked, but {wanted} would not open: {err}");
+            }
+            return;
+        }
+        // No such window any more (closed between the click and the answer):
+        // fall through to the category's own window rather than showing
+        // nothing at all.
+    }
     let shown = match which {
         Covered::Quickbar => crate::windows::show_quickbar_unlocked(app).map(|()| {
             crate::emit_quickbar(app, crate::events::FOCUS_INPUT, ());
@@ -918,8 +1023,74 @@ fn open_now(app: &AppHandle, which: Covered) {
     if let Err(err) = shown {
         eprintln!(
             "[jarvis] unlocked, but {} would not open: {err}",
-            which.label()
+            unlock_target(which, target)
         );
+    }
+}
+
+#[cfg(test)]
+mod unlock_target_tests {
+    use super::*;
+
+    /// A successful unlock shows the window the owner asked for, and the
+    /// category's own window when no label travelled with the request.
+    #[test]
+    fn a_successful_unlock_shows_the_window_that_asked_for_it() {
+        assert_eq!(unlock_target(Covered::Hud, Some("chat-3")), "chat-3");
+        assert_eq!(unlock_target(Covered::Hud, None), crate::HUD_LABEL);
+        assert_eq!(
+            unlock_target(Covered::Brain, Some(crate::windows::BRAIN_LABEL)),
+            crate::windows::BRAIN_LABEL
+        );
+        // An empty label is "no target", never a window called "".
+        assert_eq!(unlock_target(Covered::Hud, Some("")), crate::HUD_LABEL);
+    }
+
+    /// The gap this closes was a LOST LABEL, not a wrong comparison: the click
+    /// handler and `may_open_window` have to pass the window's label through
+    /// `start_unlock` to `open_now`, and no pure test can open a window to
+    /// prove it. So the wiring is pinned in the source, the same pattern as
+    /// `the_window_probe_is_the_only_test_the_opt_out_guards` above.
+    #[test]
+    fn the_unlock_path_keeps_the_clicked_label_end_to_end() {
+        let src = include_str!("lock.rs");
+        let body = fn_body(src, "pub fn on_window_event(");
+        assert!(
+            body.contains("start_unlock(app, which, Some(window.label().to_string()))"),
+            "a clicked chat window's label is lost before the unlock starts"
+        );
+        let body = fn_body(src, "pub fn may_open_window(");
+        assert!(
+            body.contains("start_unlock(app, which, Some(label.to_string()))"),
+            "a named window's label is lost before the unlock starts"
+        );
+        let body = fn_body(src, "fn open_now(");
+        assert!(
+            body.contains("app.get_webview_window(wanted)"),
+            "the unlock still opens the category's window, not the clicked one"
+        );
+        let wanted = body
+            .find("let wanted = unlock_target(which, target);")
+            .expect("open_now no longer resolves the asked-for window");
+        let main_hud = body
+            .find("Covered::Hud => crate::windows::show_hud_unlocked(app)")
+            .expect("the main HUD path is gone");
+        assert!(
+            wanted < main_hud,
+            "the main HUD path is reached before the asked-for window is tried"
+        );
+    }
+
+    /// One function's body, off its own source text, for the two pins above.
+    fn fn_body<'a>(src: &'a str, name: &str) -> &'a str {
+        let at = src
+            .find(name)
+            .unwrap_or_else(|| panic!("{name} is gone from lock.rs"));
+        let rest = &src[at..];
+        let end = rest
+            .find("\n}\n")
+            .expect("the function has no closing line");
+        &rest[..end]
     }
 }
 
@@ -948,7 +1119,9 @@ pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
                 }
                 if security.app_lock {
                     let _ = window.hide();
-                    start_unlock(app, which);
+                    // The clicked window's own label travels with the unlock,
+                    // so a chat window comes back instead of the main HUD.
+                    start_unlock(app, which, Some(window.label().to_string()));
                     return;
                 }
             }
@@ -1028,6 +1201,16 @@ pub fn spawn_watch(app: AppHandle) {
             if security.app_lock {
                 for which in Covered::ALL {
                     if let Some(window) = app.get_webview_window(which.label()) {
+                        if window.is_visible().unwrap_or(false) {
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                // The extra chat windows hold the same conversation text as
+                // the HUD, so a locked PC hides them by the same rule
+                // (2026-11-03). They are a fixed label set for exactly this.
+                for label in crate::chat_windows::CHAT_LABELS {
+                    if let Some(window) = app.get_webview_window(label) {
                         if window.is_visible().unwrap_or(false) {
                             let _ = window.hide();
                         }

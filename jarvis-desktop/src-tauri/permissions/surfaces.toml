@@ -2359,3 +2359,50 @@ permissions = [
   "allow-live-start",
   "allow-live-stop",
 ]
+
+# ---------------------------------------------------------------------------
+# Taking the owner where Jarvis said it would, and more than one conversation
+# window at once (2026-11-03, the F6 wave).
+#
+# `hud-nav`: ONE command, `open_jarvis_area`, called by the injected HUD chrome
+# for a chat answer's own route line and by nothing else. It maps an area
+# id to the real surface through one table in Rust (hud_nav.rs) - a HUD view or
+# tab, the History sidebar, the Presets menu, the Settings window at a named
+# section, the Brain window at one of its own places, Faces, the feature list,
+# or a new chat window. Navigation ONLY: it changes no setting, raises no card
+# and approves nothing, and every window it opens goes through the same App-lock
+# check as the tray row that opens it. An area this desktop does not have gets a
+# plain sentence in the HUD's own log, never a silent no-op.
+#
+# `chat-windows`: the two commands a HUD page may use to open another
+# conversation window. `new_chat_window` takes nothing; `open_conversation_window`
+# takes ONE conversation id, cleaned in Rust (trimmed, control characters
+# refused, capped) - it never opens a program or a path, and a conversation that
+# is already open is FOCUSED instead of duplicated. Both are the same page the
+# HUD already runs (capabilities/hud.json's `windows` carries `chat-*`), so the
+# rules on that page are unchanged.
+#
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "hud-nav"
+description = "Open a named area in the HUD, Settings, the Brain, Faces, the feature list or a new chat window. Navigation only: no setting changes, no card and no approval. An area this desktop does not have is said in words."
+permissions = [
+  "allow-open-jarvis-area",
+  "allow-new-chat-window",
+  "allow-open-conversation-window",
+]
+
+# `version-handshake`: ONE read-only command, `shell_version_sync`, for Settings'
+# Updates card - this executable's version against `GET /api/self`'s
+# `version.app_version`. It starts no update and writes nothing.
+#
+# 2026-11-03, the owner's requirement: after an update click the two halves are
+# READ BACK and said in words ("IN SYNC" or the honest mismatch). Settings and
+# the HUD both need to know, so the set is small, named and granted to both.
+[[set]]
+identifier = "version-handshake"
+description = "Read this executable's version against the backend's GET /api/self version, and say whether the two halves are in sync. Read-only: starts no update and writes nothing."
+permissions = [
+  "allow-shell-version-sync",
+]
+

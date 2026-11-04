@@ -380,6 +380,17 @@ fn main() {
             // the tray menu (2026-10-08, docs/FEATURES-LIST-DESIGN.md). The page
             // this opens holds no command of its own.
             "open_features",
+            // Taking the owner where Jarvis said it would, and more than one
+            // conversation window at once (2026-11-03, the owner's ask). ONE
+            // navigation command through ONE area table (hud_nav.rs) - the
+            // route-field path only, never a card, a setting or an approval -
+            // and the two window commands the injected HUD chrome calls. A
+            // second window on a conversation already open FOCUSES that window
+            // instead of duplicating it; both are the same HUD page, covered by
+            // the app lock through `lock::may_open_window`.
+            "open_jarvis_area",
+            "new_chat_window",
+            "open_conversation_window",
             // The right/wrong mark on one answer (feedback.patch). Quickbar.
             "mark_answer",
             // The first-run walkthrough — one command, closes itself.
@@ -742,6 +753,12 @@ fn main() {
             "update_both",
             "backend_update_status",
             "set_update_folders",
+            // The version handshake (2026-11-03, the owner's ask that an
+            // Update press leaves both halves in step): this executable's
+            // version against the backend's own `GET /api/self` block, read
+            // back and said in words. Read-only - it starts no update and
+            // writes nothing. Settings window only.
+            "shell_version_sync",
             "get_hotkeys",
             "set_hotkeys",
             "reset_hotkeys",

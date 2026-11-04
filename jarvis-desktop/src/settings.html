@@ -3118,6 +3118,16 @@
 
         <p class="state" id="update-state">—</p>
 
+        <!-- The version handshake (2026-11-03). This executable's version and
+             the backend's own `backend.version`, read back from GET /api/self
+             by `backend_self.rs`, said in ONE sentence: IN SYNC, or what is
+             wrong and what to do. The owner's requirement was that an update
+             click leaves both halves updated together; this line is how the
+             card can never claim that when it is not true. Hidden until the
+             read answers, so a card that has not asked shows nothing rather
+             than "unknown". -->
+        <p class="state" id="update-sync" role="status" hidden></p>
+
         <div class="progress-track" id="update-progress" hidden>
           <div class="progress-fill" id="update-progress-fill"></div>
         </div>

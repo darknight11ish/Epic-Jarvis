@@ -25877,14 +25877,45 @@ this project has reads named keys.
 **A cloud answer nobody asked for is not dressed up as one.** The measured
 failure on exactly the questions that escalate is `finish_reason: "length"`
 with empty `content` and the whole cap spent on DeepSeek's hidden reasoning
-(four of four, `docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md`). On an
-`auto: true` turn, `jarvis_chatbot_api.CloudAnswer` withholds the
-`reasoning_content` events and, if there is no usable answer, shows ONE honest
-line - "The cloud did not answer this one, so this PC answered it instead:" -
-followed by the local model's own answer (`jarvis_agent.answer_here`), or, if
-the local turn produced nothing either, one line saying so and **no
-working-out**. The 2026-10-14 rule is untouched for a turn the owner clicked
-for: that turn still shows the working-out, marked, byte for byte.
+(four of four, `docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md`; reproduced by
+the 2026-11-03 field test at Jarvis's own 2,048-token default - HTTP 200,
+`content: ""`, `reasoning_tokens: 2048/2048`). **Changed 2026-11-03 (the
+owner's decision after the second field test):** the working-out is never
+shown as an answer, on a clicked turn or an automatic one.
+`jarvis_chatbot_api.CloudAnswer` withholds the `reasoning_content` events and,
+when there is no usable answer, shows ONE honest line followed by the local
+model's own answer (`jarvis_agent.answer_here`):
+
+- the reply carried working-out and spent the budget: `CLOUD_USED_BUDGET` -
+  "The cloud model used its whole answer budget thinking and sent nothing
+  back; here is the local answer:";
+- the reply carried neither visible text nor working-out:
+  `CLOUD_ANSWERED_HERE` - "The cloud did not answer this one, so this PC
+  answered it instead:";
+- the local turn produced nothing either: `NO_CLOUD_ANSWER_HERE` says so and
+  nothing is invented (`NO_ANSWER_AT_ALL` remains the no-working-out case).
+
+This replaces the 2026-10-14 "a clicked turn still shows the working-out,
+marked" rule. `used_reasoning` is kept for callers that read it and is never
+set True any more.
+
+**The request cap (2026-11-03).** A service this PC measured to bill hidden
+reasoning INSIDE `max_tokens` is marked `Preset.thinking_inside = True`
+(DeepSeek today); its relay call is sent
+`cloud_request_cap(lane_state, asked)` = the lane's own answer cap PLUS
+`REASONING_ROOM` (`jarvis_chatbot_api.py`: `REASONING_ROOM = 8000`) - on this
+PC's DeepSeek lane an 8,000-token cap is sent as **16,000**, the same worst
+case `reply_cap()` already priced, so it cannot pass the month's limit. Every
+other service, or a lane with no cap, gets the caller's `max_tokens` untouched
+(the relay's 2,048 default is not changed). The relay applies it once, in
+`jarvis_hud.py`'s `_open`, via `ollama-direct.patch`:
+`body["max_tokens"] = _api.cloud_request_cap(_state, int(body.get("max_tokens") or 0))`,
+inside a `try/except` that changes nothing on a backend without the module.
+
+Tests: `backend/test_reasoning_fallback.py` (the withheld `reasoning_content`
+events, both framings, `t_cloud_request_cap` and
+`t_the_twins_match`) and `backend/test_cloud_say_yes.py` (the
+ordinary-turn lanes and the PC-only gate).
 
 **The one lane.** `jarvis_router.cloud_lanes()` keeps only `jarvis-escalate`
 and drops every other name, so an older `litellm-proxy.yaml` listing

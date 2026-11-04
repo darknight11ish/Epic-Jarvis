@@ -362,8 +362,37 @@ pub async fn check_for_update(app: AppHandle) -> Status {
     let status = look(&app).await;
     app.state::<UpdateState>().put(status.clone());
     crate::tray::on_update_status(&app, status.available.as_deref());
+    say_available_in_hud(&app, status.available.as_deref());
     let _ = app.emit(crate::events::UPDATE_STATUS, status.clone());
     status
+}
+
+/// Says in the HUD's own chat log that a newer version exists - and that the
+/// one Update button installs BOTH halves.
+///
+/// The owner's requirement of 2026-11-03: *"when i click update on the jarvis
+/// hud i want it linked to the back end so both are always updated at the same
+/// time"*. This line is where the HUD is told that, in the same sentence that
+/// says an update exists - so the door the owner finds is the both-halves one
+/// (Settings, then Updates, whose Install button runs `update_both`), not the
+/// desktop-only control this build used to offer. It carries no click and
+/// starts nothing: the click is still the owner's, on the card.
+fn say_available_in_hud(app: &AppHandle, available: Option<&str>) {
+    let Some(version) = available else {
+        return;
+    };
+    crate::push_to_hud(
+        app,
+        "update",
+        &UpdateWord {
+            state: "available".to_string(),
+            detail: format!(
+                "Jarvis Desktop {version} is available. One Update press installs BOTH \
+                 halves - the backend first, then the desktop app. Settings, then Updates, \
+                 has the button."
+            ),
+        },
+    );
 }
 
 /// Turns the startup check on or off.

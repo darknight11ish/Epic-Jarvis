@@ -617,7 +617,7 @@ export const UPDATE_BOTH = {
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
   altSpace, reclaimAltSpace, bigCoder, chatHistory,
-  tutorials, faq, hudLayout, advisor }) {
+  tutorials, faq, hudLayout, advisor, versionSync }) {
   const listeners = {};
   window.__calls = [];
   // H3 (post-merge audit): the Settings picker reads/writes the one HUD layout
@@ -1127,6 +1127,16 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 : "Saved on this machine. This backend has no /api/appearance, so the phone will not see it.",
             };
           }
+          case "shell_version_sync":
+            // 2026-11-03: this executable's version against the backend's own
+            // `GET /api/self` version block, read back after an update. The
+            // default is the in-sync shape a real both-halves update leaves.
+            return window.__versionSync || {
+              desktop: "0.1.0",
+              backend: "0.1.0",
+              state: "in-sync",
+              words: "Jarvis Desktop 0.1.0 and the backend 0.1.0 - IN SYNC.",
+            };
           case "update_status": return window.__update;
           case "check_for_update":
             window.__calls.push(["__checked"]);
@@ -3679,6 +3689,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__learningWaits = Boolean(learningWaits);
   window.__found = found || null;
   window.__installFails = installFails || null;
+  // The version handshake (2026-11-03): Settings calls `shell_version_sync`
+  // and draws the answer on the Updates card. A scenario may replace the
+  // default in-sync shape with a mismatch; null falls back to the default.
+  window.__versionSync = versionSync || null;
   window.__restartFails = restartFails || null;
   window.__refuse = refuse || [];
   window.__apiSettings = { base: "http://127.0.0.1:4719", bindAddress: "",
@@ -4047,3 +4061,4 @@ export async function open(browser, base, file, data, viewport) {
   page.__errors = errors;
   return page;
 }
+

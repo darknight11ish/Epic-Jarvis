@@ -3095,7 +3095,15 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // Deliberately NOT the whole `model-lane` set: `set_model_lane_auto`
       // (the automatic-restart switch) stays on the bar, the widget and the
       // phone. Appended at the end, where the capability file gained it.
-      "hud-lane"]);
+      "hud-lane",
+      // Navigation and more conversation windows (2026-11-03, the owner's
+      // "open any menu or setting area on request ... multiple conversation
+      // windows at once"). The injected chrome's two window buttons and the
+      // chat route's one `open_jarvis_area` command; navigation only, it
+      // changes no setting, raises no card and approves nothing, and every
+      // window it opens is behind the same App lock as the tray row that
+      // opens it. Appended at the end, where the capability file gained it.
+      "hud-nav"]);
   assert.equal(cap.permissions.includes("hud-layout-write"), true,
     "the HUD page's own Edit mode cannot save without the layout write grant");
   assert.equal(cap.permissions.includes("hud-layout-read"), true,
@@ -7036,4 +7044,5 @@ if (fails.length) {
   process.exit(1);
 }
 console.log("\nall passed");
+
 
