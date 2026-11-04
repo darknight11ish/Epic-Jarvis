@@ -1617,7 +1617,7 @@
       "connect_account",
       "rea_investigate"
      ],
-     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). file_read and propose_plan are not offered to the AI model right now either. calculator, memory_search, web_search, my_files, change_setting and feature_guide are offered to the AI model right now - your settings file names them - but this page has no switch for them. Nothing was changed."
+     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered to the AI model right now either. Nothing was changed."
     },
     "vault": {
      "action": "change_own_config",
@@ -3250,7 +3250,7 @@
       "connect_account",
       "rea_investigate"
      ],
-     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). file_read and propose_plan are not offered to the AI model right now either. calculator, memory_search, web_search, my_files, change_setting and feature_guide are offered to the AI model right now - your settings file names them - but this page has no switch for them. Nothing was changed."
+     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered to the AI model right now either. Nothing was changed."
     },
     "vault": {
      "action": "change_own_config",
@@ -4878,7 +4878,7 @@
       "connect_account",
       "rea_investigate"
      ],
-     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). file_read and propose_plan are not offered to the AI model right now either. calculator, memory_search, web_search, my_files, change_setting and feature_guide are offered to the AI model right now - your settings file names them - but this page has no switch for them. Nothing was changed."
+     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered to the AI model right now either. Nothing was changed."
     },
     "vault": {
      "action": "change_own_config",
@@ -6501,7 +6501,7 @@
       "connect_account",
       "rea_investigate"
      ],
-     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). file_read and propose_plan are not offered to the AI model right now either. calculator, memory_search, web_search, my_files, change_setting and feature_guide are offered to the AI model right now - your settings file names them - but this page has no switch for them. Nothing was changed."
+     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered to the AI model right now either. Nothing was changed."
     },
     "vault": {
      "action": "change_own_config",
@@ -8124,7 +8124,7 @@
       "connect_account",
       "rea_investigate"
      ],
-     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). file_read and propose_plan are not offered to the AI model right now either. calculator, memory_search, web_search, my_files, change_setting and feature_guide are offered to the AI model right now - your settings file names them - but this page has no switch for them. Nothing was changed."
+     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered to the AI model right now either. Nothing was changed."
     },
     "vault": {
      "action": "change_own_config",
@@ -9761,7 +9761,7 @@
       "connect_account",
       "rea_investigate"
      ],
-     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). file_read and propose_plan are not offered to the AI model right now either. calculator, memory_search, web_search, my_files, change_setting and feature_guide are offered to the AI model right now - your settings file names them - but this page has no switch for them. Nothing was changed."
+     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered to the AI model right now either. Nothing was changed."
     },
     "vault": {
      "action": "change_own_config",
@@ -11389,7 +11389,7 @@
       "connect_account",
       "rea_investigate"
      ],
-     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). file_read and propose_plan are not offered to the AI model right now either. calculator, memory_search, web_search, my_files, change_setting and feature_guide are offered to the AI model right now - your settings file names them - but this page has no switch for them. Nothing was changed."
+     "why": "That tool cannot be switched from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled). calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered to the AI model right now either. Nothing was changed."
     },
     "vault": {
      "action": "change_own_config",

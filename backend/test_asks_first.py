@@ -916,7 +916,11 @@ def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
         code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
         check(f"{tool}: not offered in-app (403), nothing written",
               code == 403 and tools.writes == []
-              and out["error"] == AF.tools_toml_only_note(), (code, out))
+              # The head is fixed; the tail is built from the live
+              # [tools].enabled, which `_treq` has patched to this fake file -
+              # so compare the head here and let the dedicated note test check
+              # the measured tail.
+              and out["error"].startswith(AF.TOOLS_TOML_ONLY_NOTE), (code, out))
     tools = ToolsFile()
     code, out = _treq({"tool": "nonsense", "enabled": True}, tools, here=True)
     check("an unknown tool: 403, the 'does not know that name' answer",

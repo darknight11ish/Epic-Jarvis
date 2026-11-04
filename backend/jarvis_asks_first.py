@@ -1652,14 +1652,20 @@ def _tools_enabled_now() -> tuple:
     one empty set, which is the right fail-closed answer for a turn. A SENTENCE
     about the file may not do that: it would say every unlisted tool is off
     when the real answer is "I could not read it". The two are separated here,
-    and only for wording - the read itself is still the one reader."""
+    and only for wording - the NAMES still come from `tools_enabled_set()`, the
+    one reader every caller (and every test fixture) patches, so this cannot
+    disagree with the page's own switches."""
+    try:
+        names = set(tools_enabled_set())
+    except Exception:                       # noqa: BLE001 - said as unknown
+        return False, set()
     try:
         if fw is None:
-            return False, set()
-        cfg = fw.load_framework() or {}
-        return True, normalise_enabled((cfg.get("tools") or {}).get("enabled") or [])
-    except Exception:
-        return False, set()
+            return False, names
+        fw.load_framework()
+        return True, names
+    except Exception:                       # noqa: BLE001 - said as unknown
+        return False, names
 _TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
 _ENABLED_LINE = re.compile(
     r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
