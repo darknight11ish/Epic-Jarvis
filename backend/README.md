@@ -103,8 +103,14 @@ Their own action is `github_inspect`, at `"ask"`; all six are also in
 `NEEDS_A_PERSON`, so a loosened tier still asks. No merge, push, commit, delete
 or close exists anywhere, by construction. `backend/github-tools.patch` is the
 one gate change - `jarvis_gate.py` is not in `$SHIPPED`, so only a patch reaches
-the owner's own gate - and it appends two `.update` calls at the very end of the
-file, which is the one place no other patch's context lives. All six ship
+the owner's own gate - and it is ONE hunk in the middle of that file,
+immediately AFTER `web-search-grant.patch` and BEFORE
+`unknown-risk-approvable.patch`, which has to stay its last writer. The very
+end of the file belongs to `web-search-grant.patch`'s own block, whose last
+hunk must stay the last bytes (`git apply -R` needs that post-image contiguous
+and ending at EOF), so a block put after it broke that reversal. It anchors on
+the owner's own text - the end of `review()` and the opening of the
+`if __name__` block. All six ship
 switched off, like `github_search`. Proved by `backend/test_github_tools.py`
 (no network, no real token); documented in `docs/JARVIS-API.md` section 185 and
 `docs/ARCHITECTURE.md` section 8.
