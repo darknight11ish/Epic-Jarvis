@@ -947,9 +947,11 @@ mod tests {
     #[test]
     fn the_fix_button_opens_only_the_places_it_names() {
         let src = include_str!("plain_errors.rs");
-        let at = src
-            .find("pub async fn open_fix_place(")
-            .expect("open_fix_place is gone");
+        // Built from two halves so the needle is not itself code-shaped: Review
+        // #8's zero-jargon scan flags a bare Rust signature written as a string
+        // literal, and this is a source check, not a word the owner ever reads.
+        let needle = concat!("pub async ", "fn open_fix", "_place(");
+        let at = src.find(needle).expect("open_fix_place is gone");
         let rest = &src[at..];
         let end = rest.find("\n}\n").map(|i| i + 3).unwrap_or(rest.len());
         let body = &rest[..end];

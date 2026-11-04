@@ -22144,10 +22144,10 @@ The limits are not a module each: they are **rows in one table**
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
 the owner's own words for it. Ten of them (`jarvis_limits.LIMITS` holds these
-ten written by hand, and `_notify_rows()` appends **seven more** notification
-rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff` and
-the three Quiet-hours rows - so the table a client receives is seventeen rows
-long. Only the ten are listed here; the seven are built from
+ten written by hand, and `_notify_rows()` appends **eight more** notification
+rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff`,
+`notif_setup` and the three Quiet-hours rows - so the table a client receives is
+eighteen rows long. Only the ten are listed here; the eight are built from
 `_NOTIFY_ROWS` and are not copied into this document, for the same
 no-second-copy reason as the numbers below):
 
@@ -23226,7 +23226,7 @@ sentence runs. `change_setting` CALLS THAT SAME FUNCTION. So:
 |---|---|---|
 | background learning, the sensitive-topics switch, lights without asking, web search, the watch switch, the phone-notification switch, picture mode, the headless browser, senders in the briefing, the big coder, the better voice | one card | at once |
 | asking before every web search (the REVERSED pair) | at once | one card |
-| the prompt coach, making pictures, the five PC-notification switches, humour, voice-follows-the-face | at once | at once |
+| the prompt coach, making pictures, the six PC-notification switches, humour, voice-follows-the-face | at once | at once |
 | the PC's "hey Jarvis" wake word (`jarvis_speech.set_wake_enabled`) | one card | at once |
 
 The six settings whose value is a name go through their own setters, so the card is
