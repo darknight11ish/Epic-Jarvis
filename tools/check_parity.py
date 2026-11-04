@@ -1099,6 +1099,12 @@ BACKEND_ONLY = {
     "/api/bench/run/{id}": "How one benchmark run is going, and its numbers when it is done (`state`, `step`, `of`, `partial`, `result`) - JARVIS-API section 185, jarvis_bench.py. The read a screen polls while a run is going; no app polls it yet (DESIGN.md phase 2 desktop, phase 5 phone). When a screen lands it goes on BOTH apps (ARCHITECTURE section 8).",
     "/api/bench/cancel": "Stopping the benchmark run in flight (JARVIS-API section 185; jarvis_bench.py): the repeat already running is NOT killed, because a request cut off mid-answer leaves Ollama's counters unusable, and the run row says PARTIAL. No app calls it yet - the Cancel button is DESIGN.md phase 2 on the desktop and phase 5 on the phone - and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
     "/api/bench/history": "The benchmark's OWN history, newest first, from `bench.jsonl` - never `/api/history` and never the chat history (JARVIS-API section 185; jarvis_bench.py). Filters are exact matches on the stored model/lane/preset names. The separate History window is DESIGN.md phase 3 on the desktop and phase 5 on the phone, so no window reads it yet; when one does it goes on BOTH apps, and the DELETE beside it arrives with that window because phase 1 has no delete (ARCHITECTURE section 8).",
+    # Call recording's READ route (2026-11-04, JARVIS-API section 186;
+    # jarvis_call_notes.py). The three POST routes beside it are `phone-only`
+    # in the phone lane's own pull request, because the phone holds the
+    # microphone; this one is the PC's, and this module refuses any other
+    # device through jarvis_owner_check.from_this_pc before it answers.
+    "/api/call/recording": "The list of recorded calls - date, duration, note path, status and speaker list, never the transcript text (JARVIS-API section 186; jarvis_call_notes.py). Read-only AND PC-ONLY: it names the owner's recordings and the vault paths they were filed to, which is a PC surface, and the phone has no use for it (the audio comes FROM the phone). No app calls it yet - there is no recordings screen on either app - so the PC's own list is the only reader; ARCHITECTURE section 8 and docs/CALL-RECORDING.md say why.",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

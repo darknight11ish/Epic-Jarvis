@@ -2857,6 +2857,21 @@ $SHIPPED = @(
     # Standard library only, no network. The same entry, in the same position,
     # is in backend/_where.py's SHIPPED list.
     'jarvis_storage_health.py'
+    # Recording a phone call (jarvis_call_notes.py, 2026-11-04; the owner's own
+    # request: "record a call if I tell it a keyword 'record call' ... transcribe
+    # it, put a date and identify the speakers ... store all of it in a new
+    # obsidian note labeled with the date and time"). The phone records through
+    # its microphone with the call on speaker (Android reserves the call's own
+    # audio stream), uploads 16 kHz mono PCM in order, and this PC makes the WAV,
+    # transcribes it with the existing sherpa-onnx reader, labels who spoke from
+    # the owner's own voice print plus clustering, and creates ONE new Obsidian
+    # note named for the date and time through the notes editor's own create
+    # path. OFF BY DEFAULT ([call_recording] enabled = false); starting is ONE
+    # record_call card. Four routes from its own install(), called by
+    # plugins/ready/call-notes - no patch. The same entry, in the same position,
+    # is in backend/_where.py's SHIPPED list. It sits BEFORE jarvis_bench.py
+    # because backend/test_bench.py pins that entry as the last one.
+    'jarvis_call_notes.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

@@ -33100,3 +33100,253 @@ on the card (its sentence leads with `PARTIAL:`), a failed run that writes
 `ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
 500-run cap keeping whole runs, the byte ceiling, the allowlist, the
 three-run comparison floor, and that no run can start without `confirm`.
+## 186. Call recording: the phone records on the speaker path, the PC transcribes, labels who spoke and files a new note (backend, both apps, added 2026-11-04)
+
+The owner's request, in their own words: *"add the ability of jarvis to record a
+call if I tell it a keyword 'record call' where it will record all the audio,
+transcribe it, put a date and identify the speakers in the transcription, and
+store all of it in a new obsidian note labeled with the date and time"*. The
+call is taken through the Android Jarvis app. The whole story, with the
+reasoning and the honest limits, is `docs/CALL-RECORDING.md`; this section is
+the wire contract the Android lane implements against.
+
+**The platform truth, first.** The call happens on the owner's phone, and his
+primary phone is a **Google Pixel 9**; this PC can neither see nor hear that
+call. **Android does not let an ordinary app capture the call's own audio
+stream** - `MediaRecorder.AudioSource.VOICE_CALL` is privileged and a normal app
+gets silence or a `SecurityException`. So the phone records **through its
+microphone with the call on speaker** and uploads that; the PC does everything
+after. The far end is therefore heard through the speaker and the words are less
+clear than a system recorder would give, which the note itself says.
+**No real call was driven on that phone by either lane** - the Pixel was not
+attached while this was built, which the Android half's own pull request states
+- so how the speaker path really sounds and how good the words are afterwards
+are **NOT-TESTABLE** until the owner's own field test. Importing a file from the
+phone's own call recorder, if it has one, is a later addition and is **not
+built**.
+
+### 186.1 The four routes
+
+Origin and token exactly as every other route (`X-Jarvis-Token`;
+`X-Jarvis-Client: hud` from either app). One audio shape only: **16 kHz, mono,
+signed 16-bit little-endian PCM**.
+
+```
+POST /api/call/recording/start
+     {"started_at": "2026-11-04T13:36:05-08:00", "sample_rate": 16000,
+      "channels": 1, "format": "s16le", "device": "phone"}
+  -> 200 {"ok": true, "session": "call_<24 hex>", "state": "recording",
+          "sample_rate": 16000, "channels": 1, "format": "s16le"}
+     202 {"ok": true, "session": ..., "state": "waiting", "message": "..."}
+     400 {"ok": false, "state": "refused", "error": "<one sentence>"}
+     403 {"ok": false, "state": "off"|"refused", "error": "<one sentence>"}
+```
+
+`started_at` is ISO 8601; a value more than a day away from this PC's clock is
+refused (400) so a wrong phone clock cannot name a note for the wrong time. A
+naive timestamp is read as this PC's local time. `sample_rate` must be 16000,
+`channels` 1, `format` `"s16le"` and `device` `"phone"`; anything else is
+refused **naming the accepted values**, never silently converted.
+
+```
+POST /api/call/recording/chunk
+     {"session": "call_...", "seq": 1, "data_b64": "<base64 PCM>"}
+  -> 200 {"ok": true, "session": ..., "seq": 1, "bytes": 32000,
+          "chunk_bytes": 32000}
+     404 {"ok": false, "error": "that recording is not on this PC..."}
+     409 {"ok": false, "state": "waiting", "error": "..."}   the card is up
+     409 {"ok": false, "expected": <n>, "error": "...in order..."}
+     413 {"ok": false, "error": "...over the 512 KiB limit..."}
+     400 (bad base64, an empty chunk, a missing seq or a seq below 1)
+```
+
+`seq` starts at **1** - the Android half's own first chunk is 1
+(`CallRecordStore.nextSeq`) - and goes up by one; a gap or a repeat is refused
+with the number the PC wanted in `expected`, and **nothing is written by a
+refused chunk**. `bytes` is the **running total** the PC holds for this
+recording, which is what the phone reads back to tell a PC that appends from one
+that answers 0 to every chunk; `chunk_bytes` is the piece that just landed. At
+most **512 KiB decoded per chunk** (16 s of 16 kHz mono; ~683 KiB once base64 is
+applied, well inside the PC's 4 MiB request ceiling) and **4 hours** in all. The
+phone cuts 64 KiB pieces; the cap is generous so a phone that cuts a little more
+is never refused mid-call. A chunk that arrives while the start card waits is
+refused with 409 `state: "waiting"` - **nothing is kept before the owner says
+yes**, and the phone retries the same number rather than skipping it.
+
+```
+POST /api/call/recording/finish
+     {"session": "call_...", "duration_sec": 812.4,
+      "title": "Talk with Sam", "consent_notice": "on"}
+  -> 200 {"ok": true, "session": ..., "receipt": "<one line>",
+          "note": "<vault path>" | "pending", "wav": "<path>",
+          "recording": {...}}
+     400 (no `consent_notice: "on"`, or no audio arrived)
+     403 (the feature is off, or the start card was denied)
+     409 (already finished, or not recording yet)
+```
+
+`consent_notice` must be the literal `"on"`: it is the phone saying the "this
+call is being recorded" notice was shown, and neither app may finish a
+recording without it. **`receipt` is a STRING** - the frozen contract's own
+shape, and the only one the phone reads (`CallRecordWire.finished` takes
+`receipt` when it is a string). It is one line: the session, the audio's length,
+how many lines and which speakers, and the note (or `pending`). The structured
+session record rides in `recording`, the same object the list route serves.
+
+**`finish` does not wait for the words**: the WAV is assembled and the
+transcription starts on a daemon thread, so the answer comes back with
+`note: "pending"` when the transcription or the note's own card is still
+running. **A client cannot poll for it**: the read route below is PC-only, so
+the phone has no read route at all - it keeps its own copy until `finish`
+answers, and the PC's own screen and the note itself are where the result is
+seen. That is the frozen Android half's real behaviour, written here instead of
+a poll it does not make.
+
+```
+GET /api/call/recording             -> {"ok": true, "enabled": true,
+                                        "recordings": [...], "where": "<folder>"}
+GET /api/call/recording?session=ID  -> {"ok": true, "recording": {...}}; 404 unknown
+                                       403 from any device but this PC
+```
+
+Read-only: the date, duration, note path, status and speaker list. **Never the
+transcript text** - the note holds the words and this route does not.
+**PC-only**, through `jarvis_owner_check.from_this_pc` exactly as
+`GET /api/guardian/snapshots` and the other PC surfaces do it: the list names
+the owner's recordings and the note paths they went to, which is a PC surface,
+and the phone has no use for it. The three POST routes are the phone's by
+necessity - it holds the microphone - and that is the one deliberate departure,
+written down in `docs/CALL-RECORDING.md` §8.
+
+### 186.2 The session record
+
+`receipt.json` beside the audio, and the `recording` object on `finish` and on
+the `GET`: `session`, `status` (`waiting` | `recording` | `transcribing` |
+`done` | `refused` | `empty` | `failed`), `started_at`, `finished_at`,
+`duration_sec`, `sample_rate`, `channels`, `format`, `device`, `bytes`, `chunks`
+(the count of chunks taken), `audio`, `note`, `note_job`, `transcript`,
+`speakers`, `speaker_method`, `speaker_why`, `lines`, `message`,
+`consent_notice`, `english_only`, `date`. It is the session's own record of what
+was recorded and where it went - **not** an action receipt with an Undo; the
+note's create leaves its own undo receipt through the notes editor. `finish`'s
+`receipt` string is the one-line summary of the same facts.
+
+### 186.3 The chat command, and the `call_record` directive
+
+The eight whole messages, matched **whole-message only** (after the repo's own
+tidier, which drops a polite lead-in like "can you ..." for every command in
+`jarvis_quick.py`):
+
+- arm - "record call", "record this call", "record the call", "start recording
+  the call", "start call recording";
+- stop - "stop recording", "stop the call recording", "stop call recording".
+
+The answer carries ONE new additive field in `X-Jarvis-Route`:
+
+```json
+"call_record": {"action": "arm"}      /* or {"action": "stop"} */
+```
+
+The Android app reads it and starts or stops its own recorder. The reply says
+plainly what will happen (phone records on speaker; the PC transcribes and
+labels who spoke; a new note named for the date and time is created when the
+call ends; tell the other person), and adds one sentence when this PC's tier
+makes the start raise a card. **With the feature off the reply says so and the
+directive is absent** - an app must treat absence as "record nothing". Stopping
+is always answered, because stopping only narrows what is happening. The
+intent is `call_record`; a refusal is `call_record_refused`.
+
+### 186.4 The switch, and the card
+
+- **Off by default:** `[call_recording] enabled = false` in the shipped
+  `jarvis-framework.toml`; a settings file with no such table is off too.
+  Turning it on is a hand edit of that one line - there is **no in-app switch**,
+  the same shape `github_search` and `shell_exec` use, and
+  `features/features.json` says so in the row's own `where`.
+- **The gate action is `record_call`**, tier `ask` in `[autonomy.tiers]`. The
+  owner-initiated note actions (`append_obsidian_daily`,
+  `append_logseq_journal`) ship `auto`; this one asks because it starts
+  capturing **other people's** speech. NOTE: `jarvis_gate.py` has no `_RISK`
+  row for the name yet, so the gate also forces `ask` as its
+  unclassified-action rule does, and its card carries the generic "unclassified
+  action - treated as permanent and able to leave this PC" warning. **The
+  second half of that sentence is wrong for this action** - nothing leaves this
+  PC - and the row that replaces it must be written in `jarvis_gate.py` by a
+  patch; this lane deliberately adds none. Recorded in
+  `docs/CALL-RECORDING.md` §9 rather than hidden.
+
+### 186.5 Transcription and speaker labels
+
+`jarvis_media_read.read_media()` - the existing sherpa-onnx model, English only,
+no network - reads the assembled WAV in **9-minute parts** (its own ceiling is
+10 minutes per file), and each part's segment times are shifted by its offset.
+No second speech-to-text, no model download. Segments are the reader's own
+**~10-second windows**, so two people talking inside one window get one label.
+
+Speaker labels, all on this PC: the owner's enrolled print first
+(`jarvis_voice.find_profile` + `jarvis_voice.cosine`, the print's own
+threshold), then clustering of the remaining segments at
+`SPEAKER_MERGE_SIMILARITY` = 0.55, up to six, numbered in first-speech order.
+A line too short to embed carries the previous line's label. **With no speaker
+model or no trained voice print, EVERY line says "Speaker"** and the note
+records which was missing - never a guessed name.
+
+### 186.6 The note
+
+`Calls/YYYY-MM-DD HHMM - Call.md`, a NEW file (a same-minute call gets
+" (2)"), created through `jarvis_notes_edit.handle_create()` - the notes
+editor's own public create path, so the vault/protected/collision checks, the
+File Guardian copy, the undo receipt and the ONE `edit_vault_note` card are
+unchanged. The transcript is marked `after_outside_text` provenance, because a
+call's words are other people's. The frontmatter carries `date`, `started_at`,
+`duration`, `duration_seconds`, `source` ("phone call, speaker recording"),
+`speakers`, `audio`, `session`, `consent` ("Recorded locally; tell the other
+person"), `title`, `speaker_labels`, `speaker_labels_why`, `english_only`; the
+body holds one heading, the consent reminder as a visible line, and
+`[HH:MM:SS] You: ...` per line in **the time of day it was said**.
+
+**If the vault is missing or invalid**, the transcript is still written as
+`transcript.md` beside the audio and that path is returned with a plain
+sentence saying why. The transcript is always written there first, so a vault
+problem or a refused card cannot lose a recording.
+
+### 186.7 What the phone does (the frozen Android half's checklist)
+
+1. Read `call_record` from `X-Jarvis-Route`; on `{"action": "arm"}` call
+   `start` with the date the call began, on `{"action": "stop"}` stop the
+   recorder and call `finish`. An unknown action, malformed JSON or an absent
+   field is **silence, never a guess** - and never an arming.
+2. Record 16 kHz mono s16le in 64 KiB pieces and POST them in order from `seq`
+   1, one at a time. A failed POST is retried with the **SAME** `seq`; the
+   audio is written to the phone's own files before it is posted, and a `sent`
+   list is appended only after the PC acknowledges a chunk, so a dropped
+   connection loses nothing. Show Android's own recording notification with the
+   consent line.
+3. **`start` may answer 202** while the `record_call` card waits. Keep
+   recording and keep retrying the first unsent chunk: the PC refuses a chunk
+   with 409 until the card is approved and then takes the queue in order. There
+   is **no poll**: the read route is PC-only, so the phone has no read route at
+   all, and nothing is kept on the PC before the card is approved.
+4. Stop recording if the phone's link to this PC goes stale (the repo's rule 4
+   applies on the client side: never act on a stale picture of the world).
+5. On stop: `finish` with the elapsed `duration_sec` and
+   `consent_notice: "on"`. If it is refused, **keep the audio and the PC's
+   session id and retry later** - never delete the only copy. `note` is the
+   vault path, or `"pending"` while the transcription or its own
+   `edit_vault_note` card is still running.
+
+### 186.8 What is not done
+
+The Android half is its own pull request against this contract; neither lane
+drove a real call on the owner's Pixel 9, so the speaker path and the quality of
+the words it yields are **NOT-TESTABLE** until his field test. There is no
+delete route and no retention policy (recordings stay until the owner removes
+them; only a 400-session cap refuses a new start). **A call can raise TWO
+cards**: `record_call` before anything is kept, and the notes editor's own
+`edit_vault_note` card before the note is written - a transcript is other
+people's words, so it is never a card-free write. The gate's warning line is
+generic (§186.4). English only, ten-second segments, and no import of the
+phone's own recorder. No real phone recording, transcription, speaker model,
+vault write or approval card was driven by this lane - those rows are
+**NOT-TESTABLE**, never passed. `backend/test_call_notes.py` drives fake
+readers, fake embedders, fake prints and a fake note creator.

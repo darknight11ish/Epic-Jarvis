@@ -96,6 +96,11 @@ NO_PATCH = {
     "vault",
     "vault-organizer",
     "voiceprint",
+    # Recording a phone call (jarvis_call_notes.py, 2026-11-04): its four
+    # routes come from its own install(), called by the drop-in loader, so the
+    # folder is the whole of its wiring and no patch is added to
+    # `jarvis_hud.py`.
+    "call-notes",
 }
 
 

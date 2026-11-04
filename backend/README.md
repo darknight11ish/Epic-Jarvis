@@ -20905,3 +20905,77 @@ person: the desktop and phone suites prove the words and the enabled action,
 and the backend suites prove the order, the refusals and every restore against
 fakes. `start_pooled_lane`'s real run on this PC is the measurement above, not
 a unit test.
+
+## jarvis_call_notes.py - record a phone call, transcribe it here, file a note
+
+The owner's request of 2026-11-04 (JARVIS-API §186, `docs/CALL-RECORDING.md`,
+`docs/ARCHITECTURE.md` §14): say "record call" and the Android app records the
+call; this PC turns it into a transcript with speakers and a NEW Obsidian note
+named for the date and time.
+
+**The platform truth, which the code and the docs do not contradict.** The call
+happens on the owner's phone, and his primary phone is a **Google Pixel 9**;
+this PC can neither see nor hear it. Android does not let an ordinary app
+capture the call's own audio stream (`VOICE_CALL` is privileged), so the phone
+records **through its microphone with the call on speaker** and uploads 16 kHz
+mono s16le PCM; this module does everything after. The far end is heard through
+the speaker, so the words are less clear than a system recorder's would be -
+said in the note body, on the card and in the docs. **No real call was driven on
+that phone by either lane**, so the speaker path and the words it yields are
+NOT-TESTABLE until the owner's own field test. Importing a file from the phone's
+own call recorder is a later addition and is **not built**.
+
+**Four routes, from its own `install()`, called by `plugins/ready/call-notes` -
+no patch:** `POST /api/call/recording/start`, `/chunk`, `/finish`, and
+`GET /api/call/recording` (with `?session=` for one). Chunks go in order from
+`seq` 1, at most 512 KiB each; `finish` needs `consent_notice: "on"`, answers a
+`receipt` STRING plus the structured `recording`, and starts the transcription
+on a daemon thread, so it never blocks on the model. The read route is PC-only;
+the three POSTs are the phone's by necessity. The exact shapes, the refusals
+and the `call_record` chat directive are in JARVIS-API §186.1-§186.3.
+
+**What it reuses, and adds nothing to:** `jarvis_media_read.read_media()` for
+the words (the existing sherpa-onnx model, English only, no network), cut into
+9-minute parts of the same WAV because its own ceiling is 10 minutes;
+`jarvis_voice.find_profile()` + `EcapaEmbedder()`/`StrongEmbedder()` (whichever
+model the print was made with) + `cosine()` for the owner's voice print, with
+clustering after it; `jarvis_notes_edit.handle_create()` for
+the note (its own `edit_vault_note` card, File Guardian copy and undo receipt);
+`jarvis_notes.obsidian_vault()` to decide whether a vault is usable. The audio
+is assembled with the standard library's `wave` - no ffmpeg, no new dependency.
+
+**Speaker labels:** the owner's print first (its own threshold), then clusters
+at `SPEAKER_MERGE_SIMILARITY` = 0.55 up to six, numbered in first-speech order;
+a line too short to embed carries the previous label. **With no speaker model or
+no trained print, every line says "Speaker"** and the note records which was
+missing - never a guessed name.
+
+**The note** is `Calls/YYYY-MM-DD HHMM - Call.md`, a NEW file, with `date`,
+`started_at`, `duration`, `source` ("phone call, speaker recording"),
+`speakers`, `audio`, `session`, `consent` ("Recorded locally; tell the other
+person"), `title` and the speaker method in its frontmatter, and
+`[HH:MM:SS] You: ...` lines in the time of day they were said. If the vault is
+missing or invalid the transcript is still written as `transcript.md` beside the
+audio and that path is returned with a plain sentence - a recording is never
+lost because a vault is unset.
+
+**Safety:** off by default (`[call_recording] enabled = false`; turning it on is
+a hand edit of that line, no in-app switch), ONE `record_call` card at tier
+`ask` before anything is recorded, the phone's `consent_notice` required to
+finish, the card, the reply and the note all carrying the consent reminder,
+nothing ever leaving this PC, and no delete route at all. Two things are
+recorded rather than hidden: the gate has no `_RISK` row for `record_call` yet,
+so its card prints the generic "unclassified action ... able to leave this PC"
+warning whose second half is wrong here (the row needs a patch to
+`jarvis_gate.py`, and this module adds none); and the phone's recorder is its
+own pull request against the same frozen contract, with no real call driven on
+the owner's Pixel 9 by either lane.
+
+**Tests:** `backend/test_call_notes.py` - 164 checks: chunk assembly byte-exact
+into a canonical WAV, seq 1/out-of-order/oversized/consent refusals, the receipt
+string and the structured record, fake transcriber segments into the note body,
+fake embedders for the owner match, the clusters, the strong-vs-ecapa choice and
+the two degrade cases, the note name and frontmatter, the vault-missing
+fallback, the phrase parser and whole-message rule, the `call_record` directive,
+the feature-off refusal, the PC-only read route and the install wrapper. No
+network, no model, no real audio.

@@ -829,6 +829,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
       }
      ],
      "title": "This PC and your phone"
@@ -2462,6 +2471,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
       }
      ],
      "title": "This PC and your phone"
@@ -4091,6 +4109,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
       }
      ],
      "title": "This PC and your phone"
@@ -5714,6 +5741,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
       }
      ],
      "title": "This PC and your phone"
@@ -7337,6 +7373,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
       }
      ],
      "title": "This PC and your phone"
@@ -8973,6 +9018,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
       }
      ],
      "title": "This PC and your phone"
@@ -10602,6 +10656,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
       }
      ],
      "title": "This PC and your phone"

@@ -7,8 +7,8 @@
     "core": 143,
     "missing": 0
   },
-  "folder_count": 21,
-  "ready_count": 49,
+  "folder_count": 22,
+  "ready_count": 50,
   "folders": [
     {
       "name": "skill-hub",
@@ -176,6 +176,14 @@
       "install": "handler",
       "stack_order": 172,
       "summary": "the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\\.hermes\\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "call-notes",
+      "module": "jarvis_call_notes",
+      "install": "handler",
+      "stack_order": 173,
+      "summary": "record a phone call from the Android app: POST /api/call/recording/start|chunk|finish and GET /api/call/recording, so the phone uploads 16 kHz mono PCM, the PC transcribes and labels who spoke, and ONE new Obsidian note is created named for the date and time.",
       "why": "born as a folder: it replaces no patch"
     }
   ],

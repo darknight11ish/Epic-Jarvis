@@ -2621,6 +2621,12 @@ NO_COMMAND_REASON = {
     # (control_phone is opt-in in [tools].enabled, and the model switch is the
     # models row's).
     "phone-apps": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # Recording a call (2026-11-04): an action the phone starts and this PC
+    # finishes - there is no in-app switch to turn on (it is a hand edit of
+    # [call_recording] enabled, the same shape github_search and shell_exec
+    # use), and every rule it has is carried by its own approval card and by
+    # the two chat sentences. Hence not-a-setting, not a missing control.
+    "call-recording": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "model-knowledge": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     # The price radar has a switch, but it is the settings file's own
     # `[price_radar] enabled` line, not a registered BoolSetting, and it has no

@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 175 rows from features/features.json.
+The owner's feature list, as data: 176 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 5949c44f218f31caa961f43ec30c46707fe45649a3594c67bab169eaf5d3bd21); the apps' Features pages read their own
+`features/features.json` (sha256 4f09fd19eab7fbe18f568ebecde11c369a72ce307a981ae784adc5643a35803f); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "5949c44f218f31caa961f43ec30c46707fe45649a3594c67bab169eaf5d3bd21"
+SOURCE_SHA256 = "4f09fd19eab7fbe18f568ebecde11c369a72ce307a981ae784adc5643a35803f"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1253,6 +1253,18 @@ FEATURES = (
         "surface": "both",
         "aliases": ["phone app allow-list", "phone apps", "apps on my phone", "which apps can you open on my phone", "add an app to my phone", "remove an app from my phone"],
         "covers": ["phone-extras"],
+    },
+    {
+        "id": "call-recording",
+        "group": "Phone",
+        "title": "Record a phone call and file it as a note",
+        "what": "Say \"record call\" and your phone records the call through its microphone with the call on speaker; this PC transcribes it, labels who spoke, and writes a new Obsidian note named for the date and time.",
+        "where": "Off by default; there is no in-app switch. Add [call_recording] enabled = true with a text editor to the settings file (jarvis-framework.toml), then say \"record call\" on the phone.",
+        "asks": "Off until you turn it on in the settings file. Starting a recording raises one approval card (record_call, tier ask) unless you set that line to auto yourself, and the note itself is written through the notes editor's own card.",
+        "limit": "The phone cannot capture the call's own audio stream - Android reserves it for the system dialer - so it records through the microphone with the call on speaker, and the other person is heard through the speaker, so the words are less clear than a system recorder's would be. English only, no cloud: the transcription and the speaker labels are made on this PC. A line is the reader's own ten-second window, so two people talking inside one window get one label; with no speaker model or no trained voice, every line says Speaker.",
+        "surface": "both",
+        "aliases": ["record call", "call recording", "record a call"],
+        "covers": [],
     },
     {
         "id": "appearance",
