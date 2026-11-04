@@ -3252,7 +3252,17 @@ class Scheduler:
                                         "late": False, "step": following,
                                         "parts": len(steps)})
             said = f"Part {following + 1} of {len(steps)}: {steps[following]['label']}."
-        self._write_step_state(jid, _routine_due(steps, state), state, now)
+        due = _routine_due(steps, state)
+        if due is None and row["rule"]:
+            # No clock is left in this occurrence, but a repeating routine keeps
+            # its promise to repeat: wake at the next occurrence and let the tick
+            # re-seed there. Writing None here left the row asleep forever
+            # (the owner's untimed meds / keys / badge morning checklist).
+            try:
+                due = next_run(json.loads(row["rule"]), now)
+            except Exception:
+                due = None
+        self._write_step_state(jid, due, state, now)
         return said
 
     def _write_step_state(self, jid: str, due, state: dict, now: float) -> None:
@@ -4130,7 +4140,14 @@ class Scheduler:
             if row["rule"] and all(entry.get("fired") is not None
                                    for entry in state["parts"]):
                 try:
-                    fresh = _empty_step_state(len(steps), next_run(json.loads(row["rule"]), now))
+                    # Anchor the NEW occurrence at the one that just arrived
+                    # (`due`), not at next_run(now): next_run is strictly after
+                    # `now`, so using it here skipped the occurrence being woken
+                    # for (a routine whose part was left unanswered lost a day).
+                    anchor_due = float(row["due"]) if row["due"] is not None else None
+                    if anchor_due is None or anchor_due > now:
+                        anchor_due = next_run(json.loads(row["rule"]), now)
+                    fresh = _empty_step_state(len(steps), anchor_due)
                 except Exception:
                     fresh = {}
                 if fresh:
