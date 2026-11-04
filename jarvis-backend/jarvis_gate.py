@@ -1053,6 +1053,15 @@ _TOOL_ACTIONS: dict[str, str] = {
     "protect_from_jarvis": "protect_item",
     "connect_account": "change_own_config",
     "rea_investigate": "run_shell_on_host",
+    # conversation_clear (2026-11-03, the F6 self portrait's one-card clear):
+    # the tool's own name IS its action - jarvis_self_portrait.CLEAR_ACTION, put
+    # to the gate directly - and the shipped [autonomy.tiers] line
+    # "conversation_clear = ask" is the tier it is raised under. Without this
+    # row action_for_tool() answers "unclassified_tool" (fail-safe but wrong):
+    # the Reach page calls the tool unclassified and the card is not the one the
+    # tool raises. Carried by gate-tool-actions-gap.patch so a deploy reaches
+    # the owner's own jarvis_gate.py.
+    "conversation_clear": "conversation_clear",
     # web-search-grant.patch (2026-11-01): the conversation-scoped web-search
     # approval's two tools, each on the action the agent puts it to the gate
     # under (jarvis_agent.GRANT_ACTION / REVOKE_ACTION). Without these,

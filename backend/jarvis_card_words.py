@@ -496,6 +496,12 @@ SUMMARY = {
     "unprotect_item": "stop protecting a folder, file or program",
     # --- the Obsidian notes editor (2026-10-31): one save, one card
     "edit_vault_note": "change a note in your Obsidian vault",
+    # jarvis_self_portrait.py (2026-11-03): ONE kept conversation from this PC,
+    # after ONE card; the learned facts are kept.
+    "conversation_clear": "delete one conversation",
+    # jarvis_storage_health.py's ONE tidy (PR #1117): temporary files and old
+    # deploy backups, listed in full on the card first.
+    "storage_cleanup": "clear temporary files",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

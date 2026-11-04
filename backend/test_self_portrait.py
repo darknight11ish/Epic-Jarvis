@@ -72,7 +72,7 @@ os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "config" / "receipts.db")
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
-from _where import require_shipped  # noqa: E402
+from _where import require_shipped, BACKEND  # noqa: E402
 
 require_shipped("jarvis_self_portrait.py")
 
@@ -149,8 +149,30 @@ def settings_match_the_registry():
           isinstance(number.get("low"), int) and isinstance(number.get("high"), int)
           and number["low"] < number["high"],
           f"{number.get('low')}..{number.get('high')}")
-    check("a choice setting carries its own options",
-          all(r.get("options") for r in rows if r["kind"] == "choice"))
+    # THE FACE IS THE ONE CHOICE READ FROM A FILE. jarvis_settings_registry's
+    # face row takes its options from the owner's jarvis-visual-spec.json, which
+    # is deliberately NOT in _where.SHIPPED (it is re-taken from the live folder),
+    # so run_suites.py's staged backend has no copy and the registry's own
+    # `when_empty` answer is the truth there. Every OTHER choice row must always
+    # carry options; the face must carry them exactly when the spec is really
+    # beside the active backend - and the check says which case it measured.
+    def _spec_beside_backend() -> bool:
+        return any(p.is_file() for p in (
+            BACKEND / "jarvis-visual-spec.json",
+            BACKEND.parent / "jarvis-desktop" / "src" / "jarvis-visual-spec.json",
+            BACKEND.parent / "jarvis-backend" / "jarvis-visual-spec.json"))
+
+    others = sorted(r["id"] for r in rows
+                    if r["kind"] == "choice" and r["id"] != "face"
+                    and not r.get("options"))
+    check("every choice row carries its own options", not others, str(others))
+    face = next((r for r in rows if r["id"] == "face"), None)
+    check("the face's options are there exactly when the visual spec is beside "
+          "the backend (a staged backend has no spec, and says so)",
+          face is not None
+          and bool(face.get("options")) == _spec_beside_backend(),
+          f"face options={bool(face and face.get('options'))}, "
+          f"spec beside backend={_spec_beside_backend()}")
 
 
 def abilities_and_ask_match_their_modules():
@@ -336,10 +358,24 @@ def version_surface_is_honest():
           block["app_version"] == "unknown"
           or bool(re.fullmatch(r"\d+\.\d+\.\d+", block["app_version"])),
           block["app_version"])
-    # This checkout has a VERSION file, so the honest answer here is that number.
-    want = (REPO / "VERSION").read_text(encoding="utf-8").strip()
-    check("in this checkout app_version is VERSION's number",
-          block["app_version"] == want, f"{block['app_version']} != {want}")
+    # THE MODULE'S OWN RULE, CHECKED IN BOTH LAYOUTS. _app_version() looks beside
+    # the module that is RUNNING (here and here.parent), and honestly answers
+    # "unknown" when no VERSION is there. In this checkout the repo root holds a
+    # VERSION file and the module sits at backend/, so the answer must be that
+    # number; under run_suites.py the active backend is a staged copy of the
+    # SHIPPED modules only (VERSION is not a shipped file), so the honest answer
+    # there is "unknown". Accepting the module's own answer is what makes this
+    # check true instead of environment-shaped.
+    here = Path(SP.__file__).resolve().parent
+    beside = next((c for c in (here / "VERSION", here.parent / "VERSION")
+                   if c.is_file()), None)
+    if beside is not None:
+        want = beside.read_text(encoding="utf-8").strip()
+        check("in this checkout app_version is the VERSION beside the module",
+              block["app_version"] == want, f"{block['app_version']} != {want}")
+    else:
+        check("a backend with no VERSION beside it says 'unknown', never a guess",
+              block["app_version"] == "unknown", block["app_version"])
     check("a checkout with no deploy record says so, and does not fail",
           block["deploy"]["recorded"] is False
           and bool(block["deploy"]["why_not"]))

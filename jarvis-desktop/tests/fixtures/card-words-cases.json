@@ -764,7 +764,7 @@
       "action": "conversation_clear",
       "notice": {
         "title": "Jarvis wants to delete one conversation from this PC",
-        "summary": "Jarvis wants to delete one conversation from this PC.",
+        "summary": "Jarvis wants to delete one conversation.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
@@ -1748,7 +1748,7 @@
       "action": "storage_cleanup",
       "notice": {
         "title": "Jarvis wants to clear Jarvis's temporary files",
-        "summary": "Jarvis wants to clear Jarvis's temporary files.",
+        "summary": "Jarvis wants to clear temporary files.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

@@ -76,6 +76,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import closing
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import parse_qs, quote, urlsplit
@@ -536,8 +537,13 @@ def _conversation_count() -> tuple:
         path = Path(getattr(log, "db_path"))
         if not path.is_file():
             return 0, ""
-        with sqlite3.connect(f"file:{path}?mode=ro", uri=True,
-                             timeout=1.0) as c:
+        # closing(), not a bare `with sqlite3.connect(...) as c:`: the connection
+        # object's own context manager commits/rolls back but does NOT close the
+        # handle (2026-11-03, test_sqlite_close_guard's finding on this line).
+        # A leaked handle is what made schedule.json undeletable on the Windows
+        # runner on 2026-10-07; this is the same trap in a read-only count.
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True,
+                                     timeout=1.0)) as c:
             return int(c.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]), ""
     except Exception as exc:                # noqa: BLE001 - said, never raised
         return None, f"could not be counted ({type(exc).__name__})"
