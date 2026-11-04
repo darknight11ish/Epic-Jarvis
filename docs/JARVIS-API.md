@@ -25657,10 +25657,15 @@ and no automatic per-feature model switching exists.
 origin and token checks as the old route; the answer is:
 
     {"found", "presets": [nine], "old_ids_replaced": [...],
-     "hardware": {"detected": {"count", "cards": [{"index","name","vram_gib","uuid"}],
-                                "source": "jarvis_hardware.detect()"},
+     "hardware": {"detected": {"count",
+                               "cards": [{"index","name","vram_gib","uuid",
+                                          "pci_id","monitor"}],
+                               "source": "jarvis_hardware.detect()"},
                   "questionnaire": {"focus_choices", "priority_choices", "answers"}},
-     "recommendations": {"by_gpu_count": {"1","2","3": {...}}, "three_gpu_plan"},
+     "recommendations": {"by_gpu_count": {"1","2","3": {...}},
+                         "three_gpu_plan": {"confirmed", "layout", "cards",
+                                            "heavy_pooled", "link_note",
+                                            "future_not_a_preset"}},
      "chosen": "<preset id or null>", "chosen_preset", "chosen_model",
      "lane": {"key", "base_url", "card", "words", "label", "ready", "why"},
      "lane_status": <same object>, "active_lane": {"key", "base_url"},
