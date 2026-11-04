@@ -2164,17 +2164,30 @@ def check_turn_pairs(turns: list, conversation_id) -> tuple:
         #
         # `why` keeps the CONSERVATIVE pass reason - a conversation tainted by
         # a tool anywhere at or before this turn counts - so a fact that cannot
-        # be attributed keeps the old card. `clean` asks the narrower question
-        # per-fact attribution needs: did THIS turn itself run a tool, or come
-        # from somewhere untrustworthy? A typed turn after an earlier tool turn
-        # is still the owner's own words, and a fact whose every word is in it
-        # can be learned from it.
+        # be attributed keeps the old card.
         why = (check_provenance(entry) or check_voice(entry) or check_taint(entry)
                or check_outside(text, seen_typed=True))
-        here = (check_provenance(entry) or check_voice(entry) or check_own_taint(entry)
-                or check_outside(text, seen_typed=True))
+        own = (check_provenance(entry) or check_voice(entry) or check_own_taint(entry)
+               or check_outside(text, seen_typed=True))
         pairs.append({"text": text, "entry": entry, "why": why,
-                      "clean": not here})
+                      "own_clean": not own})
+    # A conversation-wide taint may be ignored for attribution ONLY when this
+    # pass contains - as a turn THIS PC saw arrive - the turn that caused it
+    # (2026-11-03). Otherwise a restart, "Continue this chat" or a tool turn
+    # earlier in the conversation would let a later pass save facts from a
+    # conversation this PC cannot vouch for: the fail-closed rule the restart
+    # cases pin. A tainting turn read back from the record does not count -
+    # the record says it read outside text, which is exactly why that case
+    # still cards. When the causing turn itself arrived in this pass, a typed
+    # turn beside it is still the owner's own words (Gemini Q1), so a fact
+    # whose every word is in it can be learned from it.
+    explained = any(isinstance(p.get("entry"), dict)
+                    and p["entry"].get("read_outside")
+                    and not p["entry"].get("from_record")
+                    for p in pairs)
+    for p in pairs:
+        entry = p.get("entry") if isinstance(p.get("entry"), dict) else {}
+        p["clean"] = bool(p["own_clean"]) and (not entry.get("tainted") or explained)
     return "", pairs
 
 
