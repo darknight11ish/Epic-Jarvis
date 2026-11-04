@@ -6009,6 +6009,7 @@ PLUGIN_CATALOGUE = (
     ('screen-attach', '"look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it.'),
     ('secret-handoff', 'the host half of the owner-secret hand-off.'),
     ('self-improve', "two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling..."),
+    ('self-portrait', "what Jarvis is made of on this PC: every place it can open (imported from the Settings and menu registries), every setting with its live on/off value, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only, never a secret, a path or a word of chat."),
     ('send-file', "send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaq..."),
     ('setup', 'the setup questionnaire: a guided path through settings that already exist.'),
     ('skill-hub', "the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and..."),

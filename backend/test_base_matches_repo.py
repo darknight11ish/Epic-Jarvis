@@ -542,6 +542,21 @@ def t_the_stale_twin_check_agrees_with_the_rule():
         shutil.rmtree(work, ignore_errors=True)
 
 
+#: Modules a BASE file imports OPTIONALLY, whose own file ships in a pull
+#: request that has not merged into this tree yet: a guarded
+#: `try: import <name> / except ImportError` is the honest way to wire a drop-in
+#: that the published base cannot carry, and this table is how the walk is told
+#: the truth rather than being routed around. 2026-11-03: `jarvis_storage_health`
+#: is PR #1117's own module; `jarvis_self_portrait.py` and `jarvis_asks_first.py`
+#: import it that way and say "storage self-scan NOT installed" when it is
+#: absent. Delete the entry when the module is in the shipped set and the base
+#: is re-taken - the check below fails a stale entry.
+OPTIONAL_IMPORTS = {
+    "jarvis_storage_health": "PR #1117's drop-in; imported only inside a try that "
+                             "catches ImportError, and absent from this tree",
+}
+
+
 def t_the_base_is_complete_on_its_own():
     """`scripts/check-backend.ps1`'s walk, in Python and in the same shape:
     only the project's own `jarvis_*` names count, the name after `from` is
@@ -571,12 +586,21 @@ def t_the_base_is_complete_on_its_own():
     have = {n for n in need if (BASE / f"{n}.py").is_file()}
     shipped = {n.rsplit("/", 1)[-1][:-3] for n in _where.SHIPPED}
     coming = sorted(n for n in need if n not in have and n in shipped)
-    missing = sorted(n for n in need if n not in have and n not in shipped)
+    missing = sorted(n for n in need
+                     if n not in have and n not in shipped
+                     and n not in OPTIONAL_IMPORTS)
     check(f"the base's own imports close ({len(need)} modules needed by the base)",
           len(need) > 100 and not missing,
           (f"{len(missing)} missing: "
            + ", ".join(f"{n} ({len(need[n])} file(s) import it)" for n in missing)) if missing
           else f"only {len(need)} modules found - the walk did not read the folder")
+    # An exemption that has stopped being needed is a lie, the same rule the
+    # OWNER_ONLY and REPO_ONLY_IMPORTS tables carry elsewhere: once the module
+    # ships (or the import is gone) this entry must be deleted.
+    stale = sorted(n for n in OPTIONAL_IMPORTS
+                   if n not in need or n in have or n in shipped)
+    check("every OPTIONAL_IMPORTS exemption is still a module the base imports "
+          "but does not ship", not stale, "stale exemption: " + ", ".join(stale))
     check("... and none of the base's own imports is left for apply-patches.ps1 to copy in",
           not coming, "the base lacks: " + ", ".join(coming))
 

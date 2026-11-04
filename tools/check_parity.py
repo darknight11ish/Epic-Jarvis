@@ -1052,6 +1052,30 @@ BACKEND_ONLY = {
     # 2026-11-02). When the desktop section lands, this entry is removed and the
     # route becomes `ported`; when the phone's read-only screen lands it is
     # `todo`, never `ported`, on purpose.
+    # What Jarvis is made of on this PC, and its one-card conversation clear
+    # (2026-11-03, the owner's ask that it be aware of every setting and
+    # ability). Backend: jarvis_self_portrait.py, plugins/ready/self-portrait.
+    # NO app calls these yet: the desktop worker is pointing the HUD's Update
+    # button at /api/self/version, and the conversation routes are the backend
+    # half of "pull up any old conversation / clear one" - the Brain and phone
+    # History screens are the follow-up lane. Both apps should get the
+    # conversation list/open/clear from the same store, so this is a missing
+    # screen rather than a one-sided decision (ARCHITECTURE section 8); the
+    # clear itself is ONE card each, never bulk.
+    "/api/self": "What Jarvis is made of on this PC (2026-11-03; jarvis_self_portrait.py, plugins/ready/self-portrait): the places it can open (imported from jarvis_settings_registry.SECTIONS and jarvis_menus.MENUS), its settings with live values, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only. No app calls it yet: the desktop HUD's Update button reads /api/self/version (the desktop lane's half), and a full portrait screen would go on BOTH apps (ARCHITECTURE section 8).",
+    "/api/self/version": "The cheap identity block alone (2026-11-03; jarvis_self_portrait.py): app_version, started_at, and the identity the installer recorded for the live gate/hud/skills modules plus the resealed commit, read from _jarvis-state.json. The desktop HUD's Update button is being pointed at it by the desktop lane; when that lands this entry is removed and the route becomes `deliberate` (the HUD's own update surface, not a phone screen).",
+    "/api/self/refresh": "Re-read Jarvis's own abilities and settings now, and answer ONE plain sentence with what moved (2026-11-03, the owner's ask to 'refresh its function and capabilities awareness'; jarvis_self_portrait.py). Read-only: no card, no setting changed, nothing restarted - it clears the portrait's own cache and rebuilds it, and the answer names the counts and the version. The `refresh_abilities` chat tool calls the same function inside the backend, so no app window needs this route yet; a Refresh control would go on BOTH apps (ARCHITECTURE section 8).",
+    "/api/conversations": "The chat history list, answered by the SAME function GET /api/history is (2026-11-03; jarvis_self_portrait.py aliases jarvis_chat_log.handle_get, so there is one list and one reader). No app calls the alias yet - both apps already have History on /api/history - so this is built for the conversation tools and the follow-up multi-window work; a screen for it would go on BOTH apps (ARCHITECTURE section 8).",
+    "/api/conversations/{id}": "One conversation's turns, answered by the SAME function /api/history/conversation is (2026-11-03; jarvis_self_portrait.py alias). No app calls the alias yet; the conversation tools use it inside the backend, and an app screen that opens one chat would go on BOTH apps (ARCHITECTURE section 8).",
+    "/api/conversations/clear": "Deleting ONE conversation from this PC (2026-11-03; jarvis_self_portrait.py): exactly {\"id\"}, ONE approval card (conversation_clear, tier ask) naming that chat's title and message count, that it cannot be undone, that the learned facts are KEPT and that copies in older backups remain. No bulk form, no cardless form. The apps' OWN History Delete is a different, existing path and is UNCARDED - the phone's `POST /api/history/delete` (jarvis_chat_log.py:4102) answers 200 at once and keeps its own on-screen confirm, so there is no two-phase History delete anywhere; the ONE card exists only on this route and on the `conversation_clear` chat tool. A screen for it would go on BOTH apps (ARCHITECTURE section 8).",
+    # The storage self-scan's own three routes (jarvis_storage_health.py, a
+    # separate 2026-11-03 worker's drop-in). That module exports them and
+    # jarvis_self_portrait's installer serves them beside the self routes when
+    # it is present; while it is absent nothing is served, so neither app calls
+    # one. Its ONE `storage_cleanup` card is that module's own.
+    "/api/storage/scan": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
+    "/api/storage/cleanup/plan": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
+    "/api/storage/cleanup": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

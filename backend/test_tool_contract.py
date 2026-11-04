@@ -123,7 +123,13 @@ CATALOGUE = [
     "append_logseq_journal", "append_obsidian_daily",
     "approve_web_search_for_conversation", "browser_control",
     "calculator", "calendar_read", "change_setting", "coming_up",
-    "connect_account", "control_computer", "control_phone", "create_joplin_note",
+    "connect_account", "control_computer", "control_phone",
+    # Reading one of the owner's own kept conversations (2026-11-03: "pull up
+    # any old conversation"). Both are read-only under `skill_list`. Clearing is
+    # NOT a model tool (Gemini ruling 1, 2026-11-03): it stays route / app /
+    # fast-path only, behind its ONE `conversation_clear` card.
+    "conversation_find", "conversation_open",
+    "create_joplin_note",
     "draft_email",
     "email_check", "feature_guide", "file_read", "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",
@@ -131,7 +137,16 @@ CATALOGUE = [
     "notes_search", "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
     "protect_from_jarvis", "rea_investigate",
     "read_web_page",
-    "retirement_whatif", "run_data_script", "send_email", "send_file_to_phone",
+    # Re-read Jarvis's own abilities (2026-11-03, the owner's ask to "refresh
+    # its function and capabilities awareness"): read-only, no card, decided
+    # under the gate's own `skill_list` action like feature_guide. Not in a
+    # cloud or private-turn allow-list (both are empty by design).
+    "refresh_abilities",
+    # What Jarvis is made of (2026-11-03: "be aware of every setting, function
+    # and ability it has"): read-only under `skill_list`, no card.
+    "retirement_whatif", "run_data_script",
+    "self_portrait",
+    "send_email", "send_file_to_phone",
     "set_reminder",
     "set_timer", "setup_quiz", "shell_exec", "stop_web_search_approval", "tidy_inbox",
     "todo_add", "todo_done",

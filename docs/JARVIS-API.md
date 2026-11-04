@@ -31868,3 +31868,606 @@ change in that turn). Extended in the same slice: `backend/test_live.py`,
 is generated, so no fixture or catalogue needed regenerating, and
 `docs/ARCHITECTURE.md` §8 carries the one-sided half: the settings receipt has no
 screen in either app, so "say undo in the same chat" is the only way back.
+
+## 184. What Jarvis knows about itself: the self portrait, opening a place, clearing ONE conversation, a storage self-scan and a refresh (added 2026-11-03)
+
+The owner's ask of 2026-11-03, in his own words: *"Jarvis must be as flexible and
+versatile as it reasonably can be - open any menu or setting area on request,
+pull up any old conversation, have multiple conversation windows open at once,
+clear any memory or conversation on request, and know every setting/function/
+ability it has"* - plus a second ask the same day, *"when i click update on the
+jarvis hud i want it linked to the back end so both are always updated at the
+same time"*, and a third the same day - *"take inventory of storage and to see
+if it can clear any temporary files up safely also refresh its function and
+capabilities awareness"*. What was built is ONE read-only portrait, a wider
+vocabulary on the navigation field both apps already read, more than one
+conversation window on the desktop, ONE carded way to clear ONE conversation, a
+version handshake for the Updates card, a bounded storage inventory with a dry
+run and ONE card before anything is cleared, and a refresh that re-reads the
+portrait without restarting anything. The research pass that shaped it
+(`.dsh-scratch/F6-2026-11-03/RESEARCH.md`) said two things plainly, and the
+build follows them rather than the first sketch:
+
+- **No fourth list of screens.** The place ids are `jarvis_settings_registry.
+  SECTIONS` and `jarvis_menus.MENUS`, imported. A hand-written list would
+  disagree with the real UI within a week.
+- **No new event kind.** Navigation stays on the existing per-answer
+  `X-Jarvis-Route` field. An event cannot name a webview label, and a
+  doorbell with no reader is a known defect in this codebase
+  (`docs/ARCHITECTURE.md` section 6).
+
+The decision is `decisions.d/2026-11-03-self-portrait-imported-and-clear-one-card.md`.
+
+**Where it lives, and why there is no patch.** `backend/jarvis_self_portrait.py`
+(shipped whole, in `backend/` and `jarvis-backend/`) exports `install()`, which
+wraps the running server's `do_GET`/`do_POST` for exactly its own five paths
+(its own `ROUTES` tuple) and passes every other request straight through.
+It is installed by the drop-in folder `plugins/ready/self-portrait/`
+(`plugin.json` names the module, `install: "handler"`, `stack_order: 165`), so
+the routes arrive with the normal plugin copy and **`jarvis_hud.py` is not
+patched at all** - which is what the plugin loader exists for. The routes check
+the origin and the pairing token with the server's own two checks before
+answering (its `install`'s own origin-and-token check), like every other private route,
+and a caller that fails one gets the ordinary 403/401.
+
+### 184.1 The routes
+
+| Route | Method | Answers | Card |
+|---|---|---|---|
+| `/api/self` | GET | the portrait (184.2). Optional `?app_locked=1` / `?hide_memory_lists=1` can only WITHHOLD the private counts (184.4). `X-Jarvis-Client` is echoed back in `client`; it decides nothing, the same rule `/api/version` states | none - read only |
+| `/api/self/version` | GET | the `version` block alone (184.7): `app_version`, `app_version_source`, `api_version`, `server`, **`pid`**, `started_at`, `deploy` and the `_jarvis-state.json` **`manifest`** summary (`recorded`, `written`, `files_recorded`, `files_verified`, `resealed`). Cheap on purpose - it reads no big module and is cached for 60 s | none - read only |
+| `/api/conversations` | GET | the SAME body `GET /api/history` answers, including `limit`/`before`/`kind`/`tag`/`archived`, and the same App-lock withholding. It is an adapter onto `jarvis_chat_log`'s own handler, not a second list | none - read only |
+| `/api/conversations/<id>` | GET | the SAME body `GET /api/history/conversation?id=` answers, with the same `400`/`404`/`423`/`503` | none - read only |
+| `/api/conversations/clear` | POST | **202** `{"ok", "waiting": true, "id", "title", "messages", "action": "conversation_clear", "message"}` and ONE approval card; phase two deletes that one id only after a person approves (184.6) | **ONE** `conversation_clear` card (tier `ask`) |
+| `/api/self/refresh` | POST | re-reads the inventory NOW and answers `{ok, schema, client, counts, changed, said}` (184.9); a GET is `405 {"error": "use POST to refresh the self portrait"}` | none - it re-reads, it changes nothing |
+
+**The storage self-scan's own routes** are served by the same plugin when
+`jarvis_storage_health.py` is on this PC (the storage module owns them; the
+self-portrait module only proxies them, `jarvis_self_portrait.py`'s `storage_routes()` and
+its `_storage_get`/`_storage_post`). Without that module the paths fall through to the server's own
+handler and answer 404 exactly as if they had never been registered - there is
+no half-route:
+
+| Route | Method | Answers | Card |
+|---|---|---|---|
+| `/api/storage/scan` | GET | the bounded storage inventory (184.8): disks, the folders Jarvis uses, the cleanup candidates with exact bytes, the build caches it will NOT touch, and what it refused | none - read only |
+| `/api/storage/cleanup/plan?categories=` | GET | the DRY-RUN plan for `?categories=` (default `pycache`, 184.8): the exact absolute paths, bytes, one single-use token good for 15 minutes, and every candidate it refused with the reason. Touches nothing | none - read only |
+| `/api/storage/cleanup` | POST | `{"categories": [...]}`: **202** and ONE `storage_cleanup` approval card listing every path in full; only a person's yes deletes or moves anything. `200` with `nothing_to_clear` when the plan is empty, `409` while a card waits, `503` when the action's tier is not `ask` | **ONE** `storage_cleanup` card (tier `ask`) |
+
+The two conversation reads are adapters by design (its `conversation_list` and `conversation_get`): one list, one reader and one delete in the codebase, so the new names
+can never disagree with the route the apps have used since 2026-09-24.
+
+### 184.2 The portrait
+
+One answer, built fresh from the registries and the live state, cached for 20 s
+(the module's `TTL`) so a HUD that reads it on a timer does
+not re-import every module once a second:
+
+```json
+{"schema": "jarvis-self-portrait/1", "client": "hud",
+ "version": {"app_version": "...", "app_version_source": "...",
+   "api_version": 1, "server": "jarvis-hud", "started_at": 1790000000.0,
+   "deploy": {"recorded": true, "schema": "jarvis-updater-manifest/1",
+     "written": "...", "run": "...", "files_recorded": 232,
+     "files_verified": 123,
+     "resealed": {"at": "...", "ref": "", "commit": ""},
+     "identity": {"jarvis_gate.py": "<sha256>", "jarvis_hud.py": "<sha256>",
+                  "jarvis_skills.py": "<sha256>"},
+     "why_not": ""}},
+ "places": [{"id": "voice", "kind": "settings_section", "title": "...",
+             "apps": ["both"], "where": "settings", "openable": true},
+            {"id": "brain.tab.memory", "kind": "menu", "title": "Memory",
+             "apps": ["desktop"], "area": "brain", "view": "memory",
+             "group": "", "openable": true}],
+ "settings": [{"id": "background_learning", "kind": "switch", "label": "...",
+               "names": ["..."], "section": "learning", "value": true,
+               "value_known": true, "changeable": true,
+               "how_to_change": "..."},
+              {"id": "face", "kind": "choice", "label": "...", "names": ["..."],
+               "section": "appearance-card", "value": null,
+               "value_known": false, "options": ["..."],
+               "changeable": true, "how_to_change": "..."}],
+ "asks_first": {"available": true, "why": "",
+   "groups": [{"group": "Reading your own things",
+               "rows": [{"id": "calendar_read", "title": "...",
+                         "tier": "auto|ask|never|fixed", "says": "..."}]}]},
+ "abilities": [{"id": "typing", "group": "Talking",
+                "title": "Type a message and read the answer",
+                "surface": "both"}],
+ "plugins": [{"id": "mood", "module": "jarvis_mood", "on": true,
+              "loaded": true, "why_not": ""}],
+ "stores": [{"id": "memory", "label": "What Jarvis learned", "available": true,
+             "count": 42, "counts": {"facts": 50, "current": 42,
+             "retired": 8, "entities": 7}, "how_to_clear": "..."},
+            {"id": "conversations", "label": "Chat history", "available": true,
+             "count": 31, "recording": true, "enabled": true,
+             "how_to_clear": "..."},
+            {"id": "receipts", "label": "Action receipts", "available": true,
+             "count": null, "count_why": "...", "how_to_clear": "..."}],
+ "private": {"locked": false, "why": ""}}
+```
+
+| Key | Where its rows come from | What it never carries |
+|---|---|---|
+| `version` | the `VERSION` file beside the backend when there is one, `jarvis_events`' own `_STARTED`/`API_VERSION`, and the installer's `_jarvis-state.json` (184.7) | a path into the owner's folders; `identity` is sha256 only and `resealed` accepts a 7-40 character hex ref |
+| `places` | `jarvis_settings_registry.SECTIONS` (one row each, kind `settings_section`) and `jarvis_menus.MENUS` (kind `menu`) - imported, never typed here (the module's `places()`) | an id the two registries do not have |
+| `settings` | `BOOL_SETTINGS` (kind `switch`), `CHOICE_SETTINGS` (kind `choice`) and `NUMBER_SETTINGS` (kind `number`, the one shipped row `live_idle_seconds` with its `low`/`high`/`unit`); a switch's `value` is `jarvis_feature_guide.read_state()`, "the one public reader"; a number's is `jarvis_limits.value_of()` where it can be read; a choice's `value` says `null` with `value_known: false` because no public reader exists for it yet. Measured on the tree this was written from: **46 rows** = 35 switches + 10 choices + 1 number | a value that could not be read: it is `null`, never "off" |
+| `asks_first` | `jarvis_asks_first.view(here=False)` - the same page both apps draw, not reworded | a permission the gate does not keep |
+| `abilities` | `jarvis_feature_guide.features()` - the feature rows both apps' Features pages show; only id/group/title/surface, because the PROSE stays in `jarvis_feature_guide`, the one module allowed to explain a feature | a sentence a model or a plugin wrote |
+| `plugins` | `jarvis_plugins.available()`/`status()`: the drop-in folders, whether each is on, loaded, and why not | a plugin's own body or summary |
+| `stores` | memory counts from `jarvis_memory.store().status()`; conversation count by one read-only `SELECT COUNT(*)`; receipts say the store exists but keeps no total it can answer | a path, a title, a turn, a word of memory or chat |
+| `private` | `jarvis_private_view.effective(app_locked=, hide_memory_lists=)`: App lock and "Hide memory lists and chat history" | anything while locked: `locked: true` is said, and the counts are withheld |
+
+**A fixed portrait, not a prose one.** This answer is the inventory and the live
+state; it does not explain a feature and it does not decide anything. "What is
+feature X / how do I use it?" stays with `jarvis_feature_guide.py` (and the
+`feature_guide` tool), "change setting X" stays with `jarvis_settings_registry.py`,
+and the model's own summary of it is the model's, not this route's. That split
+is written into the module's header (the module's own header) and is
+what keeps a self-description from becoming a fourth source of truth that drifts.
+
+**What it deliberately never contains** (the module's own header): the
+pairing token, an API key, an account secret, a word of stored memory or chat,
+an email or web page, an owner folder path, or any model-written sentence. A
+row whose value cannot be read says `null` (or `count: null` with `why_not` /
+`count_why`) rather than guessing, and an unread switch is never reported as
+off. This is the injection-surface rule the research called F10: a self-model
+is text that reaches the model, so it is fixed data or nothing.
+
+### 184.3 The ids come from the two registries, not from a fourth list
+
+`places` is built by importing the registries every time (`jarvis_self_portrait.
+py:146-215`):
+
+- **59 Settings sections** (`SECTIONS`, kind `settings_section`) - the same ids
+  `settings.html`'s `<section class="card" id=...>` and `SettingsScreen.kt`'s
+  `item(key = ...)` rows use, already held to both files by
+  `test_settings_registry.py`'s `t_sections_match_the_real_ui` and
+  `t_every_real_settings_card_is_listed`, and reflected into the desktop's
+  generated `settings-catalog.js`.
+- **131 menus** (`MENUS`, kind `menu`) - the ids "Show or hide menus" lists,
+  with `area` (settings / brain / entry / safety), `view` and `group`, already
+  held to the phone by `tools/check_registry_phone.py` and the generated
+  `menu-catalog.js` / `MenuCatalog.kt`.
+
+That is **190 places** (the counts are the inventory audit's, measured on
+`origin/main`'s two files; `backend/test_self_portrait.py` is the authority and
+fails if one real section or menu is missing from the portrait). Adding a
+Settings card or a menu therefore adds a place with no edit to this feature -
+and removing one removes it. There is no `screens.json`, no hand-written list in
+the HUD page and no second registry to drift.
+
+**`resolve_place(words)`** (the module's `resolve_place`) is the one
+lookup that turns an "open ..." tail into the existing `X-Jarvis-Route` field:
+exact aliases only, from the same two registries (never a fuzzy guess), and it
+answers either `{"route": "settings", "id": <section id>}` or
+`{"route": "brain", "id": <view>}`. A settings-area menu maps to the section of
+the same name when one exists; a brain-area menu maps to its own `view`; a tail
+that names no place returns `None` and the sentence falls through to the model,
+exactly as "open the door" already does.
+
+**Said plainly, on the tree this was written from:** `resolve_place` is the hook
+for the wider vocabulary, and the two apps already read that wider field - but
+no backend caller in this change uses `resolve_place` yet (it is not wired into
+`jarvis_quick.py`'s settings-open path here), and the portrait is what a client
+or the model can read today. The navigation that works end to end is the
+existing `open_settings`/`open_brain` field the apps have read since
+2026-09-27/2026-10-31 plus the wider table below; the backend emitting
+`open_area` for every place is the next wiring step, not a claim made here.
+
+### 184.4 "Open <a place>": display only, and honest when the app has no screen
+
+Navigation rides the **existing per-answer route field**, not a new route and
+not a new event kind. The field already in production:
+
+- `open_settings` - a Settings section id (section 58.1, the "open" grammar);
+- `open_brain` - one of the Brain's own places (the "Continue this chat" /
+  Forget-a-time-frame answers, section 18.6);
+- `open_app_kind: "jarvis"` with `open_place` - the older "Show me where" shape.
+
+The wider vocabulary both apps now understand in the same field is
+**`open_area`** (a place id from 184.3) with an optional **`open_anchor`**
+(a row inside it). It is additive: a backend that sends only `open_settings`
+behaves exactly as before on both apps.
+
+**Desktop** (`jarvis-desktop/src-tauri/src/hud_nav.rs`). ONE table maps an area
+word to the real surface (`AREA_ALIASES`, 22 aliases, `hud_nav.rs:74`):
+a HUD view (`talk`, `galaxy`), a Studio tab (`today`, `reminders`, `memory`,
+`telemetry`), a HUD panel (`history`, `presets`), the Settings window at a
+section (`settings`), the Brain window at `history`/`tutorials` (`brain`),
+Faces, the feature list, `updates` (the Settings card the tray row opens), or a
+new chat window. The injected HUD chrome reads the answer's route and invokes
+one command, `open_jarvis_area` (`hud_nav.rs:341`; granted as the `hud-nav` set,
+`capabilities/hud.json`, with `allow-open-jarvis-area`); an older page that does
+not know the wide field keeps its tested `open_settings` behaviour
+(`hud_bootstrap.js`, `actOnOpenRoute`). Rules the code keeps:
+
+- **Display only.** `dispatch` changes no setting, raises no card and approves
+  nothing; every window it opens goes through the same App-lock check as the
+  tray row that opens it (the table plus `dispatch`'s own match).
+- **An area this desktop does not have says so**, in the HUD's own chat log:
+  *Jarvis asked to open "dashboard", but the desktop has no "dashboard". Nothing
+  was opened.* (`unknown_words`, `hud_nav.rs:177`). Never a dead control and
+  never silence.
+- **Only the main HUD is told.** `push_to_hud_main` (`lib.rs:490`) evaluates into
+  that one window; the extra chat windows never hear a navigation, so a request
+  made elsewhere cannot move a conversation the owner is reading.
+
+**Phone** (`jarvis-client`). The same answer field, resolved by a tested
+decision table rather than opening a wrong screen (`ui/OpenPlace.kt`):
+`openSettingsFromRoute` reads `open_settings` first and also `open_place`,
+`open_area` and `open_screen` (`net/Schedule.kt:1290`), because the backend's
+spelling for the wider field is not pinned on that side; `OpenPlace.whereFor`
+(`OpenPlace.kt:447`) resolves, in order: the settings-registry ids it has always
+decided; whole screens and Brain plates by area name (`AREAS`,
+`OpenPlace.kt:331`); the shared menu ids from `MenuPlaces` (`forMenu`,
+`OpenPlace.kt:431`); the honest refusal for a real place this build has no
+screen for (`PHONE_MISSING`: habits, mood and plugins say "There is no ... screen
+in this app yet"); the PC-only sentence; and finally the old harmless behaviour.
+It adds no `Screen` enum entry and no second navigation mechanism: the existing
+one-time `openSettings` request carries the id to `MainActivity`, which
+navigates once and consumes it, and the screen's own `initialSection` scrolls to
+the row. Nothing on the phone changes a setting by navigating.
+
+### 184.5 More than one conversation window (desktop)
+
+`jarvis-desktop/src-tauri/src/chat_windows.rs` (new) opens extra copies of the
+**same** HUD page - same bootstrap, same dark theme, same minimum size - each a
+separate `WebviewWindow` with its own conversation. A window may be asked for
+one conversation id (`?conversation=<id>`, also injected as
+`window.__jarvisConversation`); with no id it starts a fresh chat.
+
+- **Labels are `chat-1`..`chat-8`** (`CHAT_LABELS`, `chat_windows.rs:58`); the
+  cap is the length of that fixed list (8). The main HUD keeps the `hud` label.
+- **One conversation, one window.** `open_for` keeps a conversation-id → label
+  map and FOCUSES the window already showing that chat instead of building a
+  second one; the entry is dropped when the window is destroyed
+  (`open_for`). A conversation id is trimmed, control characters
+  are refused and the length is capped, and a window's title is never the id.
+- **Nothing is restored at start-up.** Extra windows are something the owner
+  asked for in this session; silently reopening eight of them at login is not
+  the same request (`chat_windows.rs:1-40`). Their size and place ARE
+  remembered (`window_memory.rs` treats `chat-*` like the HUD).
+- **The page opens the chat through its own History host** - the same
+  `host.open(conv)` its History sidebar calls - so a window's conversation lives
+  in that window's own memory and two windows cannot append one transcript.
+- **App lock covers them exactly as it covers the HUD** (`lock.rs:156-170` and
+  the sweep): a locked PC hides them, and they join the screen-capture exclusion
+  list. They also get the same permission file: `capabilities/hud.json` lists
+  `"windows": ["hud", "chat-*"]`, and two commands a page may invoke -
+  `new_chat_window` and `open_conversation_window` - are granted by the same
+  `hud-nav` set. A rail button ("New chat window", "Open this chat in a new
+  window") and a tray row ("New chat window") are the owner's two doors.
+- **Two windows on one conversation cannot happen.** Pressing "open this chat in
+  a new window" twice focuses the first; the second window is never built.
+
+The phone has no extra windows: it is one screen at a time by design. That is
+recorded in `docs/ARCHITECTURE.md` section 8.
+
+### 184.6 Clearing ONE conversation: two-phase, ONE card, never bulk
+
+`POST /api/conversations/clear {"id": "<one conversation id>"}` is **two
+phases** (the module's `clear_request`):
+
+1. **Phase one, the request.** The body must be exactly `{"id"}` - anything else
+   is a `400` saying there is no bulk clear. The route reads that one
+   conversation through `jarvis_chat_log`'s own handler (so a locked PC answers
+   `423` and an unknown id `404`, exactly as the list does), builds the card's
+   words, and raises **ONE** approval card under the action
+   **`conversation_clear`**, which is tier **`ask`** in both shipped
+   `jarvis-framework.toml` copies (`backend/rebuilt/` and `jarvis-backend/`).
+   Any other tier is refused with a `503` rather than obeyed - the same fail-closed
+   rule "Forget a time frame" applies to its own action. A second request while
+   a card is waiting is `409`.
+2. **Phase two, the person's yes.** Only an approved card deletes anything, and
+   the id is re-read before deleting, so a chat already gone deletes nothing and
+   says so. Denial, a timeout, a refused gate or a failed read deletes nothing.
+   The delete is `jarvis_chat_log.delete` - the one delete the History routes
+   already use - and it **never touches the memory store**: the facts Jarvis
+   learned from that chat survive (proven by `backend/test_self_portrait.py`).
+
+The card's words are fixed (`clear_card_text`)
+and consequence-first: the conversation's title and message count as the PC has
+them, *"It is removed from this PC and this cannot be undone."*, *"The facts
+Jarvis learned from it are KEPT - deleting a chat never forgets them. To forget
+those too, use Forget a time frame."*, *"Copies in older backups stay until they
+age out."*, and an Approve label that names the one thing it does. A title
+cannot carry a newline (a card is lines), and no other text from the chat is
+quoted. Three outcomes get fixed sentences (`_LAST_WORDS`): done, denied, timed
+out, refused; the audit log gets counts only (`conversations.clear.asked` with a
+message count, `conversations.clear.done`), never a title or a word.
+
+**What is NOT changed, said plainly.** The existing `POST /api/history/delete`
+keeps its old shape - one conversation, the app's own confirm, no server card -
+and nothing here adds a bulk route, a cardless route, or a memory-clear route.
+Forgetting memory keeps its existing doors: `/api/memory/erase` (one fact),
+`/api/memory/forget`, and "Forget a time frame" with its own ONE card, preview
+and 10-minute Undo (section 64/79). A cleared chat and a forgotten fact are two
+decisions; the History screen's own "delete the facts it taught" flow still
+starts with none ticked (section 79).
+
+### 184.7 The Update button: both halves read back, or it says they do not match
+
+The version block is in the portrait (184.2) and alone at `GET
+/api/self/version`. Its two parts are different on purpose:
+
+- `app_version` is the short `VERSION` file beside the backend when the folder
+  has one; a checkout answers `"unknown"` with `app_version_source` naming why,
+  because a deployed backend folder carries modules, not repository files.
+- `deploy` is the installer's OWN record (`_jarvis-state.json` beside
+  `jarvis_hud.py`, read at most once per 60 s): `recorded`, the run's schema and
+  time, how many deployed files were recorded and verified, the sha256 of the
+  three identity modules (`jarvis_gate.py`, `jarvis_hud.py`,
+  `jarvis_skills.py`), and - after a reseal - the repository commit
+  (`resealed.commit`, hex only). A missing or damaged record answers
+  `recorded: false` with `why_not`, never an exception and never a guess.
+
+**Provenance (Gemini ruling 3, 2026-11-03).** The block also names the process
+that is answering and the manifest it agrees with, so a stage check can compare
+what it reads with the live folder without patching `jarvis_hud.py`'s own
+`/api/version` (which is deliberately untouched): **`pid`** is `os.getpid()` of
+the server, **`started_at`** is the epoch seconds that same process started
+(same value the portrait's footer uses), and **`manifest`** is the
+`_jarvis-state.json` summary - `recorded`, `written`, `files_recorded`,
+`files_verified` and `resealed` (`at`/`ref`/`commit`). All are read-only,
+counts and identifiers only, no path and no secret; the out-of-band
+`Get-FileHash` + `Get-NetTCPConnection` proof remains the primary Stage V
+evidence.
+
+The desktop's handshake is `jarvis-desktop/src-tauri/src/backend_self.rs`. It
+reads `/api/self` (5 s timeout, no proxy, no redirects), compares the
+executable's own package version with the backend's `version.app_version`, and
+answers ONE state with ONE plain sentence (`backend_self.rs:131-190`):
+
+| State | When | What the owner is told |
+|---|---|---|
+| `in-sync` | both parse to the same version (`1` and `1.0` are the same) | both versions named, "IN SYNC" |
+| `backend-older` | the backend is lower **or has no `/api/self` at all** (a 404 is an answer: that backend predates this build) | "MISMATCH", both versions, and the update path to press |
+| `backend-newer` | the backend is higher | safe to keep working; the route is additive |
+| `different` | both answered but not one numbering scheme | they cannot be compared - never a made-up sync |
+| `unavailable` | answered, no version this build can read | says so and points at the update |
+| `unreachable` | nothing listening or the read failed | says so; nothing was changed |
+
+**The button and the line that goes with it.** The Settings card's Install
+button now runs that `update_both` (the backend half first, then this
+executable) rather than the desktop-only `install_update`; the desktop-only
+path survives in exactly ONE case - a PC where the backend half cannot run at
+all - and that case says in words that the backend was NOT updated and where to
+finish it, never that both halves moved. The same card carries a new
+`#update-sync` line, drawn from the handshake, so the sentence sits beside the
+button that acts. And when an update is found, the HUD's own chat log also says
+that one Update press installs BOTH halves
+(`say_available_in_hud`, `jarvis-desktop/src-tauri/src/update.rs`) - a
+sentence, not a click; the click stays on the card.
+
+The rules: **"up to date" is only ever said when both sides parse the same**
+(`backend_self.rs`'s own test `only_the_in_sync_sentence_says_in_sync`), no
+window waits on it, and the read is display-only. At start-up one handshake runs
+after 8 s and only the `backend-older` answer is spoken in the HUD's chat log
+(`spawn_startup_handshake`, `backend_self.rs:296`), so a build that is ahead of
+its backend says so once instead of pretending all is well; the Updates card can
+ask on demand (`shell_version_sync`, granted as `allow-shell-version-sync` in
+the `hud-nav` set). The update itself is the existing `update.rs` `update_both`
+- backend half first, then this executable - and this handshake is the read-back
+that says whether both halves really moved together. Nothing here checks GitHub
+for a newer version, and nothing auto-updates.
+
+**Said plainly, on the tree this was written from:** the desktop's parser reads
+the version STRING out of the portrait (`version.app_version`) in the final
+build; a pointer list that read `/backend/version` would never match the
+portrait's object shape, and that mismatch was caught during this change rather
+than shipped. If the tree that lands differs, the PR says so rather than this
+section claiming a handshake that cannot read.
+
+### 184.8 Storage: a bounded self-scan, a dry run, and ONE card before anything is cleared
+
+`backend/jarvis_storage_health.py` (new, shipped whole, with its
+`jarvis-backend/` twin; its routes come through the self-portrait plugin's
+handler) answers the owner's second ask of the same day - *"take inventory of
+storage and to see if it can clear any temporary files up safely"*. It is NOT
+`jarvis_storage.py`, which answers "can this PC hold another model?"; the two do
+not overlap and the new module imports nothing from the old one.
+
+**The scan is bounded and never follows a link** (`scan()`, schema
+`jarvis-storage-health/1`). One answer carries:
+
+- `disks` - free/used/total for the drives the roots are on;
+- `roots` - the folders Jarvis itself uses (the live program folder, this
+  repository, `~/.openjarvis`, the Ollama folder, `%TEMP%`), each with file
+  count, bytes, oldest/newest time and its top five subfolders, walked to a
+  fixed depth with an entry and time budget. A folder that hits the budget says
+  `bounded: true` and the `notes` say its counts are not exact; `.git`,
+  `.dsh-scratch` and the build caches are left out of a root's totals and said
+  so. A symlink, junction or other reparse point is skipped and counted -
+  nothing is ever followed;
+- `candidates` - the things that LOOK temporary, per category, with exact
+  bytes, file counts and oldest/newest times;
+- `regenerable` - the build caches (`node_modules`, `target`, `build`, `out`,
+  `dist`, `.gradle`) reported as "regenerable, slow to rebuild" and never
+  planned: rebuilding can take tens of minutes, so that is the owner's call and
+  not a temporary file;
+- `not_safe_to_clear` - candidates that failed a safety check, with the reason,
+  rather than being silently dropped;
+- `summary` - one plain-words line, and `wrote_anything: false`.
+
+The four categories, and what each does when cleared:
+
+| Category | What it is | Action | Planned by default |
+|---|---|---|---|
+| `pycache` | `__pycache__` folders and `.pyc`/`.pyo` files | **delete** (they rebuild themselves) | **yes** - the only default |
+| `logs` | Jarvis's own `_jarvis-logs` folder | **move to quarantine** - never deleted | no; ask for it by name |
+| `old_deploy_snapshots` | `_jarvis-deploy-backup-*` folders and `.before-*`/`.backup-*`/`.old-*` copies an update left behind (a plain `.bak` is deliberately NOT on the list: it may be the only copy of something) | **move to quarantine** - never deleted | no; ask for it by name |
+| `temp_files` | scratch files with Jarvis's own prefixes (`jarvis-`, `f6-`, `openjarvis-`) in `%TEMP%` | **delete** | no; ask for it by name |
+
+**The dry run names every path.** `GET /api/storage/cleanup/plan?categories=`
+builds the exact list of absolute paths, bytes and per-category totals, one
+single-use token good for 15 minutes, the quarantine folder a move would use,
+and every candidate it refused with the reason. It writes nothing at all
+(`plan_cleanup()`'s docstring and the tests). A plan of more than 60 items is
+refused rather than summarised - "clear one category at a time" - because a card
+that cannot list what it authorises is not a card. Only Python cache is planned
+when no category is named: the other three are offered, never assumed.
+
+**Nothing happens without ONE card.** `POST /api/storage/cleanup` builds a fresh
+plan and raises ONE approval card under the action `storage_cleanup`, which is
+tier `ask` in both shipped `jarvis-framework.toml` copies; any other tier is
+refused with a `503` rather than obeyed. The card says, in full: every category
+with its item count and bytes and a plain-words line about what it is; then
+**"Exactly this, nothing else"** followed by one line per path - `delete <path>
+(<size>)` or `move <path> -> <quarantine folder>` - and what saying no means
+(*"A deleted file cannot be undone. Moved files are kept in the quarantine
+folder above so you can put them back."*, *"Nothing of yours - no memory, chat
+history, approvals, receipts or notes - is touched. If you say no, nothing
+changes at all."*). One plan is in flight at a time (`409` while one waits). A
+plan with nothing to clear raises no card and answers `200 nothing_to_clear` with
+the refusals that stopped it.
+
+**On a yes, the plan is carried out exactly as shown** (`apply_cleanup`). The
+token must be the one the plan minted, single-use, and the categories must still
+match; an expired plan is refused. Before touching each item it re-checks the
+path (absolute, no `..`, inside the category's allowlisted roots, not a link,
+the right shape for its category) and, for a deletion, that its file count, size
+and newest time are exactly what was planned. **The first discrepancy stops the
+whole run** and the result says where and what was already done. Python cache and
+`%TEMP%` scratch files are DELETED; logs and old deploy snapshots are MOVED into
+`_jarvis-quarantine-<yyyy-mm-dd>` beside the live program, never deleted. The
+receipt is exact: `freed_bytes` counts only what was really deleted, `moved_bytes`
+is reported separately because it is still on disk, `deleted` and `quarantined`
+name every path (`quarantined[].moved_to` says where it went), `stopped_at` is
+null on a clean run, and `message` is one plain sentence - "Done: 3 items
+deleted, freeing 12.4 MB; 2 items moved into ... (still on disk)."
+
+**What it refuses, before anything else.** `~/.openjarvis` (memory, chat history,
+approvals, receipts, the voiceprint and projects), the Downloads folder, a
+relative path, a path with a `..` step, a link or junction anywhere between the
+root and the file, anything outside the allowlisted roots for its category, and
+**any file the repository tracks in git** (read with `git ls-files`; when that
+cannot be known it refuses with "Jarvis cannot prove this repository does not
+track this file"). The live program's own files are on the same list. There is
+no network, no socket, no elevation and no subprocess except that read-only
+`git ls-files`, and `backend/test_storage_health.py` proves the user-data folder
+is byte-identical before and after a cleanup.
+
+**No app screen, said plainly.** Neither app draws a storage page and the HUD's
+fixed read allowlist does not carry the storage routes; the model's tools are the
+owner's door once they are wired (§184.10 says exactly what is and is not built
+on the tree this was written from).
+
+### 184.9 Refreshing its own abilities awareness
+
+The owner's ask *"refresh its function and capabilities awareness"* is two small
+pieces, and neither restarts anything.
+
+**`POST /api/self/refresh`** (GET answers `405` with a sentence saying to use
+POST) re-reads the inventory NOW: it clears the 20-second portrait cache and the
+60-second installer-identity cache, rebuilds the portrait, compares the counts
+before and after, and answers one small document
+(`refresh()`):
+
+```json
+{"ok": true, "schema": "jarvis-self-portrait/1", "client": "hud",
+ "counts": {"places": 190, "settings": 46, "tools": 21, "abilities": 140,
+            "plugins": 48, "settings_places": 59, "menu_places": 131,
+            "stored_memory": 42, "stored_conversations": 31,
+            "app_version": "...", "started_at": 1790000000.0},
+ "changed": {"<key>": {"before": ..., "after": ...}},
+ "said": "I re-read what I can do and have now: ... Everything matches what I
+          had. Nothing was restarted."}
+```
+
+The sentence names every number it read, says "Nothing was restarted" in both
+cases, and when something moved names each key that changed - a setting count, a
+plugin, the version, a store's count. `started_at` is carried straight through,
+so a reader can see it is the same process. **No card**, because it writes
+nothing, changes no setting, reads nothing outside this PC and restarts nothing.
+A refresh never touches a pending card or a store.
+
+**The `refresh_abilities` chat tool** (`backend/jarvis_agent.py`'s `REFRESH_ABILITIES_TOOL` block,
+its `_run_refresh_abilities`, and its `Tool(...)` definition) is the same thing by asking: no arguments, a
+read-only tool that calls the refresh and hands its `said` sentence and counts
+back. It is decided under the gate's existing `skill_list` action ("listing what
+Jarvis can do", tier `auto`) exactly like `feature_guide`, so no new action, tier
+or card wording is invented; it is in the `settings` tool group beside
+`feature_guide` and `change_setting`, and it is NOT recorded as reading outside
+text (nothing outside is read). Its own description says what it is not: not the
+feature explainer, nothing restarted, nothing changed, no approval needed.
+Whether it is OFFERED on a given PC is `[tools].enabled`'s business like every
+other tool, and §184.10 says what the shipped list names on this tree.
+
+### 184.10 What is not built, and what is not proved
+
+- **The conversation tools: `conversation_find` and `conversation_open` ARE
+  built** (read-only, under the gate's own `skill_list`, no card).
+  `conversation_clear` is DELIBERATELY NOT a model tool (Gemini ruling 1,
+  2026-11-03): an LLM must never have an autonomous tool to wipe the
+  transcript, because an injected or hallucinated "clear that up for me" would
+  delete chat history. Clearing stays the REST route (`POST
+  /api/conversations/clear`), an app UI action, or the fast path - always
+  behind its ONE `conversation_clear` card. The explainer and `open_area` from
+  the first sketch are still NOT built; the portrait's routes and the existing
+  `feature_guide` answer that side.
+- **The storage routes have no chat tools and no app screen yet**, on the tree
+  this was written from: `/api/storage/scan`, `/api/storage/cleanup/plan` and
+  `/api/storage/cleanup` answer and are fully tested, but no `storage_scan`/
+  `storage_cleanup` model tool is registered and neither app draws a storage
+  page. The storage module itself carries the exact tool names its wiring
+  worker is to add (`TOOL_ROWS`), and its card wording is already built; this
+  section says what is real, not what is next.
+- **`refresh_abilities` is defined and grouped, but it is not in the shipped
+  `[tools].enabled` list on this tree** - the same list that ships
+  `feature_guide`, `change_setting`, `plugin_list` and the rest. A tool that is
+  not in that list is not offered, so a PC with the shipped settings file has
+  the POST route but not the tool by asking until the list names it (or the
+  owner adds the name).
+- **The backend does not yet emit `open_area`.** Both apps accept it and the
+  desktop's table can act on it; `resolve_place` is the hook with no caller yet
+  (184.3).
+- **No new event kind is added, and there is deliberately no stream listener
+  for a navigation frame.** The contract is the per-answer route field; the
+  desktop's `hud_nav.rs` header says plainly that a `ui.navigate` listener with
+  no publisher would be "a doorbell into an empty room", so none is wired.
+  If a navigation frame is ever added it must be label-filtered and ship with
+  a real publisher and a client handler together (the F6 research's F5).
+- **Not driven on hardware.** No real phone, no installed desktop app and no
+  live backend were run for this section; the routes, the portrait, the card,
+  the conversation adapters and the clear are proved by their suites, the
+  desktop's navigation and window code by its own tests, and the phone's tables
+  by JVM tests. What is proved is code and tests, not a field test.
+
+### 184.11 Both apps, the one-sided parts, and the tests
+
+| Piece | Desktop | Phone | Why |
+|---|---|---|---|
+| `/api/self`, `/api/self/version`, `/api/conversations` | **on this tree: NOT yet reachable from the page** - `hud_proxy.rs` carries none of the three (`HUD_GET_PATHS` has 12 paths and no `/api/self`); the desktop's own PR #1115 adds `/api/self`, `/api/conversations` and - after this branch's `/api/self/version` - its allowlist becomes 14 paths. The version STRING is read by the shell's version handshake, not only the page | can read them like any route; the phone has no self screen | it is a read; both apps' chats already reach the PC |
+| "Open a place" | `hud_nav.rs` table + `open_jarvis_area` | `OpenPlace` table + the one-time settings request | same field, each app's own surfaces |
+| More than one conversation window | **desktop only** - the extra `chat-*` windows | one screen at a time | recorded in `docs/ARCHITECTURE.md` section 8 |
+| Clearing one conversation | the card is answered in any window (Windows Hello where the gate asks) | the card is answered on Home like any card; its History delete keeps its own confirm | one action, one decision, everywhere |
+| The version handshake / Update | **desktop only** | none | a phone cannot patch this PC's backend (the existing one-sided decision, ARCHITECTURE section 8) |
+| Storage scan and cleanup (184.8) | **no screen, no tool on this tree** | **no screen, no tool on this tree** | the routes and the ONE card are built and tested; the door is the model tool the wiring worker adds, never a client-side clear |
+| Refreshing the abilities (184.9) | the `refresh_abilities` tool in either app's chat, once `[tools].enabled` names it; `POST /api/self/refresh` is a route both apps may call | same | one read of this PC's own modules; no card and nothing restarted |
+
+**Tests.** `backend/test_self_portrait.py` (added with the module; it is what
+holds the portrait to the two registries, the settings' live values, the refresh
+endpoint and its sentence, the clear card's four phases, the adapters'
+one-truth rule, the fail-closed tier, the "a cleared chat does not forget a
+fact" proof, and the never-in-it list), `backend/test_storage_health.py` (the
+bounded scan, every refusal, the plan's token and expiry, the ONE card, the
+re-check that stops a changed item, the delete-vs-quarantine split, the freed
+bytes, and the user-data folder byte-identical before and after),
+`backend/test_asks_first.py` and the shipped-whole twin checks
+(`backend/test_base_matches_repo.py`, `backend/test_base_regeneration.py`,
+`tools/check_stale_twins.py`) for the new modules and their `jarvis-backend/`
+copies; the desktop's `cargo test` unit tests in `hud_nav.rs`, `chat_windows.rs`
+and `backend_self.rs`; the phone's `OpenPlaceTest`, `OpenPlaceAreasTest` and
+`ConversationClearTest`. The two
+checkers named by the parity rule do NOT classify nothing: `tools/check_parity.py`
+adds **nine `BACKEND_ONLY` entries** for this feature - `/api/self`,
+`/api/self/version`, `/api/self/refresh`, `/api/conversations`,
+`/api/conversations/{id}`, `/api/conversations/clear`, and the storage
+self-scan's `/api/storage/scan`, `/api/storage/cleanup/plan`,
+`/api/storage/cleanup` - each carrying its follow-up lane in the reason, because
+neither app calls any of them on this tree. `tools/check_event_names.py`
+classifies nothing new because no event kind is added (navigation stays on the
+existing per-answer `X-Jarvis-Route` field). **No `features/features.json` entry
+is added by this work** - that row is still waiting on the app lanes; the PR
+says exactly what each checker reported.
