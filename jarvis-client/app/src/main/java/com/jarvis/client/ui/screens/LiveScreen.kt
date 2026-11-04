@@ -375,11 +375,25 @@ fun LiveScreen(
                         onClick = { act { JarvisRuntime.liveStart(resume = sign.resume); null } },
                     )
                     Gap(6)
+                    // THE OWNER'S RULE OF 2026-11-03, said as it is. This
+                    // sentence used to promise the 2026-11-01 behaviour -
+                    // "every full sentence is checked ... once this session is
+                    // verified" - which is no longer what happens: the voice
+                    // is checked for "hi Jarvis" on a LOCKED phone and for a
+                    // Live session STARTED on a locked phone, while an
+                    // unlocked Live start and the mic press do not check. The
+                    // unlocked "hi Jarvis" half is not applied yet (DEF-033),
+                    // so the sentence says it is still checked rather than
+                    // claiming otherwise. It also says where the one setting
+                    // lives, because the owner asked for one.
                     Text(
                         "Jarvis listens after every answer until you end it, say \"Okay Jarvis, " +
-                            "that's all for now\", or it has been quiet for 90 seconds. Every full " +
-                            "sentence is checked for your voice on your PC; once this session is " +
-                            "verified, a short reply is trusted without a check.",
+                            "that's all for now\", or it has been quiet for 90 seconds. Your " +
+                            "voice is checked when you say \"hi Jarvis\" on a locked phone, and " +
+                            "when Live starts on a locked phone; starting Live on an unlocked " +
+                            "phone and pressing the mic do not check it. Saying \"hi Jarvis\" " +
+                            "on an unlocked phone is still checked for now. Settings, Voice " +
+                            "changes this.",
                         style = MaterialTheme.typography.labelSmall,
                         color = chrome.textMid,
                     )

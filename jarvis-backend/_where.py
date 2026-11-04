@@ -1510,7 +1510,18 @@ SHIPPED = (
     # the same atomic section writer the other settings use. Shipped whole,
     # no patch of its own; phone-apps.patch is the two routes that reach it.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_phone_apps.py"
+    "jarvis_phone_apps.py",
+    # The storage self-scan and the safe temporary-file cleanup
+    # (jarvis_storage_health.py, 2026-11-03; the owner's own request: "take
+    # inventory of storage and ... clear any temporary files up safely"): a
+    # read-only, bounded inventory (disks, the folders Jarvis uses, and the
+    # pycache / log / old-deploy-snapshot / %TEMP% candidates), a dry-run plan
+    # built only from an explicit allowlist, and ONE approval card before
+    # anything is deleted or moved. ~/.openjarvis is refused; logs and old
+    # deploy snapshots are quarantined, never deleted. Standard library only,
+    # no network, no elevation. The same entry is at the end of $SHIPPED in
+    # scripts/apply-patches.ps1.
+    "jarvis_storage_health.py"
 )
 
 

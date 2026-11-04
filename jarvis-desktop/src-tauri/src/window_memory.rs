@@ -45,6 +45,11 @@ pub const REMEMBERED: StateFlags = StateFlags::SIZE
     .union(StateFlags::MAXIMIZED);
 
 /// The windows whose size and place are remembered.
+///
+/// The four fixed windows, plus every extra chat window (2026-11-03): a chat
+/// window is the same surface as the HUD, so it opens where it was left too.
+/// `chat_windows.rs` owns that fixed label set (fixed on purpose: the plugin's
+/// filter and the sweep below take `&'static str`s).
 pub const TRACKED: [&str; 4] = [HUD_LABEL, SETTINGS_LABEL, BRAIN_LABEL, FACES_LABEL];
 
 /// Where the sizes are kept, in the app's config folder. The plugin's own
@@ -63,8 +68,16 @@ const FILENAME: &str = ".window-state.json";
 /// builder's declaration is not readable back at runtime.
 pub const MIN_INNER: [(&str, f64, f64); 1] = [(HUD_LABEL, 960.0, 640.0)];
 
+/// The extra chat windows' minimum, from `chat_windows.rs`'s CHAT_MIN. They are
+/// the same page as the HUD, so a restored one must not come back below the
+/// same floor.
+const CHAT_MIN_INNER: (f64, f64) = (960.0, 640.0);
+
 /// The declared restored-size minimum for one window, if it has one.
 pub fn minimum_inner(label: &str) -> Option<(f64, f64)> {
+    if crate::chat_windows::is_chat_window(label) {
+        return Some(CHAT_MIN_INNER);
+    }
     MIN_INNER
         .iter()
         .find(|(tracked, _w, _h)| *tracked == label)
@@ -140,12 +153,18 @@ pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     for label in TRACKED {
         builder = builder.skip_initial_state(label);
     }
+    // The extra chat windows are restored by hand too (their builder calls
+    // `restore` before showing), so the plugin must not restore - and, on a
+    // window saved maximised, show - them first.
+    for label in crate::chat_windows::CHAT_LABELS {
+        builder = builder.skip_initial_state(label);
+    }
     builder.build()
 }
 
 /// Whether a window's size and place are remembered.
 pub fn is_tracked(label: &str) -> bool {
-    TRACKED.contains(&label)
+    TRACKED.contains(&label) || crate::chat_windows::is_chat_window(label)
 }
 
 /// Puts a freshly built window back where the owner left it.
@@ -412,6 +431,11 @@ mod tests {
         }
         for label in ["hud", "settings", "brain", "faces"] {
             assert!(is_tracked(label), "{label} is remembered");
+        }
+        // The extra chat windows are the HUD's page in another window, so they
+        // are remembered exactly as it is (2026-11-03).
+        for label in crate::chat_windows::CHAT_LABELS {
+            assert!(is_tracked(label), "{label} is a chat window");
         }
     }
 

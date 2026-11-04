@@ -98,26 +98,23 @@ CLEAR_PATH = "/api/conversations/clear"
 ROUTES = (SELF_PATH, VERSION_PATH, REFRESH_PATH, CONVERSATIONS_PATH, CLEAR_PATH)
 
 #: The storage self-scan's own routes, when `jarvis_storage_health.py` is on
-#: this PC (a separate worker's module, shipped as PR #1117's own drop-in). It
-#: is NOT a dependency: with the module absent its routes are simply not served
-#: and everything here works exactly as before; the scan itself, its plan and
-#: its ONE-card apply are that module's.
+#: this PC (a separate worker's module, shipped by PR #1117). It is NOT a
+#: dependency: with the module absent its routes are simply not served and
+#: everything here works exactly as before; the scan itself, its plan and its
+#: ONE-card apply are that module's.
 #:
-#: THE IMPORT IS A PLAIN, GUARDED `import` ON PURPOSE, and the two audits that
-#: read it are told the truth instead of being routed around (2026-11-03, after
-#: an audit found this call site had been hidden behind a built name):
-#:   * backend/test_shipped_modules.py now lists ("jarvis_self_portrait.py",
-#:     "jarvis_storage_health") in REPO_ONLY_IMPORTS with this reason, so the
-#:     dependency is VISIBLE and accounted for while PR #1117 is unmerged;
-#:   * backend/test_base_matches_repo.py allows it by name in OPTIONAL_IMPORTS
-#:     (the published base cannot carry a module this repository does not ship
-#:     yet) with the same reason.
-#: Both entries are removed when #1117 is in the shipped set and the base is
-#: re-taken; until then a PC without the module must SAY so rather than serving
-#: nothing quietly - see storage_absence_words() and the start-up banner line.
+#: THE IMPORT IS A PLAIN, GUARDED `import` ON PURPOSE, so a PC whose install
+#: predates the module, or whose copy is damaged, keeps this page up. Since
+#: #1117 merged, the module is in _where.py's SHIPPED set and the published
+#: base carries it, so the two audit exemptions this comment used to name
+#: (test_shipped_modules.py's REPO_ONLY_IMPORTS and
+#: test_base_matches_repo.py's OPTIONAL_IMPORTS) are gone - they were removed
+#: in the same change, along with the stale reason they recorded. A PC without
+#: the module must still SAY so rather than serving nothing quietly - see
+#: storage_absence_words() and the start-up banner line.
 try:
     import jarvis_storage_health as _STORAGE
-except ImportError:                          # not installed on this PC (PR #1117)
+except ImportError:                          # not installed on this older PC
     _STORAGE = None
 except Exception:                            # noqa: BLE001 - a damaged drop-in must not
     _STORAGE = None                          # take the self portrait down with it

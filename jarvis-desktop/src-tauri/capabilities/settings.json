@@ -41,6 +41,7 @@
     "spending-settings",
     "pictures-settings",
     "focus-presets",
+    "version-handshake",
     "core:webview:allow-set-webview-zoom"
   ]
 }

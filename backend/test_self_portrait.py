@@ -673,8 +673,19 @@ def audit_fixes_are_in():
     check("TOOL_GROUPS is defined exactly once in jarvis_asks_first.py",
           len(re.findall(r"^TOOL_GROUPS = \(", ask_src, re.M)) == 1,
           str(len(re.findall(r"^TOOL_GROUPS = \(", ask_src, re.M))))
-    check("the live TOOL_GROUPS still has its four groups",
-          len(ASK.TOOL_GROUPS) == 4, str(len(ASK.TOOL_GROUPS)))
+    # The audit's point is that the self-portrait work did not REPLACE the
+    # shipped switch list. PR #1117's jarvis_storage_health.py legitimately
+    # APPENDS one row ("Storage and space") when its module is on this PC, so
+    # the guarantee is "the four shipped groups are still there, in order, and
+    # nothing after them replaces one" - not a fixed length of 4.
+    shipped_four = ["Notes and reading", "Timers, lists and plans",
+                    "Connected accounts & home", "Safety and sharing"]
+    check("the live TOOL_GROUPS still starts with its four shipped groups",
+          [title for title, _tools in ASK.TOOL_GROUPS[:4]] == shipped_four,
+          str([title for title, _tools in ASK.TOOL_GROUPS]))
+    check("... and anything after them is an appended row, not a replacement",
+          all(title not in shipped_four for title, _tools in ASK.TOOL_GROUPS[4:]),
+          str([title for title, _tools in ASK.TOOL_GROUPS[4:]]))
     check("every switchable tool still appears exactly once",
           sorted(t for _g, tools in ASK.TOOL_GROUPS for t in tools)
           == sorted(set(t for _g, tools in ASK.TOOL_GROUPS for t in tools)))

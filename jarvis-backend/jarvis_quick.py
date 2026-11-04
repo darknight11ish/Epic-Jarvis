@@ -573,15 +573,29 @@ def _voice_speed(s: str) -> Optional[Intent]:
     return None
 
 
-def _run_voice_speed(intent: Intent) -> Result:
+def _run_voice_speed(intent: Intent,
+                     conversation: Optional[str] = None) -> Result:
     """The SAME action as POST /api/voice/voices/speed (jarvis_voices.
-    set_speed): a cosmetic setting, no card either way, its own words."""
+    set_speed): a cosmetic setting, no card either way, its own words.
+
+    THIS is the natural-verb door ("speak faster", "make the voice faster");
+    the generic "set the voice speed to faster" sentence reaches the same
+    `voice_speed` ChoiceSetting row through `_run_control_set`. Both are
+    cardless, and since 2026-11-03 (Q1b) both leave the SAME ONE undo receipt:
+    the before value is the row's own current-value reader, and an unreadable
+    value (or a PC without the row) writes none rather than a guessed one. The
+    setter call, its words and its card rule are unchanged."""
     n = intent.name
     choice = intent.f.get("speed")
     try:
         import jarvis_voices as V
     except Exception:
         return Result(VOICES_MISSING, n)
+    import jarvis_settings_registry as R
+    setting = next((c for c in R.CHOICE_SETTINGS if c.key == "voice_speed"), None)
+    before = (_setting_before(setting, {"key": "voice_speed"})
+              if setting is not None else None)
+    since = _newest_receipt_id()
     try:
         code, out = V.set_speed({"speed": choice})
     except Exception as exc:                                   # noqa: BLE001
@@ -589,6 +603,11 @@ def _run_voice_speed(intent: Intent) -> Result:
     out = out if isinstance(out, dict) else {}
     if code != 200 or not out.get("ok"):
         return Result(str(out.get("error") or "The speaking speed could not be changed."), n)
+    if setting is not None and before is not None:
+        _settings_receipt(
+            conversation, setting, before,
+            {"kind": "choice", "key": "voice_speed", "value": choice},
+            f"Set {_setting_label(setting)} to {choice}", since=since)
     return Result(str(out.get("message") or V.SPEED_SAID.get(choice, "Done.")), n)
 
 # --------------------------------------------------------------------------
@@ -8827,6 +8846,13 @@ CHANGE_BY_ASKING = frozenset({
     # 2026-11-02: "Save facts even when Jarvis had to reword them" - ON is one
     # card (learning_paraphrase_enable), OFF is immediate.
     "learn_paraphrase",
+    # 2026-11-03: "Only check my voice on a locked phone". ON is the LOOSER
+    # direction - it grants the exemption - so ON is ONE card through
+    # jarvis_live.request_voice_check; OFF takes the exemption away, is the
+    # stricter direction, and applies at once. Its reader
+    # (`_read_voice_check_locked`) answers a real True/False, so the receipt is
+    # a read and not a claim.
+    "voice_check_locked",
     "web_search", "smartwatch_notifications", "phone_notifications",
     "screen_picture", "headless_browser", "sandbox_exec", "media_index",
     "briefing_senders", "big_coder", "better_voice", "chat_history",
@@ -15168,6 +15194,29 @@ def _restore_settings_change(before, peer=None, local=None):
         out = R.set_sky_show(bool(value), peer=peer, local=local)
     elif kind == "weather_source":
         out = R.set_weather_source(str(value or ""), peer=peer, local=local)
+    # The six cardless families whose snapshots carry a kind of their own
+    # (2026-11-03). Each one goes through the SAME registry setter its own
+    # runner calls, so putting a value back raises that setting's own card and
+    # the PC-only refusals stay refusals - exactly like the rows above.
+    elif kind == "wake_word":
+        out = R.set_wake_word(bool(value), peer=peer, local=local)
+    elif kind == "browser_mode":
+        out = R.set_browser_mode(str(value or ""), peer=peer, local=local)
+    elif kind == "card_mode":
+        out = R.set_card_mode(str(value or ""), peer=peer, local=local)
+    elif kind in ("asks_first", "reading_tool", "antislop_scope"):
+        # "<kind>:<action/tool/scope>" - the key names WHICH one. A snapshot
+        # without its subject is refused rather than applied to a guess.
+        subject = key.split(":", 1)[1].strip() if ":" in key else ""
+        if not subject:
+            _settings_refuse("the receipt did not say which setting it was for, "
+                             "so nothing was changed")
+        if kind == "asks_first":
+            out = R.set_asks_first(subject, bool(value), peer=peer, local=local)
+        elif kind == "reading_tool":
+            out = R.set_reading_tool(subject, bool(value), peer=peer, local=local)
+        else:
+            out = R.set_antislop_scope(subject, bool(value), peer=peer, local=local)
     else:
         _settings_refuse("that setting is not on this PC any more, so nothing was "
                          "changed")
@@ -15239,24 +15288,110 @@ def _setting_before(setting, f: dict):
     return {"kind": kind, "key": key, "value": value}
 
 
-def _newest_receipt_id() -> str:
-    """The id of the newest receipt, or "" - read cheaply, never raising.
+def _newest_receipt_row() -> dict:
+    """The newest receipt row, or {} - read cheaply, never raising.
 
-    Used for ONE thing: noticing that the setting's own module already wrote a
-    receipt for this change. The Anti-Slop setters do exactly that
-    (`jarvis_antislop._change` records one after every write), and a spoken
-    change must leave ONE receipt, not two.
-    """
+    Used for ONE thing: noticing that a receipt appeared while a setter ran.
+    That is a SUPPRESSION test only ("do not write a second row"), never an
+    identity test - see `_settings_receipt` and `_settings_undo_point`
+    (2026-11-03 review, BUG 2)."""
     try:
         import jarvis_receipts as RC
         rows = RC.recent(1)
-        return str((rows[0] or {}).get("receipt_id") or "") if rows else ""
+        return dict(rows[0] or {}) if rows else {}
+    except Exception:
+        return {}
+
+
+def _newest_receipt_id() -> str:
+    """The id of the newest receipt, or "" - read cheaply, never raising.
+
+    Used for ONE thing: noticing that a setting's own module wrote a receipt
+    for the change that just ran, so this file does not write a second one
+    (`jarvis_antislop._change` records one after every write). It is only ever
+    compared before/after; it never names the row a chat's "undo" points at.
+    """
+    return str(_newest_receipt_row().get("receipt_id") or "")
+
+
+#: Settings whose OWN module writes the action receipt (`jarvis_receipts.record`)
+#: instead of the runner: the row lives under the module's tool name, so this
+#: chat's "undo" pointer has to point at it (Gemini ruling R4, 2026-11-03).
+#: One tuple rather than three keys, because all three are the same module.
+_SELF_RECEIPT_KEYS = ("antislop", "antislop_mode", "antislop_scope")
+
+
+def _self_receipt_tool(key: str) -> str:
+    """The tool name that writes this setting's own receipt, or "".
+
+    Only the Anti-Slop filter does this today: its three settings reach
+    `jarvis_antislop`, which records its own receipt after every write. The
+    name is the module's own constant rather than a literal, so a rename is
+    one place.
+    """
+    if key not in _SELF_RECEIPT_KEYS:
+        return ""
+    try:
+        import jarvis_antislop as AS
+        return str(getattr(AS, "TOOL_NAME", "") or "")
     except Exception:
         return ""
 
 
+def _remember_undo(conversation, entry: dict) -> None:
+    """Make `entry` THIS chat's one undo pointer, evicting the oldest chats.
+
+    One copy on purpose: the eviction loop is the part that is easy to forget,
+    and two copies of it in one file had already drifted by nothing but
+    accident (2026-11-03 review, NIT 3). A new pointer also clears the "I
+    already put it back" note, so that note can only ever be about the change
+    this chat has just taken back.
+    """
+    key = str(conversation or "")
+    if not key:
+        return
+    _SETTINGS_UNDONE.pop(key, None)
+    _SETTINGS_UNDO.pop(key, None)
+    _SETTINGS_UNDO[key] = entry
+    while len(_SETTINGS_UNDO) > _SETTINGS_UNDO_MAX:
+        _SETTINGS_UNDO.pop(next(iter(_SETTINGS_UNDO)), None)
+
+
+def _settings_undo_point(conversation, receipt_id: str, label: str) -> None:
+    """Point THIS chat's "undo" at a receipt the setting's own module wrote.
+
+    The Anti-Slop setters record their own receipt, so `_settings_receipt`
+    writes none of its own for them - but a receipt is only reachable through
+    the chat's own pointer, so "turn on the anti-slop filter" followed by
+    "undo" used to answer "there is nothing here for me to take back" (Gemini
+    ruling R4, measured 2026-11-03). This puts the module's own receipt id on
+    the same pointer `_settings_receipt` fills; the module's
+    `register_restorer` call is what `jarvis_receipts.undo` then runs.
+
+    The id is the one the module RETURNED for this change
+    (`Outcome.receipt_id`), never "the newest row in the database": two rows
+    can share a clock tick, and another chat or either Settings screen can
+    write one in between (2026-11-03 review, BUG 2). An empty id writes no
+    pointer at all, so a missing receipts store degrades to the plain "nothing
+    to take back" rather than to a guess.
+
+    No `before` here: the module's own row holds the whole prior state, and
+    `_run_settings_undo` reads only `receipt_id`/`label`/`said`. A `before: {}`
+    used to sit in this dict and would have been read as "that setting is not
+    on this PC any more" had any future path handed the entry to
+    `_restore_settings_change` (2026-11-03 review, NIT 1).
+    """
+    rid = str(receipt_id or "")
+    if not rid or not conversation:
+        return
+    _remember_undo(conversation, {"receipt_id": rid, "said": {},
+                                  "label": label or "that setting",
+                                  "at": time.time()})
+
+
 def _settings_receipt(conversation, setting, before, after, summary: str,
-                      since: str = "", label: str = "") -> None:
+                      since: str = "", label: str = "",
+                      own_tool: str = "", receipt_id: str = "") -> None:
     """One receipt for a CARDLESS settings change, and the record "undo" reads.
 
     `changeable_words()` has told the owner 'say "undo" in the same chat if you
@@ -15266,17 +15401,37 @@ def _settings_receipt(conversation, setting, before, after, summary: str,
     so there is nothing to take back. Never raises: a receipts database that is
     not there just means no receipt, and then "undo" honestly says so.
 
-    `since` is the newest receipt's id read BEFORE the setter ran: when the
-    setting's own module has written one in between, that receipt is the one
-    the apps show and this function writes nothing.
+    `since` is the newest receipt's id read BEFORE the setter ran. It is a
+    SUPPRESSION test, never an identity one: when a receipt appeared in
+    between, some setting's own module has written it (`jarvis_antislop` is
+    the only one today), so this function writes nothing and the row that is
+    already there stays the one the apps show.
+
+    `own_tool` + `receipt_id` are the EXACT answer for a setting whose own
+    module records its receipt (the Anti-Slop filter's three settings): the
+    module returns the id of the row it wrote, so when that id is there this
+    function writes NOTHING and points this chat's "undo" at that exact row.
+    It never looks at "the newest row" to decide whose change it was - another
+    chat, or either Settings screen, can write a row in between and the
+    pointer must not land on it (2026-11-03 review, BUG 2). An empty
+    `receipt_id` means the module wrote no row (its receipts store is missing
+    or the write failed), and then the receipt below is the only one for this
+    change, so it is written even if `since` moved.
 
     `label` names the change for the answer and the row's summary. The rows
     that are not a setting object (an animal switch, the sun and moon, the
     weather source, the Live timeout) have no `names`, so their own runner
     passes the label the Settings page shows.
     """
-    if _newest_receipt_id() != str(since or ""):
-        return                          # the setting's own module already receipted it
+    if own_tool:
+        # Exact identity: the module told us the row it wrote. No guessing.
+        exact = str(receipt_id or "")
+        if exact:
+            _settings_undo_point(conversation, exact,
+                                 label or _setting_label(setting))
+            return
+    elif str(_newest_receipt_id()) != str(since or ""):
+        return                          # its own module already receipted it
     entry: dict = {"receipt_id": "", "before": dict(before or {}), "said": {},
                    "label": label or _setting_label(setting), "at": time.time()}
 
@@ -15299,12 +15454,7 @@ def _settings_receipt(conversation, setting, before, after, summary: str,
     if not rid or not conversation:
         return
     entry["receipt_id"] = str(rid)
-    key = str(conversation)
-    _SETTINGS_UNDONE.pop(key, None)
-    _SETTINGS_UNDO.pop(key, None)
-    _SETTINGS_UNDO[key] = entry
-    while len(_SETTINGS_UNDO) > _SETTINGS_UNDO_MAX:
-        _SETTINGS_UNDO.pop(next(iter(_SETTINGS_UNDO)), None)
+    _remember_undo(conversation, entry)
 
 
 def _settings_said(setting, out, live: bool) -> str:
@@ -15337,14 +15487,18 @@ def _run_settings_bool(f: dict, peer, local, live: bool = False,
         return Result(SETTINGS_MISSING, "settings_bool")
     before = _setting_before(setting, f)
     # Read BEFORE the setter runs: a setting whose own module records its own
-    # receipt (the Anti-Slop mode does) must not end up with two.
+    # receipt (the Anti-Slop filter does) must not end up with two. The id that
+    # row really has comes back on `out.receipt_id` and is what the chat's undo
+    # points at - never this reading (2026-11-03 review, BUG 2).
     since = _newest_receipt_id()
     out = setting.set(f["on"], peer=peer, local=local)
     if getattr(out, "ok", False) and not getattr(out, "waiting", False):
         _settings_receipt(conversation, setting, before,
                           {"kind": "bool", "key": f["key"], "value": bool(f["on"])},
                           f"Turned {_setting_label(setting)} "
-                          f"{'on' if f['on'] else 'off'}", since=since)
+                          f"{'on' if f['on'] else 'off'}", since=since,
+                          own_tool=_self_receipt_tool(str(f["key"])),
+                          receipt_id=getattr(out, "receipt_id", ""))
     return Result(_settings_said(setting, out, live), "settings_bool")
 
 
@@ -15365,7 +15519,9 @@ def _run_settings_choice(f: dict, peer, local, live: bool = False,
     if getattr(out, "ok", False) and not getattr(out, "waiting", False):
         _settings_receipt(conversation, setting, before,
                           {"kind": "choice", "key": f["key"], "value": f["value"]},
-                          f"Set {_setting_label(setting)} to {f['value']}", since=since)
+                          f"Set {_setting_label(setting)} to {f['value']}", since=since,
+                          own_tool=_self_receipt_tool(str(setting.key)),
+                          receipt_id=getattr(out, "receipt_id", ""))
     return Result(_settings_said(setting, out, live), "settings_choice")
 
 
@@ -15413,26 +15569,87 @@ def _run_settings_only(f: dict) -> Result:
     return Result(R.settings_only_words(f.get("which") or "accounts"), "settings_only")
 
 
-def _run_settings_wake_word(f: dict, peer, local) -> Result:
+def _wake_word_now() -> Optional[bool]:
+    """The wake-word switch's REAL state, or None - never a guess.
+
+    `jarvis_speech.wake_state()` is the module's own reader (the one the status
+    route answers from), so it cannot disagree with the setter's own "already
+    on" decision. None when the module is missing, the read raises, or the
+    answer is not a bool - and then no receipt is written rather than a guessed
+    one.
+
+    This exists because `not on` was a lie in the no-op case (2026-11-03
+    review, BUG 3): asking for ON while it was already on answers "The wake
+    word is already on.", nothing changed, but a receipt claiming
+    `before: true` was still written - and its undo is `set_wake_enabled(False)`,
+    which is instant and cardless. So "turn on the wake word" (already on) +
+    "undo" silently switched the microphone OFF.
+    """
+    try:
+        import jarvis_speech as SP
+        value = (SP.wake_state() or {}).get("enabled")
+    except Exception:                       # noqa: BLE001 - None is the answer
+        return None
+    return value if isinstance(value, bool) else None
+
+
+def _run_settings_wake_word(f: dict, peer, local,
+                            conversation: Optional[str] = None) -> Result:
     """"Turn on/off the wake word" (2026-10-26).
 
     The setter is `jarvis_speech.set_wake_enabled`, the exact function
     POST /api/voice/wake calls, so the approval card is the module's own one
     and nothing changes until a person answers it. `peer`/`local` are passed on
     the same way every other setting's are, so a PC-only rule (if the module
-    ever grows one) is the module's own decision, never a second one here."""
+    ever grows one) is the module's own decision, never a second one here.
+
+    A change that really happened (OFF is instant; ON waits on its card) leaves
+    the same ONE undo receipt every other cardless change does (2026-11-03).
+    The before value is READ from the module (`_wake_word_now`): a two-state
+    switch is only "the other state" when it really moved, and a no-op must
+    write no receipt, because its undo would flip a switch that never changed
+    (2026-11-03 review, BUG 3). The setter still runs either way - its OFF
+    withdraws any card that is already waiting, which refusing here would skip.
+    """
     import jarvis_settings_registry as R
-    out = R.set_wake_word(bool(f.get("on")), peer=peer, local=local)
+    on = bool(f.get("on"))
+    now = _wake_word_now()
+    since = _newest_receipt_id()
+    out = R.set_wake_word(on, peer=peer, local=local)
+    if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+            and now is not None and now != on):
+        _settings_receipt(
+            conversation, None,
+            {"kind": "wake_word", "key": "wake_word", "value": now},
+            {"kind": "wake_word", "key": "wake_word", "value": on},
+            f"Turned the wake word {'on' if on else 'off'}", since=since,
+            label="the wake word")
     return Result(out.said, "settings_wake_word")
 
 
-def _run_settings_browser_mode(f: dict, peer, local) -> Result:
+def _run_settings_browser_mode(f: dict, peer, local,
+                               conversation: Optional[str] = None) -> Result:
     """"Set the browser to headless" (2026-10-26).
 
     The setter is `jarvis_browser_engine.handle_post({"mode": ...})`, the exact
-    function POST /api/browser/engine calls. It needs no card either way."""
+    function POST /api/browser/engine calls. It needs no card either way.
+
+    Since 2026-11-03 a real change leaves ONE undo receipt. The before value is
+    the module's own current mode (`browser_mode_now`); an unreadable file
+    returns None and then NO receipt is written rather than a guessed one."""
     import jarvis_settings_registry as R
-    out = R.set_browser_mode(str(f.get("mode") or ""), peer=peer, local=local)
+    mode = str(f.get("mode") or "")
+    before = R.browser_mode_now()
+    since = _newest_receipt_id()
+    out = R.set_browser_mode(mode, peer=peer, local=local)
+    if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+            and before is not None):
+        _settings_receipt(
+            conversation, None,
+            {"kind": "browser_mode", "key": "browser_mode", "value": before},
+            {"kind": "browser_mode", "key": "browser_mode", "value": mode},
+            f"Set which browser Jarvis uses to {mode}", since=since,
+            label="which browser Jarvis uses")
     return Result(out.said, "settings_browser_mode")
 
 
@@ -15467,16 +15684,25 @@ def _antislop_read_back(key: str, window: int = 6):
     return None
 
 
-def _run_settings_antislop_scope(f: dict, peer, local) -> Result:
+def _run_settings_antislop_scope(f: dict, peer, local,
+                                 conversation: Optional[str] = None) -> Result:
     """"Turn on anti-slop for code" - ONE scope, through the module's own setter.
 
     The sentence names one scope and the answer says what the OTHER two are
     doing, because a person who asked for code only needs to know the filter is
     still watching their copy. Nothing is claimed that was not read back.
-    """
+
+    The module records its OWN receipt after every write (`jarvis_antislop.
+    _change`) and returns that row's id, which `_settings_receipt` then uses:
+    ONE receipt, and this chat's "undo" points at that exact row (R4,
+    2026-11-03; the id, never "the newest row" - BUG 2). The snapshot built
+    here still names the scope, so the `antislop_scope` restorer is there if
+    this module's own recording ever stops."""
     import jarvis_settings_registry as R
     name = str(f.get("scope") or "")
     want = bool(f.get("on"))
+    before = R.antislop_scope_now(name)
+    since = _newest_receipt_id()
     out = R.set_antislop_scope(name, want, peer=peer, local=local)
     said = str(getattr(out, "said", "") or "").strip()
     if not getattr(out, "ok", False):
@@ -15487,6 +15713,18 @@ def _run_settings_antislop_scope(f: dict, peer, local) -> Result:
         return Result(f"I asked the PC to turn anti-slop {'on' if want else 'off'} "
                       f"for {name}, but I could not read it back, so I will not "
                       f"say it worked.", "settings_antislop_scope")
+    if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+            and before is not None):
+        _settings_receipt(
+            conversation, None,
+            {"kind": "antislop_scope", "key": f"antislop_scope:{name}",
+             "value": before},
+            {"kind": "antislop_scope", "key": f"antislop_scope:{name}",
+             "value": want},
+            f"Turned anti-slop {'on' if want else 'off'} for {name}", since=since,
+            label=f"anti-slop for {name}",
+            own_tool=_self_receipt_tool("antislop_scope"),
+            receipt_id=getattr(out, "receipt_id", ""))
     try:
         import jarvis_antislop as AS
         state = AS.get_state()
@@ -15513,14 +15751,31 @@ def _run_settings_antislop_bad(f: dict) -> Result:
                   "was changed.", "settings_antislop_bad")
 
 
-def _run_control_set(f: dict, peer, local) -> Result:
+def _run_control_set(f: dict, peer, local,
+                     conversation: Optional[str] = None) -> Result:
     """The one generic multi-field setter: the SAME ChoiceSetting.set the
-    Settings control calls - no second mutation path."""
+    Settings control calls - no second mutation path.
+
+    It carries the same undo receipt `_run_settings_choice` writes (2026-11-03):
+    `voice_speed`, `handoff_mode` and `handoff_front` arrive through HERE, so
+    this is the runner that gives those three families their receipt. The before
+    value comes from the row's own current-value reader (`_setting_before`,
+    which reads ChoiceSetting.now()), and None means no receipt, never a
+    guessed one."""
     import jarvis_settings_registry as R
     setting = next((c for c in R.CHOICE_SETTINGS if c.key == f.get("key")), None)
     if setting is None:
         return Result(SETTINGS_MISSING, "control_set")
-    out = setting.set(f.get("value"), peer=peer, local=local)
+    key = str(f.get("key") or "")
+    value = f.get("value")
+    before = _setting_before(setting, {"key": key})
+    since = _newest_receipt_id()
+    out = setting.set(value, peer=peer, local=local)
+    if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+            and before is not None):
+        _settings_receipt(conversation, setting, before,
+                          {"kind": "choice", "key": key, "value": value},
+                          f"Changed {_setting_label(setting)}", since=since)
     return Result(out.said, "control_set")
 
 
@@ -15623,13 +15878,38 @@ def _run_settings_budget(f: dict, peer, local) -> Result:
     return Result(str(out.get("said") or "Done."), "settings_budget")
 
 
-def _run_settings_asks_first(f: dict, peer, local) -> Result:
+def _run_settings_asks_first(f: dict, peer, local,
+                             conversation: Optional[str] = None) -> Result:
+    """"What asks first" - one action's tier, through the module's own route
+    function (jarvis_asks_first.request_tier). Stricter (ask=True) is instant;
+    looser is the PC only, one card plus Windows Hello - both the module's own
+    rules, never a second one here.
+
+    A real change leaves ONE undo receipt (2026-11-03). The before state is the
+    action's own current switch (`asks_first_now`); when that action has no
+    switch to read, None means no receipt rather than a guessed one, and a
+    carded or refused change writes none because nothing happened yet."""
     import jarvis_settings_registry as R
-    out = R.set_asks_first(f["action"], f["ask"], peer=peer, local=local)
+    action = str(f.get("action") or "")
+    ask = bool(f.get("ask"))
+    before = R.asks_first_now(action)
+    since = _newest_receipt_id()
+    out = R.set_asks_first(action, ask, peer=peer, local=local)
+    if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+            and before is not None):
+        names = R.asks_first_targets().get(action) or (action,)
+        label = f"\"ask me first\" for {names[0]}"
+        _settings_receipt(
+            conversation, None,
+            {"kind": "asks_first", "key": f"asks_first:{action}", "value": before},
+            {"kind": "asks_first", "key": f"asks_first:{action}", "value": ask},
+            f"Turned \"ask me first\" {'on' if ask else 'off'} for {names[0]}",
+            since=since, label=label)
     return Result(out.said, "settings_asks_first")
 
 
-def _run_settings_card_mode(f: dict, peer, local) -> Result:
+def _run_settings_card_mode(f: dict, peer, local,
+                            conversation: Optional[str] = None) -> Result:
     """"How much of an approval card is shown", by asking (the owner's request
     of 2026-10-09).
 
@@ -15637,9 +15917,23 @@ def _run_settings_card_mode(f: dict, peer, local) -> Result:
     jarvis_card_summary.set_mode - the ONE function POST /api/card-prefs calls,
     so asking and using the screen cannot drift apart. Cosmetic, so it is at
     once with no approval card, either way (CLAUDE.md: "cosmetic options change
-    at once"), and neither direction waits on a fresh link."""
+    at once"), and neither direction waits on a fresh link.
+
+    Since 2026-11-03 a real change leaves ONE undo receipt, with the before mode
+    read from the module that owns it (`card_mode_now`)."""
     import jarvis_settings_registry as R
-    out = R.set_card_mode(f["mode"], peer=peer, local=local)
+    mode = str(f.get("mode") or "")
+    before = R.card_mode_now()
+    since = _newest_receipt_id()
+    out = R.set_card_mode(mode, peer=peer, local=local)
+    if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+            and before is not None):
+        _settings_receipt(
+            conversation, None,
+            {"kind": "card_mode", "key": "card_mode", "value": before},
+            {"kind": "card_mode", "key": "card_mode", "value": mode},
+            "Changed how much of an approval card is shown", since=since,
+            label="how much of an approval card is shown")
     return Result(out.said, "settings_card_mode")
 
 
@@ -15729,9 +16023,33 @@ ANIMAL_MISSING = ("Your PC's Jarvis does not have the animal options yet - run "
                   "apply-patches.ps1 on the PC.")
 
 
-def _run_settings_tool(f: dict, peer, local) -> Result:
+def _run_settings_tool(f: dict, peer, local,
+                       conversation: Optional[str] = None) -> Result:
+    """"Let the AI model use this" - whether a reading tool is offered to the
+    model at all (jarvis_asks_first's [tools].enabled switch).
+
+    The setter is the registry's own, which calls the module's route function:
+    ON is the PC only, one card plus Windows Hello; OFF is instant. Since
+    2026-11-03 a real change (in practice the instant OFF) leaves ONE undo
+    receipt, with the before value read from the module that owns the list
+    (`reading_tool_now`)."""
     import jarvis_settings_registry as R
-    out = R.set_reading_tool(f["tool"], f["on"], peer=peer, local=local)
+    tool = str(f.get("tool") or "")
+    on = bool(f.get("on"))
+    before = R.reading_tool_now(tool)
+    since = _newest_receipt_id()
+    out = R.set_reading_tool(tool, on, peer=peer, local=local)
+    if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+            and before is not None):
+        names = R.tool_targets().get(tool) or (tool,)
+        label = f"offering {names[0]} to the AI model"
+        _settings_receipt(
+            conversation, None,
+            {"kind": "reading_tool", "key": f"reading_tool:{tool}",
+             "value": before},
+            {"kind": "reading_tool", "key": f"reading_tool:{tool}", "value": on},
+            f"{'Offered' if on else 'Stopped offering'} {names[0]} to the AI "
+            f"model", since=since, label=label)
     return Result(out.said, "settings_tool")
 
 
@@ -16254,7 +16572,7 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # Voice reflex (2026-10-21, Live/Voice audit V4): a router into an action
     # that already exists and already has its own permission model.
     if n == "voice_speed":
-        return _run_voice_speed(intent)
+        return _run_voice_speed(intent, conversation=conversation)
     # "find cheap parking near ..." (2026-10-30): read-only, no card, no model.
     # The two intents are in READ_ONLY_INTENTS - they call two public map
     # services and change nothing, so they must not take away what "cancel
@@ -16376,9 +16694,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "settings_only":
         return _run_settings_only(f)
     if n == "settings_wake_word":
-        return _run_settings_wake_word(f, peer, local)
+        return _run_settings_wake_word(f, peer, local,
+                                       conversation=conversation)
     if n == "settings_browser_mode":
-        return _run_settings_browser_mode(f, peer, local)
+        return _run_settings_browser_mode(f, peer, local,
+                                          conversation=conversation)
     if n == "settings_browser_mode_bad":
         return _run_settings_browser_mode_bad(f)
     # The Anti-Slop filter (2026-10-28): two sentences of its own, both
@@ -16386,13 +16706,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # needs nothing here - `antislop_mode` is a CHOICE_SETTINGS row, so the
     # generic "set <name> to <value>" grammar already reaches the same setter.
     if n == "settings_antislop_scope":
-        return _run_settings_antislop_scope(f, peer, local)
+        return _run_settings_antislop_scope(f, peer, local,
+                                           conversation=conversation)
     if n == "settings_antislop_state":
         return _run_settings_antislop_state(f)
     if n == "settings_antislop_bad":
         return _run_settings_antislop_bad(f)
     if n == "control_set":
-        return _run_control_set(f, peer, local)
+        return _run_control_set(f, peer, local, conversation=conversation)
     if n == "control_ask":
         return _run_control_ask(f)
     if n == "control_bad":
@@ -16404,11 +16725,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "settings_budget":
         return _run_settings_budget(f, peer, local)
     if n == "settings_card_mode":
-        return _run_settings_card_mode(f, peer, local)
+        return _run_settings_card_mode(f, peer, local,
+                                      conversation=conversation)
     if n == "settings_asks_first":
-        return _run_settings_asks_first(f, peer, local)
+        return _run_settings_asks_first(f, peer, local,
+                                       conversation=conversation)
     if n == "settings_tool":
-        return _run_settings_tool(f, peer, local)
+        return _run_settings_tool(f, peer, local, conversation=conversation)
     # Explaining a feature (2026-10-20). `feature_switch` goes through
     # _run_settings_bool below, which calls the SAME BoolSetting.set every other
     # spoken setting change uses - the setting's own card rule is unchanged.

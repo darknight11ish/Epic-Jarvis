@@ -5402,6 +5402,17 @@ private fun VoiceBar(
  * The whole 48dp of height is the FIELD's own touch target, not padding
  * around it: the decoration box only centres the one line of text, so a tap
  * anywhere in the plate puts the cursor in it.
+ *
+ * THE DECORATION BOX MUST NOT FILL THE HEIGHT IT IS MEASURED WITH
+ * (2026-11-04). A `decorationBox` is measured with whatever max height the
+ * field's parent has, and this field's parent is the full-screen bar's Row -
+ * whose max height is the whole rest of the screen. `fillMaxSize` therefore
+ * made this 48dp box 1,762px tall on the connected phone (the exact height
+ * the bar had left, where 48dp is 144px): the bar grew to take the screen,
+ * the face above it got no room, and "Show chat"/"More"/the mic sat in the
+ * middle of a blank screen - the owner's screenshot of 2026-11-03. The width
+ * fill is wanted - the words use the whole plate - but the height has to
+ * stay the field's own, so the box fills the WIDTH only.
  */
 @Composable
 private fun FaceTypeBox(
@@ -5440,7 +5451,10 @@ private fun FaceTypeBox(
                 .heightIn(min = 48.dp)
                 .semantics { contentDescription = FACE_TYPE_HINT },
             decorationBox = { inner ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                // fillMaxWidth, NOT fillMaxSize - see this function's doc
+                // comment: fillMaxSize let the box become as tall as the whole
+                // bar, which took the screen from the face (2026-11-04).
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                     inner()
                 }
             },

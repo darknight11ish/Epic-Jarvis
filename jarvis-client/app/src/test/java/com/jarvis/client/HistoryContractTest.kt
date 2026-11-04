@@ -461,7 +461,11 @@ class HistoryContractTest {
         // "Move it here" carries on the session's own chat, named by the PC.
         val start = runtime.substring(runtime.indexOf("suspend fun liveStart("))
         assertTrue(start.substring(0, 2500).contains("get(\"conversation_id\")"))
-        assertTrue(start.substring(0, 3000).contains("rules.startBody(cid)"))
+        // ...and the start body is still LiveRules' own, now carrying the
+        // phone's screen-lock word beside the chat id (the 2026-11-03
+        // voice-check rule, VoiceCheckRuleTest).
+        assertTrue(start.substring(0, 3000)
+            .contains("rules.startBody(cid, phoneLockedForVoiceCheck())"))
         val live = repoFile("$main/ui/screens/LiveScreen.kt").readText()
         assertTrue(live.contains("JarvisRuntime.liveStart(move = true)"))
         // Continue is never offered for what cannot be carried on.

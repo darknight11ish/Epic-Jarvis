@@ -21,6 +21,23 @@ full-duplex." And the owner's answers (2026-09-28):
   "let's talk" from that press is an ORDINARY MESSAGE rather than a way in -
   so nothing skips the "NO LIVE WITHOUT A REAL VOICE CHECK" rule. See
   `jarvis_speech.py`'s module docstring and `_QuickMessage`.)
+  (Amended 2026-11-03, the owner's own words: "my voice should only need to
+  be confirmed if i say hi jarvis when the phone is locked ... when i start
+  jarvis live on my unlocked phone i dont want it to need to confirm my
+  voice. make this a setting i can change". ONE rule now decides, and it is
+  `voice_check_needed()` below - (a) the mic press never checks, (b) "hi
+  Jarvis" on a LOCKED phone checks (the only check left), (c) Live started
+  from an UNLOCKED phone does not check - and it is ONE setting the owner
+  can change (`VOICE_CHECK_SETTING`, ON by default; ON is one approval card,
+  OFF is at once). OFF is the OLD, FULL CHECKS, never "no checks": it
+  withdraws the exemption, so the phone's "I am unlocked" is ignored and
+  every trigger left checks. A check that is skipped says so in the audit
+  trail once per session (`Live.start`). This SUPERSEDES the 2026-11-01
+  "once per Live session" rule for the PHONE: a phone Live session started on
+  an unlocked phone runs no voice-print check at all, and its answers are
+  accordingly never read aloud from a check it did not earn. The DESKTOP is
+  unchanged - a PC has no locked phone, so it keeps the once-per-session rule
+  below.)
   1. under "Only trust the talk button", a Live turn is trusted like the talk
      button by default HOWEVER Live was started; the voice setting
      `hands_free_live` (jarvis_voice.py) has two stricter choices - "Only
@@ -133,6 +150,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -998,6 +1016,338 @@ def _created(row) -> Optional[float]:
     return float(v)
 
 
+# --------------------------------------------------------------------------
+#   THE ONE VOICE-CHECK RULE (the owner, 2026-11-03) and its one setting
+# --------------------------------------------------------------------------
+#
+# The owner's words: "my voice should only need to be confirmed if i say hi
+# jarvis when the phone is locked ... when i start jarvis live on my unlocked
+# phone i dont want it to need to confirm my voice. make this a setting i can
+# change".
+#
+# So ONE decision, written once - `voice_check_needed()` below - for the
+# PHONE's three voice triggers:
+#
+#   (a) pressing the mic for one verbal input           - NEVER checks;
+#   (b) saying "hi Jarvis" while the phone is LOCKED    - checks (the only
+#       check left);
+#   (c) starting Jarvis Live from an UNLOCKED phone     - no check.
+#
+# (d) ... and it is ONE setting the owner can change - `VOICE_CHECK_SETTING`
+# below, ON by default (= exactly the rule above). OFF means the OLD, FULL
+# CHECKS, not "no checks": the phone's "I am unlocked" is then IGNORED and
+# every trigger left runs the check it ran before this rule existed. (a) is
+# the one thing the setting does not touch - the mic press never checks,
+# because the press is the act and not a claim about the lock. Turning it ON
+# raises ONE approval card; turning it OFF is at once (the project's standing
+# rule, jarvis_settings_registry.py).
+#
+# WHY OFF IS THE STRICT ANSWER, and not "no checks". The thing the owner
+# changes is the EXEMPTION, not the check: ON is the new rule - a Live session
+# started from an unlocked phone is not asked to prove itself. OFF withdraws
+# that exemption, and withdrawing an exemption must never quietly weaken a
+# gate. So with the setting OFF `locked=0` is a claim, not a permission: it is
+# ignored and the old, full checks come back. For the same reason an
+# unreadable setting file reads as ON: the default is the owner's own rule,
+# and only the owner may move the gate.
+#
+# FAIL CLOSED, ALWAYS. The phone's screen lock is the PHONE's own word:
+# `locked` is True or False only when the phone really said so, and None
+# means it did not (any phone older than 2026-11-03 sends no `locked`).
+# Unknown is never read as "unlocked", so a phone that cannot say keeps every
+# check it has today - the whole rule is backwards compatible by that one
+# line.
+#
+# THE DESKTOP IS NOT PART OF THIS RULE. A PC has no "locked phone", so
+# `device` is an input here: the desktop keeps the once-per-session rule
+# (`Live.trust_decision`) exactly as it was. Said plainly rather than
+# silently: this is the owner's ask about HIS PHONE, and the PC's own Live
+# rule was not part of it.
+VOICE_CHECK_FILE = "voice-check.json"
+#: The key inside VOICE_CHECK_FILE. The file holds this ONE answer; a missing
+#: file, a missing key or an unreadable file all read as ON (the owner's rule
+#: is the default, and a broken file must not quietly turn a check off).
+VOICE_CHECK_SETTING = "check_when_locked"
+VOICE_CHECK_DEFAULT = True
+#: The gate action turning it back ON goes through. NOT a new action and not a
+#: new tier: this is the same `change_own_config` card every other settings
+#: change raises, so its words, tier and stale-link rules are unchanged.
+VOICE_CHECK_ACTION = "change_own_config"
+#: The three triggers, as the phone names them.
+TRIGGER_MIC_PRESS = "mic_press"
+TRIGGER_WAKE = "wake_word"
+TRIGGER_LIVE_START = "live_start"
+VOICE_CHECK_TRIGGERS = (TRIGGER_MIC_PRESS, TRIGGER_WAKE, TRIGGER_LIVE_START)
+#: The card that turning it ON raises (the looser direction asks, the stricter
+#: one is at once), and the two lines the phone's switch shows. Fixed words:
+#: they say exactly what changes and nothing more. THE WAKE WORD'S HALF IS NOT
+#: APPLIED YET (DEF-033): the wake route cannot carry the phone's lock state
+#: until the patch wave, so a wake clip is still checked on an unlocked phone -
+#: more checking than the rule asks, never less - and these words say so
+#: instead of claiming it.
+VOICE_CHECK_CARD = ("Only check your voice when you say \"hi Jarvis\" on a locked phone? "
+                    "Starting Jarvis Live on an unlocked phone does not ask, and the mic "
+                    "button never does. Saying \"hi Jarvis\" on an unlocked phone is still "
+                    "checked for now - a later PC update stops that.")
+VOICE_CHECK_CARD_WHY = ("only check your voice when you say \"hi Jarvis\" on your locked phone")
+VOICE_CHECK_ON_WORDS = ("Your voice is checked when you say \"hi Jarvis\" on a locked phone and "
+                        "when Jarvis Live starts on a locked phone. Starting Live on an unlocked "
+                        "phone does not check it. \"Hi Jarvis\" on an unlocked phone is still "
+                        "checked for now.")
+VOICE_CHECK_OFF_WORDS = ("Your voice is checked every time you say \"hi Jarvis\" and every time "
+                         "Jarvis Live starts, locked or not. The mic button never checks.")
+
+
+def _locked_flag(value) -> Optional[bool]:
+    """The phone's own word about its screen lock: True, False, or None.
+
+    None means the phone did not say - an app older than 2026-11-03 sends no
+    `locked` at all - and every reader below treats None as "not known", never
+    as "unlocked" (fail closed).
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    return None
+
+
+def voice_check_setting() -> bool:
+    """Is the phone's voice-print check on? ON unless the owner turned it off.
+
+    ONE READER OF ONE FILE. The answer is kept beside the other Live state
+    (`<config>/live/voice-check.json`), because this setting belongs to THIS
+    module - it is the rule in `voice_check_needed()` that it switches - and
+    it is read and written ONLY through the existing `/api/voice/live` route's
+    `voice_check` command, so no route was added for it. A file that cannot be
+    read reads as ON: the owner's rule is the default, and a broken file must
+    never quietly remove a check.
+    """
+    try:
+        doc = json.loads(_voice_check_path().read_text(encoding="utf-8"))
+    except Exception:
+        return VOICE_CHECK_DEFAULT
+    if not isinstance(doc, dict):
+        return VOICE_CHECK_DEFAULT
+    value = doc.get(VOICE_CHECK_SETTING)
+    return VOICE_CHECK_DEFAULT if not isinstance(value, bool) else value
+
+
+def _voice_check_path() -> Path:
+    return _config_dir() / "live" / VOICE_CHECK_FILE
+
+
+def _save_voice_check(on: bool) -> dict:
+    """Write the owner's answer. The ONLY writer, called from the card's
+    approval and from an OFF that is at once."""
+    path = _voice_check_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        current: dict = {}
+        try:
+            read = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(read, dict):
+                current = read
+        except Exception:
+            current = {}
+        current[VOICE_CHECK_SETTING] = bool(on)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(current, indent=1, sort_keys=True) + "\n",
+                       encoding="utf-8")
+        tmp.replace(path)
+    except Exception as exc:
+        return {"ok": False,
+                "error": f"could not save the voice check setting ({type(exc).__name__})"}
+    _audit("voice.live", {"did": "voice_check", "on": bool(on)})
+    return {"ok": True}
+
+
+def voice_check_needed(trigger, *, device="phone", locked=None,
+                       setting_on: Optional[bool] = None) -> bool:
+    """Should this phone trigger check the owner's voice print? THE ONE RULE.
+
+    Answered in this order, and the order is the rule:
+
+      1. a device that is not the phone -> True (the desktop keeps its own
+         once-per-session rule, `Live.trust_decision`);
+      2. (a) the mic press -> False, whatever the setting says: the press on
+         the paired phone is the act;
+      3. the setting is read here when the caller did not pass it;
+      4. the setting OFF -> True for every trigger still left, which is the
+         OLD, FULL CHECKS. `locked` is IGNORED then: "my phone is unlocked" is
+         a claim by the phone, never an exemption the owner granted;
+      5. setting ON and a Live start -> `locked is not False`: an unlocked
+         phone skips (the unlock is the act), while `locked=True` and
+         `locked=None` both check - fail closed, because an app older than
+         2026-11-03 sends no `locked` at all;
+      6. setting ON and "hi Jarvis" -> `locked is not False`: the same line,
+         so a LOCKED phone checks (the only check left) and a phone that did
+         not say keeps the check it has today;
+      7. any other trigger -> True.
+
+    So `locked=None` never means "unlocked", and OFF never means "no checks".
+    This function only DECIDES: the place that skips a check says so in the
+    audit trail itself (`Live.start`).
+    """
+    trig = str(trigger or "").strip().lower()
+    if _norm_device(device) != "phone":
+        return True                                    # the desktop keeps its own rule
+    if trig == TRIGGER_MIC_PRESS:
+        return False                                   # (a) the press is the act
+    if setting_on is None:
+        setting_on = voice_check_setting()
+    if not setting_on:
+        return True                    # (d) OFF = the old, full checks: locked is ignored
+    if trig == TRIGGER_LIVE_START:
+        return locked is not False                     # (c) only an unlocked phone skips
+    if trig == TRIGGER_WAKE:
+        return locked is not False                     # (b) only a locked phone checks
+    return True                                        # an unknown trigger: fail closed
+
+
+#: One ON card at a time, the same shape the other settings cards use
+#: (jarvis_chat_log.py, jarvis_screen_picture.py) rather than a second
+#: invention: the id of the waiting card, the ones withdrawn by an OFF, and
+#: the lock held from an approved card's "was it withdrawn?" check to the save.
+_VOICE_CHECK_LOCK = threading.Lock()
+_VOICE_CHECK_PENDING: dict = {}
+_VOICE_CHECK_WITHDRAWN: set = set()
+_VOICE_CHECK_SWITCH = threading.Lock()
+
+
+def _voice_check_gate(action: str, detail: dict, prompt: str):
+    import jarvis_gate
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def _voice_check_tier(action: str) -> str:
+    try:
+        mod = sys.modules.get("jarvis_framework") or fw
+        return str(mod.action_tier(action))
+    except Exception as exc:
+        return f"unreadable ({type(exc).__name__})"
+
+
+def _voice_check_spawn(fn: Callable[[], None]) -> None:
+    threading.Thread(target=fn, name="jarvis-live-voice-check-card", daemon=True).start()
+
+
+def _voice_check_finish(pid: str, outcome: str) -> None:
+    with _VOICE_CHECK_LOCK:
+        if _VOICE_CHECK_PENDING.get("id") == pid:
+            _VOICE_CHECK_PENDING.clear()
+        _VOICE_CHECK_WITHDRAWN.discard(pid)
+    _audit("voice.live", {"did": "voice_check_card", "outcome": outcome})
+
+
+def _voice_check_card_ask(pid: str, gate: Callable, tier_of: Callable) -> None:
+    """The ON card's own thread: raise it, wait for the owner, save if yes.
+
+    Named "ask" and not "decide" on purpose: this module never approves
+    anything itself - the card does, and `backend/test_live.py` holds that
+    claim to the source.
+    """
+    detail = {"text": VOICE_CHECK_CARD, "what": VOICE_CHECK_CARD_WHY,
+              "leaves_this_pc": False}
+    try:
+        verdict = gate(VOICE_CHECK_ACTION, detail, VOICE_CHECK_CARD)
+    except Exception as exc:
+        return _voice_check_finish(pid, f"refused:{type(exc).__name__}")
+    vtier = getattr(verdict, "tier", "unknown")
+    allowed = getattr(verdict, "allowed", False) is True
+    outcome = getattr(verdict, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    if vtier != "ask" or tier_of(VOICE_CHECK_ACTION) != "ask":
+        return _voice_check_finish(pid, "refused:tier")
+    if not (allowed and outcome == "approved"):
+        return _voice_check_finish(pid, str(outcome))
+    with _VOICE_CHECK_SWITCH:
+        with _VOICE_CHECK_LOCK:
+            withdrawn = pid in _VOICE_CHECK_WITHDRAWN
+        if withdrawn:
+            return _voice_check_finish(pid, "withdrawn")
+        saved = _save_voice_check(True)
+        if saved.get("ok") is False:
+            return _voice_check_finish(pid, "failed")
+        _voice_check_finish(pid, "enabled")
+
+
+def request_voice_check(body=None, *, gate: Optional[Callable] = None,
+                        tier_of: Optional[Callable[[str], str]] = None,
+                        spawn: Optional[Callable] = None) -> tuple:
+    """POST /api/voice/live {"do": "voice_check", "enabled": bool|absent}.
+
+    Returns (http code, body). WITH NO `enabled` it is a READ - the one way an
+    app learns the answer, because this setting deliberately adds no route and
+    no `status` field (a status field would rewrite both apps' shared
+    live-cases fixture for one boolean). OFF is at once and also withdraws a
+    waiting ON card, so approving it afterwards changes nothing (the rule
+    every other settings switch here keeps). ON is 202 while ONE card waits -
+    never "it is on" - and nothing changes unless the owner approves it.
+    """
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "send a JSON object"}
+    gate = gate or _voice_check_gate
+    tier_of = tier_of or _voice_check_tier
+    spawn = spawn or _voice_check_spawn
+    enabled = body.get("enabled", None)
+    if enabled is None:
+        out = voice_check_status()
+        out.update(ok=True, message=out["words"])
+        return 200, out
+    if not isinstance(enabled, bool):
+        return 400, {"ok": False,
+                     "error": 'need {"enabled": true|false}, or no "enabled" to read it'}
+    if not enabled:
+        with _VOICE_CHECK_SWITCH:
+            with _VOICE_CHECK_LOCK:
+                if _VOICE_CHECK_PENDING:
+                    _VOICE_CHECK_WITHDRAWN.add(_VOICE_CHECK_PENDING["id"])
+                    _VOICE_CHECK_PENDING.clear()
+            saved = _save_voice_check(False)
+        if saved.get("ok") is False:
+            return 500, saved
+        return 200, {"ok": True, "on": False, "waiting": False,
+                     "message": VOICE_CHECK_OFF_WORDS}
+    if voice_check_setting():
+        return 200, {"ok": True, "on": True, "waiting": False,
+                     "message": VOICE_CHECK_ON_WORDS}
+    if tier_of(VOICE_CHECK_ACTION) != "ask":
+        return 503, {"ok": False, "error": (
+            "Turning the voice check back on needs a person to say yes, so "
+            f"{VOICE_CHECK_ACTION} must be 'ask' in your settings file")}
+    with _VOICE_CHECK_LOCK:
+        if _VOICE_CHECK_PENDING:
+            return 202, {"ok": True, "on": False, "waiting": True,
+                         "message": ("A card to check your voice on a locked phone is "
+                                     "already waiting for your approval.")}
+        pid = hashlib.sha1(f"{time.time()}-{id(enabled)}".encode()).hexdigest()[:16]
+        _VOICE_CHECK_PENDING.update(id=pid, since=time.time())
+    try:
+        spawn(lambda: _voice_check_card_ask(pid, gate, tier_of))
+    except Exception:
+        with _VOICE_CHECK_LOCK:
+            _VOICE_CHECK_PENDING.clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "on": False, "waiting": True,
+                 "message": "Waiting for your approval. The voice check turns on only if you "
+                            "approve the card, on your PC or phone."}
+
+
+def voice_check_status() -> dict:
+    """What both apps read for this setting: its value, its words, and whether
+    a card to turn it on is waiting. Numbers and fixed words only."""
+    on = voice_check_setting()
+    with _VOICE_CHECK_LOCK:
+        waiting = bool(_VOICE_CHECK_PENDING)
+    return {"on": on, "waiting": waiting,
+            "words": VOICE_CHECK_ON_WORDS if on else VOICE_CHECK_OFF_WORDS,
+            "default": VOICE_CHECK_DEFAULT}
+
+
 class Live:
     """One Jarvis Live session at a time. Every reader is injected, so the
     tests drive the clock, the card queue, the power mode and the lock."""
@@ -1055,6 +1405,11 @@ class Live:
         self.muted = False
         self.muted_why = ""
         self.started_by = ""
+        #: The phone's OWN word about its screen lock when this session
+        #: started: True/False, or None when it did not say (an older app).
+        #: `voice_check_needed()` is the only reader that decides anything
+        #: with it, and None keeps every check (fail closed).
+        self.phone_locked: Optional[bool] = None
         self.crisis = False
         self.awake_seen = False       # the power mode was not standby at some tick
         self._gen = 0
@@ -1105,20 +1460,27 @@ class Live:
 
     # -- start / stop / extend / resume / mute ----------------------------------------
     def start(self, device, minutes=None, by: str = "button",
-              conversation_id=None) -> dict:
+              conversation_id=None, locked=None) -> dict:
         """No card: the owner's own act. Ends a session on the other device.
         Refused without a real voice check (voice_ready). On standby it starts
         and says "Waking up" - the first question wakes the model, as any
         question does; nothing here loads it then. `conversation_id`: the
         app's chat for this session (8-64 letters, digits, - or _; anything
         else is none), shown in status() while it is on, so "Move it here"
-        carries on the same chat."""
+        carries on the same chat.
+
+        `locked`: the PHONE's own word about its screen lock (True/False), or
+        None when it did not say. It is the input to `voice_check_needed()`'s
+        case (c) - a Live session started from an unlocked phone runs no
+        voice-print check - and None keeps the checks (fail closed). A
+        desktop says nothing here and keeps its own rule."""
         cid = conversation_id if isinstance(conversation_id, str) \
             and _CID.fullmatch(conversation_id) else ""
         dev = _norm_device(device)
         if not dev:
             return {"ok": False, "error": "say which device: phone or desktop"}
         by = by if by in STARTED_BY else "button"
+        locked_flag = _locked_flag(locked)
         try:
             why = self.voice_ready(dev)
         except Exception:
@@ -1153,12 +1515,25 @@ class Live:
             self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
             self.turns = 0
             self._trust_start()
+            self.phone_locked = locked_flag
             self.awake_seen = not standby
             self.session += 1
             self._gen += 1
             gen = self._gen
         _audit("voice.live", {"did": "start", "device": dev, "minutes": m, "by": by,
-                              "ended_other": moved, "standby": standby})
+                              "ended_other": moved, "standby": standby,
+                              "locked": locked_flag})
+        if not voice_check_needed(TRIGGER_LIVE_START, device=dev, locked=locked_flag):
+            # THIS session will run no voice-print check at all, because the
+            # phone said it was unlocked and the setting is ON (case (c)).
+            # Said ONCE, here, in plain words: a check that was skipped belongs
+            # in the audit trail even though nothing was checked. Many clips
+            # later it is still the same one line - the decision is made at
+            # the start, and nothing about a clip (no words, no audio, no
+            # length) is ever written down.
+            _audit("voice.live", {"did": "voice_check_skipped",
+                                  "why": "unlocked phone, setting on",
+                                  "trigger": TRIGGER_LIVE_START})
         if not standby:
             # Warm the everyday model now, so the first answer does not wait
             # for it to load. Never on Standby: that is the owner's to end.
@@ -1454,25 +1829,65 @@ class Live:
         self.trust_print_id = ""
         return True
 
+    def session_voice_check(self, device) -> bool:
+        """Does a Live clip from `device` in THIS session run the voice-print
+        check?
+
+        THE 2026-11-03 RULE, applied to a session: a PHONE session started
+        from an UNLOCKED phone checks nothing - the unlock is the act (case
+        (c) of `voice_check_needed()`) - while the setting is ON, which is its
+        default. With the setting OFF the OLD, full checks are back and this
+        session checks exactly as it did before 2026-11-03, because OFF
+        withdraws the exemption rather than the check. A session whose `locked`
+        the phone never sent (any app older than 2026-11-03, and every session
+        started by VOICE - `jarvis_speech` starts those with no app body, so
+        they say nothing) keeps the once-per-session rule below, exactly as
+        before. A session on the DESKTOP keeps it too: a PC has no locked
+        phone at all.
+        """
+        with self._lock:
+            if not self._on() or _norm_device(device) != self.device:
+                return True
+            if _norm_device(device) != "phone":
+                return True                    # the PC has no "locked phone": unchanged
+            locked = self.phone_locked
+        return voice_check_needed(TRIGGER_LIVE_START, device=device, locked=locked)
+
     def trust_decision(self, device, seconds) -> dict:
         """What to do with one Live clip, by its speech seconds.
 
         Returns {"action": ...}: "check" (run the full strict check and, on a
-        pass, verify this session), "trusted" (any 1.5 s+ clip after that
-        check: session trust, NO speaker model and nothing said about it),
+        pass, verify this session), "trusted" (no voice-print check on this
+        clip: session trust, NO speaker model and nothing said about it),
         "refuse_first"/"refuse_stale" (say a full sentence), or "too_short"
         (the old under-1.5 s path). No audio/text is read here.
 
-        The owner's request of 2026-11-01 is why there is no window any more:
-        one successful check covers the session, so nothing asks the owner to
-        verify again for as long as it lasts. A session that is off, on another
-        device, or paused-unknown fails closed with "refuse_stale"; a session
-        whose verification was voided by a failed check or a re-enrolled print
-        asks for a full sentence once, exactly like a new session.
+        THE 2026-11-03 RULE COMES FIRST (the owner's words, at the top of this
+        file): when `session_voice_check()` says this session's trigger needed
+        no check, NO clip in it runs one - every clip is "trusted" whatever its
+        length. "trusted" here carries no strictness, so nothing that needs a
+        real check is read aloud on it (`_really_checked` answers False): the
+        session earned no privilege, it simply was not asked to prove itself.
+
+        WHAT IS LEFT, AND WHY (the 2026-11-01 rule, unchanged for every
+        session that still checks): one successful check covers the session,
+        so nothing asks the owner to verify again for as long as it lasts. A
+        session that is off, on another device, or paused-unknown fails closed
+        with "refuse_stale"; a session whose verification was voided by a
+        failed check or a re-enrolled print asks for a full sentence once,
+        exactly like a new session.
         """
         with self._lock:
             if not self._on() or _norm_device(device) != self.device:
                 return {"action": "refuse_stale", "words": SAY_RECHECK}
+            if not self.session_voice_check(device):
+                # The trigger needed no check: case (c), a phone session
+                # started from an unlocked phone with the setting ON. Nothing
+                # in this session asks for one, and no clip's length changes
+                # that. (Case (b), the wake word, is not a Live session at
+                # all, so it never reaches here; with the setting OFF this
+                # session checks like every session did before 2026-11-03.)
+                return {"action": "trusted", "strictness": "", "checked": False}
             self._trust_print_changed(device)
             try:
                 spoken = float(seconds or 0.0)
@@ -1941,15 +2356,21 @@ def handle_get(query: str = "") -> tuple:
 
 
 def handle_post(body) -> tuple:
-    """{"do": "start", "device", "minutes"?} | {"do": "stop", "why"?, "device"?}
-    | {"do": "extend", "minutes"?} | {"do": "resume"} | {"do": "mute"|"unmute",
-    "device"?, "why"?: "owner"|"call"|"mic_in_use"} | {"do": "active",
-    "device"?} (the owner typed or tapped in Live: the quiet clock starts
-    again). Start, extend and resume are held by both apps on a stale link
-    (rule 4); stop, mute, unmute and active always go. A stop's `why` must be
-    one of APP_END_REASONS - the phone reports `fgs_refused`, `mic_permission`
-    or `mic_stopped` when Android is what stopped it - and anything else,
-    including a missing reason, is "unknown" (never "owner")."""
+    """{"do": "start", "device", "minutes"?, "locked"?} | {"do": "stop",
+    "why"?, "device"?} | {"do": "extend", "minutes"?} | {"do": "resume"} |
+    {"do": "mute"|"unmute", "device"?, "why"?: "owner"|"call"|"mic_in_use"} |
+    {"do": "active", "device"?} (the owner typed or tapped in Live: the quiet
+    clock starts again) | {"do": "voice_check", "enabled": bool} (the ONE
+    voice-check setting, 2026-11-03: ON is ONE card, OFF is at once). Start,
+    extend and resume are held by both apps on a stale link (rule 4); stop,
+    mute, unmute and active always go. A stop's `why` must be one of
+    APP_END_REASONS - the phone reports `fgs_refused`, `mic_permission` or
+    `mic_stopped` when Android is what stopped it - and anything else,
+    including a missing reason, is "unknown" (never "owner").
+
+    `locked` on a start is the PHONE's own word about its screen lock (a JSON
+    true/false; missing on any app older than 2026-11-03). It is what decides
+    case (c) of `voice_check_needed()`; a missing one keeps every check."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "send a JSON object"}
     do = str(body.get("do") or "").strip().lower()
@@ -1957,8 +2378,11 @@ def handle_post(body) -> tuple:
         by = str(body.get("by") or "button").strip().lower()
         out = ENGINE.start(body.get("device"), body.get("minutes"),
                            by=by if by in APP_STARTS else "button",
-                           conversation_id=body.get("conversation_id"))
+                           conversation_id=body.get("conversation_id"),
+                           locked=body.get("locked"))
         return (200 if out.get("ok") else 409 if out.get("needs") else 400), out
+    if do == "voice_check":
+        return request_voice_check(body)
     if do == "stop":
         # An unknown or missing reason is "unknown", never "owner": an end
         # nobody supplied must not reach both apps as "You ended it."
@@ -1981,7 +2405,8 @@ def handle_post(body) -> tuple:
         out = ENGINE.note_active(body.get("device"), body.get("conversation_id"))
         return (200 if out.get("ok") else 409), out
     return 400, {"ok": False,
-                 "error": "do must be start, stop, extend, resume, mute, unmute or active"}
+                 "error": "do must be start, stop, extend, resume, mute, unmute, active "
+                          "or voice_check"}
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:

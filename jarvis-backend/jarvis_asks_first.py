@@ -468,16 +468,14 @@ TOOL_GROUPS = (
      ("protect_from_jarvis", "github_search", "send_file_to_phone")),
 )
 #: The storage self-scan's own tools, appended ONLY when its module is really
-#: on this PC (PR #1117's drop-in). The import is a PLAIN, GUARDED one on
-#: purpose, and the audits are told the truth rather than routed around:
-#: backend/test_shipped_modules.py lists ("jarvis_asks_first.py",
-#: "jarvis_storage_health") in REPO_ONLY_IMPORTS, and
-#: backend/test_base_matches_repo.py allows it in OPTIONAL_IMPORTS, both with
-#: this reason - jarvis_storage_health.py is not in this repository's shipped set
-#: yet (it lands as PR #1117), so the published base cannot carry it either.
-#: Both entries are removed when #1117 is in the shipped set and the base is
-#: re-taken. Until then a PC without the module has exactly the four shipped
-#: groups and its start-up line says the storage scan is not installed.
+#: on this PC (it ships since PR #1117 merged: the module is in _where.py's
+#: SHIPPED set and the base carries it). The import stays PLAIN and GUARDED on
+#: purpose - a PC whose install predates the module, or whose copy is damaged,
+#: must not take this page down: it then has exactly the four shipped groups
+#: and its start-up line says the storage scan is not installed. The two audit
+#: exemptions this comment used to name (test_shipped_modules.py's
+#: REPO_ONLY_IMPORTS and test_base_matches_repo.py's OPTIONAL_IMPORTS) were
+#: removed in the same change, because the module is shipped now.
 _storage_health = None
 try:
     import jarvis_storage_health as _storage_health
@@ -488,6 +486,26 @@ except Exception:                            # noqa: BLE001 - a damaged drop-in 
 if _storage_health is not None:
     TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
+
+
+def _app_can_switch(tool: str) -> bool:
+    """True when POST /api/asks_first/tools accepts this row - the same three
+    tests request_tool_enable applies. A group row can be appended for a tool
+    that raises a card but must never be switched from an app:
+    jarvis_storage_health.py's scan and cleanup are one (a cleanup is a
+    deletion, so storage_cleanup is in MUST_ASK)."""
+    return (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
+            or real_tool(tool) in SWITCHABLE_TOOL_NAMES)
+
+
+#: TOOL_GROUPS narrowed to what an app may really switch. `tools_status` is the
+#: SWITCH list and its own docstring promises "Only TIER_A + TIER_B tools are
+#: here"; without this, PR #1117's appended storage rows appeared as two
+#: switches whose POST answers 403 TOOLS_NOT_ON_LIST. A group with nothing
+#: switchable in it is not shown at all.
+SWITCHABLE_GROUPS = tuple((title, tuple(t for t in tools if _app_can_switch(t)))
+                          for title, tools in TOOL_GROUPS)
+SWITCHABLE_GROUPS = tuple((title, tools) for title, tools in SWITCHABLE_GROUPS if tools)
 
 
 
@@ -2023,7 +2041,7 @@ def tools_status(*, here: bool = False) -> dict:
         last_all = dict(_T_STATE["last"])
     pending_tool = real_tool(str(pending.get("tool") or "")) if pending else ""
     items = []
-    for title, tools in TOOL_GROUPS:
+    for title, tools in SWITCHABLE_GROUPS:
         for tool in tools:
             waiting = bool(pending) and pending_tool == real_tool(tool)
             last = dict(last_all) if (last_all.get("tool")
@@ -2034,7 +2052,7 @@ def tools_status(*, here: bool = False) -> dict:
     return {"label": TOOLS_LABEL, "detail": TOOLS_DETAIL, "can_enable": bool(here),
             "items": items,
             "groups": [{"title": title, "ids": list(tools)}
-                       for title, tools in TOOL_GROUPS],
+                       for title, tools in SWITCHABLE_GROUPS],
             "vault": _vault_switch_status(here),
             "not_offered": {
                 "tier_c": list(TIER_C), "not_this_slice": list(TIER_UNLISTED),
