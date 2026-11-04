@@ -2845,8 +2845,10 @@ Considered and explained in `jarvis_second_card.py`'s own module docstring
 about which lane it is, so one more literal instance costs the same as a
 dict entry would, without touching either existing singleton's own
 call sites in a module this safety-critical. It has its own port
-(`[second_card] third_port` in `jarvis-framework.toml`, default 11436)
-and its own log file (`second-card-third-ollama.log`), because - unlike
+(`[second_card] third_port` in `jarvis-framework.toml`, default 11438, and
+never `11434`, `11435`, `11436`, `11437`, `11450` or `11439` - the last
+reserved for the VoiceStudio sidecar by the 2026-11-04 Q6 ruling) and its own
+log file (`second-card-third-ollama.log`), because - unlike
 `_LANE`/`_COMBINED_LANE`, which are mutually exclusive and safely share
 one port - the third lane runs at the SAME TIME as the second card's own
 lane. `jarvis_agent.choose_lane()` and every other existing caller of

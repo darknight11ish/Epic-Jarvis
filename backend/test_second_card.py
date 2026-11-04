@@ -487,12 +487,22 @@ def t_third_port_is_disjoint_from_every_lane_port():
     just whatever _third_port() computes from the current config) - the check
     that was missing. It also proves the loud guard exists and fires.
 
+    It carries one port that has no owning module: 11439, which the 2026-11-04
+    Q6 ruling RESERVES for the VoiceStudio sidecar (not a Jarvis module yet) and
+    names in the guard set. That one is asserted as the literal the ruling
+    gives, so the test cannot quietly follow a constant invented for a
+    component this repo does not ship.
+
     Fails on the base commit (11436 IS the everyday lane's port) and passes
     after the fix (11438 is on no lane in this repo).
     """
     import jarvis_model_lanes as L
     import jarvis_screen_picture as SP
     import jarvis_big_coder as BC
+
+    #: The VoiceStudio sidecar's reserved port, from the 2026-11-04 Q6 ruling.
+    #: A literal on purpose: there is no `jarvis_voicestudio` module to read.
+    VOICE_STUDIO_SIDECAR_PORT = 11439
 
     # Every port an Ollama copy in this repo can listen on, read from the
     # module that owns it - never from a copy pasted into this test.
@@ -504,6 +514,8 @@ def t_third_port_is_disjoint_from_every_lane_port():
         "the pooled lane (jarvis_model_lanes.POOLED_PORT)": L.POOLED_PORT,
         "the pooled lane (jarvis_big_coder.BIG_PORT)": BC.BIG_PORT,
         "the screen-picture lane (jarvis_screen_picture.DEFAULT_PORT)": SP.DEFAULT_PORT,
+        # Reserved, not in use: no module owns it yet, so it is the literal.
+        "the VoiceStudio sidecar's reserved port (Q6 ruling)": VOICE_STUDIO_SIDECAR_PORT,
     }
     for lane in BC.LANES:
         port = lane.get("port") if isinstance(lane, dict) else getattr(lane, "port", None)
@@ -517,6 +529,10 @@ def t_third_port_is_disjoint_from_every_lane_port():
     check("... and SC.LANE_PORTS is that same table, so the guard cannot drift from it",
           set(SC.LANE_PORTS) == set(lanes.values()),
           (sorted(SC.LANE_PORTS), sorted(set(lanes.values()))))
+    check("the VoiceStudio sidecar's 11439 is guarded as the ruling's LITERAL, "
+          "not read from a module this repo does not have",
+          VOICE_STUDIO_SIDECAR_PORT in SC.LANE_PORTS,
+          (sorted(SC.LANE_PORTS), VOICE_STUDIO_SIDECAR_PORT))
 
     # _third_port() must miss every lane under every plausible configuration,
     # not only under the empty one the test above tries.
@@ -526,6 +542,8 @@ def t_third_port_is_disjoint_from_every_lane_port():
                        ({"port": SC.DEFAULT_THIRD_PORT}, "second port = the third's default"),
                        ({"third_port": 11436}, "third port = the everyday lane's"),
                        ({"third_port": 11437}, "third port = the screen-picture lane's"),
+                       ({"third_port": 11439},
+                        "third port = the VoiceStudio sidecar's reserved one"),
                        ({"third_port": 11450}, "third port = the pooled lane's"),
                        ({"third_port": 11434}, "third port = Ollama's own")):
         with with_cfg(cfg):
