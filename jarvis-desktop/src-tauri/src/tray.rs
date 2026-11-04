@@ -23,11 +23,7 @@
 //!         floating face · Floating face: bigger · Floating face: smaller ·
 //!         Chat history… · Faces… · Everything Jarvis can do…
 //!         Backend: not supervised · Reconnect the event stream · Run a status
-//!         check · Jarvis Desktop <version> - a version LABEL, not a check:
-//!         when an update is known it reads "Update available — <version>…"
-//!         and becomes clickable, otherwise it stays disabled, and a click
-//!         either way opens Settings, which is where checking and installing
-//!         happen (`on_update_status`, `ID_UPDATE`). It installs nothing.
+//!         check · Update Jarvis to <version>
 //! ─────────────────────────────
 //! Quit Jarvis
 //! ```
@@ -37,6 +33,25 @@
 //! ends the session. `ia.mjs` counts the separators, so a row added without
 //! thinking about the groups is caught rather than silently making the menu
 //! longer again.
+//!
+//! ## The update row exists only while there is an update
+//!
+//! The owner, 2026-11-03: *"when i right click the tray icon for jarvis I want
+//! a menu option that appears if there is an update to jarvis"*. So the no-update
+//! state is the row being **absent**, not greyed out. `update_row` is that whole
+//! rule - `None` means it does not belong in the menu, `Some(label)` means it
+//! does and names the version when the check gave one - and `on_update_status`
+//! is the one place that adds it (`Submenu::append`) or takes it away
+//! (`Submenu::remove`). Tauri 2.12's `MenuItem` has no `set_visible`, which is
+//! why the menu itself is where absence lives.
+//!
+//! Pressing it **installs** the update: `update::install_from_tray` calls the
+//! same `install_update` the Settings Install button calls, after turning the
+//! row into "Updating Jarvis to <version>…" so a second press cannot start a
+//! second download. It is never automatic and there is no second updater. On
+//! Windows a successful install ends this process (the installer restarts the
+//! app), so the next launch starts with the row absent because the new version
+//! is the running one - the row cannot linger after an install.
 //!
 //! Jarvis Live keeps a group of its own: it sat right under "Stop everything",
 //! and a click one row off started or ended it (the Live review, 2026-09-28).
@@ -81,7 +96,7 @@ use std::sync::Mutex;
 
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager,
 };
@@ -174,8 +189,11 @@ struct Rows {
     live: MenuItem<tauri::Wry>,
     watch: MenuItem<tauri::Wry>,
     backend: MenuItem<tauri::Wry>,
-    /// Shown only while a newer version is known to exist.
+    /// Parented only while a newer version is known to exist.
     update: MenuItem<tauri::Wry>,
+    /// The "More…" submenu `update` is added to and removed from - change of
+    /// parent is how the row becomes absent (Tauri 2.12 has no `set_visible`).
+    more: Submenu<tauri::Wry>,
     // The rows that PRINT a hotkey. Kept so a rebind can re-label them:
     // `accel()` was only ever read while the menu was built, so a row went on
     // advertising the key the owner had just replaced - the exact thing the
@@ -216,6 +234,28 @@ pub struct Painted(Mutex<Option<PaintKey>>);
 /// build with no stderr.
 #[derive(Default)]
 pub struct TrayFlashGovernor(Mutex<spec::FlashGovernor>);
+
+/// What the update row says, or `None` when it must not be in the menu at all.
+///
+/// The owner asked for this exactly (2026-11-03): *"when i right click the tray
+/// icon for jarvis I want a menu option that appears if there is an update to
+/// jarvis"*. So **absence is the no-update state** - not a greyed-out row - and
+/// the label is the plain instruction, naming the version when the check gave
+/// one ("Update Jarvis to 0.2.411"), because the row is also the only warning
+/// the owner gets before pressing it.
+///
+/// Pure on purpose: this is the whole rule, and a rule this small is the part
+/// that can be a test without a running app. `None` is "no row"; `Some` is the
+/// text of the row that must be there.
+fn update_row(available: Option<&str>) -> Option<String> {
+    let version = available?.trim();
+    // A check can know "something newer exists" without a version worth
+    // printing; the row still appears, in plain words.
+    if version.is_empty() {
+        return Some("Update Jarvis".to_string());
+    }
+    Some(format!("Update Jarvis to {version}"))
+}
 
 /// Builds the tray icon, its menu and the event handlers.
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -400,16 +440,23 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
-    // Status and action in one row, the way `backend` is: it names the version
-    // running — which the menu never showed and people do look for — and
-    // becomes clickable only when there is something newer. `MenuItem` has no
-    // `set_visible` in Tauri 2.11, so a row that appears and disappears is not
-    // available; a row that says something true either way is better anyway.
+    // The update row (owner, 2026-11-03): it is BUILT like any other row but
+    // only parented into "More…" when a check has already found something - the
+    // fresh launch has no answer yet, so it starts absent and a later check puts
+    // it in. `on_update_status` is the one place that adds and removes it, and
+    // it must be THIS handle: a second `MenuItem` with the same id would look
+    // right on screen and then never re-label.
+    let available = crate::update::available_version(app);
+    let update_label = update_row(available.as_deref());
     let update = MenuItem::with_id(
         app,
         ID_UPDATE,
-        format!("Jarvis Desktop {}", app.package_info().version),
-        false,
+        // Never shown when there is no update; this is only the handle's
+        // starting text.
+        update_label
+            .clone()
+            .unwrap_or_else(|| "Update Jarvis".to_string()),
+        true,
         None::<&str>,
     )?;
     let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings and help…", true, None::<&str>)?;
@@ -435,26 +482,28 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // with the same id would look right on screen and then go stale, and no
     // test could see it. `rows.*` is the only other reference to them, so
     // moving a row into here costs nothing.
-    let more = Submenu::with_items(
-        app,
-        "More…",
-        true,
-        &[
-            &waiting,
-            &watch,
-            &toggle_widget,
-            &toggle_floating,
-            &floating_bigger,
-            &floating_smaller,
-            &chat_history,
-            &show_faces,
-            &show_features,
-            &backend,
-            &reconnect,
-            &status_check,
-            &update,
-        ],
-    )?;
+    //
+    // `update` is LAST on purpose: `on_update_status` puts it back with
+    // `append` after a check finds a new version again, and a last row needs no
+    // index that a later addition would silently shift.
+    let mut more_items: Vec<&dyn IsMenuItem<tauri::Wry>> = vec![
+        &waiting,
+        &watch,
+        &toggle_widget,
+        &toggle_floating,
+        &floating_bigger,
+        &floating_smaller,
+        &chat_history,
+        &show_faces,
+        &show_features,
+        &backend,
+        &reconnect,
+        &status_check,
+    ];
+    if update_label.is_some() {
+        more_items.push(&update);
+    }
+    let more = Submenu::with_items(app, "More…", true, &more_items)?;
 
     // Five groups, four separators. `ia.mjs` counts the separators in this
     // slice and would fail if a row were added back at the top level, so the
@@ -512,6 +561,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             watch,
             backend,
             update,
+            more,
             stop_everything,
             toggle_spotlight,
             toggle_widget,
@@ -1426,15 +1476,19 @@ fn first_sentence(text: &str) -> String {
 // Wiring
 // ---------------------------------------------------------------------------
 
-/// Called by the stream whenever the link state moves. Re-labels the rows and
-/// repaints the icon.
-/// Shows or hides the update row. Called by `update.rs` when a check answers.
+/// Adds, re-labels or removes the update row. Called by `update.rs` when a check
+/// answers, and by nothing else.
 ///
-/// The row is a way IN to Settings, never an install: an update replaces the
-/// executable, and that decision belongs on a surface with the version and the
-/// release notes in front of the person making it, not on a context menu.
+/// The rule is [`update_row`]: no update means the row is not in the menu at
+/// all. It is added to "More…" (`append`, because it is that submenu's last row)
+/// and removed from it rather than disabled, because a greyed row saying
+/// "Jarvis Desktop 0.2.0" is the shape the owner asked to be rid of (2026-11-03).
+///
+/// Pressing the row starts the SAME install the Settings Install button starts
+/// (`update::install_from_tray`); this function only decides whether the row
+/// exists and what it says.
 pub fn on_update_status(app: &AppHandle, available: Option<&str>) {
-    let current = app.package_info().version.to_string();
+    let label = update_row(available);
     if let Some(rows) = app
         .state::<TrayHandles>()
         .inner
@@ -1442,19 +1496,54 @@ pub fn on_update_status(app: &AppHandle, available: Option<&str>) {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .as_ref()
     {
-        match available {
-            Some(v) => {
-                let _ = rows.update.set_text(format!("Update available — {v}…"));
+        match label {
+            Some(label) => {
+                // Re-label even when the row is already there: the version moves
+                // from one release to the next, and the label names it.
+                if let Err(err) = rows.update.set_text(label) {
+                    eprintln!("[jarvis] tray: could not re-label the update row: {err}");
+                }
+                // And ENABLE it: a failed press left the row disabled on
+                // "Updating…", and the re-check that follows a failure finds the
+                // release still there. Without this the owner could never press
+                // it again.
                 let _ = rows.update.set_enabled(true);
+                if rows.more.get(ID_UPDATE).is_none() {
+                    if let Err(err) = rows.more.append(&rows.update) {
+                        eprintln!("[jarvis] tray: could not show the update row: {err}");
+                    }
+                }
             }
             None => {
-                let _ = rows.update.set_text(format!("Jarvis Desktop {current}"));
-                let _ = rows.update.set_enabled(false);
+                if rows.more.get(ID_UPDATE).is_some() {
+                    if let Err(err) = rows.more.remove(&rows.update) {
+                        eprintln!("[jarvis] tray: could not remove the update row: {err}");
+                    }
+                }
             }
         }
     }
 }
 
+/// One press is under way: the row stays - the update is still there - but says
+/// what it is doing and cannot start a second download while the first runs.
+pub fn update_started(app: &AppHandle, version: &str) {
+    if let Some(rows) = app
+        .state::<TrayHandles>()
+        .inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+    {
+        let _ = rows
+            .update
+            .set_text(format!("Updating Jarvis to {version}…"));
+        let _ = rows.update.set_enabled(false);
+    }
+}
+
+/// Called by the stream whenever the link state moves. Re-labels the rows and
+/// repaints the icon.
 pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
     if let Some(rows) = app
         .state::<TrayHandles>()
@@ -1496,20 +1585,6 @@ pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .take();
     repaint(app, link);
-}
-
-/// The Settings place a tray row opens, if it names one. Pure: the tray's
-/// destination is this small mapping, and a mapping this small is the part
-/// that can be tested without a running app.
-///
-/// "Update available — v…" is the one row that carries a destination (the
-/// owner, 2026-10-27). Everything else that opens Settings - "Settings and
-/// help…" included - opens it plainly.
-fn settings_place_for(id: &str) -> Option<&'static str> {
-    match id {
-        ID_UPDATE => Some("updates"),
-        _ => None,
-    }
 }
 
 /// Routes a context-menu click to the matching action.
@@ -1720,20 +1795,22 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 
         ID_BACKEND => run_backend_action(app),
 
-        // Opens the window. It does NOT install: the tray cannot, by design —
-        // an update replaces the executable and that decision belongs on a
-        // surface with the version and the release notes in front of you.
+        // The row exists only while a newer version is known (`on_update_status`
+        // adds it, `update_row` is the rule), and pressing it INSTALLS that
+        // version - the same `install_update` the Settings Install button runs,
+        // never a second updater and never anything automatic.
         //
-        // "Update available — v…" opens the Updates CARD, not the top of
-        // Settings (the owner, 2026-10-27: it "only opens the settings page",
-        // leaving him to scroll and hunt for the version, the notes and
-        // Install). "Settings and help…" stays plain Settings.
-        ID_UPDATE | ID_SETTINGS => {
-            let opened = match settings_place_for(event.id().as_ref()) {
-                Some(place) => windows::show_settings_at(app, place),
-                None => windows::show_settings(app),
-            };
-            if let Err(err) = opened {
+        // Spawned, not awaited: this handler already runs on the main thread,
+        // and the press re-labels the row - menu work is POSTED to the main
+        // thread, so doing it inline here would deadlock on itself.
+        ID_UPDATE => run_update_from_tray(app),
+
+        // "Settings and help…" stays plain Settings. The Updates card is still
+        // reachable from it (and from Settings search and every other surface
+        // that names it); the tray's own row no longer goes there, because it
+        // now does the install the owner asked it to do.
+        ID_SETTINGS => {
+            if let Err(err) = windows::show_settings(app) {
                 eprintln!("[jarvis] tray: settings unavailable: {err}");
                 commands::notify_failed(
                     app,
@@ -1800,6 +1877,20 @@ fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
             eprintln!("[jarvis] tray: unable to toggle the quickbar: {err}");
         }
     }
+}
+
+/// The tray's "Update Jarvis to <version>" row: the Settings Install button,
+/// pressed from the context menu.
+///
+/// Off the main thread on purpose. The press must turn the row into "Updating
+/// Jarvis to <version>…" (so a second press cannot start a second download), and
+/// Tauri posts every menu call to the main thread and waits for it - so doing
+/// that from inside a menu handler would wait on the thread that is running it.
+fn run_update_from_tray(app: &AppHandle) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::update::install_from_tray(handle).await;
+    });
 }
 
 /// Starts or stops the backend, whichever the row is currently offering.
@@ -2499,16 +2590,21 @@ mod tests {
         );
     }
 
-    /// The owner, 2026-10-27: right-clicking the tray icon and choosing
-    /// "Update available — v…" "only opens the settings page". That row names
-    /// the Updates card; "Settings and help…" and every other row name no
-    /// place and keep opening Settings plainly. Pure, so no window is built.
+    /// The owner, 2026-11-03: the row appears only when an update exists, and it
+    /// names the version the check found. **Absence, not greyed out**, is the
+    /// no-update state - which is why the rule answers `Option` rather than a
+    /// label plus a flag. Pure, so no menu and no app are needed.
     #[test]
-    fn the_update_row_opens_the_updates_card_and_settings_stays_plain() {
-        assert_eq!(settings_place_for(ID_UPDATE), Some("updates"));
-        assert_eq!(settings_place_for(ID_SETTINGS), None);
-        for id in ["", "not-a-row", ID_QUIT, ID_SHOW_BRAIN, ID_CHAT_HISTORY] {
-            assert_eq!(settings_place_for(id), None, "`{id}` opened a place");
-        }
+    fn the_update_row_is_absent_with_no_update_and_present_with_one() {
+        assert_eq!(update_row(None), None, "a row with no update to offer");
+        assert_eq!(
+            update_row(Some("0.2.411")).as_deref(),
+            Some("Update Jarvis to 0.2.411"),
+            "the row must name the version the owner is about to install"
+        );
+        // A check can answer "something newer exists" without a label worth
+        // printing; the row still belongs in the menu, in plain words.
+        assert_eq!(update_row(Some("")).as_deref(), Some("Update Jarvis"));
+        assert_eq!(update_row(Some("   ")).as_deref(), Some("Update Jarvis"));
     }
 }
