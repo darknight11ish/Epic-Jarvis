@@ -7,17 +7,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The full-screen face bar's small typing box, and Quick note's sheet - the
- * two phone UI changes of 2026-11-01/02 that a JVM test can hold down.
+ * The full-screen face bar's typing box, and Quick note's sheet - the phone UI
+ * changes of 2026-11-01/02, plus the box's own words of 2026-11-04.
  *
  * SOURCE PINS, the same shape as [AuditPlumbingTest] and [ChatMenuTest]: a
  * Compose screen cannot be driven from a JVM unit test in this project, so
- * what is pinned here is the arrangement, the guards and the words - plus
- * [FaceBarPlan]'s arithmetic, which is plain numbers and can be held exactly.
+ * what is pinned here is the arrangement, the guards and the words - plus the
+ * two things in [FaceBarPlan] that are plain values a test can hold exactly:
+ * the width the bar's weights give the box, and when the words are shown.
+ *
  * What these cannot prove is said in the PR: that the box types, that the
- * keyboard's Send key answers, that the sheet is reachable from the face
- * layout on a real screen, and that nothing overlaps at 360dp - this lane has
- * no device.
+ * keyboard's Send key answers, that a tap really moves focus and takes the
+ * words away on a real phone, and that nothing overlaps at 360dp - this lane
+ * has no device.
  *
  * The rules behind them are proved elsewhere: the photo routing by
  * [AttachFileTest], the note route by [NoteCaptureTest], and the send decision
@@ -27,6 +29,7 @@ class PhoneFaceBarTest {
 
     private val screens = "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/"
     private val home by lazy { SourceFile.read(screens + "HomeScreen.kt") }
+    private val plan by lazy { SourceFile.read(screens + "FaceBarPlan.kt") }
 
     /** One top-level function's text, cut where the next one starts. */
     private fun fn(marker: String): String =
@@ -37,10 +40,10 @@ class PhoneFaceBarTest {
     private val composer by lazy { fn("private fun Composer(") }
     private val quickNote by lazy { fn("private fun QuickNoteSheet(") }
 
-    // A) The small blank typing box on the face bar ---------------------------
+    // A) The typing box on the face bar ---------------------------------------
 
     @Test
-    fun `the face bar has one small blank typing box to the right of the microphone`() {
+    fun `the face bar has one typing box to the right of the microphone`() {
         // ONE box, drawn once, in the bar itself.
         assertEquals(1, Regex("FaceTypeBox\\(").findAll(voiceBar).count())
         // To the RIGHT of the microphone: the mic is drawn first in the row,
@@ -48,15 +51,33 @@ class PhoneFaceBarTest {
         val mic = voiceBar.indexOf("VoiceButton(")
         val box = voiceBar.indexOf("FaceTypeBox(")
         assertTrue("the box is not drawn after the microphone: $box <= $mic", box > mic)
-        // No placeholder words inside it - the owner asked for a blank box.
-        assertFalse("a placeholder was put in the blank box", typeBox.contains("placeholder"))
-        assertFalse("words were put in the blank box", typeBox.contains("Ask Jarvis"))
-        // ...but TalkBack still has a name for it.
+        // The owner's words of 2026-11-04 - "with the wording \"Ask Jarvis\"
+        // present" - while the box is empty. The 2026-11-01 decision was a box
+        // with no placeholder words at all; the owner replaced it, and the
+        // words are the owner's own rather than something invented here.
+        assertEquals("the words in the box are not the owner's", "Ask Jarvis", FaceBarPlan.ASK_WORDS)
+        assertTrue("the box never draws the words", typeBox.contains("FaceBarPlan.ASK_WORDS"))
+        // ...drawn INSIDE the decoration box, never fed in as the field's
+        // value: a placeholder must not be text that can be sent to the PC.
+        val decorated = typeBox.indexOf("decorationBox =")
+        val words = typeBox.indexOf("FaceBarPlan.ASK_WORDS")
+        assertTrue("the words are drawn outside the decoration box: $words <= $decorated", words > decorated)
+        assertTrue("the field is no longer fed the owner's draft", typeBox.contains("value = text"))
+        // What the phone SAYS about the box is a separate thing, unchanged: a
+        // screen reader's name for a control is not its placeholder.
         assertTrue("the box has no TalkBack name", typeBox.contains("contentDescription = FACE_TYPE_HINT"))
         assertTrue(
             "the TalkBack name changed",
             home.contains("private const val FACE_TYPE_HINT = \"Type a message to Jarvis\""),
         )
+        assertTrue(
+            "the visible words and the spoken name became the same string",
+            FaceBarPlan.ASK_WORDS != "Type a message to Jarvis",
+        )
+        // The chat's own empty box shows these same words - which is where they
+        // come from: two boxes, one sentence, so the phone does not say two
+        // different things about the same empty field.
+        assertTrue("the chat box says different words", composer.contains("\"Ask Jarvis\""))
         // At least 48dp of touch height, on the FIELD itself - padding around
         // a short field would look the same and be untappable.
         assertTrue("the box has no 48dp height", typeBox.contains("heightIn(min = 48.dp)"))
@@ -75,6 +96,53 @@ class PhoneFaceBarTest {
         assertTrue(typeBox.contains("BasicTextField("))
         assertTrue(typeBox.contains("background(chrome.surface2)"))
         assertFalse(typeBox.contains("OutlinedTextField"))
+    }
+
+    @Test
+    fun `the words show only while the box is empty and the owner is not in it`() {
+        // The owner's rule of 2026-11-04, in their own words: the box shows
+        // "Ask Jarvis" while it is empty, and "it disseapars affer i tap the box
+        // and the keyboard pops up, reappears if its empty". A tap puts focus in
+        // the box, so focus is the signal the words go on.
+        assertTrue("an empty box nobody is in shows no words", FaceBarPlan.placeholderVisible("", false))
+        // The half that matters most: the moment the box takes focus, the words
+        // go - even though the box is still empty. A tap that leaves an empty
+        // box focused must NOT show them.
+        assertFalse(
+            "the words stay while the owner is in the box with nothing typed",
+            FaceBarPlan.placeholderVisible("", true),
+        )
+        assertFalse("the words are drawn under a typed line", FaceBarPlan.placeholderVisible("hello", false))
+        assertFalse("the words are drawn under a typed line", FaceBarPlan.placeholderVisible("hello", true))
+        // A box of spaces cannot send anything either - the bar's own send path
+        // asks `text.isNotBlank()` - so it is empty and says so, rather than
+        // sitting blank with an invisible keystroke in it.
+        assertTrue("a box of spaces is not treated as empty", FaceBarPlan.placeholderVisible("   ", false))
+        assertTrue("a newline-only box is not treated as empty", FaceBarPlan.placeholderVisible("\n", false))
+
+        // The box asks that one function instead of keeping its own copy of the
+        // condition: one place to change, one place this test can hold.
+        assertEquals(
+            "the box keeps its own copy of the show/hide rule",
+            1,
+            Regex("FaceBarPlan\\.placeholderVisible\\(").findAll(typeBox).count(),
+        )
+        // Focus is read off the field's own interaction source, so the tap that
+        // opens the keyboard is the same event the words disappear on - not a
+        // second gesture that could arrive late.
+        assertTrue(
+            "the field has no interaction source of its own",
+            typeBox.contains("val interactionSource = remember { MutableInteractionSource() }"),
+        )
+        assertTrue("the field is not wired to that source", typeBox.contains("interactionSource = interactionSource"))
+        assertTrue("focus is not read from the field", typeBox.contains("collectIsFocusedAsState()"))
+        // The chat box above the composer keeps its own rule: its words stay
+        // until something is typed, focus or no focus. The difference is
+        // deliberate - the face bar is one line with no Send button beside it,
+        // and the owner asked for the words to go there - so nobody may
+        // "unify" the two by copying either rule into the other.
+        assertTrue("the chat box stopped showing its own words", composer.contains("if (text.isEmpty())"))
+        assertFalse("the chat box took the face bar's focus rule", composer.contains("placeholderVisible"))
     }
 
     @Test
@@ -184,33 +252,84 @@ class PhoneFaceBarTest {
     // B) The bar at 360dp and at a large text size ---------------------------
 
     @Test
-    fun `the typing box's width is computed so it cannot reach the microphone`() {
-        // A 360dp phone, the composer's 12dp side padding taken off: the
-        // columns are 336dp, the microphone 48dp, so each side has 144dp. The
-        // box keeps room for Stop beside it, which is why it is 88dp and not
-        // the whole side.
+    fun `the box takes the whole right cell, and the microphone stays in the middle`() {
+        // 2026-11-04: the box is no longer a measured 48-96dp stamp with empty
+        // space after it (the owner: "take up rhe remaining exmptyspace around
+        // it"). Both side cells take `weight(1f)`, and so does the box inside
+        // the right one, so the box gets every dp that cell has left after Stop
+        // while the two EQUAL weights keep the 48dp microphone exactly in the
+        // middle of the bar.
+        assertTrue(
+            "the left cell stopped taking half of what is beside the microphone",
+            Regex("""FlowRow\(\s*Modifier\.weight\(1f\),""").containsMatchIn(voiceBar),
+        )
+        assertTrue(
+            "the right cell stopped taking half of what is beside the microphone",
+            Regex("""Row\(\s*Modifier\.weight\(1f\)\.padding\(start = 8\.dp\),""").containsMatchIn(voiceBar),
+        )
+        assertTrue(
+            "the box is not given the rest of its cell",
+            voiceBar.contains("modifier = Modifier.weight(1f)"),
+        )
+        // The microphone's own cell stays a bare Box - no weight, no width - so
+        // the two halves really are measured equally on either side of it.
+        assertTrue(
+            "the microphone gained a weight or a width of its own",
+            Regex("""Box \{\s*\n\s*// A PC that has not offered""").containsMatchIn(voiceBar),
+        )
+        // Nothing sets a width on the box any more, and the old fixed-width
+        // arithmetic is gone rather than left behind as dead code that could
+        // drift away from the layout in silence.
+        assertFalse("the box still sets its own width", typeBox.contains(".width("))
+        assertFalse("the old fixed-width call site is back", voiceBar.contains("width = typeWidth"))
+        assertFalse("the removed arithmetic is still in the screen", home.contains("typeWidthDp"))
+
+        // What that weight comes to, and the floor it has to clear. At 360dp
+        // the bar's content is 336dp, the microphone 48dp, so each cell is
+        // 144dp; the cell keeps 8dp before the box. That is 136dp for the box
+        // alone, and 88dp while Stop is showing - the 88dp the old fixed width
+        // used to be all the time.
         val available = 360f - 24f
-        assertEquals(336f, available, 0.001f)
         assertEquals(144f, FaceBarPlan.sideDp(available), 0.001f)
-        assertEquals(88f, FaceBarPlan.typeWidthDp(available), 0.001f)
+        assertEquals(136f, FaceBarPlan.boxWidthDp(available, streaming = false), 0.001f)
+        assertEquals(88f, FaceBarPlan.boxWidthDp(available, streaming = true), 0.001f)
+        // ...and the sum still closes: the box, the gap before it and Stop's
+        // room are exactly one side, so the box cannot reach the microphone.
         assertEquals(
             "the box, its gap and Stop do not add up to one side",
             FaceBarPlan.sideDp(available),
-            FaceBarPlan.typeWidthDp(available) + FaceBarPlan.GAP_DP + FaceBarPlan.STOP_DP,
+            FaceBarPlan.boxWidthDp(available, streaming = true) + FaceBarPlan.GAP_DP + FaceBarPlan.STOP_DP,
             0.001f,
         )
-        // The narrowest phone this app supports is 320dp: still exact there,
-        // so the box never overlaps the microphone on a real device size.
+        // The narrowest phone this app supports is 320dp: the box still clears
+        // its own 48dp touch target there by 20dp, even with Stop showing, so
+        // the box that took the empty space did not become unusable on a small
+        // screen.
         val narrow = 320f - 24f
-        assertEquals(68f, FaceBarPlan.typeWidthDp(narrow), 0.001f)
-        assertEquals(
-            FaceBarPlan.sideDp(narrow),
-            FaceBarPlan.typeWidthDp(narrow) + FaceBarPlan.GAP_DP + FaceBarPlan.STOP_DP,
-            0.001f,
+        assertEquals(116f, FaceBarPlan.boxWidthDp(narrow, streaming = false), 0.001f)
+        assertEquals(68f, FaceBarPlan.boxWidthDp(narrow, streaming = true), 0.001f)
+        assertTrue(
+            "the box can no longer be typed in on a 320dp phone while an answer streams",
+            FaceBarPlan.boxWidthDp(narrow, streaming = true) >= FaceBarPlan.TYPE_MIN_DP,
         )
-        // The code uses the plan for the real width, not a second copy of the
-        // arithmetic.
-        assertTrue(voiceBar.contains("FaceBarPlan.typeWidthDp(maxWidth.value).dp"))
+    }
+
+    @Test
+    fun `the 96dp cap that left the empty space is gone, and the words live in the plan`() {
+        // The 2026-11-01/02 design capped the box at 96dp so it could never
+        // become a second composer - and that is exactly the empty space the
+        // owner pointed at on 2026-11-04. A cap that came back would leave the
+        // space there again, so its absence is pinned here, beside the two
+        // things that replaced the arithmetic: the width the layout gives the
+        // box and the rule for its words.
+        assertFalse("the 96dp cap is back, so the box can stop short again", plan.contains("TYPE_MAX_DP"))
+        assertFalse("the old fixed-width arithmetic is back", plan.contains("typeWidthDp"))
+        assertTrue("the width the layout gives the box is not written down", plan.contains("fun boxWidthDp("))
+        assertTrue("the show/hide rule is not written down", plan.contains("fun placeholderVisible("))
+        assertTrue(
+            "the owner's words are not in the plan",
+            plan.contains("const val ASK_WORDS = \"Ask Jarvis\""),
+        )
     }
 
     @Test

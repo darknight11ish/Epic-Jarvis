@@ -434,7 +434,7 @@ def _live_idle_says(v) -> str:
 
 
 # ---------------------------------------------------------------------------
-#   This PC's own notifications - the seven the phone may change too
+#   This PC's own notifications - the eight the phone may change too
 # ---------------------------------------------------------------------------
 # THE OWNER'S DECISION, 2026-10-08: the PC's notification choices - which of
 # this PC's own toasts fire (alarms, reminders, the morning briefing, the
@@ -457,7 +457,7 @@ def _live_idle_says(v) -> str:
 # costs a line, while a new patch costs its place in `apply-patches.ps1`,
 # three ordering allow-lists and the stand-in ratchet.
 #
-# `loosening="none"` on ALL SEVEN, deliberately and for a reason the owner
+# `loosening="none"` on ALL EIGHT, deliberately and for a reason the owner
 # needs: a limit's card exists to say "this lets Jarvis do more", and NOTHING
 # here does. A bigger `quiet_end`, a switch turned on or the quiet window
 # moved to the middle of the day changes only when this PC shows its owner a
@@ -467,10 +467,11 @@ def _live_idle_says(v) -> str:
 # Turning the alarms row off is still the owner's own choice, made on either
 # app, and it takes effect at once, exactly as it does on the desktop today.
 #
-# `app="both"` on all seven, `pc_only=False` on all seven. The four titles
-# carry "(on your PC)" in the owner's own language, because the phone draws
-# these rows in its own Settings screen next to its OWN notification settings
-# (`settings.phone-notify`) and the two must never be confused for each other.
+# `app="both"` on all eight, `pc_only=False` on all eight. All six switch
+# titles carry "(on your PC)" in the owner's own language, because the phone
+# draws these rows in its own Settings screen next to its OWN notification
+# settings (`settings.phone-notify`) and the two must never be confused for
+# each other. The two times say it too.
 #
 # `kind="bool"` needs NO client change: the desktop's `limits.js`/`limits-settings.js`
 # and the phone's plate draw any row whose kind they can draw, so a bool row
@@ -498,6 +499,14 @@ _NOTIFY_ROWS: tuple = (
     ("handoff", "bool", "Say when a website needs you (on your PC)",
      "Tells you on the PC when a website or support chat has paused at a "
      "captcha or sign-in page and is waiting for you to solve it there."),
+    # Wave B, "Personalize Jarvis" (2026-11-03). The reminder that the quiz is
+    # still unfinished - the one `[notifications]` value that is about this
+    # PC's own state rather than something Jarvis did. `Kind::Setup` in
+    # notifications.rs, quiet-hours gated, ON when nothing is stored.
+    ("setup", "bool", "Say when Personalize Jarvis is unfinished (on your PC)",
+     "Reminds you once at launch, on the PC, that the Personalize Jarvis quiz "
+     "is still unfinished. Quiet hours hold it, and it stops for good once the "
+     "quiz is finished."),
     ("quiet_enabled", "bool", "Be quiet during quiet hours (on your PC)",
      "Silences the PC's non-urgent notifications during the hours below. It "
      "never silences an alarm, an urgent alert or a decision waiting for you."),

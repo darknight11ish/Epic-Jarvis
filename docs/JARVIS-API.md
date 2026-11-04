@@ -22466,10 +22466,10 @@ The limits are not a module each: they are **rows in one table**
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
 the owner's own words for it. Fourteen of them (`jarvis_limits.LIMITS` holds these
-fourteen written by hand, and `_notify_rows()` appends **seven more** notification
-rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff` and
-the three Quiet-hours rows - so the table a client receives is twenty-one rows
-long. Only the fourteen are listed here; the seven are built from
+fourteen written by hand, and `_notify_rows()` appends **eight more** notification
+rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff`,
+`notif_setup` and the three Quiet-hours rows - so the table a client receives is
+twenty-two rows long. Only the fourteen are listed here; the eight are built from
 `_NOTIFY_ROWS` and are not copied into this document, for the same
 no-second-copy reason as the numbers below):
 
@@ -23559,7 +23559,7 @@ sentence runs. `change_setting` CALLS THAT SAME FUNCTION. So:
 |---|---|---|
 | background learning, the sensitive-topics switch, lights without asking, web search, the watch switch, the phone-notification switch, picture mode, the headless browser, senders in the briefing, the big coder, the better voice | one card | at once |
 | asking before every web search (the REVERSED pair) | at once | one card |
-| the prompt coach, making pictures, the five PC-notification switches, humour, voice-follows-the-face | at once | at once |
+| the prompt coach, making pictures, the six PC-notification switches, humour, voice-follows-the-face | at once | at once |
 | the PC's "hey Jarvis" wake word (`jarvis_speech.set_wake_enabled`) | one card | at once |
 
 The six settings whose value is a name go through their own setters, so the card is
@@ -26898,7 +26898,15 @@ and its own docstring is the contract.
   list Jarvis's drop-in plugins and turn one on or off by chat (section 181);
   both stay on this PC - `plugin_list` only reads the plugin folder, and
   `plugin_switch` raises ONE `modify_own_code` card to turn one on and needs no
-  card to turn one off. With no folders,
+  card to turn one off. Since 2026-11-04 it also names the four read-only
+  self/chat tools of section 184 - `self_portrait`, `conversation_find`,
+  `conversation_open` and `refresh_abilities` - so a new install can say what
+  Jarvis is made of and reopen a kept chat without hand-editing this list;
+  `conversation_clear` is deliberately NOT among them (Gemini ruling 1,
+  2026-11-03), because an AI must never have an autonomous tool to wipe a
+  transcript. A PC whose own settings file already exists keeps its list: an
+  update never overwrites that file, so the four arrive with a new install
+  (or when the owner adds the names). With no folders,
   `jarvis_agent.offered_tools` omits `my_files` entirely - chat search cannot
   run even while this switch is ON, and that omission is on purpose: with no
   folder listed the tool costs no tokens and reads nothing. The Settings card
@@ -32854,12 +32862,14 @@ other tool, and §184.10 says what the shipped list names on this tree.
   page. The storage module itself carries the exact tool names its wiring
   worker is to add (`TOOL_ROWS`), and its card wording is already built; this
   section says what is real, not what is next.
-- **`refresh_abilities` is defined and grouped, but it is not in the shipped
-  `[tools].enabled` list on this tree** - the same list that ships
-  `feature_guide`, `change_setting`, `plugin_list` and the rest. A tool that is
-  not in that list is not offered, so a PC with the shipped settings file has
-  the POST route but not the tool by asking until the list names it (or the
-  owner adds the name).
+- **`refresh_abilities` now ships ON in the shipped `[tools].enabled` list**
+  (2026-11-04, Gemini's ruling Q2), beside `self_portrait`,
+  `conversation_find`, `conversation_open`, `feature_guide`, `change_setting`,
+  `plugin_list` and the rest. Before that date it was defined and grouped but
+  left out of the list, so a PC with the shipped settings file had the POST
+  route but not the tool by asking. An existing PC keeps its own list either
+  way: an update never overwrites the owner's settings file, so the four reach
+  a new install (or the owner's own file when they add the names).
 - **The backend does not yet emit `open_area`.** Both apps accept it and the
   desktop's table can act on it; `resolve_place` is the hook with no caller yet
   (184.3).
@@ -32879,13 +32889,13 @@ other tool, and §184.10 says what the shipped list names on this tree.
 
 | Piece | Desktop | Phone | Why |
 |---|---|---|---|
-| `/api/self`, `/api/self/version`, `/api/conversations` | **on this tree: NOT yet reachable from the page** - `hud_proxy.rs` carries none of the three (`HUD_GET_PATHS` has 12 paths and no `/api/self`); the desktop's own PR #1115 adds `/api/self`, `/api/conversations` and - after this branch's `/api/self/version` - its allowlist becomes 14 paths. The version STRING is read by the shell's version handshake, not only the page | can read them like any route; the phone has no self screen | it is a read; both apps' chats already reach the PC |
+| `/api/self`, `/api/self/version`, `/api/conversations` | **reachable from the page on this tree** - `hud_proxy.rs` carries all three (`HUD_GET_PATHS` has 14 paths, `/api/self` among them, landed by the desktop's own PR #1115). The version STRING is also read by the shell's version handshake, not only the page | can read them like any route; the phone has no self screen | it is a read; both apps' chats already reach the PC |
 | "Open a place" | `hud_nav.rs` table + `open_jarvis_area` | `OpenPlace` table + the one-time settings request | same field, each app's own surfaces |
 | More than one conversation window | **desktop only** - the extra `chat-*` windows | one screen at a time | recorded in `docs/ARCHITECTURE.md` section 8 |
 | Clearing one conversation | the card is answered in any window (Windows Hello where the gate asks) | the card is answered on Home like any card; its History delete keeps its own confirm | one action, one decision, everywhere |
 | The version handshake / Update | **desktop only** | none | a phone cannot patch this PC's backend (the existing one-sided decision, ARCHITECTURE section 8) |
 | Storage scan and cleanup (184.8) | **no screen, no tool on this tree** | **no screen, no tool on this tree** | the routes and the ONE card are built and tested; the door is the model tool the wiring worker adds, never a client-side clear |
-| Refreshing the abilities (184.9) | the `refresh_abilities` tool in either app's chat, once `[tools].enabled` names it; `POST /api/self/refresh` is a route both apps may call | same | one read of this PC's own modules; no card and nothing restarted |
+| Refreshing the abilities (184.9) | the `refresh_abilities` tool in either app's chat - it is in the shipped `[tools].enabled` since 2026-11-04, and an existing settings file keeps whatever it had; `POST /api/self/refresh` is a route both apps may call | same | one read of this PC's own modules; no card and nothing restarted |
 
 **Tests.** `backend/test_self_portrait.py` (added with the module; it is what
 holds the portrait to the two registries, the settings' live values, the refresh
@@ -32902,12 +32912,14 @@ copies; the desktop's `cargo test` unit tests in `hud_nav.rs`, `chat_windows.rs`
 and `backend_self.rs`; the phone's `OpenPlaceTest`, `OpenPlaceAreasTest` and
 `ConversationClearTest`. The two
 checkers named by the parity rule do NOT classify nothing: `tools/check_parity.py`
-adds **nine `BACKEND_ONLY` entries** for this feature - `/api/self`,
-`/api/self/version`, `/api/self/refresh`, `/api/conversations`,
-`/api/conversations/{id}`, `/api/conversations/clear`, and the storage
-self-scan's `/api/storage/scan`, `/api/storage/cleanup/plan`,
-`/api/storage/cleanup` - each carrying its follow-up lane in the reason, because
-neither app calls any of them on this tree. `tools/check_event_names.py`
+classifies the three read routes in `CLASSIFICATION` - `/api/self` as `todo`, and
+`/api/self/version` and `/api/conversations` as `deliberate`, because the
+desktop calls all three - and adds **six `BACKEND_ONLY` entries** for the rest of
+this feature: `/api/self/refresh`, `/api/conversations/{id}`,
+`/api/conversations/clear`, and the storage self-scan's `/api/storage/scan`,
+`/api/storage/cleanup/plan`, `/api/storage/cleanup` - each carrying its
+follow-up lane in the reason, because neither app calls any of them on this
+tree. `tools/check_event_names.py`
 classifies nothing new because no event kind is added (navigation stays on the
 existing per-answer `X-Jarvis-Route` field). **No `features/features.json` entry
 is added by this work** - that row is still waiting on the app lanes; the PR

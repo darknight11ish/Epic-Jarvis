@@ -7,7 +7,7 @@
  *     node tests/settings-catalogue.mjs
  *
  * WHY THIS EXISTS. `backend/jarvis_settings_registry.py`'s SETTINGS_ROWS is
- * the one table behind the desktop page's 26 switch rows, the fixture both
+ * the one table behind the desktop page's 33 switch rows, the fixture both
  * apps read, and the phone's SettingsCatalog.kt
  * (tools/gen_settings_cases.py). Until this file, nothing checked the page
  * against that table at row level, and **row ORDER was not protected at
@@ -151,11 +151,11 @@ await check("the catalogue is the fixture, row for row and in order", async () =
   }
 });
 
-await check("the fixture says how many rows there are, and it is 32 desktop toggles", async () => {
-  assert.equal(FIX.counts.desktop, 32);
-  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 32);
+await check("the fixture says how many rows there are, and it is 33 desktop toggles", async () => {
+  assert.equal(FIX.counts.desktop, 33);
+  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 33);
   assert.equal(FIX.counts.phone, 3);
-  assert.equal(FIX.counts.all, 35);
+  assert.equal(FIX.counts.all, 36);
   // The number this whole feature was briefed with was wrong once already
   // ("all 19"): the 19 is the count of rows with a BARE `<label class="toggle">`,
   // and the seven rows that also carry a label id were left out of it.
@@ -169,9 +169,12 @@ await check("the fixture says how many rows there are, and it is 32 desktop togg
   // 22 to 24, 29 to 31 (and three phone rows stay three).
   // "Save facts even when Jarvis had to reword them" (2026-11-02) is bare as
   // well: 24 to 25, 31 to 32.
+  // Wave B's "Personalize Jarvis" reminder (2026-11-03) carries a label id, so
+  // the bare count stays 25 while the desktop total moves to 33: 32 to 33, and
+  // the with-id rows 7 to 8.
   const bare = (HTML.match(/^[ \t]*<label class="toggle">[ \t]*$/gm) || []).length;
-  assert.equal(bare, 25, "the bare-label count moved - re-read the 32 claim");
-  assert.equal(FIX.counts.desktop, bare + 7);
+  assert.equal(bare, 25, "the bare-label count moved - re-read the 33 claim");
+  assert.equal(FIX.counts.desktop, bare + 8);
 });
 
 await check("exactly one row is flagged as not being a setting", async () => {

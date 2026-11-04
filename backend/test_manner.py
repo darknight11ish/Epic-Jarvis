@@ -44,6 +44,24 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import BACKEND, REPO, SHIPPED, require_shipped  # noqa: E402
 require_shipped("jarvis_agent.py", "jarvis_manner.py", "jarvis_quick.py")
+# THE QUIZ IS FINISHED HERE (2026-11-04). Wave B's `dress_messages` adds one
+# "Personalize Jarvis: the setup quiz is unfinished" system line while the quiz
+# is unfinished, and an ABSENT setup.json reads as unfinished (0 of 25 answered)
+# - so in a fresh config folder, as in CI, one more system line lands in every
+# prompt this file pins word for word. This suite is about the MANNER note and
+# nothing else, so it gives itself a finished quiz in its own throwaway config
+# folder (never the owner's real one): every check below stays the exact byte
+# comparison it was, and the line's own behaviour is proved in
+# test_setup_quiz.py. The folder is created BEFORE jarvis_framework is imported,
+# because CONFIG_DIR is read once, at import.
+_QUIZ_CFG = tempfile.mkdtemp(prefix="jarvis-manner-")
+os.environ["OPENJARVIS_CONFIG_DIR"] = _QUIZ_CFG
+os.environ["JARVIS_CONFIG_DIR"] = _QUIZ_CFG
+import jarvis_setup as _setup  # noqa: E402
+Path(_QUIZ_CFG, "setup.json").write_text(json.dumps({
+    "version": 2, "completed_version": _setup.QUIZ_VERSION, "runs": 1,
+    "dismissed_at": None, "in_progress": {}, "answers": {},
+    "completed_at": 1.0, "outcomes": []}), encoding="utf-8")
 import jarvis_agent as AG  # noqa: E402
 # The Personalize Jarvis line (jarvis_agent.with_setup_state_note, Wave B
 # 2026-11-03) is ONE system line added to every local turn while the quiz is

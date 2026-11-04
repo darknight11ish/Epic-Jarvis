@@ -348,7 +348,7 @@ def t_the_limits_table_matches_the_code():
 
     notify = [x.key for x in L.LIMITS if x.key.startswith("notif_")]
     check("... and it admits the notification rows that join the same table",
-          "seven more" in block and len(notify) == 7,
+          "eight more" in block and len(notify) == 8,
           f"jarvis_limits adds {len(notify)} notification rows")
 
 

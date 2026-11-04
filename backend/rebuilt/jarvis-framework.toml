@@ -2008,11 +2008,24 @@ star_floor = 25        # ...but never fewer than this many
 # switch here. Neither deletes, moves or edits a plugin folder, and neither can
 # restart Jarvis: a change lands the next time Jarvis starts.
 #
+# `self_portrait`, `conversation_find`, `conversation_open` and
+# `refresh_abilities` ALSO ship ON (2026-11-04, Gemini's ruling Q2: turn the
+# four read-only self/chat tools on in the shipped default, "keeping
+# `conversation_clear` OUT"). All four are READ-ONLY and go through the gate's
+# own `skill_list` action at tier `auto`, so they raise no card: they read only
+# this PC's own registry, its own modules and the conversations it already
+# kept, and they change nothing. A fresh install can therefore say what Jarvis
+# is made of and reopen an old chat without hand-editing this list.
+# `conversation_clear` is deliberately NOT here: an AI must never have an
+# autonomous tool to wipe a transcript (Gemini ruling 1, 2026-11-03), so
+# clearing stays the route, an app action or the fast path, always behind its
+# ONE `conversation_clear` card.
+#
 # Everything else here stays opt-in - send_email, browser_control,
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)
@@ -2129,6 +2142,10 @@ briefing = true
 # A website or support chat has paused at a captcha or sign-in page and is
 # waiting for the owner ("Solve it here").
 handoff = true
+# The "Personalize Jarvis" reminder (Wave B, 2026-11-03): one toast at launch
+# while the setup questionnaire is still unfinished. Quiet hours hold it, and it
+# stops for good once the quiz is finished.
+setup = true
 # Quiet hours on or off. Off by default.
 quiet_enabled = false
 # The quiet window's two ends, "HH:MM" on the PC's own clock. It normally wraps

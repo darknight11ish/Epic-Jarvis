@@ -39,13 +39,14 @@ table (`jarvis_limits.LIMITS`) and ONE route. What this file proves:
    and the print stays the only home of the number, with nothing about it
    logged.
 8. **This PC's own notifications** (the owner's decision of 2026-10-08: they
-   must be changeable from the phone too). Seven more rows - four toggles, the
+   must be changeable from the phone too). Eight more rows - five toggles
+   (Wave B's "Personalize Jarvis" reminder joined them on 2026-11-03), the
    quiet-hours switch and the window's two times - owned by
    `jarvis_notify_prefs.py` in the owner's `[notifications]` table. They are
    offered to BOTH apps on the wire, every title says plainly that the setting
    is the PC's own, a change from a phone really lands in
    `jarvis-framework.toml`, a time of day is carried and stored as a clock time
-   and never as a number of minutes, no direction of any of the seven raises a
+   and never as a number of minutes, no direction of any of the eight raises a
    card (so an alarm is never left waiting on one), and `quiet_on` - the one
    additive field this view ever gained - follows the quiet-hours switch.
 """
@@ -882,16 +883,17 @@ def t_the_voice_bar_is_the_number_the_check_actually_uses():
 
 
 # --------------------------------------------------------------------------
-#   This PC's own notifications - the seven the phone may change too
+#   This PC's own notifications - the eight the phone may change too
 #   (the owner's decision of 2026-10-08)
 # --------------------------------------------------------------------------
-#: The seven values `jarvis_notify_prefs.py` owns, in the order the table
+#: The eight values `jarvis_notify_prefs.py` owns, in the order the table
 #: carries them, and the kind each row must have.
 NOTIFY_ROWS = (
     ("notif_alarms", "bool"),
     ("notif_reminders", "bool"),
     ("notif_briefing", "bool"),
     ("notif_handoff", "bool"),
+    ("notif_setup", "bool"),
     ("notif_quiet_enabled", "bool"),
     ("notif_quiet_start", "time"),
     ("notif_quiet_end", "time"),
@@ -899,12 +901,12 @@ NOTIFY_ROWS = (
 
 
 def t_the_notification_rows_are_on_the_table_and_say_whose_they_are():
-    """Seven rows, one per value in the owner's `[notifications]` table, and the
+    """Eight rows, one per value in the owner's `[notifications]` table, and the
     TWO things the owner's decision of 2026-10-08 demands of their words: every
     title says the setting is the PC's own ("on your PC"), and the quiet-hours
     switch keeps its own words for the state so a switch turned off is not a
     sentence pretending it is on."""
-    check("all seven rows are on the table",
+    check("all eight rows are on the table",
           [k for k, _ in NOTIFY_ROWS if L.find(k) is None] == [],
           [k for k, _ in NOTIFY_ROWS if L.find(k) is None])
     for key, kind in NOTIFY_ROWS:
@@ -976,7 +978,7 @@ def t_the_notification_rows_reach_both_apps_and_the_pc_keeps_them():
     L.handle_post(L.ROUTE, {"key": L.NOTIFY_QUIET_ON, "value": True})
     check("... and it follows that switch",
           all(r["quiet_on"] is True for r in L.view()["limits"]))
-    # The direction rule: "none" on all seven, so neither direction asks.
+    # The direction rule: "none" on all eight, so neither direction asks.
     for key, _kind in NOTIFY_ROWS:
         check(f"{key}: no direction of this row is a loosening",
               L.find(key).loosening == "none", L.find(key).loosening)

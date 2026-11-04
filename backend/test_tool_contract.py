@@ -14,7 +14,7 @@ not move any count at all.
 WHAT THIS PINS, AS EXPLICIT SORTED NAME LISTS
   (a) FULL_ENABLED - what `enabled_tools_for_turn()` returns on a fresh
       install: the shipped template copied in as the settings file, in a temp
-      folder, exactly as `test_tool_defaults.py` does it. Six names today.
+      folder, exactly as `test_tool_defaults.py` does it. Thirteen names today.
   (b) CLOUD_ALLOWED - the tools a cloud lane may be offered. There is no
       cloud-tool allow-list in this tree, and that is the answer: the local
       tool loop is never called for a cloud lane and no cloud request builder
@@ -81,8 +81,9 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: (a) A fresh install's `[tools].enabled`, read through
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
-    "calculator", "change_setting", "feature_guide", "memory_search",
-    "my_files", "phone_apps", "plugin_list", "plugin_switch", "web_search",
+    "calculator", "change_setting", "conversation_find", "conversation_open",
+    "feature_guide", "memory_search", "my_files", "phone_apps", "plugin_list",
+    "plugin_switch", "refresh_abilities", "self_portrait", "web_search",
 ]
 
 #: (b) Tools a cloud lane may be offered. NONE: the tool loop is local-only
@@ -94,20 +95,24 @@ CLOUD_ALLOWED = []
 #: so the decision is recorded here rather than assumed.
 PRIVATE_CHAT_ALLOWED = []
 
-#: What those enabled seven become when a turn is built: `my_files` is dropped
-#: while no folder is listed (the model is never offered a tool that could
-#: read nothing), so a fresh PC offers five base tools - plus the conversation
-#: web-search approval and its instant stop, which ride with `web_search`
-#: (2026-11-02, `jarvis_agent.GRANT_ASK_TOOLS`): offering the ASK grants
-#: nothing, because the store is written only after a person answers the
+#: What those enabled thirteen become when a turn is built: `my_files` is
+#: dropped while no folder is listed (the model is never offered a tool that
+#: could read nothing), so a fresh PC offers twelve base tools - plus the
+#: conversation web-search approval and its instant stop, which ride with
+#: `web_search` (2026-11-02, `jarvis_agent.GRANT_ASK_TOOLS`): offering the ASK
+#: grants nothing, because the store is written only after a person answers the
 #: card. `phone_apps` joined the fresh offer on 2026-11-02 (#1097): it
 #: manages the phone's app allow-list, is card-first, and is the only way to
 #: fill a list that ships empty. `send_file_to_phone` is NOT a default (it
 #: leaves the PC for the phone); the owner enables it in their own settings.
+#: The four read-only self/chat tools joined on 2026-11-04 (Gemini ruling Q2)
+#: and are offered like any other enabled tool - `conversation_clear` is not a
+#: tool at all, so it cannot appear here.
 OFFERED_FRESH = [
     "approve_web_search_for_conversation", "calculator", "change_setting",
-    "feature_guide", "memory_search", "phone_apps", "plugin_list",
-    "plugin_switch", "stop_web_search_approval", "web_search",
+    "conversation_find", "conversation_open", "feature_guide", "memory_search",
+    "phone_apps", "plugin_list", "plugin_switch", "refresh_abilities",
+    "self_portrait", "stop_web_search_approval", "web_search",
 ]
 
 #: (d) Every tool that exists, pinned in full. A future tool must be added
@@ -267,7 +272,7 @@ def t_a_fresh_install_enables_exactly_the_pinned_set():
         return sorted(AG.enabled_tools_for_turn())
 
     got = _with_fresh_settings(read)
-    check("a fresh install's turn enables exactly the six pinned names",
+    check("a fresh install's turn enables exactly the thirteen pinned names",
           got == FULL_ENABLED, got)
 
 
@@ -279,9 +284,9 @@ def t_a_fresh_install_offers_exactly_the_pinned_list():
             lambda: sorted(AG.offered_tools(AG.enabled_tools_for_turn())))
     finally:
         JD.folders = real_folders
-    check("a fresh install (no folder listed) offers exactly seven names - the "
-          "five defaults plus the grant ask and its stop, which ride with web "
-          "search - with my_files withheld by its own rule",
+    check("a fresh install (no folder listed) offers exactly fourteen names - "
+          "the twelve local defaults plus the grant ask and its stop, which "
+          "ride with web search - with my_files withheld by its own rule",
           got == OFFERED_FRESH, got)
     check("...so my_files is enabled but not offered: the folder is the only "
           "thing keeping it out",

@@ -2264,9 +2264,9 @@ def progress(body, *, peer=None, local=None,
     qid = str(body.get("question") or "").strip()
     if not qid:
         return 400, {"ok": False,
-                     "error": "send a question id, with an optional section and "
-                              "draft answers, or dismiss, or keep the current "
-                              "answers"}
+                     "error": "say which question you are answering, with its "
+                              "section and any answers so far, or dismiss the "
+                              "offer, or keep the current settings"}
     q = _QUESTIONS_BY_ID.get(qid)
     if q is None:
         return 400, {"ok": False,
@@ -2274,7 +2274,7 @@ def progress(body, *, peer=None, local=None,
     supplied_draft = body.get("draft_answers")
     if supplied_draft is not None and not isinstance(supplied_draft, dict):
         return 400, {"ok": False,
-                     "error": "draft answers must be one entry per question id"}
+                     "error": "the answers must be one entry per question id"}
     where = dict(saved["in_progress"])
     if isinstance(supplied_draft, dict):
         cleaned = _clean_answers(supplied_draft)

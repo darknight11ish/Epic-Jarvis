@@ -879,10 +879,10 @@ await check("the shell holds exactly those two commands, and its own read", () =
 });
 
 await check("the read is on the proxy's fixed list, with one bounded query", () => {
-  // `15` after the 2026-11-03 merge: Wave B added `/api/setup` for the
-  // "Personalize Jarvis" banner, and main's multiwindow lane added `/api/self`,
-  // `/api/self/version` and `/api/conversations`. The count is part of the line
-  // on purpose: a wrong one is a compile error, not a route that quietly stops
+  // `15` with both appends in: main's `/api/self`, `/api/self/version` and
+  // `/api/conversations` (2026-11-03), plus Wave B's `/api/setup` for the
+  // "Personalize Jarvis" banner (2026-11-03). The count is part of the line on
+  // purpose: a wrong one is a compile error, not a route that quietly stops
   // being read.
   assert.match(PROXY, /pub const HUD_GET_PATHS: \[&str; 15\]/);
   assert.match(PROXY, /"\/api\/calendar",/);

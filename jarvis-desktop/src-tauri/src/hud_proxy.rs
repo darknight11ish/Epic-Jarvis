@@ -67,9 +67,6 @@ use crate::ChatState;
 /// Recording progress and dismissing are NOT here: they go through the
 /// `hud_setup_dismiss` and `setup_questionnaire` commands, so this window never
 /// posts. `/api/setup/plan` and `/api/setup/apply` stay refused.
-///
-/// `15` after the 2026-11-03 merge: this branch's `/api/setup` plus main's
-/// multiwindow lane's `/api/self`, `/api/self/version` and `/api/conversations`.
 pub const HUD_GET_PATHS: [&str; 15] = [
     "/api/status",
     "/api/graph",
@@ -515,10 +512,6 @@ mod tests {
         // The Current Models panel's list read, added 2026-10-26: a plain GET
         // on the exact path, and nothing around it.
         assert_eq!(allowed_get("/api/models").as_deref(), Some("/api/models"));
-        // The "Personalize Jarvis" banner's state, added 2026-11-03: the same
-        // plain GET, so the HUD can say how far the quiz has got without
-        // holding the pairing token. The two writes beside it stay refused.
-        assert_eq!(allowed_get("/api/setup").as_deref(), Some("/api/setup"));
         // The Update button's cheap version read (2026-11-03, JARVIS-API
         // section 184.7): the block alone, on the exact path. No query, no
         // sub-path and no trailing slash - the page has one read here, and a
@@ -539,6 +532,10 @@ mod tests {
                 "{bad} is not a read the page makes"
             );
         }
+        // The "Personalize Jarvis" banner's state, added 2026-11-03: the same
+        // plain GET, so the HUD can say how far the quiz has got without
+        // holding the pairing token. The two writes beside it stay refused.
+        assert_eq!(allowed_get("/api/setup").as_deref(), Some("/api/setup"));
         assert_eq!(allowed_get("/api/work/apply"), None);
         assert_eq!(
             allowed_get("/api/retrieve?q=what%20is%20on%20today").as_deref(),

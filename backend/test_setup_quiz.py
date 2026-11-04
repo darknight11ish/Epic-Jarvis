@@ -728,6 +728,53 @@ def t_the_setup_quiz_tool_reads_explains_and_stages():
           AG._setup_quiz_tool_text())
 
 
+def t_dress_messages_carries_the_line_only_while_unfinished():
+    """The WIRING, not only the helper (2026-11-04).
+
+    `t_the_setup_note_is_one_honest_line` above proves the line's words and
+    `with_setup_state_note`'s placement. Nothing proved that `dress_messages` -
+    the one function that orders every note, and the one a real turn goes
+    through - still calls it. That wiring is what a refactor drops silently, and
+    it is the exact half that made five other suites' word-for-word prompt pins
+    start failing on 2026-11-04: they now give themselves a FINISHED quiz, so
+    those pins can only stay byte-exact while THIS check says the line really
+    arrives when the quiz is unfinished.
+    """
+    import jarvis_agent as AG  # noqa: E402
+    msgs = [{"role": "system", "content": AG.LANE_SYSTEM},
+            {"role": "user", "content": "what does the Personalize quiz ask?"}]
+    _fresh(_legacy({"talk_style": "warm"}))
+    line = AG.setup_state_note()
+    dressed = AG.dress_messages(msgs, manner=None)
+    quiz = [m for m in dressed
+            if isinstance(m, dict) and "Personalize Jarvis" in str(m.get("content") or "")]
+    check("an unfinished quiz: dress_messages carries the line, once",
+          isinstance(line, str) and len(quiz) == 1
+          and quiz[0]["content"] == line and quiz[0]["role"] == "system",
+          (line, quiz))
+    if quiz:
+        check("...and it sits after the rules and before the question it is about",
+              dressed.index(quiz[0]) > dressed.index(msgs[0])
+              and dressed.index(quiz[0]) < len(dressed) - 1
+              and dressed[-1] == msgs[-1], dressed)
+    else:
+        check("...and it sits after the rules and before the question it is about",
+              False, "there is no line to place")
+    here = next(m for m in dressed if m is msgs[0])
+    check("...never first, and the caller's own messages are not changed",
+          dressed[0] is here and msgs[1] == {"role": "user",
+                                             "content": "what does the Personalize quiz ask?"},
+          dressed)
+    _fresh({"version": 2, "completed_version": S.QUIZ_VERSION, "runs": 1,
+            "dismissed_at": None, "in_progress": {}, "answers": {},
+            "completed_at": 1.0, "outcomes": []})
+    finished = AG.dress_messages(msgs, manner=None)
+    check("a finished quiz: dress_messages adds no such line, and no extra message",
+          not [m for m in finished
+               if isinstance(m, dict) and "Personalize Jarvis" in str(m.get("content") or "")]
+          and len(finished) == len(msgs), finished)
+
+
 if __name__ == "__main__":
     for fn in (t_the_question_set_is_25_in_7_sections,
                t_every_new_change_maps_to_a_real_setter,
@@ -740,6 +787,7 @@ if __name__ == "__main__":
                t_keep_current_settings_touches_no_setting,
                t_no_model_switch_no_network_no_gate_in_the_new_code,
                t_the_setup_note_is_one_honest_line,
+               t_dress_messages_carries_the_line_only_while_unfinished,
                t_the_setup_quiz_tool_reads_explains_and_stages):
         print(f"\n--- {fn.__name__} ---")
         try:
