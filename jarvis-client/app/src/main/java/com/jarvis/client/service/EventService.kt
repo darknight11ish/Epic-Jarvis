@@ -176,10 +176,15 @@ class EventService : Service() {
             // One of a question's own buttons (2026-11-02): the stream first,
             // like Snooze, then ONE answer once the link is live. It is a LOG,
             // not an approval, and it is refused while the phone is locked.
+            // A routine's part (2026-11-03) adds WHICH part it belongs to and
+            // the notification's own tag, so answering one part's notice takes
+            // that notice away and never its neighbour's.
             JarvisRuntime.startStream()
             answerFromNotification(
                 intent.getStringExtra(ScheduleNotifier.EXTRA_JOB_ID),
                 intent.getIntExtra(ScheduleNotifier.EXTRA_BUTTON, -1),
+                intent.getIntExtra(ScheduleNotifier.EXTRA_STEP, -1),
+                intent.getStringExtra(ScheduleNotifier.EXTRA_TAG),
             )
             return START_STICKY
         }
@@ -217,15 +222,23 @@ class EventService : Service() {
      * sentence the PC makes (or the unlock line) is shown as a toast: the app
      * is very likely not on screen. Nothing here is an approval, and nothing
      * here can answer twice - the notification goes once the PC said yes.
+     *
+     * [step] (2026-11-03) is WHICH PART of a routine the button belongs to, -1
+     * for an ordinary reminder's question. [tag] is the notification's own tag,
+     * so the notice that was pressed is the one taken away: a routine posts one
+     * per part.
      */
-    private fun answerFromNotification(id: String?, button: Int) {
+    private fun answerFromNotification(id: String?, button: Int, step: Int = -1, tag: String? = null) {
         if (id == null || !com.jarvis.client.net.Schedule.validId(id)) return
         if (button < 0) return
+        val part = step.takeIf { it >= 0 }
         scope.launch {
             awaitLive()
-            val (kept, said) = JarvisRuntime.scheduleAnswer(id, button)
+            val (kept, said) = JarvisRuntime.scheduleAnswer(id, button, part, tag)
             runCatching { Toast.makeText(this@EventService, said, Toast.LENGTH_LONG).show() }
-            if (kept) runCatching { ScheduleNotifier.cancel(this@EventService, id) }
+            if (kept) {
+                runCatching { ScheduleNotifier.cancel(this@EventService, id, tag ?: id) }
+            }
         }
     }
 

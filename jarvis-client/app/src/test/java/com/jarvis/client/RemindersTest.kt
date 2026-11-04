@@ -369,6 +369,99 @@ class RemindersTest {
         assertTrue("the not-connected line is gone", screen.contains("Reminders.NOT_CONNECTED"))
     }
 
+    // ------------------------------------- a routine, part by part (2026-11-03) ---
+    //
+    // The owner's ask and Gemini's rulings Q8/Q9 gave a reminder PARTS. The phone
+    // reads them and answers ONE part's ONE button, and that is all: creating or
+    // editing a routine is the PC's alone, because a part's destination can be
+    // that PC's Obsidian vault or a goal/habit id (docs/ARCHITECTURE.md section 8,
+    // "One-sided on purpose"). These checks pin exactly that division.
+
+    @Test
+    fun `the screen answers a part and never creates or edits a routine`() {
+        val screen = code(repoFile(REMINDERS_SCREEN).readText())
+        // Per-part acting rides the ONE existing write door, with the part's
+        // index - no new route, and no body of the screen's own.
+        assertTrue(
+            "the screen stopped answering a part",
+            screen.contains("JarvisRuntime.scheduleAnswer("),
+        )
+        assertEquals(
+            "both the reminders and the \"just went off\" rows must offer a part's buttons",
+            2,
+            Regex("""onAnswer = \{ p, b -> answer\(job, p, b\) \}""").findAll(screen).count(),
+        )
+        // Not one line of a routine editor: no `steps` key typed here, no add or
+        // edit body, no parts form. A routine is made on the PC and this screen
+        // would have nowhere to write a part's destination.
+        for (mine in listOf("\"steps\"", "steps =", "addRoutine", "editRoutine",
+            "ADD_PATH", "EDIT_KEYS", "action =")) {
+            assertFalse("the screen grew a routine editor: $mine", screen.contains(mine))
+        }
+    }
+
+    @Test
+    fun `the parts are drawn by the one shared block, with each part's own buttons`() {
+        val plate = code(repoFile(COMING_UP_PLATE).readText())
+        assertTrue("the parts block is not shared with the Brain plate",
+            plate.contains("internal fun PartsBlock("))
+        assertTrue("the shared row no longer draws a routine's parts",
+            plate.contains("PartsBlock(job, enabled"))
+        assertTrue("a routine that went off no longer draws its parts",
+            plate.contains("PartsBlock(job, enabled, onAnswer ?: { _, _ -> })"))
+        assertTrue("the row cannot be handed an answer",
+            plate.contains("onAnswer: ((part: Int, button: Int) -> Unit)? = null"))
+        // A part's buttons are the PC's own, and a press sends (part, button):
+        // never a label, and never "all parts".
+        assertTrue("a part's buttons are not drawn from what the PC sent",
+            plate.contains("part.buttons.forEachIndexed"))
+        assertTrue("a press no longer names its part", plate.contains("onAnswer(index, at)"))
+        assertTrue("a part that could only be refused is still offered",
+            plate.contains("part.canAnswer && part.buttons.isNotEmpty()"))
+        // An unreadable routine says so in one line rather than drawing half of it.
+        assertTrue(plate.contains("Schedule.PARTS_UNREADABLE"))
+        // Its place and its missed count are the PC's words, not this phone's.
+        assertTrue(plate.contains("Schedule.partCountLine("))
+        assertTrue(plate.contains("Schedule.missedPartsLine("))
+        // Nothing here rings anything: still no alarm, no notification, no card.
+        for (bulk in listOf("approveAll", "Approve", "deleteAll", "NotificationCompat")) {
+            assertFalse("the parts block grew a control it must not have: $bulk", plate.contains(bulk))
+        }
+    }
+
+    @Test
+    fun `a part's own buttons are the notification's actions and the press carries its step`() {
+        // The notification and the service it hands a press to. Both are Android
+        // classes, so this module holds them to their source text - the same
+        // established shape as the screen's own wiring above.
+        val notifier = code(repoFile(NOTIFIER).readText())
+        val service = code(repoFile(EVENT_SERVICE).readText())
+        assertTrue("a part's buttons are not the notification's actions",
+            notifier.contains("ask.buttons.forEachIndexed"))
+        assertTrue("the action no longer carries WHICH part it is",
+            notifier.contains("answerIntent(context, jobId, key, index, step)"))
+        assertTrue(notifier.contains("const val EXTRA_STEP"))
+        assertTrue("the answer intent does not put the part on the intent",
+            notifier.contains("putExtra(EXTRA_STEP, step)"))
+        assertTrue("the answer intent does not carry its own tag",
+            notifier.contains("putExtra(EXTRA_TAG, key)"))
+        // THREE is Android's ceiling and the PC's (MAX_ASK): a part's own
+        // buttons REPLACE this notification's Snooze and Stop, so no fourth and
+        // no fifth action can ever be drawn, and no Stop is lost to one.
+        assertTrue("Snooze is no longer the alternative to a part's buttons",
+            notifier.contains("} else if (kind in SNOOZABLE && !openBriefing && !quiet) {"))
+        assertTrue("Stop is no longer skipped when a part brings its own buttons",
+            notifier.contains("if (!quiet && !openBriefing && ask == null) {"))
+        assertEquals("a question's buttons are still capped at Android's three", 3, Schedule.MAX_ASK)
+        // The service reads both extras and passes them straight through.
+        assertTrue("the service no longer reads WHICH part",
+            service.contains("intent.getIntExtra(ScheduleNotifier.EXTRA_STEP, -1)"))
+        assertTrue("the service no longer reads the notification's tag",
+            service.contains("intent.getStringExtra(ScheduleNotifier.EXTRA_TAG)"))
+        assertTrue("the service no longer passes the part on",
+            service.contains("JarvisRuntime.scheduleAnswer(id, button, part, tag)"))
+    }
+
     // ------------------------------------------------------------------ kit ---
 
     /** [src] with whole-line `//` comments and block comments blanked, not dropped. */
@@ -413,5 +506,7 @@ class RemindersTest {
         const val BRAIN_SCREEN = CLIENT + "ui/screens/BrainScreen.kt"
         const val COMING_UP_PLATE = CLIENT + "ui/screens/ComingUpPlate.kt"
         const val REMINDERS_SCREEN = CLIENT + "ui/screens/RemindersScreen.kt"
+        const val NOTIFIER = CLIENT + "service/ScheduleNotifier.kt"
+        const val EVENT_SERVICE = CLIENT + "service/EventService.kt"
     }
 }

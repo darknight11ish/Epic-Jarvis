@@ -106,7 +106,12 @@ object ScheduleNotifier {
     /** The job id a Snooze action carries. */
     const val EXTRA_JOB_ID = "com.jarvis.client.extra.JOB_ID"
 
-    /** The notification's tag a Stop carries. */
+    /**
+     * The notification's own tag, carried by Stop, and since 2026-11-03 by
+     * Answer too: a routine posts one notice PER PART, each with its own tag
+     * (`id#step2@…`), so answering or stopping one must take away exactly that
+     * one.
+     */
     const val EXTRA_TAG = "com.jarvis.client.extra.NOTIFICATION_TAG"
 
     /**
@@ -129,6 +134,40 @@ object ScheduleNotifier {
     fun cancel(context: Context, jobId: String, tag: String = jobId) {
         runCatching { NotificationManagerCompat.from(context).cancel(tag, NOTIFICATION_ID) }
     }
+
+    /**
+     * Takes away EVERY "went off" notification for ONE job: the row's own, and
+     * since 2026-11-03 each PART's (`id#step2@…`).
+     *
+     * The one caller that needs it is a job CHANGED on the PC - snoozed,
+     * deleted or done there, by voice or in Coming up - and the same job acted
+     * on here. A routine posts one notice per part, so cancelling only the tag
+     * that is the bare job id would leave the parts' notices behind until the
+     * next schedule read's reconcile pass. What is read and cancelled is
+     * Android's own list ([posted]), never a set kept in memory, so a notice
+     * from an earlier process is reached too.
+     */
+    fun cancelAll(context: Context, jobId: String) {
+        cancel(context, jobId)
+        for ((tag, id) in posted(context)) {
+            if (id == jobId) cancel(context, jobId, tag)
+        }
+    }
+
+    /**
+     * The tag of ONE part's notice for [jobId], when Android says one is up
+     * (2026-11-03), or null.
+     *
+     * A routine's parts are tagged `id#step2@…`, so answering part 2 from the
+     * ROW (where nothing carries the notification's own tag) can still take away
+     * exactly that part's notice and leave part 3's alone. Read from Android's
+     * own list, never from a set kept here, so a notice posted by an earlier
+     * process is found too.
+     */
+    fun tagForPart(context: Context, jobId: String, step: Int): String? =
+        posted(context).firstOrNull { (tag, id) ->
+            id == jobId && tag.startsWith("$jobId#step$step@")
+        }?.first
 
     /** Distinct per key, so no two notifications share a PendingIntent. */
     private fun keyData(key: String): Uri = Uri.fromParts("jarvis-schedule", key, null)
@@ -211,6 +250,14 @@ object ScheduleNotifier {
          * Stop is lost.
          */
         ask: com.jarvis.client.net.Schedule.Ask? = null,
+        /**
+         * WHICH PART of a routine this notification is about (2026-11-03), or
+         * null for every ordinary job. Each part is its own notice - its own
+         * tag ([key]) and its own buttons - and pressing one sends that part's
+         * index with the answer ([JarvisRuntime.scheduleAnswer]), so "part 2's
+         * Done" can never tick off part 3.
+         */
+        step: Int? = null,
     ): Boolean {
         if (!allowed(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a $kind that went off is not shown")
@@ -262,12 +309,13 @@ object ScheduleNotifier {
                     // The owner's own buttons, in his own words and his own
                     // order. ONE action each; the index is what is sent, never
                     // the label, so a re-worded button cannot be answered by
-                    // accident.
+                    // accident. A routine's part carries its own index too, so
+                    // the PC knows WHICH part was answered.
                     ask.buttons.forEachIndexed { index, button ->
                         addAction(
                             R.drawable.ic_notification,
                             button.label,
-                            answerIntent(context, jobId, key, index),
+                            answerIntent(context, jobId, key, index, step),
                         )
                     }
                 } else if (kind in SNOOZABLE && !openBriefing && !quiet) {
@@ -432,9 +480,17 @@ object ScheduleNotifier {
      *
      * The button's INDEX is [EXTRA_BUTTON] and never its label: the PC reads the
      * question and its buttons back from its own row, so a page - or a
-     * notification - can never name what is written.
+     * notification - can never name what is written. A routine's part adds
+     * [EXTRA_STEP], its index inside the same row, for the same reason.
+     *
+     * The notification's own TAG travels too (2026-11-03): one routine now posts
+     * one notice PER PART, so answering part 2 must take away part 2's notice
+     * and not part 1's.
      */
     const val EXTRA_BUTTON = "com.jarvis.client.extra.BUTTON_INDEX"
+
+    /** WHICH PART of a routine an Answer carries (2026-11-03); absent for an ordinary job. */
+    const val EXTRA_STEP = "com.jarvis.client.extra.STEP_INDEX"
 
     /**
      * One of a question's buttons, pressed. To [EventService], which waits for
@@ -445,12 +501,14 @@ object ScheduleNotifier {
      * apart by the request code, which is the button's index.
      */
     private fun answerIntent(context: Context, jobId: String, key: String,
-                             index: Int): PendingIntent {
+                             index: Int, step: Int? = null): PendingIntent {
         val intent = Intent(context, EventService::class.java)
             .setAction(EventService.ACTION_ANSWER)
             .setData(keyData(key))
             .putExtra(EXTRA_JOB_ID, jobId)
             .putExtra(EXTRA_BUTTON, index)
+            .putExtra(EXTRA_TAG, key)
+        if (step != null) intent.putExtra(EXTRA_STEP, step)
         return PendingIntent.getService(
             context,
             index + 1,
