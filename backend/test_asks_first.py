@@ -994,12 +994,16 @@ def t_the_tools_status_and_the_page():
     AF.tools_enabled_set = tools.enabled
     try:
         st = AF.tools_status(here=True)
+        # AF.SWITCHABLE_GROUPS, not AF.TOOL_GROUPS: jarvis_storage_health.py
+        # (PR #1117) appends a row of tools that raise cards but are never
+        # switchable from an app, so the SWITCH list is the switchable subset.
+        # 21 items stays right - the storage row adds none of them.
         check("the label, the 21 grouped items, the vault row and the not-offered list",
               st["label"] == AF.TOOLS_LABEL and st["can_enable"] is True
               and len(st["items"]) == 21
               and [g["title"] for g in st["groups"]]
-              == [title for title, _tools in AF.TOOL_GROUPS]
-              and st["items"][0]["group"] == AF.TOOL_GROUPS[0][0]
+              == [title for title, _tools in AF.SWITCHABLE_GROUPS]
+              and st["items"][0]["group"] == AF.SWITCHABLE_GROUPS[0][0]
               and next(i for i in st["items"] if i["id"] == "calendar_read")["on"] is True
               and next(i for i in st["items"] if i["id"] == "email_check")["on"] is False
               and st["vault"]["id"] == "vault_organizer"

@@ -77,21 +77,12 @@ REPO_ONLY_IMPORTS = {
     ("import_history.py", "_where"): "the command line, run from this repository, finds "
                                      "the backend through _where.py; shipped beside "
                                      "jarvis_hud.py it uses its own folder instead",
-    # The storage self-scan (2026-11-03). `jarvis_storage_health.py` is PR
-    # #1117's own drop-in module and is NOT in this repository's shipped set
-    # yet, so a shipped file that imports it optionally is named here with the
-    # reason instead of the dependency being hidden. Both call sites are a
-    # plain `try: import jarvis_storage_health / except ImportError` (this
-    # suite's t_repo_only_imports_are_guarded proves the guard); the published
-    # base allows the same name in backend/test_base_matches_repo.py's
-    # OPTIONAL_IMPORTS with the same reason. BOTH entries are removed when
-    # #1117 is in the shipped set and the base is re-taken - a PC without the
-    # module says so in the start-up banner rather than failing.
-    ("jarvis_self_portrait.py", "jarvis_storage_health"): "the storage self-scan is "
-    "PR #1117's drop-in; imported only inside a try that catches ImportError, and "
-    "absent from this tree until that PR merges",
-    ("jarvis_asks_first.py", "jarvis_storage_health"): "the same optional drop-in: the "
-    "ask-first page appends its TOOL_ROWS only when the module is really on this PC",
+    # The storage self-scan (2026-11-03) used to be named here: it was PR
+    # #1117's drop-in and not in this repository's shipped set yet, so the two
+    # optional call sites (jarvis_self_portrait.py and jarvis_asks_first.py)
+    # were listed with the reason instead of the dependency being hidden. Both
+    # entries were removed when #1117 put the module in the shipped set and the
+    # base was re-taken - it is a shipped module now, so it needs no exemption.
 }
 
 # Third-party packages: import name -> pip name. Each must appear in
