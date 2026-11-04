@@ -361,6 +361,12 @@ SHIPPED = (
     # jarvis_price_radar.py installs it (lazily, switch on) as its F2 sources.
     "jarvis_price_sources.py",
     "jarvis_voices.py", "jarvis_f5_worker.py",
+    # the VoiceStudio sidecar CLIENT: HTTP to 127.0.0.1:11439 only, stdlib
+    # plus this repository's proxy-free opener. No AGPL code, no route, no
+    # import of its program, no weights; OFF by default behind
+    # [voicestudio] enabled = false. Nothing calls it yet - the speaking
+    # voice is the next slice (docs/VOICESTUDIO.md).
+    "jarvis_voicestudio.py",
     # which Kokoro voice pack is installed, its voices by name, the pinned
     # v1.0 download: jarvis_voices.py imports it (no patch)
     "jarvis_kokoro.py",
