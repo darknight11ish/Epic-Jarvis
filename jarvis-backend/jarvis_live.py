@@ -29,11 +29,15 @@ full-duplex." And the owner's answers (2026-09-28):
   Jarvis" on a LOCKED phone checks (the only check left), (c) Live started
   from an UNLOCKED phone does not check - and it is ONE setting the owner
   can change (`VOICE_CHECK_SETTING`, ON by default; ON is one approval card,
-  OFF is at once). This SUPERSEDES the 2026-11-01 "once per Live session"
-  rule for the PHONE: a phone Live session started on an unlocked phone runs
-  no voice-print check at all, and its answers are accordingly never read
-  aloud from a check it did not earn. The DESKTOP is unchanged - a PC has no
-  locked phone, so it keeps the once-per-session rule below.)
+  OFF is at once). OFF is the OLD, FULL CHECKS, never "no checks": it
+  withdraws the exemption, so the phone's "I am unlocked" is ignored and
+  every trigger left checks. A check that is skipped says so in the audit
+  trail once per session (`Live.start`). This SUPERSEDES the 2026-11-01
+  "once per Live session" rule for the PHONE: a phone Live session started on
+  an unlocked phone runs no voice-print check at all, and its answers are
+  accordingly never read aloud from a check it did not earn. The DESKTOP is
+  unchanged - a PC has no locked phone, so it keeps the once-per-session rule
+  below.)
   1. under "Only trust the talk button", a Live turn is trusted like the talk
      button by default HOWEVER Live was started; the voice setting
      `hands_free_live` (jarvis_voice.py) has two stricter choices - "Only
@@ -1030,9 +1034,22 @@ def _created(row) -> Optional[float]:
 #   (c) starting Jarvis Live from an UNLOCKED phone     - no check.
 #
 # (d) ... and it is ONE setting the owner can change - `VOICE_CHECK_SETTING`
-# below, ON by default (= exactly the rule above). OFF means no voice-print
-# check at all on the phone. Turning it ON raises ONE approval card; turning
-# it OFF is at once (the project's standing rule, jarvis_settings_registry.py).
+# below, ON by default (= exactly the rule above). OFF means the OLD, FULL
+# CHECKS, not "no checks": the phone's "I am unlocked" is then IGNORED and
+# every trigger left runs the check it ran before this rule existed. (a) is
+# the one thing the setting does not touch - the mic press never checks,
+# because the press is the act and not a claim about the lock. Turning it ON
+# raises ONE approval card; turning it OFF is at once (the project's standing
+# rule, jarvis_settings_registry.py).
+#
+# WHY OFF IS THE STRICT ANSWER, and not "no checks". The thing the owner
+# changes is the EXEMPTION, not the check: ON is the new rule - a Live session
+# started from an unlocked phone is not asked to prove itself. OFF withdraws
+# that exemption, and withdrawing an exemption must never quietly weaken a
+# gate. So with the setting OFF `locked=0` is a claim, not a permission: it is
+# ignored and the old, full checks come back. For the same reason an
+# unreadable setting file reads as ON: the default is the owner's own rule,
+# and only the owner may move the gate.
 #
 # FAIL CLOSED, ALWAYS. The phone's screen lock is the PHONE's own word:
 # `locked` is True or False only when the phone really said so, and None
@@ -1141,24 +1158,42 @@ def voice_check_needed(trigger, *, device="phone", locked=None,
                        setting_on: Optional[bool] = None) -> bool:
     """Should this phone trigger check the owner's voice print? THE ONE RULE.
 
-    Only "hi Jarvis" said while the phone is LOCKED checks: the mic press
-    never does (the press on the paired phone is the act), a Live session
-    started on an unlocked phone never does (the unlock is the act), and the
-    one setting turns the locked wake word's check off too. `locked=None`
-    means the phone did not say, and then every check stays (fail closed);
-    a desktop device keeps its own rule and always answers True here.
+    Answered in this order, and the order is the rule:
+
+      1. a device that is not the phone -> True (the desktop keeps its own
+         once-per-session rule, `Live.trust_decision`);
+      2. (a) the mic press -> False, whatever the setting says: the press on
+         the paired phone is the act;
+      3. the setting is read here when the caller did not pass it;
+      4. the setting OFF -> True for every trigger still left, which is the
+         OLD, FULL CHECKS. `locked` is IGNORED then: "my phone is unlocked" is
+         a claim by the phone, never an exemption the owner granted;
+      5. setting ON and a Live start -> `locked is not False`: an unlocked
+         phone skips (the unlock is the act), while `locked=True` and
+         `locked=None` both check - fail closed, because an app older than
+         2026-11-03 sends no `locked` at all;
+      6. setting ON and "hi Jarvis" -> `locked is not False`: the same line,
+         so a LOCKED phone checks (the only check left) and a phone that did
+         not say keeps the check it has today;
+      7. any other trigger -> True.
+
+    So `locked=None` never means "unlocked", and OFF never means "no checks".
+    This function only DECIDES: the place that skips a check says so in the
+    audit trail itself (`Live.start`).
     """
     trig = str(trigger or "").strip().lower()
     if _norm_device(device) != "phone":
-        return True
+        return True                                    # the desktop keeps its own rule
     if trig == TRIGGER_MIC_PRESS:
-        return False                                   # (a)
+        return False                                   # (a) the press is the act
+    if setting_on is None:
+        setting_on = voice_check_setting()
+    if not setting_on:
+        return True                    # (d) OFF = the old, full checks: locked is ignored
     if trig == TRIGGER_LIVE_START:
-        return locked is not False                     # (c)
+        return locked is not False                     # (c) only an unlocked phone skips
     if trig == TRIGGER_WAKE:
-        if setting_on is None:
-            setting_on = voice_check_setting()
-        return bool(setting_on) and locked is not False   # (b), and (d)
+        return locked is not False                     # (b) only a locked phone checks
     return True                                        # an unknown trigger: fail closed
 
 
@@ -1480,6 +1515,17 @@ class Live:
         _audit("voice.live", {"did": "start", "device": dev, "minutes": m, "by": by,
                               "ended_other": moved, "standby": standby,
                               "locked": locked_flag})
+        if not voice_check_needed(TRIGGER_LIVE_START, device=dev, locked=locked_flag):
+            # THIS session will run no voice-print check at all, because the
+            # phone said it was unlocked and the setting is ON (case (c)).
+            # Said ONCE, here, in plain words: a check that was skipped belongs
+            # in the audit trail even though nothing was checked. Many clips
+            # later it is still the same one line - the decision is made at
+            # the start, and nothing about a clip (no words, no audio, no
+            # length) is ever written down.
+            _audit("voice.live", {"did": "voice_check_skipped",
+                                  "why": "unlocked phone, setting on",
+                                  "trigger": TRIGGER_LIVE_START})
         if not standby:
             # Warm the everyday model now, so the first answer does not wait
             # for it to load. Never on Standby: that is the owner's to end.
@@ -1781,11 +1827,15 @@ class Live:
 
         THE 2026-11-03 RULE, applied to a session: a PHONE session started
         from an UNLOCKED phone checks nothing - the unlock is the act (case
-        (c) of `voice_check_needed()`). A session whose `locked` the phone
-        never sent (any app older than 2026-11-03, and every session started
-        by VOICE - `jarvis_speech` starts those with no app body, so they say
-        nothing) keeps the once-per-session rule below, exactly as before.
-        A session on the DESKTOP keeps it too: a PC has no locked phone.
+        (c) of `voice_check_needed()`) - while the setting is ON, which is its
+        default. With the setting OFF the OLD, full checks are back and this
+        session checks exactly as it did before 2026-11-03, because OFF
+        withdraws the exemption rather than the check. A session whose `locked`
+        the phone never sent (any app older than 2026-11-03, and every session
+        started by VOICE - `jarvis_speech` starts those with no app body, so
+        they say nothing) keeps the once-per-session rule below, exactly as
+        before. A session on the DESKTOP keeps it too: a PC has no locked
+        phone at all.
         """
         with self._lock:
             if not self._on() or _norm_device(device) != self.device:
@@ -1823,9 +1873,12 @@ class Live:
             if not self._on() or _norm_device(device) != self.device:
                 return {"action": "refuse_stale", "words": SAY_RECHECK}
             if not self.session_voice_check(device):
-                # The trigger needed no check (case (c), or a voice-started
-                # phone session): nothing in this session asks for one, and no
-                # clip's length changes that.
+                # The trigger needed no check: case (c), a phone session
+                # started from an unlocked phone with the setting ON. Nothing
+                # in this session asks for one, and no clip's length changes
+                # that. (Case (b), the wake word, is not a Live session at
+                # all, so it never reaches here; with the setting OFF this
+                # session checks like every session did before 2026-11-03.)
                 return {"action": "trusted", "strictness": "", "checked": False}
             self._trust_print_changed(device)
             try:

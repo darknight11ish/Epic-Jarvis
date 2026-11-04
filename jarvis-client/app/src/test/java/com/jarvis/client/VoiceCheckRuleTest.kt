@@ -48,29 +48,62 @@ class VoiceCheckRuleTest {
     }
 
     @Test
-    fun `the ONE setting turns the locked wake word check off, and nothing else`() {
-        // The locked wake word: on -> checks, off -> does not.
+    fun `hi Jarvis on an UNLOCKED phone does not check while the setting is ON`() {
+        assertFalse(VoiceCheckRule.checks(VoiceCheckRule.WAKE_WORD, false, settingOn = true))
+        // ...but a phone that did not say keeps the check (fail closed).
+        assertTrue(VoiceCheckRule.checks(VoiceCheckRule.WAKE_WORD, null, settingOn = true))
+        // ...and so does a locked one, which is the row above, restated here so
+        // the three wake-word rows sit together.
         assertTrue(VoiceCheckRule.checks(VoiceCheckRule.WAKE_WORD, true, settingOn = true))
-        assertFalse(VoiceCheckRule.checks(VoiceCheckRule.WAKE_WORD, true, settingOn = false))
-        // Everything else is unchanged by the setting, in both directions.
-        for (settingOn in listOf(true, false)) {
-            assertFalse(VoiceCheckRule.checks(VoiceCheckRule.MIC_PRESS, true, settingOn))
-            assertFalse(VoiceCheckRule.checks(VoiceCheckRule.LIVE_START, false, settingOn))
+    }
+
+    @Test
+    fun `Live started on an UNLOCKED phone does not check while the setting is ON`() {
+        assertFalse(VoiceCheckRule.checks(VoiceCheckRule.LIVE_START, false, settingOn = true))
+        // Locked, or a phone that did not say: still checks.
+        assertTrue(VoiceCheckRule.checks(VoiceCheckRule.LIVE_START, true, settingOn = true))
+        assertTrue(VoiceCheckRule.checks(VoiceCheckRule.LIVE_START, null, settingOn = true))
+    }
+
+    @Test
+    fun `the setting OFF is the OLD, FULL CHECKS - an unlocked phone is IGNORED`() {
+        // This is the row that used to be the other way round. OFF withdraws
+        // the exemption, so the phone's "I am unlocked" is a claim and not a
+        // permission: every trigger left checks, whatever it said.
+        for (locked in listOf(true, false, null)) {
+            assertTrue(
+                "Live start with locked=$locked and the setting off must check",
+                VoiceCheckRule.checks(VoiceCheckRule.LIVE_START, locked, settingOn = false),
+            )
+            assertTrue(
+                "hi Jarvis with locked=$locked and the setting off must check",
+                VoiceCheckRule.checks(VoiceCheckRule.WAKE_WORD, locked, settingOn = false),
+            )
+        }
+        // OFF never means "no checks", and it does not exempt a strange
+        // trigger either.
+        assertTrue(VoiceCheckRule.checks("something_new", false, settingOn = false))
+    }
+
+    @Test
+    fun `the setting touches nothing else - the mic press never checks either way`() {
+        for (locked in listOf(true, false, null)) {
+            for (settingOn in listOf(true, false)) {
+                assertFalse(
+                    "mic press with locked=$locked and settingOn=$settingOn",
+                    VoiceCheckRule.checks(VoiceCheckRule.MIC_PRESS, locked, settingOn),
+                )
+            }
         }
     }
 
     @Test
-    fun `Live started on an UNLOCKED phone does not check`() {
-        assertFalse(VoiceCheckRule.checks(VoiceCheckRule.LIVE_START, false, settingOn = true))
-    }
-
-    @Test
-    fun `a phone that cannot say whether it is locked keeps every check`() {
-        // null is "the phone did not say", never "unlocked" - the same
-        // fail-closed line the PC takes (`locked is not False`). An older
-        // phone sends nothing at all and lands here too.
-        assertTrue(VoiceCheckRule.checks(VoiceCheckRule.WAKE_WORD, null, settingOn = true))
-        assertTrue(VoiceCheckRule.checks(VoiceCheckRule.LIVE_START, null, settingOn = true))
+    fun `the default is the owner's rule, ON - and an unknown trigger keeps the check`() {
+        assertEquals(true, VoiceCheckRule.DEFAULT_ON)
+        // No argument means ON, which is also what a missing setting file reads
+        // as on the PC.
+        assertFalse(VoiceCheckRule.checks(VoiceCheckRule.LIVE_START, false))
+        assertTrue(VoiceCheckRule.checks(VoiceCheckRule.WAKE_WORD, true))
         assertTrue(VoiceCheckRule.checks("something_new", null, settingOn = true))
     }
 

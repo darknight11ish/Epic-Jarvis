@@ -12,12 +12,17 @@ So there is ONE decision - `jarvis_live.voice_check_needed()` - and this suite
 holds it to the four cases, to the fail-closed line, and to what it actually
 does to a Live session:
 
-  (a) pressing the mic for one verbal input          - NEVER checks;
+  (a) pressing the mic for one verbal input          - NEVER checks, whatever
+      the setting says: the press on the paired phone is the act;
   (b) "hi Jarvis" while the phone is LOCKED          - checks (the only check
-      left), unless the owner turned the one setting off;
+      left); an UNLOCKED phone does not check, and a phone that did not say
+      keeps the check;
   (c) Live started from an UNLOCKED phone            - no check;
   (d) ONE setting, ON by default; turning it ON is ONE approval card and
-      turning it OFF is at once.
+      turning it OFF is at once. OFF is the OLD, FULL CHECKS, never "no
+      checks": it withdraws the exemption, so the phone's `locked=0` is
+      IGNORED and every trigger left checks (`locked=0` is a claim by the
+      phone, not a permission the owner granted).
 
 WHAT ELSE IS PROVED HERE, because a rule that is right and not wired is worth
 nothing:
@@ -28,7 +33,10 @@ nothing:
     `jarvis_speech.hear()` with `jarvis_voice.verify` counted, reusing
     test_quick_mic.py's world, so this is the same proof and not a second one;
   * a Live session started from an unlocked phone never asks for a check, and
-    one whose phone said nothing (or said "locked") still does;
+    one whose phone said nothing (or said "locked") still does - and with the
+    setting OFF every session checks, including that one;
+  * a skipped check is written down ONCE in the audit trail, in plain words,
+    and the mic press (a rule, not a skip) writes nothing;
   * the one setting's card: ON is 202 while one card waits and nothing changes
     until it is approved; OFF is immediate and withdraws a waiting card.
 
@@ -115,40 +123,100 @@ class Verdict:
         self.allowed, self.outcome, self.tier = allowed, outcome, tier
 
 
+class Audit:
+    """Catch what `_audit()` writes, through the SAME helper the module uses
+    (`fw.audit_log`) - so a test proves the real path, not a patched-out one."""
+
+    def __init__(self):
+        self.lines = []
+
+    def audit_log(self, event, detail=None, **k):
+        self.lines.append((event, detail if isinstance(detail, dict) else {}))
+
+    def __enter__(self):
+        self.real = L.fw
+        L.fw = self
+        return self
+
+    def __exit__(self, *a):
+        L.fw = self.real
+
+    def skips(self):
+        return [(ev, d) for ev, d in self.lines if d.get("did") == "voice_check_skipped"]
+
+
 # --------------------------------------------------------------- (a) (b) (c) --
 
 def t_the_four_cases():
     need = L.voice_check_needed
-    check("(a) the mic press NEVER checks, locked or unlocked",
-          need(L.TRIGGER_MIC_PRESS, device="phone", locked=True) is False
-          and need(L.TRIGGER_MIC_PRESS, device="phone", locked=False) is False
-          and need(L.TRIGGER_MIC_PRESS, device="phone", locked=None) is False)
+    check("(a) the mic press NEVER checks, locked or unlocked, setting on or off",
+          all(need(L.TRIGGER_MIC_PRESS, device="phone", locked=locked, setting_on=on) is False
+              for locked in (True, False, None) for on in (True, False)))
     check("(b) \"hi Jarvis\" on a LOCKED phone checks",
           need(L.TRIGGER_WAKE, device="phone", locked=True, setting_on=True) is True)
-    check("(c) Live started from an UNLOCKED phone does not check",
-          need(L.TRIGGER_LIVE_START, device="phone", locked=False) is False)
+    check("...on an UNLOCKED phone it does not (setting on)",
+          need(L.TRIGGER_WAKE, device="phone", locked=False, setting_on=True) is False)
+    check("...and a phone that did not say keeps the check",
+          need(L.TRIGGER_WAKE, device="phone", locked=None, setting_on=True) is True)
+    check("(c) Live started from an UNLOCKED phone does not check (setting on)",
+          need(L.TRIGGER_LIVE_START, device="phone", locked=False, setting_on=True) is False)
     check("...and Live started from a LOCKED phone does",
-          need(L.TRIGGER_LIVE_START, device="phone", locked=True) is True)
+          need(L.TRIGGER_LIVE_START, device="phone", locked=True, setting_on=True) is True)
 
 
-def t_the_setting_changes_only_the_locked_wake_word():
+def t_an_absent_locked_is_the_old_behaviour():
+    """A phone older than 2026-11-03 sends no `locked` at all: `None`."""
     need = L.voice_check_needed
+    check("a phone that sends no `locked` gets exactly today's checks, setting ON",
+          need(L.TRIGGER_LIVE_START, device="phone", setting_on=True) is True
+          and need(L.TRIGGER_WAKE, device="phone", setting_on=True) is True
+          and need(L.TRIGGER_MIC_PRESS, device="phone", setting_on=True) is False)
+    check("...and with the setting OFF",
+          need(L.TRIGGER_LIVE_START, device="phone", setting_on=False) is True
+          and need(L.TRIGGER_WAKE, device="phone", setting_on=False) is True
+          and need(L.TRIGGER_MIC_PRESS, device="phone", setting_on=False) is False)
+    check("...which is the same answer as an explicit `locked=None`",
+          all(need(t, device="phone", locked=None, setting_on=True)
+              == need(t, device="phone", setting_on=True)
+              for t in L.VOICE_CHECK_TRIGGERS))
+
+
+def t_the_setting_off_restores_the_full_checks():
+    need = L.voice_check_needed
+    check("the setting OFF ignores `locked=0` and checks: the OLD, full checks",
+          need(L.TRIGGER_WAKE, device="phone", locked=False, setting_on=False) is True
+          and need(L.TRIGGER_LIVE_START, device="phone", locked=False,
+                   setting_on=False) is True)
+    check("...whatever the phone says about its lock",
+          all(need(t, device="phone", locked=locked, setting_on=False) is True
+              for t in (L.TRIGGER_WAKE, L.TRIGGER_LIVE_START)
+              for locked in (True, False, None)))
+    check("...and the mic press still never checks, because the setting does not "
+          "reach case (a)",
+          need(L.TRIGGER_MIC_PRESS, device="phone", locked=False,
+               setting_on=False) is False)
     rows = {}
     for trigger in L.VOICE_CHECK_TRIGGERS:
-        for locked in (True, False):
+        for locked in (True, False, None):
             for on in (True, False):
                 rows[(trigger, locked, on)] = need(trigger, device="phone",
                                                    locked=locked, setting_on=on)
     changed = [k for k, v in rows.items()
                if v != need(k[0], device="phone", locked=k[1], setting_on=True)]
-    check("the setting OFF changes exactly ONE cell: the locked wake word",
-          changed == [(L.TRIGGER_WAKE, True, False)], changed)
-    check("...so with it OFF the locked wake word no longer checks",
-          not any(rows[k] for k in rows if k[0] == L.TRIGGER_WAKE and k[2] is False))
-    check("...while (c) is untouched by the setting: an unlocked Live start never checks, "
-          "and one whose phone did not say still does",
-          rows[(L.TRIGGER_LIVE_START, False, False)] is False
-          and rows[(L.TRIGGER_LIVE_START, True, False)] is True)
+    check("the setting OFF changes exactly TWO cells, both an unlocked phone: the "
+          "wake word and the Live start",
+          {(k[0], k[1]) for k in changed} == {(L.TRIGGER_WAKE, False),
+                                              (L.TRIGGER_LIVE_START, False)},
+          sorted(f"{k[0]}/{k[1]}/{k[2]}" for k in changed))
+    skips = {k for k, v in rows.items() if v is False}
+    expected = {(L.TRIGGER_MIC_PRESS, locked, on)
+                for locked in (True, False, None) for on in (True, False)}
+    expected |= {(L.TRIGGER_WAKE, False, True), (L.TRIGGER_LIVE_START, False, True)}
+    check("the WHOLE table: the only cells that skip are the mic press (all six) and an "
+          "UNLOCKED phone with the setting ON",
+          skips == expected, sorted(f"{k[0]}/{k[1]}/{k[2]}" for k in skips))
+    check("...and every other cell checks",
+          len(rows) == 18 and all(v is True for k, v in rows.items() if k not in skips))
 
 
 def t_fail_closed():
@@ -156,9 +224,10 @@ def t_fail_closed():
     check("a phone that did not say keeps the wake word's check",
           need(L.TRIGGER_WAKE, device="phone", locked=None, setting_on=True) is True)
     check("...and keeps the Live start's check too",
-          need(L.TRIGGER_LIVE_START, device="phone", locked=None) is True)
+          need(L.TRIGGER_LIVE_START, device="phone", locked=None, setting_on=True) is True)
     check("an unknown trigger keeps the check",
-          need("something_new", device="phone", locked=False) is True)
+          need("something_new", device="phone", locked=False, setting_on=True) is True
+          and need("something_new", device="phone", locked=False, setting_on=False) is True)
     check("the DESKTOP keeps its own rule whatever the phone says",
           need(L.TRIGGER_LIVE_START, device="desktop", locked=False) is True
           and need(L.TRIGGER_MIC_PRESS, device="desktop", locked=False) is True)
@@ -201,32 +270,97 @@ def t_the_mic_press_never_reaches_the_speaker_model():
 # ------------------------------------------------------ the rule on a session --
 
 def t_an_unlocked_phone_session_never_checks():
-    e, out = engine(locked=False)
-    check("a phone session started unlocked starts", out.get("ok") is True, out)
-    check("...and its FIRST clip is trusted with no check at all",
-          e.trust_decision("phone", 2.5) == {"action": "trusted", "strictness": "",
-                                             "checked": False},
-          e.trust_decision("phone", 2.5))
-    check("...a long clip too", e.trust_decision("phone", 9.0)["action"] == "trusted")
-    check("...and a short one, because nothing in this session asks for a check",
-          e.trust_decision("phone", 0.9)["action"] == "trusted")
-    check("...and the trust it carries grants nothing: no strictness means nothing "
-          "private is read aloud", e.trust_decision("phone", 2.5)["strictness"] == "")
+    # Inside TempConfig on purpose: these rows are about the RULE, so the
+    # setting must be this test's own default (ON) and never whatever the
+    # owner's real config folder happens to hold.
+    with TempConfig():
+        check("with no setting file the rule reads ON", L.voice_check_setting() is True)
+        e, out = engine(locked=False)
+        check("a phone session started unlocked starts", out.get("ok") is True, out)
+        check("...and its FIRST clip is trusted with no check at all",
+              e.trust_decision("phone", 2.5) == {"action": "trusted", "strictness": "",
+                                                 "checked": False},
+              e.trust_decision("phone", 2.5))
+        check("...a long clip too", e.trust_decision("phone", 9.0)["action"] == "trusted")
+        check("...and a short one, because nothing in this session asks for a check",
+              e.trust_decision("phone", 0.9)["action"] == "trusted")
+        check("...and the trust it carries grants nothing: no strictness means nothing "
+              "private is read aloud", e.trust_decision("phone", 2.5)["strictness"] == "")
+
+
+def t_the_setting_off_makes_every_session_check_again():
+    """OFF is the OLD, full checks - so even an unlocked phone's session is
+    checked, which is the row this branch used to have backwards."""
+    with TempConfig():
+        L._save_voice_check(False)
+        check("the setting is OFF", L.voice_check_setting() is False)
+        e, out = engine(locked=False)
+        check("an UNLOCKED phone's Live session still starts", out.get("ok") is True, out)
+        d = e.trust_decision("phone", 2.5)
+        check("...and its first full sentence IS checked (locked=0 is ignored)",
+              d.get("action") == "check", d)
+        d = e.trust_decision("phone", 1.0)
+        check("...and a too-short first clip is refused, as before",
+              d.get("action") == "refuse_first", d)
+        e.stop()
 
 
 def t_every_other_session_still_checks():
-    for label, kwargs in (("the phone said locked", dict(locked=True)),
-                          ("the phone did not say", dict(locked=None)),
-                          ("the DESKTOP", dict(device="desktop", locked=False)),
-                          ("started by voice, like any older app", dict(by="voice"))):
-        e, out = engine(**kwargs)
-        check(f"{label}: Live starts", out.get("ok") is True, out)
-        d = e.trust_decision(kwargs.get("device", "phone"), 2.5)
-        check(f"{label}: the first full sentence IS checked",
-              d.get("action") == "check", d)
-        d = e.trust_decision(kwargs.get("device", "phone"), 1.0)
-        check(f"{label}: a too-short first clip is refused, as before",
-              d.get("action") == "refuse_first", d)
+    with TempConfig():
+        for label, kwargs in (("the phone said locked", dict(locked=True)),
+                              ("the phone did not say", dict(locked=None)),
+                              ("the DESKTOP", dict(device="desktop", locked=False)),
+                              ("started by voice, like any older app", dict(by="voice"))):
+            e, out = engine(**kwargs)
+            check(f"{label}: Live starts", out.get("ok") is True, out)
+            d = e.trust_decision(kwargs.get("device", "phone"), 2.5)
+            check(f"{label}: the first full sentence IS checked",
+                  d.get("action") == "check", d)
+            d = e.trust_decision(kwargs.get("device", "phone"), 1.0)
+            check(f"{label}: a too-short first clip is refused, as before",
+                  d.get("action") == "refuse_first", d)
+            e.stop()
+
+
+def t_a_skipped_live_start_is_written_down_once():
+    """The audit line: a check that was SKIPPED belongs in the trail, once, in
+    plain words - no clip, no audio, no token, no conversation words."""
+    with TempConfig():
+        with Audit() as a:
+            e, out = engine(locked=False)
+            check("an unlocked phone's Live session starts with the setting ON",
+                  out.get("ok") is True, out)
+            skips = a.skips()
+            check("...and the skipped check is written down ONCE",
+                  len(skips) == 1, a.lines)
+            check("...as voice.live / voice_check_skipped, plain words only",
+                  skips == [("voice.live", {"did": "voice_check_skipped",
+                                            "why": "unlocked phone, setting on",
+                                            "trigger": L.TRIGGER_LIVE_START})], skips)
+            for seconds in (2.5, 9.0, 0.9):
+                e.trust_decision("phone", seconds)
+            check("...and many clips later it is still ONE line, not one per clip",
+                  len(a.skips()) == 1, a.skips())
+            e.stop()
+        for label, locked in (("a LOCKED phone", True),
+                              ("a phone that did not say", None)):
+            with Audit() as a:
+                e, out = engine(locked=locked)
+                check(f"{label}: nothing was skipped, so nothing is written",
+                      a.skips() == [], a.lines)
+                e.stop()
+        L._save_voice_check(False)
+        with Audit() as a:
+            e, out = engine(locked=False)
+            check("with the setting OFF nothing is skipped either (full checks)",
+                  a.skips() == [] and e.trust_decision("phone", 2.5)["action"] == "check",
+                  a.lines)
+            e.stop()
+        L._save_voice_check(True)
+        with Audit() as a:
+            L.voice_check_needed(L.TRIGGER_MIC_PRESS, device="phone", locked=False)
+            check("the mic press is a RULE, not a skip: it writes no audit line",
+                  a.lines == [], a.lines)
 
 
 def t_the_route_passes_the_phone_word_through():
@@ -376,11 +510,14 @@ def t_the_registry_row_is_the_same_switch():
 
 def main() -> int:
     for fn in (t_the_four_cases,
-               t_the_setting_changes_only_the_locked_wake_word,
+               t_an_absent_locked_is_the_old_behaviour,
+               t_the_setting_off_restores_the_full_checks,
                t_fail_closed,
                t_the_mic_press_never_reaches_the_speaker_model,
                t_an_unlocked_phone_session_never_checks,
+               t_the_setting_off_makes_every_session_check_again,
                t_every_other_session_still_checks,
+               t_a_skipped_live_start_is_written_down_once,
                t_the_route_passes_the_phone_word_through,
                t_the_setting_default_and_its_file,
                t_off_is_at_once_and_on_is_one_card,

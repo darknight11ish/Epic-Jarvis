@@ -15,12 +15,20 @@ package com.jarvis.client.voice
  * to the Python side row for row by [VoiceCheckRuleTest], so the two cannot
  * drift apart.
  *
- *  - [MIC_PRESS]: pressing the mic for one verbal input NEVER checks. (The PC's
- *    `_is_quick_message` is the enforcement; the phone only sends
- *    `source=push_to_talk`, which it already did.)
- *  - [WAKE_WORD]: "hi Jarvis" on a LOCKED phone checks - the only check left -
- *    and the one setting can turn it off.
+ *  - [MIC_PRESS]: pressing the mic for one verbal input NEVER checks, whatever
+ *    the setting says. (The PC's `_is_quick_message` is the enforcement; the
+ *    phone only sends `source=push_to_talk`, which it already did.)
+ *  - [WAKE_WORD]: "hi Jarvis" on a LOCKED phone checks - the only check left.
  *  - [LIVE_START]: starting Jarvis Live from an UNLOCKED phone does not check.
+ *
+ * THE SETTING, and which way OFF points. ON is the rule above - the EXEMPTION
+ * for an unlocked phone. OFF withdraws the exemption and gives back the OLD,
+ * FULL CHECKS: the phone's "I am unlocked" is then IGNORED and every trigger
+ * left checks exactly as it did before 2026-11-03. OFF is never "no checks":
+ * withdrawing an exemption must not quietly weaken a gate, and a screen-lock
+ * reading is a claim by this phone, not a permission the owner granted.
+ * [MIC_PRESS] is the one trigger the setting does not touch. The PC is the
+ * one that decides, and its copy is `jarvis_live.voice_check_needed()`.
  *
  * WHAT THE PHONE DOES WITH IT. It never decides a check or skips one: the PC
  * does. The phone's job is to SAY whether its screen was locked, so the PC can
@@ -48,17 +56,28 @@ object VoiceCheckRule {
     const val DEFAULT_ON = true
 
     /**
-     * Does this trigger check the owner's voice print?
+     * Does this trigger check the owner's voice print? The PC's answers, in
+     * the PC's order.
      *
      * [phoneLocked] is this phone's own screen lock: true/false, or null when
      * it cannot be read. Null is NEVER "unlocked" - it keeps the check, which
      * is both the safe answer and exactly what an older phone gets.
+     *
+     * [settingOn] is `voice_check_locked`, ON by default. Turning it OFF is
+     * the OLD, full checks - see the note on this object: the setting is the
+     * exemption, so withdrawing it must not weaken anything.
      */
     fun checks(trigger: String, phoneLocked: Boolean?, settingOn: Boolean = DEFAULT_ON): Boolean =
-        when (trigger) {
-            MIC_PRESS -> false
-            LIVE_START -> phoneLocked != false
-            WAKE_WORD -> settingOn && phoneLocked != false
+        when {
+            // (a) The press on the paired phone IS the act: never a check, and
+            // the setting has nothing to say about it.
+            trigger == MIC_PRESS -> false
+            // OFF: the old, full checks, with the phone's word ignored.
+            !settingOn -> true
+            // (c) Live started on an unlocked phone: the unlock is the act.
+            trigger == LIVE_START -> phoneLocked != false
+            // (b) "hi Jarvis" - a LOCKED phone checks, the only check left.
+            trigger == WAKE_WORD -> phoneLocked != false
             // An unknown trigger is not this phone's to exempt: keep the check.
             else -> true
         }
