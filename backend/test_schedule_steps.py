@@ -1163,7 +1163,7 @@ def t_g14_a_timed_chain_becomes_timed_parts():
 
 
 def t_g14_a_checklist_becomes_untimed_parts():
-    now = 1_800_000_000.0
+    now = _a_local_morning(6)
     intent = Q.match("morning routine at 7: 1. meds 2. keys 3. badge", now)
     check("a checklist is a reminder_set with parts", intent is not None
           and intent.name == "reminder_set", intent)
@@ -1183,7 +1183,7 @@ def t_g14_a_checklist_becomes_untimed_parts():
 
 
 def t_g14_a_checklist_with_no_time_asks_one_question():
-    now = 1_800_000_000.0
+    now = _a_local_morning(6)
     intent = Q.match("morning routine: meds, keys, badge", now)
     check("a checklist with no time is its own intent", intent is not None
           and intent.name == "routine_no_time", intent)
@@ -1198,7 +1198,7 @@ def t_g14_a_checklist_with_no_time_asks_one_question():
 
 
 def t_g14_a_routine_made_in_chat_needs_no_card_and_echoes_its_parts():
-    now = 1_800_000_000.0
+    now = _a_local_morning(6)
     w = a_world(now, name="g14c")
     intent = Q.match("morning routine at 7: 1. meds 2. keys 3. badge", now)
     reply = Q.run(intent, w.s, now, conversation="c1")
@@ -1216,7 +1216,7 @@ def t_g14_a_routine_made_in_chat_needs_no_card_and_echoes_its_parts():
 
 
 def t_g14_one_receipt_so_undo_outlives_the_two_minute_window():
-    now = 1_800_000_000.0
+    now = _a_local_morning(6)
     w = a_world(now, name="g14d")
     intent = Q.match("remind me at 8 to start the laundry, then at 8:30 move it to the "
                      "dryer", now)
