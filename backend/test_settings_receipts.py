@@ -343,6 +343,42 @@ def t_voice_speed_change_leaves_one_receipt_and_undo_puts_it_back():
     _choice_family_check("voice-speed", sentence_for, "voice_speed")
 
 
+def t_voice_speed_natural_verb_door_leaves_one_receipt_too():
+    """"speak faster" / "make the voice faster" is the SECOND door to the SAME
+    `voice_speed` row (the dedicated `voice_speed` reflex, not the generic
+    control grammar). Q1b originally receipted only the generic door, so the
+    family was still cardless through this one - both must leave the same ONE
+    receipt, with the same before/after and the same undo."""
+    before = _choice_value("voice_speed")
+    target = "faster" if before != "faster" else "normal"
+    sentence = "speak faster" if target == "faster" else "speak at the normal speed"
+    conv = "receipts-voice-speed-natural-01"
+    count = _receipt_count()
+    intent, res = _drive(sentence, conv)
+    check(f"{sentence!r} is the natural-verb speaking-speed door",
+          intent is not None and intent.name == "voice_speed"
+          and intent.f.get("speed") == target, intent)
+    check("...and its sibling wording reaches the same door",
+          Q.match("make the voice faster") is not None
+          and Q.match("make the voice faster").name == "voice_speed",
+          Q.match("make the voice faster"))
+    check("...the speaking speed really changed",
+          _choice_value("voice_speed") == target,
+          (_choice_value("voice_speed"), target))
+    row = _one_new_receipt(count)
+    check("...and it left exactly ONE receipt",
+          row is not None, (count, _receipt_count()))
+    check("...whose before is the old speed and after is the new one",
+          _before_value(row).get("key") == "voice_speed"
+          and _before_value(row).get("value") == before
+          and _after_value(row).get("value") == target,
+          (before, (row or {}).get("before"), (row or {}).get("after")))
+    undo = _undo(conv)
+    check("undo puts the speaking speed back through the row's own setter",
+          undo is not None and _choice_value("voice_speed") == before,
+          (None if undo is None else undo.reply, _choice_value("voice_speed"), before))
+
+
 def t_handoff_mode_change_leaves_one_receipt_and_undo_respects_its_card():
     """The captcha hand-off's two choices. "Stop early" is instant; "Keep
     offering it" is the loosening, so it raises ONE card.
@@ -601,6 +637,7 @@ if __name__ == "__main__":
                t_browser_mode_change_leaves_one_receipt_and_undo_puts_it_back,
                t_antislop_scope_leaves_exactly_one_receipt_and_undo_puts_it_back,
                t_voice_speed_change_leaves_one_receipt_and_undo_puts_it_back,
+               t_voice_speed_natural_verb_door_leaves_one_receipt_too,
                t_handoff_mode_change_leaves_one_receipt_and_undo_respects_its_card,
                t_handoff_front_change_leaves_one_receipt_and_undo_respects_its_card,
                t_asks_first_change_leaves_one_receipt_and_undo_respects_its_card,

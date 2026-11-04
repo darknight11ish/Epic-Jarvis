@@ -573,15 +573,29 @@ def _voice_speed(s: str) -> Optional[Intent]:
     return None
 
 
-def _run_voice_speed(intent: Intent) -> Result:
+def _run_voice_speed(intent: Intent,
+                     conversation: Optional[str] = None) -> Result:
     """The SAME action as POST /api/voice/voices/speed (jarvis_voices.
-    set_speed): a cosmetic setting, no card either way, its own words."""
+    set_speed): a cosmetic setting, no card either way, its own words.
+
+    THIS is the natural-verb door ("speak faster", "make the voice faster");
+    the generic "set the voice speed to faster" sentence reaches the same
+    `voice_speed` ChoiceSetting row through `_run_control_set`. Both are
+    cardless, and since 2026-11-03 (Q1b) both leave the SAME ONE undo receipt:
+    the before value is the row's own current-value reader, and an unreadable
+    value (or a PC without the row) writes none rather than a guessed one. The
+    setter call, its words and its card rule are unchanged."""
     n = intent.name
     choice = intent.f.get("speed")
     try:
         import jarvis_voices as V
     except Exception:
         return Result(VOICES_MISSING, n)
+    import jarvis_settings_registry as R
+    setting = next((c for c in R.CHOICE_SETTINGS if c.key == "voice_speed"), None)
+    before = (_setting_before(setting, {"key": "voice_speed"})
+              if setting is not None else None)
+    since = _newest_receipt_id()
     try:
         code, out = V.set_speed({"speed": choice})
     except Exception as exc:                                   # noqa: BLE001
@@ -589,6 +603,11 @@ def _run_voice_speed(intent: Intent) -> Result:
     out = out if isinstance(out, dict) else {}
     if code != 200 or not out.get("ok"):
         return Result(str(out.get("error") or "The speaking speed could not be changed."), n)
+    if setting is not None and before is not None:
+        _settings_receipt(
+            conversation, setting, before,
+            {"kind": "choice", "key": "voice_speed", "value": choice},
+            f"Set {_setting_label(setting)} to {choice}", since=since)
     return Result(str(out.get("message") or V.SPEED_SAID.get(choice, "Done.")), n)
 
 # --------------------------------------------------------------------------
@@ -16405,7 +16424,7 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # Voice reflex (2026-10-21, Live/Voice audit V4): a router into an action
     # that already exists and already has its own permission model.
     if n == "voice_speed":
-        return _run_voice_speed(intent)
+        return _run_voice_speed(intent, conversation=conversation)
     # "find cheap parking near ..." (2026-10-30): read-only, no card, no model.
     # The two intents are in READ_ONLY_INTENTS - they call two public map
     # services and change nothing, so they must not take away what "cancel
