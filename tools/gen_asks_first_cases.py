@@ -119,6 +119,20 @@ def cases() -> dict:
     out["phone_lockdown_on"] = AF.view(here=False)
     _with(SHIPPED, lockdown=True, lockdown_waiting=True)
     out["pc_lockdown_off_card_waiting"] = AF.view(here=True)
+    # D4, 2026-11-04: the Tools page may turn OFF anything that is on. A tool
+    # switched on in the settings file that this page has no switch row for is
+    # listed in `tools.extra` with its real state and a plain reason, and the
+    # page offers it an OFF switch only. Two kinds are here: a KNOWN tool that
+    # stays a settings-file choice (web_search, "not this slice") and a name
+    # this PC has never heard of at all (plugin_scan).
+    _with(SHIPPED, tools_enabled=["web_search", "plugin_scan", "calendar_read"])
+    out["pc_unlisted_tools_on"] = AF.view(here=True)
+    # ... and the same page after the owner turned one of them OFF: the row
+    # STAYS and says Off, rather than vanishing on the next read.
+    _with(SHIPPED, tools_enabled=["web_search", "calendar_read"])
+    AF._T_STATE["off_rows"]["plugin_scan"] = {
+        "outcome": "disabled", "message": AF._tools_off_said("plugin_scan"), "at": 0}
+    out["pc_unlisted_tool_turned_off"] = AF.view(here=True)
     _with(SHIPPED)
     AF._reset_for_tests()
     return {

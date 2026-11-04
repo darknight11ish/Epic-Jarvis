@@ -11116,7 +11116,7 @@ editing on the phone): the phone reads the same list but `can_enable` is false.
 |---|---|---|---|
 | `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the plain "not offered in-app by this slice" note for a Tier C or unlisted tool, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
-| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row: a Tier C tool, one of the "not this slice" tools, or a name this PC does not know at all (a drop-in module's own tool). The one settings line is removed, and the answer names `jarvis-framework.toml` so the owner can put it back by hand. An OFF for an unlisted tool that is **not** on changes nothing and keeps the old **403**. Turning such a tool ON is **not** widened: that stays the old **403**, a deliberate hand edit of the settings file. |
 
 Its state rides on `GET /api/asks_first` (§32.2), which now carries:
 
@@ -11129,14 +11129,26 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
           "groups": [{"title", "ids"}],          # the page's order
           "vault": {"id": "vault_organizer", "kind": "switch", "title",
                     "group", "on", "waiting", "can_enable", "action", "what"},
+          "extra": [{"id", "title", "group", "on", "waiting",
+                     "switchable": false, "why",
+                     "last": {"outcome", "message", "at"}|null}, ...],
           "not_offered": {"tier_c": [...], "not_this_slice": [...],
                           "labels": {...}, "why": <the plain note>}}
 ```
 
 `items` lists exactly Tier A + Tier B (21 tools at 2026-10-31), grouped; `vault`
 is the vault organizer's separate switch; `not_offered` names every tool that is
-deliberately NOT in the app, so the page can say so. The phone reads the same
-`GET /api/asks_first` and simply does not toggle anything (`can_enable` false).
+deliberately NOT in the app, so the page can say so. `extra` is D4 (the owner,
+2026-11-04): every tool that is ON in `[tools].enabled` but has no row in
+`items` - a known Tier C / unlisted tool, or a name this PC does not know -
+with its state read from the file (`on`) and the PC's own plain `why`;
+`switchable: false` says plainly that the page offers it no ON switch. A tool
+turned OFF through this route stays in `extra` with `on: false` and the line
+the owner just saw (until Jarvis restarts), so the page can say OFF truthfully
+instead of the row vanishing; a tool the settings file lists again is shown as
+ON from the file. The phone reads the same `GET /api/asks_first` and simply
+does not toggle anything (`can_enable` false); it ignores `extra`, so the
+phone's page is unchanged.
 
 ### 43.2 The card
 

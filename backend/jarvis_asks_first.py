@@ -1589,6 +1589,29 @@ TOOLS_TOML_ONLY_NOTE = ("That tool is not offered from inside the app by this sl
                         "file_read, web_search, my_files, propose_plan, change_setting and "
                         "feature_guide are not offered in-app by this slice either. Nothing was "
                         "changed.")
+#: D4 (the owner, 2026-11-04): the Tools page may turn OFF EVERY tool that is
+#: on, including one that is enabled in the settings file but is not one of the
+#: 21 switches this page draws. The old rule refused those with a 403 ("not
+#: offered in-app by this slice" / "does not know a tool by that name"); the
+#: owner reversed only the OFF half. Turning an unlisted tool ON is unchanged:
+#: it is still a deliberate hand edit of [tools].enabled, with the old 403.
+TOOLS_EXTRA_GROUP = "Also on in your settings file"
+TOOLS_EXTRA_WHY_RAW = (
+    "Raw shell, computer and browser control, reading one web page, connecting an account "
+    "and REA stay a deliberate settings-file choice, so this page has no switch to turn this "
+    "one on. It is on in your settings file, so you can turn it off here; to offer it again, "
+    "add it back to [tools].enabled in jarvis-framework.toml by hand.")
+TOOLS_EXTRA_WHY_NOT_THIS_SLICE = (
+    "This page does not offer this one in-app, so it has no switch to turn it on. It is on "
+    "in your settings file, so you can turn it off here; to offer it again, add it back to "
+    "[tools].enabled in jarvis-framework.toml by hand.")
+TOOLS_EXTRA_WHY_UNKNOWN = (
+    "Your settings file lists this one, but this page has no row of its own for it - it may "
+    "come from a part added to Jarvis. It is on, so you can turn it off here; to offer it "
+    "again, add it back to [tools].enabled in jarvis-framework.toml by hand.")
+TOOLS_EXTRA_WHY_OFF = (
+    "Off now. This page has no switch to turn it back on: add it back to [tools].enabled in "
+    "jarvis-framework.toml on this PC by hand, then restart Jarvis.")
 _TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
 _ENABLED_LINE = re.compile(
     r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
@@ -1864,7 +1887,12 @@ def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> di
 
 
 _T_LOCK = threading.Lock()
-_T_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+#: `off_rows`: the unlisted tools this page turned OFF, so their row can stay
+#: on the page and say OFF truthfully instead of vanishing on the next read
+#: (D4, 2026-11-04). Kept in memory only: the settings file is the truth, and
+#: a tool the file lists again is shown as ON from the file, not from here.
+_T_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {},
+                  "off_rows": {}}
 #: Held the same way _L_SWITCH is: from an approved card's "was it withdrawn?"
 #: check through writing [tools].enabled, and from an OFF's withdrawing
 #: through ITS write - so an OFF pressed in between is never overwritten by
@@ -1919,6 +1947,28 @@ def _tools_decide(pid: str, tool: str, gate: Callable, tier_of: Callable,
     _tools_finish(pid, tool, "enabled")
 
 
+def _tools_off_said(tool: str) -> str:
+    """The OFF answer for a tool that has no switch row of its own (D4).
+
+    It says the two things the owner then needs: the tool is off now, and
+    putting it back on is a hand edit - this page has no ON switch for it, and
+    the decision of 2026-11-04 did not add one. It does not claim the tool was
+    being offered before: an enabled name this PC does not know was never a
+    real tool here, and saying otherwise would be a lie.
+    """
+    return ("Done - it is off now, so the AI model is not offered it. This page has no "
+            "switch to turn it back on: add \"" + tool + "\" to the [tools] enabled list in "
+            "the settings file on this PC (jarvis-framework.toml) if you want the model "
+            "offered it again.")
+
+
+def _remember_tool_off(tool: str, said: str) -> None:
+    """Keep an unlisted tool's OFF row visible until Jarvis restarts."""
+    with _T_LOCK:
+        _T_STATE["off_rows"][tool] = {"outcome": "disabled", "message": said,
+                                      "at": time.time()}
+
+
 def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable] = None,
                         tier_of: Optional[Callable[[str], str]] = None,
                         spawn: Optional[Callable] = None, write: Optional[Callable] = None,
@@ -1927,7 +1977,13 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
     """POST /api/asks_first/tools {"tool": "<name>", "enabled": bool}.
     (code, body). ON is the PC only, one card plus Windows Hello - the same
     shape as request_tier's looser side, aimed at [tools].enabled instead of
-    [autonomy.tiers]. OFF is instant, never a card, from either app."""
+    [autonomy.tiers]. OFF is instant, never a card, from either app.
+
+    OFF is also allowed for a tool that is ON but is NOT one of the 21
+    switches this page draws (D4, the owner, 2026-11-04): a tool enabled in
+    [tools].enabled is offered to the model whether or not this page knows it,
+    so turning it off must work. Turning such a tool ON is NOT widened - that
+    stays a deliberate settings-file choice, with the old 403."""
     gate = gate or _gate
     tier_of = tier_of or _tier
     spawn = spawn or _spawn
@@ -1938,14 +1994,17 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
         return 400, {"ok": False, "error": 'need {"tool": "<name>", "enabled": true|false}'}
     tool, enabled = body["tool"], body["enabled"]
     real = real_tool(tool)
-    if not (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
-            or real in SWITCHABLE_TOOL_NAMES):
-        if real in TOOLS_TOML_ONLY or tool in TOOLS_TOML_ONLY:
-            return 403, {"ok": False, "error": TOOLS_TOML_ONLY_NOTE}
-        return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
-    now_on = real_tool(tool) in tools_enabled_set()
+    known = (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
+             or real in SWITCHABLE_TOOL_NAMES)
+    now_on = real in tools_enabled_set()
     if not enabled:
         # OFF: at once, never a card - it only narrows what the model may do.
+        if not known and not now_on:
+            # The old refusal still stands for a request that would change
+            # nothing: an unlisted tool that is not on cannot be turned off.
+            if real in TOOLS_TOML_ONLY or tool in TOOLS_TOML_ONLY:
+                return 403, {"ok": False, "error": TOOLS_TOML_ONLY_NOTE}
+            return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
         with _T_SWITCH:
             with _T_LOCK:
                 p = _T_STATE["pending"]
@@ -1956,15 +2015,23 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
                 return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
                              "message": "The AI model is already not offered this tool."}
             try:
-                write(real_tool(tool), False)
+                write(real, False)
             except TierFileError as exc:
                 return 409, {"ok": False, "error": str(exc) + "."}
             except Exception as exc:
                 return 500, {"ok": False, "error": f"could not change it ({type(exc).__name__})"}
+        said = ("Done - the AI model is not offered this tool any more." if known
+                else _tools_off_said(tool))
+        if not known:
+            _remember_tool_off(real, said)
         _audit("asks_first.tools.disabled", {"tool": tool})
         return 200, {"ok": True, "changed": True, "tools": tools_status(here=True),
-                     "message": "Done - the AI model is not offered this tool any more."}
+                     "message": said}
     # ON: the PC only, one card plus Windows Hello.
+    if not known:
+        if real in TOOLS_TOML_ONLY or tool in TOOLS_TOML_ONLY:
+            return 403, {"ok": False, "error": TOOLS_TOML_ONLY_NOTE}
+        return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
     if not _here(here, peer, local):
         return 403, {"ok": False, "error": TOOLS_PC_ONLY, "pc_only": True}
     if now_on:
@@ -2018,13 +2085,58 @@ def _vault_switch_status(here: bool) -> dict:
                      "whole batch; one Undo puts it back.")}
 
 
+def _extra_tool_why(tool: str, on: bool) -> str:
+    """The plain reason under an ON/OFF row that has no switch of its own."""
+    if not on:
+        return TOOLS_EXTRA_WHY_OFF
+    if tool in TIER_C:
+        return TOOLS_EXTRA_WHY_RAW
+    if tool in TIER_UNLISTED:
+        return TOOLS_EXTRA_WHY_NOT_THIS_SLICE
+    return TOOLS_EXTRA_WHY_UNKNOWN
+
+
+def _extra_tool_rows(items: list, enabled: set) -> list:
+    """Every tool that is ON but has no switch row - and any this page just
+    turned OFF (D4, 2026-11-04).
+
+    The state is the settings file's own (`enabled`, from tools_enabled_set),
+    never a guess. `switchable: False` says plainly that this page offers no
+    ON switch for the row; the page draws it with an OFF switch only. A row
+    turned off here stays in `_T_STATE["off_rows"]` so it can say OFF instead
+    of vanishing; a tool the file lists again wins over that, because the
+    file is the truth.
+    """
+    known = {real_tool(str(i.get("id") or "")) for i in items}
+    with _T_LOCK:
+        off_rows = dict(_T_STATE["off_rows"])
+    # real_tool: an old "email_read" saved in the file is the email_check row,
+    # not a second row of its own.
+    on_now = {real_tool(str(n)) for n in enabled}
+    names = {n for n in on_now if n not in known}
+    names.update(n for n in off_rows if n not in known and n not in on_now)
+    rows = []
+    for name in sorted(names):
+        on = name in on_now
+        row = {"id": name, "title": tool_label(name), "group": TOOLS_EXTRA_GROUP,
+               "on": on, "waiting": False, "switchable": False,
+               "why": _extra_tool_why(name, on)}
+        if not on and isinstance(off_rows.get(name), dict):
+            row["last"] = dict(off_rows[name])
+        rows.append(row)
+    return rows
+
+
 def tools_status(*, here: bool = False) -> dict:
     """The switch list the desktop shows: every in-app switch, grouped.
 
-    Only TIER_A + TIER_B tools are here (the tiered ruling); the vault
-    organizer's own switch rides beside them as a different kind of row; and
+    Only TIER_A + TIER_B tools have a switch here (the tiered ruling); the
+    vault organizer's own switch rides beside them as a different kind of row;
     the not-offered tools are named with the plain reason, so the page can say
-    what is deliberately not offered in-app.
+    what is deliberately not offered in-app; and `extra` lists every OTHER tool
+    that is ON in the settings file - including names this page has never heard
+    of - with its real state and a plain reason (D4, 2026-11-04). Those can be
+    turned OFF from the page; turning one ON still means editing the file.
     """
     enabled = tools_enabled_set()
     with _T_LOCK:
@@ -2045,6 +2157,7 @@ def tools_status(*, here: bool = False) -> dict:
             "groups": [{"title": title, "ids": list(tools)}
                        for title, tools in SWITCHABLE_GROUPS],
             "vault": _vault_switch_status(here),
+            "extra": _extra_tool_rows(items, enabled),
             "not_offered": {
                 "tier_c": list(TIER_C), "not_this_slice": list(TIER_UNLISTED),
                 "labels": {tool: tool_label(tool) for tool in TOOLS_TOML_ONLY},

@@ -1020,6 +1020,115 @@ def t_the_tools_status_and_the_page():
         AF.tools_enabled_set = keep
 
 
+def t_off_a_tool_the_page_was_never_told_about():
+    """D4, 2026-11-04: the Tools page may turn OFF anything that is ON.
+
+    The old rule (2026-10-31 tiered ruling, reaffirmed 2026-11-03 for
+    read_web_page) refused every request for a tool outside the 21 in-app
+    switches - 403, "not offered in-app by this slice" / "does not know a tool
+    by that name". The owner reversed the OFF half on 2026-11-04: a tool that
+    is enabled in [tools].enabled is ON whether or not this page knows it, so
+    turning it off must work, write the one settings line, and then be shown
+    as OFF. Turning such a tool ON is NOT part of the decision and stays 403.
+    """
+    # A known-but-unlisted tool that the settings file has ON.
+    for tool in ("web_search", "read_web_page"):
+        tools = ToolsFile(tool)
+        code, out = _treq({"tool": tool, "enabled": False}, tools, here=False,
+                          gate=lambda a, d, p: (_ for _ in ()).throw(
+                              AssertionError("OFF must not raise a card")))
+        check(f"{tool}: ON in the file but not an in-app switch: OFF works, no card",
+              code == 200 and tools.writes == [(tool, False)] and tool not in tools.on,
+              (code, out, tools.writes))
+        check(f"{tool}: ... and the answer says it went off",
+              code == 200 and "off now" in str(out.get("message")),
+              out)
+
+    # A name the PC does not know at all: the settings file lists it, so it is
+    # ON, and OFF must remove exactly that one entry.
+    tools = ToolsFile("web_search", "plugin_scan", "calendar_read")
+    code, out = _treq({"tool": "plugin_scan", "enabled": False}, tools, here=False)
+    check("an enabled name the PC does not know: OFF works and only it goes",
+          code == 200 and tools.writes == [("plugin_scan", False)]
+          and tools.on == {"web_search", "calendar_read"}, (code, tools.on))
+    check("... and the answer says how to put it back, in plain words",
+          "off now" in str(out.get("message"))
+          and "jarvis-framework.toml" in str(out.get("message"))
+          and "add" in str(out.get("message")).lower(), out.get("message"))
+
+    # The page lists every tool that is ON, including the ones it has no
+    # switch row for - with the real state and a plain reason.
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = lambda: {"web_search", "plugin_scan", "calendar_read"}
+    try:
+        st = AF.tools_status(here=True)
+    finally:
+        AF.tools_enabled_set = keep
+    extra = {row["id"]: row for row in st.get("extra") or []}
+    check("the page lists the two ON-but-unlisted tools, and only those",
+          set(extra) == {"web_search", "plugin_scan"}, sorted(extra))
+    check("  ... with their real state: On",
+          all(row.get("on") is True for row in extra.values()), extra)
+    check("  ... their human label, not the raw id",
+          all(row.get("title") for row in extra.values())
+          and extra["web_search"]["title"] != "web_search", extra)
+    check("  ... and a plain reason each",
+          all(row.get("why") for row in extra.values()), extra)
+    check("  ... and none of them pretends an in-app ON switch exists",
+          all(row.get("switchable") is False for row in extra.values()), extra)
+    # The old file that saved "email_read" adds BOTH names to the enabled set
+    # (normalise_enabled keeps the old one); that must not draw a second row
+    # beside the email_check switch.
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = lambda: {"email_read", "email_check"}
+    try:
+        st = AF.tools_status(here=True)
+    finally:
+        AF.tools_enabled_set = keep
+    check("an old 'email_read' saved name is not a second row beside email_check",
+          not [r for r in st.get("extra") or [] if r["id"] in ("email_read", "email_check")],
+          st.get("extra"))
+
+    # After OFF through the route, the row STAYS and says OFF truthfully,
+    # rather than vanishing from the page on the next read.
+    tools = ToolsFile("web_search", "plugin_scan", "calendar_read")
+    AF._reset_for_tests()
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = tools.enabled
+    try:
+        code, out = AF.request_tool_enable({"tool": "plugin_scan", "enabled": False},
+                                           here=False, tier_of=Tiers(),
+                                           write=tools.write, armed=lambda: True)
+        st = AF.tools_status(here=True)
+    finally:
+        AF.tools_enabled_set = keep
+    extra = {row["id"]: row for row in st.get("extra") or []}
+    row = extra.get("plugin_scan")
+    check("after OFF the row is still there and says Off, never silently gone",
+          row is not None and row.get("on") is False, extra)
+    check("  ... with the line the owner just saw",
+          row is not None
+          and "off now" in str((row.get("last") or {}).get("message")),
+          row)
+    check("  ... and still no in-app ON switch",
+          row is not None and row.get("switchable") is False, row)
+    check("  ... while a tool that is still on remains On",
+          extra.get("web_search", {}).get("on") is True, extra)
+
+    # Turning ON is NOT widened by this decision: both old answers stay.
+    for tool, words in (("web_search", AF.TOOLS_TOML_ONLY_NOTE),
+                        ("plugin_scan", AF.TOOLS_NOT_ON_LIST)):
+        tools = ToolsFile()
+        code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
+        check(f"{tool}: turning it ON is still refused, with the old words",
+              code == 403 and out["error"] == words and tools.writes == [], (code, out))
+    # A no-op OFF for an unlisted tool that is NOT on keeps the old refusal.
+    tools = ToolsFile()
+    code, out = _treq({"tool": "web_search", "enabled": False}, tools, here=True)
+    check("OFF for an unlisted tool that is already off: the old 403, nothing written",
+          code == 403 and tools.writes == [], (code, out))
+
+
 def t_writing_the_tools_table():
     toml_with_tools = SAMPLE.replace(
         "[self_modification]", "[tools]\r\nenabled = [\"web_search\"]\r\n\r\n[self_modification]")
