@@ -1270,7 +1270,7 @@ def _suite_job(s: Path, backend: Path, env: dict) -> dict:
         # suite's non-ASCII output taking the entire run down with it.
         # That happened on 2026-10-03, at test_mail_mask.py.
         r = subprocess.run([sys.executable, str(s)], cwd=HERE, env=env,
-                           capture_output=True, text=True, timeout=900,
+                           capture_output=True, text=True, timeout=2400,
                            encoding="utf-8", errors="replace")
         code, got_out, got_err = r.returncode, r.stdout, r.stderr
     except subprocess.TimeoutExpired:

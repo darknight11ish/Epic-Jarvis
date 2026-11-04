@@ -81,6 +81,12 @@ NO_PATCH = {
     "receipts",
     "sandbox",
     "self-improve",
+    # What Jarvis is made of on this PC (jarvis_self_portrait.py, 2026-11-03;
+    # the owner's ask that it be aware of every setting, function and ability
+    # it has): its own install() answers /api/self, /api/self/version and the
+    # conversation routes, called by the drop-in loader, so the folder is the
+    # whole of its wiring and no patch is added to `jarvis_hud.py`.
+    "self-portrait",
     "skill-hub",
     # The skills menu (2026-11-02, the owner's Hermes-skills scope B): its
     # five routes come from jarvis_skill_menu.install(), called by the drop-in
