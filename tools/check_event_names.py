@@ -403,12 +403,14 @@ def event_source_handlers(text: str, mask: list[bool]):
         return []
     var = made.group(1)
     out = []
-    for m in re.finditer(re.escape(var) + r"\s*\.\s*(onmessage|onopen|onerror)\s*=", text):
+    for m in re.finditer(r"(?<![\w$])" + re.escape(var)
+                         + r"\s*\.\s*(onmessage|onopen|onerror)\s*=", text):
         if not mask[m.start()]:
             continue
         begin, end = body_after(text, mask, m.end())
         out.append((m.group(1)[2:], begin, end, line_of(text, m.start())))
-    for m in re.finditer(re.escape(var) + r'\.addEventListener\(\s*"([a-z0-9_-]+)"', text):
+    for m in re.finditer(r"(?<![\w$])" + re.escape(var)
+                         + r'\.addEventListener\(\s*"([a-z0-9_-]+)"', text):
         if not mask[m.start()]:
             continue
         begin, end = body_after(text, mask, m.end())

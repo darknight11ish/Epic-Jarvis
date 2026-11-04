@@ -217,10 +217,17 @@ def t_phase2_marker_and_rank_on_the_read():
     check("... every prior top-level key is still present",
           {"available", "now", "tz", "jobs", "todo", "went_off", "lists",
            "running", "limits"} <= set(out), sorted(out))
-    check("... and limits is unchanged, with its seven numbers",
+    check("... and limits keeps its seven numbers and gains the parts ceiling",
           set(out["limits"]) == {"text", "jobs", "todo", "timer_seconds",
-                                 "min_every_hours", "lists", "snooze_seconds"}
-          and out["limits"]["todo"] == S.MAX_TODO, out.get("limits"))
+                                 "min_every_hours", "lists", "snooze_seconds",
+                                 # 2026-11-03: how many parts one routine may
+                                 # have, read from here so neither app
+                                 # hard-codes a number the PC would refuse.
+                                 "steps"}
+          and out["limits"]["todo"] == S.MAX_TODO
+          and out["limits"]["steps"] == S.MAX_STEPS, out.get("limits"))
+    check("... and the routine marker rides beside phase2 and actions",
+          out.get("steps") is True, out.get("steps"))
     check("the `?id=` one-job read keeps its existing shape (no marker on it)",
           code_one == 200 and one.get("available") is True and "phase2" not in one
           and one["job"]["id"] == b["id"], one)

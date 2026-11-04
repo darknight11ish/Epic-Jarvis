@@ -172,7 +172,9 @@ class Stub:
     def last_set(self, *a, **k):
         return None
 
-    def add_at(self, kind, at, text, source="quick"):
+    def add_at(self, kind, at, text, source="quick", steps=None):
+        # `steps` mirrors Scheduler.add_at's own signature (routines,
+        # 2026-11-03); this stub records nothing, it only has to accept it.
         return {"id": "stub-" + kind, "text": text, "due": at, "kind": kind}
 
 

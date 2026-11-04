@@ -221,12 +221,13 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "sandbox" to 33,
     // "Learning" (2026-10-28, the settings audit's G1): the two learning
     // switches, which had no Settings row on either app before this. It sits
-    // after the sandbox and before First-time setup; every index below it
+    // after the sandbox and before Personalize Jarvis; every index below it
     // moved down by one.
     "learning" to 34,
-    // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
-    // fourteen questions and its READ-ONLY plan, drawn by
-    // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
+    // "Personalize Jarvis" (S2, 2026-10-20, renamed 2026-11-03; JARVIS-API
+    // section 147): the PC's twenty-five questions in seven sections and its
+    // READ-ONLY plan, drawn by SetupQuestionnairePlate.kt. A row added at the
+    // end moves no other number.
     "setup-questionnaire" to 35,
     // "All features and abilities" (2026-10-22): the searchable directory of
     // all 140 features. A row added at the end moves no other number.
@@ -1008,15 +1009,17 @@ fun SettingsScreen(
                 MenuFrame(menus, "settings.learning") { LearningSection(canAct = canAct) }
             }
 
-            // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the
-            // PC's fourteen questions and its READ-ONLY plan, drawn by
+            // "Personalize Jarvis" (S2, 2026-10-20, renamed 2026-11-03;
+            // JARVIS-API section 147): the PC's twenty-five questions in seven
+            // sections, its read-only plan and one progress line, drawn by
             // SetupQuestionnairePlate.kt. It is NOT a hideable menu: no menu id
             // exists for it (registering one is a backend change), and the
             // desktop card has no menu id either - so, like "What asks first"
-            // and "App control", the row is always drawn. It applies nothing:
-            // the changes are made on the PC (docs/ARCHITECTURE.md section 8).
-            // A row added at the end of the screen moves no other row's
-            // position (see SETTINGS_ITEM_INDEX).
+            // and "App control", the row is always drawn. It applies nothing
+            // and records no progress: the changes and the card's own state are
+            // the PC's (docs/ARCHITECTURE.md section 8). A row added at the end
+            // of the screen moves no other row's position (see
+            // SETTINGS_ITEM_INDEX).
             if (drawn("setup-questionnaire")) item(key = "setup-questionnaire") {
                 SetupQuestionnaireSection()
             }

@@ -154,6 +154,24 @@ internal fun ComingUpSection(
         }
     }
 
+    /**
+     * ONE button of ONE part of a routine (2026-11-03): the same `answer` verb
+     * as a question's own buttons, with the part's index added. A LOG, never an
+     * approval - and held on a stale link like every other write here.
+     */
+    fun answer(job: Schedule.Job, part: Int, button: Int) {
+        busyId = job.id
+        said = null
+        scope.launch {
+            try {
+                val (_, sentence) = JarvisRuntime.scheduleAnswer(job.id, button, part)
+                said = sentence
+            } finally {
+                busyId = null
+            }
+        }
+    }
+
     Section(Schedule.TITLE, trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
         Plate {
             Text(Schedule.UNDER, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
@@ -197,7 +215,8 @@ internal fun ComingUpSection(
                         Text(Schedule.WENT_OFF_DETAIL, style = MaterialTheme.typography.labelSmall,
                             color = chrome.textLo)
                         shown.wentOff.forEach {
-                            WentOffRow(it, canAct && busyId == null) { a -> act(it, a) }
+                            WentOffRow(it, canAct && busyId == null,
+                                onAnswer = { p, b -> answer(it, p, b) }) { a -> act(it, a) }
                         }
                         Gap(14)
                     }
@@ -208,7 +227,8 @@ internal fun ComingUpSection(
                     }
                     shown.jobs.forEach {
                         ScheduleRow(it, now - readAt, canAct && busyId == null,
-                            onSaid = { s -> said = s }) { a -> act(it, a) }
+                            onSaid = { s -> said = s },
+                            onAnswer = { p, b -> answer(it, p, b) }) { a -> act(it, a) }
                     }
                     // "Also on my phone": the one line that says what it does and
                     // warns about two alarms and Google, once, while a row offers it.
@@ -445,12 +465,21 @@ internal fun ComingUpSection(
  * 2026-10-13 (DEF-008; net/Schedule.kt's [Schedule.WENT_OFF_ACTIONS] says why
  * it is worded "Delete" and not "Clear this"). Neither asks anything first.
  *
+ * A ROUTINE that went off draws its parts too ([PartsBlock], 2026-11-03): the
+ * hour it sits here is exactly when its parts are ticked off, so a part's own
+ * buttons are offered here as well as on its live row.
+ *
  * Shared with the phone's own Reminders screen (ui/screens/RemindersScreen.kt,
  * 2026-11-02), like [ScheduleRow] below: a reminder that went off is drawn the
  * one way in both places.
  */
 @Composable
-internal fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> Unit) {
+internal fun WentOffRow(
+    job: Schedule.Job,
+    enabled: Boolean,
+    onAnswer: ((part: Int, button: Int) -> Unit)? = null,
+    onAct: (String) -> Unit,
+) {
     val chrome = LocalChrome.current
     Gap(10)
     Column(Modifier.fillMaxWidth()) {
@@ -458,6 +487,11 @@ internal fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> 
         Text(Schedule.titleOf(job), style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
         Schedule.wentOffMeta(job).forEach {
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        // A routine's parts (2026-11-03): a fired routine is still a routine,
+        // and the hour it sits here is exactly when its parts are ticked off.
+        if (job.steps.isNotEmpty() || job.stepsUnreadable) {
+            PartsBlock(job, enabled, onAnswer)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Schedule.WENT_OFF_ACTIONS.forEach { action ->
@@ -475,6 +509,9 @@ internal fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> 
 /**
  * One job: its kind, its title, its lines, and its own buttons - ONE job per tap.
  *
+ * A ROUTINE draws its parts under its lines ([PartsBlock], 2026-11-03), each
+ * with the PC's own mark and its own buttons.
+ *
  * Shared with the phone's own Reminders screen (ui/screens/RemindersScreen.kt,
  * 2026-11-02): the owner's reminders are drawn by the ONE row here, so the
  * Brain plate and the dedicated screen cannot say a different thing about the
@@ -490,6 +527,10 @@ internal fun ScheduleRow(
     // rollover list only: the day-labelled view puts the day on its heading
     // instead (2026-11-02; Schedule.carryOf).
     carry: String = "",
+    // ONE button of ONE part of a routine (2026-11-03), as (part, button)
+    // indexes. Null where the surface cannot answer - the row still DRAWS the
+    // parts it was handed, it just offers no button it could not send.
+    onAnswer: ((part: Int, button: Int) -> Unit)? = null,
     onAct: (String) -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -505,6 +546,11 @@ internal fun ScheduleRow(
         Text(Schedule.titleOf(job), style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
         Schedule.metaOf(job, sinceMs, carry).forEach {
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        // A routine's parts (2026-11-03), each with the PC's own mark on it and
+        // its own buttons. Read and act per part; never created or edited here.
+        if (job.steps.isNotEmpty() || job.stepsUnreadable) {
+            PartsBlock(job, enabled, onAnswer)
         }
         if (offer is AlsoOnPhone.Offer.Later) {
             Text(offer.why, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
@@ -527,6 +573,84 @@ internal fun ScheduleRow(
                 Quiet(AlsoOnPhone.LABEL, onClick = { handToPhone(context, handOver)?.let(onSaid) })
             }
         }
+    }
+}
+
+/**
+ * ONE routine's parts, under its row (2026-11-03).
+ *
+ * A reminder can be a routine of up to 12 parts, timed or one after another
+ * (the owner's ask; the rulings' Q8/Q9). Each part is drawn with the PC's own
+ * words for its moment and the PC's own mark on it - done, or the part on now -
+ * and with the buttons the PC handed out for that part: its own question's, or
+ * the ONE implicit Done a plain checklist line gets.
+ *
+ * THIS IS READ AND ACT ONLY. Nothing here creates a part, edits one, renames
+ * one or moves one: a part's destination can be the Obsidian vault on the PC or
+ * a goal/habit id, so making one belongs on the PC exactly as making a question
+ * does (docs/ARCHITECTURE.md section 8, "One-sided on purpose").
+ *
+ * A button is offered only on a part the PC has SURFACED and has not already
+ * been ticked ([Schedule.Part.canAnswer]): `Scheduler.answer` refuses anything
+ * else with "That part has not come up yet.", so no control that could only be
+ * refused is drawn. A press is ONE part's ONE button, never "all parts" - the
+ * same one-job-per-tap rule every other row keeps - and it raises no card: an
+ * answer is a log line, like ticking a to-do item.
+ */
+@Composable
+internal fun PartsBlock(
+    job: Schedule.Job,
+    enabled: Boolean,
+    onAnswer: ((part: Int, button: Int) -> Unit)?,
+) {
+    val chrome = LocalChrome.current
+    // A surface that cannot answer (no handler) draws the parts READ-ONLY: the
+    // buttons are disabled rather than drawn live and doing nothing, which is
+    // the one thing this project never ships.
+    val canPress = enabled && onAnswer != null
+    if (job.stepsUnreadable) {
+        // The PC has parts for this row and could not read them: it fires as an
+        // ordinary reminder, and this says so rather than drawing half a
+        // routine. Never a guessed part.
+        Gap(4)
+        Text(
+            Schedule.PARTS_UNREADABLE,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.warnInk,
+        )
+        return
+    }
+    val line = Schedule.partCountLine(job)
+    if (line.isNotEmpty()) {
+        Gap(4)
+        Text(line, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+    }
+    job.steps.forEachIndexed { index, part ->
+        Gap(6)
+        Text(
+            Schedule.partLine(part),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (part.done) chrome.textLo else chrome.textHi,
+        )
+        if (part.whenWords.isNotEmpty()) {
+            Text(part.whenWords, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        if (part.canAnswer && part.buttons.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                part.buttons.forEachIndexed { at, button ->
+                    Quiet(
+                        button.label,
+                        enabled = canPress,
+                        onClick = { onAnswer?.invoke(index, at) },
+                    )
+                }
+            }
+        }
+    }
+    val missed = Schedule.missedPartsLine(job.missedParts)
+    if (missed.isNotEmpty()) {
+        Gap(4)
+        Text(missed, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
     }
 }
 

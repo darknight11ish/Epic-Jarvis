@@ -97,6 +97,9 @@ pub mod sandbox_exec;
 pub mod screen_work;
 pub mod selection;
 pub mod setup_questionnaire;
+// Wave B (2026-11-03): the one "Personalize Jarvis" offer - the toast, the tray
+// row, the HUD's "Not now" command and the first-run door (setup_offer.rs).
+pub mod setup_offer;
 pub mod sidecar;
 pub mod skills_menu;
 pub mod sky;
@@ -617,6 +620,12 @@ fn spawn_telemetry_loop(app: AppHandle) {
         //: Which wake-up we are on, so the notification choices are re-read
         //: every `SYNC_EVERY` ticks rather than every three seconds (2026-10-09).
         let mut tick: u32 = 0;
+        //: Wave B (2026-11-03): when this process started and whether the one
+        //: "Personalize Jarvis" offer has been considered. The offer waits
+        //: `setup_offer::OFFER_AFTER` so it cannot race the HUD's first paint,
+        //: and then gets exactly one look - not one per tick.
+        let launched = std::time::Instant::now();
+        let mut offer_considered = false;
 
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
@@ -633,6 +642,23 @@ fn spawn_telemetry_loop(app: AppHandle) {
             tick = tick.wrapping_add(1);
             if tick.is_multiple_of(notifications::SYNC_EVERY) {
                 notifications::refresh_notification_prefs(app.clone()).await;
+                // The "Personalize Jarvis" state on the same beat (Wave B):
+                // one GET /api/setup, which drives the tray row and the toast.
+                // A failure leaves the state as it was - and "not known" never
+                // becomes an offer.
+                setup_offer::refresh_setup_state(app.clone()).await;
+            }
+
+            // The one toast this launch may raise, and only once the app has
+            // settled: `offer_once` itself checks the state, the owner's
+            // switch, quiet hours, the 24 h dismissal window and the
+            // one-per-launch flag. It answers whether the launch's one offer
+            // is now SPENT, and that answer is the flag: a backend that was
+            // not answering at the 60 s mark has not answered, so the look is
+            // retried on the next beat instead of costing the launch its
+            // reminder (audit 2026-11-03, bug 1).
+            if !offer_considered && launched.elapsed() >= setup_offer::OFFER_AFTER {
+                offer_considered = setup_offer::offer_once(app.clone());
             }
 
             // A drag is persisted even while the widget is collapsed or
@@ -1003,6 +1029,12 @@ pub fn run() {
         // poster on the event stream reads it, and `state` PANICS on a type
         // that was never managed.
         .manage(notifications::NotificationState::default())
+        // Wave B (2026-11-03): how far the "Personalize Jarvis" quiz has got,
+        // plus the once-per-launch offer flag. Registered with every other
+        // managed type for the same reason: the telemetry loop, the tray row
+        // and the HUD's dismiss command all read it, and `state` PANICS on a
+        // type that was never managed.
+        .manage(setup_offer::SetupOfferState::default())
         .manage(window_memory::PendingMaximize::default())
         // The extra chat windows' conversation -> label map (chat_windows.rs).
         // Managed here like every other state: a command that reads it would
@@ -1654,6 +1686,12 @@ pub fn run() {
             // confirmed answers through the existing setters, one change at a
             // time. Settings only; nothing here approves a card.
             setup_questionnaire::setup_questionnaire,
+            // Wave B (2026-11-03): the HUD banner's "Not now". The HUD holds no
+            // token and its POSTs are refused, so this one command is how a
+            // window without a token records a dismissal - it writes ONE
+            // timestamp on the PC (`POST /api/setup/progress {"dismiss": true}`)
+            // and changes no setting. HUD only (`hud-link` in surfaces.toml).
+            setup_offer::hud_setup_dismiss,
             // "Write like me" (voiceprint.rs; PR #665, 2026-10-20; JARVIS-API
             // section 133): the samples, the switch, keeping ONE sample and
             // forgetting ONE after the page's own are-you-sure. Settings only;
@@ -2123,6 +2161,13 @@ pub fn run() {
                         "[jarvis] the first-run walkthrough could not be opened: {err}"
                     ));
                 }
+                // Wave B (2026-11-03, ruling Q3): the walkthrough stays the
+                // first-run surface, and the "Personalize Jarvis" quiz follows
+                // it ONCE. The order matters: the walkthrough is what makes the
+                // five day-one choices, and the quiz assumes they are made
+                // (the card says so in its own words). This decides on the PC's
+                // own answer, so an already-finished quiz opens nothing.
+                setup_offer::offer_after_onboarding(handle.clone());
             }
 
             Ok(())

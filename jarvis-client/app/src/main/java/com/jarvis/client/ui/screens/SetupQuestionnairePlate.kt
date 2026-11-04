@@ -1,5 +1,6 @@
 package com.jarvis.client.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
@@ -25,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
@@ -39,14 +43,19 @@ import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.launch
 
 /**
- * "First-time setup" on Settings (docs/JARVIS-API.md section 147; the PC's
+ * "Personalize Jarvis" on Settings (docs/JARVIS-API.md section 147; the PC's
  * module is `backend/jarvis_setup.py`; [SetupQuestionnaire] holds every rule).
  *
- * READ-ONLY. The same fourteen questions, the same prefill from the last
- * accepted answers, and the PC's own read-only plan: "See what this would
- * change" posts `POST /api/setup/plan`, which writes nothing and raises no
- * card, and draws each change with its effect - Instant, Asks you on a card, or
- * Blocked - plus what would NOT change and why.
+ * READ-ONLY. The same twenty-five questions split into the PC's own sections -
+ * a row of section tabs above the list, and a heading per section while all of
+ * them are shown - the same prefill from the last accepted answers, and the
+ * PC's own read-only plan: "See what this would change" posts
+ * `POST /api/setup/plan`, which writes nothing and raises no card, and draws
+ * each change with its effect - Instant, Asks you on a card, or Blocked - plus
+ * what would NOT change and why. One more read-only line says whether the PC's
+ * question set is finished, how many questions it has answered and which
+ * question its card is on; it never moves that card, and this file has no
+ * progress write of its own.
  *
  * THERE IS NO APPLY BUTTON HERE, deliberately. Applying works through the
  * changes one at a time and waits on each existing approval card; some changes
@@ -71,6 +80,8 @@ internal fun SetupQuestionnaireSection() {
     var plan by remember { mutableStateOf<SetupQuestionnaire.Plan?>(null) }
     var planning by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    /** "" shows every section; otherwise the PC's own section id. */
+    var sectionPick by remember { mutableStateOf("") }
 
     LaunchedEffect(reads) {
         when (val result = JarvisRuntime.setupQuestionnaire()) {
@@ -83,6 +94,7 @@ internal fun SetupQuestionnaireSection() {
                     draft = SetupQuestionnaire.initialDraft(got)
                     plan = null
                     missing = false
+                    sectionPick = ""
                 }
                 readError = null
             }
@@ -135,17 +147,54 @@ internal fun SetupQuestionnaireSection() {
                             color = chrome.warnInk,
                         )
                     } else {
-                        for (question in got.questions) {
-                            QuestionBlock(
-                                question = question,
-                                draft = draft,
-                                enabled = !planning,
-                                onDraft = { next ->
-                                    draft = next
-                                    plan = null
-                                    said = null
-                                },
+                        val progress = SetupQuestionnaire.progressWords(got)
+                        if (progress.isNotEmpty()) {
+                            Gap(6)
+                            Text(
+                                progress,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
                             )
+                        }
+                        val picked = if (sectionPick.isEmpty()) {
+                            got.sections
+                        } else {
+                            got.sections.filter { it.id == sectionPick }
+                        }
+                        // A section the PC no longer sends (it refreshed under
+                        // us) shows everything rather than an empty list.
+                        val groups = picked.ifEmpty { got.sections }
+                        if (got.sections.size > 1) {
+                            Gap(6)
+                            SectionRow(
+                                sections = got.sections,
+                                pick = if (picked.isEmpty()) "" else sectionPick,
+                                onPick = { sectionPick = it },
+                            )
+                        }
+                        // Every question is in one of the groups (the split is
+                        // total), so an empty `groups` means no questions at all.
+                        for (group in groups) {
+                            if (groups.size > 1) {
+                                Gap(10)
+                                Text(
+                                    SetupQuestionnaire.sectionWords(group),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = chrome.textHi,
+                                )
+                            }
+                            for (question in group.questions) {
+                                QuestionBlock(
+                                    question = question,
+                                    draft = draft,
+                                    enabled = !planning,
+                                    onDraft = { next ->
+                                        draft = next
+                                        plan = null
+                                        said = null
+                                    },
+                                )
+                            }
                         }
                         Gap(12)
                         Secondary(
@@ -212,6 +261,49 @@ internal fun SetupQuestionnaireSection() {
                     modifier = Modifier.liveStatus(),
                 )
             }
+        }
+    }
+}
+
+/**
+ * The PC's sections as one row of tabs that scrolls sideways (the same shape
+ * History's tag row uses): "All sections" first, then every section in the
+ * PC's own order. A tab only CHOOSES WHICH QUESTIONS ARE DRAWN - the answers,
+ * the draft and the plan are the same whichever tab is open - so this row can
+ * never apply, save or record anything.
+ */
+@Composable
+private fun SectionRow(
+    sections: List<SetupQuestionnaire.Section>,
+    pick: String,
+    onPick: (String) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Quiet(
+            SetupQuestionnaire.ALL_SECTIONS,
+            modifier = Modifier.semantics {
+                contentDescription = "Section: ${SetupQuestionnaire.ALL_SECTIONS}" +
+                    if (pick.isEmpty()) ", chosen" else ""
+            },
+            color = if (pick.isEmpty()) chrome.textHi else chrome.textLo,
+            onClick = { onPick("") },
+        )
+        for (section in sections) {
+            Spacer(Modifier.width(4.dp))
+            val words = SetupQuestionnaire.sectionWords(section)
+            Quiet(
+                words,
+                modifier = Modifier.semantics {
+                    contentDescription = "Section: $words" +
+                        if (pick == section.id) ", chosen" else ""
+                },
+                color = if (pick == section.id) chrome.textHi else chrome.textLo,
+                onClick = { onPick(section.id) },
+            )
         }
     }
 }

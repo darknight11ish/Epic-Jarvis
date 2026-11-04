@@ -1,23 +1,31 @@
 /**
- * The setup questionnaire on the desktop: the model, the bridge, the page's
- * one action, and the PC's real fourteen questions.
+ * "Personalize Jarvis" on the desktop: the model, the stepper, the bridge, the
+ * page's one action, and the PC's real questions.
  *
  * Part 1 reads the PC's own questions from `backend/jarvis_setup.py` with the
  * real Python interpreter (`tests/lib/python.mjs`), so this suite cannot pass
  * against a hand-written idea of the questionnaire: the count, the ids, the
  * options and the order are the PC's. When there is no Python on this machine
- * those checks SKIP and say so - a skip is not a pass.
+ * those checks SKIP and say so - a skip is not a pass. The suite never types
+ * the number of questions: the fixture's generated `count` is the one number,
+ * so a backend that grows from fourteen to twenty-five cannot leave this file
+ * lying.
  *
  * Part 2 is the model: the reading, the draft ("All"/"None" expand at the data
  * level), the READ-ONLY plan body, the one apply body (the only one carrying
- * `confirm: true`), the effect words (instant / card / blocked - never
- * rounded), the gate a stale link holds, and the honest outcomes (a card still
- * waiting is NOT "failed" and NOT "done").
+ * `confirm: true`), the progress body, the effect words (instant / card /
+ * blocked - never rounded), the gate a stale link holds, and the honest
+ * outcomes (a card still waiting is NOT "failed" and NOT "done").
  *
- * Part 3 is a fake bridge: what the page sends for read, plan and apply, and
- * that a read or a plan can never carry `confirm`. It also reads the Rust and
- * the page as text for the wiring and for what must NOT be there: no route
- * name in the page, no gate action, no auto-apply on load.
+ * Part 3 is the stepper (Wave B, 2026-11-03): the section tabs, the "new /
+ * unanswered" filter driven by each question's own `version`, the next-question
+ * rule and the progress words - all pure, all tested here.
+ *
+ * Part 4 is a fake bridge: what the page sends for read, plan, progress and
+ * apply, and that a read, a plan or a progress note can never carry `confirm`.
+ * It also reads the Rust and the page as text for the wiring and for what must
+ * NOT be there: no route name in the page, no gate action, no auto-apply on
+ * load; and the HUD's own banner and the one command it needs.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -65,6 +73,9 @@ print(json.dumps({
         "options": [{"id": o["id"], "label": o["label"],
                      "detail": o.get("detail", "")} for o in q["options"]],
         "all_none": bool(q["multi"]),
+        "section": q.get("section", ""),
+        "version": q.get("version", 0),
+        "sections": list(getattr(S, "SECTIONS", ())),
     } for q in S.QUESTIONS],
 }))
 `);
@@ -76,9 +87,9 @@ function needLive() {
   return LIVE.questions;
 }
 
-await check("the PC's questionnaire is fourteen questions, each with choices", () => {
+await check("the PC's questionnaire is a list of questions, each with choices", () => {
   const questions = needLive();
-  assert.equal(questions.length, 14, `the PC sent ${questions.length} questions`);
+  assert.ok(questions.length > 0, "the PC sent no questions at all");
   const ids = questions.map((q) => q.id);
   assert.equal(new Set(ids).size, ids.length, "question ids are unique");
   for (const q of questions) {
@@ -86,6 +97,18 @@ await check("the PC's questionnaire is fourteen questions, each with choices", (
     assert.ok(q.options.length >= 2, `${q.id} offers at least two choices`);
     assert.equal(new Set(q.options.map((o) => o.id)).size, q.options.length,
       `${q.id}'s choice ids are unique`);
+  }
+  // Wave B's per-question fields, once the PC sends them: `version` is a whole
+  // number and `section` (when present) is one of the PC's own declared
+  // sections. Before the backend lands they are absent, which is allowed - the
+  // reading treats that as "no version data", never as a broken question.
+  const declared = new Set((questions[0].sections || []).map((row) => row[0]));
+  for (const q of questions) {
+    assert.ok(Number.isInteger(q.version) && q.version >= 0,
+      `${q.id}'s version is a whole number`);
+    if (q.section) {
+      assert.ok(declared.has(q.section), `${q.id}'s section is one the PC declares`);
+    }
   }
 });
 
@@ -120,10 +143,22 @@ await check("no question id or title is hardcoded in the page's source", () => {
 await check("the shared fixture is the PC's questions, and the phone reads the same file", () => {
   const questions = needLive();
   const fixture = JSON.parse(read("../backend/fixtures/setup_questions.json"));
-  assert.equal(fixture.count, 14, "the fixture says fourteen questions");
+  // The count is the fixture's own generated number, never one typed here: a
+  // backend that grows from fourteen questions to twenty-five regenerates it,
+  // and this file needs no edit to stay honest.
+  assert.equal(fixture.count, questions.length,
+    "the fixture is stale: run py -3 tools/gen_setup_questions.py");
   assert.equal(fixture.generated_by, "tools/gen_setup_questions.py");
   assert.equal(fixture.source, "backend/jarvis_setup.py");
-  assert.deepEqual(fixture.questions, questions,
+  // Compared on the fields the fixture has always carried, in the order the PC
+  // sends them. Wave B adds `section` and `version` per question once the PC
+  // sends them; the fixture picks those up when it is next regenerated, and
+  // this comparison does not care either way.
+  const shape = (rows) => rows.map((q) => ({
+    id: q.id, title: q.title, help: q.help, multi: q.multi,
+    options: q.options, all_none: q.all_none === true || q.multi === true,
+  }));
+  assert.deepEqual(shape(fixture.questions), shape(questions),
     "the fixture is stale: run py -3 tools/gen_setup_questions.py");
 });
 
@@ -382,7 +417,295 @@ await check("the card patience is said in minutes, and the last run is readable"
   assert.equal(Q.lastRunView(Q.normaliseReading({ available: true, questions: [] })).rows.length, 0);
 });
 
-/* ── 3. The bridge: what is sent, and what can never be sent ─────────────── */
+/* ── 3. The stepper: sections, the filter, the next question, progress ───── */
+
+/* A reading shaped like the PC's answer after Wave B: seven sections, some
+ * questions from version 1 and some new in version 2, and an owner who has
+ * answered five of the eleven and last finished version 1. */
+const STEPS = Q.normaliseReading({
+  available: true,
+  version: 2,
+  completed_version: 1,
+  answered_count: 5,
+  dismissed_at: null,
+  in_progress: { section: "learning", question: "reworded_memories",
+    started_at: 1_793_941_000.5, draft_answers: { reworded_memories: "on" } },
+  sections: [
+    { id: "talk", title: "How it talks" },
+    { id: "read", title: "What it may read" },
+    { id: "learning", title: "Learning & privacy" },
+    { id: "notify", title: "Notifications" },
+  ],
+  questions: [
+    { id: "talk_style", title: "How should Jarvis talk?", help: "Words only.", multi: false,
+      section: "talk", version: 1,
+      options: [{ id: "warm", label: "Warm" }, { id: "plain", label: "Plain" }] },
+    { id: "personality", title: "Which personality?", help: "", multi: false,
+      section: "talk", version: 2,
+      options: [{ id: "warm_peer", label: "Warm" }, { id: "calm_stoic", label: "Calm" }] },
+    { id: "reading_tools", title: "Which of your things may it read?", help: "",
+      multi: true, section: "read", version: 1,
+      options: [{ id: "calendar", label: "Calendar" }, { id: "email", label: "Email" }] },
+    { id: "lights_without_card", title: "Lights without a card?", help: "", multi: false,
+      section: "read", version: 2,
+      options: [{ id: "on", label: "On" }, { id: "off", label: "Off" }] },
+    { id: "learning", title: "How should Jarvis learn?", help: "", multi: false,
+      section: "learning", version: 1,
+      options: [{ id: "learn", label: "Learn" }, { id: "learn_off", label: "Off" }] },
+    { id: "reworded_memories", title: "Save a reworded fact?", help: "", multi: false,
+      section: "learning", version: 2,
+      options: [{ id: "on", label: "On" }, { id: "off", label: "Off" }] },
+    { id: "chat_history", title: "Keep chats on this PC?", help: "", multi: false,
+      section: "learning", version: 2,
+      options: [{ id: "on", label: "On" }, { id: "off", label: "Off" }] },
+    { id: "notifications", title: "Which notifications?", help: "", multi: true,
+      section: "notify", version: 1,
+      options: [{ id: "phone", label: "Phone" }, { id: "watch", label: "Watch" }] },
+  ],
+  answers: {
+    talk_style: "warm", reading_tools: ["calendar"], learning: "learn",
+    notifications: ["phone"], // answered, and still version 1
+  },
+});
+const STEPS_DRAFT = Q.draftFromAnswers(STEPS);
+
+await check("the PC's sections are the tabs, in its order; a backend without them still gets one", () => {
+  const sections = Q.sectionsOf(STEPS);
+  assert.deepEqual(sections.map((s) => s.id), ["talk", "read", "learning", "notify"],
+    "the PC's declared order is kept");
+  assert.deepEqual(sections.map((s) => s.title),
+    ["How it talks", "What it may read", "Learning & privacy", "Notifications"]);
+  assert.deepEqual(sections[1].questions.map((q) => q.id),
+    ["reading_tools", "lights_without_card"]);
+
+  // No declared sections: derived from the questions' own `section` values, in
+  // the order they appear - never a blank page.
+  const derived = Q.sectionsOf(Q.normaliseReading({
+    available: true,
+    questions: [
+      { id: "a", title: "A", options: [{ id: "x" }, { id: "y" }], section: "one" },
+      { id: "b", title: "B", options: [{ id: "x" }, { id: "y" }], section: "two" },
+      { id: "c", title: "C", options: [{ id: "x" }, { id: "y" }], section: "one" },
+    ],
+  }));
+  assert.deepEqual(derived.map((s) => s.id), ["one", "two"]);
+  assert.deepEqual(derived[0].questions.map((q) => q.id), ["a", "c"]);
+
+  // No sections and none on the questions: ONE unnamed tab, holding all of
+  // them. An older PC is not a broken card.
+  const fallback = Q.sectionsOf(Q.normaliseReading({
+    available: true,
+    questions: [
+      { id: "a", title: "A", options: [{ id: "x" }, { id: "y" }] },
+      { id: "b", title: "B", options: [{ id: "x" }, { id: "y" }] },
+    ],
+  }));
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0].id, "");
+  assert.equal(fallback[0].title, Q.SECTION_FALLBACK_TITLE);
+  assert.equal(fallback[0].questions.length, 2);
+  // A section the PC declared but has no questions for is left out.
+  assert.equal(Q.sectionsOf(Q.normaliseReading({
+    available: true, sections: [{ id: "empty", title: "Empty" }],
+    questions: [{ id: "a", title: "A", options: [{ id: "x" }, { id: "y" }], section: "one" }],
+  })).some((s) => s.id === "empty"), false);
+});
+
+await check("the filter is new-or-unanswered, driven by each question's own version", () => {
+  // Answered in version 1, unchanged since: hidden by the filter.
+  assert.equal(Q.isNewOrUnanswered(STEPS, STEPS.questions[0]), false);
+  // Answered in version 1, but the question is now version 2: SHOWN - this is
+  // exactly ruling Q3's "10 new questions" after a 1 -> 2 bump.
+  assert.equal(Q.isNewOrUnanswered(STEPS, STEPS.questions[1]), true);
+  // Never answered: shown whatever its version.
+  assert.equal(Q.isNewOrUnanswered(STEPS, STEPS.questions[6]), true);
+  const fresh = Q.visibleQuestions(STEPS, { filter: true });
+  assert.deepEqual(fresh.map((q) => q.id),
+    ["personality", "lights_without_card", "reworded_memories", "chat_history"]);
+  // The count in the label is this same call, never a number typed on the page.
+  assert.equal(fresh.length, 4);
+
+  // A section narrows it; both together are the card's filter.
+  assert.deepEqual(Q.visibleQuestions(STEPS, { section: "learning", filter: true })
+    .map((q) => q.id), ["reworded_memories", "chat_history"]);
+  assert.deepEqual(Q.visibleQuestions(STEPS, { section: "talk" }).map((q) => q.id),
+    ["talk_style", "personality"]);
+
+  // No version data at all (an older PC): the filter keeps only the
+  // unanswered, and never hides a question it cannot judge.
+  const oldPc = Q.normaliseReading({
+    available: true, questions: [
+      { id: "a", title: "A", options: [{ id: "x" }, { id: "y" }] },
+      { id: "b", title: "B", options: [{ id: "x" }, { id: "y" }] },
+    ], answers: { a: "x" },
+  });
+  assert.deepEqual(Q.visibleQuestions(oldPc, { filter: true }).map((q) => q.id), ["b"]);
+});
+
+await check("the filter's empty line and its count tell the same truth", () => {
+  // Four questions are new or unanswered across the whole questionnaire; that
+  // number is the label above the panel ("Show only new / unanswered (4)").
+  assert.equal(Q.visibleQuestions(STEPS, { filter: true }).length, 4);
+  // The section on screen holds none of them, so the panel says THAT. It used
+  // to say "Every question is answered and up to date" here, contradicting
+  // the count right above it (audit 2026-11-03, bug 6).
+  assert.equal(Q.visibleQuestions(STEPS, { section: "notify", filter: true }).length, 0);
+  assert.equal(Q.filterEmptyWords(STEPS, { section: "notify", filter: true }),
+    Q.FILTER_SECTION_EMPTY);
+  assert.doesNotMatch(Q.FILTER_SECTION_EMPTY, /Every question is answered/);
+  // A section that does have fresh questions says nothing at all.
+  assert.equal(Q.filterEmptyWords(STEPS, { section: "talk", filter: true }), "");
+  assert.equal(Q.filterEmptyWords(STEPS, { section: "learning", filter: true }), "");
+  // The completion sentence is for a questionnaire with nothing fresh
+  // ANYWHERE - the same set the count is taken from.
+  const finished = Q.normaliseReading({
+    available: true, version: 1, completed_version: 1,
+    sections: [{ id: "a", title: "A" }, { id: "b", title: "B" }],
+    questions: [
+      { id: "q1", title: "Q1", section: "a", version: 1, options: [{ id: "x", label: "X" }] },
+      { id: "q2", title: "Q2", section: "b", version: 1, options: [{ id: "x", label: "X" }] },
+    ],
+    answers: { q1: "x", q2: "x" },
+  });
+  assert.equal(Q.visibleQuestions(finished, { filter: true }).length, 0);
+  assert.equal(Q.filterEmptyWords(finished, { section: "a", filter: true }), Q.FILTER_EMPTY);
+  assert.equal(Q.filterEmptyWords(finished, { filter: true }), Q.FILTER_EMPTY);
+  // The filter off is no empty state at all: the whole section is on screen.
+  assert.equal(Q.filterEmptyWords(STEPS, { section: "notify", filter: false }), "");
+  // The two sentences are different on purpose.
+  assert.notEqual(Q.FILTER_EMPTY, Q.FILTER_SECTION_EMPTY);
+});
+
+await check("next, first-unanswered and the position words walk the PC's order", () => {
+  // Forward from a question to the next one with no answer in the draft.
+  assert.equal(Q.nextQuestion(STEPS, STEPS_DRAFT, "talk_style").id, "personality");
+  assert.equal(Q.nextQuestion(STEPS, STEPS_DRAFT, "learning").id, "reworded_memories");
+  // From the start (`""`) it is the first unanswered question overall.
+  assert.equal(Q.nextQuestion(STEPS, STEPS_DRAFT, "").id, "personality");
+  // From the last question there is nothing after it.
+  assert.equal(Q.nextQuestion(STEPS, STEPS_DRAFT, "notifications"), null);
+  // "Skip" is this same rule after the id is dropped from the draft: the
+  // question just walked past is not offered again.
+  const skipped = Q.chooseOne(STEPS_DRAFT, "personality", "");
+  assert.equal(Q.answerFor(skipped, "personality"), null);
+  assert.equal(Q.nextQuestion(STEPS, skipped, "personality").id, "lights_without_card");
+
+  // First open: the first question the owner has never answered.
+  assert.equal(Q.firstUnanswered(STEPS).id, "personality");
+  // Everything answered: null, so the card opens at its own top.
+  const all = { talk_style: "warm", personality: "calm_stoic", reading_tools: ["calendar"],
+    lights_without_card: "off", learning: "learn", reworded_memories: "on",
+    chat_history: "off", notifications: ["phone"] };
+  assert.equal(Q.firstUnanswered({ ...STEPS, answers: all }), null);
+
+  // "8 of 25 answered" is a count, never a percentage, and it follows the DRAFT.
+  assert.equal(Q.progressWords(STEPS, STEPS_DRAFT), "4 of 8 answered");
+  assert.equal(Q.progressWords(STEPS, {}), "0 of 8 answered");
+  assert.equal(Q.progressWords(Q.normaliseReading({ available: true, questions: [] }), {}),
+    "0 of 0 answered");
+  assert.equal(Q.positionWords(STEPS, "learning"), "Question 5 of 8");
+  assert.equal(Q.positionWords(STEPS, "not-a-question"), "");
+});
+
+await check("the reading carries the PC's own progress state, and tolerates every missing field", () => {
+  assert.equal(STEPS.version, 2);
+  assert.equal(STEPS.completedVersion, 1);
+  assert.equal(STEPS.answeredCount, 5);
+  assert.equal(STEPS.dismissedAt, null);
+  assert.equal(STEPS.inProgress.question, "reworded_memories");
+  assert.equal(STEPS.inProgress.section, "learning");
+  assert.deepEqual(STEPS.inProgress.draftAnswers, { reworded_memories: "on" });
+  assert.equal(STEPS.completedAt, null);
+  assert.equal(STEPS.runs, 0);
+
+  // An old three-key file, and a body with no progress fields at all: zeros,
+  // never a guess and never a throw.
+  const old = Q.normaliseReading({
+    available: true, questions: [{ id: "a", title: "A", options: [{ id: "x" }] }],
+  });
+  assert.equal(old.version, 0);
+  assert.equal(old.completedVersion, 0);
+  assert.equal(old.inProgress, null);
+  assert.equal(old.answeredCount, 0);
+  assert.deepEqual(old.sections, []);
+  // A corrupt `in_progress` is no position, not a crash.
+  assert.equal(Q.normaliseReading({ available: true, questions: [], in_progress: "here" }).inProgress,
+    null);
+  assert.equal(Q.normaliseReading({
+    available: true, questions: [], in_progress: { section: "learning" },
+  }).inProgress, null, "a position with no question is not a position");
+});
+
+await check("the card's offer row honours Not now for the same day the toast does", () => {
+  const at = 1_800_000_000;
+  // Unfinished, never dismissed: offered.
+  assert.equal(STEPS.version, 2);
+  assert.equal(STEPS.completedVersion, 1);
+  assert.equal(Q.offerShown(STEPS, at), true);
+  // Dismissed now, an hour ago, a second before the day is up: not offered.
+  // The row used to ignore `dismissed_at` entirely and paint itself again on
+  // the next open, inside the very day it promised to stay quiet (audit
+  // 2026-11-03, bug 4).
+  const dismissed = { ...STEPS, dismissedAt: at };
+  assert.equal(Q.offerShown(dismissed, at), false);
+  assert.equal(Q.offerShown(dismissed, at + 3_600), false);
+  assert.equal(Q.offerShown(dismissed, at + Q.OFFER_QUIET_SECS - 1), false);
+  // Twenty-four hours later the offer is back, exactly as the toast's is.
+  assert.equal(Q.offerShown(dismissed, at + Q.OFFER_QUIET_SECS), true);
+  assert.equal(Q.offerShown(dismissed, at + Q.OFFER_QUIET_SECS + 60), true);
+  // A clock that went backwards is still "just pressed": the quiet reading.
+  assert.equal(Q.offerShown(dismissed, at - 60), false);
+  // Zero is not a real press, so it hides nothing.
+  assert.equal(Q.offerShown({ ...STEPS, dismissedAt: 0 }, at), true);
+  // A finished pass is not offered whatever the clock says, and a PC without
+  // the questionnaire offers nothing at all.
+  assert.equal(Q.offerShown({ ...STEPS, completedVersion: 2 }, at), false);
+  assert.equal(Q.offerShown(Q.normaliseReading({ available: false }), at), false);
+  // The 24 hours is the Rust toast's own number, not a second opinion.
+  const rust = read("src-tauri/src/setup_offer.rs");
+  const hours = Number(
+    /DISMISS_QUIET_SECS: f64 = ([0-9.]+) \* 60\.0 \* 60\.0/.exec(rust)[1],
+  );
+  assert.equal(hours * 3_600, Q.OFFER_QUIET_SECS, "one press, one length of quiet");
+});
+
+await check("the finished block never claims answers the pass does not have", () => {
+  // Not finished: no block at all.
+  assert.equal(Q.finishedPassWords(STEPS, STEPS_DRAFT), "");
+  assert.equal(Q.finishedPassWords(Q.normaliseReading({ available: true }), {}), "");
+
+  // "Keep current settings" records `completed_version` and writes NO answer,
+  // so the block may not say "Every question the PC has is answered" - it used
+  // to, and kept saying it (audit 2026-11-03, bug 5).
+  const kept = { ...STEPS, completedVersion: 2 };
+  const keptWords = Q.finishedPassWords(kept, STEPS_DRAFT);
+  assert.equal(keptWords, `${Q.DONE_HEADING}. ${Q.KEPT_WORDS}`);
+  assert.doesNotMatch(keptWords, /Every question the PC has is answered/);
+  assert.match(keptWords, /still unanswered/);
+
+  // Every question answered: the completion sentence, and only then.
+  const all = {
+    talk_style: "warm", personality: "calm_stoic", reading_tools: ["calendar"],
+    lights_without_card: "off", learning: "learn", reworded_memories: "on",
+    chat_history: "off", notifications: ["phone"],
+  };
+  assert.equal(Q.finishedPassWords(kept, all), `${Q.DONE_HEADING}. ${Q.DONE_WORDS}`);
+  // One answer short is not completion, and an empty answer is not one either.
+  const almost = { ...all };
+  delete almost.chat_history;
+  assert.equal(Q.finishedPassWords(kept, almost), `${Q.DONE_HEADING}. ${Q.KEPT_WORDS}`);
+  assert.equal(Q.finishedPassWords(kept, { ...all, chat_history: "" }),
+    `${Q.DONE_HEADING}. ${Q.KEPT_WORDS}`);
+  // A reading with no questions is never "every question is answered".
+  const empty = Q.normaliseReading({
+    available: true, version: 2, completed_version: 2, questions: [],
+  });
+  assert.equal(Q.finishedPassWords(empty, {}), `${Q.DONE_HEADING}. ${Q.KEPT_WORDS}`);
+  // And the two bodies are different words, not the same one twice.
+  assert.notEqual(Q.DONE_WORDS, Q.KEPT_WORDS);
+});
+
+/* ── 4. The bridge: what is sent, and what can never be sent ─────────────── */
 
 const calls = [];
 let reply = async () => ({ available: true, questions: [] });
@@ -429,7 +752,58 @@ await check("apply sends the one write body, with confirm: true, and nothing els
   }]);
   assert.deepEqual(Object.keys(calls[0].args).sort(), ["action", "answers", "confirm"]);
   assert.equal(Bridge.COMMAND, "setup_questionnaire");
-  assert.deepEqual(Bridge.VERBS, ["read", "plan", "apply"]);
+  assert.deepEqual(Bridge.VERBS, ["read", "plan", "progress", "apply"]);
+});
+
+await check("progress sends one small note, and never an answer's confirm", async () => {
+  reset(async () => ({ ok: true }));
+  await Bridge.progressSetup(Q.progressBody({ section: "learning", question: "learning" }));
+  assert.deepEqual(calls, [{
+    command: "setup_questionnaire",
+    args: { action: "progress", progress: { section: "learning", question: "learning" } },
+  }]);
+  assert.ok(!("confirm" in calls[0].args));
+  assert.ok(!("answers" in calls[0].args));
+  assert.doesNotMatch(JSON.stringify(calls[0].args), /confirm/);
+
+  // The three shapes, and only those. "Not now" wins over anything else that
+  // was sent with it (the Rust builder applies the same order).
+  assert.deepEqual(Q.progressBody({ dismiss: true, question: "learning" }), { dismiss: true });
+  assert.deepEqual(Q.progressBody({ keepCurrent: true, question: "learning" }),
+    { keep_current: true });
+  assert.deepEqual(
+    Q.progressBody({ section: "talk", question: "talk_style", draft: { talk_style: "warm" } }),
+    { section: "talk", question: "talk_style", draft_answers: { talk_style: "warm" } });
+  // Nothing staged means no draft field at all, not an empty object.
+  assert.deepEqual(Q.progressBody({ question: "talk_style", draft: {} }),
+    { question: "talk_style" });
+  // EXCEPT for "Take it again", which needs the explicit empty object: the PC
+  // merges a supplied draft and only an explicit `{}` clears it, while an
+  // absent field means "keep what you have" - so the retake was undone on the
+  // next open (audit 2026-11-03, bug 2).
+  assert.deepEqual(
+    Q.progressBody({ section: "talk", question: "talk_style", draft: {}, clearDraft: true }),
+    { section: "talk", question: "talk_style", draft_answers: {} });
+  // A clear that still has staged answers sends them as usual: the flag never
+  // turns a real draft into a wipe.
+  assert.deepEqual(
+    Q.progressBody({ question: "talk_style", draft: { talk_style: "warm" }, clearDraft: true }),
+    { question: "talk_style", draft_answers: { talk_style: "warm" } });
+  assert.ok(!("confirm" in Q.progressBody({ question: "talk_style", clearDraft: true })));
+  // It is never an apply: no confirm, no answers.
+  for (const body of [Q.progressBody({ dismiss: true }),
+    Q.progressBody({ keepCurrent: true }),
+    Q.progressBody({ question: "talk_style", draft: { talk_style: "warm" } })]) {
+    assert.ok(!("confirm" in body));
+    assert.ok(!("answers" in body));
+  }
+
+  // A refusal comes back as words, not a throw and not a retry.
+  reset(async () => { throw new Error("this PC has no progress route"); });
+  const refused = await Bridge.progressSetup(Q.progressBody({ question: "learning" }));
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /no progress route/);
+  assert.equal(calls.length, 1);
 });
 
 await check("a failed read or plan becomes words, and a failed apply is thrown - never retried", async () => {
@@ -502,71 +876,181 @@ await check("the page names no route and no gate action, and never applies on lo
     "planBody never builds a confirm");
 });
 
+await check("the card paints the three honest states from the model", () => {
+  const page = read("src/setup-settings.js");
+  // Bugs 4, 5 and 6 were each a sentence computed in the page: the offer row
+  // ignored the PC's dismissal, the done block claimed answers it did not
+  // have, and the empty panel tested a different set from the count above it.
+  assert.match(page, /offerShown\(reading, Date\.now\(\) \/ 1000\)/,
+    "the offer row decides from the PC's dismissal again");
+  assert.match(page, /finishedPassWords\(reading, draft\)/,
+    "the done block words itself from its own idea of finished");
+  assert.match(page, /filterEmptyWords\(reading, \{ section, filter: filterOn \}\)/,
+    "the empty panel is not the count's own set");
+  for (const word of ["DONE_HEADING", "DONE_WORDS", "FILTER_EMPTY"]) {
+    assert.ok(!page.includes(word), `the page still words ${word} itself`);
+  }
+  // "Take it again" sends the explicit empty draft AT ONCE - not through the
+  // debounced position note, which the next answer would replace (bug 2).
+  assert.match(page, /clearDraft: true/);
+  const takeAt = page.indexOf("function takeAgain()");
+  const takeEnd = page.indexOf("function planRows(");
+  assert.ok(takeAt > 0 && takeEnd > takeAt, "takeAgain is gone from the page");
+  const takeBody = page.slice(takeAt, takeEnd);
+  assert.ok(takeBody.includes("clearStagedDraft()"),
+    "the retake never clears the draft the PC stores");
+  assert.ok(!takeBody.includes("queueProgress()"),
+    "the retake's clear rides the debounce, where the next note replaces it");
+});
+
 await check("the Rust command builds the bodies, refuses without confirm, and holds only apply on a stale link", () => {
   const rust = read("src-tauri/src/setup_questionnaire.rs");
   assert.match(rust, /pub\(crate\) const PATH: &str = "\/api\/setup";/);
   assert.match(rust, /PLAN_PATH: &str = "\/api\/setup\/plan";/);
+  assert.match(rust, /PROGRESS_PATH: &str = "\/api\/setup\/progress";/);
   assert.match(rust, /APPLY_PATH: &str = "\/api\/setup\/apply";/);
   assert.match(rust, /confirm != Some\(true\)/);
   assert.match(rust, /\{ "answers": answers, "confirm": true \}/);
-  // The plan branch never checks the link; the apply branch does, before the
-  // post. Two slices of the command, so the check cannot pass on the other
-  // branch's line.
+  assert.match(rust, /const ACTIONS: &\[&str\] = &\["read", "plan", "progress", "apply"\];/);
+  // Three slices of the command: the read-only plan and the progress note are
+  // never held on a stale link, and the one write always is. Written per
+  // slice, so a passing line in one branch cannot cover another.
   const planAt = rust.indexOf('"plan" =>');
+  const progressAt = rust.indexOf('"progress" =>');
   const applyAt = rust.indexOf("The only verb left");
   const testsAt = rust.indexOf("#[cfg(test)]");
-  assert.ok(planAt > 0 && applyAt > planAt && testsAt > applyAt);
-  assert.ok(!rust.slice(planAt, applyAt).includes("stale"),
+  assert.ok(planAt > 0 && progressAt > planAt && applyAt > progressAt && testsAt > applyAt);
+  // `.stale` is the code expression; the comments in these arms may explain a
+  // stale link without holding on one.
+  assert.ok(!rust.slice(planAt, progressAt).includes(".stale"),
     "a read-only plan is not held on a stale link");
+  assert.ok(!rust.slice(progressAt, applyAt).includes(".stale"),
+    "a progress note is not held on a stale link");
   assert.match(rust.slice(applyAt, testsAt), /\.link\(\)\s*\.stale/,
     "the write is held on a stale link");
-  // A fourth verb is refused before any body is built.
+  // A fifth verb is refused before any body is built.
   assert.match(rust, /if !ACTIONS\.contains\(&verb\)/);
+  // The progress body is one of exactly three small shapes: a dismissal, a
+  // keep-current, or where the owner is - and an unknown field is refused
+  // rather than passed on.
+  assert.match(rust, /const FIELDS: &\[&str\] = &\[/);
+  assert.match(rust, /"keep_current": true/);
   // No approval machinery in this module: it can only ask the PC.
   for (const name of ["decide_approval", "approve_approval", "jarvis_gate", "deny("]) {
     assert.ok(!rust.includes(name), `the command must not call ${name}`);
   }
 });
 
-await check("the wiring is real: the card, the command, its one permission and the phone's read-only row", () => {
-  // Desktop: the Settings card, its script tag and its jump link; the module;
-  // the command list; the one permission set and the capability; the generated
-  // permission file. A dropped line here means the page or the command is
-  // unreachable, which no unit test of the model above would notice.
+await check("the wiring is real: the card, the command, its permissions and the phone's read-only row", () => {
+  // Desktop: the Settings card (with the section tabs, the mode row, the
+  // progress line and the filter), its script tag and its jump link; the
+  // module; the command list; the permission set and the capability; the
+  // generated permission files. A dropped line here means the page or the
+  // command is unreachable, which no unit test of the model above would
+  // notice.
   const settingsHtml = read("src/settings.html");
   assert.match(settingsHtml, /<section class="card" id="setup-questionnaire">/);
+  // The place other surfaces ask for by name, on the card's first line.
+  assert.match(settingsHtml, /<span id="personalize-jarvis" class="place-anchor"><\/span>/);
   assert.match(settingsHtml, /id="sq-body"/);
+  assert.match(settingsHtml, /id="sq-sections"[^>]*role="tablist"/);
+  assert.match(settingsHtml, /id="sq-step"[^>]*>Step through one by one</);
+  assert.match(settingsHtml, /id="sq-showall"/);
+  assert.match(settingsHtml, /id="sq-progress"/);
+  assert.match(settingsHtml, /id="sq-filter"/);
+  assert.match(settingsHtml, /id="sq-not-now"/);
+  assert.match(settingsHtml, /id="sq-keep"/);
+  assert.match(settingsHtml, /id="sq-again"/);
   assert.match(settingsHtml, /<script type="module" src="setup-settings.js"><\/script>/);
-  assert.match(settingsHtml, /href="#setup-questionnaire"/);
+  assert.match(settingsHtml, /href="#setup-questionnaire">Personalize Jarvis</);
+  // The notification switch's page row comes from the generated catalogue
+  // (`tools/gen_settings_cases.py`, from the backend registry), so this branch
+  // must NOT hand-write it: the Rust switch exists and the page seam is named.
+  assert.doesNotMatch(settingsHtml, /id="notif-setup"/,
+    "the notification row is generated, not hand-written");
 
   const lib = read("src-tauri/src/lib.rs");
   assert.match(lib, /pub mod setup_questionnaire;/);
   assert.match(lib, /setup_questionnaire::setup_questionnaire,/);
+  // Wave B: the offer module, its state and its one command.
+  assert.match(lib, /pub mod setup_offer;/);
+  assert.match(lib, /setup_offer::hud_setup_dismiss,/);
+  assert.match(lib, /manage\(setup_offer::SetupOfferState::default\(\)\)/);
+  assert.match(lib, /setup_offer::refresh_setup_state/);
+  assert.match(lib, /setup_offer::offer_once/);
+  assert.match(lib, /setup_offer::offer_after_onboarding/);
 
   const build = read("src-tauri/build.rs");
   assert.match(build, /"setup_questionnaire",/);
+  assert.match(build, /"hud_setup_dismiss",/);
 
   const surfaces = read("src-tauri/permissions/surfaces.toml");
   assert.match(surfaces, /identifier = "setup-questionnaire"/);
   assert.match(surfaces, /permissions = \["allow-setup-questionnaire"\]/);
+  // The HUD's banner sets are the ones it already holds: one navigation door
+  // and one dismissal.
+  assert.match(surfaces, /"allow-hud-setup-dismiss",/);
+  assert.match(surfaces, /"allow-open-fix-place",/);
 
   const capabilities = read("src-tauri/capabilities/settings.json");
   assert.match(capabilities, /"setup-questionnaire",/);
+  assert.match(read("src-tauri/capabilities/hud.json"), /"hud-link",/);
 
   const generated = read("src-tauri/permissions/autogenerated/setup_questionnaire.toml");
   assert.match(generated, /identifier = "allow-setup-questionnaire"/);
   assert.match(generated, /commands\.allow = \["setup_questionnaire"\]/);
+  const generatedDismiss = read("src-tauri/permissions/autogenerated/hud_setup_dismiss.toml");
+  assert.match(generatedDismiss, /identifier = "allow-hud-setup-dismiss"/);
+  assert.match(generatedDismiss, /commands\.allow = \["hud_setup_dismiss"\]/);
+
+  // The HUD's own banner: the read, the two buttons and the one command.
+  const hud = read("src/jarvis_hud.html");
+  assert.match(hud, /id="setup-offer"/);
+  assert.match(hud, /id="setup-offer-finish"/);
+  assert.match(hud, /id="setup-offer-not-now"/);
+  assert.match(hud, /jfetch\("\/api\/setup"/);
+  assert.match(hud, /core\.invoke\("open_fix_place", \{place:"personalize-jarvis"\}\)/);
+  assert.match(hud, /core\.invoke\("hud_setup_dismiss"\)/);
+  // The read is on the HUD's allow-list, and the writes beside it are not. The
+  // constant's own block is what is checked: the refused-path test below it
+  // names the writes to prove they are refused, which is not the same thing as
+  // allowing them.
+  const proxy = read("src-tauri/src/hud_proxy.rs");
+  // `15` after the 2026-11-03 merge: this lane's `/api/setup` plus main's
+  // multiwindow routes (`/api/self`, `/api/self/version`, `/api/conversations`).
+  assert.match(proxy, /HUD_GET_PATHS: \[&str; 15\]/);
+  const arrayAt = proxy.indexOf("HUD_GET_PATHS: [&str; 15]");
+  const arrayEnd = proxy.indexOf("];", arrayAt);
+  const allowed = proxy.slice(arrayAt, arrayEnd);
+  assert.match(allowed, /"\/api\/setup",/);
+  assert.ok(!allowed.includes("/api/setup/progress"));
+  assert.ok(!allowed.includes("/api/setup/apply"));
+
+  // The tray's row is driven by the same state and opens the same place.
+  const tray = read("src-tauri/src/tray.rs");
+  assert.match(tray, /ID_SETUP/);
+  assert.match(tray, /pub fn on_setup_state\(/);
+  assert.match(tray, /show_settings_at\(app, "personalize-jarvis"\)/);
+
+  // The place is in the closed list both surfaces ask through.
+  assert.match(read("src-tauri/src/windows.rs"),
+    /SETTINGS_PLACES: \[&str; 2\] = \["updates", "personalize-jarvis"\]/);
+  assert.match(read("src-tauri/src/plain_errors.rs"),
+    /"personalize-jarvis" => crate::windows::show_settings_at\(&app, "personalize-jarvis"\)/);
 
   // Phone: its Settings row, jump entry, search row and the two READS. It has
-  // no apply path, and no source file may name one.
+  // no apply path, and no source file may name one. The TITLE is the phone
+  // session's to rename (Wave B gives both apps the same words) - what this
+  // suite holds is the id and the two reads, which cannot change on either
+  // side without the other knowing.
   const screen = repoRead(
     "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt",
   );
   assert.match(screen, /item\(key = "setup-questionnaire"\)/);
   assert.match(repoRead("jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt"),
-    /Entry\("First-time setup", "setup-questionnaire"\)/);
+    /Entry\("(?:First-time setup|Personalize Jarvis)", "setup-questionnaire"\)/);
   assert.match(repoRead("jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsSearch.kt"),
-    /key = "setup-questionnaire", title = "First-time setup"/);
+    /key = "setup-questionnaire", title = "(?:First-time setup|Personalize Jarvis)"/);
   const api = repoRead("jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisApi.kt");
   assert.match(api, /probe\(SetupQuestionnaire\.PATH\)/);
   assert.match(api, /postObject\(SetupQuestionnaire\.PLAN_PATH/);

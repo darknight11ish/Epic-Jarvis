@@ -134,12 +134,21 @@ check("Rust and the page spell the event the same way", () => {
     new RegExp(`SETTINGS_PLACE_EVENT: &str = "${SETTINGS_PLACE_EVENT}"`),
     "windows.rs does not emit the event this module listens for",
   );
-  // The place and the page must still agree about where it lands.
-  assert.match(rust, /SETTINGS_PLACES: \[&str; 1\] = \["updates"\]/,
-    "windows.rs no longer names exactly the Updates place");
+  // The place and the page must still agree about where it lands. Two places
+  // since Wave B (2026-11-03): the Updates card, and "Personalize Jarvis" -
+  // the HUD's "Finish now" and the tray's "Setup unfinished" row both ask for
+  // that one by name.
+  assert.match(rust, /SETTINGS_PLACES: \[&str; 2\] = \["updates", "personalize-jarvis"\]/,
+    "windows.rs no longer names the Updates and Personalize Jarvis places");
   const html = read("src/settings.html");
   assert.match(html, /<section class="card" id="updates">/,
     "there is no `updates` card for the place to land on");
+  // The quiz's card keeps its long id (the jump list and Settings search name
+  // it), so the place's own id is the anchor on its first line.
+  assert.match(html, /<span id="personalize-jarvis" class="place-anchor"><\/span>/,
+    "there is no `personalize-jarvis` place for the quiz card");
+  assert.match(html, /<section class="card" id="setup-questionnaire">/,
+    "there is no quiz card for the `personalize-jarvis` place to land on");
 });
 
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nsettings places are read safely");

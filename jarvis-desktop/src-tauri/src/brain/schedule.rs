@@ -106,6 +106,23 @@ pub(crate) const ACTIONS: &[&str] = &[
 /// actions, and the PC's row mirrors it (`jarvis_schedule.MAX_ASK_BUTTONS`).
 pub(crate) const MAX_ASK_BUTTONS: u32 = 3;
 
+/// The most parts one routine may have (2026-11-03, `jarvis_schedule.MAX_STEPS`
+/// and `status()["limits"]["steps"]`): the form's own "Add a part" stops here,
+/// and a thirteenth part is refused before any request is made. The words are
+/// the PC's own sentence.
+pub(crate) const MAX_STEPS: u32 = 12;
+
+/// The fewest parts a routine may have (`jarvis_schedule.MIN_STEPS`): one part
+/// is just a reminder, so a one-part routine is refused on both sides.
+const MIN_STEPS: u32 = 2;
+
+/// The longest a part's own words may be (`jarvis_schedule.MAX_STEP_LABEL`).
+const MAX_STEP_LABEL: usize = 80;
+
+/// The furthest a part may sit from the start (`jarvis_schedule.MAX_STEP_OFFSET`):
+/// `offset_min` is minutes after the occurrence's first moment, 0 to a day.
+const MAX_STEP_OFFSET: i64 = 1440;
+
 /// Snooze: how long the buttons set (jarvis_schedule.SNOOZE_DEFAULT), and
 /// the shortest and longest the PC takes.
 pub(crate) const SNOOZE_SECONDS: f64 = 600.0;
@@ -156,6 +173,15 @@ pub struct ScheduleChange {
     pub list: Option<String>,
     pub rank: Option<i64>,
     pub seconds: Option<f64>,
+    /// A routine's parts (2026-11-03, the owner's ask): the shape §2.3 of the
+    /// wave's spec names, checked by [`steps_body`] and never invented here.
+    /// It is the field the HUD's own parts editor saves, and the one the PC
+    /// re-validates through `_clean_steps`.
+    pub steps: Option<serde_json::Value>,
+    /// A reminder's OWN action, so an existing one can be fixed instead of
+    /// deleted and retyped (the gap `docs/JARVIS-API.md` §21.14 named). Built
+    /// by [`action_body`], the same validator the add form uses.
+    pub action: Option<serde_json::Value>,
 }
 
 /// How long ONE change may take: a repeat edit waits for the owner's approval
@@ -279,6 +305,19 @@ pub(crate) fn change_body(
                 body.insert("repeat".into(), repeat_rule(rule)?);
                 fields += 1;
             }
+            // A routine's parts (2026-11-03) and a reminder's own action
+            // (2026-10-27, editable since this wave): both are checked by the
+            // same builders the add form uses, and both are cardless - neither
+            // changes what the owner is allowed to do. A `repeat` still keeps
+            // its ONE card, which is why `change_timeout` is unchanged.
+            if let Some(raw) = change.steps.as_ref() {
+                body.insert("steps".into(), steps_body(raw)?);
+                fields += 1;
+            }
+            if let Some(raw) = change.action.as_ref() {
+                body.insert("action".into(), action_body(raw)?);
+                fields += 1;
+            }
             if let Some(raw) = change.list.as_deref() {
                 body.insert("list".into(), serde_json::json!(move_target(raw)?));
                 has_list = true;
@@ -397,6 +436,43 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
     Err(commands::backend_refusal(status, body))
 }
 
+/// A routine's parts with every one of the owner's own words taken out, for
+/// while App lock or the private lists are hidden (2026-11-03).
+///
+/// What stays is what says nothing about him: the part's time, when it fired,
+/// whether it is done or was missed, whether it is the one showing now, and HOW
+/// MANY buttons it offers. What goes is its label, its question, the words on
+/// its buttons ("Taken" is a fact about his day) and where an answer would be
+/// written (a goal or habit id is a name of his).
+///
+/// The page then draws the routine's count and times and no part rows at all -
+/// exactly the rule the row's own `text` keeps ("times, kinds and counts still
+/// show"), and the same reason: a page is only as private as what it is handed.
+fn redact_steps(parts: &mut serde_json::Value) {
+    let Some(items) = parts.as_array_mut() else {
+        return;
+    };
+    for part in items.iter_mut() {
+        let Some(one) = part.as_object_mut() else {
+            continue;
+        };
+        one.insert("label".into(), serde_json::json!(""));
+        one.remove("ask");
+        if let Some(buttons) = one.get_mut("buttons").and_then(|b| b.as_array_mut()) {
+            for button in buttons.iter_mut() {
+                // Only the verb: a fixed word from a closed list, so the page
+                // still knows how many buttons there are and nothing else.
+                let does = button
+                    .get("does")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                *button = serde_json::json!({ "does": does });
+            }
+        }
+    }
+}
+
 /// The list with every reminder's and to-do item's words taken out, for
 /// while the private lists are hidden (lock.rs). Kinds, times and counts
 /// stay: they say nothing about the owner, and a timer should still count
@@ -481,6 +557,14 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                         // there is nothing to draw.
                         if o.contains_key("answers") {
                             o.insert("answers".into(), serde_json::json!([]));
+                        }
+                        // A routine's PARTS (2026-11-03) are the owner's words
+                        // as well - "fold the laundry", and a question that can
+                        // name a medication. Times, marks and how many parts and
+                        // buttons there are stay (counts, like the row's), and
+                        // every word goes.
+                        if let Some(steps) = o.get_mut("steps") {
+                            redact_steps(steps);
                         }
                         o.insert("hidden".into(), serde_json::json!(true));
                         let named = o
@@ -601,7 +685,16 @@ pub(crate) fn act_body(
 /// It is cardless and decides nothing - an answer is a log line, like ticking a
 /// to-do item - so the only checks here are the ones that make the body mean
 /// something at all: a real id, and an index inside the ceiling the PC enforces.
-pub(crate) fn answer_body(id: &str, button: Option<u32>) -> Result<serde_json::Value, String> {
+///
+/// `step` (2026-11-03) is WHICH part of a routine, also an INDEX and never a
+/// label, and also checked against the PC's own ceiling. It is absent for a
+/// reminder with no parts, so every body this app sent before today is the same
+/// body it sends now.
+pub(crate) fn answer_body(
+    id: &str,
+    button: Option<u32>,
+    step: Option<u32>,
+) -> Result<serde_json::Value, String> {
     if !valid_id(id) {
         return Err("That is not one job.".to_string());
     }
@@ -609,7 +702,14 @@ pub(crate) fn answer_body(id: &str, button: Option<u32>) -> Result<serde_json::V
     if button >= MAX_ASK_BUTTONS {
         return Err("A question has up to three buttons.".to_string());
     }
-    Ok(serde_json::json!({ "id": id, "do": "answer", "button": button }))
+    let mut body = serde_json::json!({ "id": id, "do": "answer", "button": button });
+    if let Some(step) = step {
+        if step >= MAX_STEPS {
+            return Err(format!("A routine has up to {MAX_STEPS} parts."));
+        }
+        body["step"] = serde_json::json!(step);
+    }
+    Ok(body)
 }
 
 /// A named list's name as the PC keeps it ("shopping"): lower case, one to
@@ -775,6 +875,22 @@ fn action_body(action: &serde_json::Value) -> Result<serde_json::Value, String> 
 /// a question with no words, no buttons, more than three, or a button whose
 /// verb is not one of the three.
 fn ask_body(obj: &serde_json::Map<String, serde_json::Value>) -> Result<serde_json::Value, String> {
+    let mut body = ask_block(obj)?;
+    if let Some(map) = body.as_object_mut() {
+        map.insert("kind".to_string(), serde_json::json!("ask"));
+    }
+    Ok(body)
+}
+
+/// One question's own block - the question, its buttons and where an answer is
+/// written - WITHOUT the `kind` marker that says which of a reminder's actions
+/// it is. Split out of [`ask_body`] because a routine's PART carries exactly
+/// this block (§2.3 of the wave's spec: "`ask` is literally `_clean_ask`'s
+/// output minus `kind`"), so a part's question is built and checked by the same
+/// code as a reminder's, never by a second set of rules.
+fn ask_block(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Result<serde_json::Value, String> {
     let question = obj
         .get("question")
         .and_then(|v| v.as_str())
@@ -835,7 +951,6 @@ fn ask_body(obj: &serde_json::Map<String, serde_json::Value>) -> Result<serde_js
         clean.push(built);
     }
     let mut body = serde_json::json!({
-        "kind": "ask",
         "question": question,
         "buttons": clean,
     });
@@ -864,6 +979,94 @@ fn ask_body(obj: &serde_json::Map<String, serde_json::Value>) -> Result<serde_js
     Ok(body)
 }
 
+/// A routine's parts (2026-11-03, the owner's ask: *"a reminder can have up to
+/// twelve parts, each with its own time"*), checked as a SHAPE only - exactly
+/// as the four actions and the question above are.
+///
+/// The backend owns the rules: the 2..12 bounds, a part's own words, one time
+/// per part, the ORDER (which needs the occurrence's anchor, so only the PC can
+/// check it - "Part 3 starts before Part 2."), the three-button ceiling and
+/// where an answer is written. It refuses anything it does not accept with one
+/// plain sentence, and the page shows it as it is. What is checked here is what
+/// this app could not MEAN, so a body it cannot have built never leaves it: a
+/// routine of one part or thirteen, a part holding two times at once, a time
+/// that is not HH:MM, and a minutes value outside the PC's own 0..1440.
+///
+/// A part's own block is [`ask_block`] - a part asks a question with buttons,
+/// or it is a plain checklist line and the PC hands it the one implicit "Done".
+/// `id` is deliberately absent: the PC numbers the parts itself, so a page can
+/// never name one.
+fn steps_body(raw: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let parts = raw
+        .as_array()
+        .ok_or_else(|| "A routine is a list of parts, each with its own words.".to_string())?;
+    if parts.len() < MIN_STEPS as usize {
+        return Err(
+            "A routine needs at least two parts - a single part is just a reminder.".to_string(),
+        );
+    }
+    if parts.len() > MAX_STEPS as usize {
+        return Err(format!("A routine has up to {MAX_STEPS} parts."));
+    }
+    let mut clean = Vec::with_capacity(parts.len());
+    for part in parts {
+        let one = part
+            .as_object()
+            .ok_or_else(|| "That is not one part.".to_string())?;
+        if one
+            .keys()
+            .any(|key| !matches!(key.as_str(), "label" | "at" | "offset_min" | "ask"))
+        {
+            return Err("That is not something a part can hold.".to_string());
+        }
+        let label = one
+            .get("label")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if label.is_empty() {
+            return Err("Every part needs its own words.".to_string());
+        }
+        if label.chars().count() > MAX_STEP_LABEL {
+            return Err(format!(
+                "A part's words are up to {MAX_STEP_LABEL} characters."
+            ));
+        }
+        let at = one.get("at").and_then(|v| v.as_str());
+        let offset = one.get("offset_min").filter(|v| !v.is_null());
+        if at.is_some() && offset.is_some() {
+            return Err(
+                "A part has one time: a clock time, minutes after the start, or \
+                        the part before it."
+                    .to_string(),
+            );
+        }
+        let mut built = serde_json::json!({ "label": label });
+        if let Some(at) = at {
+            let at = hhmm(at).ok_or_else(|| "A part's time looks like 09:30.".to_string())?;
+            built["at"] = serde_json::json!(at);
+        }
+        if let Some(offset) = offset {
+            let minutes = offset
+                .as_i64()
+                .ok_or_else(|| "A part is 0 to 1440 minutes after the start.".to_string())?;
+            if !(0..=MAX_STEP_OFFSET).contains(&minutes) {
+                return Err("A part is 0 to 1440 minutes after the start.".to_string());
+            }
+            built["offset_min"] = serde_json::json!(minutes);
+        }
+        if let Some(ask) = one.get("ask").and_then(|v| v.as_object()) {
+            if !ask.is_empty() {
+                built["ask"] = ask_block(ask)?;
+            }
+        }
+        clean.push(built);
+    }
+    Ok(serde_json::Value::Array(clean))
+}
+
 /// The HUD Reminders tab's form -> the body of `POST /api/schedule/add`.
 /// ONE item at a time, in the four plain kinds the form offers, and nothing
 /// the backend does not already take for them. `notes` is not a field of its
@@ -878,6 +1081,11 @@ fn ask_body(obj: &serde_json::Map<String, serde_json::Value>) -> Result<serde_js
 /// `action` (2026-10-27) is the owner's "then open / then do" choice, and only
 /// a REMINDER may carry one - the same guard `jarvis_schedule.add_at` makes, so
 /// the refusal reads the same from either side.
+///
+/// `steps` (2026-11-03) is the same shape of addition for the owner's routines:
+/// two to twelve parts, each with its own words and its own time, built by the
+/// form's own parts editor and checked as a shape by [`steps_body`]. Only a
+/// reminder can be one, for the same reason `action` is.
 //
 // One argument per form field (see `hud_schedule_add`): the tests assert the
 // flat body each combination makes, and the fields are the page's own.
@@ -892,11 +1100,15 @@ pub(crate) fn hud_add_body(
     repeat: Option<&serde_json::Value>,
     list: Option<&str>,
     action: Option<&serde_json::Value>,
+    steps: Option<&serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let kind = kind.trim().to_ascii_lowercase();
     let words = joined_words(text, notes)?;
     if action.is_some() && kind != "reminder" {
         return Err("Only a reminder can carry an action.".to_string());
+    }
+    if steps.is_some() && kind != "reminder" {
+        return Err("Only a reminder can be a routine.".to_string());
     }
     match kind.as_str() {
         "todo" => todo_body(&words, list),
@@ -919,6 +1131,10 @@ pub(crate) fn hud_add_body(
                 Some(raw) => Some(action_body(raw)?),
                 None => None,
             };
+            let checked_steps = match steps {
+                Some(raw) => Some(steps_body(raw)?),
+                None => None,
+            };
             if let Some(rule) = repeat {
                 let mut body = serde_json::json!({ "kind": kind, "repeat": repeat_rule(rule)? });
                 if !words.is_empty() {
@@ -926,6 +1142,9 @@ pub(crate) fn hud_add_body(
                 }
                 if let Some(action) = checked {
                     body["action"] = action;
+                }
+                if let Some(steps) = checked_steps {
+                    body["steps"] = steps;
                 }
                 return Ok(body);
             }
@@ -945,6 +1164,9 @@ pub(crate) fn hud_add_body(
             }
             if let Some(action) = checked {
                 body["action"] = action;
+            }
+            if let Some(steps) = checked_steps {
+                body["steps"] = steps;
             }
             Ok(body)
         }
@@ -1151,6 +1373,72 @@ pub(crate) fn toast_words(
     (title, body)
 }
 
+/// WHICH part of a routine a firing is, as `(index, of how many)` with the
+/// index 0-based like every index on this page.
+///
+/// A routine gets ONE notification per part (2026-11-03, the owner's ask), and
+/// the PC says which one two ways, both additive keys an older client ignores:
+/// on the event (`step`/`parts`, `jarvis_schedule.tick`) and on the job
+/// (`steps_cursor`/`steps_parts`, §4.3 of the wave's spec). The EVENT is asked
+/// first, because it is the firing that is being toasted - the job may have
+/// moved on if the owner already answered the part while this read was in
+/// flight. `None` for a job with no parts, which is every reminder written
+/// before today and every timer, alarm and to-do.
+pub(crate) fn part_of(
+    data: &serde_json::Value,
+    job: Option<&serde_json::Value>,
+) -> Option<(u64, u64)> {
+    let number = |v: Option<&serde_json::Value>| v.and_then(|x| x.as_u64());
+    if let (Some(step), Some(parts)) = (number(data.get("step")), number(data.get("parts"))) {
+        if parts > 0 && step < parts {
+            return Some((step, parts));
+        }
+    }
+    let job = job?;
+    let parts = number(job.get("steps_parts"))?;
+    let cursor = number(job.get("steps_cursor")).unwrap_or(0);
+    (parts > 0 && cursor < parts).then_some((cursor, parts))
+}
+
+/// The toast's title with the part on it: "Reminder · 2 of 4".
+///
+/// A NUMBER and never a word, so it is safe while App lock or the private lists
+/// are hidden - the HUD's own rule for those minutes is "times, kinds and
+/// counts still show" (`hiddenNote` in the page), and a count is a count.
+pub(crate) fn part_title(title: &str, part: (u64, u64)) -> String {
+    format!("{title} · {} of {}", part.0 + 1, part.1)
+}
+
+/// A routine part's own words from the job's drawn parts, for one index. Empty
+/// when the job cannot be read or does not have that part - the caller then
+/// says the reminder's own words, exactly as a notice did before today.
+pub(crate) fn part_label(job: Option<&serde_json::Value>, index: u64) -> String {
+    let Some(steps) = job.and_then(|j| j.get("steps")).and_then(|v| v.as_array()) else {
+        return String::new();
+    };
+    steps
+        .get(index as usize)
+        .and_then(|part| part.get("label"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+/// A routine part's body: the part's own words, then the reminder's own, so the
+/// notice says what to DO now rather than only what the routine is for. The
+/// " - " join is this app's existing one (the add form's notes, `joined_words`).
+/// Never called while the words are hidden: a part's label is the owner's own.
+pub(crate) fn part_body(label: &str, text: &str) -> String {
+    let label = label.trim();
+    let text = text.trim();
+    match (label.is_empty(), text.is_empty()) {
+        (true, _) => text.to_string(),
+        (false, true) => label.to_string(),
+        (false, false) => format!("{label} - {text}"),
+    }
+}
+
 /// How late (seconds after it went off) this app may still ring for a job
 /// it hears about. Later than this - the app was restarted, or the PC's
 /// event reached it late - it shows a quiet "missed at" notice instead of
@@ -1286,13 +1574,43 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
     let (title, mut body) = toast_words(&kind, job.as_ref(), private);
+    // A routine's PART (2026-11-03, the owner's ask): one notification per part,
+    // and the notice says WHICH one - "Reminder · 2 of 4" in the title, which is
+    // a count and so is safe while the words are hidden - and the part's OWN
+    // words in the body, so it says what to do now. While App lock or the
+    // private lists are hidden the label is not read at all: it is the owner's
+    // own words, exactly like the reminder's, and the fallback sentence is what
+    // a toast has always said for those minutes.
+    let part = part_of(&data, job.as_ref());
+    let title = match part {
+        Some(part) => {
+            if !private {
+                let label = part_label(job.as_ref(), part.0);
+                if !label.is_empty() {
+                    body = part_body(&label, &body);
+                }
+            }
+            part_title(&title, part)
+        }
+        None => title,
+    };
     // A reminder that opens something (2026-10-27): the notice names the target
     // IN FULL before anything opens, and the Open button carries the job id
     // only. Nothing opens by itself. While App lock or the private lists are
     // hidden there is no target to show, so there is no button either -
     // `redact_list` blanks the action for the HUD, and `private` is what stops
     // the toast drawing a control whose target the owner may not see.
-    let opening = open_notice(job.as_ref(), private);
+    //
+    // A ROUTINE's own `action` is deliberately not offered: the PC fires a
+    // routine's action only for a PART (`jarvis_schedule.tick`, which spawns
+    // `part_action` and nothing else once a row has parts), so a notice that
+    // said "This opens: ..." for one would be promising something that never
+    // happens. Saying nothing is the honest half.
+    let opening = if part.is_some() {
+        None
+    } else {
+        open_notice(job.as_ref(), private)
+    };
     if let Some((line, _)) = opening.as_ref() {
         body = format!("{body} {line}");
     }
@@ -2531,6 +2849,69 @@ mod tests {
         }
     }
 
+    /// 2026-11-03: a routine's parts are the owner's own words, so the same
+    /// blanking that takes the row's `text` and its action takes them - and the
+    /// counts and times stay, exactly as they do for every other row.
+    #[test]
+    fn a_routines_parts_are_blanked_with_its_words_and_keep_the_counts() {
+        let job = serde_json::json!({"id": "s0123456789", "kind": "reminder",
+        "text": "Morning routine", "fired_at": 1_793_000_000.0,
+        "steps_parts": 2, "steps_cursor": 1,
+        "steps": [
+            {"id": "p1", "label": "take the blue folder", "offset_min": 0,
+             "at": null, "when": "08:00", "fired_at": 1_793_000_000.0,
+             "done": true, "missed": false, "current": false,
+             "buttons": [{"label": "Done", "does": "done"}]},
+            {"id": "p2", "label": "fold the laundry", "offset_min": 30,
+             "at": null, "when": "08:30", "fired_at": null,
+             "done": false, "missed": false, "current": true,
+             "ask": {"question": "Did you take your medication?",
+                     "buttons": [{"label": "Taken", "does": "record"},
+                                 {"label": "Later", "does": "snooze", "minutes": 30}],
+                     "record": {"history": true, "goal": "gym", "habit": "walk"}},
+             "buttons": [{"label": "Taken", "does": "record"},
+                         {"label": "Later", "does": "snooze", "minutes": 30}]}
+        ]});
+        let hidden = redact_list(serde_json::json!({"jobs": [job], "todo": []}));
+        let text = hidden.to_string();
+        for word in [
+            "blue folder",
+            "laundry",
+            "medication",
+            "Taken",
+            "Later",
+            "gym",
+            "walk",
+        ] {
+            assert!(!text.contains(word), "{word} survived redaction: {text}");
+        }
+        let row = &hidden["jobs"][0];
+        assert_eq!(row["hidden"], serde_json::json!(true));
+        let parts = row["steps"].as_array().unwrap();
+        assert_eq!(parts.len(), 2);
+        // The times, the marks and the count of buttons are not words: they stay,
+        // so the row can still say "4 parts, 2 of 4, one missed".
+        assert_eq!(parts[0]["when"], serde_json::json!("08:00"));
+        assert_eq!(parts[0]["done"], serde_json::json!(true));
+        assert_eq!(parts[1]["current"], serde_json::json!(true));
+        assert_eq!(parts[1]["offset_min"], serde_json::json!(30));
+        assert_eq!(parts[1]["buttons"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            parts[1]["buttons"][0],
+            serde_json::json!({"does": "record"})
+        );
+        // Every word is gone, including the whole question and its destinations.
+        assert_eq!(parts[1]["label"], serde_json::json!(""));
+        assert!(parts[1].get("ask").is_none());
+        assert_eq!(row["steps_parts"], serde_json::json!(2));
+        assert_eq!(row["steps_cursor"], serde_json::json!(1));
+        // A row with no parts is untouched by any of this.
+        let plain = redact_list(serde_json::json!({
+            "jobs": [{"id": "s012345678a", "kind": "reminder", "text": "Call Mum"}],
+            "todo": []}));
+        assert!(plain["jobs"][0].get("steps").is_none());
+    }
+
     /// The Open button is drawn only when there IS something to open, the PC did
     /// not refuse it, and the words are not hidden - and the notice names the
     /// target in full before anything opens.
@@ -2593,11 +2974,31 @@ mod tests {
 
     // ---- the HUD Reminders tab's add form (2026-10-21) ------------------
 
+    /// `hud_add_body` with NO routine parts - the shape every call below has,
+    /// so a check written before 2026-11-03 reads exactly as it did. The parts
+    /// have their own test, which calls `hud_add_body` itself.
+    #[allow(clippy::too_many_arguments)]
+    fn add(
+        kind: &str,
+        text: Option<&str>,
+        notes: Option<&str>,
+        seconds: Option<f64>,
+        date: Option<&str>,
+        time: Option<&str>,
+        repeat: Option<&serde_json::Value>,
+        list: Option<&str>,
+        action: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        hud_add_body(
+            kind, text, notes, seconds, date, time, repeat, list, action, None,
+        )
+    }
+
     /// The form's fields -> the exact bodies `POST /api/schedule/add`
     /// already takes; nothing invented, no field the backend does not know.
     #[test]
     fn the_hud_add_form_makes_the_body_the_backend_takes() {
-        let todo = hud_add_body(
+        let todo = add(
             "todo",
             Some("Buy milk"),
             None,
@@ -2616,7 +3017,7 @@ mod tests {
         );
 
         // The notes are carried in the item's ONE free-text field, on the end.
-        let noted = hud_add_body(
+        let noted = add(
             "reminder",
             Some("  Call Mum  "),
             Some("about the trip"),
@@ -2635,7 +3036,7 @@ mod tests {
             "text": "Call Mum - about the trip"})
         );
 
-        let timer = hud_add_body(
+        let timer = add(
             "timer",
             None,
             None,
@@ -2652,7 +3053,7 @@ mod tests {
             serde_json::json!({"kind": "timer", "seconds": 600.0})
         );
 
-        let daily = hud_add_body(
+        let daily = add(
             "reminder",
             Some("Stretch"),
             None,
@@ -2671,7 +3072,7 @@ mod tests {
             "text": "Stretch"})
         );
 
-        let weekly = hud_add_body(
+        let weekly = add(
             "alarm",
             None,
             None,
@@ -2696,13 +3097,11 @@ mod tests {
     fn the_hud_add_form_refuses_bad_shapes_in_plain_words() {
         let err = |b: Result<serde_json::Value, String>| b.unwrap_err();
         assert_eq!(
-            err(hud_add_body(
-                "todo", None, None, None, None, None, None, None, None,
-            )),
+            err(add("todo", None, None, None, None, None, None, None, None,)),
             "Type what to add first."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "reminder",
                 Some("x"),
                 None,
@@ -2716,7 +3115,7 @@ mod tests {
             "Pick a date, like 2030-09-15."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "reminder",
                 Some("x"),
                 None,
@@ -2730,7 +3129,7 @@ mod tests {
             "A date looks like 2030-09-15."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "alarm",
                 Some("x"),
                 None,
@@ -2744,7 +3143,7 @@ mod tests {
             "Write the time as HH:MM, like 18:00."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "timer",
                 None,
                 None,
@@ -2758,7 +3157,7 @@ mod tests {
             "A timer needs a positive number of seconds."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "timer",
                 None,
                 None,
@@ -2772,7 +3171,7 @@ mod tests {
             "A timer is for today - at most 24 hours."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "briefing",
                 Some("x"),
                 None,
@@ -2786,7 +3185,7 @@ mod tests {
             REMINDERS_FORM_HINT
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "reminder",
                 Some("x"),
                 None,
@@ -2801,7 +3200,7 @@ mod tests {
             "Pick at least one day."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "reminder",
                 Some("x"),
                 None,
@@ -2816,7 +3215,7 @@ mod tests {
             "A weekly repeat needs its days, 0 (Monday) to 6 (Sunday)."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "reminder",
                 Some("x"),
                 None,
@@ -2831,7 +3230,7 @@ mod tests {
             "Only a standby schedule has an end time."
         );
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "reminder",
                 Some("x"),
                 None,
@@ -2846,7 +3245,7 @@ mod tests {
         );
         let too_long = "a".repeat(MAX_TEXT + 1);
         assert_eq!(
-            err(hud_add_body(
+            err(add(
                 "todo",
                 Some(&too_long),
                 None,
@@ -2922,5 +3321,340 @@ mod tests {
         assert!(action_body(&three).unwrap().get("record").is_none());
         // And it really is the one kind that is not "a kind plus one key".
         assert_eq!(MAX_ASK_BUTTONS, 3);
+    }
+
+    // ---- a routine's parts (2026-11-03, the owner's ask) -----------------
+
+    /// One routine, exactly as the page's parts editor builds it: a part's own
+    /// words, ONE time per part (a clock time, minutes after the start, or
+    /// neither - "after the part before"), and an OPTIONAL question that is the
+    /// same block a reminder's own question is, without the `kind` marker.
+    #[test]
+    fn a_routine_is_two_to_twelve_parts_and_a_part_is_one_time() {
+        let asked = serde_json::json!({
+            "label": "leave",
+            "at": "08:30",
+            "ask": {"question": "Did you lock the door?",
+                    "buttons": [{"label": "Locked", "does": "record"}],
+                    "record": {"history": true}},
+        });
+        let body = steps_body(&serde_json::json!([
+            {"label": "  meds  ", "offset_min": 0},
+            {"label": "keys", "offset_min": null},
+            {"label": "badge"},
+            asked,
+        ]))
+        .unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!([
+                // Tidied, and an index is NEVER in the body: the PC numbers the
+                // parts itself, so a page cannot name one.
+                {"label": "meds", "offset_min": 0},
+                // `offset_min: null` is the sequential form, and it is kept as
+                // no key at all - never as a time of zero.
+                {"label": "keys"},
+                {"label": "badge"},
+                // A part's question is `ask_block`: the SAME fields the row's
+                // own `action` carries, minus the `kind` that says which of a
+                // reminder's actions it is (§2.3 of the wave's spec).
+                {"label": "leave", "at": "08:30",
+                 "ask": {"question": "Did you lock the door?",
+                         "buttons": [{"label": "Locked", "does": "record"}],
+                         "record": {"history": true}}},
+            ])
+        );
+        // The clock time is tidied the way the PC writes it.
+        let early = steps_body(&serde_json::json!([
+            {"label": "a", "at": "8:05"}, {"label": "b", "offset_min": 60}
+        ]))
+        .unwrap();
+        assert_eq!(early[0]["at"], serde_json::json!("08:05"));
+        assert_eq!(early[1]["offset_min"], serde_json::json!(60));
+        // Thirteen parts is the ceiling; twelve is a routine.
+        let twelve: Vec<serde_json::Value> = (0..12)
+            .map(|i| serde_json::json!({"label": format!("part {i}"), "offset_min": i}))
+            .collect();
+        assert!(steps_body(&serde_json::Value::Array(twelve)).is_ok());
+        let thirteen: Vec<serde_json::Value> = (0..13)
+            .map(|i| serde_json::json!({"label": format!("part {i}"), "offset_min": i}))
+            .collect();
+        assert_eq!(
+            steps_body(&serde_json::Value::Array(thirteen)).unwrap_err(),
+            "A routine has up to 12 parts."
+        );
+        // A single part is just a reminder, in the PC's own sentence.
+        assert_eq!(
+            steps_body(&serde_json::json!([{"label": "one"}])).unwrap_err(),
+            "A routine needs at least two parts - a single part is just a reminder."
+        );
+        // Every shape this app cannot mean is refused BEFORE anything leaves it,
+        // and in one plain sentence each.
+        for (bad, why) in [
+            (
+                serde_json::json!([{"label": "a", "at": "08:30", "offset_min": 10},
+                                   {"label": "b"}]),
+                "two times at once",
+            ),
+            (
+                // "8:30" is NOT this case: the app tidies a one-digit hour to
+                // "08:30", which is what the PC's own pattern demands.
+                serde_json::json!([{"label": "a", "at": "0830"}, {"label": "b"}]),
+                "a time with no colon in it",
+            ),
+            (
+                serde_json::json!([{"label": "a", "at": "25:00"}, {"label": "b"}]),
+                "an hour past 23",
+            ),
+            (
+                serde_json::json!([{"label": "a", "offset_min": -1}, {"label": "b"}]),
+                "a negative minute",
+            ),
+            (
+                serde_json::json!([{"label": "a", "offset_min": 1441}, {"label": "b"}]),
+                "past a day",
+            ),
+            (
+                serde_json::json!([{"label": "   "}, {"label": "b"}]),
+                "a part with no words",
+            ),
+            (
+                serde_json::json!([{"label": "x".repeat(81)}, {"label": "b"}]),
+                "81 characters",
+            ),
+            (
+                serde_json::json!([{"label": "a", "id": "p9"}, {"label": "b"}]),
+                "a key a part cannot hold",
+            ),
+            (
+                serde_json::json!([{"label": "a",
+                                    "ask": {"question": "", "buttons": []}},
+                                   {"label": "b"}]),
+                "a question with nothing in it",
+            ),
+            (serde_json::json!("not a list"), "a body that is not a list"),
+        ] {
+            assert!(steps_body(&bad).is_err(), "not refused: {why}");
+        }
+        // A part with no question is a plain checklist line: no `ask` key, and
+        // the PC hands it the one implicit Done (so no label is ever invented).
+        let plain = steps_body(&serde_json::json!([
+            {"label": "meds"}, {"label": "keys", "ask": null}
+        ]))
+        .unwrap();
+        assert!(plain[0].get("ask").is_none());
+        assert!(plain[1].get("ask").is_none());
+    }
+
+    /// ONE edit carries the parts (and a reminder's own action) through the same
+    /// `change` command as every other Phase 2 field - and is cardless, so it
+    /// keeps the ordinary write budget while a `repeat` edit keeps its card.
+    #[test]
+    fn one_edit_carries_a_routines_parts_through_the_same_door() {
+        let parts = serde_json::json!([
+            {"label": "meds", "offset_min": 0},
+            {"label": "keys", "offset_min": 30},
+        ]);
+        let change = ScheduleChange {
+            steps: Some(parts.clone()),
+            ..Default::default()
+        };
+        assert_eq!(
+            change_body("s0123456789", "edit", &change).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "edit", "steps": parts})
+        );
+        assert_eq!(change_timeout("edit", &change), WRITE_TIMEOUT);
+        // A refused part refuses the whole edit: nothing half-saved.
+        let bad = ScheduleChange {
+            steps: Some(serde_json::json!([{"label": "only one"}])),
+            ..Default::default()
+        };
+        assert!(change_body("s0123456789", "edit", &bad).is_err());
+        // A reminder's OWN action is editable too, through the same validator.
+        let action = ScheduleChange {
+            action: Some(serde_json::json!({
+                "kind": "ask", "question": "Did you take it?",
+                "buttons": [{"label": "Yes", "does": "done"}]})),
+            ..Default::default()
+        };
+        assert_eq!(
+            change_body("s0123456789", "edit", &action).unwrap()["action"]["question"],
+            serde_json::json!("Did you take it?")
+        );
+        assert!(change_body(
+            "s0123456789",
+            "edit",
+            &ScheduleChange {
+                action: Some(serde_json::json!({"kind": "run-a-script", "task": "x"})),
+                ..Default::default()
+            }
+        )
+        .is_err());
+        // An edit of the parts alone is a REAL edit - it never becomes the
+        // backend's `move` verb, which is what a list-only change does.
+        assert_eq!(
+            change_body("s0123456789", "edit", &change).unwrap()["do"],
+            serde_json::json!("edit")
+        );
+    }
+
+    /// The add form can make a routine too, and only a reminder can be one.
+    #[test]
+    fn the_add_form_can_make_a_routine_and_only_a_reminder_can_be_one() {
+        let parts = serde_json::json!([
+            {"label": "meds", "offset_min": 0},
+            {"label": "keys", "offset_min": 30},
+        ]);
+        let body = hud_add_body(
+            "reminder",
+            Some("Morning routine"),
+            None,
+            None,
+            Some("2030-09-15"),
+            Some("08:00"),
+            None,
+            None,
+            None,
+            Some(&parts),
+        )
+        .unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "kind": "reminder", "date": "2030-09-15", "time": "08:00",
+                "text": "Morning routine", "steps": parts})
+        );
+        // A repeating routine carries them too.
+        let repeating = hud_add_body(
+            "reminder",
+            Some("Morning routine"),
+            None,
+            None,
+            None,
+            None,
+            Some(&serde_json::json!({"every": "day", "at": "08:00"})),
+            None,
+            None,
+            Some(&parts),
+        )
+        .unwrap();
+        assert_eq!(repeating["steps"], parts);
+        assert_eq!(repeating["repeat"]["every"], serde_json::json!("day"));
+        // A timer, alarm or to-do is not a routine - the PC never takes parts
+        // for one, so this refuses it first in the words the owner will read.
+        for kind in ["todo", "timer", "alarm"] {
+            assert_eq!(
+                hud_add_body(
+                    kind,
+                    Some("x"),
+                    None,
+                    Some(600.0),
+                    Some("2030-09-15"),
+                    Some("08:00"),
+                    None,
+                    None,
+                    None,
+                    Some(&parts),
+                )
+                .unwrap_err(),
+                "Only a reminder can be a routine.",
+                "{kind} took a routine"
+            );
+        }
+        // And a thirteenth part never leaves this app.
+        let thirteen: Vec<serde_json::Value> = (0..13)
+            .map(|i| serde_json::json!({"label": format!("part {i}")}))
+            .collect();
+        assert_eq!(
+            hud_add_body(
+                "reminder",
+                Some("Too many"),
+                None,
+                None,
+                Some("2030-09-15"),
+                Some("08:00"),
+                None,
+                None,
+                None,
+                Some(&serde_json::Value::Array(thirteen)),
+            )
+            .unwrap_err(),
+            "A routine has up to 12 parts."
+        );
+    }
+
+    /// WHICH part a firing is - from the event first (it is the firing being
+    /// toasted), then from the job's own drawn parts - and what the notice says
+    /// about it. A count is safe while the words are hidden; a part's label is
+    /// the owner's own words and never is.
+    #[test]
+    fn a_routines_notice_says_which_part_and_what_it_is() {
+        let job = serde_json::json!({
+            "id": "s0123456789", "kind": "reminder", "text": "Morning routine",
+            "steps_parts": 4, "steps_cursor": 1,
+            "steps": [{"label": "meds"}, {"label": "keys"}, {"label": "badge"},
+                      {"label": "leave"}],
+        });
+        // The event says, and it wins over the job's cursor - the job may have
+        // moved on if the owner answered the part while this read was in flight.
+        assert_eq!(
+            part_of(
+                &serde_json::json!({"id": "s0123456789", "step": 2, "parts": 4}),
+                Some(&job)
+            ),
+            Some((2, 4))
+        );
+        // A replayed event with no `step` falls back to the job's own parts.
+        assert_eq!(
+            part_of(&serde_json::json!({"id": "s0123456789"}), Some(&job)),
+            Some((1, 4))
+        );
+        // An index outside the count is not a part: the job's own answer is used.
+        assert_eq!(
+            part_of(
+                &serde_json::json!({"step": 9, "parts": 4}),
+                Some(&serde_json::json!({"steps_parts": 2, "steps_cursor": 0}))
+            ),
+            Some((0, 2))
+        );
+        // No parts anywhere: every reminder, timer, alarm and to-do written
+        // before today, and every one written after it without parts.
+        assert_eq!(
+            part_of(&serde_json::json!({"id": "s0123456789"}), None),
+            None
+        );
+        assert_eq!(
+            part_of(
+                &serde_json::json!({}),
+                Some(&serde_json::json!({"text": "x"}))
+            ),
+            None
+        );
+        assert_eq!(
+            part_of(
+                &serde_json::json!({}),
+                Some(&serde_json::json!({"steps_parts": 0, "steps_cursor": 0}))
+            ),
+            None
+        );
+        // The title carries "2 of 4" and nothing else: a count, never words.
+        assert_eq!(part_title("Reminder", (1, 4)), "Reminder · 2 of 4");
+        assert_eq!(part_title("Alarm", (0, 12)), "Alarm · 1 of 12");
+        // The body leads with the part's own words, then the reminder's.
+        assert_eq!(
+            part_body("keys", "Morning routine"),
+            "keys - Morning routine"
+        );
+        assert_eq!(part_body("keys", "  "), "keys");
+        assert_eq!(part_body("", "Morning routine"), "Morning routine");
+        assert_eq!(part_body("  ", "  "), "");
+        // The label is read only from the parts the PC handed out.
+        assert_eq!(part_label(Some(&job), 2), "badge");
+        assert_eq!(part_label(Some(&job), 9), "");
+        assert_eq!(part_label(None, 0), "");
+        assert_eq!(
+            part_label(Some(&serde_json::json!({"steps": "nonsense"})), 0),
+            ""
+        );
     }
 }
