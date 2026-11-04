@@ -4632,7 +4632,14 @@ TOOLS: dict = {
             "target": {"type": "string",
                        "description": "full path in a listed folder, when the action takes a "
                                       "file or folder"},
-            "arguments": {"type": "object", "additionalProperties": True,
+            # A bare object, with NO `properties` and NO `additionalProperties`: the local
+            # model's grammar cannot enforce `additionalProperties`, and `check_call` cannot
+            # validate a key it has no shape for, so `jarvis_tool_schema.guard_tool_schemas()`
+            # refuses a schema that declares one and the tool would never be offered
+            # (measured: 5 failures in test_agent.py). `jarvis_rea._arguments_for` is the
+            # closed-world check instead: every key must be one of that REA tool's own
+            # settings, and the ones it does have are listed in the refusal when it is not.
+            "arguments": {"type": "object",
                           "description": "the action's own settings, by name (for example mode, "
                                          "pid, address, session_id)"},
             "format": {"type": "string", "enum": ["har", "saz"]},

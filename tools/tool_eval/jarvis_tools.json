@@ -1528,7 +1528,6 @@
      },
      "arguments": {
       "type": "object",
-      "additionalProperties": true,
       "description": "the action's own settings, by name (for example mode, pid, address, session_id)"
      },
      "format": {
