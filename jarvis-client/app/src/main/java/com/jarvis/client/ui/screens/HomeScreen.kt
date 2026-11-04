@@ -25,9 +25,10 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -107,7 +108,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -222,9 +222,13 @@ private const val PANE_LIST = "list"
 private const val REPLY_KEY = "reply"
 
 /**
- * What TalkBack calls the full-screen face bar's small typing box. The box
- * itself stays blank - the owner asked for "a small blank emptyy text box"
- * (2026-11-01) - so this name is the only thing said about it out loud.
+ * What TalkBack calls the full-screen face bar's typing box.
+ *
+ * It is NOT what the box shows. Since 2026-11-04 the box shows the owner's own
+ * words while it is empty - "Ask Jarvis", `FaceBarPlan.ASK_WORDS` - and a
+ * screen reader's name for a control is a separate thing from the placeholder
+ * drawn in it. Keeping the two apart is deliberate: the placeholder is what
+ * the owner reads, this is what the phone says out loud.
  */
 private const val FACE_TYPE_HINT = "Type a message to Jarvis"
 
@@ -5283,15 +5287,15 @@ private fun VoiceBar(
         // the typing box can never draw over the microphone or "Show chat" on
         // a 360dp phone, and the microphone stays exactly in the middle while
         // the two sides are equal.
-        BoxWithConstraints(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-            // What is left of one side of the microphone once the typing box
-            // and Stop have their room. Kept between 48 and 96dp: a small box,
-            // never a second composer, and it shrinks rather than crowding the
-            // microphone on a narrow phone. At 360dp this is 88dp. The
-            // arithmetic is [FaceBarPlan] so [PhoneFaceBarTest] can hold it at a
-            // computed 360dp; it is also why box + gap + Stop is exactly one
-            // side and cannot reach the microphone.
-            val typeWidth = FaceBarPlan.typeWidthDp(maxWidth.value).dp
+        //
+        // Since 2026-11-04 neither side is a measured width: the box and the
+        // two labels both take `weight(1f)`, so each side gets half of what is
+        // left beside the 48dp microphone and the microphone cannot drift off
+        // centre. That is what let the box stop being a 48-96dp stamp with
+        // empty space after it - the owner's ask of 2026-11-04, "take up rhe
+        // remaining exmptyspace around it". `FaceBarPlan.boxWidthDp` no longer
+        // sets anything; it says what this weight comes to, for the test.
+        Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 // The two labels, in ONE cell that is half of what is left
                 // beside the microphone - so they fit on one line at the
@@ -5350,21 +5354,24 @@ private fun VoiceBar(
                     Modifier.weight(1f).padding(start = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // The owner's ask of 2026-11-01: a small blank box to the
-                    // right of the microphone, for the times typing beats
-                    // talking.
+                    // The box the owner asked for on 2026-11-01 ("put a small
+                    // blank emptyy text box to the right of the mic"), which
+                    // since 2026-11-04 takes the whole of this cell: the weight
+                    // gives it every dp the cell has left after Stop. The words
+                    // it shows while empty are the owner's own, "Ask Jarvis",
+                    // and they are drawn by the box itself.
                     FaceTypeBox(
                         text = text,
-                        width = typeWidth,
+                        modifier = Modifier.weight(1f),
                         onDraftChange = actions.onDraftChange,
                         onSend = { sendTyped() },
                     )
                     // Stop is the same action the composer's Send button turns
                     // into while an answer streams: cancelling the call stops
-                    // generation. It is pushed to the bar's right edge so the
-                    // typing box can stay next to the microphone.
+                    // generation. It stays at the right edge - the box's weight
+                    // takes everything else, so no spacer is needed - and the
+                    // box only narrows by Stop's own width.
                     if (state.streaming) {
-                        Spacer(Modifier.weight(1f))
                         Quiet("Stop", color = chrome.badInk, onClick = actions.onInterrupt)
                     }
                 }
@@ -5391,13 +5398,27 @@ private fun VoiceBar(
 }
 
 /**
- * The small typing box on the full-screen face bar (the owner's ask of
- * 2026-11-01: "put a small blank emptyy text box to the right of the mic").
+ * The typing box on the full-screen face bar: the owner's ask of 2026-11-01
+ * ("put a small blank emptyy text box to the right of the mic"), filled in on
+ * 2026-11-04 with "the wording \"Ask Jarvis\" present", and given the whole
+ * right cell of the bar instead of a fixed width.
  *
- * Blank on purpose: there are no placeholder words in it, only the TalkBack
- * name [FACE_TYPE_HINT]. It is [Composer]'s field made small - a flat
- * `surface2` plate, `BasicTextField`, the keyboard's Send key wired to the
- * same send path - one line tall and [width] wide.
+ * WHAT IT SHOWS, AND WHEN. While it holds nothing and nobody is in it, the box
+ * draws the owner's own words, [FaceBarPlan.ASK_WORDS]. The rule is
+ * [FaceBarPlan.placeholderVisible], and it is the owner's rule: the words go
+ * the moment the box takes focus - the keyboard opens on that same tap - and
+ * come back once the box is empty again and focus has left it. The words are
+ * drawn HERE, inside the decoration box, rather than through a text-field
+ * placeholder: this field is fed a plain String, and a second text-drawing path
+ * would be a second place for the size, the colour and the ellipsis to drift
+ * from the typed line's.
+ *
+ * The TalkBack name is a separate thing and has not changed ([FACE_TYPE_HINT]):
+ * a screen reader says a name for the control, the owner reads a placeholder.
+ *
+ * It is [Composer]'s field made small - a flat `surface2` plate,
+ * `BasicTextField`, the keyboard's Send key wired to the same send path - one
+ * line tall and as wide as the bar's cell gives it.
  *
  * The whole 48dp of height is the FIELD's own touch target, not padding
  * around it: the decoration box only centres the one line of text, so a tap
@@ -5417,16 +5438,26 @@ private fun VoiceBar(
 @Composable
 private fun FaceTypeBox(
     text: String,
-    width: Dp,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
     val radii = LocalRadii.current
+    // Whether the owner is in the box, so the words can go while he types. Read
+    // off the field's own interaction source rather than with `onFocusChanged`
+    // on a wrapper: `remember` keeps the source across recomposition, and
+    // `collectIsFocusedAsState` recomposes this box only when focus changes.
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    // One style for the typed line and for the words, so the placeholder is the
+    // same size and weight as the text that replaces it.
+    val textStyle = LocalTextStyle.current.merge(
+        MaterialTheme.typography.bodySmall.copy(color = chrome.textHi),
+    )
     Box(
-        Modifier
-            .width(width)
+        modifier
             .heightIn(min = 48.dp)
             .clip(radii.controlShape)
             .background(chrome.surface2)
@@ -5436,9 +5467,7 @@ private fun FaceTypeBox(
         BasicTextField(
             value = text,
             onValueChange = onDraftChange,
-            textStyle = LocalTextStyle.current.merge(
-                MaterialTheme.typography.bodySmall.copy(color = chrome.textHi),
-            ),
+            textStyle = textStyle,
             cursorBrush = SolidColor(accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             // The keyboard showed a Send key that did nothing on the composer
@@ -5446,6 +5475,7 @@ private fun FaceTypeBox(
             // without this the press is swallowed. Same guard inside sendTyped.
             keyboardActions = KeyboardActions(onSend = { onSend() }),
             singleLine = true,
+            interactionSource = interactionSource,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
@@ -5453,8 +5483,24 @@ private fun FaceTypeBox(
             decorationBox = { inner ->
                 // fillMaxWidth, NOT fillMaxSize - see this function's doc
                 // comment: fillMaxSize let the box become as tall as the whole
-                // bar, which took the screen from the face (2026-11-04).
+                // bar, which took the screen from the face (2026-11-04). The
+                // words sit UNDER the field's own content, so a typed line is
+                // never drawn through them; they are hidden while it is focused
+                // anyway.
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                    if (FaceBarPlan.placeholderVisible(text, focused)) {
+                        Text(
+                            FaceBarPlan.ASK_WORDS,
+                            // One line and an ellipsis, like the bar's labels:
+                            // while Stop is showing, the box is narrow, and the
+                            // words must end in "…" rather than grow the plate
+                            // or be cut with no sign.
+                            style = textStyle,
+                            color = chrome.textLo,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     inner()
                 }
             },
